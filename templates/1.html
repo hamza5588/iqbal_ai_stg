@@ -1,0 +1,2452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            myblue: '#05B0FC',
+          },
+          fontFamily: {
+            inter: ['Inter', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts & Font Awesome -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <title>AI Chat Interface</title>
+</head>
+<body class="h-screen bg-gray-100 font-inter">
+  <div class="flex h-full">
+
+    <!-- Sidebar -->
+    <div id="sidebar" class="w-[275px] md:w-[275px] bg-white shadow-md p-4 fixed md:static top-0 left-0 h-full md:h-auto transform -translate-x-full md:translate-x-0 transition-transform duration-300 z-40">
+      <div class="flex justify-between items-center">
+        <img src="./logo.png" width="150" height="200" alt="">
+        <button onclick="hideSidebar()" class="mt-4 hover:bg-gray-100 p-1 rounded">
+          <img src="./slider.png" alt="">
+        </button>
+      </div>
+      
+      <!-- Border Line -->
+      <div class="mt-4 border-t-2 border-gray-300 -mx-4"></div>
+      
+      <div class="flex flex-col space-y-4 justify-center items-center mt-6 mb-2">
+
+        <!-- New Chat -->
+        <button onclick="startNewChat()" class="w-[200px] h-[50px] mt-3 mb-2 px-4 flex items-center justify-center gap-2 bg-[#05B0FC] text-white font-bold rounded transition duration-200 ease-in-out hover:bg-blue-600">
+          <img src="./msg.png" alt="">
+          <span>New Chat</span>
+        </button>
+
+        <!-- Action Buttomsns -->
+        <button onclick="changeTab(document.querySelectorAll('.tab-btn')[2], 'lesson')" class="w-[230px] h-[40px] px-4 flex items-center gap-3 font-semibold text-[16px] text-gray-700 hover:bg-gray-50 rounded transition-colors" id="generateLessonBtn">
+          <img src="./lesson.png" alt="">
+          <span>Generate Lessons</span>
+        </button>
+
+        <!-- Sidebar Button for View Lessons -->
+        
+
+        <button onclick="changeTab(document.querySelectorAll('.tab-btn')[4], 'settings')" class="w-[230px] h-[40px] px-4 flex items-center gap-3 font-semibold text-[16px] text-gray-700 hover:bg-gray-50 rounded transition-colors">
+         <img src="./key.png" alt="">
+          <span>Update API Key</span>
+        </button>
+
+        <button onclick="toggleVoiceRecording()" class="w-[230px] h-[40px] px-4 flex items-center gap-3 font-semibold text-[16px] text-gray-700 hover:bg-gray-50 rounded transition-colors">
+         <i class="fas fa-microphone w-5 h-5"></i>
+          <span>Real Time Chat</span>
+        </button>
+
+        <button onclick="resetChat()" class="w-[230px] h-[40px] px-4 flex items-center gap-3 font-semibold text-[16px] text-gray-700 hover:bg-gray-50 rounded transition-colors">
+          <i class="fas fa-refresh text-[#B7B7B7] w-5 h-5"></i>
+          <span>Reset Chat</span>
+        </button>
+
+        <!-- Chat History Button -->
+        <button onclick="toggleDropdown()" class="w-[260px] h-[40px] px-4 flex items-center justify-between font-semibold text-[16px] text-gray-700 mt-2 hover:bg-gray-50 rounded transition-colors">
+          <i class="fas fa-history text-[#B7B7B7]"></i>
+          <span>Chat History</span>
+          <i class="fas fa-chevron-down text-[#666]" id="historyArrow"></i>
+        </button>
+
+        <!-- Dropdown Chat History -->
+        <div id="dropdownContent" class="mt-2 hidden flex-col gap-3 w-[240px] max-h-48 overflow-y-auto">
+          <div class="flex items-center justify-between px-3 py-2 hover:bg-gray-100 rounded cursor-pointer">
+            <div class="text-sm text-gray-700 flex-1">
+              <span class="block font-medium">Sample Chat 1</span>
+              <span class="text-xs text-gray-500">Today</span>
+            </div>
+            <div class="flex items-center space-x-3 text-gray-500">
+              <i class="fas fa-download hover:text-black cursor-pointer"></i>
+              <i class="fas fa-trash hover:text-red-600 cursor-pointer"></i>
+            </div>
+          </div>
+          <div class="flex items-center justify-between px-3 py-2 hover:bg-gray-100 rounded cursor-pointer">
+            <div class="text-sm text-gray-700 flex-1">
+              <span class="block font-medium">Sample Chat 2</span>
+              <span class="text-xs text-gray-500">Yesterday</span>
+            </div>
+            <div class="flex items-center space-x-3 text-gray-500">
+              <i class="fas fa-download hover:text-black cursor-pointer"></i>
+              <i class="fas fa-trash hover:text-red-600 cursor-pointer"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Logout Button -->
+        <button onclick="logout()" class="fixed bottom-4 w-[230px] h-[40px] px-4 flex items-center justify-center gap-3 font-semibold text-[16px] text-gray-700 bg-white shadow rounded hover:bg-gray-50 transition-colors">
+          <i class="fas fa-sign-out-alt text-[#F50D0D]"></i>
+          <span class="text-[#F50D0D]">Log out</span>
+        </button>
+
+      </div>
+    </div>
+    <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden md:hidden"></div>
+
+    <!-- Main Content -->
+    <div class="flex-1 bg-white min-h-screen flex flex-col md:ml-0">
+        
+        <!-- Search Section -->
+        <div class="px-6 py-4">
+            <div class="relative flex gap-2">
+                <button id="mobileMenuBtn" class="md:hidden w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
+                  <i class="fas fa-bars w-6 h-6"></i>
+                </button>
+                <div class="relative flex-1">
+                    <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input
+                        type="text"
+                        placeholder="Search Conversations and Knowledge base..."
+                        class="w-full pl-12 pr-4 py-3 border-0 rounded-xl bg-gray-100 focus:outline-none text-gray-600 placeholder-gray-500"
+                        onkeypress="handleSearchKeyPress(event)"
+                    />
+                </div>
+                <button class="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-bell text-gray-500"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabs Section -->
+        <div class="flex items-center justify-between px-6 py-4">
+            <div class="bg-gray-100 rounded-2xl p-1 flex overflow-x-auto">
+                <button
+                    onclick="changeTab(this, 'chat')"
+                    class="tab-btn px-6 py-3 text-blue-500 font-semibold bg-white rounded-xl shadow-sm whitespace-nowrap"
+                >
+                    Chat
+                </button>
+                <button
+                    onclick="changeTab(this, 'knowledge')"
+                    class="tab-btn px-6 py-3 text-gray-500 font-semibold rounded-xl whitespace-nowrap hover:bg-gray-50"
+                >
+                    Knowledge Base
+                </button>
+                <button
+                    onclick="changeTab(this, 'lesson')"
+                    class="tab-btn px-6 py-3 text-gray-500 font-semibold rounded-xl whitespace-nowrap hover:bg-gray-50"
+                >
+                    Generate Lesson
+                </button>
+                <button
+                    onclick="changeTab(this, 'browse')"
+                    class="tab-btn px-6 py-3 text-gray-500 font-semibold rounded-xl whitespace-nowrap hover:bg-gray-50"
+                    id="browseTabBtn"
+                >
+                    View Lessons
+                </button>
+                <button
+                    onclick="changeTab(this, 'settings')"
+                    class="tab-btn px-6 py-3 text-gray-500 font-semibold rounded-xl whitespace-nowrap hover:bg-gray-50"
+                >
+                    API Key
+                </button>
+            </div>
+            <div class="w-11 h-11 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                AI
+            </div>
+        </div>
+
+        <!-- Chat Header Section -->
+        
+
+        <!-- Chat Messages Area -->
+        <div class="flex-1 px-6 py-8 overflow-y-auto" id="chatMessages">
+            <div class="flex items-start gap-4">
+                <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    AI
+                </div>
+                <div class="bg-gray-100 rounded-2xl px-5 py-4 max-w-lg">
+                    <p class="text-gray-700 leading-relaxed">
+                        Hello! I'm your AI assistant. How can I help you today?
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Knowledge Base Content -->
+        <div id="knowledgeBaseContent" class="hidden flex-1 px-6 py-8 overflow-y-auto">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-blue-500 mb-2">Knowledge Base</h2>
+                <p class="text-gray-600">Manage your documents and search through your knowledge base</p>
+            </div>
+
+            <div class="mb-8">
+                <div class="bg-gray-100 rounded-2xl p-1 flex max-w-md mx-auto">
+                    <button onclick="switchKnowledgeTab('upload')" id="uploadTab" class="kb-tab-btn px-6 py-3 text-blue-500 font-semibold bg-white rounded-xl shadow-sm flex-1">
+                        Upload Documents
+                    </button>
+                    <button onclick="switchKnowledgeTab('search')" id="searchTab" class="kb-tab-btn px-6 py-3 text-gray-500 font-semibold hover:text-gray-700 flex-1">
+                        Search Knowledge
+                    </button>
+                </div>
+            </div>
+
+            <div id="uploadTabContent" class="max-w-4xl mx-auto">
+                <div class="text-center mb-6">
+                    <i class="fas fa-database text-blue-600 text-2xl mr-2"></i>
+                    <span class="text-gray-700 font-medium text-lg">Add Documents to Knowledge Base</span>
+                </div>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center mb-6 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors min-h-64 flex flex-col items-center justify-center" onclick="document.getElementById('knowledgeFileInput').click()">
+                    <i class="fas fa-cloud-upload-alt text-6xl text-gray-400 mb-4"></i>
+                    <p class="text-gray-600 text-xl mb-2">Drop your documents here or click to browse</p>
+                    <p class="text-gray-500">Support PDF, DOCX, TXT, and PPT files up to 100 MB</p>
+                    
+                    <input type="file" id="knowledgeFileInput" class="hidden" accept=".pdf,.doc,.docx,.txt,.ppt,.pptx" multiple onchange="handleKnowledgeFileSelect(event)">
+                </div>
+                
+                <div id="selectedKnowledgeFiles" class="hidden mb-6 space-y-3">
+                </div>
+                
+                <div class="text-center">
+                    <button onclick="uploadToKnowledgeBase()" id="uploadToKnowledgeBtn" class="px-8 py-3 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-colors text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <span id="uploadBtnText">Upload to Knowledge Base</span>
+                        <i id="uploadBtnLoader" class="fas fa-spinner fa-spin ml-2 hidden"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="searchTabContent" class="hidden max-w-4xl mx-auto">
+                <div class="text-center mb-6">
+                    <i class="fas fa-search text-blue-600 text-2xl mr-2"></i>
+                    <span class="text-gray-700 font-medium text-lg">Search Your Knowledge Base</span>
+                </div>
+                
+                <div class="mb-8">
+                    <div class="relative max-w-2xl mx-auto">
+                        <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        <input
+                            type="text"
+                            id="knowledgeSearchInput"
+                            placeholder="Search documents, topics, or keywords..."
+                            class="w-full pl-12 pr-4 py-4 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 text-gray-700 text-lg"
+                            onkeypress="handleKnowledgeSearchKeyPress(event)"
+                        />
+                        <button onclick="searchKnowledgeBase()" class="absolute right-2 top-1/2 transform -translate-y-1/2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                            Search
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="knowledgeSearchResults" class="space-y-4">
+                    <div class="text-center text-gray-500 py-16">
+                        <i class="fas fa-search text-6xl mb-6"></i>
+                        <p class="text-xl">Enter a search term to find relevant documents and information</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lesson Generator Content -->
+        <div id="lessonGeneratorContent" class="hidden flex-1 px-6 pt-8 overflow-y-auto">
+            <!-- Step 1: File Upload -->
+            <div id="uploadStep" class="max-w-4xl mx-auto">
+               <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-[#05B0FC] mb-2">Generate Lesson from Document</h2>
+                <p class="text-gray-600">Upload your educational materials and create structured lesson plans</p>
+            </div>
+              
+                <div class="text-center mb-6">
+                    <i class="fas fa-upload text-[#05B0FC] text-2xl mr-2"></i>
+                    <span class="text-gray-700 font-medium text-lg">Upload Your PDF (Textbook or Handout)</span>
+                </div>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center mb-6 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors min-h-64 flex flex-col items-center justify-center" onclick="document.getElementById('lessonFileInput').click()">
+                    <div class="flex gap-2 mb-5">
+                        <img src="./excel.png" alt="">
+                        <img src="./ppt.png" alt="">
+                        <img src="./word.png" alt="">
+                    </div>
+                    <p class="text-gray-600 text-xl mb-2">Drop your file here or click to browse</p>
+                    <p class="text-gray-500">Support PDF, DOCX, and PPT files up to 100 MB</p>
+                    
+                    <input type="file" id="lessonFileInput" class="hidden" accept=".pdf,.doc,.docx,.txt,.ppt,.pptx" onchange="handleFileSelect(event)">
+                </div>
+                
+                <div id="selectedFileName" class="hidden mb-6 p-4 bg-sky-100 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i class="fas fa-file text-blue-500 mr-3"></i>
+                            <span class="text-lg text-blue-500 font-medium"></span>
+                        </div>
+                        <button onclick="removeSelectedFile()" class="text-blue-500 hover:text-red-600 p-2">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="text-center">
+                    <button onclick="proceedToLessonConfig()" id="proceedBtn" class="px-8 py-3 border-2 border-[#05B0FC] text-[#05B0FC] rounded-lg hover:bg-[#05B0FC] hover:text-white transition-colors text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Generate Lesson
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Lesson Configuration -->
+            <div id="configStep" class="hidden w-[436px] mx-auto text-slate-500 border border-blue-500 rounded-lg ">
+                <div class="text-center mb-8 bg-[#05B0FC] text-white w-full py-4  ">
+    
+                    <span class=" font-medium text-xl">Lesson Details</span>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-4 ">
+                    <form id="lessonConfigForm" onsubmit="generateLesson(event)">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <!-- Lesson Title -->
+                            <div class="md:col-span-2">
+                                <label class="block text-gray-400 text-sm font-bold mb-2" for="lessonTitle">
+                                    Lesson Title *
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="lessonTitle" 
+                                    name="lessonTitle"
+                                    placeholder="Enter lesson title..."
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
+                                    required
+                                />
+                            </div>
+
+                            <!-- Learning Objective -->
+                            <div class="md:col-span-2 border-b">
+                                <label class="block text-gray-400 text-sm font-bold mb-2" for="learningObjective">
+                                    Learning Objective *
+                                </label>
+                                <textarea 
+                                    id="learningObjective" 
+                                    name="learningObjective"
+                                    placeholder="What should students learn from this lesson?"
+                                    class="w-full px-4 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400 h-10 resize-none"
+                                    required
+                                ></textarea>
+                            </div>
+
+                            <!-- Focus Area -->
+                            <div>
+                                <label class="block text-gray-400 text-sm font-bold mb-2" for="focusArea">
+                                    Focus Area *
+                                </label>
+                                <select 
+                                    id="focusArea" 
+                                    name="focusArea"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
+                                    required
+                                >
+                                    <option value="">Select focus area...</option>
+                                    <option value="Reading Comprehension">Reading Comprehension</option>
+                                    <option value="Mathematics">Mathematics</option>
+                                    <option value="Science">Science</option>
+                                    <option value="Social Studies">Social Studies</option>
+                                    <option value="Language Arts">Language Arts</option>
+                                    <option value="History">History</option>
+                                    <option value="Geography">Geography</option>
+                                    <option value="Literature">Literature</option>
+                                    <option value="Writing">Writing</option>
+                                    <option value="Critical Thinking">Critical Thinking</option>
+                                    <option value="Problem Solving">Problem Solving</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <!-- Grade Level -->
+                            <div>
+                                <label class="block text-gray-400 text-sm font-bold mb-2" for="gradeLevel">
+                                    Grade Level *
+                                </label>
+                                <select 
+                                    id="gradeLevel" 
+                                    name="gradeLevel"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
+                                    required
+                                >
+                                    <option value="">Select grade level...</option>
+                                    <option value="K-1">Kindergarten - 1st Grade</option>
+                                    <option value="2-3">2nd - 3rd Grade</option>
+                                    <option value="4-5">4th - 5th Grade</option>
+                                    <option value="6-8">6th - 8th Grade (Middle School)</option>
+                                    <option value="9-12">9th - 12th Grade (High School)</option>
+                                    <option value="College">College/University</option>
+                                    <option value="Adult">Adult Education</option>
+                                </select>
+                            </div>
+
+                            <!-- Additional Notes -->
+                            <div class="md:col-span-2">
+                                <label class="block text-gray-400 text-sm font-bold mb-2" for="additionalNotes">
+                                    Additional Notes (Optional)
+                                </label>
+                                <textarea 
+                                    id="additionalNotes" 
+                                    name="additionalNotes"
+                                    placeholder="Any specific requirements, teaching methods, or notes..."
+                                    class="w-full px-4 py-3 border flex  border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400 h-10 resize-none"
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-center mt-4">
+                            <button type="submit" id="generateLessonBtn" class="px-8 py-3 bg-[#05B0FC] text-white rounded-lg hover:bg-[#05B0FC] transition-colors text-lg font-medium">
+                                <span id="generateBtnText">Generate Lesson</span>
+                                <i id="generateBtnLoader" class="fas fa-spinner fa-spin ml-2 hidden"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Step 3: Generated Lesson Display - UPDATED -->
+            <div id="lessonDisplay" class="hidden  w-[616px] mx-auto  p-5">
+                <div class="text-center mb-8 text-[#05B0FC] justify-center ">
+                    <div class="flex gap-2 justify-center text-center">
+                        <img src="./f7_book.png" alt="">
+                        <span class="font-medium text-2xl">
+                        Initial Lesson Generated</span></div>
+                        <p class="text-center mt-3 mb-3">Review the AI- Generated Content</p>
+                        <button class="px-8 py-3 bg-[#05B0FC] text-white rounded-lg hover:bg-blue-600 transition-colors font-medium">Generated based on you Document </button>
+                        </div>
+                         
+
+                <div class="bg-white">
+                    <!-- Lesson Header -->
+                    <div class="">
+                        <div class="mb-2">
+                            <div class=" p-2 rounded-lg border border-blue-500 rounded-lg shadow-lg">
+                                <div id="lessonSummary" class="text-gray-700 leading-relaxed max-h-[436px]">
+                                    <p>Lorem, ipsum dolor sit amet consectetur adipisicing elit. Iusto dolorem velit fuga nemo atque excepturi consectetur, delectus voluptatum veniam exercitationem repellat facilis dolorum animi! Voluptate natus quia porro, nemo beatae mollitia, pariatur voluptas autem illum illo suscipit corrupti nobis perferendis ipsum necessitatibus fugit modi fuga unde nisi molestiae. Dolore dicta blanditiis quod doloribus iste veritatis illo, dolorum ab corporis sint expedita molestias quo maxime debitis assumenda aut odit similique vero error placeat pariatur. Laborum, enim unde omnis cumque non consequatur, facere tempore blanditiis dolor ea commodi recusandae tempora aliquid dolorum eaque nostrum exercitationem pariatur explicabo nesciunt laudantium soluta sunt magnam!</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="additionalNotesDisplay" class="mb-6 hidden">
+                            <h4 class="text-lg font-semibold text-gray-800 mb-3">Additional Notes</h4>
+                            <div class=" p-4 rounded-lg">
+                                <p class="text-yellow-800" id="displayAdditionalNotes"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <!-- Action Buttons -->
+<div class="p-3">
+    <div class="flex flex-row sm:flex-row justify-center items-center gap-4">
+        <button onclick="reviewWithHuman()" class="px-8 py-3 bg-[#05B0FC] text-white rounded-lg hover:bg-blue-600 transition-colors font-medium flex items-center gap-2">
+            Review with Human
+        </button>
+        <button onclick="reviewWithAI()" class="px-8 py-3 bg-[#05B0FC] text-white rounded-lg hover:bg-blue-600 transition-colors font-medium flex items-center gap-2">
+            Review with AI
+        </button>
+    </div>
+    <div class="flex justify-center mt-4">
+        <button onclick="proceedToCompletion()" class="border border-[#05B0FC] px-8 py-3 bg-white  text-[#05B0FC] hover:text-white hover:bg-[#05B0FC] rounded-lg transition-colors font-medium flex items-center gap-2">
+            <i class="fas fa-check"></i>
+            Finalize and Download
+        </button>
+    </div>
+</div>
+                </div>
+            </div>
+<!-- Lesson Completion Page -->
+<div id="lessonCompletionPage" class="hidden max-w-2xl mx-auto text-center p-8">
+    <div class="mb-8">
+        <div class="flex items-center justify-center mb-4">
+            <i class="fas fa-check-circle text-[#05B0FC] text-4xl mr-3"></i>
+            <h2 class="text-3xl font-bold text-[#05B0FC]">Your lesson is ready!</h2>
+        </div>
+        <p class="text-gray-600 text-lg">Download and share your lesson</p>
+    </div>
+
+    <!-- Lesson File Display -->
+    <div class="mb-8">
+        <div class="bg-[#05B0FC] text-white rounded-lg px-6 py-4 text-lg font-medium">
+            <i class="fas fa-file mr-2"></i>
+            <span id="completedLessonTitle">Sample Lesson from document.pdf</span>
+        </div>
+    </div>
+
+    <!-- Download Buttons -->
+    <div class="flex justify-center gap-4 mb-8">
+        <button onclick="downloadLesson('pdf')" class="px-8 py-3 bg-[#05B0FC] text-white rounded-lg  transition-colors font-medium flex items-center gap-2">
+            <i class="fas fa-download"></i>
+            Download PDF
+        </button>
+        <button onclick="downloadLesson('docx')" class="px-8 py-3 bg-[#05B0FC] text-white rounded-lg  transition-colors font-medium flex items-center gap-2">
+            <i class="fas fa-download"></i>
+            Download DOCX
+        </button>
+    </div>
+
+    <!-- Start New Lesson Button -->
+    <div>
+        <button onclick="startNewLesson()" class="px-12 py-4 text-[#05B0FC] hover:text-white bg-white hover:bg-[#05B0FC] border border-[#05B0FC] rounded-lg  transition-colors font-medium text-lg">
+            Start New Lesson
+        </button>
+    </div>
+</div>
+            
+        </div>
+
+
+
+
+       <!-- Human Review Interface -->
+<!-- Human Review Interface -->
+<div class="max-h-[80vh] overflow-y-auto ">
+    <div id="humanReviewInterface" class="hidden w-[616px] mx-auto px-6 pt-8 border border-[#05B0FC] shadow-3xl rounded-xl">
+<div class="text-center mb-8">
+    <div class="flex gap-2 justify-center items-center">
+        <img src="./manual.png" alt="Manual Edit Icon" class="h-8 w-8">
+        <h2 class="text-3xl font-bold text-[#05B0FC] mb-2">Manual Edit</h2>
+    </div>
+    <p class="text-gray-600">Manually edit the content below</p>
+</div>
+
+
+        <div class=" p-4">
+            <!-- Remove the Current Lesson Preview section entirely -->
+            
+            <!-- Single Editable Content Area -->
+            <div class="mb-6">
+                <textarea
+                    id="humanReviewContent"
+                    class="w-full px-4 py-3 border border-[#05B0FC] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[24rem] max-h-[32rem] overflow-y-auto resize-none text-sm font-mono"
+                    placeholder="Edit your lesson content here..."
+                ></textarea>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex justify-end gap-2">
+                <button
+                    onclick="cancelHumanReview()"
+                    class="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick="saveHumanReview()"
+                    class="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                >
+                    Apply Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+<div class="max-h-[80vh] overflow-y-auto">
+    <div id="aiReviewInterface" class="hidden max-w-4xl mx-auto px-6 pt-8">
+      <div class="text-center mb-8">
+    <div class="flex justify-center items-center gap-2">
+        <img src="./manual.png" alt="Manual Edit Icon" class="h-8 w-8">
+        <h2 class="text-3xl font-bold text-[#05B0FC] mb-2">Edit With AI</h2>
+    </div>
+    <p class="">Provide Instruction to AI to modify your lesson </p>
+</div>
+
+      
+        <div class="bg-white rounded-xl shadow-lg p-8 border border-[#05B0FC]">
+            <div class="mb-6">
+                <label class="block text-[#05B0FC] text-sm font-bold mb-2" for="aiReviewPrompt">
+                    Add Your Prompt Here
+                </label>
+                <textarea 
+                    id="aiReviewPrompt"
+                    placeholder="Describe what changes you want AI to make..."
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 min-h-[8rem] max-h-[16rem] overflow-y-auto resize-none"
+                ></textarea>
+            </div>
+            <div class="mb-6 border border-[#05B0FC] rounded-lg p-4 bg-blue-50">
+                <label class="block  text-sm text-[#05B0FC] font-bold mb-2 ">
+                    Current Lesson Preview
+                </label>
+                <div id="currentLessonPreview" class="bg-blue-80 p-4 rounded-lg min-h-[8rem] max-h-[12rem] overflow-y-auto text-sm">
+                    <!-- This area will scroll if content is long -->
+                </div>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button onclick="cancelAIReview()" class="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100">
+                    <i class="fas fa-times mr-2"></i>Cancel
+                </button>
+                <button onclick="applyAIReview()" id="applyAIReviewBtn" class="px-6 py-3 bg-[#05B0FC] text-white rounded-lg hover:bg-[#05B0FC]-600 transition-colors font-medium">
+                    <span id="applyAIReviewText">Apply AI Changes</span>
+                    <i id="applyAIReviewLoader" class="fas fa-spinner fa-spin ml-2 hidden"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+        <!-- Browse Lessons Content -->
+        <div id="browseLessonsContent" class="hidden flex-1 px-6 py-8 overflow-y-auto w-full">
+            <div class="w-full mx-auto">
+                <div class=" mb-2">
+                    <h2 class="text-3xl font-semibold text-[#05B0FC] mb-2">My Lesson</h2>
+                    <p class="text-gray-600">Explore Your AI Powered Lessons</p>
+                </div>
+
+                <!-- Search and Filter Section -->
+                <div class="bg-white  p-6 mb-8 w-full">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <input 
+                                type="text" 
+                                id="searchLessons" 
+                                placeholder="Search by title, content, or subject..."
+                                class="w-[1200px] px-4 py-3 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                onkeypress="handleLessonSearchKeyPress(event)"
+                            />
+                        </div>
+                        
+                    </div>
+                    <div class="mt-4 flex justify-center">
+                        <button onclick="searchLessons()" class="px-8 py-3 bg-[#05B0FC] text-white rounded-lg transition-colors font-medium">
+                            <i class="fas fa-search mr-2"></i>Search Lessons
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Lessons Display -->
+                <div id="lessonsDisplay" class="space-y-6">
+                    <!-- Sample lessons will be displayed here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Content -->
+         <div id="settingsContent" class="hidden flex-1 px-6 py-8 overflow-y-auto">
+            
+
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-xl p-8 shadow-lg">
+                    <h3 class="text-2xl text-center font-bold text-sky-500 mb-6">Update API Key</h3>
+                    
+                    <div class="text-gray-600 space-y-3 mb-6">
+                        <p class="font-bold text-sky-500 text-lg">How to get your GROQ API Key:</p>
+                        <p>1. Visit <span class="text-red-500 font-semibold">Groq Console</span></p>
+                        <p>2. Sign up or log in to your account</p>
+                        <p>3. Go to the API Keys section</p>
+                        <p>4. Click "Create API Key"</p>
+                        <p>5. Copy your API key and paste it below</p>
+                        <p class="text-sm text-gray-500">Your API key should start with "gsk_"</p>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="apiKeyInput">
+                            API Key
+                        </label>
+                        <div class="relative">
+                            <input 
+                                type="password" 
+                                id="apiKeyInput" 
+                                placeholder="Enter your GROQ API key..." 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 pr-12"
+                            />
+                            <button onclick="toggleApiKeyVisibility()" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                                <i class="fas fa-eye" id="toggleApiKeyIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-4">
+                        <button onclick="clearApiKey()" class="flex-1 px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                            Clear
+                        </button>
+                        <button onclick="saveApiKey()" class="flex-1 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                            Save API Key
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voice Recording Indicator -->
+        <div id="voiceRecordingIndicator" class="hidden px-6 py-2 bg-red-50 border-l-4 border-red-500">
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                <span class="text-red-700 font-medium">Recording... Click to stop</span>
+                <button onclick="stopRecording()" class="ml-auto text-red-700 hover:text-red-900">
+                    <i class="fas fa-stop-circle text-xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="px-6 py-4 border-t border-gray-100 mt-[40px]">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleVoiceRecording()" id="micButton" class="w-12 h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
+                  <img src="./recorder.png" alt="">
+                </button>
+                <button onclick="toggleVoiceOutput()" id="voiceOutputBtn" class="w-12 h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
+                  <img src="./voice.png" alt="">
+                </button>
+                
+                <div class="flex-1 relative">
+                    <input
+                        type="text"
+                        id="messageInput"
+                        placeholder="Type your message"
+                        class="w-full px-6 py-4 bg-gray-100 rounded-full border-0 focus:outline-none text-gray-700 placeholder-gray-500"
+                        onkeypress="handleKeyPress(event)"
+                    />
+                    <button class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <i class="far fa-smile text-xl"></i>
+                    </button>
+                </div>
+                
+                <button onclick="sendMessage()" class="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center hover:bg-blue-600 transition-colors">
+                    <img src="./sender.png" alt="">
+                </button>
+            </div>
+        </div>
+    </div>
+
+  </div>
+
+  <!-- JS -->
+  <script>
+    // Global variables
+    let chatHistory = [];
+    let currentChatId = null;
+    let isRecording = false;
+    let isVoiceOutputEnabled = false;
+    let mediaRecorder = null;
+    let selectedKnowledgeFiles = [];
+    let currentView = 'chat';
+    let currentLessonFile = null;
+    let currentLessonData = null;
+    let isCollapsed = false;
+
+    // Mock data for demo
+    const mockLessons = [
+        {
+            id: 1,
+            title: "Introduction to Fractions",
+            focus_area: "Mathematics",
+            grade_level: "4-5",
+            summary: "A comprehensive lesson on understanding fractions with visual aids and practical examples.",
+            teacher_name: "Ms. Johnson",
+            created_at: "2024-01-15T10:00:00Z",
+            learning_objectives: "Students will understand what fractions represent and how to identify numerators and denominators.",
+            content: "This lesson introduces students to the concept of fractions using pizza slices and pie charts. Students will learn to identify the numerator and denominator, and understand what each part represents.\n\nActivity 1: Pizza Party Fractions\nStudents will work with paper pizza slices to understand how fractions work in real life.\n\nActivity 2: Fraction Art\nStudents will create colorful fraction wheels to visualize different fraction values."
+        },
+        {
+            id: 2,
+            title: "The Solar System",
+            focus_area: "Science",
+            grade_level: "6-8",
+            summary: "Explore the planets, moons, and other celestial bodies in our solar system.",
+            teacher_name: "Mr. Smith",
+            created_at: "2024-01-10T14:30:00Z",
+            learning_objectives: "Students will be able to identify and describe the characteristics of each planet.",
+            content: "In this lesson, we will journey through space to learn about the eight planets in our solar system. Students will discover the unique characteristics of each planet, including size, composition, and distance from the sun.\n\nActivity 1: Planet Parade\nStudents will create a scale model of the solar system.\n\nActivity 2: Space Facts\nStudents will research and present interesting facts about their assigned planet."
+        },
+        {
+            id: 3,
+            title: "Creative Writing: Character Development",
+            focus_area: "Language Arts",
+            grade_level: "9-12",
+            summary: "Learn how to create compelling characters for your stories.",
+            teacher_name: "Ms. Davis",
+            created_at: "2024-01-08T09:00:00Z",
+            learning_objectives: "Students will be able to develop three-dimensional characters with clear motivations and personality traits.",
+            content: "This lesson focuses on the art of character development in creative writing. Students will learn techniques for creating memorable, believable characters that drive their stories forward.\n\nActivity 1: Character Profiles\nStudents will create detailed character profiles including background, personality, and motivations.\n\nActivity 2: Character Dialogue\nStudents will practice writing dialogue that reveals character traits and advances the plot."
+        }
+    ];
+
+    // Initialize
+    window.onload = function() {
+        setupSidebarListeners();
+        startNewChat();
+        
+        // Initialize mobile state
+        if (window.innerWidth < 768) {
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+        }
+    };
+
+    // Tab management
+    function changeTab(button, tabType) {
+        // Update tab button styles
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        tabButtons.forEach(btn => {
+            btn.classList.remove('text-blue-500', 'bg-white', 'shadow-sm');
+            btn.classList.add('text-gray-500');
+        });
+        
+        button.classList.remove('text-gray-500');
+        button.classList.add('text-blue-500', 'bg-white', 'shadow-sm');
+        
+        // Hide all content areas
+        document.getElementById('chatMessages').classList.add('hidden');
+        document.getElementById('knowledgeBaseContent').classList.add('hidden');
+        document.getElementById('lessonGeneratorContent').classList.add('hidden');
+        document.getElementById('browseLessonsContent').classList.add('hidden');
+        document.getElementById('settingsContent').classList.add('hidden');
+        
+        // Show selected content area
+        currentView = tabType;
+        switch(tabType) {
+            case 'chat':
+                document.getElementById('chatMessages').classList.remove('hidden');
+                document.getElementById('chatTitle').textContent = 'Chat';
+                document.getElementById('chatStatus').textContent = 'Online';
+                break;
+            case 'knowledge':
+                document.getElementById('knowledgeBaseContent').classList.remove('hidden');
+                document.getElementById('chatTitle').textContent = 'Knowledge Base';
+                document.getElementById('chatStatus').textContent = 'Manage Documents';
+                break;
+            case 'lesson':
+                document.getElementById('lessonGeneratorContent').classList.remove('hidden');
+                document.getElementById('chatTitle').textContent = 'Lesson Generator';
+                document.getElementById('chatStatus').textContent = 'Create Lessons';
+                break;
+            case 'browse':
+                document.getElementById('browseLessonsContent').classList.remove('hidden');
+                document.getElementById('chatTitle').textContent = 'Browse Lessons';
+                document.getElementById('chatStatus').textContent = 'View Available Lessons';
+                loadAvailableLessons();
+                break;
+            case 'settings':
+                document.getElementById('settingsContent').classList.remove('hidden');
+                document.getElementById('chatTitle').textContent = 'Settings';
+                document.getElementById('chatStatus').textContent = 'Configure Application';
+                break;
+        }
+    }
+
+    // Chat Functions
+    function startNewChat() {
+        currentChatId = Date.now();
+        changeTab(document.querySelector('.tab-btn'), 'chat');
+        
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = `
+            <div class="flex items-start gap-4">
+                <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    AI
+                </div>
+                <div class="bg-gray-100 rounded-2xl px-5 py-4 max-w-lg">
+                    <p class="text-gray-700 leading-relaxed">
+                        Hello! I'm your AI assistant. How can I help you today?
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('messageInput').value = '';
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+        
+        if (message) {
+            // Switch to chat if not already there
+            if (currentView !== 'chat') {
+                changeTab(document.querySelector('.tab-btn'), 'chat');
+            }
+            
+            addMessageToChat('user', message);
+            input.value = '';
+            
+            showTypingIndicator();
+            
+            // Simulate AI response
+            setTimeout(() => {
+                hideTypingIndicator();
+                
+                // Generate contextual response
+                let response = generateAIResponse(message);
+                addMessageToChat('ai', response);
+                
+                if (isVoiceOutputEnabled) {
+                    speakText(response);
+                }
+            }, 1000 + Math.random() * 2000);
+        }
+    }
+
+    function generateAIResponse(message) {
+        const lowerMessage = message.toLowerCase();
+        
+        if (lowerMessage.includes('lesson') || lowerMessage.includes('teach')) {
+            return "I'd be happy to help you with lesson planning! You can use the Lesson Generator tab to create structured lesson plans from your documents. Simply upload a PDF or document, and I'll help you create engaging educational content.";
+        } else if (lowerMessage.includes('knowledge') || lowerMessage.includes('document')) {
+            return "For document management, check out the Knowledge Base tab. You can upload documents and search through them later. This is perfect for organizing your educational resources.";
+        } else if (lowerMessage.includes('help') || lowerMessage.includes('how')) {
+            return "I can help you with various tasks! You can:\n• Generate lesson plans from documents\n• Search and manage your knowledge base\n• Browse available lessons\n• Use voice commands\n• Download content in various formats\n\nWhat would you like to explore?";
+        } else if (lowerMessage.includes('thank')) {
+            return "You're welcome! I'm here to help with all your educational needs. Feel free to ask me anything or explore the different features available.";
+        } else {
+            return `I understand you're asking about "${message}". I'm here to help with educational content creation, lesson planning, and document management. How can I assist you further?`;
+        }
+    }
+
+    function addMessageToChat(sender, message) {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'flex items-start gap-4 mb-4';
+
+        if (sender === 'user') {
+            messageDiv.innerHTML = `
+                <div class="flex items-start gap-4 flex-row-reverse w-full">
+                    <div class="w-10 h-10 bg-gray-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                        U
+                    </div>
+                    <div class="bg-blue-500 text-white rounded-2xl px-5 py-4 max-w-lg">
+                        <p class="leading-relaxed">${message}</p>
+                    </div>
+                </div>
+            `;
+        } else {
+            messageDiv.innerHTML = `
+                <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    AI
+                </div>
+                <div class="bg-gray-100 rounded-2xl px-5 py-4 max-w-lg">
+                    <p class="text-gray-700 leading-relaxed">${message.replace(/\n/g, '<br>')}</p>
+                </div>
+            `;
+        }
+
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function showTypingIndicator() {
+        const chatMessages = document.getElementById('chatMessages');
+        const typingDiv = document.createElement('div');
+        typingDiv.id = 'typingIndicator';
+        typingDiv.className = 'flex items-start gap-4 mb-4';
+        typingDiv.innerHTML = `
+            <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                AI
+            </div>
+            <div class="bg-gray-100 rounded-2xl px-5 py-4 max-w-lg">
+                <div class="flex space-x-1">
+                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                </div>
+            </div>
+        `;
+        chatMessages.appendChild(typingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function hideTypingIndicator() {
+        const typingIndicator = document.getElementById('typingIndicator');
+        if (typingIndicator) {
+            typingIndicator.remove();
+        }
+    }
+
+    function resetChat() {
+        if (confirm('Are you sure you want to reset the chat?')) {
+            startNewChat();
+            showNotification('Chat reset successfully!', 'success');
+        }
+    }
+
+    function downloadCurrentChat() {
+        // Create a simple text file with chat content
+        const chatContent = `Chat Conversation\n\nThis is a demo download of the current chat conversation.\n\nTimestamp: ${new Date().toLocaleString()}\n\nNote: This is a frontend demo without backend functionality.`;
+        
+        const blob = new Blob([chatContent], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat_${currentChatId}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+        
+        showNotification('Chat downloaded successfully!', 'success');
+    }
+
+    // Knowledge Base Functions
+    function switchKnowledgeTab(tabName) {
+        const tabButtons = document.querySelectorAll('.kb-tab-btn');
+        tabButtons.forEach(btn => {
+            btn.classList.remove('text-blue-500', 'bg-white', 'shadow-sm');
+            btn.classList.add('text-gray-500');
+        });
+        
+        document.getElementById('uploadTabContent').classList.toggle('hidden', tabName !== 'upload');
+        document.getElementById('searchTabContent').classList.toggle('hidden', tabName !== 'search');
+        
+        const activeTab = document.getElementById(tabName + 'Tab');
+        activeTab.classList.remove('text-gray-500');
+        activeTab.classList.add('text-blue-500', 'bg-white', 'shadow-sm');
+    }
+
+    function handleKnowledgeFileSelect(event) {
+        const files = Array.from(event.target.files);
+        selectedKnowledgeFiles = files;
+        
+        if (files.length > 0) {
+            const container = document.getElementById('selectedKnowledgeFiles');
+            container.innerHTML = '';
+            
+            files.forEach((file, index) => {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'p-4 bg-blue-100 rounded-lg';
+                fileDiv.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i class="fas fa-file text-blue-600 mr-3"></i>
+                            <span class="text-lg text-blue-800 font-medium">${file.name}</span>
+                            <span class="text-sm text-blue-600 ml-2">(${(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        </div>
+                        <button onclick="removeKnowledgeFile(${index})" class="text-blue-600 hover:text-red-600 p-2">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(fileDiv);
+            });
+            
+            container.classList.remove('hidden');
+            document.getElementById('uploadToKnowledgeBtn').disabled = false;
+        }
+    }
+
+    function removeKnowledgeFile(index) {
+        selectedKnowledgeFiles.splice(index, 1);
+        if (selectedKnowledgeFiles.length === 0) {
+            document.getElementById('selectedKnowledgeFiles').classList.add('hidden');
+            document.getElementById('uploadToKnowledgeBtn').disabled = true;
+        } else {
+            const event = { target: { files: selectedKnowledgeFiles } };
+            handleKnowledgeFileSelect(event);
+        }
+    }
+
+    function uploadToKnowledgeBase() {
+        if (selectedKnowledgeFiles.length === 0) {
+            showNotification('Please select files to upload', 'error');
+            return;
+        }
+
+        const uploadBtn = document.getElementById('uploadToKnowledgeBtn');
+        const uploadBtnText = document.getElementById('uploadBtnText');
+        const uploadBtnLoader = document.getElementById('uploadBtnLoader');
+
+        uploadBtn.disabled = true;
+        uploadBtnText.textContent = 'Uploading...';
+        uploadBtnLoader.classList.remove('hidden');
+
+        // Simulate upload
+        setTimeout(() => {
+            showNotification(`Successfully uploaded ${selectedKnowledgeFiles.length} files to knowledge base`, 'success');
+            
+            selectedKnowledgeFiles = [];
+            document.getElementById('selectedKnowledgeFiles').classList.add('hidden');
+            document.getElementById('knowledgeFileInput').value = '';
+            
+            uploadBtn.disabled = false;
+            uploadBtnText.textContent = 'Upload to Knowledge Base';
+            uploadBtnLoader.classList.add('hidden');
+        }, 2000);
+    }
+
+    function handleKnowledgeSearchKeyPress(event) {
+        if (event.key === 'Enter') {
+            searchKnowledgeBase();
+        }
+    }
+
+    function searchKnowledgeBase() {
+        const searchTerm = document.getElementById('knowledgeSearchInput').value.trim();
+        if (!searchTerm) {
+            showNotification('Please enter a search term', 'error');
+            return;
+        }
+
+        const resultsContainer = document.getElementById('knowledgeSearchResults');
+        resultsContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="loading mx-auto mb-4"></div>
+                <p class="text-gray-500 text-lg">Searching knowledge base...</p>
+            </div>
+        `;
+
+        // Simulate search
+        setTimeout(() => {
+            const mockResults = [
+                {
+                    id: 1,
+                    title: "Search Result 1",
+                    snippet: `This document contains information about "${searchTerm}" and related topics. It includes detailed explanations and examples.`,
+                    source: "document1.pdf",
+                    score: 0.95
+                },
+                {
+                    id: 2,
+                    title: "Search Result 2",
+                    snippet: `Another relevant document discussing "${searchTerm}" with practical applications and case studies.`,
+                    source: "document2.docx",
+                    score: 0.87
+                }
+            ];
+            
+            displayKnowledgeSearchResults(mockResults);
+        }, 1500);
+    }
+
+    function displayKnowledgeSearchResults(results) {
+        const resultsContainer = document.getElementById('knowledgeSearchResults');
+        
+        if (results.length === 0) {
+            resultsContainer.innerHTML = `
+                <div class="text-center py-16 text-gray-500">
+                    <i class="fas fa-search text-6xl mb-4"></i>
+                    <p class="text-xl">No results found for your search term</p>
+                </div>
+            `;
+            return;
+        }
+
+        resultsContainer.innerHTML = results.map(result => `
+            <div class="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <h4 class="font-semibold text-gray-900 mb-3 text-lg">${result.title}</h4>
+                        <p class="text-gray-600 mb-4">${result.snippet}</p>
+                        <div class="flex items-center text-sm text-gray-500">
+                            <i class="fas fa-file mr-2"></i>
+                            <span>${result.source}</span>
+                            <span class="mx-2">•</span>
+                            <span>Relevance: ${Math.round(result.score * 100)}%</span>
+                        </div>
+                    </div>
+                    <button onclick="useKnowledgeResult('${result.id}')" class="ml-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                        Use in Chat
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function useKnowledgeResult(resultId) {
+        changeTab(document.querySelector('.tab-btn'), 'chat');
+        showNotification('Knowledge base result added to chat context', 'success');
+        addMessageToChat('ai', 'I\'ve added the relevant information from your knowledge base to our conversation context. How can I help you with this information?');
+    }
+
+    // Lesson Generator Functions
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (file) {
+            currentLessonFile = file;
+            const fileNameDisplay = document.getElementById('selectedFileName');
+            fileNameDisplay.querySelector('span').textContent = file.name;
+            fileNameDisplay.classList.remove('hidden');
+            document.getElementById('proceedBtn').disabled = false;
+        }
+    }
+
+    function removeSelectedFile() {
+        document.getElementById('selectedFileName').classList.add('hidden');
+        document.getElementById('lessonFileInput').value = '';
+        document.getElementById('proceedBtn').disabled = true;
+        currentLessonFile = null;
+    }
+
+    function proceedToLessonConfig() {
+        if (!currentLessonFile) {
+            showNotification('Please select a file first', 'error');
+            return;
+        }
+
+        document.getElementById('uploadStep').classList.add('hidden');
+        document.getElementById('configStep').classList.remove('hidden');
+        
+        // Pre-fill lesson title with filename
+        const fileName = currentLessonFile.name.split('.')[0];
+        document.getElementById('lessonTitle').value = fileName.replace(/[-_]/g, ' ');
+    }
+
+    function goBackToUpload() {
+        document.getElementById('configStep').classList.add('hidden');
+        document.getElementById('uploadStep').classList.remove('hidden');
+    }
+
+    function generateLesson(event) {
+        event.preventDefault();
+        
+        if (!currentLessonFile) {
+            showNotification('Please select a file first', 'error');
+            return;
+        }
+
+        const form = document.getElementById('lessonConfigForm');
+        const formData = new FormData(form);
+
+        const generateBtn = document.getElementById('generateLessonBtn');
+        const generateBtnText = document.getElementById('generateBtnText');
+        const generateBtnLoader = document.getElementById('generateBtnLoader');
+
+        generateBtn.disabled = true;
+        generateBtnText.textContent = 'Generating...';
+        generateBtnLoader.classList.remove('hidden');
+
+        // Simulate lesson generation
+        setTimeout(() => {
+            currentLessonData = {
+                title: formData.get('lessonTitle'),
+                focusArea: formData.get('focusArea'),
+                gradeLevel: formData.get('gradeLevel'),
+                objective: formData.get('learningObjective'),
+                notes: formData.get('additionalNotes'),
+                summary: `This ${formData.get('focusArea')} lesson for ${formData.get('gradeLevel')} students focuses on ${formData.get('learningObjective')}. The lesson includes interactive activities, practical examples, and assessment opportunities to ensure students meet the learning objectives. Students will engage with the material through various teaching methods designed to accommodate different learning styles and promote active participation.`,
+                content: `# ${formData.get('lessonTitle')}
+
+## Learning Objectives
+Students will be able to:
+- ${formData.get('learningObjective')}
+
+## Materials Needed
+- Uploaded document: ${currentLessonFile.name}
+- Whiteboard/Smart board
+- Student worksheets
+- Interactive materials
+
+## Lesson Structure
+
+### Introduction (10 minutes)
+Welcome students and introduce the topic. Review previous learning and set expectations for today's lesson.
+
+### Main Activity (25 minutes)
+Guide students through the key concepts from the uploaded material. Use interactive discussions and examples to reinforce learning.
+
+### Practice (10 minutes)
+Provide students with guided practice opportunities to apply what they've learned.
+
+### Wrap-up (5 minutes)
+Review key concepts and assign homework or extension activities.
+
+## Assessment
+- Formative assessment through questioning during the lesson
+- Exit ticket to check understanding
+- Homework assignment for practice
+
+## Additional Notes
+${formData.get('additionalNotes') || 'No additional notes provided.'}
+
+## Extension Activities
+- Research project on related topics
+- Creative presentation of key concepts
+- Peer teaching opportunities
+
+---
+Generated lesson plan for ${formData.get('gradeLevel')} students focusing on ${formData.get('focusArea')}.`,
+                fileName: currentLessonFile.name
+            };
+            
+            displayGeneratedLesson(currentLessonData);
+            showNotification('Lesson generated successfully!', 'success');
+            
+            generateBtn.disabled = false;
+            generateBtnText.textContent = 'Generate Lesson';
+            generateBtnLoader.classList.add('hidden');
+        }, 3000);
+    }
+
+    // Updated function to display lesson summary
+    function displayGeneratedLesson(lessonData) {
+        document.getElementById('configStep').classList.add('hidden');
+        document.getElementById('lessonDisplay').classList.remove('hidden');
+        
+        // Update lesson header
+        document.getElementById('displayLessonTitle').textContent = lessonData.title;
+        document.getElementById('displayFocusArea').textContent = lessonData.focusArea;
+        document.getElementById('displayGradeLevel').textContent = lessonData.gradeLevel;
+        document.getElementById('displayFileName').textContent = lessonData.fileName;
+        
+        // Update lesson objective
+        document.getElementById('displayLearningObjective').textContent = lessonData.objective;
+        
+        // Update lesson summary
+        document.getElementById('lessonSummary').textContent = lessonData.summary;
+        
+        // Handle additional notes
+        if (lessonData.notes && lessonData.notes.trim()) {
+            document.getElementById('displayAdditionalNotes').textContent = lessonData.notes;
+            document.getElementById('additionalNotesDisplay').classList.remove('hidden');
+        } else {
+            document.getElementById('additionalNotesDisplay').classList.add('hidden');
+        }
+    }
+// Function to proceed to completion page
+function proceedToCompletion() {
+    if (!currentLessonData) {
+        showNotification('No lesson to complete', 'error');
+        return;
+    }
+    
+    // Hide lesson display and show completion page
+    document.getElementById('lessonDisplay').classList.add('hidden');
+    document.getElementById('lessonCompletionPage').classList.remove('hidden');
+    
+    // Update the completed lesson title
+    const completedTitle = `Lesson from ${currentLessonData.fileName}`;
+    document.getElementById('completedLessonTitle').textContent = completedTitle;
+    
+    showNotification('Lesson completed successfully!', 'success');
+}
+
+// Update the startNewLesson function
+function startNewLesson() {
+    // Reset all steps and hide completion page
+    document.getElementById('lessonDisplay').classList.add('hidden');
+    document.getElementById('lessonCompletionPage').classList.add('hidden');
+    document.getElementById('aiReviewInterface').classList.add('hidden');
+    document.getElementById('humanReviewInterface').classList.add('hidden');
+    document.getElementById('configStep').classList.add('hidden');
+    document.getElementById('uploadStep').classList.remove('hidden');
+    
+    // Clear form and data
+    document.getElementById('lessonConfigForm').reset();
+    document.getElementById('aiReviewPrompt').value = '';
+    document.getElementById('humanReviewContent').value = '';
+    removeSelectedFile();
+    currentLessonFile = null;
+    currentLessonData = null;
+    
+    showNotification('Ready to create a new lesson!', 'info');
+}
+
+// Update saveHumanReview function to go to completion
+function saveHumanReview() {
+    const content = document.getElementById('humanReviewContent').value.trim();
+
+    if (!content) {
+        showNotification('Please add lesson content', 'error');
+        return;
+    }
+
+    // Update the lesson data with edited content
+    currentLessonData.content = content;
+    
+    // Extract title from the content if it starts with #
+    const lines = content.split('\n');
+    const titleLine = lines.find(line => line.startsWith('# '));
+    if (titleLine) {
+        currentLessonData.title = titleLine.replace('# ', '').trim();
+    }
+    
+    // Update summary to reflect manual editing
+    currentLessonData.summary = `This ${currentLessonData.focusArea} lesson for ${currentLessonData.gradeLevel} students has been manually reviewed and edited.`;
+
+    // Go directly to completion page instead of back to display
+    document.getElementById('humanReviewInterface').classList.add('hidden');
+    proceedToCompletion();
+    
+    showNotification('Manual edits saved successfully!', 'success');
+}
+
+// Update applyAIReview function similarly
+function applyAIReview() {
+    const prompt = document.getElementById('aiReviewPrompt').value.trim();
+    if (!prompt) {
+        showNotification('Please enter AI instructions', 'error');
+        return;
+    }
+
+    const applyBtn = document.getElementById('applyAIReviewBtn');
+    const applyText = document.getElementById('applyAIReviewText');
+    const applyLoader = document.getElementById('applyAIReviewLoader');
+
+    applyBtn.disabled = true;
+    applyText.textContent = 'Applying AI Changes...';
+    applyLoader.classList.remove('hidden');
+
+    // Simulate AI editing
+    setTimeout(() => {
+        currentLessonData.content = `${currentLessonData.content}\n\n--- AI Modifications ---\nBased on your request: "${prompt}"\n\nI've enhanced the lesson with additional examples and interactive elements.`;
+        currentLessonData.summary = `This lesson has been enhanced with AI modifications based on your instructions.`;
+        
+        document.getElementById('aiReviewInterface').classList.add('hidden');
+        proceedToCompletion();
+        
+        showNotification('AI review applied successfully!', 'success');
+        
+        applyBtn.disabled = false;
+        applyText.textContent = 'Apply AI Changes';
+        applyLoader.classList.add('hidden');
+    }, 2000);
+}
+    // Updated Review Functions
+function reviewWithHuman() {
+    document.getElementById('lessonDisplay').classList.add('hidden');
+    document.getElementById('humanReviewInterface').classList.remove('hidden');
+    
+    if (currentLessonData) {
+        // Populate the textarea with formatted lesson content
+        const formattedContent = `# ${currentLessonData.title}
+
+## Learning Objectives
+${currentLessonData.objective}
+
+## Materials Needed
+- Uploaded document: ${currentLessonData.fileName}
+- Whiteboard/Smart board
+- Student worksheets
+- Interactive materials
+
+## Lesson Structure
+
+### Introduction (10 minutes)
+Welcome students and introduce the topic. Review previous learning and set expectations for today's lesson.
+
+### Main Activity (25 minutes)
+Guide students through the key concepts from the uploaded material. Use interactive discussions and examples to reinforce learning.
+
+### Practice (10 minutes)
+Provide students with guided practice opportunities to apply what they've learned.
+
+### Wrap-up (5 minutes)
+Review key concepts and assign homework or extension activities.
+
+## Assessment
+- Formative assessment through questioning during the lesson
+- Exit ticket to check understanding
+- Homework assignment for practice
+
+${currentLessonData.notes ? `## Additional Notes\n${currentLessonData.notes}` : ''}`;
+
+        document.getElementById('humanReviewContent').value = formattedContent;
+    }
+}
+
+    function reviewWithAI() {
+        document.getElementById('lessonDisplay').classList.add('hidden');
+        document.getElementById('aiReviewInterface').classList.remove('hidden');
+        
+        if (currentLessonData) {
+            const preview = document.getElementById('currentLessonPreview');
+            preview.innerHTML = `
+                <div class="space-y-2">
+                    <div><strong>Title:</strong> ${currentLessonData.title}</div>
+                    <div><strong>Objective:</strong> ${currentLessonData.objective}</div>
+                    <div><strong>Summary:</strong> ${currentLessonData.summary}</div>
+                </div>
+            `;
+        }
+    }
+
+    function cancelHumanReview() {
+        document.getElementById('humanReviewInterface').classList.add('hidden');
+        document.getElementById('lessonDisplay').classList.remove('hidden');
+    }
+
+    function cancelAIReview() {
+        document.getElementById('aiReviewInterface').classList.add('hidden');
+        document.getElementById('lessonDisplay').classList.remove('hidden');
+    }
+
+function saveHumanReview() {
+    const content = document.getElementById('humanReviewContent').value.trim();
+
+    if (!content) {
+        showNotification('Please add lesson content', 'error');
+        return;
+    }
+
+    // Update the lesson data with edited content
+    currentLessonData.content = content;
+    
+    // Extract title from the content if it starts with #
+    const lines = content.split('\n');
+    const titleLine = lines.find(line => line.startsWith('# '));
+    if (titleLine) {
+        currentLessonData.title = titleLine.replace('# ', '').trim();
+    }
+    
+    // Update summary to reflect manual editing
+    currentLessonData.summary = `This ${currentLessonData.focusArea} lesson for ${currentLessonData.gradeLevel} students has been manually reviewed and edited. The content has been customized to meet specific teaching requirements and learning objectives.`;
+
+    displayGeneratedLesson(currentLessonData);
+
+    document.getElementById('humanReviewInterface').classList.add('hidden');
+    document.getElementById('lessonDisplay').classList.remove('hidden');
+
+    showNotification('Manual edits saved successfully!', 'success');
+}
+    function applyAIReview() {
+        const prompt = document.getElementById('aiReviewPrompt').value.trim();
+        if (!prompt) {
+            showNotification('Please enter AI instructions', 'error');
+            return;
+        }
+
+        const applyBtn = document.getElementById('applyAIReviewBtn');
+        const applyText = document.getElementById('applyAIReviewText');
+        const applyLoader = document.getElementById('applyAIReviewLoader');
+
+        applyBtn.disabled = true;
+        applyText.textContent = 'Applying AI Changes...';
+        applyLoader.classList.remove('hidden');
+
+        // Simulate AI editing
+        setTimeout(() => {
+            currentLessonData.content = `${currentLessonData.content}\n\n--- AI Modifications ---\nBased on your request: "${prompt}"\n\nI've enhanced the lesson with additional examples and interactive elements to make it more engaging for students. The content now includes more practical applications and student-centered activities.`;
+            currentLessonData.summary = `This ${currentLessonData.focusArea} lesson for ${currentLessonData.gradeLevel} students has been enhanced with AI modifications based on your instructions: "${prompt}". The lesson now includes improved engagement strategies and practical applications.`;
+            
+            displayGeneratedLesson(currentLessonData);
+            
+            document.getElementById('aiReviewInterface').classList.add('hidden');
+            document.getElementById('lessonDisplay').classList.remove('hidden');
+            
+            showNotification('AI review applied successfully!', 'success');
+            
+            applyBtn.disabled = false;
+            applyText.textContent = 'Apply AI Changes';
+            applyLoader.classList.add('hidden');
+        }, 2000);
+    }
+
+
+    function downloadLesson(format) {
+        if (!currentLessonData) {
+            showNotification('No lesson to download', 'error');
+            return;
+        }
+        
+        document.getElementById('downloadOptions').classList.add('hidden');
+        
+        // Create download content
+        const content = `${currentLessonData.title}\n\n${currentLessonData.content}\n\nGenerated: ${new Date().toLocaleString()}`;
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        const baseFileName = currentLessonData.title.replace(/[^a-zA-Z0-9]/g, '_');
+        a.download = `${baseFileName}.${format}`;
+        
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+        
+        showNotification(`Lesson downloaded as ${format.toUpperCase()} successfully!`, 'success');
+    }
+
+    function startNewLesson() {
+        // Reset all steps
+        document.getElementById('lessonDisplay').classList.add('hidden');
+        document.getElementById('aiReviewInterface').classList.add('hidden');
+        document.getElementById('humanReviewInterface').classList.add('hidden');
+        document.getElementById('configStep').classList.add('hidden');
+        document.getElementById('uploadStep').classList.remove('hidden');
+        
+        // Clear form and data
+        document.getElementById('lessonConfigForm').reset();
+        document.getElementById('aiReviewPrompt').value = '';
+        document.getElementById('humanReviewTitle').value = '';
+        document.getElementById('humanReviewObjective').value = '';
+        document.getElementById('humanReviewContent').value = '';
+        removeSelectedFile();
+        currentLessonFile = null;
+        currentLessonData = null;
+        
+        showNotification('Ready to create a new lesson!', 'info');
+    }
+
+    // Browse Lessons Functions
+    function loadAvailableLessons() {
+        displayLessons(mockLessons);
+    }
+
+    function searchLessons() {
+        const searchTerm = document.getElementById('searchLessons').value.trim();
+        
+        if (!searchTerm) {
+            loadAvailableLessons();
+            return;
+        }
+        
+        const filteredLessons = mockLessons.filter(lesson => 
+            lesson.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            lesson.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            lesson.focus_area.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        
+        displayLessons(filteredLessons);
+    }
+
+    function filterLessons() {
+        const gradeLevel = document.getElementById('filterGradeLevel').value;
+        const focusArea = document.getElementById('filterFocusArea').value;
+        
+        let filteredLessons = mockLessons;
+        
+        if (gradeLevel) {
+            filteredLessons = filteredLessons.filter(lesson => lesson.grade_level === gradeLevel);
+        }
+        
+        if (focusArea) {
+            filteredLessons = filteredLessons.filter(lesson => lesson.focus_area === focusArea);
+        }
+        
+        displayLessons(filteredLessons);
+    }
+
+    function handleLessonSearchKeyPress(event) {
+        if (event.key === 'Enter') {
+            searchLessons();
+        }
+    }
+
+    function displayLessons(lessons) {
+    const lessonsDisplay = document.getElementById('lessonsDisplay');
+
+    if (!lessons || lessons.length === 0) {
+        lessonsDisplay.innerHTML = `
+            <div class="text-center text-gray-500 py-16">
+                <i class="fas fa-search text-6xl mb-6"></i>
+                <p class="text-xl">No lessons found matching your criteria</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Header Row
+    let html = `
+        <div class="grid grid-cols-6 bg-[#05B0FC] text-white font-semibold py-3 px-4 rounded-t-lg">
+            <div>No</div>
+            <div>Lesson Title</div>
+            <div>Subject</div>
+            <div>Grade</div>
+            <div>Created By</div>
+            <div>Action</div>
+        </div>
+    `;
+
+    // Lessons List
+    html += lessons.map((lesson, index) => `
+        <div class="grid grid-cols-6 py-2 px-2 border-b">
+
+            <!-- No -->
+            <div class="flex items-center">${index + 1}</div>
+
+            <!-- Lesson Title -->
+            <div class="flex items-center font-medium text-gray-900">${lesson.title}</div>
+
+            <!-- Subject -->
+            <div class="flex items-center">
+                <span class="px-2 py-1  text-white bg-blue-300 rounded-xl text-xs rounded-full">
+                    ${lesson.focus_area}
+                </span>
+            </div>
+
+            <!-- Grade -->
+            <div class="flex items-center">
+                <span class="px-2 py-1  text-blue-800 text-xs rounded-full">
+                    ${lesson.grade_level}
+                </span>
+            </div>
+
+            <!-- Created By -->
+            <div class="flex items-center text-gray-700">${lesson.created_by}</div>
+
+            <!-- Actions -->
+            <div class="flex flex-row gap-1 ">
+                <button onclick="downloadLessonFile(${lesson.id})" class="px-4 py-2 text-blue-500 ">
+                    <img src="./Group69.png" alt="">
+                </button>
+                <button onclick="askQuestion(${lesson.id})" class="px-4 py-2 text-blue-500 rounded ">
+                    <img src="./jam_message-alt.png" alt="">
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    lessonsDisplay.innerHTML = html;
+}
+
+    function askQuestion(lessonId) {
+        const lesson = mockLessons.find(l => l.id === lessonId);
+        if (lesson) {
+            changeTab(document.querySelector('.tab-btn'), 'chat');
+            addMessageToChat('user', `I have a question about the lesson: ${lesson.title}`);
+            setTimeout(() => {
+                addMessageToChat('ai', `I'd be happy to help you with questions about "${lesson.title}". This ${lesson.focus_area} lesson for ${lesson.grade_level} students covers ${lesson.learning_objectives}. What specific aspect would you like to know more about?`);
+            }, 1000);
+        }
+    }
+
+    function downloadLessonFile(lessonId) {
+        const lesson = mockLessons.find(l => l.id === lessonId);
+        if (lesson) {
+            const content = `${lesson.title}\n\n${lesson.content}\n\nCreated by: ${lesson.teacher_name}\nSubject: ${lesson.focus_area}\nGrade Level: ${lesson.grade_level}\n\nDownloaded: ${new Date().toLocaleString()}`;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            // Use the actual lesson title for the filename
+            const filename = `${lesson.title.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+            
+            showNotification('Lesson downloaded successfully!', 'success');
+        }
+    }
+
+    // Settings Functions
+    function toggleApiKeyVisibility() {
+        const input = document.getElementById('apiKeyInput');
+        const icon = document.getElementById('toggleApiKeyIcon');
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
+
+    function clearApiKey() {
+        document.getElementById('apiKeyInput').value = '';
+        showNotification('Settings cleared', 'info');
+    }
+
+    function saveApiKey() {
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const newApiKey = apiKeyInput.value.trim();
+
+        if (!newApiKey) {
+            showNotification('Please enter a configuration value', 'error');
+            return;
+        }
+
+        showNotification('Settings saved successfully! (Demo mode)', 'success');
+        apiKeyInput.value = '';
+        changeTab(document.querySelector('.tab-btn'), 'chat');
+    }
+
+    // Voice Functions
+    function toggleVoiceRecording() {
+        if (!isRecording) {
+            startVoiceInput();
+        } else {
+            stopVoiceInput();
+        }
+    }
+
+    function startVoiceInput() {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.start();
+            isRecording = true;
+            
+            document.getElementById('voiceRecordingIndicator').classList.remove('hidden');
+            const micBtn = document.getElementById('micButton');
+            micBtn.classList.add('bg-red-50', 'border-red-300');
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('messageInput').value = transcript;
+                stopVoiceInput();
+                sendMessage();
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                stopVoiceInput();
+                showNotification('Voice recognition error: ' + event.error, 'error');
+            };
+
+            recognition.onend = () => {
+                stopVoiceInput();
+            };
+        } else {
+            showNotification('Speech recognition not supported in this browser', 'error');
+        }
+    }
+
+    function stopVoiceInput() {
+        isRecording = false;
+        document.getElementById('voiceRecordingIndicator').classList.add('hidden');
+        const micBtn = document.getElementById('micButton');
+        micBtn.classList.remove('bg-red-50', 'border-red-300');
+    }
+
+    function stopRecording() {
+        stopVoiceInput();
+    }
+
+    function toggleVoiceOutput() {
+        isVoiceOutputEnabled = !isVoiceOutputEnabled;
+        const btn = document.getElementById('voiceOutputBtn');
+        
+        if (isVoiceOutputEnabled) {
+            btn.classList.add('bg-blue-50', 'border-blue-300');
+            showNotification('Voice output enabled', 'success');
+        } else {
+            btn.classList.remove('bg-blue-50', 'border-blue-300');
+            showNotification('Voice output disabled', 'info');
+        }
+    }
+
+    function speakText(text) {
+        if ('speechSynthesis' in window && isVoiceOutputEnabled) {
+            window.speechSynthesis.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            
+            const voices = window.speechSynthesis.getVoices();
+            const femaleVoice = voices.find(voice => 
+                voice.name.includes('Female') || 
+                voice.name.includes('Zira') || 
+                voice.name.includes('Emma')
+            );
+            if (femaleVoice) {
+                utterance.voice = femaleVoice;
+            }
+            
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    // Sidebar Functions
+    function setupSidebarListeners() {
+        const overlay = document.getElementById('overlay');
+        
+        if (overlay) {
+            overlay.addEventListener('click', hideSidebar);
+        }
+        
+        window.addEventListener('resize', handleResize);
+        
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        if (mobileMenuBtn) {
+            mobileMenuBtn.addEventListener('click', showSidebar);
+        }
+    }
+
+    function handleResize() {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
+        
+        if (window.innerWidth >= 768) {
+            sidebar.classList.remove('-translate-x-full');
+            if (overlay) overlay.classList.add('hidden');
+            
+            if (isCollapsed) {
+                restoreFullSidebar();
+            }
+        } else {
+            sidebar.classList.add('-translate-x-full');
+            if (overlay) overlay.classList.add('hidden');
+            isCollapsed = false;
+        }
+    }
+
+    function hideSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        
+        if (window.innerWidth < 768) {
+            sidebar.classList.add('-translate-x-full');
+            const overlay = document.getElementById('overlay');
+            if (overlay) overlay.classList.add('hidden');
+        } else {
+            const mainContent = document.querySelector('.flex-1');
+            
+            sidebar.innerHTML = `
+                <div class="flex flex-col h-full justify-between items-center py-4">
+                    <button onclick="showSidebar()" class="w-10 h-10 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg flex items-center justify-center transition-colors">
+                        <i class="fas fa-bars w-6 h-6"></i>
+                    </button>
+                    <button onclick="logout()" class="w-10 h-10 bg-white shadow hover:bg-gray-50 text-red-600 rounded-lg flex items-center justify-center transition-colors">
+                        <i class="fas fa-sign-out-alt text-[#F50D0D]"></i>
+                    </button>
+                </div>
+            `;
+            sidebar.className = "w-16 bg-white shadow-md";
+            if (mainContent) mainContent.style.marginLeft = "8px";
+            isCollapsed = true;
+        }
+    }
+
+    function showSidebar() {
+        if (window.innerWidth < 768) {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.remove('-translate-x-full');
+            const overlay = document.getElementById('overlay');
+            if (overlay) overlay.classList.remove('hidden');
+        } else {
+            restoreFullSidebar();
+        }
+    }
+
+    function restoreFullSidebar() {
+        location.reload(); // Simple approach for demo
+    }
+
+    function toggleDropdown() {
+        const dropdown = document.getElementById('dropdownContent');
+        const arrow = document.getElementById('historyArrow');
+        
+        if (dropdown && arrow) {
+            if (dropdown.classList.contains('hidden')) {
+                dropdown.classList.remove('hidden');
+                arrow.classList.add('fa-chevron-up');
+                arrow.classList.remove('fa-chevron-down');
+            } else {
+                dropdown.classList.add('hidden');
+                arrow.classList.remove('fa-chevron-up');
+                arrow.classList.add('fa-chevron-down');
+            }
+        }
+    }
+
+    function logout() {
+        if (confirm('Are you sure you want to log out?')) {
+            showNotification('Logging out... (Demo mode)', 'info');
+            setTimeout(() => {
+                alert('This is a demo. In a real application, you would be redirected to the login page.');
+            }, 1000);
+        }
+    }
+
+    // Utility Functions
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-white font-medium transform transition-all duration-300 translate-x-full`;
+        
+        switch(type) {
+            case 'success':
+                notification.classList.add('bg-green-500');
+                break;
+            case 'error':
+                notification.classList.add('bg-red-500');
+                break;
+            case 'warning':
+                notification.classList.add('bg-yellow-500');
+                break;
+            default:
+                notification.classList.add('bg-blue-500');
+        }
+        
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.classList.remove('translate-x-full');
+        }, 100);
+        
+        setTimeout(() => {
+            notification.classList.add('translate-x-full');
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    document.body.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    }
+
+    function handleSearchKeyPress(event) {
+        if (event.key === 'Enter') {
+            const searchTerm = event.target.value.trim();
+            if (searchTerm) {
+                changeTab(document.querySelector('.tab-btn'), 'chat');
+                addMessageToChat('user', `Search: ${searchTerm}`);
+                setTimeout(() => {
+                    addMessageToChat('ai', `I found several results related to "${searchTerm}". Here are the most relevant items from our knowledge base and conversation history. (Demo mode - no actual search performed)`);
+                }, 1000);
+            }
+        }
+    }
+
+    // Initialize drag and drop
+    document.addEventListener('DOMContentLoaded', function() {
+        const knowledgeDropZone = document.querySelector('#knowledgeBaseContent .border-dashed');
+        const lessonDropZone = document.querySelector('#lessonGeneratorContent .border-dashed');
+        
+        if (knowledgeDropZone) {
+            setupDropZone(knowledgeDropZone, 'knowledge');
+        }
+
+        if (lessonDropZone) {
+            setupDropZone(lessonDropZone, 'lesson');
+        }
+
+        // Close download options when clicking outside
+        document.addEventListener('click', function(e) {
+            const downloadBtn = document.getElementById('downloadBtn');
+            const downloadOptions = document.getElementById('downloadOptions');
+            
+            if (downloadBtn && downloadOptions && !downloadBtn.contains(e.target) && !downloadOptions.contains(e.target)) {
+                downloadOptions.classList.add('hidden');
+            }
+        });
+    });
+
+    function setupDropZone(dropZone, type) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            if (type === 'knowledge') {
+                dropZone.classList.add('border-blue-500', 'bg-blue-50');
+            } else {
+                dropZone.classList.add('border-sky-500', 'bg-sky-50');
+            }
+        }
+
+        function unhighlight(e) {
+            if (type === 'knowledge') {
+                dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+            } else {
+                dropZone.classList.remove('border-sky-500', 'bg-sky-50');
+            }
+        }
+
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                if (type === 'knowledge') {
+                    const fileInput = document.getElementById('knowledgeFileInput');
+                    fileInput.files = files;
+                    handleKnowledgeFileSelect({ target: fileInput });
+                } else {
+                    const fileInput = document.getElementById('lessonFileInput');
+                    fileInput.files = files;
+                    handleFileSelect({ target: fileInput });
+                }
+            }
+        }
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+            e.preventDefault();
+            startNewChat();
+        }
+        
+        if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            e.preventDefault();
+            resetChat();
+        }
+        
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            sendMessage();
+        }
+
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            changeTab(document.querySelectorAll('.tab-btn')[1], 'knowledge');
+        }
+
+        if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+            e.preventDefault();
+            changeTab(document.querySelectorAll('.tab-btn')[2], 'lesson');
+        }
+
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            changeTab(document.querySelectorAll('.tab-btn')[4], 'settings');
+        }
+    });
+
+    // Demo welcome message
+    setTimeout(() => {
+        showNotification('Welcome to the AI Chat Interface Demo!', 'info');
+    }, 1000);
+
+  </script>
+
+  <style>
+    .animate-bounce {
+      animation: bounce 1s infinite;
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 53%, 80%, 100% {
+        transform: translate3d(0,0,0);
+      }
+      40%, 43% {
+        transform: translate3d(0,-15px,0);
+      }
+      70% {
+        transform: translate3d(0,-7px,0);
+      }
+      90% {
+        transform: translate3d(0,-2px,0);
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .flex-1 {
+        margin-left: 0 !important;
+      }
+    }
+    
+    /* Custom scrollbar */
+    .overflow-y-auto::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .overflow-y-auto::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+    
+    .overflow-y-auto::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 3px;
+    }
+    
+    .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+      background: #a1a1a1;
+    }
+    
+    /* Focus styles for accessibility */
+    button:focus,
+    input:focus,
+    textarea:focus {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+    
+    /* Loading animation */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Knowledge Base specific styles */
+    .kb-tab-btn {
+      transition: all 0.2s ease;
+    }
+
+    .kb-tab-btn:hover {
+      background-color: rgba(59, 130, 246, 0.1);
+    }
+
+    /* Enhanced hover effects */
+    .hover\:shadow-md:hover {
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    .hover\:shadow-xl:hover {
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+
+    /* Smooth transitions */
+    .transition-all {
+      transition-property: all;
+      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      transition-duration: 150ms;
+    }
+
+    .transition-colors {
+      transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      transition-duration: 150ms;
+    }
+
+    .transition-shadow {
+      transition-property: box-shadow;
+      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      transition-duration: 150ms;
+    }
+
+    /* Tab scrolling on mobile */
+    .overflow-x-auto {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .overflow-x-auto::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Responsive tabs */
+    @media (max-width: 768px) {
+      .tab-btn {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+      }
+    }
+
+    /* Lesson generator specific styles */
+    .prose {
+      color: #374151;
+      max-width: none;
+    }
+
+    .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    .prose h1 {
+      font-size: 1.875rem;
+      line-height: 2.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .prose h2 {
+      font-size: 1.5rem;
+      line-height: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .prose h3 {
+      font-size: 1.25rem;
+      line-height: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .prose p {
+      margin-bottom: 1rem;
+      line-height: 1.75;
+    }
+
+    .prose ul, .prose ol {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
+    }
+
+    .prose li {
+      margin-bottom: 0.5rem;
+    }
+
+    .prose strong {
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .prose em {
+      font-style: italic;
+    }
+
+    .prose blockquote {
+      border-left: 4px solid #e5e7eb;
+      padding-left: 1rem;
+      margin: 1.5rem 0;
+      font-style: italic;
+      color: #6b7280;
+    }
+
+    .prose code {
+      background-color: #f3f4f6;
+      padding: 0.125rem 0.25rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      font-family: 'Courier New', monospace;
+    }
+
+    .prose pre {
+      background-color: #f3f4f6;
+      padding: 1rem;
+      border-radius: 0.375rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    .prose pre code {
+      background-color: transparent;
+      padding: 0;
+    }
+
+    /* Form styles */
+    .form-input {
+      transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+
+    .form-input:focus {
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+    }
+
+    /* Lesson display animations */
+    .lesson-fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Step indicators */
+    .step-active {
+      background-color: #0ea5e9;
+      color: white;
+    }
+
+    .step-completed {
+      background-color: #10b981;
+      color: white;
+    }
+
+    .step-pending {
+      background-color: #e5e7eb;
+      color: #6b7280;
+    }
+
+    /* Dropdown menu z-index fix */
+    .dropdown-menu {
+      z-index: 1000;
+    }
+
+    /* Print styles for lesson content */
+    @media print {
+      .prose {
+        font-size: 12pt;
+        line-height: 1.5;
+      }
+      
+      .prose h1 {
+        font-size: 16pt;
+        page-break-after: avoid;
+      }
+      
+      .prose h2 {
+        font-size: 14pt;
+        page-break-after: avoid;
+      }
+      
+      .prose h3 {
+        font-size: 12pt;
+        page-break-after: avoid;
+      }
+      
+      .bg-sky-50, .bg-blue-50, .bg-yellow-50 {
+        background-color: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+      }
+    }
+
+    /* Demo styles */
+    .demo-badge {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      font-weight: bold;
+      z-index: 1000;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    /* Pulsing effect for important buttons */
+    .pulse-effect {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+    
+  </style>
+</body>
+</html>

@@ -1,0 +1,332 @@
+version: "3.9"
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./static:/app/static
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      flask_app1:
+        condition: service_healthy
+      # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
+      # flask_app2:
+      #   condition: service_healthy
+      # flask_app3:
+      #   condition: service_healthy
+      # flask_app4:
+      #   condition: service_healthy
+    networks:
+      - app_network
+
+  # ----------------------------
+  # POSTGRES DATABASE (primary)
+  # ----------------------------
+  postgres:
+    image: postgres:17
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # ----------------------------
+  # REDIS (for Celery broker and result backend)
+  # ----------------------------
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------
+  # PRIMARY FLASK INSTANCE
+  # ----------------------------
+  flask_app1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "5000"
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - OPENBLAS_NUM_THREADS=2
+      - OMP_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
+      - RAYON_NUM_THREADS=2
+      - TOKENIZERS_PARALLELISM=false
+      - TQDM_DISABLE=1
+      - DB_MODE=primary
+      - INSTANCE_ROLE=primary
+
+      # PostgreSQL URL (IMPORTANT)
+      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+
+      # APIs
+      - GOOGLE_CLIENT_ID=507995986306-qcdrhrrt3d71la4pkrf7lt1b2tvuusqm.apps.googleusercontent.com
+      - GROQ_API_KEY=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
+      - NOMIC_APIC_KEY=nk-7Ad201NonNkEv_pYdRwb-EkNjf84mVLW205ihoE7RyU
+
+      # vLLM API
+      - VLLM_API_BASE=http://69.28.92.113:8000/v1
+      - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+
+      - VLLM_TIMEOUT=600
+
+      # Celery Configuration
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # - ollama  # Removed - using external vLLM API instead
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 20G
+        reservations:
+          cpus: "2"
+          memory: 12G
+    networks:
+      - app_network
+
+  # ----------------------------
+  # CELERY WORKER
+  # ----------------------------
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - TOKENIZERS_PARALLELISM=false
+      - TQDM_DISABLE=1
+      
+      # Database
+      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+      
+      # Celery Configuration
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      
+      # APIs (if needed by tasks)
+      - GROQ_API_KEY=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
+      - NOMIC_APIC_KEY=nk-7Ad201NonNkEv_pYdRwb-EkNjf84mVLW205ihoE7RyU
+      - VLLM_API_BASE=http://69.28.92.113:8000/v1
+      - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+      - VLLM_TIMEOUT=600
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=2
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 16G
+        reservations:
+          cpus: "2"
+          memory: 8G
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  # ----------------------------
+  # FLASK REPLICA 1
+  # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
+  # ----------------------------
+  # flask_app2:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   expose:
+  #     - "5000"
+  #   environment:
+  #     - FLASK_APP=run.py
+  #     - FLASK_ENV=production
+  #     - FLASK_DEBUG=0
+  #     - PYTHONUNBUFFERED=1
+  #     - PYTHONPATH=/app
+  #     - DB_MODE=readonly
+  #     - INSTANCE_ROLE=replica
+  #     # CPU optimization for better performance
+  #     - OPENBLAS_NUM_THREADS=4
+  #     - OMP_NUM_THREADS=4
+  #     - MKL_NUM_THREADS=4
+  #     - RAYON_NUM_THREADS=4
+  #     - TOKENIZERS_PARALLELISM=false
+  #     - TQDM_DISABLE=1
+  #
+  #     - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+  #
+  #     - OLLAMA_BASE_URL=http://ollama:11434
+  #     - OLLAMA_MODEL=qwen2.5:1.5b
+  #     - OLLAMA_TIMEOUT=600
+  #
+  #   volumes:
+  #     - .:/app
+  #   depends_on:
+  #     - postgres
+  #     - ollama
+  #     - flask_app1
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   networks:
+  #     - app_network
+
+  # ----------------------------
+  # FLASK REPLICA 2
+  # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
+  # ----------------------------
+  # flask_app3:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   expose:
+  #     - "5000"
+  #   environment:
+  #     - FLASK_APP=run.py
+  #     - FLASK_ENV=production
+  #     - FLASK_DEBUG=0
+  #     - PYTHONUNBUFFERED=1
+  #     - PYTHONPATH=/app
+  #     - DB_MODE=readonly
+  #     - INSTANCE_ROLE=replica
+  #     # CPU optimization for better performance
+  #     - OPENBLAS_NUM_THREADS=4
+  #     - OMP_NUM_THREADS=4
+  #     - MKL_NUM_THREADS=4
+  #     - RAYON_NUM_THREADS=4
+  #     - TOKENIZERS_PARALLELISM=false
+  #     - TQDM_DISABLE=1
+  #
+  #     - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+  #
+  #     - OLLAMA_BASE_URL=http://ollama:11434
+  #     - OLLAMA_MODEL=qwen2.5:1.5b
+  #     - OLLAMA_TIMEOUT=600
+  #
+  #   volumes:
+  #     - .:/app
+  #   depends_on:
+  #     - postgres
+  #     - ollama
+  #     - flask_app1
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   networks:
+  #     - app_network
+
+  # ----------------------------
+  # FLASK REPLICA 3
+  # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
+  # ----------------------------
+  # flask_app4:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   expose:
+  #     - "5000"
+  #   environment:
+  #     - FLASK_APP=run.py
+  #     - FLASK_ENV=production
+  #     - FLASK_DEBUG=0
+  #     - PYTHONUNBUFFERED=1
+  #     - PYTHONPATH=/app
+  #     - DB_MODE=readonly
+  #     - INSTANCE_ROLE=replica
+  #     # CPU optimization for better performance
+  #     - OPENBLAS_NUM_THREADS=4
+  #     - OMP_NUM_THREADS=4
+  #     - MKL_NUM_THREADS=4
+  #     - RAYON_NUM_THREADS=4
+  #     - TOKENIZERS_PARALLELISM=false
+  #     - TQDM_DISABLE=1
+  #
+  #     - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+  #
+  #     - OLLAMA_BASE_URL=http://ollama:11434
+  #     - OLLAMA_MODEL=qwen2.5:1.5b
+  #     - OLLAMA_TIMEOUT=600
+  #
+  #   volumes:
+  #     - .:/app
+  #   depends_on:
+  #     - postgres
+  #     - ollama
+  #     - flask_app1
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   networks:
+  #     - app_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app_network:
+    driver: bridge

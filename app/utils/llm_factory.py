@@ -1,0 +1,297 @@
+"""
+LLM Factory for dynamic LLM initialization
+Supports OpenAI, Groq, and vLLM providers based on admin/user settings
+"""
+import os
+import logging
+from typing import Optional
+from langchain_openai import ChatOpenAI
+from app.config import Config
+from app.utils.llm_models import (
+    get_default_model_for_provider,
+    is_valid_model_for_provider,
+    get_model_ids_for_provider
+)
+from app.utils.encryption import decrypt_api_key
+
+logger = logging.getLogger(__name__)
+
+# Try to import ChatGroq, but don't fail if it's not installed
+try:
+    from langchain_groq import ChatGroq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    logger.warning("langchain-groq not available. Groq provider will not work.")
+
+
+def get_chat_model(user_id: Optional[int] = None, **kwargs):
+    """
+    Get chat model based on admin settings and user preferences.
+    This is the main entry point for creating LLM instances.
+    
+    Args:
+        user_id: User ID for user-specific model selection (optional)
+        **kwargs: Additional parameters passed to create_llm
+    
+    Returns:
+        LLM instance (ChatOpenAI or ChatGroq)
+    """
+    try:
+        from app.utils.db import get_db
+        from app.models.database_models import SystemSettings, UserSettings
+        
+        db = get_db()
+        
+        # Get active provider from admin settings
+        provider_setting = db.query(SystemSettings).filter(
+            SystemSettings.key == 'active_provider'
+        ).first()
+        
+        active_provider = (provider_setting.value.upper() if provider_setting 
+                          else kwargs.get('provider', Config.LLM_PROVIDER).upper())
+        
+        # Get provider-specific settings
+        provider_key = active_provider.lower()
+        
+        # Get API key from admin settings (encrypted)
+        api_key_setting = db.query(SystemSettings).filter(
+            SystemSettings.key == f'{provider_key}_api_key'
+        ).first()
+        
+        api_key = None
+        if api_key_setting and api_key_setting.value:
+            try:
+                api_key = decrypt_api_key(api_key_setting.value)
+                logger.debug(f"Successfully decrypted {active_provider} API key from database")
+            except Exception as e:
+                logger.warning(f"Error decrypting API key: {str(e)}")
+                # Fallback to environment variable
+                if active_provider == 'OPENAI':
+                    api_key = os.getenv('OPENAI_API_KEY')
+                elif active_provider == 'GROQ':
+                    api_key = os.getenv('GROQ_API_KEY')
+                logger.debug(f"Using environment variable for {active_provider} API key")
+        else:
+            # No API key in settings, use environment
+            logger.debug(f"No {active_provider} API key in database settings, checking environment")
+            if active_provider == 'OPENAI':
+                api_key = os.getenv('OPENAI_API_KEY')
+            elif active_provider == 'GROQ':
+                api_key = os.getenv('GROQ_API_KEY')
+        
+        # Validate API key exists
+        if not api_key:
+            raise ValueError(
+                f"{active_provider} API key is not configured. "
+                f"Please configure it in the Admin Panel settings."
+            )
+        
+        logger.info(f"Retrieved {active_provider} API key (length: {len(api_key) if api_key else 0})")
+        
+        # Determine model to use
+        model_to_use = None
+        
+        # Check if user model selection is enabled for this provider
+        allow_user_selection_setting = db.query(SystemSettings).filter(
+            SystemSettings.key == f'{provider_key}_allow_user_model_selection'
+        ).first()
+        
+        allow_user_selection = (
+            allow_user_selection_setting and 
+            allow_user_selection_setting.value.lower() == 'true'
+        )
+        
+        # If user selection is allowed and user_id is provided, check user preference
+        if allow_user_selection and user_id:
+            user_settings = db.query(UserSettings).filter(
+                UserSettings.user_id == user_id
+            ).first()
+            
+            if user_settings and user_settings.selected_model:
+                # Validate user's selected model
+                if is_valid_model_for_provider(user_settings.selected_model, active_provider):
+                    model_to_use = user_settings.selected_model
+                    logger.info(f"Using user-selected model: {model_to_use} for user {user_id}")
+                else:
+                    logger.warning(
+                        f"User {user_id} selected invalid model {user_settings.selected_model} "
+                        f"for provider {active_provider}, falling back to default"
+                    )
+        
+        # If no user model selected, use admin default
+        if not model_to_use:
+            default_model_setting = db.query(SystemSettings).filter(
+                SystemSettings.key == f'{provider_key}_default_model'
+            ).first()
+            
+            if default_model_setting and default_model_setting.value:
+                model_to_use = default_model_setting.value
+            else:
+                # Fallback to hardcoded default
+                model_to_use = get_default_model_for_provider(active_provider)
+        
+        # Override with explicit model_name if provided
+        if kwargs.get('model_name'):
+            model_to_use = kwargs['model_name']
+        
+        # Create LLM instance
+        logger.info(f"Creating LLM with provider={active_provider.lower()}, model={model_to_use}, has_api_key={bool(api_key)}")
+        return create_llm(
+            provider=active_provider.lower(),
+            api_key=api_key,
+            model_name=model_to_use,
+            **{k: v for k, v in kwargs.items() if k != 'provider' and k != 'model_name' and k != 'api_key'}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in get_chat_model: {str(e)}", exc_info=True)
+        # Try to preserve provider from kwargs or get from settings
+        fallback_provider = kwargs.get('provider')
+        if not fallback_provider:
+            try:
+                from app.utils.db import get_db
+                from app.models.database_models import SystemSettings
+                db = get_db()
+                setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
+                if setting:
+                    fallback_provider = setting.value.lower()
+                else:
+                    setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
+                    fallback_provider = setting.value.lower() if setting else Config.LLM_PROVIDER.lower()
+            except:
+                fallback_provider = Config.LLM_PROVIDER.lower()
+        
+        # Fallback to original create_llm behavior but preserve provider
+        logger.warning(f"Falling back to create_llm with provider={fallback_provider}")
+        return create_llm(provider=fallback_provider, **kwargs)
+
+
+def create_llm(
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    timeout: Optional[int] = None,
+    model_name: Optional[str] = None,
+    api_key: Optional[str] = None,
+    provider: Optional[str] = None
+) -> ChatOpenAI:
+    """
+    Create an LLM instance based on provider selection.
+    
+    Args:
+        temperature: Override default temperature (optional)
+        max_tokens: Override default max_tokens (optional)
+        timeout: Override default timeout (optional)
+        model_name: Override default model name (optional)
+        api_key: Override default API key (optional, used for OpenAI and Groq)
+        provider: Override LLM_PROVIDER setting (optional: 'openai', 'groq', 'vllm')
+    
+    Returns:
+        LLM instance configured for the selected provider (ChatOpenAI or ChatGroq)
+        
+    Environment Variables:
+        LLM_PROVIDER: 'openai', 'groq', or 'vllm' (default: 'openai')
+        
+        For OpenAI:
+            OPENAI_API_KEY: Your OpenAI API key (required if LLM_PROVIDER='openai')
+            OPENAI_MODEL: Model name (default: 'gpt-3.5-turbo')
+            OPENAI_TEMPERATURE: Temperature (default: 0.7)
+            OPENAI_MAX_TOKENS: Max tokens (default: 1024)
+            OPENAI_TIMEOUT: Timeout in seconds (default: 60)
+            
+        For Groq:
+            GROQ_API_KEY: Your Groq API key (required if LLM_PROVIDER='groq')
+            GROQ_MODEL: Model name (default: 'llama-3.3-70b-versatile')
+            GROQ_TEMPERATURE: Temperature (default: 0.7)
+            GROQ_MAX_TOKENS: Max tokens (default: 1024)
+            GROQ_TIMEOUT: Timeout in seconds (default: 60)
+            
+        For vLLM:
+            VLLM_API_BASE: vLLM API base URL (default: 'http://69.28.92.113:8000/v1')
+            VLLM_MODEL: Model name (default: 'Qwen/Qwen2.5-14B-Instruct')
+            VLLM_TEMPERATURE: Temperature (default: 0.7)
+            VLLM_MAX_TOKENS: Max tokens (default: 1024)
+            VLLM_TIMEOUT: Timeout in seconds (default: 600)
+    """
+    # Use provided provider or fall back to config
+    provider = (provider or Config.LLM_PROVIDER).lower()
+    
+    # Use provided values or fall back to config defaults
+    if provider == 'openai':
+        # OpenAI configuration
+        api_key_to_use = api_key or Config.OPENAI_API_KEY
+        if not api_key_to_use:
+            raise ValueError(
+                "OPENAI_API_KEY environment variable is required when LLM_PROVIDER='openai'. "
+                "Please set OPENAI_API_KEY in your environment or .env file."
+            )
+        
+        model = model_name or Config.OPENAI_MODEL
+        temp = temperature if temperature is not None else Config.OPENAI_TEMPERATURE
+        max_toks = max_tokens if max_tokens is not None else Config.OPENAI_MAX_TOKENS
+        time_out = timeout if timeout is not None else Config.OPENAI_TIMEOUT
+        
+        llm = ChatOpenAI(
+            openai_api_key=api_key_to_use,
+            model_name=model,
+            temperature=temp,
+            timeout=time_out,
+        )
+        
+        logger.info(f"Initialized OpenAI LLM: model={model}, temperature={temp}, max_tokens={max_toks}")
+        
+    elif provider == 'groq':
+        # Groq configuration
+        if not GROQ_AVAILABLE:
+            raise ValueError(
+                "Groq provider requires langchain-groq package. "
+                "Please install it with: pip install langchain-groq"
+            )
+        
+        api_key_to_use = api_key or os.getenv('GROQ_API_KEY', '')
+        if not api_key_to_use:
+            raise ValueError(
+                "GROQ_API_KEY is required when LLM_PROVIDER='groq'. "
+                "Please set GROQ_API_KEY in your environment or provide it via api_key parameter."
+            )
+        
+        model = model_name or os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+        temp = temperature if temperature is not None else float(os.getenv('GROQ_TEMPERATURE', '0.7'))
+        max_toks = max_tokens if max_tokens is not None else int(os.getenv('GROQ_MAX_TOKENS', '1024'))
+        time_out = timeout if timeout is not None else int(os.getenv('GROQ_TIMEOUT', '60'))
+        
+        llm = ChatGroq(
+            groq_api_key=api_key_to_use,
+            model_name=model,
+            temperature=temp,
+            timeout=time_out,
+        )
+        
+        logger.info(f"Initialized Groq LLM: model={model}, temperature={temp}, max_tokens={max_toks}")
+        
+    elif provider == 'vllm':
+        # vLLM configuration (OpenAI-compatible API)
+        api_base = Config.VLLM_API_BASE
+        model = model_name or Config.VLLM_MODEL
+        temp = temperature if temperature is not None else Config.VLLM_TEMPERATURE
+        max_toks = max_tokens if max_tokens is not None else Config.VLLM_MAX_TOKENS
+        time_out = timeout if timeout is not None else Config.VLLM_TIMEOUT
+        
+        llm = ChatOpenAI(
+            openai_api_key="EMPTY",  # vLLM doesn't require a real API key
+            openai_api_base=api_base,
+            model_name=model,
+            temperature=temp,
+            timeout=time_out,
+        )
+        
+        logger.info(f"Initialized vLLM LLM: base={api_base}, model={model}, temperature={temp}, max_tokens={max_toks}")
+        
+    else:
+        raise ValueError(
+            f"Invalid LLM_PROVIDER: '{provider}'. Must be 'openai', 'groq', or 'vllm'. "
+            f"Current value: {provider or Config.LLM_PROVIDER}"
+        )
+    
+    return llm
+

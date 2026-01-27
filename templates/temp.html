@@ -1,0 +1,24 @@
+<div id="chatInputArea" class="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 border-t border-gray-100 bg-white flex-shrink-0">
+    <div class="flex items-center gap-2 sm:gap-3">
+        <button onclick="toggleVoiceRecording()" id="micButton"
+            class="w-10 h-10 sm:w-12 sm:h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
+            <img src="{{ url_for('static', filename='images/recorder.png') }}" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
+        </button>
+        <button onclick="toggleVoiceOutput()" id="voiceOutputBtn"
+            class="w-10 h-10 sm:w-12 sm:h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
+            <img src="{{ url_for('static', filename='images/voice.png') }}" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
+        </button>
+
+        <div class="flex-1 relative">
+            <textarea id="messageInput" placeholder="Type your message"
+                class="w-full px-4 sm:px-5 lg:px-6 py-3 sm:py-4 bg-gray-100 rounded-2xl border-0 focus:outline-none text-gray-700 placeholder-gray-500 text-sm sm:text-base resize-none overflow-hidden min-h-[48px] max-h-[200px]"
+                rows="1" onkeydown="handleKeyDown(event)" oninput="autoResizeTextarea(this)"></textarea>
+        </div>
+
+        <button onclick="sendMessage()"
+            class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-xl flex items-center justify-center hover:bg-blue-600 transition-colors">
+            <img src="{{ url_for('static', filename='images/sender.png') }}" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
+        </button>
+    </div>
+
+</div>

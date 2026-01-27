@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lesson Generator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .upload-container {
+            text-align: center;
+            margin: 40px 0;
+            padding: 30px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .upload-container:hover {
+            border-color: #3498db;
+            background-color: #f8f9fa;
+        }
+        
+        .upload-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 24px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .upload-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .upload-btn i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .file-info {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        
+        .lesson-container {
+            margin-top: 40px;
+            display: none;
+        }
+        
+        .lesson-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .lesson-sections {
+    margin-bottom: 15px;
+}
+        .learning-objectives ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.learning-objectives li {
+    background: #f8f9fa;
+    padding: 8px 12px;
+    margin: 5px 0;
+    border-radius: 6px;
+    border-left: 3px solid #28a745;
+    position: relative;
+}
+
+.learning-objectives li::before {
+    content: "✓";
+    color: #28a745;
+    font-weight: bold;
+    margin-right: 8px;
+}
+.section-preview {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 10px 0;
+    border: 1px solid #e9ecef;
+}
+
+.section-preview h4 {
+    color: #495057;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.section-preview p {
+    color: #6c757d;
+    line-height: 1.5;
+    margin: 0;
+}
+.quiz-info {
+    background: #fff3cd;
+    padding: 12px 15px;
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+    color: #856404;
+    font-weight: 500;
+}
+        .lesson-section h3 {
+            color: #2c3e50;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        
+        .quiz-item {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .loading {
+            text-align: center;
+            margin: 30px 0;
+            display: none;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lesson Generator</h1>
+        
+        <div class="upload-container">
+            <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt">
+            <button class="upload-btn" id="uploadBtn">
+                <i class="fas fa-file-upload"></i> Upload Document
+            </button>
+            <div class="file-info" id="fileInfo">No file selected</div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Generating your lesson plan...</p>
+        </div>
+        
+        <div class="error-message" id="errorMessage"></div>
+        
+        <div class="lesson-container" id="lessonContainer">
+            <h2 id="lessonTitle"></h2>
+            <p id="lessonSummary"></p>
+            
+            <div id="lessonSections"></div>
+            
+            <h3>Quiz Questions</h3>
+            <div id="quizQuestions"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadBtn = document.getElementById('uploadBtn');
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('errorMessage');
+            const lessonContainer = document.getElementById('lessonContainer');
+            
+            // Handle upload button click
+            uploadBtn.addEventListener('click', function() {
+                fileInput.click();
+            });
+            
+            // Handle file selection
+            fileInput.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    const file = e.target.files[0];
+                    fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                    processFile(file);
+                }
+            });
+            
+            // Process the uploaded file
+            async function processFile(file) {
+                // Show loading state
+                loading.style.display = 'block';
+                errorMessage.style.display = 'none';
+                lessonContainer.style.display = 'none';
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // Send to backend
+                    const response = await fetch('/upload-lesson', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server error: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                        throw new Error(result.error);
+                    }
+                    
+                    // Display the lesson
+                    displayLesson(result.lesson);
+                    
+                } catch (error) {
+                    console.error('Error:', error);
+                    errorMessage.textContent = `Error: ${error.message}`;
+                    errorMessage.style.display = 'block';
+                } finally {
+                    loading.style.display = 'none';
+                }
+            }
+            
+            // Display the generated lesson
+            function displayLesson(lesson) {
+                document.getElementById('lessonTitle').textContent = lesson.title;
+                document.getElementById('lessonSummary').textContent = lesson.summary;
+                
+                // Display sections
+                const sectionsContainer = document.getElementById('lessonSections');
+                sectionsContainer.innerHTML = '';
+                
+                lesson.sections.forEach(section => {
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = 'lesson-section';
+                    sectionDiv.innerHTML = `
+                        <h3>${section.heading}</h3>
+                        <p>${section.content}</p>
+                    `;
+                    sectionsContainer.appendChild(sectionDiv);
+                });
+                
+                // Display quiz questions
+                const quizContainer = document.getElementById('quizQuestions');
+                quizContainer.innerHTML = '';
+                
+                lesson.quiz.forEach((question, index) => {
+                    const questionDiv = document.createElement('div');
+                    questionDiv.className = 'quiz-item';
+                    questionDiv.innerHTML = `
+                        <p><strong>Question ${index + 1}:</strong> ${question.question}</p>
+                        <ul>
+                            ${question.options.map(opt => `<li>${opt}</li>`).join('')}
+                        </ul>
+                        <p><em>Answer: ${question.answer}</em></p>
+                    `;
+                    quizContainer.appendChild(questionDiv);
+                });
+                
+                // Show the lesson container
+                lessonContainer.style.display = 'block';
+            }
+            
+            // Drag and drop functionality
+            const uploadContainer = document.querySelector('.upload-container');
+            
+            uploadContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadContainer.style.borderColor = '#3498db';
+                uploadContainer.style.backgroundColor = '#f8f9fa';
+            });
+            
+            uploadContainer.addEventListener('dragleave', () => {
+                uploadContainer.style.borderColor = '#ccc';
+                uploadContainer.style.backgroundColor = 'transparent';
+            });
+            
+            uploadContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadContainer.style.borderColor = '#ccc';
+                uploadContainer.style.backgroundColor = 'transparent';
+                
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    const file = e.dataTransfer.files[0];
+                    fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                    processFile(file);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

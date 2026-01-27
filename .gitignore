@@ -1,0 +1,17 @@
+bin
+lib64
+lib
+pyvenv.cfg
+include
+venv
+vector_store.faiss
+logs
+.env
+generate_prompt.py
+vector_store.faiss
+vector_stores
+docss
+data
+data/file.txt
+file.txt
+file.py
