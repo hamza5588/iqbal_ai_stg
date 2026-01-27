@@ -63,7 +63,7 @@ class Config:
         DATABASE = None  # Not used for non-SQLite databases
     
     # Nomic API configuration
-    NOMIC_API_KEY = os.getenv('NOMIC_API_KEY', 'nk-7Em9YdxJJI09E4vXTxJ9VOC2zygDGWD9eGBYxDLuG0E')  # Replace with your Nomic API key
+    NOMIC_API_KEY = os.getenv('NOMIC_API_KEY', '')  # Set via environment variable
     
     # Server URL for generating absolute URLs in production
     # Set this to your production domain (e.g., 'https://iqbalai.com')
@@ -73,8 +73,8 @@ class Config:
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB max file size 
     
     # Stripe configuration
-    STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_51SdENKR3GHwhdSflEXLb8vuJCGAwrUsjAYOvpbviKHNfVEjSKDZrBFqS92bIt1GuXPyzRO8DzwsK2ZecfyV0hlCy00hS7JJVz4')
-    STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', 'sk_test_51SdENKR3GHwhdSflTCjLB5h83eDa8G4oZOLySliNfIduAeizo10wrhOZsnlfsslD5530mboYRii8MdXLTFIVNQEQ003sVSsIS1')
+    STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')                                                                                                                                                    
+    STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')         
     STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
     
     # Stripe Product IDs (we'll fetch the default price from these)

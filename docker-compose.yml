@@ -95,8 +95,8 @@ services:
 
       # APIs
       - GOOGLE_CLIENT_ID=507995986306-qcdrhrrt3d71la4pkrf7lt1b2tvuusqm.apps.googleusercontent.com
-      - GROQ_API_KEY=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
-      - NOMIC_APIC_KEY=nk-7Ad201NonNkEv_pYdRwb-EkNjf84mVLW205ihoE7RyU
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NOMIC_APIC_KEY=${NOMIC_API_KEY}
 
       # vLLM API
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
@@ -157,8 +157,8 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       
       # APIs (if needed by tasks)
-      - GROQ_API_KEY=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
-      - NOMIC_APIC_KEY=nk-7Ad201NonNkEv_pYdRwb-EkNjf84mVLW205ihoE7RyU
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NOMIC_APIC_KEY=${NOMIC_API_KEY}
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
       - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
       - VLLM_TIMEOUT=600
