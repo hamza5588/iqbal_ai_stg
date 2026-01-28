@@ -5,10 +5,15 @@ from celery import Celery
 from app.config import Config
 
 # Create Celery instance
+# NOTE: The "include" argument ensures the worker imports our task modules
+# so that tasks like "app.tasks.ingest_tasks.ingest_pdf_task" are registered.
 celery = Celery(
     'iqbalai',
     broker=Config.CELERY_BROKER_URL,
-    backend=Config.CELERY_RESULT_BACKEND
+    backend=Config.CELERY_RESULT_BACKEND,
+    include=[
+        'app.tasks.ingest_tasks',
+    ],
 )
 
 # Update Celery configuration from Config

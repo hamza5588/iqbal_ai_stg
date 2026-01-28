@@ -298,7 +298,7 @@ def download_chat(conversation_id):
         
         # Create a new Word document
         from docx import Document
-        from docx.shared import Pt, RGBColor
+        from docx.shared import Pt
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         
         doc = Document()
@@ -331,6 +331,64 @@ def download_chat(conversation_id):
     except Exception as e:
         logger.error(f"Error downloading chat: {str(e)}")
         return jsonify({'error': 'Failed to download chat'}), 500
+
+
+@bp.route('/download_last_ai_message/<int:conversation_id>')
+@login_required
+def download_last_ai_message(conversation_id):
+    """Download the last AI message from a chat as a Word document"""
+    try:
+        chat_service = ChatService(session['user_id'], session['groq_api_key'])
+        messages = chat_service.get_conversation_messages(conversation_id)
+
+        if not messages:
+            return jsonify({'error': 'No messages found in this conversation'}), 404
+
+        # Find the last AI/bot message
+        last_bot_message = None
+        for msg in reversed(messages):
+            if msg.get('role') == 'bot' and msg.get('message'):
+                last_bot_message = msg['message']
+                break
+
+        if not last_bot_message:
+            return jsonify({'error': 'No AI messages found to download'}), 404
+
+        # Create a new Word document containing only the last AI message
+        from docx import Document
+        from docx.shared import Pt
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from io import BytesIO
+        from flask import make_response
+
+        doc = Document()
+
+        # Add a title
+        title = doc.add_heading('AI Lecture', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Add some spacing
+        spacer = doc.add_paragraph()
+        spacer.paragraph_format.space_after = Pt(12)
+
+        # Add the AI message content
+        content_paragraph = doc.add_paragraph(last_bot_message)
+        content_paragraph.paragraph_format.space_after = Pt(12)
+
+        # Save document to buffer
+        doc_io = BytesIO()
+        doc.save(doc_io)
+        doc_io.seek(0)
+
+        # Prepare response
+        response = make_response(doc_io.getvalue())
+        response.headers["Content-Disposition"] = f"attachment; filename=ai_lecture_{conversation_id}.docx"
+        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+        return response
+    except Exception as e:
+        logger.error(f"Error downloading last AI message: {str(e)}")
+        return jsonify({'error': 'Failed to download AI lecture'}), 500
 
 @bp.route('/get_token_usage')
 @login_required

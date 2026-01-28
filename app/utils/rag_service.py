@@ -186,8 +186,14 @@ def get_rag_llm(api_key=None, provider=None, user_id=None):
         timeout=timeout_override
     )
 
-# Global fallback LLM (used when user API key is not available)
-llm = get_rag_llm()
+"""
+RAG service utilities.
+
+Note: Avoid creating global LLM/embedding instances at import time because that
+can require a Flask application context (e.g., database access for settings),
+which is not available when Celery workers import this module on startup.
+Instead, LLMs and embeddings are created lazily via helper functions.
+"""
 
 # Cache for current provider to detect changes
 _LAST_EMBEDDING_PROVIDER = None
@@ -254,9 +260,6 @@ def get_rag_embeddings():
                     "Cannot get embeddings: No valid API key found and HuggingFace embeddings are not available. "
                     "Please set OPENAI_API_KEY or install langchain-huggingface"
                 )
-
-# Initialize embeddings based on provider
-embeddings = get_rag_embeddings()
 
 # -------------------
 # 2. Single shared vector store paths

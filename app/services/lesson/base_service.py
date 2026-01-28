@@ -112,12 +112,15 @@ class BaseLessonService:
         """Initialize the base service with API key"""
         self.api_key = groq_api_key
         
-        # Get LLM provider from system settings
+        # Get LLM provider from system settings.
+        # IMPORTANT: Use the same "active_provider" used by the main RAG/chat workflow
+        # so lesson features share the exact same provider/model configuration.
         from app.utils.db import get_db
         from app.models.database_models import SystemSettings
         db = get_db()
-        setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
-        provider = setting.value if setting else os.getenv('LLM_PROVIDER', 'openai').lower()
+        setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
+        # Fallback to environment variable if admin setting not found
+        provider = (setting.value if setting else os.getenv('LLM_PROVIDER', 'openai')).lower()
         
         # If OpenAI is set from admin, use environment variable instead of passed API key
         api_key_to_use = None

@@ -1125,8 +1125,15 @@
                         title="Configure API Key">
                         <i class="fas fa-key text-gray-500 text-xs sm:text-sm"></i>
                     </button>
+                    <!-- New Download Lecture button (last AI message) -->
+                    <button id="lectureDownloadBtn" onclick="saveLastLectureToMyLessons()"
+                        class="hidden sm:inline-flex w-8 h-8 sm:w-10 sm:h-10 border border-gray-200 rounded-lg items-center justify-center hover:bg-gray-50 transition-colors"
+                        title="Save last AI lecture to My Lessons">
+                        <i class="fas fa-book text-gray-500 text-xs sm:text-sm"></i>
+                    </button>
                     <button id="chatDownloadBtn" onclick="downloadCurrentChat()"
-                        class="w-8 h-8 sm:w-10 sm:h-10 border border-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors">
+                        class="w-8 h-8 sm:w-10 sm:h-10 border border-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+                        title="Download full chat">
                         <i class="fas fa-download text-gray-500 text-xs sm:text-sm"></i>
                 </button>
             </div>
@@ -1154,14 +1161,7 @@
             <div id="ragLessonFinalizedButtons" class="hidden mb-6 sm:mb-8 px-3 sm:px-4 lg:px-6">
                 <!-- This section is now hidden - Save Lesson button moved to sidebar -->
             </div>
-            <!-- Finalize Button for Lesson Chat (hidden by default) -->
-            <div id="lessonChatFinalizeBtn" class="hidden mb-3 flex justify-center">
-                <button onclick="finalizeLessonFromChat()"
-                    class="px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all duration-300 font-semibold flex items-center justify-center gap-2 sm:gap-3 text-sm sm:text-base shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
-                    <i class="fas fa-check-circle text-base sm:text-lg"></i>
-                    <span>Finalize Lesson</span>
-                </button>
-            </div>
+            <!-- Finalize Button for Lesson Chat (removed per requirements) -->
             
             <div class="flex items-center gap-2 sm:gap-3">
                 <button onclick="toggleVoiceRecording()" id="micButton"
@@ -1236,7 +1236,7 @@
                                 class="px-3 py-1.5 bg-[#05B0FC] text-white rounded-lg transition-colors font-medium text-sm">
                             <i class="fas fa-search mr-1"></i>Search
                         </button>
-                            <button onclick="generateLessonButton()"
+                            <button onclick="showRAGUploadModal()"
                                 class="px-3 py-1.5 bg-[#05B0FC] text-white rounded-lg hover:bg-blue-600 transition-colors font-medium text-sm"
                                 id="generateLessonTopBtn" style="display: none;">
                             <i class="fas fa-plus"></i>
@@ -1340,89 +1340,7 @@
 
                         <div class="p-4 sm:p-6">
                             <form id="lessonConfigForm" onsubmit="generateLesson(event)">
-                                <!-- Enhanced File Upload Section -->
-                                <div class="mb-6">
-                                    <div class="flex items-center mb-3">
-                                        <div class="w-7 h-7 bg-gradient-to-r from-[#05B0FC] to-blue-600 rounded-full flex items-center justify-center mr-3">
-                                            <i class="fas fa-upload text-white text-xs"></i>
-                                        </div>
-                                        <div>
-                                            <h4 class="text-base font-bold text-gray-800">Upload Document (Optional)</h4>
-                                            <p class="text-gray-500 text-xs">Enhance your lesson with supporting materials</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div id="lessonDropZone" class="border-2 border-dashed border-blue-200 rounded-2xl p-6 text-center bg-gradient-to-br from-blue-50 to-indigo-50 cursor-pointer hover:bg-gradient-to-br hover:from-blue-100 hover:to-indigo-100 hover:border-[#05B0FC] transition-all duration-300 min-h-28 flex flex-col items-center justify-center group shadow-sm"
-                                        onclick="document.getElementById('lessonFileInput').click()">
-                                        <div class="flex gap-2 mb-3">
-                                            <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                <img src="{{ url_for('static', filename='images/excel.png') }}" alt="Excel" class="w-4 h-4">
-                                            </div>
-                                            <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                <img src="{{ url_for('static', filename='images/ppt.png') }}" alt="PowerPoint" class="w-4 h-4">
-                                            </div>
-                                            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                <img src="{{ url_for('static', filename='images/word.png') }}" alt="Word" class="w-4 h-4">
-                                            </div>
-                                        </div>
-                                        <div class="mb-2">
-                                            <i class="fas fa-cloud-upload-alt text-2xl text-[#05B0FC] mb-2 group-hover:scale-110 transition-transform"></i>
-                                        </div>
-                                        <p class="text-gray-700 text-sm mb-1 font-semibold">Drop your file here or click to browse</p>
-                                        <p class="text-gray-500 text-xs">PDF, DOCX, PPT up to 100MB</p>
-                                        
-                                        <input type="file" id="lessonFileInput" class="hidden" accept=".pdf,.doc,.docx,.txt,.ppt,.pptx"
-                                            onchange="handleFileSelect(event)">
-                                    </div>
-                                    
-                                    <div id="selectedFileName" class="hidden mt-4 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl shadow">
-                                        <div class="flex items-center justify-between mb-3">
-                                            <div class="flex items-center gap-2">
-                                                <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                                    <i class="fas fa-check text-green-600 text-xs"></i>
-                                                </div>
-                                                <div>
-                                                    <p class="text-green-800 font-semibold text-xs">File Selected</p>
-                                                    <span id="selectedFileSize" class="text-green-700 font-medium text-xs"></span>
-                                                </div>
-                                            </div>
-                                            <div class="flex items-center gap-2">
-                                                <button type="button" id="viewPdfTextBtn" onclick="viewUploadedPdfText()" class="hidden text-[#05B0FC] hover:text-blue-700 p-1 hover:bg-blue-50 rounded-full transition-colors" title="View PDF text">
-                                                    <i class="fas fa-eye text-xs"></i>
-                                                </button>
-                                                <button type="button" onclick="removeSelectedFile()" class="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded-full transition-colors" title="Remove file">
-                                                    <i class="fas fa-trash text-xs"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Upload Progress Bar -->
-                                        <div id="lessonUploadProgress" class="hidden">
-                                            <div class="flex items-center justify-between mb-2">
-                                                <div class="flex items-center gap-2">
-                                                    <i class="fas fa-upload text-blue-600 text-xs"></i>
-                                                    <span id="lessonUploadStatus" class="text-sm text-gray-700">Uploading...</span>
-                                                </div>
-                                                <div class="flex items-center gap-3">
-                                                    <span id="lessonUploadSpeed" class="text-xs text-gray-500"></span>
-                                                    <span id="lessonUploadPercent" class="text-sm font-medium text-blue-600">0%</span>
-                                                </div>
-                                            </div>
-                                            <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-                                                <div id="lessonUploadBar" class="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-                                            </div>
-                                            <div class="flex items-center justify-between">
-                                                <span id="lessonUploadInfo" class="text-xs text-gray-500">0 MB / 0 MB</span>
-                                                <span id="lessonUploadETA" class="text-xs text-gray-500"></span>
-                                            </div>
-                                            <div id="lessonUploadWarning" class="hidden mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                                                <i class="fas fa-exclamation-triangle mr-1"></i>
-                                                <span>Slow upload detected. Please check your internet connection.</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Extraction Options Toggles -->
+                                <!-- Extraction Options Toggles -->
                                     <div class="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
                                         <p class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                             <i class="fas fa-cog text-[#05B0FC] text-xs"></i>
@@ -1726,17 +1644,7 @@
                         </div>
                     </div>
 
-                        <!-- Action Buttons -->
-                        <div class="bg-gray-50 px-4 sm:px-6 py-4 sm:py-5 border-t border-gray-200">
-                            <!-- Default review buttons -->
-                            <div id="defaultReviewButtons" class="flex flex-col sm:flex-row justify-center items-stretch sm:items-center gap-3 sm:gap-4">
-                                <button onclick="reviewWithHuman()"
-                                    class="group w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-[#05B0FC] to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-[#05B0FC] transition-all duration-300 font-semibold flex items-center justify-center gap-2 sm:gap-3 text-sm sm:text-base shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
-                                    <i class="fas fa-user-check text-base sm:text-lg group-hover:scale-110 transition-transform"></i>
-                                    <span class="truncate">Review with Human</span>
-                                </button>
-                            </div>
-                        </div>
+                        <!-- Action Buttons (removed Review with Human) -->
                         
                         <!-- Inline editing buttons (hidden by default) -->
                         <div id="inlineEditButtons" class="hidden flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4">
@@ -1763,16 +1671,8 @@
                             </button>
                         </div>
                             <div id="finalizeNewLessonButtons" class="flex flex-col sm:flex-row justify-center mt-3 sm:mt-4 gap-3 sm:gap-4">
-                                <button onclick="proceedToCompletion()"
-                                    class="w-full sm:w-auto border border-[#05B0FC] px-6 sm:px-8 py-2 sm:py-3 bg-white text-[#05B0FC] hover:text-white hover:bg-[#05B0FC] rounded-lg transition-colors font-medium flex items-center justify-center gap-2 text-sm sm:text-base">
-                                <i class="fas fa-check"></i>
-                                Finalize and Download
-                            </button>
-                                <button onclick="startNewLesson()"
-                                    class="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 border-2 border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors text-base sm:text-lg font-medium">
-                                    <i class="fas fa-plus mr-2"></i>New Lesson
-                            </button>
-                        </div>
+                                <!-- Finalize and New Lesson buttons removed per requirements -->
+                            </div>
                     </div>
                 </div>
             </div>
@@ -2304,56 +2204,16 @@ async function initializeApp() {
             console.log(`Restored thread_id from localStorage: ${savedRAGThreadId}`);
         }
         
-        // Priority 1: Restore RAG mode if thread exists
-        if (savedRAGThreadId && ragThreads.length > 0) {
-            // Verify the thread still exists
-            const threadExists = ragThreads.some(t => t.thread_id === savedRAGThreadId);
-            if (threadExists) {
-                // Restore RAG chat mode
-                const thread = ragThreads.find(t => t.thread_id === savedRAGThreadId);
-                switchToRAGChatMode(savedRAGThreadId, thread?.filename || null);
-                
-                // Restore conversation_id if available
-                if (savedConversationId) {
-                    currentRAGConversationId = parseInt(savedConversationId);
-                    currentChatId = parseInt(savedConversationId);
-                    // Load chat history for this conversation
-                    await loadRAGChatHistory(parseInt(savedConversationId));
-                }
-                return; // Don't restore regular chat if RAG mode is restored
-            } else {
-                // Thread doesn't exist anymore, clear it
-                console.warn(`Saved thread_id ${savedRAGThreadId} no longer exists, clearing from localStorage`);
-                localStorage.removeItem('currentRAGThreadId');
-                currentRAGThreadId = null;
-            }
-        }
-        
-        // Priority 2: Restore regular conversation if conversation_id exists
-        if (savedConversationId) {
-            try {
-                const conversationId = parseInt(savedConversationId);
-                const response = await fetch(`/get_messages/${conversationId}`, {
-                    method: 'GET',
-                    credentials: 'include'
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.messages && data.messages.length > 0) {
-                        // Conversation exists and has messages, restore it
-                        currentChatId = conversationId;
-                        await loadChat(conversationId);
-                        return; // Don't start new chat
-                    }
-                }
-            } catch (error) {
-                console.error('Error restoring conversation:', error);
-            }
-        }
-        
-        // Priority 3: Restore or start new chat
-        await restoreOrStartChat();
+        // Always start a fresh regular chat when user opens the app (ChatGPT-style)
+        // Clear any saved RAG/thread state and regular conversation so each new visit is a clean slate.
+        localStorage.removeItem('currentRAGThreadId');
+        localStorage.removeItem('currentConversationId');
+        localStorage.removeItem('currentChatId');
+        currentRAGThreadId = null;
+        currentRAGConversationId = null;
+        currentChatId = null;
+        isRAGChatMode = false;
+        await startNewChat();
         
         // Initialize mobile state
         if (window.innerWidth < 768) {
@@ -5528,13 +5388,8 @@ async function initializeApp() {
             // Add the AI message to chat
             addMessageToChat('ai', aiResponse);
             
-            // Check if lesson is finalized and show/hide buttons accordingly
-            // Only show button when lesson_finalized is explicitly true
-            if (data.lesson_finalized === true && data.last_lesson_text) {
-                showLessonFinalizedButtons(data.last_lesson_text, data.lesson_title || '');
-            } else {
-                hideLessonFinalizedButtons();
-            }
+            // Lesson-finalization auto-save UI removed per requirements
+            hideLessonFinalizedButtons();
             
             // Automatically speak the response if voice output is enabled
             if (isVoiceOutputEnabled || isRecording) {
@@ -6249,12 +6104,8 @@ async function initializeApp() {
                 // Add default message for thread with document
                 addMessageToChat('ai', `PDF "${filename}" loaded. You can now ask questions about it.`);
                 
-                // Check if lesson is finalized - only show button when explicitly true
-                if (data.metadata.lesson_finalized === true && data.metadata.last_lesson_text) {
-                    showLessonFinalizedButtons(data.metadata.last_lesson_text, data.metadata.lesson_title || '');
-                } else {
-                    hideLessonFinalizedButtons();
-                }
+                // Lesson-finalization auto-save UI removed per requirements
+                hideLessonFinalizedButtons();
             } else {
                 document.getElementById('chatStatus').textContent = 'PDF Document Chat';
                 // Add default message for thread without document
@@ -7716,12 +7567,8 @@ async function initializeApp() {
             
             if (response && response.ok) {
                 const data = await response.json();
-                // Only show button when lesson_finalized is explicitly true
-                if (data.metadata && data.metadata.lesson_finalized === true && data.metadata.last_lesson_text) {
-                    showLessonFinalizedButtons(data.metadata.last_lesson_text, data.metadata.lesson_title || '');
-                } else {
-                    hideLessonFinalizedButtons();
-                }
+                // Lesson-finalization auto-save UI removed per requirements
+                hideLessonFinalizedButtons();
             }
         } catch (error) {
             console.error('Error checking thread lesson status:', error);
@@ -10626,6 +10473,8 @@ async function initializeApp() {
             
             // Store reference to last AI message for potential save button placement
             window.lastAIMessage = messageDiv;
+            // Also store the last AI message text (used for saving lecture)
+            lastAIMessage = (typeof message === 'string' ? message : String(message || ''));
         }
 
         chatMessages.appendChild(messageDiv);
@@ -11211,6 +11060,52 @@ async function initializeApp() {
         } catch (error) {
             console.error('Error downloading chat:', error);
             showNotification('Error downloading chat', 'error');
+        }
+    }
+
+    // Save the last AI message into My Lessons
+    async function saveLastLectureToMyLessons() {
+        const content = (lastAIMessage || '').trim();
+        if (!content) {
+            showNotification('No AI lecture found to save yet', 'error');
+            return;
+        }
+
+        // Unique title to avoid "title already used" errors
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+        const title = `AI Lecture ${stamp}`;
+
+        showFullPageLoading('Saving lecture to My Lessons...');
+
+        try {
+            const response = await authenticatedFetch('/api/lessons/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    content,
+                    focus_area: 'Lecture',
+                    grade_level: 'General',
+                    summary: 'Saved from chat (last AI message).'
+                })
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (response.ok && data && data.success) {
+                hideFullPageLoading();
+                showNotification('Lecture saved to My Lessons!', 'success');
+                setTimeout(() => {
+                    openViewLessons();
+                }, 700);
+            } else {
+                hideFullPageLoading();
+                showNotification(data.error || 'Failed to save lecture', 'error');
+            }
+        } catch (error) {
+            hideFullPageLoading();
+            console.error('Error saving lecture:', error);
+            showNotification('Error saving lecture', 'error');
         }
     }
 

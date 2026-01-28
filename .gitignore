@@ -15,3 +15,9 @@ data
 data/file.txt
 file.txt
 file.py
+chatbot.db-shm
+chatbot.db-wal
+rag_metadata.json
+uploaded_files
+instance
+chat.db

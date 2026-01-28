@@ -628,21 +628,12 @@ def chat():
             # Don't fail the request if saving to database fails
             logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
 
-        # Get thread metadata to check if lesson is finalized
-        metadata = thread_document_metadata(thread_id)
-        lesson_finalized = metadata.get("lesson_finalized", False)
-        last_lesson_text = metadata.get("last_lesson_text", "")
-        lesson_title = metadata.get("lesson_title", "")
-
         return jsonify({
             'success': True,
             'message': response_content,
             'thread_id': thread_id,
             'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-            'has_document': thread_has_document(thread_id),
-            'lesson_finalized': lesson_finalized,
-            'last_lesson_text': last_lesson_text,
-            'lesson_title': lesson_title
+            'has_document': thread_has_document(thread_id)
         })
 
     except Exception as e:
@@ -800,6 +791,11 @@ def get_thread_status(thread_id):
 
         has_doc = thread_has_document(thread_id)
         metadata = thread_document_metadata(thread_id) if has_doc else {}
+        # Remove lesson-finalization metadata from API responses (deprecated behavior)
+        if isinstance(metadata, dict):
+            metadata.pop('lesson_finalized', None)
+            metadata.pop('last_lesson_text', None)
+            metadata.pop('lesson_title', None)
 
         return jsonify({
             'thread_id': thread_id,
