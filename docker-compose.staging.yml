@@ -1,0 +1,191 @@
+version: "3.9"
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      # Staging listens on different host ports so it doesn't conflict with production
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./static:/app/static
+      - ./nginx.staging.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      flask_app1:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ----------------------------
+  # POSTGRES DATABASE (staging)
+  # ----------------------------
+  postgres:
+    image: postgres:17
+    restart: always
+    environment:
+      # You can keep these the same as production or change them
+      # to isolate staging data completely if you want.
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    volumes:
+      # Separate volume name so staging DB data is isolated
+      - postgres_data_staging:/var/lib/postgresql/data
+    # Map to a different host port so it doesn't clash with prod's 5432
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # ----------------------------
+  # REDIS (staging)
+  # ----------------------------
+  redis:
+    image: redis:7-alpine
+    restart: always
+    # Optional: expose a different host port to avoid conflict with prod (6379)
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data_staging:/data
+    command: redis-server --appendonly yes
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------
+  # PRIMARY FLASK INSTANCE (staging)
+  # ----------------------------
+  flask_app1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "5000"
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - OPENBLAS_NUM_THREADS=2
+      - OMP_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
+      - RAYON_NUM_THREADS=2
+      - TOKENIZERS_PARALLELISM=false
+      - TQDM_DISABLE=1
+
+      # Mark this stack logically as "staging" (you can read this in your code if needed)
+      - INSTANCE_ROLE=staging
+      - DB_MODE=primary
+
+      # PostgreSQL URL (inside Docker network this still uses the postgres service)
+      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+
+      # APIs – these will come from whatever env values you have on the host
+      - GOOGLE_CLIENT_ID=507995986306-qcdrhrrt3d71la4pkrf7lt1b2tvuusqm.apps.googleusercontent.com
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NOMIC_APIC_KEY=${NOMIC_API_KEY}
+
+      # vLLM API
+      - VLLM_API_BASE=http://69.28.92.113:8000/v1
+      - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+      - VLLM_TIMEOUT=600
+
+      # Celery Configuration
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 20G
+        reservations:
+          cpus: "2"
+          memory: 12G
+    networks:
+      - app_network
+
+  # ----------------------------
+  # CELERY WORKER (staging)
+  # ----------------------------
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - TOKENIZERS_PARALLELISM=false
+      - TQDM_DISABLE=1
+
+      # Database – same as staging postgres above
+      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+
+      # Celery Configuration
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+      # APIs (if needed by tasks)
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NOMIC_APIC_KEY=${NOMIC_API_KEY}
+      - VLLM_API_BASE=http://69.28.92.113:8000/v1
+      - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+      - VLLM_TIMEOUT=600
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=2
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 16G
+        reservations:
+          cpus: "2"
+          memory: 8G
+    networks:
+      - app_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data_staging:
+  redis_data_staging:
+
+networks:
+  app_network:
+    driver: bridge
+
