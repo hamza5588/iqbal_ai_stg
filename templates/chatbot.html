@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Chat Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chat-message {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #6b7280;
+            animation: typing 1.4s infinite;
+        }
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.7;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+        #chatContainer {
+            scroll-behavior: smooth;
+        }
+        .upload-area {
+            transition: all 0.3s ease;
+        }
+        .upload-area.dragover {
+            border-color: #05B0FC;
+            background-color: #f0f9ff;
+        }
+        .file-upload-progress {
+            display: none;
+        }
+        .file-upload-progress.active {
+            display: block;
+        }
+        .thread-item {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .thread-item:hover {
+            background-color: #f3f4f6;
+        }
+        .thread-item.active {
+            background-color: #dbeafe;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-[#05B0FC] to-blue-600 text-white shadow-lg">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-file-pdf text-2xl"></i>
+                        <h1 class="text-2xl font-bold">PDF Chat Assistant</h1>
+                    </div>
+                    <div class="flex items-center space-x-4 flex-wrap">
+                        <!-- Thread Selector -->
+                        <div class="relative">
+                            <button id="threadSelectorBtn" onclick="toggleThreadSelector()" 
+                                class="flex items-center space-x-2 bg-white bg-opacity-20 px-4 py-2 rounded-lg hover:bg-opacity-30 transition-all">
+                                <i class="fas fa-layer-group"></i>
+                                <span id="currentThreadName" class="text-sm font-medium">No Thread</span>
+                                <i class="fas fa-chevron-down text-xs"></i>
+                            </button>
+                            <div id="threadSelectorDropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl z-50 border border-gray-200">
+                                <div class="p-2">
+                                    <div class="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+                                        <span class="text-sm font-semibold text-gray-700">Threads</span>
+                                        <button onclick="createNewThread()" class="text-xs text-[#05B0FC] hover:text-blue-700 font-medium flex items-center gap-1">
+                                            <i class="fas fa-plus"></i>
+                                            <span>New</span>
+                                        </button>
+                                    </div>
+                                    <div id="threadList" class="max-h-64 overflow-y-auto">
+                                        <!-- Threads will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Upload New Document Button -->
+                        <button onclick="showUploadNewDocument()" 
+                            class="flex items-center space-x-2 bg-white bg-opacity-20 px-4 py-2 rounded-lg hover:bg-opacity-30 transition-all">
+                            <i class="fas fa-upload"></i>
+                            <span class="text-sm font-medium">Upload New Document</span>
+                        </button>
+                        <div id="documentStatus" class="flex items-center space-x-2 bg-white bg-opacity-20 px-4 py-2 rounded-lg">
+                            <i class="fas fa-info-circle"></i>
+                            <span id="statusText" class="text-sm font-medium">No document uploaded</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Upload Document Modal -->
+        <div id="uploadModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+                <div class="bg-gradient-to-r from-[#05B0FC] to-blue-600 px-6 py-4 rounded-t-lg">
+                    <h3 class="text-xl font-semibold text-white">Upload New Document</h3>
+                </div>
+                <div class="p-6">
+                    <div id="uploadArea" class="upload-area border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-all mb-4">
+                        <input type="file" id="fileInput" accept=".pdf" class="hidden">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-gray-600 mb-2">Click to upload or drag and drop</p>
+                        <p class="text-sm text-gray-400">PDF files only</p>
+                    </div>
+                    <div id="uploadProgress" class="file-upload-progress mb-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-gray-600">Uploading...</span>
+                            <span id="uploadPercent" class="text-sm font-medium text-blue-600">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="uploadBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 mt-4">
+                        <button onclick="closeUploadModal()" 
+                            class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="flex-1 container mx-auto px-4 py-6 max-w-6xl">
+            <!-- Chat Container -->
+            <div id="chatContainer" class="bg-white rounded-lg shadow-lg h-[calc(100vh-250px)] flex flex-col overflow-hidden">
+                <!-- Messages Area -->
+                <div id="messagesArea" class="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
+                    <div id="welcomeMessage" class="text-center text-gray-500 py-12">
+                        <i class="fas fa-comments text-4xl mb-4 text-gray-300"></i>
+                        <p class="text-lg font-medium">Welcome to PDF Chat Assistant</p>
+                        <p class="text-sm mt-2">Upload a PDF document to start chatting</p>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="border-t border-gray-200 p-4 bg-white">
+                    <div id="inputContainer" class="flex gap-3 items-end">
+                        <div class="flex-1">
+                            <textarea id="messageInput" 
+                                rows="1"
+                                placeholder="Ask questions about your PDF document..." 
+                                disabled
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                onkeydown="handleKeyDown(event)"></textarea>
+                        </div>
+                        <button id="sendButton" 
+                            disabled
+                            onclick="sendMessage()"
+                            class="px-6 py-3 bg-gradient-to-r from-[#05B0FC] to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-[#05B0FC] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center space-x-2">
+                            <span>Send</span>
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentThreadId = null;
+        let threads = []; // Array of {thread_id, name, filename, created_at}
+        let uploadedFileName = null;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for thread_id in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const threadIdFromUrl = urlParams.get('thread_id');
+            
+            if (threadIdFromUrl) {
+                currentThreadId = threadIdFromUrl;
+                loadThreadInfo(threadIdFromUrl);
+            }
+            
+            // Load threads from localStorage
+            loadThreads();
+            updateThreadSelector();
+            
+            // Setup file upload
+            setupFileUpload();
+        });
+
+        function setupFileUpload() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            
+            if (!uploadArea || !fileInput) return;
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    handleFileUpload(files[0]);
+                } else {
+                    alert('Please upload a PDF file');
+                }
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileUpload(e.target.files[0]);
+                }
+            });
+        }
+
+        function showUploadNewDocument() {
+            document.getElementById('uploadModal').classList.remove('hidden');
+        }
+
+        function closeUploadModal() {
+            document.getElementById('uploadModal').classList.add('hidden');
+            document.getElementById('fileInput').value = '';
+            document.getElementById('uploadProgress').classList.remove('active');
+        }
+
+        async function handleFileUpload(file) {
+            if (!file.type.includes('pdf')) {
+                alert('Please upload a PDF file');
+                return;
+            }
+
+            uploadedFileName = file.name;
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Create new thread for new upload
+            // The backend will generate a new thread_id
+            if (currentThreadId) {
+                formData.append('thread_id', currentThreadId);
+            }
+
+            const uploadProgress = document.getElementById('uploadProgress');
+            const uploadBar = document.getElementById('uploadBar');
+            const uploadPercent = document.getElementById('uploadPercent');
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.getElementById('uploadArea');
+            
+            uploadProgress.classList.add('active');
+            fileInput.disabled = true;
+            uploadArea.style.pointerEvents = 'none';
+            uploadArea.style.opacity = '0.6';
+
+            try {
+                const response = await fetch('/api/rag/ingest', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Store thread_id
+                    currentThreadId = data.thread_id;
+                    
+                    // Add thread to list
+                    const threadName = `Thread ${threads.length + 1}`;
+                    const thread = {
+                        thread_id: data.thread_id,
+                        name: threadName,
+                        filename: data.filename,
+                        created_at: new Date().toISOString()
+                    };
+                    threads.push(thread);
+                    saveThreads();
+                    updateThreadSelector();
+                    switchToThread(data.thread_id);
+                    
+                    // Update status
+                    updateStatus('Document uploaded successfully', 'success');
+                    
+                    // Enable chat
+                    enableChat();
+                    
+                    // Add welcome message
+                    clearChat();
+                    addSystemMessage(`PDF "${data.filename}" uploaded successfully! You can now ask questions about it.`);
+                    
+                    // Close modal
+                    closeUploadModal();
+                } else {
+                    throw new Error(data.error || 'Upload failed');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Failed to upload PDF: ' + error.message);
+                updateStatus('Upload failed', 'error');
+            } finally {
+                uploadProgress.classList.remove('active');
+                fileInput.disabled = false;
+                uploadArea.style.pointerEvents = 'auto';
+                uploadArea.style.opacity = '1';
+                uploadBar.style.width = '0%';
+                uploadPercent.textContent = '0%';
+            }
+        }
+
+        function loadThreadInfo(threadId) {
+            fetch(`/api/rag/thread/status/${encodeURIComponent(threadId)}`, {
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.has_document) {
+                    updateStatus('Document loaded', 'success');
+                    enableChat();
+                    if (data.metadata && data.metadata.filename) {
+                        addSystemMessage(`PDF "${data.metadata.filename}" loaded. You can now ask questions about it.`);
+                    }
+                } else {
+                    updateStatus('No document uploaded', 'info');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading thread info:', error);
+            });
+        }
+
+        function loadThreads() {
+            const saved = localStorage.getItem('rag_threads');
+            if (saved) {
+                threads = JSON.parse(saved);
+            }
+        }
+
+        function saveThreads() {
+            localStorage.setItem('rag_threads', JSON.stringify(threads));
+        }
+
+        function updateThreadSelector() {
+            const threadList = document.getElementById('threadList');
+            const currentThreadName = document.getElementById('currentThreadName');
+            
+            if (!threadList) return;
+            
+            threadList.innerHTML = '';
+            
+            if (threads.length === 0) {
+                threadList.innerHTML = '<div class="px-3 py-2 text-sm text-gray-500 text-center">No threads yet</div>';
+                if (currentThreadName) {
+                    currentThreadName.textContent = 'No Thread';
+                }
+                return;
+            }
+            
+            threads.forEach((thread, index) => {
+                const isActive = thread.thread_id === currentThreadId;
+                const threadDiv = document.createElement('div');
+                threadDiv.className = `thread-item px-3 py-2 rounded-lg ${isActive ? 'active' : ''}`;
+                threadDiv.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-gray-800 truncate">${thread.name}</div>
+                            <div class="text-xs text-gray-500 truncate">${thread.filename || 'No file'}</div>
+                        </div>
+                        ${isActive ? '<i class="fas fa-check text-[#05B0FC] ml-2"></i>' : ''}
+                    </div>
+                `;
+                threadDiv.addEventListener('click', () => switchToThread(thread.thread_id));
+                threadList.appendChild(threadDiv);
+            });
+            
+            // Update current thread name
+            if (currentThreadId) {
+                const currentThread = threads.find(t => t.thread_id === currentThreadId);
+                if (currentThread && currentThreadName) {
+                    currentThreadName.textContent = currentThread.name;
+                }
+            } else if (currentThreadName) {
+                currentThreadName.textContent = 'No Thread';
+            }
+        }
+
+        function switchToThread(threadId) {
+            currentThreadId = threadId;
+            updateThreadSelector();
+            closeThreadSelector();
+            clearChat();
+            loadThreadInfo(threadId);
+        }
+
+        function createNewThread() {
+            // Clear current thread and show upload modal
+            currentThreadId = null;
+            updateThreadSelector();
+            closeThreadSelector();
+            clearChat();
+            showUploadNewDocument();
+        }
+
+        function toggleThreadSelector() {
+            const dropdown = document.getElementById('threadSelectorDropdown');
+            if (dropdown) {
+                dropdown.classList.toggle('hidden');
+            }
+        }
+
+        function closeThreadSelector() {
+            const dropdown = document.getElementById('threadSelectorDropdown');
+            if (dropdown) {
+                dropdown.classList.add('hidden');
+            }
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            const selectorBtn = document.getElementById('threadSelectorBtn');
+            const dropdown = document.getElementById('threadSelectorDropdown');
+            if (dropdown && selectorBtn && !selectorBtn.contains(event.target) && !dropdown.contains(event.target)) {
+                closeThreadSelector();
+            }
+        });
+
+        function updateStatus(text, type = 'info') {
+            const statusText = document.getElementById('statusText');
+            const statusIcon = statusText?.previousElementSibling;
+            
+            if (statusText) {
+                statusText.textContent = text;
+            }
+            
+            if (statusIcon) {
+                statusIcon.className = 'fas';
+                if (type === 'success') {
+                    statusIcon.classList.add('fa-check-circle');
+                } else if (type === 'error') {
+                    statusIcon.classList.add('fa-exclamation-circle');
+                } else {
+                    statusIcon.classList.add('fa-info-circle');
+                }
+            }
+        }
+
+        function enableChat() {
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendButton').disabled = false;
+            document.getElementById('welcomeMessage').classList.add('hidden');
+        }
+
+        function disableChat() {
+            document.getElementById('messageInput').disabled = true;
+            document.getElementById('sendButton').disabled = true;
+            document.getElementById('welcomeMessage').classList.remove('hidden');
+        }
+
+        function clearChat() {
+            document.getElementById('messagesArea').innerHTML = '';
+            chatHistory = [];
+        }
+
+        function addSystemMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'text-center py-2';
+            messageDiv.innerHTML = `
+                <span class="inline-block px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                    ${text}
+                </span>
+            `;
+            document.getElementById('messagesArea').appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function addMessage(text, isUser = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message flex ${isUser ? 'justify-end' : 'justify-start'}`;
+            
+            const bubbleClass = isUser 
+                ? 'bg-gradient-to-r from-[#05B0FC] to-blue-600 text-white' 
+                : 'bg-white text-gray-800 border border-gray-200';
+            
+            messageDiv.innerHTML = `
+                <div class="max-w-[80%] ${isUser ? 'order-2' : 'order-1'}">
+                    <div class="${bubbleClass} rounded-2xl px-6 py-4 shadow-sm">
+                        <p class="whitespace-pre-wrap">${escapeHtml(text)}</p>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1 ${isUser ? 'text-right' : 'text-left'} px-2">
+                        ${new Date().toLocaleTimeString()}
+                    </div>
+                </div>
+                <div class="${isUser ? 'order-1 mr-3' : 'order-2 ml-3'} flex items-end">
+                    <div class="w-8 h-8 rounded-full ${isUser ? 'bg-blue-500' : 'bg-gray-300'} flex items-center justify-center">
+                        <i class="fas ${isUser ? 'fa-user' : 'fa-robot'} text-white text-sm"></i>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('messagesArea').appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function addTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typingIndicator';
+            typingDiv.className = 'chat-message flex justify-start';
+            typingDiv.innerHTML = `
+                <div class="ml-11">
+                    <div class="bg-white border border-gray-200 rounded-2xl px-6 py-4 shadow-sm inline-block">
+                        <div class="typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('messagesArea').appendChild(typingDiv);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('messagesArea');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) {
+                return;
+            }
+
+            if (!currentThreadId) {
+                alert('Please upload a PDF document first');
+                return;
+            }
+
+            // Add user message to chat
+            addMessage(message, true);
+            
+            // Clear input
+            input.value = '';
+            
+            // Show typing indicator
+            addTypingIndicator();
+            
+            // Disable input while waiting for response
+            input.disabled = true;
+            document.getElementById('sendButton').disabled = true;
+
+            try {
+                const response = await fetch('/api/rag/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        message: message,
+                        thread_id: currentThreadId
+                    })
+                });
+
+                const data = await response.json();
+                
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                // Re-enable input
+                input.disabled = false;
+                document.getElementById('sendButton').disabled = false;
+
+                if (response.ok && data.success) {
+                    // Add AI response to chat
+                    const aiResponse = data.message || 'No response received';
+                    addMessage(aiResponse, false);
+                } else {
+                    // Show error message
+                    const errorMsg = data.error || 'Failed to get response from server';
+                    addMessage(`Error: ${errorMsg}`, false);
+                    console.error('API Error:', data);
+                }
+            } catch (error) {
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                // Re-enable input
+                input.disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                
+                // Show error message
+                addMessage(`Error: Failed to connect to server. ${error.message}`, false);
+                console.error('Network Error:', error);
+            }
+
+            // Focus input for next message
+            input.focus();
+        }
+
+        // Auto-resize textarea
+        document.getElementById('messageInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+        });
+
+        // Close upload modal on outside click
+        document.getElementById('uploadModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeUploadModal();
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
+

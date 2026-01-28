@@ -1,0 +1,6 @@
+"""
+Celery tasks package.
+"""
+from app.celery_app import celery
+
+__all__ = ['celery']

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complete Registration | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'iqbal-primary': '#05B0FC',
+            'iqbal-light': '#E6F7FF'
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+   <style>
+    .bg-rect {
+      background-image: url("{{ url_for('static', filename='images/rect.png') }}");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    .error-field {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+    .error-message {
+      color: #ef4444;
+      font-size: 0.875rem;
+      margin-top: 0.25rem;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex">
+
+  <div class="flex flex-col lg:flex-row min-h-screen w-full">
+
+    <!-- LEFT SIDE - Illustration -->
+    <div 
+      class="hidden lg:flex lg:w-1/2 items-center justify-center p-6 bg-rect h-screen"
+      
+    >
+      <div class="text-center text-white">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" class="mx-auto w-24 mb-4" alt="Iqbal AI">
+        <h1 class="text-3xl font-semibold text-[#146FAD] mb-3" style="text-shadow: 2px 2px 6px rgba(0,0,0,0.5);">
+          Welcome back to your learning journey
+        </h1>
+        <img src="{{ url_for('static', filename='images/rafiki.png') }}" 
+             alt="Illustration" 
+             class="h-[350px] w-[450px] object-contain">
+      </div>
+    </div>
+
+    <!-- RIGHT SIDE - Registration Form -->
+    <div class="flex flex-col justify-center w-full lg:w-1/2 p-4 sm:p-6">
+
+      <!-- Mobile Logo -->
+      <div class="lg:hidden text-center mb-4">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" class="mx-auto w-20 mb-2" alt="Iqbal AI">
+        <h1 class="text-2xl font-bold text-gray-800">IQBAL AI</h1>
+      </div>
+
+      <!-- Title -->
+      <div class="text-center mb-4">
+        <h2 class="text-3xl font-bold text-iqbal-primary">Complete Registration</h2>
+        <p class="text-gray-600 mt-2 text-sm sm:text-base">Fill in your details to finish signing up</p>
+      </div>
+
+      <!-- Form Card -->
+      <div class="p-2 sm:p-4 max-w-md mx-auto w-full">
+        <!-- Error Display -->
+        {% if error %}
+          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {{ error }}
+          </div>
+        {% endif %}
+        <form action="{{ url_for('auth.register') }}" method="POST" id="completeRegistrationForm" class="space-y-3">
+          <input type="hidden" name="useremail" value="{{ email }}">
+
+          <!-- Username -->
+          <div>
+            <label for="username" class="block text-sm font-medium text-iqbal-primary mb-1">Username *</label>
+            <input 
+              type="text" 
+              id="username" 
+              name="username" 
+              required
+              placeholder="Enter your username"
+              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary placeholder-gray-400"
+            >
+            <div id="username-error" class="error-message hidden">Username is required</div>
+          </div>
+
+          <!-- Password -->
+          <div>
+            <label for="password" class="block text-sm font-medium text-iqbal-primary mb-1">Password *</label>
+            <input 
+              type="password" 
+              id="password" 
+              name="password" 
+              required
+              placeholder="Enter a strong password"
+              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary placeholder-gray-400"
+            >
+            <div id="password-error" class="error-message hidden">Password is required</div>
+          </div>
+
+          <!-- Role -->
+          <div>
+            <label for="role" class="block text-sm font-medium text-iqbal-primary mb-1">Role *</label>
+            <select 
+              id="role" 
+              name="role" 
+              required
+              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary"
+              onchange="handleRoleChange()"
+            >
+              <option value="">Select your role...</option>
+              <option value="student">Student - View lessons</option>
+              <option value="teacher">Teacher - Create & manage lessons</option>
+            </select>
+            <div id="role-error" class="error-message hidden">Please select your role</div>
+          </div>
+
+          <!-- Class Standard (shown after role selection) -->
+          <div id="class-standard-section" class="hidden">
+            <label for="class_standard" class="block text-sm font-medium text-iqbal-primary mb-1">Class Standard *</label>
+            <select 
+              id="class_standard" 
+              name="class_standard" 
+              required
+              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary"
+            >
+              <option value="">Select your class...</option>
+              <option value="1st">1st Class</option>
+              <option value="2nd">2nd Class</option>
+              <option value="3rd">3rd Class</option>
+              <option value="4th">4th Class</option>
+              <option value="5th">5th Class</option>
+              <option value="6th">6th Class</option>
+              <option value="7th">7th Class</option>
+              <option value="8th">8th Class</option>
+              <option value="9th">9th Class</option>
+              <option value="10th">10th Class</option>
+              <option value="11th">11th Class</option>
+              <option value="12th">12th Class</option>
+              <option value="College">College</option>
+              <option value="University">University</option>
+              <option value="Other">Other</option>
+            </select>
+            <div id="class-standard-error" class="error-message hidden">Please select your class standard</div>
+          </div>
+
+          <!-- Medium -->
+          <div>
+            <label for="medium" class="block text-sm font-medium text-iqbal-primary mb-1">Medium *</label>
+            <select 
+              id="medium" 
+              name="medium" 
+              required
+              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary"
+            >
+              <option value="">Select medium...</option>
+              <option value="English">English</option>
+              <option value="Urdu">Urdu</option>
+            </select>
+            <div id="medium-error" class="error-message hidden">Please select medium</div>
+          </div>
+
+          <!-- Submit -->
+          <button 
+            type="submit"
+            class="w-full bg-blue-600 hover:bg-blue-800 text-white font-semibold py-2 rounded-lg transition duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring-iqbal-primary focus:ring-offset-1"
+            onclick="validateForm(event)"
+          >
+            Complete Registration
+          </button>
+        </form>
+
+        <!-- Already have account -->
+        <p class="text-center mt-3 text-gray-600 text-sm">
+          Already have an account? 
+          <a href="{{ url_for('auth.login') }}" class="text-iqbal-primary hover:underline font-medium">Login here</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    function handleRoleChange() {
+      const role = document.getElementById('role').value;
+      const classStandardSection = document.getElementById('class-standard-section');
+      
+      if (role === 'student') {
+        classStandardSection.classList.remove('hidden');
+        document.getElementById('class_standard').required = true;
+      } else if (role === 'teacher') {
+        classStandardSection.classList.add('hidden');
+        document.getElementById('class_standard').required = false;
+        document.getElementById('class_standard').value = '';
+      } else {
+        classStandardSection.classList.add('hidden');
+        document.getElementById('class_standard').required = false;
+        document.getElementById('class_standard').value = '';
+      }
+    }
+
+    function validateForm(event) {
+      event.preventDefault();
+      
+      // Reset all error states
+      clearAllErrors();
+      
+      let isValid = true;
+      const requiredFields = [
+        { id: 'username', name: 'Username' },
+        { id: 'password', name: 'Password' },
+        { id: 'role', name: 'Role' },
+        { id: 'medium', name: 'Medium' }
+      ];
+
+      // Check if role is selected and add class standard if needed
+      const role = document.getElementById('role').value;
+      if (role === 'student') {
+        requiredFields.push({ id: 'class_standard', name: 'Class Standard' });
+      }
+
+      // Validate each required field
+      requiredFields.forEach(field => {
+        const element = document.getElementById(field.id);
+        const errorElement = document.getElementById(field.id + '-error');
+        
+        if (!element.value.trim()) {
+          element.classList.add('error-field');
+          errorElement.classList.remove('hidden');
+          isValid = false;
+        }
+      });
+
+      if (isValid) {
+        document.getElementById('completeRegistrationForm').submit();
+      }
+    }
+
+    function clearAllErrors() {
+      const errorFields = ['username', 'password', 'role', 'class_standard', 'medium'];
+      errorFields.forEach(fieldId => {
+        const element = document.getElementById(fieldId);
+        const errorElement = document.getElementById(fieldId + '-error');
+        if (element) {
+          element.classList.remove('error-field');
+        }
+        if (errorElement) {
+          errorElement.classList.add('hidden');
+        }
+      });
+    }
+
+    // Clear error when user starts typing/selecting
+    document.addEventListener('DOMContentLoaded', function() {
+      const inputs = document.querySelectorAll('input, select');
+      inputs.forEach(input => {
+        input.addEventListener('input', function() {
+          const fieldId = this.id;
+          const errorElement = document.getElementById(fieldId + '-error');
+          if (errorElement) {
+            this.classList.remove('error-field');
+            errorElement.classList.add('hidden');
+          }
+        });
+      });
+    });
+
+  </script>
+</body>
+</html>
