@@ -108,55 +108,38 @@ class BaseLessonService:
     Base class for lesson services with common functionality
     """
     
-    def __init__(self, groq_api_key: str):
-        """Initialize the base service with API key"""
+    def __init__(self, groq_api_key: str = None):
+        """Initialize the base service with central LLM provider (same as chat/RAG).
+        
+        Args:
+            groq_api_key: Optional API key. If None, uses central admin settings from SystemSettings.
+                         This makes lesson features use the exact same LLM provider as chat/RAG.
+        """
         self.api_key = groq_api_key
         
-        # Get LLM provider from system settings.
-        # IMPORTANT: Use the same "active_provider" used by the main RAG/chat workflow
-        # so lesson features share the exact same provider/model configuration.
-        from app.utils.db import get_db
-        from app.models.database_models import SystemSettings
-        db = get_db()
-        setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
-        # Fallback to environment variable if admin setting not found
-        provider = (setting.value if setting else os.getenv('LLM_PROVIDER', 'openai')).lower()
+        # Use the same LLM factory as chat/RAG - gets provider and API key from admin settings
+        # This ensures lesson features use the exact same central LLM configuration
+        from app.utils.llm_factory import get_chat_model
         
-        # If OpenAI is set from admin, use environment variable instead of passed API key
-        api_key_to_use = None
-        if provider == 'openai' and setting:
-            api_key_to_use = os.getenv('OPENAI_API_KEY')
-        elif provider in ['openai', 'groq']:
-            api_key_to_use = self.api_key
+        # Get user_id from session if available (for user-specific model selection)
+        # Handle case where we're not in a request context (e.g., background tasks)
+        user_id = None
+        try:
+            from flask import has_request_context, session
+            if has_request_context():
+                user_id = session.get('user_id')
+        except Exception:
+            # Not in a request context, use None
+            pass
         
-        # Enforce Groq-only when Groq is selected - no fallback to OpenAI
-        if provider == 'groq' and not api_key_to_use:
-            raise ValueError(
-                "Groq API key is required when Groq is selected as the LLM provider. "
-                "Please configure your Groq API key in the chat interface."
-            )
+        # Use get_chat_model which handles:
+        # - active_provider from SystemSettings
+        # - API key from SystemSettings (encrypted) or env vars
+        # - User-specific model selection if enabled
+        # This is the SAME logic used by chat/RAG endpoints
+        self.llm = get_chat_model(user_id=user_id)
         
-        # Use dynamic LLM factory - supports OpenAI, Groq, and vLLM
-        # For OpenAI and Groq, use api_key (from env if OpenAI set from admin, else from self.api_key)
-        # For vLLM, api_key is not needed
-        # IMPORTANT: When Groq is selected, we ONLY use Groq - no fallback to OpenAI
-        self.llm = create_llm(
-            temperature=0.7,
-            max_tokens=1024,
-            api_key=api_key_to_use,
-            provider=provider
-        )
-        
-        if provider == 'openai':
-            model = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
-            logger.info(f"Base lesson service initialized with OpenAI using model {model}")
-        elif provider == 'groq':
-            model = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
-            logger.info(f"Base lesson service initialized with Groq using model {model}")
-        else:
-            api_base = os.getenv('VLLM_API_BASE', 'http://69.28.92.113:8000/v1')
-            model = os.getenv('VLLM_MODEL', 'Qwen/Qwen2.5-14B-Instruct')
-            logger.info(f"Base lesson service initialized with vLLM at {api_base} using model {model}")
+        logger.info(f"Base lesson service initialized with central LLM provider (same as chat/RAG)")
 
     def allowed_file(self, filename: str) -> bool:
         """Check if file extension is supported"""

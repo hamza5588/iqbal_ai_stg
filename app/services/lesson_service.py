@@ -17,8 +17,13 @@ class LessonService:
     Main lesson service that delegates to specialized teacher and student services.
     This maintains backward compatibility while providing a structured approach.
     """
-    def __init__(self, api_key: str):
-        """Initialize the LessonService with API key from database."""
+    def __init__(self, api_key: str = None):
+        """Initialize the LessonService with central LLM provider (same as chat/RAG).
+        
+        Args:
+            api_key: Optional API key. If None, uses central admin settings from SystemSettings.
+                    This makes lesson features use the same LLM provider as chat/RAG.
+        """
         self.api_key = api_key
         self.teacher_service = TeacherLessonService(api_key)
         self.student_service = StudentLessonService(api_key)
