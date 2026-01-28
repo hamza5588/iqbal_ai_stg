@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings & Subscription | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'iqbal-primary': '#05B0FC',
+            'iqbal-light': '#E6F7FF'
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+</head>
+<body class="min-h-screen bg-gray-50">
+  <div class="min-h-screen">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <a href="{{ url_for('chat.index') }}" class="text-gray-600 hover:text-gray-900">
+              <i class="fas fa-arrow-left"></i>
+            </a>
+            <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
+          </div>
+          <a href="{{ url_for('auth.logout') }}" class="text-red-600 hover:text-red-700">
+            <i class="fas fa-sign-out-alt mr-2"></i>Logout
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Current Plan Badge -->
+      <div class="mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">Current Plan</h2>
+              <p class="text-3xl font-bold text-iqbal-primary capitalize mt-2">{{ subscription.tier }}</p>
+            </div>
+            {% if subscription.status == 'active' %}
+            <span class="px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+              Active
+            </span>
+            {% else %}
+            <span class="px-4 py-2 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">
+              Free
+            </span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Subscription Plans -->
+      <div class="mb-8">
+        <h2 class="text-2xl font-bold text-gray-900 mb-6">Choose Your Plan</h2>
+        <div id="plans-container" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Plans will be loaded via JavaScript -->
+        </div>
+      </div>
+
+      <!-- Success Message -->
+      {% if request.args.get('success') %}
+      <div id="success-message" class="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+        <div class="flex items-center">
+          <i class="fas fa-check-circle text-green-600 mr-2"></i>
+          <p class="text-green-800">Subscription updated successfully!</p>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Coupon Redemption Section -->
+      <div class="mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-xl font-bold text-gray-900 mb-4">Redeem Coupon Code</h2>
+          <p class="text-gray-600 mb-4">Have a coupon code? Enter it below to activate your free subscription.</p>
+          <div class="flex gap-3">
+            <input 
+              type="text" 
+              id="couponCodeInput" 
+              placeholder="Enter coupon code" 
+              class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-iqbal-primary"
+              maxlength="100"
+            >
+            <button 
+              onclick="redeemCoupon()" 
+              class="px-6 py-2 bg-iqbal-primary hover:bg-blue-600 text-white rounded-lg font-semibold transition-colors"
+            >
+              Redeem
+            </button>
+          </div>
+          <div id="couponMessage" class="mt-3 hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const stripe = Stripe('{{ stripe_publishable_key }}');
+    let currentTier = '{{ subscription.tier }}';
+
+    async function loadPlans() {
+      try {
+        const response = await fetch('/subscription/api/subscription/plans');
+        const data = await response.json();
+        renderPlans(data.plans, data.current_tier);
+      } catch (error) {
+        console.error('Error loading plans:', error);
+      }
+    }
+
+    function renderPlans(plans, currentTier) {
+      const container = document.getElementById('plans-container');
+      container.innerHTML = plans.map(plan => `
+        <div class="bg-white rounded-lg shadow-lg ${plan.current ? 'ring-2 ring-iqbal-primary' : ''} ${plan.coming_soon ? 'opacity-75' : ''} overflow-hidden">
+          <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-xl font-bold text-gray-900">${plan.name}</h3>
+              ${plan.current ? '<span class="px-3 py-1 bg-iqbal-primary text-white rounded-full text-xs font-medium">Current</span>' : ''}
+            </div>
+            <div class="mb-4">
+              <span class="text-4xl font-bold text-gray-900">$${plan.price}</span>
+              ${plan.interval ? `<span class="text-gray-600">/${plan.interval}</span>` : ''}
+            </div>
+            <ul class="space-y-3 mb-6">
+              ${plan.features.map(feature => `
+                <li class="flex items-start">
+                  <i class="fas fa-check text-green-500 mr-2 mt-1"></i>
+                  <span class="text-gray-700">${feature}</span>
+                </li>
+              `).join('')}
+            </ul>
+            ${plan.coming_soon ? `
+              <button disabled class="w-full bg-gray-300 text-gray-500 py-3 rounded-lg font-semibold cursor-not-allowed">
+                Coming Soon
+              </button>
+            ` : plan.current ? `
+              ${plan.id !== 'free' ? `
+                <button onclick="cancelSubscription('${plan.id}')" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-semibold transition-colors">
+                  Cancel Subscription
+                </button>
+              ` : `
+                <button disabled class="w-full bg-gray-300 text-gray-500 py-3 rounded-lg font-semibold cursor-not-allowed">
+                  Current Plan
+                </button>
+              `}
+            ` : `
+              <button onclick="selectPlan('${plan.id}')" class="w-full bg-iqbal-primary hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-colors">
+                ${plan.id === 'free' ? 'Switch to Free' : 'Upgrade'}
+              </button>
+            `}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function selectPlan(planId) {
+      if (planId === 'free') {
+        if (confirm('Are you sure you want to switch to the free plan? This will immediately cancel your current subscription and downgrade to Free.')) {
+          try {
+            const response = await fetch('/subscription/api/subscription/cancel', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ immediate: true })
+            });
+            if (response.ok) {
+              const data = await response.json();
+              alert(data.message || 'Plan changed to Free successfully!');
+              window.location.reload();
+            } else {
+              const errorData = await response.json().catch(() => ({}));
+              alert(errorData.error || 'Failed to change plan. Please try again.');
+            }
+          } catch (error) {
+            console.error('Error switching to free plan:', error);
+            alert('An error occurred. Please try again.');
+          }
+        }
+        return;
+      }
+
+      if (planId === 'pro_plus') {
+        alert('Pro Plus is coming soon!');
+        return;
+      }
+
+      try {
+        const response = await fetch('/subscription/api/subscription/create-checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ plan_id: planId })
+        });
+
+        const data = await response.json();
+        if (data.checkout_url) {
+          window.location.href = data.checkout_url;
+        } else {
+          alert(data.error || 'Failed to create checkout session');
+        }
+      } catch (error) {
+        console.error('Error creating checkout:', error);
+        alert('An error occurred. Please try again.');
+      }
+    }
+
+    async function cancelSubscription(planId) {
+      if (confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your billing period.')) {
+        try {
+          const response = await fetch('/subscription/api/subscription/cancel', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include'
+          });
+          if (response.ok) {
+            alert('Subscription canceled. You will retain access until the end of your billing period.');
+            window.location.reload();
+          } else {
+            alert('Failed to cancel subscription. Please try again.');
+          }
+        } catch (error) {
+          console.error('Error canceling subscription:', error);
+          alert('An error occurred. Please try again.');
+        }
+      }
+    }
+
+    // Load plans on page load
+    loadPlans();
+
+    // Coupon redemption function
+    async function redeemCoupon() {
+      const couponInput = document.getElementById('couponCodeInput');
+      const messageDiv = document.getElementById('couponMessage');
+      const code = couponInput.value.trim().toUpperCase();
+      
+      if (!code) {
+        showCouponMessage('Please enter a coupon code', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch('/subscription/api/subscription/redeem-coupon', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ code: code })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          showCouponMessage(data.message || 'Coupon redeemed successfully!', 'success');
+          couponInput.value = '';
+          // Reload page after 2 seconds to show updated plan
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } else {
+          showCouponMessage(data.error || 'Failed to redeem coupon', 'error');
+        }
+      } catch (error) {
+        console.error('Error redeeming coupon:', error);
+        showCouponMessage('An error occurred. Please try again.', 'error');
+      }
+    }
+
+    function showCouponMessage(message, type) {
+      const messageDiv = document.getElementById('couponMessage');
+      messageDiv.className = `mt-3 p-3 rounded-lg ${
+        type === 'success' 
+          ? 'bg-green-50 border border-green-200 text-green-800' 
+          : 'bg-red-50 border border-red-200 text-red-800'
+      }`;
+      messageDiv.innerHTML = `
+        <div class="flex items-center">
+          <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-2"></i>
+          <p>${message}</p>
+        </div>
+      `;
+      messageDiv.classList.remove('hidden');
+      
+      // Auto-hide after 5 seconds
+      setTimeout(() => {
+        messageDiv.classList.add('hidden');
+      }, 5000);
+    }
+
+    // Allow Enter key to redeem coupon
+    document.addEventListener('DOMContentLoaded', function() {
+      const couponInput = document.getElementById('couponCodeInput');
+      if (couponInput) {
+        couponInput.addEventListener('keypress', function(e) {
+          if (e.key === 'Enter') {
+            redeemCoupon();
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+
+
