@@ -112,14 +112,33 @@ class BaseLessonService:
         """Initialize the base service with central LLM provider (same as chat/RAG).
         
         Args:
-            groq_api_key: Optional API key. If None, uses central admin settings from SystemSettings.
-                         This makes lesson features use the exact same LLM provider as chat/RAG.
+            groq_api_key: Optional API key (deprecated - kept for backward compatibility).
+                         The LLM now uses central admin settings from SystemSettings,
+                         matching the exact same logic as chat/RAG endpoints.
         """
         self.api_key = groq_api_key
         
-        # Use the same LLM factory as chat/RAG - gets provider and API key from admin settings
-        # This ensures lesson features use the exact same central LLM configuration
+    @property
+    def llm(self):
+        """Get LLM instance using the EXACT same pattern as RAG service.
+        
+        This uses the global LLM cache and get_chat_model() exactly as RAG does.
+        The LLM is created on-demand when needed, with proper request context.
+        """
+        # Import here to avoid circular imports and ensure Flask context is available
         from app.utils.llm_factory import get_chat_model
+        from app.utils.db import get_db
+        from app.models.database_models import SystemSettings
+        from threading import Lock
+        
+        # Use the same global cache as RAG service
+        # Import the cache from rag_service module (it's defined at module level)
+        try:
+            from app.utils.rag_service import _llm_cache, _llm_cache_lock
+        except ImportError:
+            # Fallback: create local cache if import fails
+            _llm_cache = {}
+            _llm_cache_lock = Lock()
         
         # Get user_id from session if available (for user-specific model selection)
         # Handle case where we're not in a request context (e.g., background tasks)
@@ -132,14 +151,69 @@ class BaseLessonService:
             # Not in a request context, use None
             pass
         
-        # Use get_chat_model which handles:
-        # - active_provider from SystemSettings
-        # - API key from SystemSettings (encrypted) or env vars
-        # - User-specific model selection if enabled
-        # This is the SAME logic used by chat/RAG endpoints
-        self.llm = get_chat_model(user_id=user_id)
+        # Get provider for cache key (same pattern as RAG service)
+        provider = 'openai'  # default
+        try:
+            db = get_db()
+            # Check for new active_provider setting first
+            setting = db.query(SystemSettings).filter(
+                SystemSettings.key == 'active_provider'
+            ).first()
+            if setting:
+                provider = setting.value.lower()
+            else:
+                # Fallback to old llm_provider setting
+                setting = db.query(SystemSettings).filter(
+                    SystemSettings.key == 'llm_provider'
+                ).first()
+                if setting:
+                    provider = setting.value.lower()
+        except Exception as e:
+            logger.warning(f"Error getting provider from settings: {str(e)}, using default: {provider}")
         
-        logger.info(f"Base lesson service initialized with central LLM provider (same as chat/RAG)")
+        # Use cached LLM instance to avoid recreating on every call (same as RAG)
+        if user_id:
+            # Include provider in cache key to ensure correct provider is used (same as RAG)
+            cache_key = f"{user_id}_{provider}_factory"
+            with _llm_cache_lock:
+                if cache_key not in _llm_cache:
+                    logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
+                    try:
+                        # Call get_chat_model exactly as RAG service does - it handles all provider/model selection
+                        _llm_cache[cache_key] = get_chat_model(user_id=user_id, timeout=120, temperature=0.7)
+                        logger.info(f"Created and cached {provider} LLM instance for user {user_id}")
+                    except ValueError as e:
+                        # Re-raise with clearer message if API key is missing
+                        error_msg = str(e)
+                        if "API key is not configured" in error_msg or "required" in error_msg.lower():
+                            logger.error(f"LLM initialization failed: {error_msg}")
+                            # Try to get the provider name for better error message
+                            try:
+                                provider_setting = db.query(SystemSettings).filter(
+                                    SystemSettings.key == 'active_provider'
+                                ).first()
+                                provider_name = provider_setting.value.upper() if provider_setting else provider.upper()
+                                raise ValueError(
+                                    f"{provider_name} API key is not configured in Admin Panel settings. "
+                                    f"Please go to Admin Panel → Settings and configure the {provider_name} API key."
+                                )
+                            except Exception:
+                                raise ValueError(
+                                    f"LLM provider is not properly configured. {error_msg} "
+                                    f"Please configure the API key in the Admin Panel settings."
+                                )
+                        raise
+                    except Exception as e:
+                        # Log unexpected errors but re-raise
+                        logger.error(f"Unexpected error initializing LLM: {str(e)}", exc_info=True)
+                        raise
+                else:
+                    logger.debug(f"Reusing cached LLM instance for user {user_id} with provider {provider}")
+                return _llm_cache[cache_key]
+        else:
+            # No user_id, create LLM without caching (same fallback as RAG)
+            logger.debug(f"Creating LLM without user_id (no caching)")
+            return get_chat_model(user_id=None, timeout=120, temperature=0.7)
 
     def allowed_file(self, filename: str) -> bool:
         """Check if file extension is supported"""

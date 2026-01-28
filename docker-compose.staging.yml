@@ -96,6 +96,7 @@ services:
 
       # APIs – these will come from whatever env values you have on the host
       - GOOGLE_CLIENT_ID=507995986306-qcdrhrrt3d71la4pkrf7lt1b2tvuusqm.apps.googleusercontent.com
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - NOMIC_APIC_KEY=${NOMIC_API_KEY}
 
@@ -156,6 +157,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
       # APIs (if needed by tasks)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - NOMIC_APIC_KEY=${NOMIC_API_KEY}
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
