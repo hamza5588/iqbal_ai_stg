@@ -1,6 +1,15 @@
 # Celery Implementation Testing Guide
 
-## Prerequisites
+## Local vs production (config-driven)
+
+PDF ingestion can run **with or without Celery**:
+
+- **Local / no Redis:** Set `USE_CELERY_FOR_INGESTION=false` (default) in config or env. Ingestion runs **synchronously in-process**; no Redis or Celery worker needed. Use this when you don’t have enough resources to run a Celery worker.
+- **Production:** Set `USE_CELERY_FOR_INGESTION=true` (e.g. in `.env` or environment). Ingestion runs as **Celery tasks** in the background; you need Redis and a Celery worker.
+
+Config is in `app/config.py`; override with env var: `USE_CELERY_FOR_INGESTION=true` or `USE_CELERY_FOR_INGESTION=false`.
+
+## Prerequisites (for Celery / production mode)
 
 1. **Install Dependencies**
    ```bash

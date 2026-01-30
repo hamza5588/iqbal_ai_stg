@@ -7,11 +7,13 @@ import json
 import re
 import logging
 from pathlib import Path
-from typing import Annotated, Any, Dict, Optional, TypedDict, List
+from typing import Annotated, Any, Dict, Optional, TypedDict, List, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 from app.utils.db import get_db
-from app.models.database_models import RAGPrompt
+from app.utils.encryption import decrypt_api_key
+from app.models.database_models import RAGPrompt, SystemSettings
 from app.config import Config
 logger = logging.getLogger(__name__)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -136,48 +138,79 @@ def get_cached_llm(user_id: int, api_key: str, provider: str):
 
 # -------------------
 # 1. LLM + embeddings
+def _get_api_key_from_admin_settings():
+    """
+    Load active provider and API key from Admin Panel (SystemSettings).
+    Used so RAG tools (e.g. outline extraction) use the same key as the chat UI.
+    Returns (api_key or None, provider str).
+    """
+    try:
+        db = get_db()
+        setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
+        if not setting:
+            setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
+        provider = (setting.value if setting else os.getenv('LLM_PROVIDER', 'openai')).lower()
+        key_name = f'{provider}_api_key'  # e.g. groq_api_key, openai_api_key
+        key_setting = db.query(SystemSettings).filter(SystemSettings.key == key_name).first()
+        if key_setting and key_setting.value:
+            try:
+                api_key = decrypt_api_key(key_setting.value)
+                if api_key:
+                    logger.debug(f"Using {provider} API key from Admin Panel for RAG tools")
+                    return api_key, provider
+            except Exception as e:
+                logger.warning(f"Error decrypting API key from Admin Panel: {e}")
+        # Fallback to environment
+        if provider == 'groq':
+            api_key = os.getenv('GROQ_API_KEY', '') or None
+        else:
+            api_key = os.getenv('OPENAI_API_KEY', '') or None
+        return (api_key if api_key else None), provider
+    except Exception as e:
+        logger.warning(f"Could not load API key from Admin Panel: {e}")
+        provider = os.getenv('LLM_PROVIDER', 'openai').lower()
+        api_key = os.getenv('GROQ_API_KEY') if provider == 'groq' else os.getenv('OPENAI_API_KEY')
+        return (api_key if api_key else None), provider
+
+
 # -------------------
 # Use dynamic LLM factory - supports OpenAI, Groq, and vLLM
 # Note: RAG service uses a global LLM instance, but individual requests should use user-specific API keys
 # This is a fallback for when user API key is not available
 def get_rag_llm(api_key=None, provider=None, user_id=None):
-    """Get LLM for RAG service, using system settings or provided parameters"""
-    # If user_id is provided, use the new get_chat_model which respects admin/user settings
+    """Get LLM for RAG service, using system settings or provided parameters.
+    Prefers: (1) get_chat_model(user_id) then (2) Admin Panel API key from DB then (3) env."""
+    # If user_id is provided, use get_chat_model which reads Admin Panel / user settings
     if user_id:
         try:
             return get_chat_model(user_id=user_id, timeout=120, temperature=0.7)
         except Exception as e:
-            logger.warning(f"Error using get_chat_model with user_id {user_id}, falling back: {str(e)}")
+            logger.warning(f"Error using get_chat_model with user_id {user_id}, falling back to Admin Panel key: {str(e)}")
     
-    # Fallback to old behavior for backward compatibility
+    # Resolve provider from DB if not given
     if provider is None:
-        # Get from system settings (check new active_provider first, then old llm_provider)
-        from app.utils.db import get_db
-        from app.models.database_models import SystemSettings
         try:
             db = get_db()
-            # Check for new active_provider setting first
             setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
             if setting:
                 provider = setting.value.lower()
             else:
-                # Fallback to old llm_provider setting
                 setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
-                provider = setting.value if setting else os.getenv('LLM_PROVIDER', 'openai').lower()
-        except:
+                provider = setting.value.lower() if setting else os.getenv('LLM_PROVIDER', 'openai').lower()
+        except Exception:
             provider = os.getenv('LLM_PROVIDER', 'openai').lower()
     
+    # Use API key from Admin Panel (database) when not passed in, so tools use same key as chat
+    if api_key is None and provider in ('openai', 'groq'):
+        admin_key, _ = _get_api_key_from_admin_settings()
+        if admin_key:
+            api_key = admin_key
+    
     # Increase timeout for OpenAI to handle longer requests
-    # Respect OPENAI_TIMEOUT env var if set, otherwise default to 120 seconds
     timeout_override = None
     if provider == 'openai':
-        # Check if OPENAI_TIMEOUT is explicitly set in environment
         env_timeout = os.getenv('OPENAI_TIMEOUT')
-        if env_timeout:
-            timeout_override = int(env_timeout)
-        else:
-            # Default to 120 seconds if not set (increased from 60)
-            timeout_override = 120
+        timeout_override = int(env_timeout) if env_timeout else 120
     
     return create_llm(
         temperature=0.7,
@@ -260,6 +293,67 @@ def get_rag_embeddings():
                     "Cannot get embeddings: No valid API key found and HuggingFace embeddings are not available. "
                     "Please set OPENAI_API_KEY or install langchain-huggingface"
                 )
+
+
+# Batch embedding for faster ingestion (avoids sequential embed_query per doc)
+EMBED_BATCH_SIZE = int(os.getenv("RAG_EMBED_BATCH_SIZE", "100"))  # docs per API call
+EMBED_PARALLEL_BATCHES = int(os.getenv("RAG_EMBED_PARALLEL_BATCHES", "4"))  # concurrent batch requests (1 = sequential)
+
+
+def _embed_documents_in_batches(
+    embedding_model: Any,
+    documents: List[Document],
+    progress_callback: Optional[callable] = None,
+    batch_size: int = EMBED_BATCH_SIZE,
+    parallel_batches: int = EMBED_PARALLEL_BATCHES,
+) -> Tuple[List[Tuple[str, List[float]]], List[Dict[str, Any]]]:
+    """
+    Embed documents in batches (and optionally in parallel) for faster ingestion.
+    Returns (text_embeddings, metadatas) for FAISS.from_embeddings / add_embeddings.
+    """
+    if not documents:
+        return [], []
+
+    texts = [d.page_content for d in documents]
+    metadatas = [dict(d.metadata) if d.metadata else {} for d in documents]
+    n = len(texts)
+    all_text_embeddings: List[Tuple[str, List[float]]] = []
+    all_metadatas: List[Dict[str, Any]] = []
+
+    def embed_batch(start: int) -> Tuple[List[Tuple[str, List[float]]], List[Dict[str, Any]]]:
+        end = min(start + batch_size, n)
+        batch_texts = texts[start:end]
+        batch_metas = metadatas[start:end]
+        batch_embeddings = embedding_model.embed_documents(batch_texts)
+        return list(zip(batch_texts, batch_embeddings)), batch_metas
+
+    if parallel_batches <= 1:
+        # Sequential batching: one batch at a time
+        for start in range(0, n, batch_size):
+            te, meta = embed_batch(start)
+            all_text_embeddings.extend(te)
+            all_metadatas.extend(meta)
+            if progress_callback:
+                pct = 65 + int(15 * len(all_text_embeddings) / n)
+                progress_callback("embeddings", min(pct, 79), f"Embedded {len(all_text_embeddings)}/{n} chunks...")
+    else:
+        # Parallel batching: run multiple batches concurrently, then reorder by start index
+        batch_starts = list(range(0, n, batch_size))
+        with ThreadPoolExecutor(max_workers=min(parallel_batches, len(batch_starts))) as executor:
+            future_to_start = {executor.submit(embed_batch, start): start for start in batch_starts}
+            completed = {}
+            for future in as_completed(future_to_start):
+                start = future_to_start[future]
+                completed[start] = future.result()
+        for start in batch_starts:
+            te, meta = completed[start]
+            all_text_embeddings.extend(te)
+            all_metadatas.extend(meta)
+        if progress_callback:
+            progress_callback("embeddings", 78, f"Embedded {n} chunks (batched, parallel).")
+
+    return all_text_embeddings, all_metadatas
+
 
 # -------------------
 # 2. Single shared vector store paths
@@ -421,16 +515,38 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
     - Excludes documents with metadata["type"] == "page_full_text"
       so similarity retrieval returns only content chunks.
     """
+    # #region agent log
+    _debug_log = (Path(__file__).resolve().parent.parent.parent / ".cursor" / "debug.log")
+    try:
+        with open(_debug_log, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:entry", "message": "get_retriever entry", "data": {"thread_id": thread_id, "user_id_in": user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H1,H5"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
     if not thread_id:
         return None
 
     if user_id is None:
         user_id = _extract_user_id_from_thread_id(thread_id)
 
+    # #region agent log
+    try:
+        with open(_debug_log, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:after_extract", "message": "user_id after extract", "data": {"user_id": user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H1"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
     if user_id is None:
         return None
 
     vector_store = _load_shared_vector_store()
+    # #region agent log
+    try:
+        with open(_debug_log, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:vector_store", "message": "vector_store loaded", "data": {"has_store": vector_store is not None}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H5"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
     if vector_store is None:
         return None
 
@@ -444,14 +560,34 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
             docs = self.vector_store.similarity_search_with_score(query, k=60)
             logger.info(f"FilteredRetriever: retrieved {len(docs)} documents before filtering")
 
-            filtered_docs = []
+            # #region agent log
+            _debug_log = (Path(__file__).resolve().parent.parent.parent / ".cursor" / "debug.log")
+            try:
+                with open(_debug_log, "a", encoding="utf-8") as _f:
+                    _f.write(json.dumps({"location": "rag_service.py:FilteredRetriever.invoke:entry", "message": "invoke entry", "data": {"query": query.strip()[:120], "retrieved": len(docs), "self_thread_id": self.thread_id, "self_user_id": self.user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H5"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
+            # Collect all matching (thread+user) docs with score; then sort by score and take top N
+            # so retrieval is consistent across calls (same query -> same top chunks by relevance)
+            scored_matches: List[tuple] = []
+            skipped_page_full_text = 0
+            match_thread_only = 0
+            match_user_only = 0
+            match_both = 0
+            sample_meta_types = []
             for doc, score in docs:
                 meta = doc.metadata or {}
                 doc_thread_id = str(meta.get("thread_id", ""))
                 doc_user_id = meta.get("user_id")
+                meta_type = meta.get("type")
+                if len(sample_meta_types) < 10:
+                    sample_meta_types.append(meta_type)
 
                 # Exclude page_full_text docs from RAG retrieval
                 if meta.get("type") == "page_full_text":
+                    skipped_page_full_text += 1
                     continue
 
                 try:
@@ -459,15 +595,39 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
                 except (ValueError, TypeError):
                     doc_user_id = None
 
+                thread_match = (doc_thread_id == self.thread_id)
+                user_match = (doc_user_id == self.user_id)
+                if thread_match and not user_match:
+                    match_thread_only += 1
+                if user_match and not thread_match:
+                    match_user_only += 1
                 if doc_thread_id == self.thread_id and doc_user_id == self.user_id:
-                    filtered_docs.append(doc)
+                    match_both += 1
+                    scored_matches.append((score, doc))
 
-                if len(filtered_docs) >= 6:
-                    break
+            # FAISS returns L2 distance (lower = more similar). Sort by score ascending, take top 12
+            # so more context and deterministic order reduce "sometimes wrong" for any query.
+            scored_matches.sort(key=lambda x: (x[0], (x[1].page_content or "")[:200]))
+            filtered_docs = [doc for _, doc in scored_matches[:12]]
+
+            # #region agent log
+            try:
+                with open(_debug_log, "a", encoding="utf-8") as _f:
+                    _f.write(json.dumps({"location": "rag_service.py:FilteredRetriever.invoke:exit", "message": "invoke exit", "data": {"filtered_count": len(filtered_docs), "skipped_page_full_text": skipped_page_full_text, "match_thread_only": match_thread_only, "match_user_only": match_user_only, "match_both": match_both, "sample_meta_types": sample_meta_types}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H3,H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
 
             logger.info(f"FilteredRetriever: filtered to {len(filtered_docs)} documents")
             return filtered_docs
 
+    # #region agent log
+    try:
+        with open(_debug_log, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:return", "message": "returning FilteredRetriever", "data": {"thread_id": thread_id, "user_id": user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H5"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
     return FilteredRetriever(vector_store, thread_id, user_id)
 
 # def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
@@ -947,22 +1107,24 @@ def ingest_pdf(
 
         all_docs_to_index = page_docs + chunks  # NEW: index both
 
-        # Get current embeddings based on provider (dynamic)
+        # Get current embeddings and compute in batches (faster than sequential per-doc embedding)
         current_embeddings = get_rag_embeddings()
-        
+        _send_progress("embeddings", 65, "Creating embeddings for pages + chunks (batched)...")
+        text_embeddings, embed_metadatas = _embed_documents_in_batches(
+            current_embeddings, all_docs_to_index, _send_progress
+        )
+        _send_progress("embeddings", 79, f"Embedded {len(text_embeddings)} documents.")
+
         if vector_store is None:
-            _send_progress("embeddings", 65, "Creating embeddings for pages + chunks (may take a moment)...")
-            vector_store = FAISS.from_documents(all_docs_to_index, current_embeddings)
+            vector_store = FAISS.from_embeddings(
+                text_embeddings, embedding=current_embeddings, metadatas=embed_metadatas
+            )
             _SHARED_VECTOR_STORE = vector_store
-            _send_progress("embeddings", 80, f"Created embeddings for {len(all_docs_to_index)} documents")
+            _send_progress("embeddings", 80, f"Created vector store with {len(all_docs_to_index)} documents")
         else:
             # Check if embeddings are compatible with existing vector store
             try:
-                # Test embedding dimension by embedding a small text
-                test_embedding = current_embeddings.embed_query("test")
-                test_dim = len(test_embedding)
-                
-                # Check if vector store dimension matches
+                test_dim = len(text_embeddings[0][1]) if text_embeddings else len(current_embeddings.embed_query("test"))
                 if hasattr(vector_store, 'index') and hasattr(vector_store.index, 'd'):
                     store_dim = vector_store.index.d
                     if test_dim != store_dim:
@@ -971,7 +1133,6 @@ def ingest_pdf(
                             f"but current embeddings have {test_dim} dimensions. Recreating vector store."
                         )
                         _send_progress("embeddings", 65, "Recreating vector store with new embeddings (provider changed)...")
-                        # Delete old vector store and create new one
                         _SHARED_VECTOR_STORE = None
                         try:
                             import shutil
@@ -980,25 +1141,23 @@ def ingest_pdf(
                                 logger.info("Deleted incompatible vector store")
                         except Exception as del_error:
                             logger.error(f"Error deleting incompatible vector store: {del_error}")
-                        
-                        # Create new vector store with current embeddings
-                        vector_store = FAISS.from_documents(all_docs_to_index, current_embeddings)
+
+                        vector_store = FAISS.from_embeddings(
+                            text_embeddings, embedding=current_embeddings, metadatas=embed_metadatas
+                        )
                         _SHARED_VECTOR_STORE = vector_store
                         _send_progress("embeddings", 80, f"Created new vector store with {len(all_docs_to_index)} documents")
                     else:
-                        # Dimensions match, safe to add documents
                         _send_progress("embeddings", 70, f"Adding {len(all_docs_to_index)} documents to vector store...")
-                        vector_store.add_documents(all_docs_to_index)
+                        vector_store.add_embeddings(text_embeddings, metadatas=embed_metadatas)
                         _SHARED_VECTOR_STORE = vector_store
                         _send_progress("embeddings", 80, f"Added {len(all_docs_to_index)} documents to vector store")
                 else:
-                    # Can't check dimension, try to add and catch error
                     _send_progress("embeddings", 70, f"Adding {len(all_docs_to_index)} documents to vector store...")
-                    vector_store.add_documents(all_docs_to_index)
+                    vector_store.add_embeddings(text_embeddings, metadatas=embed_metadatas)
                     _SHARED_VECTOR_STORE = vector_store
                     _send_progress("embeddings", 80, f"Added {len(all_docs_to_index)} documents to vector store")
             except AssertionError as dim_error:
-                # Dimension mismatch detected, recreate vector store
                 logger.warning(f"Dimension mismatch detected when adding documents. Recreating vector store: {dim_error}")
                 _send_progress("embeddings", 65, "Recreating vector store with new embeddings (dimension mismatch)...")
                 _SHARED_VECTOR_STORE = None
@@ -1009,9 +1168,10 @@ def ingest_pdf(
                         logger.info("Deleted incompatible vector store due to dimension mismatch")
                 except Exception as del_error:
                     logger.error(f"Error deleting incompatible vector store: {del_error}")
-                
-                # Create new vector store with current embeddings
-                vector_store = FAISS.from_documents(all_docs_to_index, current_embeddings)
+
+                vector_store = FAISS.from_embeddings(
+                    text_embeddings, embedding=current_embeddings, metadatas=embed_metadatas
+                )
                 _SHARED_VECTOR_STORE = vector_store
                 _send_progress("embeddings", 80, f"Created new vector store with {len(all_docs_to_index)} documents")
 
@@ -1243,8 +1403,8 @@ def _extract_topics_with_ai(page_docs: List[Document], user_id: int, thread_id: 
     3. If no TOC, scan all pages in batches to extract headings
     """
     try:
-        # Get LLM instance for topic extraction
-        user_llm = get_rag_llm()
+        # Get LLM instance for topic extraction (use user_id so admin/system API key is used)
+        user_llm = get_rag_llm(user_id=user_id)
         
         # Phase 1: Check for TOC in early pages (first 10 pages)
         early_pages = [d for d in page_docs[:10] if d.metadata.get("page", 0) <= 10]
@@ -1470,6 +1630,7 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
     headings, and topics across the entire PDF using AI analysis.
 
     Use this tool when the user asks for:
+    - what topic(s) are covered / what topics does the document cover
     - a list of topics or sections in the document
     - the document outline or structure
     - headings or major sections
@@ -1700,14 +1861,47 @@ def count_words_in_text_tool(text: str, label: str = "text") -> dict:
 
 
 
+def _strip_metadata_like_lines(text: str) -> str:
+    """Remove lines that look like PDF/internal metadata so they are not shown to the user."""
+    if not text or not text.strip():
+        return text
+    skip_phrases = (
+        "metadata notes", "the page is part of", "duplicated in two chunks",
+        "pdf-xchange", "created using", "timestamps from", "windows 10",
+        "the content is duplicated", "likely due to pdf formatting",
+        "for deeper insights", "for specific applications", "feel free to ask",
+    )
+    lines = text.split("\n")
+    kept = []
+    for line in lines:
+        lower = line.strip().lower()
+        if not lower:
+            kept.append(line)
+            continue
+        if any(phrase in lower for phrase in skip_phrases):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip() or text
+
+
 @tool
-def rag_tool(query: str, thread_id: Optional[str] = None) -> dict:
+def rag_tool(query: str, thread_id: Optional[str] = None):
     """
     Retrieve relevant information from the uploaded PDF for this chat thread.
     Always include the thread_id when calling this tool.
+    Returns content-only text for the LLM (no internal metadata).
     """
     logger.info(f"rag_tool called: query='{query[:100]}...', thread_id={thread_id}")
-    
+
+    # #region agent log
+    _debug_log = (Path(__file__).resolve().parent.parent.parent / ".cursor" / "debug.log")
+    try:
+        with open(_debug_log, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"location": "rag_service.py:rag_tool:entry", "message": "rag_tool entry", "data": {"query": query.strip()[:200], "thread_id": thread_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H1,H5"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # Extract user_id from thread_id for filtering
     user_id = _extract_user_id_from_thread_id(thread_id) if thread_id else None
     logger.info(f"rag_tool: extracted user_id={user_id}")
@@ -1732,28 +1926,25 @@ def rag_tool(query: str, thread_id: Optional[str] = None) -> dict:
                 if thread_id:
                     return get_page_tool.invoke({"page": page_requested, "thread_id": thread_id})
                 else:
-                    return {
-                        "error": "thread_id is required for page queries",
-                        "query": query,
-                    }
+                    return "Error: thread_id is required for page queries."
             except (ValueError, IndexError):
                 pass
     
-    # Check for author/title queries
+    # Check for author/title/person-identity queries (e.g. "who is X?", "who wrote?", "author")
     author_keywords = ["author", "written by", "who wrote", "title page", "lecturer", "who is the author"]
     is_author_query = any(keyword in query.lower() for keyword in author_keywords)
-    
+    # "who is <name>?" should get consistent results: always include page 1 (resumes/PDFs often put name there)
+    is_who_is_person = query.strip().lower().startswith("who is ") and len(query.strip()) > 10
+    is_person_identity_query = is_author_query or is_who_is_person
+
     # Get retriever for similarity search
     retriever = _get_retriever(thread_id, user_id)
     if retriever is None:
-        # If author query and no retriever, try page 1 fallback
-        if is_author_query and thread_id:
-            logger.info("rag_tool: author query with no retriever, trying page 1 fallback")
+        # If person/author query and no retriever, try page 1 fallback
+        if is_person_identity_query and thread_id:
+            logger.info("rag_tool: person/author query with no retriever, trying page 1 fallback")
             return get_page_tool.invoke({"page": 1, "thread_id": thread_id})
-        return {
-            "error": "No document indexed for this chat. Upload a PDF first.",
-            "query": query,
-        }
+        return "Error: No document indexed for this chat. Upload a PDF first."
 
     # Perform similarity search
     result = retriever.invoke(query)
@@ -1762,32 +1953,47 @@ def rag_tool(query: str, thread_id: Optional[str] = None) -> dict:
     context = [doc.page_content for doc in result]
     metadata = [doc.metadata for doc in result]
     
-    # Author/title fallback: if query is about author and we got no results or no person-name-like content
-    if is_author_query and (not result or not any(
-        any(word.isupper() and len(word) > 2 for word in chunk.split()) 
-        for chunk in context[:3]
-    )):
-        logger.info("rag_tool: author query with insufficient results, trying page 1 fallback")
-        if thread_id:
-            page1_result = get_page_tool.invoke({"page": 1, "thread_id": thread_id})
-            if isinstance(page1_result, dict) and "content" in page1_result:
-                # Append page 1 content
-                context = page1_result.get("content", []) + context
-                metadata = page1_result.get("metadata", []) + metadata
-                logger.info(f"rag_tool: appended {len(page1_result.get('content', []))} chunks from page 1")
+    # For "who is X?" / author queries: always include page 1 so the answer is consistent (name often on page 1)
+    if is_person_identity_query and thread_id:
+        page1_result = get_page_tool.invoke({"page": 1, "thread_id": thread_id})
+        if isinstance(page1_result, dict) and "content" in page1_result:
+            page1_content = page1_result.get("content", [])
+            if page1_content:
+                # Prepend page 1 so the model sees it first; avoid duplicating if already in context
+                existing_text = "\n".join(context).lower()
+                new_chunks = [c for c in page1_content if c and c.strip() and c.strip().lower() not in existing_text]
+                if new_chunks:
+                    context = list(new_chunks) + context
+                    metadata = list(page1_result.get("metadata", [])[: len(new_chunks)]) + metadata
+                    logger.info(f"rag_tool: prepended page 1 for person/author query ({len(new_chunks)} chunks)")
+                elif not context:
+                    context = list(page1_content)
+                    metadata = list(page1_result.get("metadata", [])[: len(page1_content)])
+                    logger.info(f"rag_tool: used page 1 only for person/author query ({len(context)} chunks)")
+    # Legacy fallback: author query with no/inadequate results still get page 1 (already handled above)
     
     # Get thread metadata for page count
     thread_meta = _THREAD_METADATA.get(str(thread_id), {})
     num_pages = thread_meta.get("num_pages") or thread_meta.get("pages") or thread_meta.get("documents")
+    source_file = thread_meta.get("filename") or "PDF"
 
-    return {
-        "query": query,
-        "context": context,
-        "metadata": metadata,
-        "source_file": thread_meta.get("filename"),
-        "num_pages": num_pages,  # Total number of pages in the PDF
-        "pages": num_pages,  # Alternative key
-    }
+    # Return content-only string for the LLM so internal metadata is not shown to the user
+    cleaned_chunks = [_strip_metadata_like_lines(c) for c in context if c and c.strip()]
+    content_block = "\n\n---\n\n".join(cleaned_chunks) if cleaned_chunks else "(No relevant content found.)"
+    content_for_llm = (
+        f"Relevant content from the PDF:\n\n{content_block}\n\n"
+        f"Source: {source_file}. Total pages: {num_pages or 'unknown'}."
+    )
+
+    # #region agent log
+    try:
+        with open(_debug_log, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({"location": "rag_service.py:rag_tool:exit", "message": "rag_tool exit", "data": {"query": query.strip()[:120], "result_count": len(result), "chunks_returned": len(cleaned_chunks), "content_length": len(content_for_llm), "content_has_hamza": "hamza" in content_block.lower()}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H3,H4"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
+    return content_for_llm
 
 
 
@@ -2035,16 +2241,14 @@ def chat_node(state: ChatState, config=None):
     f"- Always use get_page_tool for page-specific queries to ensure accuracy.\n\n"
 
     f"CRITICAL: Topics/Outline/Chapters Queries:\n"
-    f"- If the user asks for a list of topics, outline, chapters, headings, table of contents, or topics for the whole PDF,\n"
-    f"  you MUST call list_topics_whole_doc_tool(thread_id='{thread_id}') immediately.\n"
-    f"- Examples of queries that require this tool:\n"
-    f"  * 'show me the list of topics'\n"
-    f"  * 'what are the topics in this document'\n"
-    f"  * 'list all chapters'\n"
-    f"  * 'show me the outline'\n"
-    f"  * 'what topics are covered'\n"
-    f"  * 'table of contents'\n"
-    f"- After calling the tool, summarize the 'topics' list from the response for the user.\n\n"
+    f"- If the user asks for a list of topics, outline, chapters, headings, table of contents, or what the document covers,\n"
+    f"  you MUST call list_topics_whole_doc_tool(thread_id='{thread_id}') FIRST. Do NOT answer from rag_tool for these queries.\n"
+    f"- Examples that REQUIRE list_topics_whole_doc_tool (call it immediately):\n"
+    f"  * 'what topic covered' / 'what topics are covered' / 'what topics does this document cover'\n"
+    f"  * 'show me the list of topics' / 'what are the topics in this document'\n"
+    f"  * 'list all chapters' / 'show me the outline' / 'table of contents'\n"
+    f"  * 'headings' / 'sections' / 'what does the document cover'\n"
+    f"- After calling the tool, present the full 'topics' list from the response to the user. Do not summarize to only a few items.\n\n"
 
     f"When generating a LECTURE or LESSON, you MUST follow these rules strictly:\n"
     f"- Use clear and meaningful headings\n"
@@ -2055,11 +2259,8 @@ def chat_node(state: ChatState, config=None):
     f"- Write in an academic, lecture-style tone suitable for teaching\n"
     f"- Explain concepts clearly, as if teaching students\n\n"
 
-    f"When you call rag_tool, it will return:\n"
-    f"- Relevant content from the PDF\n"
-    f"- Page numbers and metadata\n"
-    f"- Total number of pages (num_pages or pages field)\n"
-    f"- Source filename\n\n"
+    f"When you call rag_tool, it returns relevant PDF content only (no internal metadata).\n"
+    f"Use that content to answer. Do not mention internal metadata, file paths, or technical notes to the user.\n\n"
 
     f"When you call get_page_tool, it will return:\n"
     f"- Exact content from the specified page\n"

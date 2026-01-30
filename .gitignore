@@ -21,3 +21,5 @@ rag_metadata.json
 uploaded_files
 instance
 chat.db
+.cursor
+.vscode
