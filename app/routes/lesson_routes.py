@@ -1081,13 +1081,9 @@ def create_ai_lesson_version(lesson_id):
         data = request.get_json()
         improvement_prompt = data.get('improvement_prompt', '')
         
-        # Get API key from session
-        api_key = session.get('groq_api_key')
-        if not api_key:
-            return jsonify({'error': 'API key not configured. Please set your API key first.'}), 400
-        
-        # Use LessonService to improve the lesson
-        lesson_service = LessonService(api_key=api_key)
+        # Use LessonService with central LLM provider (same as chat/RAG)
+        # No need for per-user API key - uses central admin settings
+        lesson_service = LessonService(api_key=None)
         
         # Generate improved lesson content
         improved_content = lesson_service.improve_lesson_content(
@@ -1494,17 +1490,13 @@ def apply_prompt_to_lesson(lesson_id):
         if not prompt.strip():
             return jsonify({'error': 'Prompt is required'}), 400
         
-        # Get API key from session
-        api_key = session.get('groq_api_key')
-        if not api_key:
-            return jsonify({'error': 'API key not configured. Please set your API key first.'}), 400
-        
         # Get current content (use draft if available, otherwise original)
         current_draft = LessonModel.get_draft_content(lesson_id)
         content_to_edit = current_draft if current_draft else lesson.get('original_content', lesson['content'])
         
-        # Use LessonService to apply the prompt
-        lesson_service = LessonService(api_key=api_key)
+        # Use LessonService with central LLM provider (same as chat/RAG)
+        # No need for per-user API key - uses central admin settings
+        lesson_service = LessonService(api_key=None)
         improved_content = lesson_service.improve_lesson_content(
             lesson_id=lesson_id,
             current_content=content_to_edit,
@@ -1619,7 +1611,7 @@ def finalize_lesson_version(lesson_id):
         
         # Delete FAISS index after storing in database
         try:
-            lesson_service = LessonService(api_key=session.get('groq_api_key'))
+            lesson_service = LessonService(api_key=None)
             lesson_service._delete_faiss_index(new_lesson_id)
             logger.info(f"Deleted FAISS index for finalized lesson {new_lesson_id}")
         except Exception as e:

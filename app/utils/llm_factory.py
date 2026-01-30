@@ -213,8 +213,44 @@ def create_llm(
             VLLM_MAX_TOKENS: Max tokens (default: 1024)
             VLLM_TIMEOUT: Timeout in seconds (default: 600)
     """
-    # Use provided provider or fall back to config
-    provider = (provider or Config.LLM_PROVIDER).lower()
+    # Resolve provider in a way that respects Admin settings (same as RAG/global LLM)
+    # Priority:
+    # 1. Explicit `provider` argument
+    # 2. SystemSettings.active_provider (Admin panel)
+    # 3. Legacy SystemSettings.llm_provider
+    # 4. Config.LLM_PROVIDER (default)
+    resolved_provider = provider
+
+    if resolved_provider is None:
+        try:
+            from app.utils.db import get_db
+            from app.models.database_models import SystemSettings
+
+            db = get_db()
+
+            # Check new active_provider setting first
+            setting = db.query(SystemSettings).filter(
+                SystemSettings.key == "active_provider"
+            ).first()
+
+            if setting and setting.value:
+                resolved_provider = setting.value.lower()
+            else:
+                # Fallback to old llm_provider setting
+                setting = db.query(SystemSettings).filter(
+                    SystemSettings.key == "llm_provider"
+                ).first()
+                if setting and setting.value:
+                    resolved_provider = setting.value.lower()
+        except Exception as e:
+            # If anything goes wrong (e.g. no app context), log and fall back to config
+            logger.warning(
+                f"create_llm: failed to read provider from SystemSettings, "
+                f"falling back to Config.LLM_PROVIDER. Error: {str(e)}"
+            )
+
+    # Final fallback to config default if still not resolved
+    provider = (resolved_provider or Config.LLM_PROVIDER).lower()
     
     # Use provided values or fall back to config defaults
     if provider == 'openai':
