@@ -131,6 +131,7 @@ services:
       - VLLM_TIMEOUT=600
 
       # Celery Configuration
+      - USE_CELERY_FOR_INGESTION=true
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
@@ -186,6 +187,7 @@ services:
       - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
 
       # Celery Configuration
+      - USE_CELERY_FOR_INGESTION=true
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
@@ -211,7 +213,7 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
-    command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=2
+    command: celery -A app.celery_worker_entry.celery worker --loglevel=info --concurrency=2
     deploy:
       resources:
         limits:
