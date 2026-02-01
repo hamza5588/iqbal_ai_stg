@@ -58,12 +58,12 @@ def ingest_pdf_task(self, file_bytes_b64: str, thread_id: str, filename: str, us
             file_bytes=file_bytes,
             thread_id=thread_id,
             filename=filename,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            user_id=user_id,
         )
         
-        # Save thread to database
-        # Flask app context should be available from ContextTask
-        _save_thread_to_db(user_id, thread_id, filename)
+        # Save thread to database with ingest result
+        _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
         
         # Return success result
         return {
@@ -120,7 +120,7 @@ def ingest_pdf_task(self, file_bytes_b64: str, thread_id: str, filename: str, us
         }
 
 
-def _save_thread_to_db(user_id: int, thread_id: str, filename: str):
+def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
     """
     Helper function to save thread to database.
     Uses session factory directly since Flask's 'g' is not available in Celery tasks.
@@ -151,34 +151,40 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str):
     db = Session()
     
     try:
-        # Check if thread already exists
         existing_thread = db.query(RAGThread).filter_by(thread_id=thread_id).first()
+        now = datetime.utcnow()
         if not existing_thread:
-            # Create new thread record
-            thread_name = f"Thread {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
-            now = datetime.utcnow()
+            thread_name = f"Thread {now.strftime('%Y-%m-%d %H:%M')}"
             rag_thread = RAGThread(
                 user_id=user_id,
                 thread_id=thread_id,
                 name=thread_name,
                 filename=filename,
                 created_at=now,
-                updated_at=now
+                updated_at=now,
             )
             db.add(rag_thread)
             db.commit()
             db.refresh(rag_thread)
-            logger.info(f"Created new thread {thread_id} for user {user_id} with filename {filename}")
+            existing_thread = rag_thread
+            logger.info("Created new thread %s for user %s", thread_id, user_id)
+
+        if ingest_result:
+            existing_thread.filename = filename
+            existing_thread.has_document = True
+            existing_thread.doc_count = (existing_thread.doc_count or 0) + 1
+            existing_thread.num_pages = ingest_result.get("num_pages") or ingest_result.get("pages")
+            existing_thread.last_ingested_at = now
+            existing_thread.embedding_model = ingest_result.get("embedding_model")
+            existing_thread.embedding_dim = ingest_result.get("embedding_dim")
+            existing_thread.updated_at = now
+            db.commit()
+            logger.info("Updated thread %s with has_document=true", thread_id)
         else:
-            # Update existing thread (only if it doesn't already have a document)
-            from app.utils.rag_service import thread_has_document
-            if not thread_has_document(thread_id):
+            if not getattr(existing_thread, "has_document", False):
                 existing_thread.filename = filename
-                existing_thread.updated_at = datetime.utcnow()
+                existing_thread.updated_at = now
                 db.commit()
-                logger.info(f"Updated existing thread {thread_id} with filename {filename}")
-            else:
-                logger.warning(f"Attempted to update thread {thread_id} that already has a document")
     except Exception as e:
         logger.error(f"Error saving thread to database: {str(e)}")
         db.rollback()

@@ -86,7 +86,8 @@ def ingest():
         result = ingest_pdf(
             file_bytes=file_bytes,
             thread_id=thread_id,
-            filename=filename
+            filename=filename,
+            user_id=user_id,
         )
 
         return jsonify({

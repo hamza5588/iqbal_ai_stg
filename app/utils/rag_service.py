@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from app.utils.db import get_db
 from app.utils.encryption import decrypt_api_key
-from app.models.database_models import RAGPrompt, SystemSettings
+from app.models.database_models import RAGPrompt, RAGThread, RAGChunk, SystemSettings
 from app.config import Config
 logger = logging.getLogger(__name__)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -34,12 +34,10 @@ except ImportError:
     logger.warning("PDFPlumberLoader not available. Install pdfplumber for better PDF support.")
 
 from langchain_community.tools import DuckDuckGoSearchRun
-from langchain_community.vectorstores import FAISS
 from langchain_core.messages import BaseMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_core.documents import Document
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-# Try to import from langchain_huggingface first (newer), fallback to langchain_community
+# HuggingFace embeddings only (no OpenAI)
 try:
     from langchain_huggingface import HuggingFaceEmbeddings
     HUGGINGFACE_EMBEDDINGS_AVAILABLE = True
@@ -168,15 +166,14 @@ def _get_api_key_from_admin_settings():
         return (api_key if api_key else None), provider
     except Exception as e:
         logger.warning(f"Could not load API key from Admin Panel: {e}")
-        provider = os.getenv('LLM_PROVIDER', 'openai').lower()
+        provider = os.getenv('LLM_PROVIDER', 'groq').lower()
         api_key = os.getenv('GROQ_API_KEY') if provider == 'groq' else os.getenv('OPENAI_API_KEY')
         return (api_key if api_key else None), provider
 
 
 # -------------------
-# Use dynamic LLM factory - supports OpenAI, Groq, and vLLM
+# Use dynamic LLM factory - RAG uses Groq or vLLM only (no OpenAI)
 # Note: RAG service uses a global LLM instance, but individual requests should use user-specific API keys
-# This is a fallback for when user API key is not available
 def get_rag_llm(api_key=None, provider=None, user_id=None):
     """Get LLM for RAG service, using system settings or provided parameters.
     Prefers: (1) get_chat_model(user_id) then (2) Admin Panel API key from DB then (3) env."""
@@ -187,7 +184,7 @@ def get_rag_llm(api_key=None, provider=None, user_id=None):
         except Exception as e:
             logger.warning(f"Error using get_chat_model with user_id {user_id}, falling back to Admin Panel key: {str(e)}")
     
-    # Resolve provider from DB if not given
+    # Resolve provider from DB if not given (RAG uses groq or vllm only, not openai)
     if provider is None:
         try:
             db = get_db()
@@ -196,25 +193,26 @@ def get_rag_llm(api_key=None, provider=None, user_id=None):
                 provider = setting.value.lower()
             else:
                 setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
-                provider = setting.value.lower() if setting else os.getenv('LLM_PROVIDER', 'openai').lower()
+                provider = setting.value.lower() if setting else os.getenv('LLM_PROVIDER', 'groq').lower()
         except Exception:
-            provider = os.getenv('LLM_PROVIDER', 'openai').lower()
+            provider = os.getenv('LLM_PROVIDER', 'groq').lower()
+    if provider == 'openai':
+        provider = 'groq'
     
     # Use API key from Admin Panel (database) when not passed in, so tools use same key as chat
-    if api_key is None and provider in ('openai', 'groq'):
+    if api_key is None and provider in ('groq', 'vllm'):
         admin_key, _ = _get_api_key_from_admin_settings()
         if admin_key:
             api_key = admin_key
     
-    # Increase timeout for OpenAI to handle longer requests
     timeout_override = None
-    if provider == 'openai':
-        env_timeout = os.getenv('OPENAI_TIMEOUT')
+    if provider == 'groq':
+        env_timeout = os.getenv('GROQ_TIMEOUT')
         timeout_override = int(env_timeout) if env_timeout else 120
     
     return create_llm(
         temperature=0.7,
-        api_key=api_key if provider in ['openai', 'groq'] else None,
+        api_key=api_key if provider in ['groq', 'vllm'] else None,
         provider=provider,
         timeout=timeout_override
     )
@@ -228,71 +226,15 @@ which is not available when Celery workers import this module on startup.
 Instead, LLMs and embeddings are created lazily via helper functions.
 """
 
-# Cache for current provider to detect changes
-_LAST_EMBEDDING_PROVIDER = None
-
 def get_rag_embeddings():
-    """Get embeddings based on active provider setting"""
-    global _LAST_EMBEDDING_PROVIDER, _SHARED_VECTOR_STORE
-    
-    try:
-        from app.utils.db import get_db
-        from app.models.database_models import SystemSettings
-        
-        db = get_db()
-        # Check for new active_provider setting first
-        setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
-        if setting:
-            provider = setting.value.upper()
-        else:
-            # Fallback to old llm_provider setting
-            setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
-            provider = setting.value.upper() if setting else os.getenv('LLM_PROVIDER', 'OPENAI').upper()
-        
-        # Check if provider changed - if so, clear vector store cache
-        if _LAST_EMBEDDING_PROVIDER is not None and _LAST_EMBEDDING_PROVIDER != provider:
-            logger.warning(f"Provider changed from {_LAST_EMBEDDING_PROVIDER} to {provider}. Clearing vector store cache.")
-            _SHARED_VECTOR_STORE = None  # Clear cache to force regeneration with new embeddings
-        
-        _LAST_EMBEDDING_PROVIDER = provider
-        
-        # Use HuggingFace embeddings for Groq, OpenAI embeddings for OpenAI
-        if provider == 'GROQ':
-            if not HUGGINGFACE_EMBEDDINGS_AVAILABLE:
-                raise ValueError(
-                    "HuggingFace embeddings are required for Groq provider. "
-                    "Please install: pip install langchain-huggingface"
-                )
-            logger.info("Using HuggingFace embeddings for Groq provider")
-            return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        else:
-            logger.info("Using OpenAI embeddings for OpenAI provider")
-            # Check if OpenAI API key is available
-            openai_key = os.getenv('OPENAI_API_KEY') or Config.OPENAI_API_KEY
-            if not openai_key:
-                logger.warning("No OpenAI API key found, falling back to HuggingFace embeddings")
-                if HUGGINGFACE_EMBEDDINGS_AVAILABLE:
-                    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-                else:
-                    raise ValueError("OpenAI API key is required but not found, and HuggingFace embeddings are not available")
-            return OpenAIEmbeddings(model="text-embedding-3-small", openai_api_key=openai_key)
-    except Exception as e:
-        logger.warning(f"Error getting provider for embeddings: {str(e)}")
-        # Try to use HuggingFace as fallback (no API key needed)
-        if HUGGINGFACE_EMBEDDINGS_AVAILABLE:
-            logger.info("Falling back to HuggingFace embeddings (no API key required)")
-            return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        else:
-            # Last resort: try OpenAI if key exists
-            openai_key = os.getenv('OPENAI_API_KEY') or Config.OPENAI_API_KEY
-            if openai_key:
-                logger.info("Falling back to OpenAI embeddings")
-                return OpenAIEmbeddings(model="text-embedding-3-small", openai_api_key=openai_key)
-            else:
-                raise ValueError(
-                    "Cannot get embeddings: No valid API key found and HuggingFace embeddings are not available. "
-                    "Please set OPENAI_API_KEY or install langchain-huggingface"
-                )
+    """Get HuggingFace embeddings only (fixed model, no provider switching)."""
+    if not HUGGINGFACE_EMBEDDINGS_AVAILABLE:
+        raise ValueError(
+            "HuggingFace embeddings are required. "
+            "Please install: pip install langchain-huggingface sentence-transformers"
+        )
+    model = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+    return HuggingFaceEmbeddings(model_name=model)
 
 
 # Batch embedding for faster ingestion (avoids sequential embed_query per doc)
@@ -309,7 +251,7 @@ def _embed_documents_in_batches(
 ) -> Tuple[List[Tuple[str, List[float]]], List[Dict[str, Any]]]:
     """
     Embed documents in batches (and optionally in parallel) for faster ingestion.
-    Returns (text_embeddings, metadatas) for FAISS.from_embeddings / add_embeddings.
+    Returns (text_embeddings, metadatas) for Milvus insert.
     """
     if not documents:
         return [], []
@@ -356,128 +298,46 @@ def _embed_documents_in_batches(
 
 
 # -------------------
-# 2. Single shared vector store paths
+# 2. Paths (no file-based metadata)
 # -------------------
 BASE_DIR = Path(__file__).parent.parent.parent
-VECTOR_STORE_DIR = BASE_DIR / "vector_stores"
-SHARED_VECTOR_STORE_PATH = VECTOR_STORE_DIR / "shared_vectorstore.faiss"
 UPLOADED_FILES_DIR = BASE_DIR / "uploaded_files"
-METADATA_FILE = BASE_DIR / "rag_metadata.json"
-
-# Create directories if they don't exist
-VECTOR_STORE_DIR.mkdir(exist_ok=True)
 UPLOADED_FILES_DIR.mkdir(exist_ok=True)
 
-# -------------------
-# 3. Global shared vector store
-# -------------------
-_SHARED_VECTOR_STORE: Optional[FAISS] = None
-_THREAD_METADATA: Dict[str, dict] = {}
-
-# Load metadata from disk on startup
-def _load_metadata():
-    """Load metadata from disk."""
-    global _THREAD_METADATA
-    if METADATA_FILE.exists():
-        try:
-            with open(METADATA_FILE, 'r', encoding='utf-8') as f:
-                _THREAD_METADATA = json.load(f)
-        except Exception as e:
-            print(f"Error loading metadata: {e}")
-            _THREAD_METADATA = {}
-
-def _save_metadata():
-    """Save metadata to disk."""
+def _get_thread_metadata_from_db(thread_id: str) -> Optional[Dict[str, Any]]:
+    """Get thread metadata from database (replaces _THREAD_METADATA)."""
     try:
-        with open(METADATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(_THREAD_METADATA, f, indent=2, ensure_ascii=False)
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        if not thread:
+            return None
+        return {
+            "filename": thread.filename,
+            "num_pages": thread.num_pages,
+            "pages": thread.num_pages,
+            "documents": thread.num_pages,
+            "doc_count": thread.doc_count,
+            "chunks": None,
+            "lesson_finalized": getattr(thread, "lesson_finalized", False),
+            "last_lesson_text": getattr(thread, "last_lesson_text", ""),
+            "lesson_title": getattr(thread, "lesson_title", ""),
+        }
     except Exception as e:
-        print(f"Error saving metadata: {e}")
+        logger.warning("Error getting thread metadata from DB: %s", e)
+        return None
 
-def _load_shared_vector_store():
-    """Load the shared vector store from disk."""
-    global _SHARED_VECTOR_STORE
-    if _SHARED_VECTOR_STORE is not None:
-        return _SHARED_VECTOR_STORE
-    
-    if SHARED_VECTOR_STORE_PATH.exists():
-        try:
-            # Get current embeddings based on provider (dynamic)
-            current_embeddings = get_rag_embeddings()
-            
-            # Test embedding dimension first
-            test_embedding = current_embeddings.embed_query("test")
-            test_dim = len(test_embedding)
-            
-            # Try to load the vector store
-            _SHARED_VECTOR_STORE = FAISS.load_local(
-                str(SHARED_VECTOR_STORE_PATH.parent),
-                current_embeddings,
-                allow_dangerous_deserialization=True,
-                index_name=SHARED_VECTOR_STORE_PATH.stem
-            )
-            
-            # Check if dimensions match after loading
-            if hasattr(_SHARED_VECTOR_STORE, 'index') and hasattr(_SHARED_VECTOR_STORE.index, 'd'):
-                store_dim = _SHARED_VECTOR_STORE.index.d
-                if test_dim != store_dim:
-                    logger.warning(
-                        f"Vector store dimension mismatch detected: store has {store_dim} dimensions, "
-                        f"but current embeddings have {test_dim} dimensions. Deleting incompatible vector store."
-                    )
-                    # Delete the incompatible vector store
-                    try:
-                        import shutil
-                        if SHARED_VECTOR_STORE_PATH.parent.exists():
-                            shutil.rmtree(str(SHARED_VECTOR_STORE_PATH.parent))
-                        logger.info("Deleted incompatible vector store. It will be regenerated with current embeddings.")
-                    except Exception as del_error:
-                        logger.error(f"Error deleting incompatible vector store: {del_error}")
-                    _SHARED_VECTOR_STORE = None
-                else:
-                    print(f"Loaded shared vector store with {_SHARED_VECTOR_STORE.index.ntotal} vectors")
-            else:
-                print(f"Loaded shared vector store (dimension check unavailable)")
-        except Exception as e:
-            # Vector store might be incompatible with current embeddings (e.g., created with different provider)
-            error_msg = str(e).lower()
-            if 'dimension' in error_msg or 'embedding' in error_msg or 'incompatible' in error_msg:
-                logger.warning(f"Vector store incompatible with current embeddings (likely created with different provider). Will regenerate.")
-                # Delete the incompatible vector store
-                try:
-                    import shutil
-                    if SHARED_VECTOR_STORE_PATH.parent.exists():
-                        shutil.rmtree(str(SHARED_VECTOR_STORE_PATH.parent))
-                    logger.info("Deleted incompatible vector store. It will be regenerated with current embeddings.")
-                except Exception as del_error:
-                    logger.error(f"Error deleting incompatible vector store: {del_error}")
-            else:
-                logger.error(f"Error loading shared vector store: {e}")
-            _SHARED_VECTOR_STORE = None
-    
-    return _SHARED_VECTOR_STORE
 
-def _save_shared_vector_store():
-    """Save the shared vector store to disk."""
-    if _SHARED_VECTOR_STORE is not None:
-        try:
-            _SHARED_VECTOR_STORE.save_local(
-                str(SHARED_VECTOR_STORE_PATH.parent),
-                index_name=SHARED_VECTOR_STORE_PATH.stem
-            )
-            print(f"Saved shared vector store with {_SHARED_VECTOR_STORE.index.ntotal} vectors")
-        except Exception as e:
-            print(f"Error saving shared vector store: {e}")
-
-def _extract_user_id_from_thread_id(thread_id: str) -> Optional[int]:
-    """Extract user_id from thread_id format: user_{user_id}_conv_{conversation_id} or user_{user_id}_default"""
+def _get_user_id_for_thread(thread_id: str) -> Optional[int]:
+    """Get user_id from DB (RAGThread). Never infer from thread_id string."""
     if not thread_id:
         return None
-    
-    match = re.match(r'user_(\d+)(?:_conv_\d+|_default|_thread_\d+_\w+)?', thread_id)
-    if match:
-        return int(match.group(1))
-    return None
+    try:
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        return thread.user_id if thread else None
+    except Exception as e:
+        logger.warning("_get_user_id_for_thread error: %s", e)
+        return None
 
 
 def _get_rag_prompt(user_id: Optional[int], thread_id: Optional[str] = None) -> Optional[str]:
@@ -508,400 +368,59 @@ def _get_rag_prompt(user_id: Optional[int], thread_id: Optional[str] = None) -> 
 
 def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
     """
-    Get a retriever for a specific thread with metadata filtering.
-    Filters results to only include documents from the specified thread_id and user_id.
-
-    NEW:
-    - Excludes documents with metadata["type"] == "page_full_text"
-      so similarity retrieval returns only content chunks.
+    Get a retriever for a specific thread using Milvus.
+    Returns an object with invoke(query) -> List[Document].
     """
-    # #region agent log
-    _debug_log = (Path(__file__).resolve().parent.parent.parent / ".cursor" / "debug.log")
-    try:
-        with open(_debug_log, "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:entry", "message": "get_retriever entry", "data": {"thread_id": thread_id, "user_id_in": user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H1,H5"}) + "\n")
-    except Exception:
-        pass
-    # #endregion
     if not thread_id:
         return None
-
     if user_id is None:
-        user_id = _extract_user_id_from_thread_id(thread_id)
-
-    # #region agent log
-    try:
-        with open(_debug_log, "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:after_extract", "message": "user_id after extract", "data": {"user_id": user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H1"}) + "\n")
-    except Exception:
-        pass
-    # #endregion
+        user_id = _get_user_id_for_thread(thread_id)
     if user_id is None:
         return None
 
-    vector_store = _load_shared_vector_store()
-    # #region agent log
-    try:
-        with open(_debug_log, "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:vector_store", "message": "vector_store loaded", "data": {"has_store": vector_store is not None}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H5"}) + "\n")
-    except Exception:
-        pass
-    # #endregion
-    if vector_store is None:
-        return None
+    from app.utils.rag_vectorstore import similarity_search, fetch_chunks_by_ids
+    embeddings = get_rag_embeddings()
 
-    class FilteredRetriever:
-        def __init__(self, vector_store: FAISS, thread_id: str, user_id: int):
-            self.vector_store = vector_store
+    class VectorRetriever:
+        def __init__(self, thread_id: str, user_id: int):
             self.thread_id = str(thread_id)
             self.user_id = int(user_id)
 
         def invoke(self, query: str) -> List[Document]:
-            docs = self.vector_store.similarity_search_with_score(query, k=60)
-            logger.info(f"FilteredRetriever: retrieved {len(docs)} documents before filtering")
+            query_vector = embeddings.embed_query(query)
+            results = similarity_search(
+                query_vector=query_vector,
+                thread_id=self.thread_id,
+                user_id=self.user_id,
+                k=12,
+            )
+            chunk_ids = [r["chunk_id"] for r in results if r.get("chunk_id") is not None]
+            chunk_map = fetch_chunks_by_ids(chunk_ids) if chunk_ids else {}
+            docs = []
+            for r in results:
+                cid = r.get("chunk_id")
+                c = chunk_map.get(cid) if cid else {}
+                doc = Document(
+                    page_content=c.get("text", ""),
+                    metadata={"source": c.get("source", ""), "page": r.get("page", 0), "chunk_index": r.get("chunk_index", 0)},
+                )
+                docs.append(doc)
+            logger.info("VectorRetriever: returned %d documents for thread_id=%s", len(docs), self.thread_id)
+            return docs
 
-            # #region agent log
-            _debug_log = (Path(__file__).resolve().parent.parent.parent / ".cursor" / "debug.log")
-            try:
-                with open(_debug_log, "a", encoding="utf-8") as _f:
-                    _f.write(json.dumps({"location": "rag_service.py:FilteredRetriever.invoke:entry", "message": "invoke entry", "data": {"query": query.strip()[:120], "retrieved": len(docs), "self_thread_id": self.thread_id, "self_user_id": self.user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H5"}) + "\n")
-            except Exception:
-                pass
-            # #endregion
+    return VectorRetriever(thread_id, user_id)
 
-            # Collect all matching (thread+user) docs with score; then sort by score and take top N
-            # so retrieval is consistent across calls (same query -> same top chunks by relevance)
-            scored_matches: List[tuple] = []
-            skipped_page_full_text = 0
-            match_thread_only = 0
-            match_user_only = 0
-            match_both = 0
-            sample_meta_types = []
-            for doc, score in docs:
-                meta = doc.metadata or {}
-                doc_thread_id = str(meta.get("thread_id", ""))
-                doc_user_id = meta.get("user_id")
-                meta_type = meta.get("type")
-                if len(sample_meta_types) < 10:
-                    sample_meta_types.append(meta_type)
-
-                # Exclude page_full_text docs from RAG retrieval
-                if meta.get("type") == "page_full_text":
-                    skipped_page_full_text += 1
-                    continue
-
-                try:
-                    doc_user_id = int(doc_user_id) if doc_user_id is not None else None
-                except (ValueError, TypeError):
-                    doc_user_id = None
-
-                thread_match = (doc_thread_id == self.thread_id)
-                user_match = (doc_user_id == self.user_id)
-                if thread_match and not user_match:
-                    match_thread_only += 1
-                if user_match and not thread_match:
-                    match_user_only += 1
-                if doc_thread_id == self.thread_id and doc_user_id == self.user_id:
-                    match_both += 1
-                    scored_matches.append((score, doc))
-
-            # FAISS returns L2 distance (lower = more similar). Sort by score ascending, take top 12
-            # so more context and deterministic order reduce "sometimes wrong" for any query.
-            scored_matches.sort(key=lambda x: (x[0], (x[1].page_content or "")[:200]))
-            filtered_docs = [doc for _, doc in scored_matches[:12]]
-
-            # #region agent log
-            try:
-                with open(_debug_log, "a", encoding="utf-8") as _f:
-                    _f.write(json.dumps({"location": "rag_service.py:FilteredRetriever.invoke:exit", "message": "invoke exit", "data": {"filtered_count": len(filtered_docs), "skipped_page_full_text": skipped_page_full_text, "match_thread_only": match_thread_only, "match_user_only": match_user_only, "match_both": match_both, "sample_meta_types": sample_meta_types}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H3,H4"}) + "\n")
-            except Exception:
-                pass
-            # #endregion
-
-            logger.info(f"FilteredRetriever: filtered to {len(filtered_docs)} documents")
-            return filtered_docs
-
-    # #region agent log
-    try:
-        with open(_debug_log, "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"location": "rag_service.py:_get_retriever:return", "message": "returning FilteredRetriever", "data": {"thread_id": thread_id, "user_id": user_id}, "timestamp": __import__("time").time() * 1000, "sessionId": "debug-session", "hypothesisId": "H5"}) + "\n")
-    except Exception:
-        pass
-    # #endregion
-    return FilteredRetriever(vector_store, thread_id, user_id)
-
-# def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
-#     """
-#     Get a retriever for a specific thread with metadata filtering.
-#     Filters results to only include documents from the specified thread_id and user_id.
-#     """
-#     if not thread_id:
-#         return None
-    
-#     # Extract user_id from thread_id if not provided
-#     if user_id is None:
-#         user_id = _extract_user_id_from_thread_id(thread_id)
-    
-#     if user_id is None:
-#         return None
-    
-#     # Load shared vector store
-#     vector_store = _load_shared_vector_store()
-#     if vector_store is None:
-#         return None
-    
-#     # Create a custom retriever that filters by thread_id and user_id
-#     class FilteredRetriever:
-#         def __init__(self, vector_store: FAISS, thread_id: str, user_id: int):
-#             self.vector_store = vector_store
-#             self.thread_id = str(thread_id)  # Ensure string type
-#             self.user_id = int(user_id) if user_id is not None else None
-        
-#         def invoke(self, query: str) -> List[Document]:
-#             """Retrieve documents and filter by thread_id and user_id."""
-#             # Get more results than needed, then filter (increased from 20 to 60)
-#             docs = self.vector_store.similarity_search_with_score(query, k=60)
-#             logger.info(f"FilteredRetriever: retrieved {len(docs)} documents before filtering")
-            
-#             # Filter documents by thread_id and user_id (using string comparisons for robustness)
-#             filtered_docs = []
-#             for doc, score in docs:
-#                 meta = doc.metadata
-#                 doc_thread_id = str(meta.get('thread_id', ''))
-#                 doc_user_id = meta.get('user_id')
-                
-#                 # Convert doc_user_id to int for comparison if it's not None
-#                 if doc_user_id is not None:
-#                     try:
-#                         doc_user_id = int(doc_user_id)
-#                     except (ValueError, TypeError):
-#                         doc_user_id = None
-                
-#                 # Check if document belongs to this thread and user (string comparison for thread_id)
-#                 if (str(doc_thread_id) == str(self.thread_id) and 
-#                     doc_user_id == self.user_id):
-#                     filtered_docs.append(doc)
-                
-#                 # Stop when we have enough results (increased from 4 to 6)
-#                 if len(filtered_docs) >= 6:
-#                     break
-            
-#             logger.info(f"FilteredRetriever: filtered to {len(filtered_docs)} documents")
-#             return filtered_docs
-    
-#     return FilteredRetriever(vector_store, thread_id, user_id)
-
-# def ingest_pdf(file_bytes: bytes, thread_id: str, filename: Optional[str] = None, progress_callback: Optional[callable] = None) -> dict:
-#     """
-#     Build a FAISS retriever for the uploaded PDF and store metadata inside the vector DB.
-#     Adds documents to the shared vector store with user_id and thread_id metadata.
-    
-#     Args:
-#         file_bytes: PDF file bytes
-#         thread_id: Thread ID for the document
-#         filename: Optional filename
-#         progress_callback: Optional callback function(step, progress, message) for progress updates
-#     """
-#     def _send_progress(step: str, progress: int, message: str):
-#         """Helper to send progress updates"""
-#         if progress_callback:
-#             try:
-#                 progress_callback(step, progress, message)
-#             except Exception as e:
-#                 logger.warning(f"Error sending progress update: {e}")
-    
-#     if not file_bytes:
-#         raise ValueError("No bytes received for ingestion.")
-
-#     _send_progress("init", 5, "Initializing PDF processing...")
-    
-#     thread_id_str = str(thread_id)
-#     user_id = _extract_user_id_from_thread_id(thread_id_str)
-    
-#     if user_id is None:
-#         raise ValueError(f"Could not extract user_id from thread_id: {thread_id_str}")
-    
-#     # Save the original PDF file
-#     safe_filename = filename or f"document_{thread_id_str}.pdf"
-#     # Sanitize filename
-#     safe_filename = "".join(c for c in safe_filename if c.isalnum() or c in "._- ")
-#     file_path = UPLOADED_FILES_DIR / f"{thread_id_str}_{safe_filename}"
-    
-#     _send_progress("saving", 10, "Saving PDF file...")
-#     with open(file_path, 'wb') as f:
-#         f.write(file_bytes)
-
-#     # Create temp file for PDF loader
-#     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-#         temp_file.write(file_bytes)
-#         temp_path = temp_file.name
-
-#     try:
-#         _send_progress("loading", 15, "Reading PDF document...")
-#         loader = PyPDFLoader(temp_path)
-#         docs = loader.load()  # each item = 1 PDF page
-        
-#         # Calculate total number of pages - ensure we have valid pages
-#         num_pages = len(docs)
-#         if num_pages == 0:
-#             raise ValueError("PDF appears to be empty or could not be loaded. No pages found.")
-        
-#         _send_progress("validating", 25, f"Validating {num_pages} pages...")
-        
-#         # Verify pages have content
-#         valid_pages = [doc for doc in docs if doc.page_content and doc.page_content.strip()]
-#         if len(valid_pages) == 0:
-#             raise ValueError("PDF loaded but contains no extractable text content.")
-        
-#         # Use valid pages count if different
-#         if len(valid_pages) != num_pages:
-#             logger.warning(f"PDF has {num_pages} pages but only {len(valid_pages)} contain extractable text")
-#             # Still use original count for metadata, but note the difference
-#             num_pages = len(docs)  # Keep original page count
-
-#         _send_progress("metadata", 30, "Adding metadata to pages...")
-#         # Inject additional metadata directly INTO the documents before splitting
-#         for i, doc in enumerate(docs):
-#             doc.metadata = {
-#                 **doc.metadata,
-#                 "thread_id": thread_id_str,
-#                 "user_id": user_id,  # Add user_id to metadata
-#                 "filename": filename or os.path.basename(temp_path),
-#                 "page": i + 1,  # 1-indexed page number (primary)
-#                 "page_number": i + 1,  # Alternative key for clarity
-#                 "page_zero_index": i,  # 0-indexed for UI compatibility (optional)
-#                 "total_pages": num_pages,  # Store total pages in each page's metadata
-#             }
-
-#         _send_progress("splitting", 40, "Splitting document into chunks...")
-#         splitter = RecursiveCharacterTextSplitter(
-#             chunk_size=1600,
-#             chunk_overlap=600,
-#             separators=["\n\n", "\n", " ", ""]
-#         )
-
-#         # Split docs, keeping metadata automatically
-#         chunks = splitter.split_documents(docs)
-#         _send_progress("splitting", 50, f"Created {len(chunks)} text chunks from {num_pages} pages")
-
-#         _send_progress("chunk_metadata", 55, "Enriching chunk metadata...")
-#         # Add even richer metadata to each chunk
-#         for i, c in enumerate(chunks):
-#             # Preserve page number from original metadata
-#             page_num = c.metadata.get("page") or c.metadata.get("page_number", "unknown")
-#             # Calculate page_zero_index if page_num is numeric
-#             page_zero_idx = None
-#             try:
-#                 if isinstance(page_num, (int, float)):
-#                     page_zero_idx = int(page_num) - 1
-#                 elif isinstance(page_num, str) and page_num.isdigit():
-#                     page_zero_idx = int(page_num) - 1
-#             except (ValueError, TypeError):
-#                 pass
-            
-#             c.metadata = {
-#                 **c.metadata,
-#                 "chunk_length": len(c.page_content),
-#                 "source_pdf": filename or os.path.basename(temp_path),
-#                 "thread_id": thread_id_str,
-#                 "user_id": user_id,  # Ensure user_id is in every chunk
-#                 "page": page_num,  # Ensure page number is preserved (1-indexed)
-#                 "page_number": page_num,  # Alternative key
-#                 "page_zero_index": page_zero_idx if page_zero_idx is not None else c.metadata.get("page_zero_index"),  # 0-indexed for UI compatibility
-#                 "num_pages": num_pages,  # Total pages in PDF
-#                 "total_pages": num_pages,  # Alternative key
-#             }
-#             # Update progress for large documents
-#             if (i + 1) % 50 == 0:
-#                 _send_progress("chunk_metadata", 55 + int((i + 1) / len(chunks) * 5), f"Processing chunk {i + 1}/{len(chunks)}...")
-
-#         _send_progress("vector_store", 60, "Loading vector store...")
-#         # Load or create shared vector store
-#         global _SHARED_VECTOR_STORE
-#         vector_store = _load_shared_vector_store()
-        
-#         if vector_store is None:
-#             _send_progress("embeddings", 65, "Creating embeddings for chunks (this may take a moment)...")
-#             # Create new vector store
-#             vector_store = FAISS.from_documents(chunks, embeddings)
-#             _SHARED_VECTOR_STORE = vector_store
-#             _send_progress("embeddings", 80, f"Created embeddings for {len(chunks)} chunks")
-#         else:
-#             _send_progress("embeddings", 70, f"Adding {len(chunks)} chunks to vector store...")
-#             # Add new documents to existing vector store
-#             vector_store.add_documents(chunks)
-#             _SHARED_VECTOR_STORE = vector_store
-#             _send_progress("embeddings", 80, f"Added {len(chunks)} chunks to vector store")
-
-#         _send_progress("saving", 85, "Saving vector store to disk...")
-#         # Save vector store to disk
-#         _save_shared_vector_store()
-
-#         _send_progress("metadata", 90, "Saving document metadata...")
-#         # Save thread metadata (num_pages was already calculated above)
-#         _THREAD_METADATA[thread_id_str] = {
-#             "filename": filename or safe_filename,
-#             "file_path": str(file_path),
-#             "user_id": user_id,
-#             "documents": num_pages,  # Keep for backward compatibility
-#             "num_pages": num_pages,  # Explicit page count
-#             "pages": num_pages,  # Alternative key for clarity
-#             "chunks": len(chunks),
-#         }
-        
-#         # Persist metadata to disk
-#         _save_metadata()
-#         _send_progress("cleanup", 95, "Cleaning up temporary files...")
-
-#         # Delete temporary PDF file after chunks are created and stored
-#         try:
-#             if os.path.exists(temp_path):
-#                 os.remove(temp_path)
-#                 logger.debug(f"Deleted temporary PDF file: {temp_path}")
-#         except OSError as e:
-#             logger.warning(f"Failed to delete temporary PDF file {temp_path}: {e}")
-
-#         # Delete the uploaded file from uploaded_files directory after processing
-#         try:
-#             if file_path.exists():
-#                 os.remove(file_path)
-#                 logger.debug(f"Deleted uploaded PDF file: {file_path}")
-#         except OSError as e:
-#             logger.warning(f"Failed to delete uploaded PDF file {file_path}: {e}")
-
-#         _send_progress("complete", 100, f"PDF processing complete! Processed {num_pages} pages into {len(chunks)} chunks.")
-        
-#         return {
-#             "thread_id": thread_id_str,  # Include thread_id in response
-#             "filename": filename or safe_filename,
-#             "documents": num_pages,  # Keep for backward compatibility
-#             "num_pages": num_pages,  # Explicit page count
-#             "pages": num_pages,  # Alternative key
-#             "chunks": len(chunks),
-#         }
-
-#     finally:
-#         # Safety net: ensure temp file is deleted even if an error occurred
-#         try:
-#             if 'temp_path' in locals() and os.path.exists(temp_path):
-#                 os.remove(temp_path)
-#                 logger.debug(f"Deleted temporary PDF file in finally block: {temp_path}")
-#         except OSError as e:
-#             logger.warning(f"Failed to delete temporary PDF file in finally block {temp_path}: {e}")
 
 def ingest_pdf(
     file_bytes: bytes,
     thread_id: str,
     filename: Optional[str] = None,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
+    user_id: Optional[int] = None,
 ) -> dict:
     """
-    Build a FAISS retriever for the uploaded PDF and store metadata inside the vector DB.
-    Adds documents to the shared vector store with user_id and thread_id metadata.
-
-    NEW:
-    - In addition to chunk documents, we also store 1 "page_full_text" Document per page.
-      This makes TOC/topic extraction much cleaner and more reliable.
+    Ingest PDF: chunk text -> PostgreSQL (RAGChunk), vectors -> Milvus/Chroma.
+    user_id must be passed (never inferred from thread_id).
     """
     def _send_progress(step: str, progress: int, message: str):
         if progress_callback:
@@ -916,9 +435,10 @@ def ingest_pdf(
     _send_progress("init", 5, "Initializing PDF processing...")
 
     thread_id_str = str(thread_id)
-    user_id = _extract_user_id_from_thread_id(thread_id_str)
     if user_id is None:
-        raise ValueError(f"Could not extract user_id from thread_id: {thread_id_str}")
+        user_id = _get_user_id_for_thread(thread_id_str)
+    if user_id is None:
+        raise ValueError("user_id is required; pass explicitly or ensure thread exists in DB")
 
     safe_filename = filename or f"document_{thread_id_str}.pdf"
     safe_filename = "".join(c for c in safe_filename if c.isalnum() or c in "._- ")
@@ -1043,22 +563,6 @@ def ingest_pdf(
                 "total_pages": num_pages,
             }
 
-        # -------------------------------------------------------
-        # NEW: Create one "page_full_text" Document per page
-        # -------------------------------------------------------
-        _send_progress("page_docs", 35, "Creating page-level documents...")
-        page_docs: List[Document] = []
-        for d in docs:
-            page_docs.append(
-                Document(
-                    page_content=d.page_content,
-                    metadata={
-                        **(d.metadata or {}),
-                        "type": "page_full_text",  # IMPORTANT TAG
-                    },
-                )
-            )
-
         _send_progress("splitting", 40, "Splitting document into chunks...")
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=1600,
@@ -1101,106 +605,82 @@ def ingest_pdf(
                     f"Processing chunk {i + 1}/{len(chunks)}...",
                 )
 
-        _send_progress("vector_store", 60, "Loading vector store...")
-        global _SHARED_VECTOR_STORE
-        vector_store = _load_shared_vector_store()
-
-        all_docs_to_index = page_docs + chunks  # NEW: index both
-
-        # Get current embeddings and compute in batches (faster than sequential per-doc embedding)
+        _send_progress("embeddings", 60, "Creating embeddings for chunks (batched)...")
         current_embeddings = get_rag_embeddings()
-        _send_progress("embeddings", 65, "Creating embeddings for pages + chunks (batched)...")
         text_embeddings, embed_metadatas = _embed_documents_in_batches(
-            current_embeddings, all_docs_to_index, _send_progress
+            current_embeddings, chunks, _send_progress
         )
-        _send_progress("embeddings", 79, f"Embedded {len(text_embeddings)} documents.")
+        _send_progress("embeddings", 70, f"Embedded {len(text_embeddings)} chunks.")
+        vectors = [te[1] for te in text_embeddings]
+        texts = [te[0] for te in text_embeddings]
 
-        if vector_store is None:
-            vector_store = FAISS.from_embeddings(
-                text_embeddings, embedding=current_embeddings, metadatas=embed_metadatas
-            )
-            _SHARED_VECTOR_STORE = vector_store
-            _send_progress("embeddings", 80, f"Created vector store with {len(all_docs_to_index)} documents")
-        else:
-            # Check if embeddings are compatible with existing vector store
-            try:
-                test_dim = len(text_embeddings[0][1]) if text_embeddings else len(current_embeddings.embed_query("test"))
-                if hasattr(vector_store, 'index') and hasattr(vector_store.index, 'd'):
-                    store_dim = vector_store.index.d
-                    if test_dim != store_dim:
-                        logger.warning(
-                            f"Embedding dimension mismatch: vector store has {store_dim} dimensions, "
-                            f"but current embeddings have {test_dim} dimensions. Recreating vector store."
-                        )
-                        _send_progress("embeddings", 65, "Recreating vector store with new embeddings (provider changed)...")
-                        _SHARED_VECTOR_STORE = None
-                        try:
-                            import shutil
-                            if SHARED_VECTOR_STORE_PATH.parent.exists():
-                                shutil.rmtree(str(SHARED_VECTOR_STORE_PATH.parent))
-                                logger.info("Deleted incompatible vector store")
-                        except Exception as del_error:
-                            logger.error(f"Error deleting incompatible vector store: {del_error}")
-
-                        vector_store = FAISS.from_embeddings(
-                            text_embeddings, embedding=current_embeddings, metadatas=embed_metadatas
-                        )
-                        _SHARED_VECTOR_STORE = vector_store
-                        _send_progress("embeddings", 80, f"Created new vector store with {len(all_docs_to_index)} documents")
-                    else:
-                        _send_progress("embeddings", 70, f"Adding {len(all_docs_to_index)} documents to vector store...")
-                        vector_store.add_embeddings(text_embeddings, metadatas=embed_metadatas)
-                        _SHARED_VECTOR_STORE = vector_store
-                        _send_progress("embeddings", 80, f"Added {len(all_docs_to_index)} documents to vector store")
-                else:
-                    _send_progress("embeddings", 70, f"Adding {len(all_docs_to_index)} documents to vector store...")
-                    vector_store.add_embeddings(text_embeddings, metadatas=embed_metadatas)
-                    _SHARED_VECTOR_STORE = vector_store
-                    _send_progress("embeddings", 80, f"Added {len(all_docs_to_index)} documents to vector store")
-            except AssertionError as dim_error:
-                logger.warning(f"Dimension mismatch detected when adding documents. Recreating vector store: {dim_error}")
-                _send_progress("embeddings", 65, "Recreating vector store with new embeddings (dimension mismatch)...")
-                _SHARED_VECTOR_STORE = None
-                try:
-                    import shutil
-                    if SHARED_VECTOR_STORE_PATH.parent.exists():
-                        shutil.rmtree(str(SHARED_VECTOR_STORE_PATH.parent))
-                        logger.info("Deleted incompatible vector store due to dimension mismatch")
-                except Exception as del_error:
-                    logger.error(f"Error deleting incompatible vector store: {del_error}")
-
-                vector_store = FAISS.from_embeddings(
-                    text_embeddings, embedding=current_embeddings, metadatas=embed_metadatas
+        _send_progress("postgres", 72, "Storing chunk text in PostgreSQL...")
+        from datetime import datetime as dt
+        db = get_db()
+        try:
+            thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
+            if not thread_row:
+                thread_row = RAGThread(
+                    user_id=user_id,
+                    thread_id=thread_id_str,
+                    name=f"Thread {dt.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                    filename=filename or safe_filename,
                 )
-                _SHARED_VECTOR_STORE = vector_store
-                _send_progress("embeddings", 80, f"Created new vector store with {len(all_docs_to_index)} documents")
+                db.add(thread_row)
+                db.commit()
+                db.refresh(thread_row)
+                logger.info("Created RAGThread %s for ingestion", thread_id_str)
 
-        _send_progress("saving", 85, "Saving vector store to disk...")
-        _save_shared_vector_store()
+            for i, (text, meta) in enumerate(zip(texts, embed_metadatas)):
+                rc = RAGChunk(
+                    thread_id=thread_id_str,
+                    user_id=user_id,
+                    document_id=None,
+                    chunk_index=i,
+                    page=int(meta.get("page") or meta.get("page_number") or 0),
+                    text=text,
+                    source=meta.get("source_pdf") or safe_filename,
+                )
+                db.add(rc)
+            db.commit()
+            chunk_rows = db.query(RAGChunk).filter(
+                RAGChunk.thread_id == thread_id_str,
+                RAGChunk.user_id == user_id,
+            ).order_by(RAGChunk.chunk_index).all()
+            chunk_ids = [r.id for r in chunk_rows]
+            if len(chunk_ids) != len(chunks):
+                db.rollback()
+                raise ValueError("Chunk insert count mismatch")
+        except Exception as e:
+            logger.error("Failed to store chunks in PostgreSQL: %s", e)
+            db.rollback()
+            raise
+        _send_progress("postgres", 78, f"Stored {len(chunk_ids)} chunks in PostgreSQL.")
 
-        # Delete uploaded PDF file after embeddings are successfully created
-        _send_progress("cleanup", 87, "Deleting uploaded file after embedding creation...")
+        _send_progress("vector_store", 80, "Inserting vectors...")
+        from app.utils.rag_vectorstore import insert_chunks, ensure_collection, EMBEDDING_MODEL_NAME, EMBEDDING_DIM
+
+        pages = [int(m.get("page") or m.get("page_number") or 0) for m in embed_metadatas]
+        chunk_indices = list(range(len(chunks)))
+
+        ensure_collection()
+        insert_chunks(
+            vectors=vectors,
+            thread_id=thread_id_str,
+            user_id=user_id,
+            document_id=None,
+            chunk_ids=chunk_ids,
+            pages=pages,
+            chunk_indices=chunk_indices,
+        )
+        _send_progress("vector_store", 85, f"Inserted {len(chunks)} vectors.")
+
         try:
             if file_path.exists():
-                file_path.unlink()  # Use Path.unlink() for Path objects
-                logger.info(f"Successfully deleted uploaded PDF file: {file_path}")
-            else:
-                logger.warning(f"Uploaded PDF file not found for deletion: {file_path}")
+                file_path.unlink()
+                logger.info(f"Deleted uploaded PDF file: {file_path}")
         except Exception as e:
             logger.error(f"Failed to delete uploaded PDF file {file_path}: {e}")
-
-        _send_progress("metadata", 90, "Saving document metadata...")
-        _THREAD_METADATA[thread_id_str] = {
-            "filename": filename or safe_filename,
-            "file_path": str(file_path),  # Keep path in metadata for reference, but file is deleted
-            "user_id": user_id,
-            "documents": num_pages,
-            "num_pages": num_pages,
-            "pages": num_pages,
-            "chunks": len(chunks),
-            "page_docs": len(page_docs),  # NEW
-        }
-        _save_metadata()
 
         _send_progress("cleanup", 95, "Cleaning up temporary files...")
 
@@ -1220,7 +700,8 @@ def ingest_pdf(
             "num_pages": num_pages,
             "pages": num_pages,
             "chunks": len(chunks),
-            "page_docs": len(page_docs),
+            "embedding_model": EMBEDDING_MODEL_NAME,
+            "embedding_dim": EMBEDDING_DIM,
         }
 
     finally:
@@ -1283,7 +764,7 @@ def get_page_tool(page: int, thread_id: str) -> dict:
     logger.info(f"get_page_tool called: page={page}, thread_id={thread_id}")
     
     # Extract user_id from thread_id
-    user_id = _extract_user_id_from_thread_id(thread_id) if thread_id else None
+    user_id = _get_user_id_for_thread(thread_id) if thread_id else None
     if user_id is None:
         return {
             "error": f"Could not extract user_id from thread_id: {thread_id}",
@@ -1300,76 +781,12 @@ def get_page_tool(page: int, thread_id: str) -> dict:
     else:
         resolved_page = page
     
-    logger.info(f"get_page_tool: page_requested={original_page}, page_resolved={resolved_page}, user_id={user_id}")
-    
-    # Load shared vector store
-    vector_store = _load_shared_vector_store()
-    if vector_store is None:
-        return {
-            "error": "No vector store available. Upload a PDF first.",
-            "thread_id": thread_id,
-            "page_requested": original_page,
-            "page_resolved": resolved_page,
-            "chunks_found": 0,
-        }
-    
-    # Access docstore to iterate over all documents
-    if not hasattr(vector_store, 'docstore') or not hasattr(vector_store.docstore, '_dict'):
-        return {
-            "error": "Vector store docstore not accessible.",
-            "thread_id": thread_id,
-            "page_requested": original_page,
-            "page_resolved": resolved_page,
-            "chunks_found": 0,
-        }
-    
-    # Collect matching documents
-    matching_docs = []
-    thread_id_str = str(thread_id)
-    user_id_str = str(user_id)
-    
-    for doc in vector_store.docstore._dict.values():
-        meta = doc.metadata
-        doc_thread_id = str(meta.get('thread_id', ''))
-        doc_user_id = str(meta.get('user_id', ''))
-        
-        # Get page number from metadata (try multiple keys)
-        doc_page = meta.get('page') or meta.get('page_number')
-        doc_page_zero = meta.get('page_zero_index')
-        
-        # Check if page matches (support both 1-indexed and 0-indexed)
-        page_matches = False
-        if doc_page is not None:
-            try:
-                doc_page_int = int(doc_page)
-                # Match if resolved_page matches 1-indexed page
-                if doc_page_int == resolved_page:
-                    page_matches = True
-            except (ValueError, TypeError):
-                pass
-        
-        # Also check page_zero_index if page didn't match
-        if not page_matches and doc_page_zero is not None:
-            try:
-                doc_page_zero_int = int(doc_page_zero)
-                # Match if original_page (0-indexed) matches page_zero_index
-                if original_page == 0 and doc_page_zero_int == 0:
-                    page_matches = True
-                elif original_page > 0 and doc_page_zero_int == (original_page - 1):
-                    page_matches = True
-            except (ValueError, TypeError):
-                pass
-        
-        if not page_matches:
-            continue
-        
-        # Check if document matches thread_id and user_id
-        if (doc_thread_id == thread_id_str and doc_user_id == user_id_str):
-            matching_docs.append(doc)
-    
-    logger.info(f"get_page_tool: found {len(matching_docs)} chunks for page {resolved_page}")
-    
-    if not matching_docs:
+    logger.info("get_page_tool: page_requested=%s, page_resolved=%s, user_id=%s", original_page, resolved_page, user_id)
+
+    from app.utils.rag_vectorstore import query_chunks_by_page
+    results = query_chunks_by_page(thread_id=thread_id, user_id=user_id, page=resolved_page)
+
+    if not results:
         return {
             "error": f"No content found for page {resolved_page} (requested as page {original_page}).",
             "thread_id": thread_id,
@@ -1377,17 +794,16 @@ def get_page_tool(page: int, thread_id: str) -> dict:
             "page_resolved": resolved_page,
             "chunks_found": 0,
         }
-    
-    # Sort by chunk order if available (by page position or chunk index)
-    # For now, just return all chunks
-    content = [doc.page_content for doc in matching_docs]
-    metadata = [doc.metadata for doc in matching_docs]
+
+    results.sort(key=lambda x: x.get("chunk_index", 0))
+    content = [r.get("text", "") for r in results]
+    metadata = [{"source": r.get("source"), "page": r.get("page"), "chunk_index": r.get("chunk_index")} for r in results]
     
     return {
         "thread_id": thread_id,
         "page_requested": original_page,
         "page_resolved": resolved_page,
-        "chunks_found": len(matching_docs),
+        "chunks_found": len(results),
         "content": content,
         "metadata": metadata,
     }
@@ -1654,48 +1070,41 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
         - "method": extraction method used ("ai_toc_extraction" or "ai_heading_extraction")
         - "chunks_scanned": number of document pages analyzed
     """
-    user_id = _extract_user_id_from_thread_id(thread_id)
+    user_id = _get_user_id_for_thread(thread_id)
     if user_id is None:
         return {"error": f"Could not extract user_id from thread_id: {thread_id}"}
 
-    vector_store = _load_shared_vector_store()
-    if vector_store is None or not hasattr(vector_store, "docstore") or not hasattr(vector_store.docstore, "_dict"):
-        return {"error": "Vector store docstore not accessible. Upload a PDF first."}
+    from app.utils.rag_vectorstore import query_all_chunks
 
-    thread_id_str = str(thread_id)
-    user_id_str = str(user_id)
+    all_chunks = query_all_chunks(thread_id=str(thread_id), user_id=user_id)
+    if not all_chunks:
+        return {"error": "No document pages found for this thread. Upload a PDF first."}
 
-    # Prefer page_full_text documents if available (better for topic extraction)
+    # Group chunks by page and build Document per page for AI extraction
+    from collections import defaultdict
+    by_page = defaultdict(list)
+    for c in all_chunks:
+        p = c.get("page") or 0
+        try:
+            p = int(p)
+        except (ValueError, TypeError):
+            p = 0
+        by_page[p].append(c)
+    for k in by_page:
+        by_page[k].sort(key=lambda x: x.get("chunk_index", 0))
+
     page_docs = []
-    for doc in vector_store.docstore._dict.values():
-        meta = doc.metadata or {}
-        if (str(meta.get("thread_id", "")) == thread_id_str and 
-            str(meta.get("user_id", "")) == user_id_str):
-            # Prefer page_full_text, but also include regular chunks if needed
-            if meta.get("type") == "page_full_text":
-                page_docs.append(doc)
-    
-    # If no page_full_text docs, fall back to regular chunks
-    if not page_docs:
-        for doc in vector_store.docstore._dict.values():
-            meta = doc.metadata or {}
-            if (str(meta.get("thread_id", "")) == thread_id_str and 
-                str(meta.get("user_id", "")) == user_id_str):
-                page_docs.append(doc)
+    for p in sorted(by_page.keys()):
+        chunks = by_page[p]
+        text = "\n\n".join(c.get("text", "") for c in chunks)
+        doc = Document(
+            page_content=text,
+            metadata={"page": p, "page_number": p, "source": chunks[0].get("source", "") if chunks else ""},
+        )
+        page_docs.append(doc)
 
     if not page_docs:
         return {"error": "No document pages found for this thread."}
-
-    # Sort by page number
-    def _page_key(d):
-        meta = d.metadata or {}
-        p = meta.get("page") or meta.get("page_number") or 10**9
-        try:
-            return int(p)
-        except:
-            return 10**9
-
-    page_docs.sort(key=_page_key)
 
     # Use AI to extract topics
     try:
@@ -1753,16 +1162,13 @@ def count_pdf_words_tool(
     include_per_page: bool = False
 ) -> dict:
     """Count words in uploaded PDF for this thread. Supports whole doc, single page, or page range."""
-    user_id = _extract_user_id_from_thread_id(thread_id)
+    user_id = _get_user_id_for_thread(thread_id)
     if user_id is None:
         return {"error": f"Could not extract user_id from thread_id: {thread_id}"}
 
-    vector_store = _load_shared_vector_store()
-    if vector_store is None or not hasattr(vector_store, "docstore") or not hasattr(vector_store.docstore, "_dict"):
-        return {"error": "Vector store docstore not accessible. Upload a PDF first."}
+    from app.utils.rag_vectorstore import query_all_chunks
 
     thread_id_str = str(thread_id)
-    user_id_str = str(user_id)
 
     def norm(p: Optional[int]) -> Optional[int]:
         if p is None:
@@ -1771,7 +1177,7 @@ def count_pdf_words_tool(
             p = int(p)
         except Exception:
             return None
-        return 1 if p == 0 else p  # treat page 0 as page 1
+        return 1 if p == 0 else p
 
     page_n = norm(page)
     start_n = norm(start_page)
@@ -1784,59 +1190,41 @@ def count_pdf_words_tool(
     if end_n is not None and start_n is None:
         start_n = 1
 
-    # Prefer page_full_text
-    page_docs = []
-    for doc in vector_store.docstore._dict.values():
-        meta = doc.metadata or {}
-        if (
-            str(meta.get("thread_id", "")) == thread_id_str
-            and str(meta.get("user_id", "")) == user_id_str
-            and meta.get("type") == "page_full_text"
-        ):
-            page_docs.append(doc)
+    all_chunks = query_all_chunks(thread_id=thread_id_str, user_id=user_id)
+    if not all_chunks:
+        return {"error": "No chunks found for this thread. Upload a PDF first."}
 
-    if not page_docs:
-        return {"error": "No page_full_text docs found for this thread."}
-
-    def page_key(d):
-        p = (d.metadata or {}).get("page") or (d.metadata or {}).get("page_number") or 10**9
+    # Group chunks by page
+    pages_seen = set()
+    for c in all_chunks:
+        p = c.get("page")
         try:
-            return int(p)
-        except Exception:
-            return 10**9
+            pages_seen.add(int(p) if p is not None else 0)
+        except (ValueError, TypeError):
+            pass
 
-    page_docs.sort(key=page_key)
+    if not pages_seen:
+        return {"error": "No page data found in chunks."}
 
-    # Apply range
-    selected = page_docs
-    if start_n is not None and end_n is not None:
-        selected = []
-        for d in page_docs:
-            p = d.metadata.get("page") or d.metadata.get("page_number")
-            try:
-                p = int(p)
-            except Exception:
-                continue
-            if start_n <= p <= end_n:
-                selected.append(d)
-
-    if not selected:
-        return {"error": "No pages matched the requested page/range."}
+    max_page = max(pages_seen)
+    if start_n is None:
+        start_n = 1
+    if end_n is None:
+        end_n = max_page
 
     total = 0
     per_page = {}
-    for d in selected:
-        p = d.metadata.get("page") or d.metadata.get("page_number")
-        try:
-            p = int(p)
-        except Exception:
-            p = None
-        wc = _count_words(d.page_content or "")
+    for p in range(start_n, end_n + 1):
+        page_chunks = [c for c in all_chunks if (c.get("page") or 0) == p]
+        if not page_chunks:
+            continue
+        page_chunks.sort(key=lambda x: x.get("chunk_index", 0))
+        text = " ".join(c.get("text", "") for c in page_chunks)
+        wc = _count_words(text)
         total += wc
-        if p is not None:
-            per_page[p] = wc
+        per_page[p] = wc
 
-    meta = _THREAD_METADATA.get(thread_id_str, {})
+    meta = _get_thread_metadata_from_db(thread_id_str) or {}
     num_pages = meta.get("num_pages") or meta.get("pages") or meta.get("documents")
 
     out = {
@@ -1903,7 +1291,7 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     # #endregion
 
     # Extract user_id from thread_id for filtering
-    user_id = _extract_user_id_from_thread_id(thread_id) if thread_id else None
+    user_id = _get_user_id_for_thread(thread_id) if thread_id else None
     logger.info(f"rag_tool: extracted user_id={user_id}")
     
     # Parse page requests from query
@@ -1972,8 +1360,8 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
                     logger.info(f"rag_tool: used page 1 only for person/author query ({len(context)} chunks)")
     # Legacy fallback: author query with no/inadequate results still get page 1 (already handled above)
     
-    # Get thread metadata for page count
-    thread_meta = _THREAD_METADATA.get(str(thread_id), {})
+    # Get thread metadata from DB
+    thread_meta = _get_thread_metadata_from_db(str(thread_id)) or {}
     num_pages = thread_meta.get("num_pages") or thread_meta.get("pages") or thread_meta.get("documents")
     source_file = thread_meta.get("filename") or "PDF"
 
@@ -2033,24 +1421,17 @@ def chat_node(state: ChatState, config=None):
         if thread_id:
             thread_id_str = str(thread_id)
 
-    # Check if a PDF document exists for this thread
+    # Check if a PDF document exists for this thread (from DB)
     has_document = False
     if thread_id_str:
-        # Check metadata
-        if thread_id_str in _THREAD_METADATA:
-            has_document = True
-        # Also check if vector store exists and has documents for this thread
-        else:
-            _load_metadata()  # Reload in case it was updated
-            if thread_id_str in _THREAD_METADATA:
-                has_document = True
+        has_document = thread_has_document(thread_id_str)
     
     # Get user_id from thread_id
-    user_id = _extract_user_id_from_thread_id(thread_id_str) if thread_id_str else None
+    user_id = _get_user_id_for_thread(thread_id_str) if thread_id_str else None
     
     # Get active provider from admin settings (needed for error handling and rate limiting)
     # Initialize with default first to ensure it's always defined
-    provider = os.getenv('LLM_PROVIDER', 'openai').lower()
+    provider = os.getenv('LLM_PROVIDER', 'groq').lower()
     try:
         from app.utils.db import get_db
         from app.models.database_models import SystemSettings
@@ -2220,8 +1601,8 @@ def chat_node(state: ChatState, config=None):
     # """
     
     if has_document:
-        # Get document info
-        doc_meta = _THREAD_METADATA.get(str(thread_id), {})
+        # Get document info from DB
+        doc_meta = _get_thread_metadata_from_db(str(thread_id)) or {}
         filename = doc_meta.get("filename", "PDF")
         num_pages = doc_meta.get("num_pages") or doc_meta.get("pages") or doc_meta.get("documents")
         page_info = f" The PDF has {num_pages} pages." if num_pages else ""
@@ -2617,60 +1998,52 @@ def chat_node(state: ChatState, config=None):
                     ]
                     user_wants_to_finalize = any(keyword in last_user_msg for keyword in finalization_keywords)
             
-            # Save AI response text for metadata tracking
+            # Save AI response text to DB (lesson tracking)
             is_likely_lesson = False
             if thread_id_str and response_content:
-                if thread_id_str not in _THREAD_METADATA:
-                    _THREAD_METADATA[thread_id_str] = {}
-                
-                # Always save last AI response
-                _THREAD_METADATA[thread_id_str]["last_response_text"] = response_content
-                
-                # Also check if this looks like a lesson/lecture response
-                is_likely_lesson = (
-                    len(response_content) > 200 or  # Substantial content
-                    '#' in response_content or  # Has markdown headers
-                    '\n\n' in response_content  # Has paragraphs
-                )
-                
-                if is_likely_lesson:
-                    # Also save as lesson text if it appears to be a lesson
-                    _THREAD_METADATA[thread_id_str]["last_lesson_text"] = response_content
-                    logger.debug(f"Saved response text (lesson detected) - {len(response_content)} characters")
-                else:
-                    logger.debug(f"Saved last AI response text - {len(response_content)} characters")
-                
-                # Save metadata to disk
-                _save_metadata()
+                try:
+                    db = get_db()
+                    thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
+                    if thread_row:
+                        is_likely_lesson = (
+                            len(response_content) > 200 or
+                            '#' in response_content or
+                            '\n\n' in response_content
+                        )
+                        if is_likely_lesson:
+                            thread_row.last_lesson_text = response_content
+                        db.commit()
+                except Exception as e:
+                    logger.warning("Error saving lesson text to DB: %s", e)
             
             # Only process if lesson_state was successfully retrieved AND user explicitly wants to finalize
             if lesson_state and lesson_state.get("lesson_finalized", False) and user_wants_to_finalize:
-                # Update the lesson state
                 if thread_id_str:
-                    if thread_id_str not in _THREAD_METADATA:
-                        _THREAD_METADATA[thread_id_str] = {}
-                    _THREAD_METADATA[thread_id_str]["lesson_finalized"] = True
-                    # Use lesson_state text if available, otherwise use response content
-                    lesson_text = lesson_state.get("last_lesson_text", "") or response_content
-                    _THREAD_METADATA[thread_id_str]["last_lesson_text"] = lesson_text
-                    _THREAD_METADATA[thread_id_str]["lesson_title"] = lesson_state.get("lesson_title", "")
-                    _save_metadata()
+                    try:
+                        db = get_db()
+                        thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
+                        if thread_row:
+                            thread_row.lesson_finalized = True
+                            lesson_text = lesson_state.get("last_lesson_text", "") or response_content
+                            thread_row.last_lesson_text = lesson_text
+                            thread_row.lesson_title = lesson_state.get("lesson_title", "")
+                            db.commit()
+                    except Exception as e:
+                        logger.warning("Error updating lesson finalized: %s", e)
             elif lesson_state and lesson_state.get("lesson_finalized", False) and not user_wants_to_finalize:
-                # LLM wants to finalize but user hasn't explicitly requested it - don't finalize
                 logger.debug("LLM suggested finalization but user hasn't explicitly requested it - keeping lesson in progress")
-                # Keep lesson in progress, but update the lesson text and title for display
                 if thread_id_str:
-                    if thread_id_str not in _THREAD_METADATA:
-                        _THREAD_METADATA[thread_id_str] = {}
-                    _THREAD_METADATA[thread_id_str]["lesson_finalized"] = False
-                    # Use lesson_state text if available, otherwise use response content
-                    lesson_text = lesson_state.get("last_lesson_text", "") or response_content
-                    _THREAD_METADATA[thread_id_str]["last_lesson_text"] = lesson_text
-                    _THREAD_METADATA[thread_id_str]["lesson_title"] = lesson_state.get("lesson_title", "")
-                    _save_metadata()
-            elif thread_id_str and is_likely_lesson:
-                # Save lesson text even if not finalized
-                _save_metadata()
+                    try:
+                        db = get_db()
+                        thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
+                        if thread_row:
+                            thread_row.lesson_finalized = False
+                            lesson_text = lesson_state.get("last_lesson_text", "") or response_content
+                            thread_row.last_lesson_text = lesson_text
+                            thread_row.lesson_title = lesson_state.get("lesson_title", "")
+                            db.commit()
+                    except Exception as e:
+                        logger.warning("Error updating lesson state: %s", e)
 
             # Log if we had to reduce messages
             if attempt > 0:
@@ -2921,146 +2294,67 @@ def retrieve_all_threads():
 
 
 def thread_has_document(thread_id: str) -> bool:
-    """Check if thread has a document (check metadata)."""
-    thread_id_str = str(thread_id)
-    
-    # Check metadata
-    if thread_id_str in _THREAD_METADATA:
-        return True
-    
-    # Reload metadata in case it was updated
-    _load_metadata()
-    return thread_id_str in _THREAD_METADATA
+    """Check if thread has a document (from DB)."""
+    try:
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        return thread is not None and getattr(thread, "has_document", False)
+    except Exception as e:
+        logger.warning("Error checking thread_has_document: %s", e)
+        return False
 
 
 def thread_document_metadata(thread_id: str) -> dict:
-    """Get document metadata for a thread. Loads from disk if needed."""
-    thread_id_str = str(thread_id)
-    
-    # Reload metadata if not in memory
-    if thread_id_str not in _THREAD_METADATA:
-        _load_metadata()
-    
-    return _THREAD_METADATA.get(thread_id_str, {})
+    """Get document metadata for a thread (from DB)."""
+    meta = _get_thread_metadata_from_db(str(thread_id))
+    return meta if meta else {}
 
 
 def update_lesson_finalized_status(thread_id: str, finalized: bool) -> bool:
     """
-    Update the lesson finalized status for a thread.
-    
-    Args:
-        thread_id: The thread ID to update
-        finalized: Boolean indicating if the lesson is finalized
-        
-    Returns:
-        True if the update was successful, False if thread not found
+    Update the lesson finalized status for a thread (in DB).
     """
-    thread_id_str = str(thread_id)
-    
-    # Reload metadata if not in memory
-    if thread_id_str not in _THREAD_METADATA:
-        _load_metadata()
-    
-    # Check if thread exists
-    if thread_id_str not in _THREAD_METADATA:
+    try:
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        if not thread:
+            return False
+        thread.lesson_finalized = finalized
+        db.commit()
+        return True
+    except Exception as e:
+        logger.warning("Error updating lesson finalized: %s", e)
         return False
-    
-    # Update the finalized status
-    _THREAD_METADATA[thread_id_str]["lesson_finalized"] = finalized
-    
-    # Save metadata to disk
-    _save_metadata()
-    
-    return True
 
 
 def delete_thread(thread_id: str) -> dict:
     """
-    Delete a thread and all associated data.
-    
-    This function:
-    1. Removes thread metadata from _THREAD_METADATA
-    2. Removes documents from the vector store (filtered by thread_id)
-    3. Optionally removes uploaded files
-    4. Saves updated metadata
-    
-    Args:
-        thread_id: The thread ID to delete
-        
-    Returns:
-        dict with 'success' (bool) and 'message' (str)
+    Delete a thread: remove vectors from Milvus and optionally clean uploaded files.
+    Note: RAGThread DB row is deleted by the route, not here.
     """
     thread_id_str = str(thread_id)
-    user_id = _extract_user_id_from_thread_id(thread_id_str)
-    
+    user_id = _get_user_id_for_thread(thread_id_str)
+
     if not user_id:
         return {'success': False, 'message': f'Could not extract user_id from thread_id: {thread_id_str}'}
-    
+
     try:
-        # Load latest metadata
-        _load_metadata()
-        
-        # Get thread metadata before deletion (for filename)
-        thread_meta = _THREAD_METADATA.get(thread_id_str, {})
-        filename = thread_meta.get('filename')
-        
-        # Remove documents from vector store
-        vector_store = _load_shared_vector_store()
-        if vector_store:
-            try:
-                # Get all document IDs that belong to this thread
-                # We need to search and filter by metadata
-                # Since FAISS doesn't have a direct delete by metadata, we'll need to:
-                # 1. Get all documents with this thread_id
-                # 2. Create a new vector store without those documents
-                
-                # For now, we'll mark the thread as deleted in metadata
-                # The documents will remain in the vector store but won't be retrievable
-                # (since the retriever filters by thread_id)
-                # This is acceptable as the documents are small and the vector store is shared
-                
-                # If we want to actually remove documents, we'd need to:
-                # - Load all documents
-                # - Filter out documents with matching thread_id
-                # - Recreate the vector store
-                # This is expensive, so we'll just remove from metadata for now
-                
-                logger.info(f"Removing thread {thread_id_str} from metadata (documents remain in vector store)")
-            except Exception as e:
-                logger.warning(f"Error removing documents from vector store for thread {thread_id_str}: {e}")
-        
-        # Remove thread metadata
-        if thread_id_str in _THREAD_METADATA:
-            del _THREAD_METADATA[thread_id_str]
-            _save_metadata()
-            logger.info(f"Removed thread metadata for {thread_id_str}")
-        
-        # Optionally remove uploaded file
-        if filename:
-            try:
-                # Find and remove uploaded file
-                file_pattern = f"{thread_id_str}_*"
-                for file_path in UPLOADED_FILES_DIR.glob(file_pattern):
-                    try:
-                        file_path.unlink()
-                        logger.info(f"Deleted uploaded file: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete uploaded file {file_path}: {e}")
-            except Exception as e:
-                logger.warning(f"Error removing uploaded files for thread {thread_id_str}: {e}")
-        
-        return {
-            'success': True,
-            'message': f'Thread {thread_id_str} deleted successfully'
-        }
-        
+        from app.utils.rag_vectorstore import delete_by_thread
+        delete_by_thread(thread_id_str, user_id)
+        logger.info("Removed vectors from Milvus for thread %s", thread_id_str)
+
+        # Optionally remove uploaded files
+        try:
+            for file_path in UPLOADED_FILES_DIR.glob(f"{thread_id_str}_*"):
+                try:
+                    file_path.unlink()
+                    logger.info("Deleted uploaded file: %s", file_path)
+                except Exception as e:
+                    logger.warning("Failed to delete uploaded file %s: %s", file_path, e)
+        except Exception as e:
+            logger.warning("Error removing uploaded files: %s", e)
+
+        return {'success': True, 'message': f'Thread {thread_id_str} deleted successfully'}
     except Exception as e:
-        logger.error(f"Error deleting thread {thread_id_str}: {e}", exc_info=True)
-        return {
-            'success': False,
-            'message': f'Failed to delete thread: {str(e)}'
-        }
-
-
-# Load metadata on module import
-_load_metadata()
+        logger.error("Error deleting thread %s: %s", thread_id_str, e, exc_info=True)
+        return {'success': False, 'message': f'Failed to delete thread: {str(e)}'}
