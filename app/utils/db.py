@@ -68,14 +68,25 @@ def get_db():
     return g.db
 
 def close_db(e=None):
-    """Close database session."""
+    """Close database session. On commit failure, rolls back and invalidates
+    the connection so the pool discards it (avoids reusing broken connections).
+    """
     db = g.pop('db', None)
     if db is not None:
         try:
             db.commit()
-        except Exception as e:
-            logger.error(f"Error committing database session: {str(e)}")
-            db.rollback()
+        except Exception as ex:
+            logger.error(f"Error committing database session: {ex}")
+            try:
+                db.rollback()
+            except Exception as rollback_ex:
+                logger.error(f"Error during rollback: {rollback_ex}")
+            # Invalidate the connection so the pool discards it
+            try:
+                conn = db.connection()
+                conn.invalidate()
+            except Exception:
+                pass
         finally:
             db.close()
 
