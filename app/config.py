@@ -106,10 +106,20 @@ class Config:
     VLLM_MAX_TOKENS = int(os.getenv('VLLM_MAX_TOKENS', '1024'))
     VLLM_TIMEOUT = int(os.getenv('VLLM_TIMEOUT', '600'))
     
+    # ENV: local | staging | production. local=Chroma, else=Milvus
+    ENV = os.getenv('ENV', 'local').lower()
+    USE_CHROMA_LOCAL = os.getenv('USE_CHROMA_LOCAL', 'false').lower() in ('true', '1')
+
+    # Milvus & RAG Embeddings Configuration (HuggingFace only, 384 dims)
+    MILVUS_HOST = os.getenv('MILVUS_HOST', 'localhost')
+    MILVUS_PORT = int(os.getenv('MILVUS_PORT', '19530'))
+    EMBEDDING_MODEL_NAME = os.getenv('EMBEDDING_MODEL_NAME', 'sentence-transformers/all-MiniLM-L6-v2')
+    EMBEDDING_DIM = int(os.getenv('EMBEDDING_DIM', '384'))
+
     # Celery Configuration
     # Set USE_CELERY_FOR_INGESTION=true in production to run PDF ingestion in Celery workers.
     # Set to false (default) for local dev so ingestion runs in-process (no Redis/Celery worker needed).
-    USE_CELERY_FOR_INGESTION = os.getenv('USE_CELERY_FOR_INGESTION', 'True').lower() in ('true', '1')
+    USE_CELERY_FOR_INGESTION = os.getenv('USE_CELERY_FOR_INGESTION', 'false').lower() in ('true', '1')
     CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
     CELERY_ACCEPT_CONTENT = ['json']

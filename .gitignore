@@ -19,7 +19,13 @@ chatbot.db-shm
 chatbot.db-wal
 rag_metadata.json
 uploaded_files
+fix_boolean_columns.sql
 instance
 chat.db
 .cursor
 .vscode
+milvus_data
+migrations
+chroma_data
+shared_vector_store.pkl
+MILVUS_STAGING.md
