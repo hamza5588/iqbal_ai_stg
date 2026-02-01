@@ -188,7 +188,7 @@ def init_db(app):
         Base, User, Lesson, Conversation, ChatHistory, SurveyResponse,
         UserPrompt, UserDocument, UserTokenUsage, TokenResetHistory,
         LessonFAQ, LessonChatHistory, EmailVerificationToken, PasswordResetToken,
-        RAGThread, RAGPrompt, Coupon, CouponRedemption, GlobalPrompt,
+        RAGChunk, RAGThread, RAGPrompt, Coupon, CouponRedemption, GlobalPrompt,
         SystemSettings, UserSettings
     )
     from sqlalchemy import inspect
@@ -276,8 +276,38 @@ def init_db(app):
                 logger.warning(f"Subscription migration warning: {str(e)}")
                 db.rollback()
             
+            # Run RAG migration (add new columns, create rag_chunks table)
+            try:
+                import sys
+                proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if proj_root not in sys.path:
+                    sys.path.insert(0, proj_root)
+                from migrations.rag_milvus_migration import run_migration
+                run_migration(engine)
+            except Exception as mig_e:
+                logger.warning("RAG migration warning: %s", mig_e)
+
+            # RAG vector store startup health check (production: fail if Milvus unreachable)
+            try:
+                env = os.getenv("ENV", "local").lower()
+                use_chroma = os.getenv("USE_CHROMA_LOCAL", "false").lower() in ("true", "1")
+                if env != "local" and not use_chroma:
+                    from app.utils.rag_vectorstore import ensure_collection
+                    ensure_collection()
+                    logger.info("RAG vector store (Milvus) health check passed")
+                elif env == "local" or use_chroma:
+                    from app.utils.rag_vectorstore import ensure_collection
+                    ensure_collection()
+                    logger.info("RAG vector store (Chroma) health check passed")
+            except Exception as vs_e:
+                env = os.getenv("ENV", "local").lower()
+                if env in ("staging", "production"):
+                    logger.error("RAG vector store unavailable in production: %s", vs_e)
+                    raise SystemExit(f"Startup failed: Milvus unreachable: {vs_e}")
+                logger.warning("RAG vector store health check: %s", vs_e)
+
             logger.info("Database initialized successfully")
-            
+
     except Exception as e:
         logger.error(f"Database initialization error: {str(e)}")
         raise

@@ -46,6 +46,31 @@ services:
       - app_network
 
   # ----------------------------
+  # MILVUS (vector database for RAG - staging)
+  # ----------------------------
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    container_name: milvus_staging
+    command: ["milvus", "run", "standalone"]
+    restart: always
+    ports:
+      - "19531:19530"
+      - "9092:9091"
+    volumes:
+      - milvus_data_staging:/var/lib/milvus
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: local
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9091/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
+  # ----------------------------
   # REDIS (staging)
   # ----------------------------
   redis:
@@ -96,6 +121,7 @@ services:
 
       # APIs – these will come from whatever env values you have on the host
       - GOOGLE_CLIENT_ID=507995986306-qcdrhrrt3d71la4pkrf7lt1b2tvuusqm.apps.googleusercontent.com
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - NOMIC_APIC_KEY=${NOMIC_API_KEY}
 
@@ -108,12 +134,20 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
+      # Milvus (RAG vector database)
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_DIM=384
+
     volumes:
       - .:/app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      milvus:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -155,7 +189,14 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
+      # Milvus (RAG vector database)
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_DIM=384
+
       # APIs (if needed by tasks)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - NOMIC_APIC_KEY=${NOMIC_API_KEY}
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
@@ -167,6 +208,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      milvus:
         condition: service_healthy
     command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=2
     deploy:
@@ -184,6 +227,7 @@ services:
 volumes:
   postgres_data_staging:
   redis_data_staging:
+  milvus_data_staging:
 
 networks:
   app_network:

@@ -48,6 +48,31 @@ services:
       - app_network
 
   # ----------------------------
+  # MILVUS (vector database for RAG)
+  # ----------------------------
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    container_name: milvus
+    command: ["milvus", "run", "standalone"]
+    restart: always
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: local
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9091/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
+  # ----------------------------
   # REDIS (for Celery broker and result backend)
   # ----------------------------
   redis:
@@ -108,6 +133,12 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
+      # Milvus (RAG vector database)
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_DIM=384
+
     volumes:
       - .:/app
     depends_on:
@@ -115,7 +146,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # - ollama  # Removed - using external vLLM API instead
+      milvus:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -162,12 +194,20 @@ services:
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
       - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
       - VLLM_TIMEOUT=600
+
+      # Milvus (RAG vector database)
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_DIM=384
     volumes:
       - .:/app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      milvus:
         condition: service_healthy
     command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=2
     deploy:
@@ -326,6 +366,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  milvus_data:
 
 networks:
   app_network:
