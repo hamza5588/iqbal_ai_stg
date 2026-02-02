@@ -1,137 +1,1262 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Iqbal AI - Login</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            'iqbal-primary': '#05B0FC',
-            'iqbal-bg': '#F0F9FF'
-          }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | Iqbal AI - Secure Learning Platform</title>
+    <!-- Global Theme Colors CSS -->
+    <link rel="stylesheet" href="css/theme-colors.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+              display: ["Poppins", "Inter", "sans-serif"],
+            },
+            colors: {
+              primary: {
+                50: "#f0f9ff",
+                100: "#e0f2fe",
+                200: "#bae6fd",
+                300: "#7dd3fc",
+                400: "#38bdf8",
+                500: "#0ea5e9",
+                600: "#0284c7",
+                700: "#0369a1",
+                800: "#075985",
+                900: "#0c4a6e",
+              },
+              secondary: {
+                50: "#f8fafc",
+                100: "#f1f5f9",
+                200: "#e2e8f0",
+                300: "#cbd5e1",
+                400: "#94a3b8",
+                500: "#64748b",
+                600: "#475569",
+                700: "#334155",
+                800: "#1e293b",
+                900: "#0f172a",
+              },
+              accent: {
+                50: "#fdf2f8",
+                100: "#fce7f3",
+                200: "#fbcfe8",
+                300: "#f9a8d4",
+                400: "#f472b6",
+                500: "#ec4899",
+                600: "#db2777",
+                700: "#be185d",
+                800: "#9d174d",
+                900: "#831843",
+              },
+              success: {
+                50: "#f0fdf4",
+                100: "#dcfce7",
+                200: "#bbf7d0",
+                300: "#86efac",
+                400: "#4ade80",
+                500: "#22c55e",
+                600: "#16a34a",
+                700: "#15803d",
+                800: "#166534",
+                900: "#14532d",
+              },
+              warning: {
+                50: "#fffbeb",
+                100: "#fef3c7",
+                200: "#fde68a",
+                300: "#fcd34d",
+                400: "#fbbf24",
+                500: "#f59e0b",
+                600: "#d97706",
+                700: "#b45309",
+                800: "#92400e",
+                900: "#78350f",
+              },
+              error: {
+                50: "#fef2f2",
+                100: "#fee2e2",
+                200: "#fecaca",
+                300: "#fca5a5",
+                400: "#f87171",
+                500: "#ef4444",
+                600: "#dc2626",
+                700: "#b91c1c",
+                800: "#991b1b",
+                900: "#7f1d1d",
+              },
+              surface: {
+                50: "#fafafa",
+                100: "#f5f5f5",
+                200: "#e5e5e5",
+                300: "#d4d4d4",
+                400: "#a3a3a3",
+                500: "#737373",
+                600: "#525252",
+                700: "#404040",
+                800: "#262626",
+                900: "#171717",
+              },
+            },
+            animation: {
+              "gradient-x": "gradient-x 15s ease infinite",
+              "gradient-y": "gradient-y 15s ease infinite",
+              "gradient-xy": "gradient-xy 15s ease infinite",
+              "float-slow": "float 8s ease-in-out infinite",
+              "float-slower": "float 12s ease-in-out infinite",
+              "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+              "slide-in-right":
+                "slideInRight 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards",
+              "slide-in-up":
+                "slideInUp 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards",
+              "fade-in": "fadeIn 0.8s ease-out forwards",
+              "border-glow": "borderGlow 3s ease-in-out infinite",
+              shimmer: "shimmer 2s infinite linear",
+            },
+            keyframes: {
+              "gradient-y": {
+                "0%, 100%": {
+                  "background-size": "400% 400%",
+                  "background-position": "center top",
+                },
+                "50%": {
+                  "background-size": "200% 200%",
+                  "background-position": "center center",
+                },
+              },
+              "gradient-x": {
+                "0%, 100%": {
+                  "background-size": "200% 200%",
+                  "background-position": "left center",
+                },
+                "50%": {
+                  "background-size": "200% 200%",
+                  "background-position": "right center",
+                },
+              },
+              "gradient-xy": {
+                "0%, 100%": {
+                  "background-position": "0% 0%",
+                },
+                "50%": {
+                  "background-position": "100% 100%",
+                },
+              },
+              float: {
+                "0%, 100%": { transform: "translateY(0) translateX(0)" },
+                "33%": { transform: "translateY(-20px) translateX(10px)" },
+                "66%": { transform: "translateY(-10px) translateX(-10px)" },
+              },
+              "pulse-glow": {
+                "0%, 100%": {
+                  "box-shadow": "0 0 20px rgba(14, 165, 233, 0.3)",
+                  transform: "scale(1)",
+                },
+                "50%": {
+                  "box-shadow": "0 0 40px rgba(14, 165, 233, 0.5)",
+                  transform: "scale(1.05)",
+                },
+              },
+              slideInRight: {
+                from: { opacity: "0", transform: "translateX(30px)" },
+                to: { opacity: "1", transform: "translateX(0)" },
+              },
+              slideInUp: {
+                from: { opacity: "0", transform: "translateY(30px)" },
+                to: { opacity: "1", transform: "translateY(0)" },
+              },
+              fadeIn: {
+                from: { opacity: "0" },
+                to: { opacity: "1" },
+              },
+              borderGlow: {
+                "0%, 100%": {
+                  "border-color": "rgba(14, 165, 233, 0.3)",
+                  "box-shadow": "0 0 15px rgba(14, 165, 233, 0.2)",
+                },
+                "50%": {
+                  "border-color": "rgba(236, 72, 153, 0.5)",
+                  "box-shadow": "0 0 25px rgba(236, 72, 153, 0.3)",
+                },
+              },
+              shimmer: {
+                "0%": { "background-position": "-200px 0" },
+                "100%": { "background-position": "calc(200px + 100%) 0" },
+              },
+            },
+            backgroundImage: {
+              "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+              "gradient-conic":
+                "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
+              "gradient-diagonal":
+                "linear-gradient(135deg, var(--tw-gradient-stops))",
+            },
+            animationDelay: {
+              75: "75ms",
+              100: "100ms",
+              150: "150ms",
+              200: "200ms",
+              300: "300ms",
+              500: "500ms",
+              700: "700ms",
+              1000: "1000ms",
+            },
+          },
+        },
+      };
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --color-primary: #0ea5e9;
+        --color-secondary: #64748b;
+        --color-accent: #ec4899;
+      }
+
+      * {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      body {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      }
+
+      .glass-morphism {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+      }
+
+      .glass-dark {
+        background: rgba(15, 23, 42, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .gradient-border {
+        position: relative;
+        background:
+          linear-gradient(white, white) padding-box,
+          linear-gradient(135deg, #0ea5e9, #ec4899) border-box;
+        border: 1.5px solid transparent;
+      }
+
+      .gradient-text {
+        background: linear-gradient(135deg, #0ea5e9, #ec4899);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .gradient-bg {
+        background: linear-gradient(
+          135deg,
+          #0ea5e9 0%,
+          #3b82f6 25%,
+          #8b5cf6 50%,
+          #ec4899 75%,
+          #f59e0b 100%
+        );
+        background-size: 300% 300%;
+        animation: gradient-xy 20s ease infinite;
+      }
+
+      .input-gradient-focus {
+        background:
+          linear-gradient(white, white) padding-box,
+          linear-gradient(135deg, #0ea5e9, #ec4899) border-box;
+        border: 1.5px solid transparent;
+        transition: all 0.3s ease;
+      }
+
+      .input-gradient-focus:focus {
+        box-shadow:
+          0 0 0 4px rgba(14, 165, 233, 0.1),
+          0 0 20px rgba(14, 165, 233, 0.2);
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%);
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+      }
+
+      .btn-primary:hover {
+        background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(14, 165, 233, 0.3);
+      }
+
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+
+      .btn-secondary {
+        background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+      }
+
+      .btn-secondary:hover {
+        background: linear-gradient(135deg, #475569 0%, #334155 100%);
+      }
+
+      .particle {
+        position: absolute;
+        pointer-events: none;
+        background: linear-gradient(135deg, #0ea5e9, #ec4899);
+        border-radius: 50%;
+      }
+
+      .loading-dots {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .loading-dots span {
+        animation: loading-dots 1.4s infinite ease-in-out both;
+        background-color: currentColor;
+        border-radius: 50%;
+        display: inline-block;
+        height: 8px;
+        width: 8px;
+        margin: 0 2px;
+      }
+
+      .loading-dots span:nth-child(1) {
+        animation-delay: -0.32s;
+      }
+      .loading-dots span:nth-child(2) {
+        animation-delay: -0.16s;
+      }
+
+      @keyframes loading-dots {
+        0%,
+        80%,
+        100% {
+          transform: scale(0);
+        }
+        40% {
+          transform: scale(1);
         }
       }
-    }
-  </script>
-</head>
 
-<body class="min-h-screen  flex flex-col">
-
-  <div class="flex flex-col lg:flex-row min-h-screen">
-    
-    <!-- LEFT SECTION (Hidden on small screens) -->
-    <div 
-  class="hidden lg:flex lg:w-1/2 items-center justify-center p-8 bg-cover bg-center bg-no-repeat h-screen"
-  style="background-image: url('../static/images/rect.png');"
->
-  <div class="text-center text-white">
-    <img src="../static/images/logo.png" class="mx-auto w-28 mb-6" alt="Iqbal AI">
-    <h1 class="text-3xl font-semibold text-[#146FAD] mb-4"
-    style="text-shadow: 2px 2px 6px rgba(0,0,0,0.5);"
-    >Welcome back to your learning journey</h1>
-    <img src="../static/images/rafiki.png" alt="Illustration" class="h-[400px] w-[500px] object-contain">
-  </div>
-</div>
-
-
-    <!-- RIGHT SECTION (Login Form) -->
-    <div class="flex flex-col justify-center w-full lg:w-1/2 p-6 sm:p-10">
-      
-      <!-- Mobile Logo -->
-      <div class="lg:hidden text-center mb-6">
-        <img src="../static/images/logo.png" class="mx-auto w-20 mb-3" alt="Iqbal AI">
-        <h1 class="text-2xl font-bold text-gray-800">IQBAL AI</h1>
-      </div>
-
-      <!-- Welcome Text -->
-      <div class="text-center mb-6">
-        <h2 class="text-2xl sm:text-3xl font-bold text-[#05B0FC]">Welcome Back to</h2>
-        <h2 class="text-2xl sm:text-3xl font-bold text-[#05B0FC]">Iqbal AI</h2>
-        <p class="text-gray-600 mt-2 text-sm sm:text-base">Sign in to continue your personalized learning journey</p>
-      </div>
-
-      <!-- Error Display -->
-      {% if error %}
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {{ error }}
-        </div>
-      {% endif %}
-      <!-- Login Form -->
-      <form action="{{ url_for('auth.login') }}" method="POST" id="loginForm" class="space-y-4 sm:space-y-6">
-        
-        <!-- Email -->
-        <div>
-          <label for="useremail" class="block text-sm font-medium text-[#05B0FC] mb-1">Email Address</label>
-          <input 
-            type="email"
-            id="useremail"
-            name="useremail"
-            required
-            placeholder="Enter your Email"
-            class="w-full px-4 py-3 text-sm sm:text-base border border-[#05B0FC] rounded-lg  "
-          >
-        </div>
-
-        <!-- Password -->
-        <div>
-          <label for="password" class="block text-sm font-medium text-[#05B0FC] mb-1">Password</label>
-          <div class="relative">
-            <input 
-              type="password"
-              id="password"
-              name="password"
-              required
-              placeholder="Enter your Password"
-              class="w-full px-4 py-3 text-sm sm:text-base pr-10 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-[#05B0FC] focus:border-[#05B0FC] placeholder-gray-400"
-            >
-            <button 
-              type="button"
-              onclick="togglePassword()"
-              class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <i class="fas fa-eye" id="eyeIcon"></i>
-            </button>
-          </div>
-          <div class="text-right mt-2">
-            <a href="{{ url_for('auth.forgot_password') }}" class="text-sm font-bold text-[#05B0FC] hover:underline">Forgot Password?</a>
-          </div>
-        </div>
-
-        <!-- Sign In Button -->
-        <button 
-          type="submit"
-          class="w-full bg-blue-600 hover:bg-blue-800 text-white font-semibold py-3 rounded-lg transition duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring- focus:ring-offset-2"
-        >
-          Sign In
-        </button>
-      </form>
-
-      <!-- Register Link -->
-      <p class="text-center mt-6 text-gray-600 text-sm">
-        Don’t have an account? 
-        <a href="{{ url_for('auth.register_email') }}" class="text-[#05B0FC] hover:underline font-medium">Register here</a>
-      </p>
-    </div>
-  </div>
-
-  <script>
-    function togglePassword() {
-      const passwordInput = document.getElementById('password');
-      const eyeIcon = document.getElementById('eyeIcon');
-      if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        eyeIcon.classList.replace('fa-eye', 'fa-eye-slash');
-      } else {
-        passwordInput.type = 'password';
-        eyeIcon.classList.replace('fa-eye-slash', 'fa-eye');
+      .toggle-password {
+        cursor: pointer;
+        transition: all 0.3s ease;
       }
-    }
-  </script>
 
-</body>
+      .toggle-password:hover {
+        color: var(--color-primary);
+        transform: scale(1.1);
+      }
+
+      .success-checkmark {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto;
+      }
+
+      .success-checkmark .check-icon {
+        width: 80px;
+        height: 80px;
+        position: relative;
+        border-radius: 50%;
+        box-sizing: content-box;
+        border: 4px solid #22c55e;
+      }
+
+      .success-checkmark .check-icon .icon-line {
+        height: 5px;
+        background-color: #22c55e;
+        display: block;
+        border-radius: 2px;
+        position: absolute;
+        z-index: 10;
+      }
+
+      .success-checkmark .check-icon .icon-line.line-tip {
+        top: 46px;
+        left: 14px;
+        width: 25px;
+        transform: rotate(45deg);
+        animation: icon-line-tip 0.75s;
+      }
+
+      .success-checkmark .check-icon .icon-line.line-long {
+        top: 38px;
+        right: 8px;
+        width: 47px;
+        transform: rotate(-45deg);
+        animation: icon-line-long 0.75s;
+      }
+
+      @keyframes icon-line-tip {
+        0% {
+          width: 0;
+          left: 1px;
+          top: 19px;
+        }
+        54% {
+          width: 0;
+          left: 1px;
+          top: 19px;
+        }
+        70% {
+          width: 50px;
+          left: -8px;
+          top: 37px;
+        }
+        84% {
+          width: 17px;
+          left: 21px;
+          top: 48px;
+        }
+        100% {
+          width: 25px;
+          left: 14px;
+          top: 45px;
+        }
+      }
+
+      @keyframes icon-line-long {
+        0% {
+          width: 0;
+          right: 46px;
+          top: 54px;
+        }
+        65% {
+          width: 0;
+          right: 46px;
+          top: 54px;
+        }
+        84% {
+          width: 55px;
+          right: 0px;
+          top: 35px;
+        }
+        100% {
+          width: 47px;
+          right: 8px;
+          top: 38px;
+        }
+      }
+    </style>
+  </head>
+  <body
+    class="min-h-screen font-sans text-surface-900 antialiased overflow-x-hidden"
+  >
+    <!-- Loading Overlay -->
+    <div
+      id="loading-overlay"
+      class="fixed inset-0 bg-white z-50 flex items-center justify-center transition-opacity duration-300"
+    >
+      <div class="text-center">
+        <div class="w-20 h-20 mx-auto mb-6 relative">
+          <div
+            class="absolute inset-0 rounded-full border-4 border-primary-100 animate-spin"
+          ></div>
+          <div
+            class="absolute inset-2 rounded-full border-4 border-primary-300 animate-spin animation-delay-150"
+          ></div>
+          <div
+            class="absolute inset-4 rounded-full border-4 border-primary-500 animate-spin animation-delay-300"
+          ></div>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-10 h-10" alt="Loading" />
+          </div>
+        </div>
+        <p class="text-primary-600 font-medium">Loading Secure Portal...</p>
+      </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="min-h-screen flex flex-col lg:flex-row items-stretch">
+      <!-- Left Panel - Brand & Visual (hidden on mobile) -->
+      <div
+        class="hidden lg:block lg:w-1/2 relative min-h-[40vh] lg:min-h-screen overflow-hidden bg-gradient-to-br from-primary-900 via-primary-800 to-secondary-900"
+      >
+        <!-- Animated Background Elements -->
+        <div class="absolute inset-0">
+          <div
+            class="absolute top-10 left-10 w-64 h-64 rounded-full bg-primary-400/10 blur-3xl animate-pulse-glow"
+          ></div>
+          <div
+            class="absolute bottom-10 right-10 w-80 h-80 rounded-full bg-accent-400/10 blur-3xl animate-pulse-glow animation-delay-1000"
+          ></div>
+          <div
+            class="absolute top-1/3 right-1/4 w-48 h-48 rounded-full bg-primary-500/5 blur-2xl animate-float-slow"
+          ></div>
+        </div>
+
+        <!-- Content -->
+        <div class="relative z-10 h-full flex flex-col p-8 lg:p-12">
+          <!-- Brand Header -->
+          <div class="mb-12 lg:mb-0">
+            <div class="flex items-center space-x-3">
+              <div
+                class="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center"
+              >
+                <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-8 h-8" alt="IQBAL AI" />
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold text-white font-display">
+                  IQBAL AI
+                </h1>
+                <p class="text-primary-200 text-sm">
+                  Intelligent Learning Platform
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hero Content -->
+          <div class="flex-1 flex flex-col justify-center max-w-2xl mx-auto">
+            <div class="mb-12">
+              <div
+                class="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm text-white text-sm font-medium mb-8"
+              >
+                <i class="fas fa-rocket mr-2"></i> AI-Powered Learning
+              </div>
+
+              <h2
+                class="text-4xl lg:text-5xl font-bold text-white mb-6 font-display leading-tight"
+              >
+                Welcome Back to <span class="gradient-text">Your Future</span>
+              </h2>
+
+              <p class="text-xl text-primary-100 mb-10 leading-relaxed">
+                Continue your journey with personalized AI learning. Access
+                cutting-edge courses, projects, and career guidance.
+              </p>
+            </div>
+
+            <!-- Features Grid -->
+            <div class="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+              <div class="glass-dark rounded-xl p-5 border border-white/10">
+                <div
+                  class="w-12 h-12 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center mb-4"
+                >
+                  <i class="fas fa-brain text-white text-lg"></i>
+                </div>
+                <h3 class="text-white font-semibold mb-2">AI Mentor</h3>
+                <p class="text-primary-200 text-sm">
+                  Personalized learning paths
+                </p>
+              </div>
+
+              <div class="glass-dark rounded-xl p-5 border border-white/10">
+                <div
+                  class="w-12 h-12 rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center mb-4"
+                >
+                  <i class="fas fa-chart-line text-white text-lg"></i>
+                </div>
+                <h3 class="text-white font-semibold mb-2">Progress Tracking</h3>
+                <p class="text-primary-200 text-sm">
+                  Real-time skill analytics
+                </p>
+              </div>
+
+              <div class="glass-dark rounded-xl p-5 border border-white/10">
+                <div
+                  class="w-12 h-12 rounded-lg bg-gradient-to-br from-success-500 to-success-600 flex items-center justify-center mb-4"
+                >
+                  <i class="fas fa-certificate text-white text-lg"></i>
+                </div>
+                <h3 class="text-white font-semibold mb-2">Certifications</h3>
+                <p class="text-primary-200 text-sm">
+                  Industry-recognized credentials
+                </p>
+              </div>
+            </div>
+
+            <!-- Testimonial -->
+            <div class="glass-dark rounded-2xl p-6 border border-white/10">
+              <div class="flex items-start mb-4">
+                <div class="flex-1">
+                  <p class="text-primary-100 italic mb-3">
+                    "I landed a 40% salary increase after completing the AI
+                    Engineering track. The learning experience is
+                    transformative!"
+                  </p>
+                  <div class="flex items-center">
+                    <div
+                      class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold mr-3"
+                    >
+                      M
+                    </div>
+                    <div>
+                      <p class="text-white font-medium">Michael Chen</p>
+                      <p class="text-primary-300 text-sm">Senior AI Engineer</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-warning-400 text-3xl">
+                  <i class="fas fa-quote-right"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="mt-8 lg:mt-auto pt-8 border-t border-white/10">
+            <div
+              class="flex flex-wrap items-center justify-between text-primary-200 text-sm"
+            >
+              <div class="flex items-center space-x-6">
+                <a href="#" class="hover:text-white transition-colors"
+                  >Privacy Policy</a
+                >
+                <a href="#" class="hover:text-white transition-colors"
+                  >Terms of Service</a
+                >
+                <a href="#" class="hover:text-white transition-colors"
+                  >Support</a
+                >
+              </div>
+              <div class="mt-4 lg:mt-0">
+                <p>© 2026 Iqbal AI. All rights reserved.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel - Login Form -->
+      <div
+        class="lg:w-1/2 min-h-screen flex flex-col bg-gradient-to-b from-surface-50 to-white"
+      >
+        <!-- Mobile Header -->
+        <div class="lg:hidden p-6">
+          <div class="relative">
+            <div class="flex items-center justify-center">
+              <div class="flex items-center space-x-3">
+                <div
+                  class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center"
+                >
+                  <img
+                    src="{{ url_for('static', filename='images/logo.png') }}"
+                    class="w-6 h-6 mx-auto"
+                    alt="IQBAL AI"
+                  />
+                </div>
+                <div class="text-center">
+                  <h1 class="font-bold text-surface-900">IQBAL AI</h1>
+                  <p class="text-surface-500 text-xs">Secure Login</p>
+                </div>
+              </div>
+            </div>
+            <a
+              href="{{ url_for('chat.index') }}"
+              class="absolute right-4 top-1/2 transform -translate-y-1/2 text-primary-600 hover:text-primary-700 font-medium text-sm"
+            >
+              <!-- Home -->
+            </a>
+          </div>
+        </div>
+
+        <!-- Form Container -->
+        <div class="flex-1 flex items-center justify-center p-6 lg:p-12">
+          <div class="w-full max-w-md">
+            <!-- Welcome Message -->
+            <div class="mb-10 text-center">
+              <div
+                class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 mb-6"
+              >
+                <i class="fas fa-user-check text-primary-600 text-2xl"></i>
+              </div>
+              <h2 class="text-3xl font-bold text-surface-900 mb-2 font-display">
+                Welcome Back
+              </h2>
+              <p class="text-surface-600">
+                Sign in to continue your learning journey
+              </p>
+
+              <!-- Login Stats -->
+              <div
+                class="mt-6 inline-flex items-center px-4 py-2 rounded-full bg-primary-50 text-primary-700 text-sm"
+              >
+                <i class="fas fa-users mr-2"></i>
+                <span>2,847 active learners today</span>
+              </div>
+            </div>
+
+            <!-- Form Card -->
+            <div
+              class="glass-morphism rounded-2xl p-8 border border-surface-200 shadow-xl animate-slide-in-up"
+            >
+              {% if error %}
+              <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                {{ error }}
+              </div>
+              {% endif %}
+              <!-- Success State (Hidden by default) -->
+              <div id="success-state" class="hidden">
+                <div class="text-center py-8">
+                  <div class="success-checkmark mb-6">
+                    <div class="check-icon">
+                      <span class="icon-line line-tip"></span>
+                      <span class="icon-line line-long"></span>
+                      <div class="icon-circle"></div>
+                      <div class="icon-fix"></div>
+                    </div>
+                  </div>
+                  <h3 class="text-2xl font-bold text-success-700 mb-3">
+                    Login Successful!
+                  </h3>
+                  <p class="text-surface-600 mb-8">
+                    Redirecting to your dashboard...
+                  </p>
+                  <div class="flex space-x-4">
+                    <button
+                      onclick="resetForm()"
+                      class="flex-1 bg-surface-100 hover:bg-surface-200 text-surface-800 py-3 rounded-lg font-medium transition-colors"
+                    >
+                      Back to Login
+                    </button>
+                    <a
+                      href="{{ url_for('chat.index') }}"
+                      class="flex-1 btn-primary text-white py-3 rounded-lg font-medium text-center"
+                    >
+                      Go to Dashboard
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Form (Visible by default) -->
+              <form id="login-form" class="space-y-6">
+                <!-- Email Input -->
+                <div>
+                  <label
+                    for="email"
+                    class="block text-surface-700 font-semibold mb-3"
+                  >
+                    <i class="fas fa-envelope mr-2 text-primary-500"></i> Email
+                    Address
+                  </label>
+                  <div class="relative">
+                    <input
+                      type="email"
+                      id="email"
+                      name="useremail"
+                      required
+                      placeholder="john.doe@example.com"
+                      class="w-full px-5 py-4 pr-12 text-surface-900 bg-surface-50 rounded-xl input-gradient-focus focus:outline-none transition-all duration-300"
+                    />
+                    <div
+                      class="absolute right-4 top-1/2 transform -translate-y-1/2"
+                    >
+                      <i
+                        id="email-icon"
+                        class="fas fa-user text-surface-400"
+                      ></i>
+                    </div>
+                  </div>
+                  <div
+                    id="email-error"
+                    class="text-error-500 text-sm mt-2 hidden"
+                  >
+                    <i class="fas fa-exclamation-circle mr-1"></i> Please enter
+                    a valid email address
+                  </div>
+                </div>
+
+                <!-- Password Input -->
+                <div>
+                  <div class="flex items-center justify-between mb-3">
+                    <label
+                      for="password"
+                      class="block text-surface-700 font-semibold"
+                    >
+                      <i class="fas fa-lock mr-2 text-primary-500"></i> Password
+                    </label>
+                    <a
+                      href="{{ url_for('auth.forgot_password') }}"
+                      class="text-primary-600 hover:text-primary-700 text-sm font-medium transition-colors"
+                    >
+                      Forgot password?
+                    </a>
+                  </div>
+                  <div class="relative">
+                    <input
+                      type="password"
+                      id="password"
+                      name="password"
+                      required
+                      placeholder="••••••••"
+                      class="w-full px-5 py-4 pr-12 text-surface-900 bg-surface-50 rounded-xl input-gradient-focus focus:outline-none transition-all duration-300"
+                    />
+                    <button
+                      type="button"
+                      id="toggle-password"
+                      class="absolute right-4 top-1/2 transform -translate-y-1/2 cursor-pointer bg-transparent border-none p-0 flex items-center justify-center hover:scale-110 transition-transform"
+                    >
+                      <i class="fas fa-eye text-surface-400 toggle-password"></i>
+                    </button>
+                  </div>
+                  <div
+                    id="password-error"
+                    class="text-error-500 text-sm mt-2 hidden"
+                  >
+                    <i class="fas fa-exclamation-circle mr-1"></i> Password must
+                    be at least 8 characters
+                  </div>
+                </div>
+
+                <!-- Remember Me & Security -->
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="remember"
+                      class="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                    />
+                    <label for="remember" class="ml-2 text-surface-700 text-sm"
+                      >Remember this device</label
+                    >
+                  </div>
+                  <div class="flex items-center text-surface-500 text-sm">
+                    <i class="fas fa-shield-alt text-success-500 mr-1"></i>
+                    <span>Secure Connection</span>
+                  </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button
+                  type="submit"
+                  id="submit-btn"
+                  class="w-full btn-primary text-white py-4 rounded-xl font-semibold text-lg transition-all duration-300 relative overflow-hidden group"
+                >
+                  <span class="relative z-10 flex items-center justify-center">
+                    <i class="fas fa-sign-in-alt mr-3"></i> Sign In
+                  </span>
+                  <span
+                    class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"
+                  ></span>
+                </button>
+
+                <!-- Divider -->
+                <div class="relative">
+                  <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-surface-200"></div>
+                  </div>
+                  <div class="relative flex justify-center text-sm">
+                    <span class="px-4 bg-white text-surface-500"
+                      >Or continue with</span
+                    >
+                  </div>
+                </div>
+
+                <!-- Social Login Options -->
+                <div class="grid grid-cols-3 gap-4">
+                  <button
+                    type="button"
+                    class="flex items-center justify-center space-x-2 py-3.5 rounded-xl border border-surface-200 hover:border-error-300 hover:bg-error-50 transition-all duration-200 group"
+                  >
+                    <i
+                      class="fab fa-google text-error-500 group-hover:scale-110 transition-transform"
+                    ></i>
+                    <span class="font-medium text-surface-700">Google</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="flex items-center justify-center space-x-2 py-3.5 rounded-xl border border-surface-200 hover:border-primary-300 hover:bg-primary-50 transition-all duration-200 group"
+                  >
+                    <i
+                      class="fab fa-linkedin text-primary-600 group-hover:scale-110 transition-transform"
+                    ></i>
+                    <span class="font-medium text-surface-700">LinkedIn</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="flex items-center justify-center space-x-2 py-3.5 rounded-xl border border-surface-200 hover:border-surface-800 hover:bg-surface-100 transition-all duration-200 group"
+                  >
+                    <i
+                      class="fab fa-github text-surface-800 group-hover:scale-110 transition-transform"
+                    ></i>
+                    <span class="font-medium text-surface-700">GitHub</span>
+                  </button>
+                </div>
+              </form>
+
+              <!-- Sign Up Link -->
+              <div class="mt-10 pt-8 border-t border-surface-100 text-center">
+                <p class="text-surface-600">
+                  New to Iqbal AI?
+                  <a
+                    href="{{ url_for('auth.register_email') }}"
+                    class="text-primary-600 hover:text-primary-700 font-semibold ml-1 transition-colors"
+                  >
+                    Create an account <i class="fas fa-arrow-right ml-1"></i>
+                  </a>
+                </p>
+              </div>
+
+              <!-- Support -->
+              <div class="mt-6 text-center">
+                <a
+                  href="#"
+                  class="inline-flex items-center text-surface-500 hover:text-surface-700 text-sm transition-colors"
+                >
+                  <i class="fas fa-life-ring mr-2"></i> Need help? Contact
+                  Support
+                </a>
+              </div>
+            </div>
+
+            <!-- Security Badges -->
+            <div class="mt-8 flex flex-wrap items-center justify-center gap-6">
+              <div class="flex items-center space-x-2 text-surface-500">
+                <i class="fas fa-shield-alt text-success-500"></i>
+                <span class="text-sm">SSL Encrypted</span>
+              </div>
+              <div class="flex items-center space-x-2 text-surface-500">
+                <i class="fas fa-lock text-primary-500"></i>
+                <span class="text-sm">GDPR Compliant</span>
+              </div>
+              <div class="flex items-center space-x-2 text-surface-500">
+                <i class="fas fa-user-shield text-accent-500"></i>
+                <span class="text-sm">Privacy First</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Initialize particles
+      function createParticles() {
+        const container = document.body;
+        const particleCount = window.innerWidth < 768 ? 15 : 25;
+
+        for (let i = 0; i < particleCount; i++) {
+          const particle = document.createElement("div");
+          particle.className = "particle";
+
+          // Random properties
+          const size = Math.random() * 5 + 1;
+          const posX = Math.random() * 100;
+          const posY = Math.random() * 100;
+          const opacity = Math.random() * 0.4 + 0.1;
+          const delay = Math.random() * 5;
+          const duration = Math.random() * 15 + 10;
+          const blur = Math.random() * 5 + 2;
+
+          // Apply styles
+          particle.style.width = `${size}px`;
+          particle.style.height = `${size}px`;
+          particle.style.left = `${posX}vw`;
+          particle.style.top = `${posY}vh`;
+          particle.style.opacity = opacity;
+          particle.style.filter = `blur(${blur}px)`;
+          particle.style.animation = `float-slower ${duration}s ease-in-out ${delay}s infinite`;
+
+          container.appendChild(particle);
+        }
+      }
+
+      // Email validation
+      function validateEmail(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+      }
+
+      // Password validation
+      function validatePassword(password) {
+        return password.length >= 8;
+      }
+
+      // Set button to loading state
+      function setButtonLoading(button) {
+        button.disabled = true;
+        button.innerHTML = `
+        <span class="relative z-10 flex items-center justify-center">
+          <div class="loading-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </span>
+        <span class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+      `;
+      }
+
+      // Restore button to original state
+      function restoreButton(button) {
+        button.disabled = false;
+        button.innerHTML = `
+        <span class="relative z-10 flex items-center justify-center">
+          <i class="fas fa-sign-in-alt mr-3"></i> Sign In
+        </span>
+        <span class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+      `;
+      }
+      // Toggle password visibility
+      function setupPasswordToggle() {
+        const toggleBtn = document.getElementById("toggle-password");
+        const passwordField = document.getElementById("password");
+
+        if (toggleBtn && passwordField) {
+          toggleBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            const icon = this.querySelector("i");
+            // Toggle the password field type
+            if (passwordField.type === "password") {
+              passwordField.type = "text";
+              icon.className = "fas fa-eye-slash text-primary-500 toggle-password";
+            } else {
+              passwordField.type = "password";
+              icon.className = "fas fa-eye text-surface-400 toggle-password";
+            }
+          });
+        }
+      }
+
+      // Initialize password toggle when DOM is ready
+      document.addEventListener("DOMContentLoaded", function () {
+        setupPasswordToggle();
+      });
+      // Form submission handler with authentication
+      document
+        .getElementById("login-form")
+        .addEventListener("submit", async function (e) {
+          e.preventDefault();
+
+          const email = document.getElementById("email").value;
+          const password = document.getElementById("password").value;
+          const emailError = document.getElementById("email-error");
+          const passwordError = document.getElementById("password-error");
+          const submitBtn = document.getElementById("submit-btn");
+          const emailIcon = document.getElementById("email-icon");
+          const loadingOverlay = document.getElementById("loading-overlay");
+
+          // Reset states
+          emailError.classList.add("hidden");
+          passwordError.classList.add("hidden");
+          emailIcon.className = "fas fa-user text-surface-400";
+          document
+            .getElementById("email")
+            .classList.remove("!border-error-300");
+          document
+            .getElementById("password")
+            .classList.remove("!border-error-300");
+
+          let isValid = true;
+
+          // Validate email
+          if (!validateEmail(email)) {
+            emailError.classList.remove("hidden");
+            emailIcon.className = "fas fa-exclamation-circle text-error-500";
+            document.getElementById("email").classList.add("!border-error-300");
+            isValid = false;
+          }
+
+          // Validate password
+          if (!validatePassword(password)) {
+            passwordError.classList.remove("hidden");
+            document
+              .getElementById("password")
+              .classList.add("!border-error-300");
+            isValid = false;
+          }
+
+          if (!isValid) return;
+
+          // Show loading state
+          setButtonLoading(submitBtn);
+
+          // Show loading overlay
+          loadingOverlay.classList.remove("opacity-0", "pointer-events-none");
+
+          try {
+            // POST to backend login API (same as old templates/login.html)
+            const formData = new FormData();
+            formData.append("useremail", email);
+            formData.append("password", password);
+
+            const response = await fetch("{{ url_for('auth.login') }}", {
+              method: "POST",
+              body: formData,
+              redirect: "manual",
+            });
+
+            // Hide loading overlay
+            loadingOverlay.classList.add("opacity-0", "pointer-events-none");
+
+            if (response.type === "opaqueredirect" || response.status === 302) {
+              const location = response.headers.get("Location");
+              if (location) {
+                window.location.href = location;
+                return;
+              }
+            }
+
+            if (response.ok && response.status === 200) {
+              // Backend returned login page with error
+              const text = await response.text();
+              const errorMatch = text.match(/error["\s>][^<]*>([^<]+)/i) || text.match(/Invalid credentials|Login failed/);
+              const errorMsg = errorMatch ? (errorMatch[1] || errorMatch[0]).trim() : "Invalid credentials";
+              alert("❌ " + errorMsg);
+            } else {
+              alert("❌ Login failed. Please try again.");
+            }
+
+            restoreButton(submitBtn);
+          } catch (error) {
+            loadingOverlay.classList.add("opacity-0", "pointer-events-none");
+            alert("❌ " + (error.message || "Login failed. Please try again."));
+            restoreButton(submitBtn);
+          }
+        });
+
+      // Real-time email validation
+      document.getElementById("email").addEventListener("input", function () {
+        const email = this.value;
+        const emailIcon = document.getElementById("email-icon");
+        const emailError = document.getElementById("email-error");
+
+        if (email.length === 0) {
+          emailIcon.className = "fas fa-user text-surface-400";
+          emailError.classList.add("hidden");
+          this.classList.remove("!border-error-300", "!border-success-300");
+          return;
+        }
+
+        if (validateEmail(email)) {
+          emailIcon.className = "fas fa-check-circle text-success-500";
+          emailError.classList.add("hidden");
+          this.classList.remove("!border-error-300");
+          this.classList.add("!border-success-300");
+        } else {
+          emailIcon.className = "fas fa-exclamation-circle text-error-500";
+          if (email.length > 3) {
+            emailError.classList.remove("hidden");
+            this.classList.add("!border-error-300");
+            this.classList.remove("!border-success-300");
+          } else {
+            emailError.classList.add("hidden");
+            this.classList.remove("!border-error-300", "!border-success-300");
+          }
+        }
+      });
+
+      // Real-time password validation
+      document
+        .getElementById("password")
+        .addEventListener("input", function () {
+          const password = this.value;
+          const passwordError = document.getElementById("password-error");
+
+          if (password.length === 0) {
+            passwordError.classList.add("hidden");
+            this.classList.remove("!border-error-300", "!border-success-300");
+            return;
+          }
+
+          if (validatePassword(password)) {
+            passwordError.classList.add("hidden");
+            this.classList.remove("!border-error-300");
+            this.classList.add("!border-success-300");
+          } else {
+            if (password.length > 0) {
+              passwordError.classList.remove("hidden");
+              this.classList.add("!border-error-300");
+              this.classList.remove("!border-success-300");
+            } else {
+              passwordError.classList.add("hidden");
+              this.classList.remove("!border-error-300", "!border-success-300");
+            }
+          }
+        });
+
+      // Reset form function
+window.resetForm = function() {
+  document.getElementById('login-form').classList.remove('hidden');
+  document.getElementById('success-state').classList.add('hidden');
+  document.getElementById('email').value = '';
+  document.getElementById('password').value = '';
+  document.getElementById('email-icon').className = 'fas fa-user text-surface-400';
+  
+  // Reset password toggle
+  const toggleBtn = document.getElementById('toggle-password');
+  const passwordField = document.getElementById('password');
+  if (toggleBtn && passwordField) {
+    toggleBtn.className = 'fas fa-eye text-surface-400 toggle-password cursor-pointer';
+    passwordField.type = 'password';
+  }
+  
+  // Restore original submit button HTML
+  restoreButton(document.getElementById('submit-btn'));
+};
+
+      // Initialize on page load
+      document.addEventListener("DOMContentLoaded", function () {
+        // Hide loading overlay
+        setTimeout(() => {
+          document
+            .getElementById("loading-overlay")
+            .classList.add("opacity-0", "pointer-events-none");
+        }, 800);
+
+        // Create particles
+        createParticles();
+
+        // Add input focus effects
+        const inputs = document.querySelectorAll(
+          'input[type="email"], input[type="password"], input[type="text"]',
+        );
+        inputs.forEach((input) => {
+          input.addEventListener("focus", function () {
+            this.parentElement.classList.add("ring-2", "ring-primary-100");
+          });
+
+          input.addEventListener("blur", function () {
+            this.parentElement.classList.remove("ring-2", "ring-primary-100");
+          });
+        });
+      });
+
+      // Add keyboard shortcuts
+      document.addEventListener("keydown", function (e) {
+        // Ctrl + Enter to submit form
+        if (e.ctrlKey && e.key === "Enter") {
+          const submitBtn = document.getElementById("submit-btn");
+          if (!submitBtn.disabled) {
+            submitBtn.click();
+          }
+        }
+
+        // Alt + S to focus on email
+        if (e.altKey && e.key === "s") {
+          e.preventDefault();
+          document.getElementById("email").focus();
+        }
+
+        // Alt + P to focus on password
+        if (e.altKey && e.key === "p") {
+          e.preventDefault();
+          document.getElementById("password").focus();
+        }
+      });
+    </script>
+    <!-- Authentication System -->
+    <script src="js/auth.js"></script>
+    <!-- Demo Data System -->
+    <script src="js/demo-data.js"></script>
+    <!-- Global Theme Switcher -->
+    <script src="js/theme-switcher.js"></script>
+  </body>
 </html>
