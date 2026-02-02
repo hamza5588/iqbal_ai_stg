@@ -4786,7 +4786,7 @@ async function initializeApp() {
                 }
                 
                 // Switch to RAG chat mode in existing interface
-                switchToRAGChatMode(data.thread_id, data.filename);
+                switchToRAGChatMode(data.thread_id, data.filename, data.markdown_download_url, data.processing_time_seconds);
             } else {
                 throw new Error(data.error || 'Upload failed');
             }
@@ -5216,8 +5216,8 @@ async function initializeApp() {
         }
     }
 
-    // Switch to RAG chat mode
-    function switchToRAGChatMode(threadId, filename) {
+    // Switch to RAG chat mode (markdownDownloadUrl: optional; processingTimeSeconds: optional, shown in welcome message)
+    function switchToRAGChatMode(threadId, filename, markdownDownloadUrl, processingTimeSeconds) {
         isRAGChatMode = true;
         currentRAGThreadId = threadId;
         
@@ -5310,7 +5310,16 @@ async function initializeApp() {
         // When switching threads (filename is null), don't add message here - 
         // it will be added by switchToRAGThread after loading thread info
         if (filename) {
-            const welcomeMessage = `PDF "${filename}" uploaded successfully! You can now ask questions about it.`;
+            let welcomeMessage = `PDF "${filename}" uploaded successfully! You can now ask questions about it.`;
+            if (typeof processingTimeSeconds === 'number' && !isNaN(processingTimeSeconds)) {
+                welcomeMessage += ` (processed in ${processingTimeSeconds} sec)`;
+            }
+            if (markdownDownloadUrl) {
+                const fullUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
+                    ? (window.location.origin + markdownDownloadUrl) : markdownDownloadUrl;
+                console.log('Download PDF text as Markdown (click to open):', fullUrl);
+                welcomeMessage += `\n\nDownload extracted text as Markdown: ${fullUrl}`;
+            }
             addMessageToChat('ai', welcomeMessage);
         }
         
@@ -5329,9 +5338,6 @@ async function initializeApp() {
     async function handleRAGChat(message) {
         hideTypingIndicator();
         showTypingIndicator();
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/18cb2b74-61ca-48a6-88db-33a75b05cf86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chat.html:handleRAGChat:entry',message:'handleRAGChat entry',data:{msgLen:message&&message.length,currentRAGThreadId:currentRAGThreadId||null,currentChatId:currentChatId||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'})}).catch(()=>{});
-        // #endregion
         try {
             // RAG chat can take 20+ seconds; use 120s timeout so we don't hang forever (backend invoke can take up to LLM timeout)
             const RAG_CHAT_TIMEOUT_MS = 120000;
@@ -5352,9 +5358,6 @@ async function initializeApp() {
             } finally {
                 clearTimeout(timeoutId);
             }
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/18cb2b74-61ca-48a6-88db-33a75b05cf86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chat.html:handleRAGChat:afterFetch',message:'after authenticatedFetch',data:{status:response&&response.status,ok:response&&response.ok},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H3,H5'})}).catch(()=>{});
-            // #endregion
             hideTypingIndicator();
             
             if (!response) {
@@ -5376,9 +5379,6 @@ async function initializeApp() {
                 addMessageToChat('ai', 'Invalid response from server. Please try again.');
                 return;
             }
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/18cb2b74-61ca-48a6-88db-33a75b05cf86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chat.html:handleRAGChat:afterJson',message:'after response.json()',data:{hasMessage:!!(data&&data.message),hasError:!!(data&&data.error),msgLen:data&&data.message&&data.message.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-            // #endregion
             if (data && data.error) {
                 addMessageToChat('ai', `Error: ${data.error}`);
                 return;
@@ -5409,9 +5409,6 @@ async function initializeApp() {
             }
             
             // Add the AI message to chat
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/18cb2b74-61ca-48a6-88db-33a75b05cf86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chat.html:handleRAGChat:addMsg',message:'adding AI message',data:{aiResponseLen:aiResponse&&aiResponse.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-            // #endregion
             addMessageToChat('ai', aiResponse);
             
             // Lesson-finalization auto-save UI removed per requirements
@@ -5428,9 +5425,6 @@ async function initializeApp() {
             }, 500);
             
         } catch (error) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/18cb2b74-61ca-48a6-88db-33a75b05cf86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chat.html:handleRAGChat:catch',message:'handleRAGChat catch',data:{errorMsg:(error&&error.message)||String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H4,H5'})}).catch(()=>{});
-            // #endregion
             hideTypingIndicator();
             console.error('Error in RAG chat:', error);
             const isTimeout = error && (error.name === 'AbortError' || (error.message && error.message.toLowerCase().indexOf('abort') !== -1));
@@ -5920,7 +5914,7 @@ async function initializeApp() {
                             if (threadId) {
                                 currentRAGThreadId = threadId;
                                 localStorage.setItem('currentRAGThreadId', threadId);
-                                switchToRAGChatMode(threadId, filename);
+                                switchToRAGChatMode(threadId, filename, statusData.markdown_download_url, statusData.processing_time_seconds);
                             } else {
                                 // If no thread_id, find the most recent thread with document
                                 if (ragThreads && ragThreads.length > 0) {
@@ -5996,7 +5990,7 @@ async function initializeApp() {
                 if (data.thread_id) {
                     currentRAGThreadId = data.thread_id;
                     localStorage.setItem('currentRAGThreadId', data.thread_id);
-                    switchToRAGChatMode(data.thread_id, data.filename);
+                    switchToRAGChatMode(data.thread_id, data.filename, data.markdown_download_url, data.processing_time_seconds);
                 }
             }
             

@@ -303,6 +303,8 @@ def _embed_documents_in_batches(
 BASE_DIR = Path(__file__).parent.parent.parent
 UPLOADED_FILES_DIR = BASE_DIR / "uploaded_files"
 UPLOADED_FILES_DIR.mkdir(exist_ok=True)
+MARKDOWN_EXPORTS_DIR = BASE_DIR / "markdown_exports"
+MARKDOWN_EXPORTS_DIR.mkdir(exist_ok=True)
 
 def _get_thread_metadata_from_db(thread_id: str) -> Optional[Dict[str, Any]]:
     """Get thread metadata from database (replaces _THREAD_METADATA)."""
@@ -432,6 +434,7 @@ def ingest_pdf(
     if not file_bytes:
         raise ValueError("No bytes received for ingestion.")
 
+    _start_time = time.time()
     _send_progress("init", 5, "Initializing PDF processing...")
 
     thread_id_str = str(thread_id)
@@ -563,6 +566,20 @@ def ingest_pdf(
                 "total_pages": num_pages,
             }
 
+        # Export extracted text as markdown for user download (## Page N + content per page)
+        safe_base = (safe_filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+        md_filename = f"{thread_id_str}_{safe_base}.md"
+        md_path = MARKDOWN_EXPORTS_DIR / md_filename
+        md_parts = []
+        for doc in docs:
+            page_num = doc.metadata.get("page") or doc.metadata.get("page_number", "?")
+            md_parts.append(f"## Page {page_num}\n\n{doc.page_content or ''}\n\n")
+        try:
+            md_path.write_text("\n".join(md_parts), encoding="utf-8")
+            logger.info("Saved PDF text as markdown: %s", md_path)
+        except Exception as e:
+            logger.warning("Could not save markdown export: %s", e)
+
         _send_progress("splitting", 40, "Splitting document into chunks...")
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=1600,
@@ -691,7 +708,8 @@ def ingest_pdf(
         except OSError as e:
             logger.warning(f"Failed to delete temporary PDF file {temp_path}: {e}")
 
-        _send_progress("complete", 100, f"PDF processing complete! Processed {num_pages} pages.")
+        _elapsed_seconds = round(time.time() - _start_time, 2)
+        _send_progress("complete", 100, f"PDF processing complete! Processed {num_pages} pages in {_elapsed_seconds}s.")
 
         return {
             "thread_id": thread_id_str,
@@ -702,6 +720,8 @@ def ingest_pdf(
             "chunks": len(chunks),
             "embedding_model": EMBEDDING_MODEL_NAME,
             "embedding_dim": EMBEDDING_DIM,
+            "markdown_filename": md_filename,
+            "processing_time_seconds": _elapsed_seconds,
         }
 
     finally:

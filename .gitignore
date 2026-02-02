@@ -19,6 +19,7 @@ chatbot.db-shm
 chatbot.db-wal
 rag_metadata.json
 uploaded_files
+markdown_exports
 fix_boolean_columns.sql
 instance
 chat.db
@@ -29,3 +30,4 @@ migrations
 chroma_data
 shared_vector_store.pkl
 MILVUS_STAGING.md
+frontend
