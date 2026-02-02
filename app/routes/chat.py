@@ -43,23 +43,29 @@ def _get_openai_client():
 @login_required
 def index():
     """Render the main chat interface"""
+    has_submitted_survey = False
+    subscription_tier = 'free'
     try:
         # Check if user has submitted survey
         survey_model = SurveyModel(session['user_id'])
         has_submitted_survey = survey_model.has_submitted_survey()
-        
+    except Exception as e:
+        logger.warning(f"Survey check failed in index: {e}")
+    try:
         # Get user subscription tier
-        from app.utils.db import get_db
         from app.models.database_models import User as DBUser
         db = get_db()
         user = db.query(DBUser).filter(DBUser.id == session['user_id']).first()
-        subscription_tier = user.subscription_tier if user and user.subscription_tier else 'free'
-        
-        return render_template('chat.html', 
-                             has_submitted_survey=has_submitted_survey,
-                             subscription_tier=subscription_tier)
+        if user and getattr(user, 'subscription_tier', None):
+            subscription_tier = user.subscription_tier
     except Exception as e:
-        logger.error(f"Error in index route: {str(e)}")
+        logger.warning(f"Subscription tier check failed in index: {e}")
+    try:
+        return render_template('chat.html',
+                               has_submitted_survey=has_submitted_survey,
+                               subscription_tier=subscription_tier)
+    except Exception as e:
+        logger.error(f"Error rendering chat template: {str(e)}", exc_info=True)
         return render_template('chat.html', has_submitted_survey=False, subscription_tier='free')
 
 # Add these routes to chat.py

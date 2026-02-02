@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file
 from app.utils.auth import login_required
 from app.utils.rag_service import (
     ingest_pdf,
@@ -7,6 +7,7 @@ from app.utils.rag_service import (
     thread_document_metadata,
     update_lesson_finalized_status,
     delete_thread,
+    MARKDOWN_EXPORTS_DIR,
 )
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument
@@ -214,7 +215,9 @@ def ingest():
                     'documents': result.get('documents', result.get('num_pages', 0)),
                     'num_pages': result.get('num_pages', result.get('documents', 0)),
                     'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
-                    'chunks': result.get('chunks', 0)
+                    'chunks': result.get('chunks', 0),
+                    'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
+                    'processing_time_seconds': result.get('processing_time_seconds'),
                 })
             except ValueError as e:
                 logger.error(f"Value error in sync ingest: {str(e)}")
@@ -249,6 +252,32 @@ def ingest():
     except Exception as e:
         logger.error(f"Error ingesting PDF: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to ingest PDF: {str(e)}'}), 500
+
+
+@bp.route('/download-markdown/<thread_id>', methods=['GET'])
+@login_required
+def download_markdown(thread_id):
+    """Download the PDF-extracted text as a markdown file for the given thread (user must own the thread)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    user_id = session['user_id']
+    db = get_db()
+    thread = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
+    if not thread:
+        return jsonify({'error': 'Thread not found or access denied'}), 404
+    matches = list(MARKDOWN_EXPORTS_DIR.glob(f"{thread_id}_*.md"))
+    if not matches:
+        return jsonify({'error': 'Markdown export not found for this document'}), 404
+    md_path = matches[0]
+    download_name = (thread.filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+    if not download_name.endswith(".md"):
+        download_name += ".md"
+    return send_file(
+        str(md_path),
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="text/markdown",
+    )
 
 
 def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
@@ -380,7 +409,9 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
                 error_msg = f"Error: {result_container['error']}"
                 yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': error_msg, 'error': result_container['error']})}\n\n"
             elif result_container['result']:
-                yield f"data: {json.dumps({'step': 'complete', 'progress': 100, 'message': 'PDF ingestion complete!', 'result': result_container['result']})}\n\n"
+                res = dict(result_container['result'])
+                res['markdown_download_url'] = f'/api/rag/download-markdown/{res.get("thread_id", "")}'
+                yield f"data: {json.dumps({'step': 'complete', 'progress': 100, 'message': 'PDF ingestion complete!', 'result': res})}\n\n"
             else:
                 yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Processing timeout or unknown error'})}\n\n"
                 
@@ -682,18 +713,21 @@ def get_ingest_status(task_id):
         elif task.state == 'SUCCESS':
             # Task completed successfully
             result = task.result
+            thread_id = result.get('thread_id')
             response = {
                 'task_id': task_id,
                 'status': 'success',
                 'state': task.state,
                 'message': result.get('message', 'PDF ingested successfully'),
-                'thread_id': result.get('thread_id'),
+                'thread_id': thread_id,
                 'conversation_id': result.get('conversation_id'),
                 'filename': result.get('filename'),
                 'documents': result.get('documents', result.get('num_pages', 0)),
                 'num_pages': result.get('num_pages', result.get('documents', 0)),
                 'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
-                'chunks': result.get('chunks', 0)
+                'chunks': result.get('chunks', 0),
+                'markdown_download_url': result.get('markdown_download_url') or (f'/api/rag/download-markdown/{thread_id}' if thread_id else None),
+                'processing_time_seconds': result.get('processing_time_seconds'),
             }
         elif task.state == 'FAILURE':
             # Task failed
