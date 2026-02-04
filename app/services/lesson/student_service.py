@@ -2,6 +2,7 @@
 Student-focused lesson service for learning and Q&A
 """
 import logging
+import re
 from typing import Dict, List, Any, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -9,6 +10,13 @@ from langchain_core.output_parsers import StrOutputParser
 from .base_service import BaseLessonService
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Strip Groq reasoning/thinking blocks (<think>...</think>) - keep only the final answer."""
+    if not text or not isinstance(text, str):
+        return text
+    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
 
 class StudentLessonService(BaseLessonService):
@@ -94,6 +102,7 @@ class StudentLessonService(BaseLessonService):
                 "formatted_history": formatted_history,
             })
 
+            answer = _strip_reasoning(answer)
             return {
                 "answer": answer.strip(),
                 "lesson_id": lesson_id,
@@ -142,6 +151,7 @@ class StudentLessonService(BaseLessonService):
                 "lesson_content": lesson_content,
                 "limit": limit
             })
+            faq_response = _strip_reasoning(faq_response)
             
             # Parse JSON response
             import json
@@ -189,6 +199,7 @@ class StudentLessonService(BaseLessonService):
                 "lesson_title": lesson_title,
                 "lesson_content": lesson_content
             })
+            summary = _strip_reasoning(summary)
             
             return {
                 "summary": summary,
@@ -231,6 +242,7 @@ class StudentLessonService(BaseLessonService):
                 "lesson_title": lesson_title,
                 "lesson_content": lesson_content
             })
+            key_points_response = _strip_reasoning(key_points_response)
             
             # Split response into list
             key_points = [point.strip() for point in key_points_response.split('\n') if point.strip()]
@@ -262,7 +274,7 @@ class StudentLessonService(BaseLessonService):
                 "lesson_content": lesson_content,
                 "question": question
             })
-            
+            answer = _strip_reasoning(answer)
             return answer
             
         except Exception as e:
@@ -297,7 +309,7 @@ class StudentLessonService(BaseLessonService):
                 "lesson_content": lesson_content,
                 "question": question
             })
-            
+            canonical_question = _strip_reasoning(canonical_question)
             return canonical_question.strip()
             
         except Exception as e:

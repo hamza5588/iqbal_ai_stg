@@ -226,15 +226,39 @@ which is not available when Celery workers import this module on startup.
 Instead, LLMs and embeddings are created lazily via helper functions.
 """
 
+# Cache embedding model so we don't reload on every PDF query (~5+ seconds saved per request after first)
+_rag_embeddings_cache: Optional[Any] = None
+_rag_embeddings_lock = Lock()
+
+
 def get_rag_embeddings():
-    """Get HuggingFace embeddings only (fixed model, no provider switching)."""
+    """Get HuggingFace embeddings (cached per process to avoid ~5s load on every query)."""
+    global _rag_embeddings_cache
     if not HUGGINGFACE_EMBEDDINGS_AVAILABLE:
         raise ValueError(
             "HuggingFace embeddings are required. "
             "Please install: pip install langchain-huggingface sentence-transformers"
         )
-    model = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
-    return HuggingFaceEmbeddings(model_name=model)
+    with _rag_embeddings_lock:
+        if _rag_embeddings_cache is None:
+            model = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+            _rag_embeddings_cache = HuggingFaceEmbeddings(model_name=model)
+            logger.info("RAG embeddings model loaded and cached: %s", model)
+        return _rag_embeddings_cache
+
+
+def warmup_rag_embeddings() -> bool:
+    """
+    Load and cache the embedding model in this process so the first PDF query is fast.
+    Call this when the user uploads a PDF (sync or async complete) or when they open a chat with a PDF.
+    Safe to call multiple times; after the first call the cache is used.
+    """
+    try:
+        get_rag_embeddings()
+        return True
+    except Exception as e:
+        logger.warning("RAG embeddings warmup failed: %s", e)
+        return False
 
 
 # Batch embedding for faster ingestion (avoids sequential embed_query per doc)
@@ -305,6 +329,42 @@ UPLOADED_FILES_DIR = BASE_DIR / "uploaded_files"
 UPLOADED_FILES_DIR.mkdir(exist_ok=True)
 MARKDOWN_EXPORTS_DIR = BASE_DIR / "markdown_exports"
 MARKDOWN_EXPORTS_DIR.mkdir(exist_ok=True)
+SPEED_LOG_PATH = BASE_DIR / "speed.txt"
+
+
+def _write_speed_log(section: str, thread_id: Optional[str], steps: list[tuple[str, float]], started_at: float) -> None:
+    """Append per-step timing to speed.txt for PDF query performance analysis."""
+    if not steps:
+        return
+    try:
+        # Create file with header if it doesn't exist
+        if not SPEED_LOG_PATH.exists():
+            with open(SPEED_LOG_PATH, "w", encoding="utf-8") as _f:
+                _f.write(
+                    "# RAG PDF query performance log\n"
+                    "# Each section shows step timings (ms). Use this to find slow steps and improve response time.\n"
+                    "# Sections: rag_tool (PDF retrieval), chat_node (LLM + tools).\n\n"
+                )
+        now_ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        lines = [
+            "",
+            "=" * 60,
+            f"[{now_ts}] SECTION: {section}  thread_id={thread_id or 'n/a'}",
+            "-" * 40,
+        ]
+        prev = started_at
+        for label, ts in steps:
+            ms = (ts - prev) * 1000
+            lines.append(f"  {label}: {ms:.1f} ms")
+            prev = ts
+        total_ms = (prev - started_at) * 1000
+        lines.append(f"  TOTAL: {total_ms:.1f} ms")
+        lines.append("")
+        with open(SPEED_LOG_PATH, "a", encoding="utf-8") as _f:
+            _f.write("\n".join(lines) + "\n")
+    except Exception as e:
+        logger.debug("Could not write speed log: %s", e)
+
 
 def _get_thread_metadata_from_db(thread_id: str) -> Optional[Dict[str, Any]]:
     """Get thread metadata from database (replaces _THREAD_METADATA)."""
@@ -368,10 +428,11 @@ def _get_rag_prompt(user_id: Optional[int], thread_id: Optional[str] = None) -> 
         return None
 
 
-def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
+def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, steps_list: Optional[list] = None):
     """
     Get a retriever for a specific thread using Milvus.
     Returns an object with invoke(query) -> List[Document].
+    If steps_list is provided, timing for embed_query, vector_search, fetch_chunks, build_docs is appended.
     """
     if not thread_id:
         return None
@@ -384,20 +445,29 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
     embeddings = get_rag_embeddings()
 
     class VectorRetriever:
-        def __init__(self, thread_id: str, user_id: int):
+        def __init__(self, thread_id: str, user_id: int, steps_list: Optional[list] = None):
             self.thread_id = str(thread_id)
             self.user_id = int(user_id)
+            self.steps_list = steps_list
 
         def invoke(self, query: str) -> List[Document]:
+            def _step(label: str) -> None:
+                if self.steps_list is not None:
+                    self.steps_list.append((label, time.perf_counter()))
+
+            _step("retriever_embed_query_start")
             query_vector = embeddings.embed_query(query)
+            _step("retriever_vector_search_start")
             results = similarity_search(
                 query_vector=query_vector,
                 thread_id=self.thread_id,
                 user_id=self.user_id,
                 k=12,
             )
+            _step("retriever_fetch_chunks_start")
             chunk_ids = [r["chunk_id"] for r in results if r.get("chunk_id") is not None]
             chunk_map = fetch_chunks_by_ids(chunk_ids) if chunk_ids else {}
+            _step("retriever_build_docs_start")
             docs = []
             for r in results:
                 cid = r.get("chunk_id")
@@ -407,10 +477,11 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None):
                     metadata={"source": c.get("source", ""), "page": r.get("page", 0), "chunk_index": r.get("chunk_index", 0)},
                 )
                 docs.append(doc)
+            _step("retriever_done")
             logger.info("VectorRetriever: returned %d documents for thread_id=%s", len(docs), self.thread_id)
             return docs
 
-    return VectorRetriever(thread_id, user_id)
+    return VectorRetriever(thread_id, user_id, steps_list)
 
 
 def ingest_pdf(
@@ -1299,7 +1370,14 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     Always include the thread_id when calling this tool.
     Returns content-only text for the LLM (no internal metadata).
     """
+    rag_steps = []
+    rag_started = time.perf_counter()
+
+    def _rag_step(label: str) -> None:
+        rag_steps.append((label, time.perf_counter()))
+
     logger.info(f"rag_tool called: query='{query[:100]}...', thread_id={thread_id}")
+    _rag_step("rag_entry")
 
     # #region agent log
     _debug_log = (Path(__file__).resolve().parent.parent.parent / ".cursor" / "debug.log")
@@ -1312,8 +1390,9 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
 
     # Extract user_id from thread_id for filtering
     user_id = _get_user_id_for_thread(thread_id) if thread_id else None
+    _rag_step("resolve_user_id")
     logger.info(f"rag_tool: extracted user_id={user_id}")
-    
+
     # Parse page requests from query
     import re
     page_patterns = [
@@ -1332,12 +1411,16 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
                 logger.info(f"rag_tool: detected page request: {page_requested}")
                 # Call get_page_tool instead of similarity search
                 if thread_id:
-                    return get_page_tool.invoke({"page": page_requested, "thread_id": thread_id})
+                    _rag_step("page_request_detected")
+                    out = get_page_tool.invoke({"page": page_requested, "thread_id": thread_id})
+                    _write_speed_log("rag_tool", thread_id, rag_steps, rag_started)
+                    return out
                 else:
                     return "Error: thread_id is required for page queries."
             except (ValueError, IndexError):
                 pass
-    
+    _rag_step("page_request_parsed")
+
     # Check for author/title/person-identity queries (e.g. "who is X?", "who wrote?", "author")
     author_keywords = ["author", "written by", "who wrote", "title page", "lecturer", "who is the author"]
     is_author_query = any(keyword in query.lower() for keyword in author_keywords)
@@ -1345,17 +1428,22 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     is_who_is_person = query.strip().lower().startswith("who is ") and len(query.strip()) > 10
     is_person_identity_query = is_author_query or is_who_is_person
 
-    # Get retriever for similarity search
-    retriever = _get_retriever(thread_id, user_id)
+    # Get retriever for similarity search (pass rag_steps for per-step timing inside retriever)
+    retriever = _get_retriever(thread_id, user_id, steps_list=rag_steps)
+    _rag_step("get_retriever")
     if retriever is None:
         # If person/author query and no retriever, try page 1 fallback
         if is_person_identity_query and thread_id:
             logger.info("rag_tool: person/author query with no retriever, trying page 1 fallback")
-            return get_page_tool.invoke({"page": 1, "thread_id": thread_id})
+            out = get_page_tool.invoke({"page": 1, "thread_id": thread_id})
+            _write_speed_log("rag_tool", thread_id, rag_steps, rag_started)
+            return out
+        _write_speed_log("rag_tool", thread_id, rag_steps, rag_started)
         return "Error: No document indexed for this chat. Upload a PDF first."
 
     # Perform similarity search
     result = retriever.invoke(query)
+    _rag_step("similarity_search")
     logger.info(f"rag_tool: similarity search returned {len(result)} documents after filtering")
     
     context = [doc.page_content for doc in result]
@@ -1382,16 +1470,19 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     
     # Get thread metadata from DB
     thread_meta = _get_thread_metadata_from_db(str(thread_id)) or {}
+    _rag_step("load_thread_metadata")
     num_pages = thread_meta.get("num_pages") or thread_meta.get("pages") or thread_meta.get("documents")
     source_file = thread_meta.get("filename") or "PDF"
 
     # Return content-only string for the LLM so internal metadata is not shown to the user
     cleaned_chunks = [_strip_metadata_like_lines(c) for c in context if c and c.strip()]
+    _rag_step("clean_chunks")
     content_block = "\n\n---\n\n".join(cleaned_chunks) if cleaned_chunks else "(No relevant content found.)"
     content_for_llm = (
         f"Relevant content from the PDF:\n\n{content_block}\n\n"
         f"Source: {source_file}. Total pages: {num_pages or 'unknown'}."
     )
+    _rag_step("build_content_for_llm")
 
     # #region agent log
     try:
@@ -1401,6 +1492,7 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
         pass
     # #endregion
 
+    _write_speed_log("rag_tool", thread_id, rag_steps, rag_started)
     return content_for_llm
 
 
@@ -1434,20 +1526,29 @@ class LessonState(TypedDict):
 
 def chat_node(state: ChatState, config=None):
     """LLM node that may answer or request a tool call."""
+    perf_steps = []
+    perf_started = time.perf_counter()
+
+    def _mark_step(label: str) -> None:
+        perf_steps.append((label, time.perf_counter()))
+
     thread_id = None
     thread_id_str = None
     if config and isinstance(config, dict):
         thread_id = config.get("configurable", {}).get("thread_id")
         if thread_id:
             thread_id_str = str(thread_id)
+    _mark_step("resolve_thread_id")
 
     # Check if a PDF document exists for this thread (from DB)
     has_document = False
     if thread_id_str:
         has_document = thread_has_document(thread_id_str)
-    
+    _mark_step("check_thread_document")
+
     # Get user_id from thread_id
     user_id = _get_user_id_for_thread(thread_id_str) if thread_id_str else None
+    _mark_step("resolve_user_id")
     
     # Get active provider from admin settings (needed for error handling and rate limiting)
     # Initialize with default first to ensure it's always defined
@@ -1467,7 +1568,8 @@ def chat_node(state: ChatState, config=None):
                 provider = setting.value.lower()
     except Exception as e:
         logger.warning(f"Error getting provider from settings: {str(e)}, using default: {provider}")
-    
+    _mark_step("load_provider_settings")
+
     # Use new get_chat_model which handles admin/user settings automatically
     logger.info(f"Creating LLM for user {user_id} (thread: {thread_id_str}, provider: {provider})")
     
@@ -1491,11 +1593,13 @@ def chat_node(state: ChatState, config=None):
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
         logger.debug(f"Successfully created/retrieved {provider} LLM instance for user {user_id}")
+        _mark_step("init_llm")
     except Exception as e:
         logger.error(f"Error creating user-specific LLM: {str(e)}, falling back to global LLM")
         # Fallback to global LLM if user-specific LLM creation fails
         # But only if it's not a missing API key error
         if "API key" in str(e) or "api key" in str(e).lower():
+            _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
             error_response = AIMessage(
                 content=(
                     f"⚠️ **API Key Error**: {str(e)}\n\n"
@@ -1505,7 +1609,8 @@ def chat_node(state: ChatState, config=None):
             return {"messages": [error_response]}
         user_llm_with_tools = llm.bind_tools(tools)
         user_llm_structured_output = llm.with_structured_output(LessonState)
-    
+        _mark_step("init_llm")
+
     # Get custom prompt from database (user-level, applies to all threads)
     custom_prompt = _get_rag_prompt(user_id, thread_id_str)
     # custom_prompt = """
@@ -1917,13 +2022,15 @@ def chat_node(state: ChatState, config=None):
             
             # First get the main response
             response = user_llm_with_tools.invoke(messages, config=config)
-            
+            _mark_step("llm_invoke")
+
             # Record success to reset error count
             if provider == 'groq':
                 groq_rate_limiter.record_success()
-            
+
             # Extract lesson text from AI response
             response_content = response.content if hasattr(response, 'content') else str(response)
+            _mark_step("extract_response")
             
             # Try to get lesson state, but make it optional to save tokens and avoid rate limits
             # Skip lesson_state call for Groq to reduce API calls and avoid rate limits
@@ -1953,6 +2060,7 @@ def chat_node(state: ChatState, config=None):
                 try:
                     # time.sleep(0.5)  # optional
                     lesson_state = user_llm_structured_output.invoke(messages, config=config)
+                    _mark_step("lesson_state_invoke")
                 except Exception as lesson_error:
                     logger.warning(f"Failed to get lesson state (non-critical): {str(lesson_error)}")
                     lesson_state = {
@@ -2007,67 +2115,63 @@ def chat_node(state: ChatState, config=None):
                         last_user_msg = msg.content.lower() if hasattr(msg, 'content') else str(msg).lower()
                         break
                 
-                # Check for explicit finalization requests
+                # Static approach: check for finalization keywords in user message
                 if last_user_msg:
                     finalization_keywords = [
                         'finalize', 'finalise', 'final', 'this is final', 'this is the final',
-                        'i am satisfied', "i'm satisfied", 'i am done', "i'm done",
+                        'lesson final', 'lesson finalized', 'create the lesson', 'create the lesson plan',
+                        'create lesson', 'i am satisfied', "i'm satisfied", 'i am done', "i'm done",
                         'complete the lesson', 'finish the lesson', 'save the lesson',
                         'this lesson is complete', 'lesson is ready', 'ready to save',
                         'finalize this lesson', 'finalise this lesson', 'make this final'
                     ]
                     user_wants_to_finalize = any(keyword in last_user_msg for keyword in finalization_keywords)
             
-            # Save AI response text to DB (lesson tracking)
-            is_likely_lesson = False
-            if thread_id_str and response_content:
+            # Static approach: when user says final/finalized/create the lesson etc., save the previous AI response (response -1)
+            if thread_id_str and response_content and user_wants_to_finalize:
+                finalized_source_content = response_content
+                if conversation_messages:
+                    try:
+                        for msg in reversed(conversation_messages):
+                            if isinstance(msg, AIMessage):
+                                prev_text = (msg.content or "").strip()
+                                if prev_text:
+                                    finalized_source_content = prev_text
+                                    break
+                    except Exception:
+                        pass
+                if finalized_source_content:
+                    _persist_finalized_lesson_static(thread_id_str, finalized_source_content)
+                _mark_step("persist_finalized_lesson")
+                # Replace any JSON-like reply with a friendly confirmation message
                 try:
-                    db = get_db()
-                    thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-                    if thread_row:
-                        is_likely_lesson = (
-                            len(response_content) > 200 or
-                            '#' in response_content or
-                            '\n\n' in response_content
-                        )
-                        if is_likely_lesson:
-                            thread_row.last_lesson_text = response_content
-                        db.commit()
-                except Exception as e:
-                    logger.warning("Error saving lesson text to DB: %s", e)
-            
-            # Only process if lesson_state was successfully retrieved AND user explicitly wants to finalize
-            if lesson_state and lesson_state.get("lesson_finalized", False) and user_wants_to_finalize:
-                if thread_id_str:
+                    response.content = "Lesson finalized and saved. You can download it now."
+                except Exception:
+                    pass
+            else:
+                # Track last AI response as "in-progress" lesson only when thread is NOT already finalized (so we don't overwrite the saved lesson)
+                if thread_id_str and response_content:
                     try:
                         db = get_db()
                         thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-                        if thread_row:
-                            thread_row.lesson_finalized = True
-                            lesson_text = lesson_state.get("last_lesson_text", "") or response_content
-                            thread_row.last_lesson_text = lesson_text
-                            thread_row.lesson_title = lesson_state.get("lesson_title", "")
+                        if thread_row and not getattr(thread_row, "lesson_finalized", False):
+                            is_likely_lesson = (
+                                len(response_content) > 200 or
+                                '#' in response_content or
+                                '\n\n' in response_content
+                            )
+                            if is_likely_lesson:
+                                thread_row.last_lesson_text = response_content
                             db.commit()
                     except Exception as e:
-                        logger.warning("Error updating lesson finalized: %s", e)
-            elif lesson_state and lesson_state.get("lesson_finalized", False) and not user_wants_to_finalize:
-                logger.debug("LLM suggested finalization but user hasn't explicitly requested it - keeping lesson in progress")
-                if thread_id_str:
-                    try:
-                        db = get_db()
-                        thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-                        if thread_row:
-                            thread_row.lesson_finalized = False
-                            lesson_text = lesson_state.get("last_lesson_text", "") or response_content
-                            thread_row.last_lesson_text = lesson_text
-                            thread_row.lesson_title = lesson_state.get("lesson_title", "")
-                            db.commit()
-                    except Exception as e:
-                        logger.warning("Error updating lesson state: %s", e)
+                        logger.warning("Error saving lesson text to DB: %s", e)
+                _mark_step("persist_in_progress_lesson")
 
             # Log if we had to reduce messages
             if attempt > 0:
                 logger.info(f"Successfully processed request after reducing to {current_max} messages (attempt {attempt + 1})")
+            _mark_step("postprocess_done")
+            _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
             
             return {"messages": [response]}
             
@@ -2127,6 +2231,7 @@ def chat_node(state: ChatState, config=None):
                                 f"*This error occurred after {effective_max_attempts} retry attempts.*"
                             )
                         )
+                        _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                         return {"messages": [error_response]}
                 else:
                     # For regular rate limit (429), don't retry in our loop - Groq SDK handles retries internally
@@ -2143,10 +2248,10 @@ def chat_node(state: ChatState, config=None):
                                 f"*This error occurred after {effective_max_attempts} retry attempts.*"
                             )
                         )
+                        _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                         return {"messages": [error_response]}
                     # For first attempts, continue to let Groq SDK handle retry
                     # But we need to wait a bit to avoid immediate retry
-                    import time
                     time.sleep(2)  # Wait 2 seconds before continuing
                     continue
             
@@ -2188,6 +2293,7 @@ def chat_node(state: ChatState, config=None):
                         )
                     )
                     logger.error(f"Groq daily token limit reached: Used {used}/{limit}, Wait {wait_time}")
+                    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                     return {"messages": [error_response]}
                 except Exception as parse_error:
                     logger.error(f"Error parsing Groq token limit error: {parse_error}")
@@ -2222,6 +2328,7 @@ def chat_node(state: ChatState, config=None):
                             f"*The request timed out after multiple retry attempts.*"
                         )
                     )
+                    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                     return {"messages": [error_response]}
             
             # Check if it's a token error (context length)
@@ -2240,6 +2347,7 @@ def chat_node(state: ChatState, config=None):
                             f"*Error details: {error_msg}*"
                         )
                     )
+                    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                     return {"messages": [error_response]}
             else:
                 # Not a token error, check if it's a connection error
@@ -2268,6 +2376,7 @@ def chat_node(state: ChatState, config=None):
                             )
                         )
                 
+                _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                 return {"messages": [error_response]}
     
     # Fallback: If we somehow exit the loop without returning, return a generic error
@@ -2280,6 +2389,7 @@ def chat_node(state: ChatState, config=None):
             "*The request could not be completed after multiple retry attempts.*"
         )
     )
+    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
     return {"messages": [error_response]}
 
 tool_node = ToolNode(tools)
@@ -2330,6 +2440,73 @@ def thread_document_metadata(thread_id: str) -> dict:
     return meta if meta else {}
 
 
+def get_finalized_lesson(thread_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get the last finalized lesson for a thread (from DB).
+    Returns dict with last_lesson_text, lesson_title, lesson_finalized, or None if thread not found.
+    """
+    meta = _get_thread_metadata_from_db(str(thread_id))
+    if not meta:
+        return None
+    text = (meta.get("last_lesson_text") or "").strip()
+    return {
+        "last_lesson_text": text,
+        "lesson_title": (meta.get("lesson_title") or "").strip(),
+        "lesson_finalized": meta.get("lesson_finalized", False),
+    }
+
+
+def _parse_lesson_title_from_content(content: str) -> str:
+    """Extract Lesson Title from AI response text if present."""
+    if not content:
+        return ""
+    m = re.search(r"Lesson\s+Title\s*:\s*[\"']([^\"']+)[\"']", content, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"Lesson\s+Title\s*:\s*(.+?)(?:\n|$)", content, re.IGNORECASE | re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
+def _persist_finalized_lesson_static(thread_id_str: str, response_content: str) -> None:
+    """
+    Static approach: save the current AI response as the finalized lesson to the RAG thread.
+    Call this when the user's message contains finalization keywords (final, finalized, create the lesson, etc.).
+    Optionally parses Lesson Title from response content.
+    """
+    if not thread_id_str or not (response_content or "").strip():
+        return
+    title = _parse_lesson_title_from_content(response_content)
+    try:
+        db = get_db()
+        thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
+        if thread_row:
+            thread_row.lesson_finalized = True
+            thread_row.last_lesson_text = response_content
+            thread_row.lesson_title = title
+            db.commit()
+            logger.info(
+                "Persisted finalized lesson (static, thread_id=%s, title=%s)",
+                thread_id_str,
+                (title[:50] + "…") if len(title) > 50 else title or "(none)",
+            )
+    except Exception as e:
+        logger.warning("Error persisting finalized lesson: %s", e)
+
+
+def _try_persist_finalized_from_response_content(thread_id_str: str, response_content: str) -> None:
+    """
+    Parse AI response for "Lesson Finalized: true" and "Lesson Title: ..." and persist to RAG thread.
+    Used when structured lesson_state is not available (e.g. Groq). Kept for backward compatibility.
+    """
+    if not thread_id_str or not (response_content or "").strip():
+        return
+    content = response_content.strip()
+    if not re.search(r"Lesson\s+Finalized\s*:\s*true", content, re.IGNORECASE):
+        return
+    # Reuse static persist (same DB update, title parsed inside)
+    _persist_finalized_lesson_static(thread_id_str, response_content)
+
+
 def update_lesson_finalized_status(thread_id: str, finalized: bool) -> bool:
     """
     Update the lesson finalized status for a thread (in DB).
@@ -2344,6 +2521,26 @@ def update_lesson_finalized_status(thread_id: str, finalized: bool) -> bool:
         return True
     except Exception as e:
         logger.warning("Error updating lesson finalized: %s", e)
+        return False
+
+
+def save_finalized_lesson(thread_id: str, last_lesson_text: str, lesson_title: str = "") -> bool:
+    """
+    Save finalized lesson content and title to a thread (sets lesson_finalized=True).
+    Used when the frontend sends the displayed finalized content (e.g. when backend did not persist).
+    """
+    try:
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        if not thread:
+            return False
+        thread.lesson_finalized = True
+        thread.last_lesson_text = (last_lesson_text or "").strip() or thread.last_lesson_text
+        thread.lesson_title = (lesson_title or "").strip()
+        db.commit()
+        return True
+    except Exception as e:
+        logger.warning("Error saving finalized lesson: %s", e)
         return False
 
 
