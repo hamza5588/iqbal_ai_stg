@@ -38,6 +38,13 @@ from langchain_core.messages import BaseMessage, SystemMessage, AIMessage, ToolM
 from langchain_core.tools import tool
 from langchain_core.documents import Document
 # HuggingFace embeddings only (no OpenAI)
+# Load torch.nn early to fix "name 'nn' is not defined" in sentence-transformers (staging/Docker)
+try:
+    import torch  # noqa: F401
+    import torch.nn as _torch_nn  # noqa: F401 - ensures nn available for sentence-transformers
+except ImportError:
+    pass
+
 try:
     from langchain_huggingface import HuggingFaceEmbeddings
     HUGGINGFACE_EMBEDDINGS_AVAILABLE = True
