@@ -2302,6 +2302,9 @@ Answer:"""
             # Generate improved content using LLM
             response = self.llm.invoke(prompt)
             improved_content = response.content.strip()
+
+            # Strip Groq reasoning/thinking blocks (<think>...</think>) - keep only the final answer
+            improved_content = re.sub(r'<think>.*?</think>', '', improved_content, flags=re.DOTALL).strip()
             
             # Check if the response is in JSON format and extract the actual content
             try:

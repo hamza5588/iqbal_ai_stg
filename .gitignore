@@ -31,3 +31,5 @@ chroma_data
 shared_vector_store.pkl
 MILVUS_STAGING.md
 frontend
+speed.txt
+SPEED_IMPROVEMENTS.md

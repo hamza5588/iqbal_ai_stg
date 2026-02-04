@@ -183,26 +183,35 @@ class BaseLessonService:
                         _llm_cache[cache_key] = get_chat_model(user_id=user_id, timeout=120, temperature=0.7)
                         logger.info(f"Created and cached {provider} LLM instance for user {user_id}")
                     except ValueError as e:
-                        # Re-raise with clearer message if API key is missing
+                        # On API key error: fall back to session/user key (same source as RAG chat)
                         error_msg = str(e)
-                        if "API key is not configured" in error_msg or "required" in error_msg.lower():
-                            logger.error(f"LLM initialization failed: {error_msg}")
-                            # Try to get the provider name for better error message
-                            try:
+                        if "API key" in error_msg.lower() or "required" in error_msg.lower():
+                            from app.utils.rag_service import get_rag_llm, _get_api_key_from_admin_settings
+                            fallback_key = self.api_key
+                            if not fallback_key:
+                                try:
+                                    from flask import has_request_context, session
+                                    if has_request_context():
+                                        fallback_key = session.get('groq_api_key')
+                                except Exception:
+                                    pass
+                            if not fallback_key:
+                                admin_key, _ = _get_api_key_from_admin_settings()
+                                fallback_key = admin_key
+                            if fallback_key:
+                                logger.info("Using session/admin API key fallback (same as RAG)")
+                                _llm_cache[cache_key] = get_rag_llm(api_key=fallback_key, provider=provider)
+                            else:
                                 provider_setting = db.query(SystemSettings).filter(
                                     SystemSettings.key == 'active_provider'
                                 ).first()
                                 provider_name = provider_setting.value.upper() if provider_setting else provider.upper()
                                 raise ValueError(
-                                    f"{provider_name} API key is not configured in Admin Panel settings. "
-                                    f"Please go to Admin Panel → Settings and configure the {provider_name} API key."
+                                    f"{provider_name} API key is not configured. "
+                                    f"Please set your API key in Settings or configure it in Admin Panel."
                                 )
-                            except Exception:
-                                raise ValueError(
-                                    f"LLM provider is not properly configured. {error_msg} "
-                                    f"Please configure the API key in the Admin Panel settings."
-                                )
-                        raise
+                        else:
+                            raise
                     except Exception as e:
                         # Log unexpected errors but re-raise
                         logger.error(f"Unexpected error initializing LLM: {str(e)}", exc_info=True)
@@ -211,9 +220,27 @@ class BaseLessonService:
                     logger.debug(f"Reusing cached LLM instance for user {user_id} with provider {provider}")
                 return _llm_cache[cache_key]
         else:
-            # No user_id, create LLM without caching (same fallback as RAG)
+            # No user_id, try get_chat_model then fall back to session/admin key
             logger.debug(f"Creating LLM without user_id (no caching)")
-            return get_chat_model(user_id=None, timeout=120, temperature=0.7)
+            try:
+                return get_chat_model(user_id=None, timeout=120, temperature=0.7)
+            except ValueError as e:
+                if "API key" in str(e).lower() or "required" in str(e).lower():
+                    from app.utils.rag_service import get_rag_llm, _get_api_key_from_admin_settings
+                    fallback_key = self.api_key
+                    if not fallback_key:
+                        try:
+                            from flask import has_request_context, session
+                            if has_request_context():
+                                fallback_key = session.get('groq_api_key')
+                        except Exception:
+                            pass
+                    if not fallback_key:
+                        admin_key, _ = _get_api_key_from_admin_settings()
+                        fallback_key = admin_key
+                    if fallback_key:
+                        return get_rag_llm(api_key=fallback_key, provider=provider)
+                raise
 
     def allowed_file(self, filename: str) -> bool:
         """Check if file extension is supported"""

@@ -15,7 +15,15 @@ from gtts import gTTS
 import os
 
 from openai import OpenAI
+import whisper
 
+import logging
+
+bp = Blueprint("stt", __name__)
+logger = logging.getLogger(__name__)
+
+# ✅ LOAD ONCE — app startup
+whisper_model = whisper.load_model("base")
 logger = logging.getLogger(__name__)
 bp = Blueprint('chat', __name__)
 
@@ -539,16 +547,9 @@ def get_user_info():
         logger.error(f"Error getting user info: {str(e)}")
         return jsonify({'error': 'Failed to get user info'}), 500
 
-
 @bp.route('/api/stt', methods=['POST'])
 @login_required
 def speech_to_text():
-    """
-    Convert uploaded speech audio to text using OpenAI Whisper.
-
-    Expects multipart/form-data with field "audio".
-    Returns JSON: {"text": "..."} on success.
-    """
     try:
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
@@ -557,25 +558,20 @@ def speech_to_text():
         if audio_file.filename == '':
             return jsonify({'error': 'Empty audio filename'}), 400
 
-        # OpenAI client for Whisper
-        client = _get_openai_client()
-
-        # Whisper works best with binary file-like objects
-        # We read into memory here as recordings are short (voice messages)
         from tempfile import NamedTemporaryFile
 
         with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
             audio_file.save(tmp.name)
             tmp_path = tmp.name
 
-        with open(tmp_path, "rb") as f:
-            transcription = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=f,
-                response_format="json"
-            )
+        # 👇 LOCAL WHISPER HERE
+        result = whisper_model.transcribe(
+            tmp_path,
+            fp16=False,      # important if no GPU
+            language="en"    # optional but faster if known
+        )
 
-        text = getattr(transcription, "text", None) or transcription.get("text")  # handle both object/dict
+        text = result.get("text", "").strip()
         if not text:
             return jsonify({'error': 'Transcription failed'}), 500
 
@@ -584,6 +580,51 @@ def speech_to_text():
     except Exception as e:
         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to transcribe audio'}), 500
+
+# @bp.route('/api/stt', methods=['POST'])
+# @login_required
+# def speech_to_text():
+#     """
+#     Convert uploaded speech audio to text using OpenAI Whisper.
+
+#     Expects multipart/form-data with field "audio".
+#     Returns JSON: {"text": "..."} on success.
+#     """
+#     try:
+#         if 'audio' not in request.files:
+#             return jsonify({'error': 'No audio file provided'}), 400
+
+#         audio_file = request.files['audio']
+#         if audio_file.filename == '':
+#             return jsonify({'error': 'Empty audio filename'}), 400
+
+#         # OpenAI client for Whisper
+#         client = _get_openai_client()
+
+#         # Whisper works best with binary file-like objects
+#         # We read into memory here as recordings are short (voice messages)
+#         from tempfile import NamedTemporaryFile
+
+#         with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+#             audio_file.save(tmp.name)
+#             tmp_path = tmp.name
+
+#         with open(tmp_path, "rb") as f:
+#             transcription = client.audio.transcriptions.create(
+#                 model="whisper-1",
+#                 file=f,
+#                 response_format="json"
+#             )
+
+#         text = getattr(transcription, "text", None) or transcription.get("text")  # handle both object/dict
+#         if not text:
+#             return jsonify({'error': 'Transcription failed'}), 500
+
+#         return jsonify({'text': text})
+
+#     except Exception as e:
+#         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
+#         return jsonify({'error': 'Failed to transcribe audio'}), 500
 
 @bp.route('/chatbot', methods=['GET'])
 @teacher_required

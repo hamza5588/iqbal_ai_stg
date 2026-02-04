@@ -1125,10 +1125,10 @@
                         title="Configure API Key">
                         <i class="fas fa-key text-gray-500 text-xs sm:text-sm"></i>
                     </button>
-                    <!-- New Download Lecture button (last AI message) -->
+                    <!-- Download/Save Lecture: uses last finalized lecture when available -->
                     <button id="lectureDownloadBtn" onclick="saveLastLectureToMyLessons()"
                         class="hidden sm:inline-flex w-8 h-8 sm:w-10 sm:h-10 border border-gray-200 rounded-lg items-center justify-center hover:bg-gray-50 transition-colors"
-                        title="Save last AI lecture to My Lessons">
+                        title="Save last finalized lecture to My Lessons">
                         <i class="fas fa-book text-gray-500 text-xs sm:text-sm"></i>
                     </button>
                     <button id="chatDownloadBtn" onclick="downloadCurrentChat()"
@@ -11135,17 +11135,51 @@ async function initializeApp() {
         }
     }
 
-    // Save the last AI message into My Lessons
+    // Parse "Lesson Title: \"...\"" or "Lesson Title: ..." from text (matches backend format)
+    function parseLessonTitleFromContent(text) {
+        if (!text || typeof text !== 'string') return '';
+        const quoted = text.match(/Lesson\s+Title\s*:\s*["']([^"']+)["']/i);
+        if (quoted) return quoted[1].trim();
+        const unquoted = text.match(/Lesson\s+Title\s*:\s*(.+?)(?:\n|$)/i);
+        return unquoted ? unquoted[1].trim() : '';
+    }
+
+    // Download/save only the last created (finalized) lesson, not the last AI message
     async function saveLastLectureToMyLessons() {
-        const content = (lastAIMessage || '').trim();
-        if (!content) {
-            showNotification('No AI lecture found to save yet', 'error');
-            return;
+        let content = '';
+        let title = '';
+
+        // In RAG mode: use only the finalized lesson from DB (intelligent download)
+        if (currentRAGThreadId) {
+            try {
+                const lessonRes = await authenticatedFetch(`/api/rag/thread/${encodeURIComponent(currentRAGThreadId)}/finalized-lesson`, { method: 'GET' });
+                const lessonData = await lessonRes.json().catch(() => ({}));
+                if (lessonRes.ok && lessonData && lessonData.success && lessonData.lesson_finalized) {
+                    content = (lessonData.last_lesson_text || '').trim();
+                    title = (lessonData.lesson_title || '').trim();
+                }
+            } catch (e) {
+                console.warn('Could not fetch finalized lesson:', e);
+            }
+
+            if (!content) {
+                showNotification('No finalized lesson yet. Say "finalize", "final", or "create the lesson" to save your lesson, then click Download.', 'info');
+                return;
+            }
+        } else {
+            // Non-RAG: fallback to last AI message
+            content = (lastAIMessage || '').trim();
+            if (!content) {
+                showNotification('No AI lecture found to save yet', 'error');
+                return;
+            }
         }
 
-        // Unique title to avoid "title already used" errors
-        const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-        const title = `AI Lecture ${stamp}`;
+        // Unique title if we did not get one from finalized lesson
+        if (!title) {
+            const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            title = `AI Lecture ${stamp}`;
+        }
 
         showFullPageLoading('Saving lecture to My Lessons...');
 
@@ -11158,7 +11192,7 @@ async function initializeApp() {
                     content,
                     focus_area: 'Lecture',
                     grade_level: 'General',
-                    summary: 'Saved from chat (last AI message).'
+                    summary: 'Saved from chat.'
                 })
             });
 
