@@ -6,7 +6,6 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      # Staging listens on different host ports so it doesn't conflict with production
       - "8080:80"
       - "8443:443"
     volumes:
@@ -19,22 +18,15 @@ services:
     networks:
       - app_network
 
-  # ----------------------------
-  # POSTGRES DATABASE (staging)
-  # ----------------------------
   postgres:
     image: postgres:17
     restart: always
     environment:
-      # You can keep these the same as production or change them
-      # to isolate staging data completely if you want.
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
       POSTGRES_DB: mydatabase
     volumes:
-      # Separate volume name so staging DB data is isolated
       - postgres_data_staging:/var/lib/postgresql/data
-    # Map to a different host port so it doesn't clash with prod's 5432
     ports:
       - "5433:5432"
     healthcheck:
@@ -45,9 +37,6 @@ services:
     networks:
       - app_network
 
-  # ----------------------------
-  # MILVUS (vector database for RAG - staging)
-  # ----------------------------
   milvus:
     image: milvusdb/milvus:v2.4.0
     container_name: milvus_staging
@@ -70,13 +59,9 @@ services:
     networks:
       - app_network
 
-  # ----------------------------
-  # REDIS (staging)
-  # ----------------------------
   redis:
     image: redis:7-alpine
     restart: always
-    # Optional: expose a different host port to avoid conflict with prod (6379)
     ports:
       - "6380:6379"
     volumes:
@@ -90,9 +75,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ----------------------------
-  # PRIMARY FLASK INSTANCE (staging)
-  # ----------------------------
   flask_app1:
     build:
       context: .
@@ -105,37 +87,36 @@ services:
       - FLASK_DEBUG=0
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
-      - OPENBLAS_NUM_THREADS=2
-      - OMP_NUM_THREADS=2
-      - MKL_NUM_THREADS=2
-      - RAYON_NUM_THREADS=2
+
+      # --- Threading / CPU backend stability (Torch/Whisper) ---
+      - TORCH_DISABLE_MKLDNN=1
+      - MKL_SERVICE_FORCE_INTEL=1
+      - OPENBLAS_NUM_THREADS=1
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - RAYON_NUM_THREADS=1
+
       - TOKENIZERS_PARALLELISM=false
       - TQDM_DISABLE=1
 
-      # Mark this stack logically as "staging" (you can read this in your code if needed)
       - INSTANCE_ROLE=staging
       - DB_MODE=primary
 
-      # PostgreSQL URL (inside Docker network this still uses the postgres service)
       - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
 
-      # APIs – these will come from whatever env values you have on the host
       - GOOGLE_CLIENT_ID=507995986306-qcdrhrrt3d71la4pkrf7lt1b2tvuusqm.apps.googleusercontent.com
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - NOMIC_APIC_KEY=${NOMIC_API_KEY}
 
-      # vLLM API
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
       - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
       - VLLM_TIMEOUT=600
 
-      # Celery Configuration
       - USE_CELERY_FOR_INGESTION=true
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
-      # Milvus (RAG vector database)
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
       - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
@@ -167,9 +148,6 @@ services:
     networks:
       - app_network
 
-  # ----------------------------
-  # CELERY WORKER (staging)
-  # ----------------------------
   celery_worker:
     build:
       context: .
@@ -180,30 +158,36 @@ services:
       - FLASK_DEBUG=0
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
+
+      # --- Threading / CPU backend stability (Torch/Whisper) ---
+      - TORCH_DISABLE_MKLDNN=1
+      - MKL_SERVICE_FORCE_INTEL=1
+      - OPENBLAS_NUM_THREADS=1
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - RAYON_NUM_THREADS=1
+
       - TOKENIZERS_PARALLELISM=false
       - TQDM_DISABLE=1
 
-      # Database – same as staging postgres above
       - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
 
-      # Celery Configuration
       - USE_CELERY_FOR_INGESTION=true
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
-      # Milvus (RAG vector database)
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
       - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
       - EMBEDDING_DIM=384
 
-      # APIs (if needed by tasks)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - NOMIC_APIC_KEY=${NOMIC_API_KEY}
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
       - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
       - VLLM_TIMEOUT=600
+
     volumes:
       - .:/app
     depends_on:
@@ -234,4 +218,3 @@ volumes:
 networks:
   app_network:
     driver: bridge
-
