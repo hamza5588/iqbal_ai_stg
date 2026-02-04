@@ -1,0 +1,4 @@
+cd ~/iqbal_ai_stg
+
+docker-compose -f docker-compose.staging.yml -p iqbal_staging up -d --build
+docker-compose -f docker-compose.staging.yml -p iqbal_staging down

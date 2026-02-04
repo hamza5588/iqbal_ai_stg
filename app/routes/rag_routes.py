@@ -1,12 +1,16 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file
 from app.utils.auth import login_required
 from app.utils.rag_service import (
     ingest_pdf,
     chatbot,
     thread_has_document,
     thread_document_metadata,
+    get_finalized_lesson,
+    save_finalized_lesson,
     update_lesson_finalized_status,
     delete_thread,
+    warmup_rag_embeddings,
+    MARKDOWN_EXPORTS_DIR,
 )
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument
@@ -14,6 +18,7 @@ from app.services.chat_service import ChatService
 from app.tasks.ingest_tasks import ingest_pdf_task
 from langchain_core.messages import HumanMessage
 import logging
+import threading
 import uuid
 from datetime import datetime
 import os
@@ -195,6 +200,8 @@ def ingest():
         use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
         if not use_celery:
             try:
+                # Warm up embedding model first so it's cached before ingestion and first query is fast
+                warmup_rag_embeddings()
                 result = ingest_pdf(
                     file_bytes=file_bytes,
                     thread_id=thread_id,
@@ -214,7 +221,9 @@ def ingest():
                     'documents': result.get('documents', result.get('num_pages', 0)),
                     'num_pages': result.get('num_pages', result.get('documents', 0)),
                     'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
-                    'chunks': result.get('chunks', 0)
+                    'chunks': result.get('chunks', 0),
+                    'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
+                    'processing_time_seconds': result.get('processing_time_seconds'),
                 })
             except ValueError as e:
                 logger.error(f"Value error in sync ingest: {str(e)}")
@@ -249,6 +258,32 @@ def ingest():
     except Exception as e:
         logger.error(f"Error ingesting PDF: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to ingest PDF: {str(e)}'}), 500
+
+
+@bp.route('/download-markdown/<thread_id>', methods=['GET'])
+@login_required
+def download_markdown(thread_id):
+    """Download the PDF-extracted text as a markdown file for the given thread (user must own the thread)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    user_id = session['user_id']
+    db = get_db()
+    thread = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
+    if not thread:
+        return jsonify({'error': 'Thread not found or access denied'}), 404
+    matches = list(MARKDOWN_EXPORTS_DIR.glob(f"{thread_id}_*.md"))
+    if not matches:
+        return jsonify({'error': 'Markdown export not found for this document'}), 404
+    md_path = matches[0]
+    download_name = (thread.filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+    if not download_name.endswith(".md"):
+        download_name += ".md"
+    return send_file(
+        str(md_path),
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="text/markdown",
+    )
 
 
 def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
@@ -380,7 +415,9 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
                 error_msg = f"Error: {result_container['error']}"
                 yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': error_msg, 'error': result_container['error']})}\n\n"
             elif result_container['result']:
-                yield f"data: {json.dumps({'step': 'complete', 'progress': 100, 'message': 'PDF ingestion complete!', 'result': result_container['result']})}\n\n"
+                res = dict(result_container['result'])
+                res['markdown_download_url'] = f'/api/rag/download-markdown/{res.get("thread_id", "")}'
+                yield f"data: {json.dumps({'step': 'complete', 'progress': 100, 'message': 'PDF ingestion complete!', 'result': res})}\n\n"
             else:
                 yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Processing timeout or unknown error'})}\n\n"
                 
@@ -472,8 +509,8 @@ def chat():
         thread_row = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
         if not thread_row:
             return jsonify({
-                'error': 'Invalid thread_id. Thread not found or you do not have access to it.',
-                'code': 'THREAD_NOT_FOUND'
+                'error': 'No PDF has been uploaded for this conversation yet. Please upload a PDF document first to chat with your document.',
+                'code': 'NO_DOCUMENT_UPLOADED'
             }), 400
 
         if not thread_row.has_document:
@@ -680,20 +717,24 @@ def get_ingest_status(task_id):
                 'message': meta.get('message', 'Processing PDF...')
             }
         elif task.state == 'SUCCESS':
-            # Task completed successfully
+            # Task completed successfully - warm up embedding model in this process so first query is fast
+            warmup_rag_embeddings()
             result = task.result
+            thread_id = result.get('thread_id')
             response = {
                 'task_id': task_id,
                 'status': 'success',
                 'state': task.state,
                 'message': result.get('message', 'PDF ingested successfully'),
-                'thread_id': result.get('thread_id'),
+                'thread_id': thread_id,
                 'conversation_id': result.get('conversation_id'),
                 'filename': result.get('filename'),
                 'documents': result.get('documents', result.get('num_pages', 0)),
                 'num_pages': result.get('num_pages', result.get('documents', 0)),
                 'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
-                'chunks': result.get('chunks', 0)
+                'chunks': result.get('chunks', 0),
+                'markdown_download_url': result.get('markdown_download_url') or (f'/api/rag/download-markdown/{thread_id}' if thread_id else None),
+                'processing_time_seconds': result.get('processing_time_seconds'),
             }
         elif task.state == 'FAILURE':
             # Task failed
@@ -990,6 +1031,76 @@ def delete_rag_prompt():
         return jsonify({'error': f'Failed to delete prompt: {str(e)}'}), 500
 
 
+@bp.route('/thread/<thread_id>/finalized-lesson', methods=['GET'])
+@login_required
+def get_finalized_lesson_route(thread_id):
+    """
+    Get the last finalized lesson for a thread (last_lesson_text, lesson_title).
+    Used by the frontend so the download/save button uses the finalized lecture, not the last message.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        user_id = session['user_id']
+
+        if not _validate_thread_id(thread_id, user_id):
+            return jsonify({'error': 'Access denied. You can only access your own threads.'}), 403
+
+        lesson = get_finalized_lesson(thread_id)
+        if lesson is None:
+            return jsonify({'error': 'Thread not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'last_lesson_text': lesson.get('last_lesson_text', ''),
+            'lesson_title': lesson.get('lesson_title', ''),
+            'lesson_finalized': lesson.get('lesson_finalized', False),
+        })
+    except Exception as e:
+        logger.error(f"Error getting finalized lesson: {str(e)}")
+        return jsonify({'error': f'Failed to get finalized lesson: {str(e)}'}), 500
+
+
+@bp.route('/thread/<thread_id>/finalized-lesson', methods=['PUT'])
+@login_required
+def put_finalized_lesson_route(thread_id):
+    """
+    Save the finalized lesson (last_lesson_text, lesson_title) for a thread.
+    Used when the UI shows "Lesson Finalized: true" but the backend did not persist it (e.g. Groq).
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        user_id = session['user_id']
+
+        if not _validate_thread_id(thread_id, user_id):
+            return jsonify({'error': 'Access denied. You can only access your own threads.'}), 403
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        last_lesson_text = data.get('last_lesson_text', '')
+        lesson_title = data.get('lesson_title', '')
+        if not (last_lesson_text or '').strip():
+            return jsonify({'error': 'last_lesson_text is required'}), 400
+
+        success = save_finalized_lesson(thread_id, last_lesson_text, lesson_title)
+        if not success:
+            return jsonify({'error': 'Thread not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Finalized lesson saved',
+            'thread_id': thread_id,
+        })
+    except Exception as e:
+        logger.error(f"Error saving finalized lesson: {str(e)}")
+        return jsonify({'error': f'Failed to save finalized lesson: {str(e)}'}), 500
+
+
 @bp.route('/thread/<thread_id>/lesson-finalized', methods=['PUT'])
 @login_required
 def update_lesson_finalized(thread_id):
@@ -1111,6 +1222,9 @@ def get_pdf_info_for_conversation(conversation_id):
         db = get_db()
         thread_row = db.query(RAGThread).filter_by(thread_id=expected_thread_id, user_id=user_id).first()
         if thread_row and thread_row.has_document:
+            # Warm up embedding model in background so first query in this chat is fast
+            t = threading.Thread(target=warmup_rag_embeddings, daemon=True)
+            t.start()
             return jsonify({
                 'success': True,
                 'has_pdf': True,
@@ -1128,6 +1242,8 @@ def get_pdf_info_for_conversation(conversation_id):
                 if thread_conv_match:
                     thread_conv_id = int(thread_conv_match.group(1))
                     if thread_conv_id == conversation_id and thread.has_document:
+                        t = threading.Thread(target=warmup_rag_embeddings, daemon=True)
+                        t.start()
                         return jsonify({
                             'success': True,
                             'has_pdf': True,

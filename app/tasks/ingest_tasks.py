@@ -75,7 +75,9 @@ def ingest_pdf_task(self, file_bytes_b64: str, thread_id: str, filename: str, us
             'documents': result.get('documents', result.get('num_pages', 0)),
             'num_pages': result.get('num_pages', result.get('documents', 0)),
             'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
-            'chunks': result.get('chunks', 0)
+            'chunks': result.get('chunks', 0),
+            'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
+            'processing_time_seconds': result.get('processing_time_seconds'),
         }
         
     except ValueError as e:

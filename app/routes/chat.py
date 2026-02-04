@@ -15,7 +15,15 @@ from gtts import gTTS
 import os
 
 from openai import OpenAI
+import whisper
 
+import logging
+
+bp = Blueprint("stt", __name__)
+logger = logging.getLogger(__name__)
+
+# ✅ LOAD ONCE — app startup
+whisper_model = whisper.load_model("base")
 logger = logging.getLogger(__name__)
 bp = Blueprint('chat', __name__)
 
@@ -43,23 +51,29 @@ def _get_openai_client():
 @login_required
 def index():
     """Render the main chat interface"""
+    has_submitted_survey = False
+    subscription_tier = 'free'
     try:
         # Check if user has submitted survey
         survey_model = SurveyModel(session['user_id'])
         has_submitted_survey = survey_model.has_submitted_survey()
-        
+    except Exception as e:
+        logger.warning(f"Survey check failed in index: {e}")
+    try:
         # Get user subscription tier
-        from app.utils.db import get_db
         from app.models.database_models import User as DBUser
         db = get_db()
         user = db.query(DBUser).filter(DBUser.id == session['user_id']).first()
-        subscription_tier = user.subscription_tier if user and user.subscription_tier else 'free'
-        
-        return render_template('chat.html', 
-                             has_submitted_survey=has_submitted_survey,
-                             subscription_tier=subscription_tier)
+        if user and getattr(user, 'subscription_tier', None):
+            subscription_tier = user.subscription_tier
     except Exception as e:
-        logger.error(f"Error in index route: {str(e)}")
+        logger.warning(f"Subscription tier check failed in index: {e}")
+    try:
+        return render_template('chat.html',
+                               has_submitted_survey=has_submitted_survey,
+                               subscription_tier=subscription_tier)
+    except Exception as e:
+        logger.error(f"Error rendering chat template: {str(e)}", exc_info=True)
         return render_template('chat.html', has_submitted_survey=False, subscription_tier='free')
 
 # Add these routes to chat.py
@@ -533,16 +547,9 @@ def get_user_info():
         logger.error(f"Error getting user info: {str(e)}")
         return jsonify({'error': 'Failed to get user info'}), 500
 
-
 @bp.route('/api/stt', methods=['POST'])
 @login_required
 def speech_to_text():
-    """
-    Convert uploaded speech audio to text using OpenAI Whisper.
-
-    Expects multipart/form-data with field "audio".
-    Returns JSON: {"text": "..."} on success.
-    """
     try:
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
@@ -551,25 +558,20 @@ def speech_to_text():
         if audio_file.filename == '':
             return jsonify({'error': 'Empty audio filename'}), 400
 
-        # OpenAI client for Whisper
-        client = _get_openai_client()
-
-        # Whisper works best with binary file-like objects
-        # We read into memory here as recordings are short (voice messages)
         from tempfile import NamedTemporaryFile
 
         with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
             audio_file.save(tmp.name)
             tmp_path = tmp.name
 
-        with open(tmp_path, "rb") as f:
-            transcription = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=f,
-                response_format="json"
-            )
+        # 👇 LOCAL WHISPER HERE
+        result = whisper_model.transcribe(
+            tmp_path,
+            fp16=False,      # important if no GPU
+            language="en"    # optional but faster if known
+        )
 
-        text = getattr(transcription, "text", None) or transcription.get("text")  # handle both object/dict
+        text = result.get("text", "").strip()
         if not text:
             return jsonify({'error': 'Transcription failed'}), 500
 
@@ -578,6 +580,51 @@ def speech_to_text():
     except Exception as e:
         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to transcribe audio'}), 500
+
+# @bp.route('/api/stt', methods=['POST'])
+# @login_required
+# def speech_to_text():
+#     """
+#     Convert uploaded speech audio to text using OpenAI Whisper.
+
+#     Expects multipart/form-data with field "audio".
+#     Returns JSON: {"text": "..."} on success.
+#     """
+#     try:
+#         if 'audio' not in request.files:
+#             return jsonify({'error': 'No audio file provided'}), 400
+
+#         audio_file = request.files['audio']
+#         if audio_file.filename == '':
+#             return jsonify({'error': 'Empty audio filename'}), 400
+
+#         # OpenAI client for Whisper
+#         client = _get_openai_client()
+
+#         # Whisper works best with binary file-like objects
+#         # We read into memory here as recordings are short (voice messages)
+#         from tempfile import NamedTemporaryFile
+
+#         with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+#             audio_file.save(tmp.name)
+#             tmp_path = tmp.name
+
+#         with open(tmp_path, "rb") as f:
+#             transcription = client.audio.transcriptions.create(
+#                 model="whisper-1",
+#                 file=f,
+#                 response_format="json"
+#             )
+
+#         text = getattr(transcription, "text", None) or transcription.get("text")  # handle both object/dict
+#         if not text:
+#             return jsonify({'error': 'Transcription failed'}), 500
+
+#         return jsonify({'text': text})
+
+#     except Exception as e:
+#         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
+#         return jsonify({'error': 'Failed to transcribe audio'}), 500
 
 @bp.route('/chatbot', methods=['GET'])
 @teacher_required
