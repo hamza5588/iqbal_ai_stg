@@ -2123,11 +2123,15 @@ def chat_node(state: ChatState, config=None):
                         break
                 
                 # Static approach: check for finalization keywords in user message
+                # IMPORTANT: Do NOT treat generic creation phrases like "create the lesson"
+                # as finalization triggers, otherwise normal lesson-creation requests will
+                # immediately mark the lesson as finalized and show a misleading message.
                 if last_user_msg:
                     finalization_keywords = [
+                        # direct "final" / "done" intents
                         'finalize', 'finalise', 'final', 'this is final', 'this is the final',
-                        'lesson final', 'lesson finalized', 'create the lesson', 'create the lesson plan',
-                        'create lesson', 'i am satisfied', "i'm satisfied", 'i am done', "i'm done",
+                        'lesson final', 'lesson finalized',
+                        'i am satisfied', "i'm satisfied", 'i am done', "i'm done",
                         'complete the lesson', 'finish the lesson', 'save the lesson',
                         'this lesson is complete', 'lesson is ready', 'ready to save',
                         'finalize this lesson', 'finalise this lesson', 'make this final'
