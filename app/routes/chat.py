@@ -16,14 +16,23 @@ import os
 
 from openai import OpenAI
 import whisper
+import torch
 
 import logging
 
 bp = Blueprint("stt", __name__)
 logger = logging.getLogger(__name__)
 
+# ✅ Whisper / PyTorch configuration (server-safe)
+# Some CPU environments (e.g. certain staging/production hosts) can fail with
+# "RuntimeError: could not create a primitive" when using oneDNN/MKLDNN for conv1d.
+# Disabling MKLDNN and forcing CPU+float32 keeps behavior correct while avoiding
+# those hardware-specific crashes.
+torch.backends.mkldnn.enabled = False  # avoid oneDNN primitive creation issues
+
 # ✅ LOAD ONCE — app startup
-whisper_model = whisper.load_model("base")
+whisper_model = whisper.load_model("base", device="cpu")
+
 logger = logging.getLogger(__name__)
 bp = Blueprint('chat', __name__)
 
