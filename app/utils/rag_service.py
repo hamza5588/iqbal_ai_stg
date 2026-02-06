@@ -8,6 +8,8 @@ import re
 import logging
 from pathlib import Path
 from typing import Annotated, Any, Dict, Optional, TypedDict, List, Tuple
+
+from pydantic import BaseModel, Field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
@@ -1563,6 +1565,43 @@ class LessonState(TypedDict):
     last_lesson_text: str
     lesson_title: str
 
+
+class IsLessonCheck(BaseModel):
+    """Structured output for LLM check: is the given content a lesson to finalize?"""
+
+    is_lesson: bool = Field(
+        description="True if the content is a complete or substantive lesson (educational material with structure, headings, etc.). False if it is a short reply, clarification, or non-lesson content."
+    )
+
+
+# Prompt for lesson validation: is the given content a lesson worth finalizing?
+# Uses both user query and AI response: only finalize when user asked to create a lesson AND the AI produced one.
+LESSON_VALIDATION_PROMPT = """You are a validator. Your task is to determine if the AI response below is a LESSON that the user explicitly asked to create (and should be finalized/saved).
+
+Consider BOTH:
+
+1) USER'S QUERY (the message that preceded the AI response):
+---
+{user_query}
+---
+
+2) AI'S RESPONSE:
+---
+{content}
+---
+
+A LESSON TO FINALIZE means:
+- The user explicitly requested lesson creation (e.g. "create a lesson", "generate a lesson", "make a lesson plan", "create lesson on X")
+- The AI response is the generated lesson: educational, structured (headings, sections), substantive
+
+NOT a lesson to finalize:
+- User asked a question (e.g. "what is X?", "explain Y") and AI gave an educational answer — that is Q&A, not a lesson
+- User said "finalize" but the AI response above is a short reply, clarification, or non-lesson content
+- Greetings, thanks, casual chat, meta-discussion
+
+Output your judgment: user must say somethin like "create a lesson", "generate a lesson", "make a lesson plan", "create lesson on X" to finalize the lesson. Then in  the  AI RESPINSE must be a well structured lesson with headings, sections, bullet points, or organized topics."""
+
+
 # -------------------
 # 6. Nodes
 # -------------------
@@ -2175,7 +2214,7 @@ def chat_node(state: ChatState, config=None):
                     ]
                     user_wants_to_finalize = any(keyword in last_user_msg for keyword in finalization_keywords)
             
-            # Static approach: when user says final/finalized/create the lesson etc., save the previous AI response (response -1)
+            # Static approach: when user says final/finalized/create the lesson etc., validate then save the previous AI response (response -1)
             if thread_id_str and response_content and user_wants_to_finalize:
                 finalized_source_content = response_content
                 if conversation_messages:
@@ -2189,13 +2228,35 @@ def chat_node(state: ChatState, config=None):
                     except Exception:
                         pass
                 if finalized_source_content:
-                    _persist_finalized_lesson_static(thread_id_str, finalized_source_content)
-                _mark_step("persist_finalized_lesson")
-                # Replace any JSON-like reply with a friendly confirmation message
-                try:
-                    response.content = "Lesson finalized and saved. You can download it now."
-                except Exception:
-                    pass
+                    # Get the user query that preceded the lesson (the message before the AI response we're finalizing)
+                    user_query_before_lesson = ""
+                    last_human_content = ""
+                    for msg in conversation_messages:
+                        if isinstance(msg, HumanMessage):
+                            last_human_content = (msg.content or "").strip() if hasattr(msg, "content") else str(msg)
+                        elif isinstance(msg, AIMessage):
+                            ai_text = (msg.content or "").strip()
+                            if ai_text and ai_text == finalized_source_content:
+                                user_query_before_lesson = last_human_content
+                                break
+                    is_lesson = _check_if_content_is_lesson(
+                        finalized_source_content,
+                        user_query=user_query_before_lesson,
+                        user_id=user_id,
+                    )
+                    if is_lesson:
+                        _persist_finalized_lesson_static(thread_id_str, finalized_source_content)
+                        _mark_step("persist_finalized_lesson")
+                        try:
+                            response.content = "Lesson finalized and saved. You can download it now."
+                        except Exception:
+                            pass
+                    else:
+                        _mark_step("lesson_validation_no")
+                        try:
+                            response.content = "There is no lesson to finalize."
+                        except Exception:
+                            pass
             else:
                 # Track last AI response as "in-progress" lesson only when thread is NOT already finalized (so we don't overwrite the saved lesson)
                 if thread_id_str and response_content:
@@ -2502,6 +2563,37 @@ def get_finalized_lesson(thread_id: str) -> Optional[Dict[str, Any]]:
         "lesson_title": (meta.get("lesson_title") or "").strip(),
         "lesson_finalized": meta.get("lesson_finalized", False),
     }
+
+
+def _check_if_content_is_lesson(
+    content: str, user_query: str = "", user_id: Optional[int] = None
+) -> bool:
+    """
+    Use Grok LLM to determine if the given content is a lesson suitable for finalization.
+    Requires both the user's query (that preceded the AI response) and the AI response.
+    Returns True if user asked to create a lesson and the AI produced one, False otherwise.
+    On error, returns False to avoid persisting non-lesson content.
+    """
+    if not (content or "").strip():
+        return False
+    try:
+        llm = get_chat_model(user_id=user_id, timeout=60, temperature=0)
+        llm_structured = llm.with_structured_output(IsLessonCheck)
+        # Truncate very long content to avoid token limits (keep ~8k chars)
+        content_sample = (content or "").strip()
+        if len(content_sample) > 8000:
+            content_sample = content_sample[:8000] + "\n\n[...content truncated for validation...]"
+        user_query_sample = (user_query or "").strip() or "(no user query provided)"
+        prompt = LESSON_VALIDATION_PROMPT.format(user_query=user_query_sample, content=content_sample)
+        print("[Lesson Validation] INPUT user_query:", repr(user_query_sample[:500]))
+        print("[Lesson Validation] INPUT content (first 500 chars):", repr(content_sample[:500]))
+        result = llm_structured.invoke(prompt)
+        is_lesson = result.is_lesson if hasattr(result, "is_lesson") else False
+        print("[Lesson Validation] OUTPUT is_lesson:", is_lesson)
+        return is_lesson
+    except Exception as e:
+        logger.warning("Lesson validation check failed: %s", e)
+        return False
 
 
 def _parse_lesson_title_from_content(content: str) -> str:
