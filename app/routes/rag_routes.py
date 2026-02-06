@@ -443,8 +443,11 @@ def chat():
     Chat with the RAG-enabled chatbot.
     Accepts JSON or form-data with 'message' and optionally 'thread_id' or 'conversation_id'.
     """
-    _log_path = r"c:\Users\DCS\Desktop\New folder (14)\iqbalai\iqbal_ai_stg\.cursor\debug.log"
     import json as _json
+    # Debug log path under project root (works on any machine); skip log if path missing/unwritable
+    _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    _log_dir = os.path.join(_project_root, 'logs')
+    _log_path = os.path.join(_log_dir, 'rag_debug.log')
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
@@ -527,16 +530,23 @@ def chat():
             }
         }
         # #region agent log
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+        try:
+            os.makedirs(_log_dir, exist_ok=True)
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+        except Exception:
+            pass
         # #endregion
         # Create HumanMessage
         human_message = HumanMessage(content=message)
 
         # Invoke the chatbot - LangGraph returns the final state
         # #region agent log
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+        try:
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+        except Exception:
+            pass
         # #endregion
         state = chatbot.invoke(
             {"messages": [human_message]},
@@ -544,8 +554,11 @@ def chat():
         )
         # #region agent log
         _msgs = state.get("messages", [])
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+        try:
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+        except Exception:
+            pass
         # #endregion
 
         # Extract the last message from the state
@@ -618,8 +631,11 @@ def chat():
             logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
 
         # #region agent log
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+        try:
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+        except Exception:
+            pass
         # #endregion
         return jsonify({
             'success': True,
@@ -632,6 +648,7 @@ def chat():
     except Exception as e:
         # #region agent log
         try:
+            os.makedirs(_log_dir, exist_ok=True)
             with open(_log_path, 'a', encoding='utf-8') as _f:
                 _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
         except Exception:

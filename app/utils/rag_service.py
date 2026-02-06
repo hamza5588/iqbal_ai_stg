@@ -448,7 +448,8 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
     if user_id is None:
         return None
 
-    from app.utils.rag_vectorstore import similarity_search, fetch_chunks_by_ids
+    import os
+    from app.utils.rag_vectorstore import similarity_search, hybrid_search, fetch_chunks_by_ids
     embeddings = get_rag_embeddings()
 
     class VectorRetriever:
@@ -456,6 +457,8 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
             self.thread_id = str(thread_id)
             self.user_id = int(user_id)
             self.steps_list = steps_list
+            # Feature flag so we can safely switch between pure semantic and hybrid.
+            self.use_hybrid = os.getenv("USE_HYBRID_RAG", "false").lower() in ("true", "1", "yes")
 
         def invoke(self, query: str) -> List[Document]:
             def _step(label: str) -> None:
@@ -465,12 +468,40 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
             _step("retriever_embed_query_start")
             query_vector = embeddings.embed_query(query)
             _step("retriever_vector_search_start")
-            results = similarity_search(
-                query_vector=query_vector,
-                thread_id=self.thread_id,
-                user_id=self.user_id,
-                k=12,
-            )
+            if self.use_hybrid:
+                print("[RAG] Using HYBRID retrieval (semantic + lexical) for thread_id=%s" % self.thread_id)
+                logger.info(
+                    "RAG retrieval: using HYBRID (semantic + lexical) for thread_id=%s query_len=%d",
+                    self.thread_id, len(query),
+                )
+                results = hybrid_search(
+                    query=query,
+                    query_vector=query_vector,
+                    thread_id=self.thread_id,
+                    user_id=self.user_id,
+                    k=12,
+                )
+                print("[RAG] hybrid_search returned %d chunks" % len(results))
+                logger.info(
+                    "RAG retrieval: hybrid_search returned %d chunks for thread_id=%s",
+                    len(results), self.thread_id,
+                )
+            else:
+                print("[RAG] Using SEMANTIC-ONLY retrieval (vector) for thread_id=%s" % self.thread_id)
+                logger.info(
+                    "RAG retrieval: using SEMANTIC-ONLY (vector) for thread_id=%s query_len=%d",
+                    self.thread_id, len(query),
+                )
+                results = similarity_search(
+                    query_vector=query_vector,
+                    thread_id=self.thread_id,
+                    user_id=self.user_id,
+                    k=12,
+                )
+                logger.info(
+                    "RAG retrieval: similarity_search returned %d chunks for thread_id=%s",
+                    len(results), self.thread_id,
+                )
             _step("retriever_fetch_chunks_start")
             chunk_ids = [r["chunk_id"] for r in results if r.get("chunk_id") is not None]
             chunk_map = fetch_chunks_by_ids(chunk_ids) if chunk_ids else {}
@@ -488,6 +519,12 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
             logger.info("VectorRetriever: returned %d documents for thread_id=%s", len(docs), self.thread_id)
             return docs
 
+    use_hybrid = os.getenv("USE_HYBRID_RAG", "false").lower() in ("true", "1", "yes")
+    print("[RAG] Retriever created: use_hybrid=%s (set USE_HYBRID_RAG=true for hybrid)" % use_hybrid)
+    logger.info(
+        "RAG retriever created thread_id=%s user_id=%s use_hybrid=%s (USE_HYBRID_RAG env)",
+        thread_id, user_id, use_hybrid,
+    )
     return VectorRetriever(thread_id, user_id, steps_list)
 
 
