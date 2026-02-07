@@ -1,29 +1,30 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file
 from app.utils.auth import login_required
 from app.utils.rag_service import (
     ingest_pdf,
     chatbot,
     thread_has_document,
     thread_document_metadata,
+    get_finalized_lesson,
+    save_finalized_lesson,
     update_lesson_finalized_status,
-    delete_thread
+    delete_thread,
+    warmup_rag_embeddings,
+    MARKDOWN_EXPORTS_DIR,
 )
 from app.utils.db import get_db
-from app.models.database_models import RAGThread, RAGPrompt
+from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk
 from app.services.chat_service import ChatService
 from app.tasks.ingest_tasks import ingest_pdf_task
 from langchain_core.messages import HumanMessage
 import logging
+import threading
 import uuid
 from datetime import datetime
 import os
 import json
 import time
 import base64
-from tempfile import NamedTemporaryFile
-
-from openai import OpenAI
-
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 
@@ -179,38 +180,18 @@ def ingest():
                         'error': 'Error verifying conversation ownership. Please try again.'
                     }), 500
             
-            # Check if this conversation already has a PDF uploaded
+            # Check if this conversation already has a PDF uploaded (DB-based)
             expected_thread_id = f"user_{user_id}_conv_{conversation_id}"
-            if thread_has_document(expected_thread_id):
-                # Also check RAGThread table for any thread linked to this conversation
-                db = get_db()
-                existing_thread = db.query(RAGThread).filter_by(
-                    user_id=user_id,
-                    thread_id=expected_thread_id
-                ).first()
-                
-                if existing_thread:
-                    return jsonify({
-                        'error': 'This conversation already has a PDF uploaded. Each conversation can only have one PDF. Please create a new conversation to upload another PDF.',
-                        'existing_filename': existing_thread.filename
-                    }), 400
-            
-            # Also check metadata for stored conversation_id
-            try:
-                from app.utils.rag_service import _THREAD_METADATA, _load_metadata
-                _load_metadata()
-                
-                for thread_id, metadata in _THREAD_METADATA.items():
-                    stored_conv_id = metadata.get('conversation_id')
-                    if stored_conv_id == conversation_id:
-                        if _validate_thread_id(thread_id, user_id) and thread_has_document(thread_id):
-                            existing_filename = metadata.get('filename', 'Unknown PDF')
-                            return jsonify({
-                                'error': 'This conversation already has a PDF uploaded. Each conversation can only have one PDF. Please create a new conversation to upload another PDF.',
-                                'existing_filename': existing_filename
-                            }), 400
-            except Exception as e:
-                logger.warning(f"Error checking metadata for existing PDF: {str(e)}")
+            db = get_db()
+            existing_thread = db.query(RAGThread).filter_by(
+                user_id=user_id,
+                thread_id=expected_thread_id
+            ).first()
+            if existing_thread and existing_thread.has_document:
+                return jsonify({
+                    'error': 'This conversation already has a PDF uploaded. Each conversation can only have one PDF. Please create a new conversation to upload another PDF.',
+                    'existing_filename': existing_thread.filename
+                }), 400
         
         # If create_new_thread is False AND a thread_id is provided, use existing thread
         # (This is rare - normally each upload creates a new thread)
@@ -227,10 +208,11 @@ def ingest():
             
             thread_id = provided_thread_id
         else:
-            # Always create a new thread for new PDF uploads (default behavior)
-            # This ensures each uploaded PDF gets its own thread
+            # Always create/use thread for THIS conversation only (never reuse another conversation's thread).
+            # Same document uploaded in a new chat gets a new thread_id (user_X_conv_{conversation_id}).
+            # Filtration in RAG uses thread_id, so each chat only sees its own document chunks.
             thread_id = _get_thread_id(user_id, conversation_id)
-            logger.info(f"Creating new thread {thread_id} for PDF upload (filename: {file.filename}, conversation_id: {conversation_id})")
+            logger.info(f"Using thread {thread_id} for PDF upload (filename: {file.filename}, conversation_id: {conversation_id})")
         
         filename = file.filename
 
@@ -242,12 +224,45 @@ def ingest():
         # If streaming is requested, use SSE for backend processing progress (legacy support)
         if stream_progress:
             return _ingest_with_progress(file_bytes, thread_id, filename, user_id)
-        
-        # Use Celery for background processing
-        # Encode file bytes to base64 for Celery task
+
+        # When Celery is disabled (e.g. local dev), run ingestion synchronously in-process
+        use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
+        if not use_celery:
+            try:
+                # Warm up embedding model first so it's cached before ingestion and first query is fast
+                warmup_rag_embeddings()
+                result = ingest_pdf(
+                    file_bytes=file_bytes,
+                    thread_id=thread_id,
+                    filename=filename,
+                    progress_callback=None,
+                    user_id=user_id,
+                )
+                _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
+                logger.info(f"PDF ingested synchronously: {filename} (thread_id: {thread_id})")
+                return jsonify({
+                    'success': True,
+                    'status': 'success',
+                    'message': 'PDF ingested successfully',
+                    'thread_id': thread_id,
+                    'conversation_id': conversation_id,
+                    'filename': result.get('filename', filename),
+                    'documents': result.get('documents', result.get('num_pages', 0)),
+                    'num_pages': result.get('num_pages', result.get('documents', 0)),
+                    'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
+                    'chunks': result.get('chunks', 0),
+                    'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
+                    'processing_time_seconds': result.get('processing_time_seconds'),
+                })
+            except ValueError as e:
+                logger.error(f"Value error in sync ingest: {str(e)}")
+                return jsonify({'error': str(e)}), 400
+            except Exception as e:
+                logger.error(f"Error in sync PDF ingestion: {str(e)}", exc_info=True)
+                return jsonify({'error': f'Failed to ingest PDF: {str(e)}'}), 500
+
+        # Use Celery for background processing (production)
         file_bytes_b64 = base64.b64encode(file_bytes).decode('utf-8')
-        
-        # Start Celery task
         task = ingest_pdf_task.delay(
             file_bytes_b64=file_bytes_b64,
             thread_id=thread_id,
@@ -255,9 +270,7 @@ def ingest():
             user_id=user_id,
             conversation_id=conversation_id
         )
-        
         logger.info(f"Started Celery task {task.id} for PDF ingestion: {filename} (thread_id: {thread_id})")
-        
         return jsonify({
             'success': True,
             'message': 'PDF ingestion started in background',
@@ -276,41 +289,73 @@ def ingest():
         return jsonify({'error': f'Failed to ingest PDF: {str(e)}'}), 500
 
 
-def _save_thread_to_db(user_id: int, thread_id: str, filename: str):
-    """Helper function to save thread to database"""
+@bp.route('/download-markdown/<thread_id>', methods=['GET'])
+@login_required
+def download_markdown(thread_id):
+    """Download the PDF-extracted text as a markdown file for the given thread (user must own the thread)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    user_id = session['user_id']
+    db = get_db()
+    thread = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
+    if not thread:
+        return jsonify({'error': 'Thread not found or access denied'}), 404
+    matches = list(MARKDOWN_EXPORTS_DIR.glob(f"{thread_id}_*.md"))
+    if not matches:
+        return jsonify({'error': 'Markdown export not found for this document'}), 404
+    md_path = matches[0]
+    download_name = (thread.filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+    if not download_name.endswith(".md"):
+        download_name += ".md"
+    return send_file(
+        str(md_path),
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="text/markdown",
+    )
+
+
+def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
+    """Save or update RAG thread in database. On success, set has_document, doc_count, num_pages."""
     db = get_db()
     try:
-        # Check if thread already exists
         existing_thread = db.query(RAGThread).filter_by(thread_id=thread_id).first()
+        now = datetime.utcnow()
         if not existing_thread:
-            # Create new thread record
-            thread_name = f"Thread {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
-            now = datetime.utcnow()
+            thread_name = f"Thread {now.strftime('%Y-%m-%d %H:%M')}"
             rag_thread = RAGThread(
                 user_id=user_id,
                 thread_id=thread_id,
                 name=thread_name,
                 filename=filename,
                 created_at=now,
-                updated_at=now  # Ensure updated_at is set on creation
+                updated_at=now,
             )
             db.add(rag_thread)
             db.commit()
             db.refresh(rag_thread)
-            logger.info(f"Created new thread {thread_id} for user {user_id} with filename {filename}")
+            existing_thread = rag_thread
+            logger.info("Created new thread %s for user %s", thread_id, user_id)
+
+        if ingest_result:
+            existing_thread.filename = filename
+            existing_thread.has_document = True
+            existing_thread.doc_count = (existing_thread.doc_count or 0) + 1
+            existing_thread.num_pages = ingest_result.get("num_pages") or ingest_result.get("pages")
+            existing_thread.last_ingested_at = now
+            existing_thread.embedding_model = ingest_result.get("embedding_model")
+            existing_thread.embedding_dim = ingest_result.get("embedding_dim")
+            existing_thread.updated_at = now
+            db.commit()
+            logger.info("Updated thread %s with has_document=true, doc_count=%s", thread_id, existing_thread.doc_count)
         else:
-            # Update existing thread (only if it doesn't already have a document)
-            if not thread_has_document(thread_id):
+            if not existing_thread.has_document:
                 existing_thread.filename = filename
-                existing_thread.updated_at = datetime.utcnow()
+                existing_thread.updated_at = now
                 db.commit()
-                logger.info(f"Updated existing thread {thread_id} with filename {filename}")
-            else:
-                logger.warning(f"Attempted to update thread {thread_id} that already has a document")
     except Exception as e:
-        logger.error(f"Error saving thread to database: {str(e)}")
+        logger.error("Error saving thread to database: %s", e)
         db.rollback()
-        # Continue even if database save fails
 
 
 def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user_id: int):
@@ -353,13 +398,14 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
                         file_bytes=file_bytes,
                         thread_id=thread_id,
                         filename=filename,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        user_id=user_id,
                     )
                     # Ensure thread_id is in the result
                     if 'thread_id' not in result:
                         result['thread_id'] = thread_id
                     result_container['result'] = result
-                    _save_thread_to_db(user_id, thread_id, filename)
+                    _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
                 except Exception as e:
                     result_container['error'] = str(e)
                     logger.error(f"Error during PDF ingestion: {str(e)}", exc_info=True)
@@ -398,7 +444,9 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
                 error_msg = f"Error: {result_container['error']}"
                 yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': error_msg, 'error': result_container['error']})}\n\n"
             elif result_container['result']:
-                yield f"data: {json.dumps({'step': 'complete', 'progress': 100, 'message': 'PDF ingestion complete!', 'result': result_container['result']})}\n\n"
+                res = dict(result_container['result'])
+                res['markdown_download_url'] = f'/api/rag/download-markdown/{res.get("thread_id", "")}'
+                yield f"data: {json.dumps({'step': 'complete', 'progress': 100, 'message': 'PDF ingestion complete!', 'result': res})}\n\n"
             else:
                 yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Processing timeout or unknown error'})}\n\n"
                 
@@ -424,11 +472,24 @@ def chat():
     Chat with the RAG-enabled chatbot.
     Accepts JSON or form-data with 'message' and optionally 'thread_id' or 'conversation_id'.
     """
+    import json as _json
+    # Debug log path under project root (works on any machine); skip log if path missing/unwritable
+    _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    _log_dir = os.path.join(_project_root, 'logs')
+    _log_path = os.path.join(_log_dir, 'rag_debug.log')
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
 
         user_id = session['user_id']
+
+        # If audio is sent (voice input), return error - RAG uses Groq/vLLM only, no OpenAI Whisper
+        audio_file = request.files.get('audio')
+        if audio_file and audio_file.filename:
+            return jsonify({
+                'error': 'Voice input is not supported for RAG chat. Please use text input.',
+                'code': 'VOICE_NOT_SUPPORTED'
+            }), 400
 
         # If audio is sent (voice input), transcribe using local Whisper base model
         audio_text = None
@@ -467,6 +528,7 @@ def chat():
                     'thread_id': request.args.get('thread_id'),
                     'conversation_id': request.args.get('conversation_id', type=int)
                 }
+        
             elif audio_text:
                 # Pure audio request – use transcribed text as the message
                 data = {
@@ -486,53 +548,75 @@ def chat():
                     data['conversation_id'] = None
 
         if not data:
-            return jsonify({'error': 'No data provided. Please send JSON, form-data with \"message\" field, or an audio file.'}), 400
+            logger.warning("RAG chat 400: No data provided (no JSON/form/audio)")
+            return jsonify({'error': 'No data provided. Please send JSON, form-data with "message" field, or an audio file.', 'code': 'NO_DATA'}), 400
 
-        message = data.get('message', '').strip()
+        message = (data.get('message') or '').strip()
         if not message:
-            return jsonify({'error': 'Message is required'}), 400
-        
-        # Get thread_id from request or auto-select thread with document
+            logger.warning("RAG chat 400: Empty message")
+            return jsonify({'error': 'Message is required', 'code': 'MESSAGE_REQUIRED'}), 400
+
+        # thread_id is REQUIRED for RAG chat (no auto-create, no auto-pick)
         provided_thread_id = data.get('thread_id')
-        conversation_id = data.get('conversation_id')
-        
-        # If thread_id is provided, validate it belongs to this user
-        if provided_thread_id:
-            if not _validate_thread_id(provided_thread_id, user_id):
-                return jsonify({'error': 'Invalid thread_id. You can only access your own threads.'}), 403
-            thread_id = provided_thread_id
-            logger.info(f"Using provided thread_id: {thread_id} for user {user_id}")
-            
-            # Verify thread has document
-            if not thread_has_document(thread_id):
-                logger.warning(f"Provided thread_id {thread_id} does not have a document, but continuing anyway")
-        else:
-            # Auto-select the most recent thread with a document for this user
-            # IMPORTANT: Order by created_at to get the most recently uploaded PDF
-            # created_at is more reliable than updated_at for determining upload order
-            db = get_db()
+        if isinstance(provided_thread_id, str):
+            provided_thread_id = provided_thread_id.strip() or None
+        raw_conversation_id = data.get('conversation_id')
+        if raw_conversation_id == '' or (isinstance(raw_conversation_id, str) and not raw_conversation_id.strip()):
+            raw_conversation_id = None
+        conversation_id = None
+        if raw_conversation_id is not None:
             try:
-                # Get all threads for this user, ordered by most recently created first
-                # This ensures we get the thread for the most recently uploaded PDF
-                threads = db.query(RAGThread).filter_by(user_id=user_id).order_by(
-                    RAGThread.created_at.desc()
-                ).all()
-                
-                # Find the most recent thread that has a document
-                # Check threads in order (most recently created first)
-                for thread in threads:
-                    if thread_has_document(thread.thread_id):
-                        thread_id = thread.thread_id
-                        logger.info(f"Auto-selected thread {thread_id} with document for user {user_id} (most recently created)")
-                        break
-                else:
-                    # No thread with document found, generate new thread_id
-                    thread_id = _get_thread_id(user_id, conversation_id)
-                    logger.info(f"No thread with document found, generated new thread_id: {thread_id}")
-            except Exception as e:
-                logger.warning(f"Error finding thread with document: {str(e)}, generating new thread_id")
-                # Fallback: generate thread_id based on user_id
-                thread_id = _get_thread_id(user_id, conversation_id)
+                conversation_id = int(raw_conversation_id) if not isinstance(raw_conversation_id, int) else raw_conversation_id
+            except (TypeError, ValueError):
+                conversation_id = None
+
+        if provided_thread_id:
+            thread_id = str(provided_thread_id).strip()
+        elif conversation_id is not None:
+            thread_id = _get_thread_id(user_id, conversation_id)
+        else:
+            logger.warning("RAG chat 400: Missing thread_id and conversation_id (user_id=%s)", user_id)
+            return jsonify({
+                'error': 'thread_id or conversation_id is required for RAG chat. Please select a conversation with an uploaded PDF or upload a PDF first.',
+                'code': 'MISSING_THREAD_ID'
+            }), 400
+
+        # Validate thread exists and belongs to user
+        db = get_db()
+        thread_row = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
+        if not thread_row:
+            logger.warning("RAG chat 400: No thread found for thread_id=%s user_id=%s", thread_id, user_id)
+            return jsonify({
+                'error': 'No PDF has been uploaded for this conversation yet. Please upload a PDF document first to chat with your document.',
+                'code': 'NO_DOCUMENT_UPLOADED',
+                'thread_id': thread_id
+            }), 400
+
+        if not getattr(thread_row, 'has_document', False):
+            # Auto-repair: if chunks exist in DB, ingest completed but has_document was never set
+            chunk_count = db.query(RAGChunk).filter_by(thread_id=thread_id, user_id=user_id).count()
+            if chunk_count > 0:
+                try:
+                    thread_row.has_document = True
+                    if getattr(thread_row, 'doc_count', None) is None or thread_row.doc_count == 0:
+                        thread_row.doc_count = chunk_count
+                    db.commit()
+                    logger.info("RAG chat: repaired has_document=True for thread_id=%s (chunk_count=%s)", thread_id, chunk_count)
+                except Exception as e:
+                    logger.warning("RAG chat: failed to repair has_document for thread_id=%s: %s", thread_id, e)
+                    db.rollback()
+                    return jsonify({
+                        'error': 'Your PDF may still be processing. Please wait a moment and try again, or upload the PDF again.',
+                        'code': 'NO_DOCUMENT',
+                        'thread_id': thread_id
+                    }), 400
+            else:
+                logger.warning("RAG chat 400: Thread exists but has_document=False and no chunks thread_id=%s", thread_id)
+                return jsonify({
+                    'error': 'Your PDF may still be processing. Please wait a moment and try again, or upload the PDF again.',
+                    'code': 'NO_DOCUMENT',
+                    'thread_id': thread_id
+                }), 400
 
         # Prepare config for LangGraph
         config = {
@@ -540,15 +624,37 @@ def chat():
                 "thread_id": thread_id
             }
         }
-
+        # #region agent log
+        try:
+            os.makedirs(_log_dir, exist_ok=True)
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
         # Create HumanMessage
         human_message = HumanMessage(content=message)
 
         # Invoke the chatbot - LangGraph returns the final state
+        # #region agent log
+        try:
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
         state = chatbot.invoke(
             {"messages": [human_message]},
             config=config
         )
+        # #region agent log
+        _msgs = state.get("messages", [])
+        try:
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
 
         # Extract the last message from the state
         messages = state.get("messages", [])
@@ -586,57 +692,22 @@ def chat():
                     )
                     logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
             else:
-                # Priority 2: Extract conversation_id from thread_id if present (format: user_{user_id}_conv_{conversation_id})
+                # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
                 import re
                 thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
                 if thread_conv_match:
-                    # Conversation ID is in thread_id
                     db_conversation_id = int(thread_conv_match.group(1))
-                    # Verify conversation belongs to user
                     conv = conversation_model.get_conversation_by_id(db_conversation_id)
                     if not conv:
-                        # Create new conversation if it doesn't exist or doesn't belong to user
                         db_conversation_id = conversation_model.create_conversation(
                             title=message[:50] if len(message) > 50 else message
                         )
-                    logger.info(f"Extracted conversation_id {db_conversation_id} from thread_id {thread_id}")
+                    logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
                 else:
-                    # Priority 3: Check thread metadata for stored conversation_id
-                    from app.utils.rag_service import _THREAD_METADATA, _save_metadata, _load_metadata
-                    _load_metadata()  # Ensure we have latest metadata
-                    
-                    stored_conv_id = _THREAD_METADATA.get(thread_id, {}).get('conversation_id')
-                    if stored_conv_id:
-                        # Verify it still exists and belongs to user
-                        conv = conversation_model.get_conversation_by_id(stored_conv_id)
-                        if conv:
-                            db_conversation_id = stored_conv_id
-                            logger.info(f"Using stored conversation_id {db_conversation_id} from metadata for thread {thread_id}")
-                        else:
-                            # Create new conversation
-                            db_conversation_id = conversation_model.create_conversation(
-                                title=message[:50] if len(message) > 50 else message
-                            )
-                            # Update metadata
-                            if thread_id not in _THREAD_METADATA:
-                                _THREAD_METADATA[thread_id] = {}
-                            _THREAD_METADATA[thread_id]['conversation_id'] = db_conversation_id
-                            _save_metadata()
-                            logger.info(f"Created new conversation {db_conversation_id} (stored conversation_id was invalid)")
-                    else:
-                        # Priority 4: Create new conversation
-                        db_conversation_id = conversation_model.create_conversation(
-                            title=message[:50] if len(message) > 50 else message
-                        )
-                        
-                        # Store conversation_id in thread metadata for future reference
-                        from app.utils.rag_service import _THREAD_METADATA, _save_metadata, _load_metadata
-                        _load_metadata()
-                        if thread_id not in _THREAD_METADATA:
-                            _THREAD_METADATA[thread_id] = {}
-                        _THREAD_METADATA[thread_id]['conversation_id'] = db_conversation_id
-                        _save_metadata()
-                        logger.info(f"Created new conversation {db_conversation_id} for thread {thread_id}")
+                    db_conversation_id = conversation_model.create_conversation(
+                        title=message[:50] if len(message) > 50 else message
+                    )
+                    logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
             
             # Save user message
             conversation_model.save_message(
@@ -657,6 +728,13 @@ def chat():
             # Don't fail the request if saving to database fails
             logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
 
+        # #region agent log
+        try:
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
         return jsonify({
             'success': True,
             'message': response_content,
@@ -666,6 +744,14 @@ def chat():
         })
 
     except Exception as e:
+        # #region agent log
+        try:
+            os.makedirs(_log_dir, exist_ok=True)
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
         logger.error(f"Error in RAG chat: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
 
@@ -677,13 +763,19 @@ def get_ingest_status(task_id):
     Get the status of a PDF ingestion task.
     Returns task status and progress information.
     Validates that the task belongs to the requesting user.
+    When USE_CELERY_FOR_INGESTION is False, ingestion is synchronous and this endpoint is unused.
     """
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
-        
+
+        if not current_app.config.get('USE_CELERY_FOR_INGESTION', False):
+            return jsonify({
+                'error': 'Task status is not available. PDF ingestion is running in-process (Celery is disabled).'
+            }), 400
+
         user_id = session['user_id']
-        
+
         # Get task result
         task = ingest_pdf_task.AsyncResult(task_id)
         
@@ -740,20 +832,24 @@ def get_ingest_status(task_id):
                 'message': meta.get('message', 'Processing PDF...')
             }
         elif task.state == 'SUCCESS':
-            # Task completed successfully
+            # Task completed successfully - warm up embedding model in this process so first query is fast
+            warmup_rag_embeddings()
             result = task.result
+            thread_id = result.get('thread_id')
             response = {
                 'task_id': task_id,
                 'status': 'success',
                 'state': task.state,
                 'message': result.get('message', 'PDF ingested successfully'),
-                'thread_id': result.get('thread_id'),
+                'thread_id': thread_id,
                 'conversation_id': result.get('conversation_id'),
                 'filename': result.get('filename'),
                 'documents': result.get('documents', result.get('num_pages', 0)),
                 'num_pages': result.get('num_pages', result.get('documents', 0)),
                 'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
-                'chunks': result.get('chunks', 0)
+                'chunks': result.get('chunks', 0),
+                'markdown_download_url': result.get('markdown_download_url') or (f'/api/rag/download-markdown/{thread_id}' if thread_id else None),
+                'processing_time_seconds': result.get('processing_time_seconds'),
             }
         elif task.state == 'FAILURE':
             # Task failed
@@ -898,7 +994,7 @@ def get_threads():
                     'filename': thread.filename,
                     'created_at': thread.created_at.isoformat() if thread.created_at else None,
                     'updated_at': thread.updated_at.isoformat() if thread.updated_at else None,
-                    'has_document': thread_has_document(thread.thread_id)
+                    'has_document': getattr(thread, 'has_document', False)
                 })
             
             return jsonify({
@@ -1053,6 +1149,76 @@ def delete_rag_prompt():
         return jsonify({'error': f'Failed to delete prompt: {str(e)}'}), 500
 
 
+@bp.route('/thread/<thread_id>/finalized-lesson', methods=['GET'])
+@login_required
+def get_finalized_lesson_route(thread_id):
+    """
+    Get the last finalized lesson for a thread (last_lesson_text, lesson_title).
+    Used by the frontend so the download/save button uses the finalized lecture, not the last message.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        user_id = session['user_id']
+
+        if not _validate_thread_id(thread_id, user_id):
+            return jsonify({'error': 'Access denied. You can only access your own threads.'}), 403
+
+        lesson = get_finalized_lesson(thread_id)
+        if lesson is None:
+            return jsonify({'error': 'Thread not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'last_lesson_text': lesson.get('last_lesson_text', ''),
+            'lesson_title': lesson.get('lesson_title', ''),
+            'lesson_finalized': lesson.get('lesson_finalized', False),
+        })
+    except Exception as e:
+        logger.error(f"Error getting finalized lesson: {str(e)}")
+        return jsonify({'error': f'Failed to get finalized lesson: {str(e)}'}), 500
+
+
+@bp.route('/thread/<thread_id>/finalized-lesson', methods=['PUT'])
+@login_required
+def put_finalized_lesson_route(thread_id):
+    """
+    Save the finalized lesson (last_lesson_text, lesson_title) for a thread.
+    Used when the UI shows "Lesson Finalized: true" but the backend did not persist it (e.g. Groq).
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        user_id = session['user_id']
+
+        if not _validate_thread_id(thread_id, user_id):
+            return jsonify({'error': 'Access denied. You can only access your own threads.'}), 403
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        last_lesson_text = data.get('last_lesson_text', '')
+        lesson_title = data.get('lesson_title', '')
+        if not (last_lesson_text or '').strip():
+            return jsonify({'error': 'last_lesson_text is required'}), 400
+
+        success = save_finalized_lesson(thread_id, last_lesson_text, lesson_title)
+        if not success:
+            return jsonify({'error': 'Thread not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Finalized lesson saved',
+            'thread_id': thread_id,
+        })
+    except Exception as e:
+        logger.error(f"Error saving finalized lesson: {str(e)}")
+        return jsonify({'error': f'Failed to save finalized lesson: {str(e)}'}), 500
+
+
 @bp.route('/thread/<thread_id>/lesson-finalized', methods=['PUT'])
 @login_required
 def update_lesson_finalized(thread_id):
@@ -1111,9 +1277,11 @@ def get_thread_for_conversation(conversation_id):
 
         user_id = session['user_id']
         
-        # Method 1: Check if there's a thread with the pattern user_{user_id}_conv_{conversation_id}
+        # Method 1: Check DB for thread with conversation pattern
         expected_thread_id = f"user_{user_id}_conv_{conversation_id}"
-        if thread_has_document(expected_thread_id):
+        db = get_db()
+        thread_row = db.query(RAGThread).filter_by(thread_id=expected_thread_id, user_id=user_id).first()
+        if thread_row and thread_row.has_document:
             return jsonify({
                 'success': True,
                 'is_rag_conversation': True,
@@ -1121,17 +1289,16 @@ def get_thread_for_conversation(conversation_id):
                 'has_document': True
             })
         
-        # Method 2: Check RAGThread table for threads with this conversation_id pattern
+        # Method 2: Check RAGThread table (DB-based)
         db = get_db()
         try:
             threads = db.query(RAGThread).filter_by(user_id=user_id).all()
             for thread in threads:
-                # Check if thread_id matches the conversation pattern
                 import re
                 thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread.thread_id)
                 if thread_conv_match:
                     thread_conv_id = int(thread_conv_match.group(1))
-                    if thread_conv_id == conversation_id and thread_has_document(thread.thread_id):
+                    if thread_conv_id == conversation_id and thread.has_document:
                         return jsonify({
                             'success': True,
                             'is_rag_conversation': True,
@@ -1140,26 +1307,7 @@ def get_thread_for_conversation(conversation_id):
                             'filename': thread.filename
                         })
         except Exception as e:
-            logger.warning(f"Error checking RAGThread table for conversation {conversation_id}: {str(e)}")
-        
-        # Method 3: Check thread metadata for stored conversation_id
-        try:
-            from app.utils.rag_service import _THREAD_METADATA, _load_metadata
-            _load_metadata()
-            
-            for thread_id, metadata in _THREAD_METADATA.items():
-                stored_conv_id = metadata.get('conversation_id')
-                if stored_conv_id == conversation_id:
-                    # Validate thread belongs to user
-                    if _validate_thread_id(thread_id, user_id) and thread_has_document(thread_id):
-                        return jsonify({
-                            'success': True,
-                            'is_rag_conversation': True,
-                            'thread_id': thread_id,
-                            'has_document': True
-                        })
-        except Exception as e:
-            logger.warning(f"Error checking thread metadata for conversation {conversation_id}: {str(e)}")
+            logger.warning("Error checking RAGThread for conversation %s: %s", conversation_id, e)
         
         # Not a RAG conversation
         return jsonify({
@@ -1187,15 +1335,18 @@ def get_pdf_info_for_conversation(conversation_id):
 
         user_id = session['user_id']
         
-        # Method 1: Check if there's a thread with the pattern user_{user_id}_conv_{conversation_id}
+        # Method 1: Check DB for thread with conversation pattern
         expected_thread_id = f"user_{user_id}_conv_{conversation_id}"
-        if thread_has_document(expected_thread_id):
-            metadata = thread_document_metadata(expected_thread_id)
-            filename = metadata.get('filename', 'Unknown PDF')
+        db = get_db()
+        thread_row = db.query(RAGThread).filter_by(thread_id=expected_thread_id, user_id=user_id).first()
+        if thread_row and thread_row.has_document:
+            # Warm up embedding model in background so first query in this chat is fast
+            t = threading.Thread(target=warmup_rag_embeddings, daemon=True)
+            t.start()
             return jsonify({
                 'success': True,
                 'has_pdf': True,
-                'filename': filename,
+                'filename': thread_row.filename or 'Unknown PDF',
                 'thread_id': expected_thread_id
             })
         
@@ -1208,7 +1359,9 @@ def get_pdf_info_for_conversation(conversation_id):
                 thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread.thread_id)
                 if thread_conv_match:
                     thread_conv_id = int(thread_conv_match.group(1))
-                    if thread_conv_id == conversation_id and thread_has_document(thread.thread_id):
+                    if thread_conv_id == conversation_id and thread.has_document:
+                        t = threading.Thread(target=warmup_rag_embeddings, daemon=True)
+                        t.start()
                         return jsonify({
                             'success': True,
                             'has_pdf': True,
@@ -1216,26 +1369,7 @@ def get_pdf_info_for_conversation(conversation_id):
                             'thread_id': thread.thread_id
                         })
         except Exception as e:
-            logger.warning(f"Error checking RAGThread table for conversation {conversation_id}: {str(e)}")
-        
-        # Method 3: Check thread metadata
-        try:
-            from app.utils.rag_service import _THREAD_METADATA, _load_metadata
-            _load_metadata()
-            
-            for thread_id, metadata in _THREAD_METADATA.items():
-                stored_conv_id = metadata.get('conversation_id')
-                if stored_conv_id == conversation_id:
-                    if _validate_thread_id(thread_id, user_id) and thread_has_document(thread_id):
-                        filename = metadata.get('filename', 'Unknown PDF')
-                        return jsonify({
-                            'success': True,
-                            'has_pdf': True,
-                            'filename': filename,
-                            'thread_id': thread_id
-                        })
-        except Exception as e:
-            logger.warning(f"Error checking thread metadata for conversation {conversation_id}: {str(e)}")
+            logger.warning("Error checking RAGThread for conversation %s: %s", conversation_id, e)
         
         # No PDF found for this conversation
         return jsonify({

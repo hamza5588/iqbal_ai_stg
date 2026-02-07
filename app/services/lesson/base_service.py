@@ -108,55 +108,139 @@ class BaseLessonService:
     Base class for lesson services with common functionality
     """
     
-    def __init__(self, groq_api_key: str):
-        """Initialize the base service with API key"""
+    def __init__(self, groq_api_key: str = None):
+        """Initialize the base service with central LLM provider (same as chat/RAG).
+        
+        Args:
+            groq_api_key: Optional API key (deprecated - kept for backward compatibility).
+                         The LLM now uses central admin settings from SystemSettings,
+                         matching the exact same logic as chat/RAG endpoints.
+        """
         self.api_key = groq_api_key
         
-        # Get LLM provider from system settings.
-        # IMPORTANT: Use the same "active_provider" used by the main RAG/chat workflow
-        # so lesson features share the exact same provider/model configuration.
+    @property
+    def llm(self):
+        """Get LLM instance using the EXACT same pattern as RAG service.
+        
+        This uses the global LLM cache and get_chat_model() exactly as RAG does.
+        The LLM is created on-demand when needed, with proper request context.
+        """
+        # Import here to avoid circular imports and ensure Flask context is available
+        from app.utils.llm_factory import get_chat_model
         from app.utils.db import get_db
         from app.models.database_models import SystemSettings
-        db = get_db()
-        setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
-        # Fallback to environment variable if admin setting not found
-        provider = (setting.value if setting else os.getenv('LLM_PROVIDER', 'openai')).lower()
+        from threading import Lock
         
-        # If OpenAI is set from admin, use environment variable instead of passed API key
-        api_key_to_use = None
-        if provider == 'openai' and setting:
-            api_key_to_use = os.getenv('OPENAI_API_KEY')
-        elif provider in ['openai', 'groq']:
-            api_key_to_use = self.api_key
+        # Use the same global cache as RAG service
+        # Import the cache from rag_service module (it's defined at module level)
+        try:
+            from app.utils.rag_service import _llm_cache, _llm_cache_lock
+        except ImportError:
+            # Fallback: create local cache if import fails
+            _llm_cache = {}
+            _llm_cache_lock = Lock()
         
-        # Enforce Groq-only when Groq is selected - no fallback to OpenAI
-        if provider == 'groq' and not api_key_to_use:
-            raise ValueError(
-                "Groq API key is required when Groq is selected as the LLM provider. "
-                "Please configure your Groq API key in the chat interface."
-            )
+        # Get user_id from session if available (for user-specific model selection)
+        # Handle case where we're not in a request context (e.g., background tasks)
+        user_id = None
+        try:
+            from flask import has_request_context, session
+            if has_request_context():
+                user_id = session.get('user_id')
+        except Exception:
+            # Not in a request context, use None
+            pass
         
-        # Use dynamic LLM factory - supports OpenAI, Groq, and vLLM
-        # For OpenAI and Groq, use api_key (from env if OpenAI set from admin, else from self.api_key)
-        # For vLLM, api_key is not needed
-        # IMPORTANT: When Groq is selected, we ONLY use Groq - no fallback to OpenAI
-        self.llm = create_llm(
-            temperature=0.7,
-            max_tokens=1024,
-            api_key=api_key_to_use,
-            provider=provider
-        )
+        # Get provider for cache key (same pattern as RAG service)
+        provider = 'openai'  # default
+        try:
+            db = get_db()
+            # Check for new active_provider setting first
+            setting = db.query(SystemSettings).filter(
+                SystemSettings.key == 'active_provider'
+            ).first()
+            if setting:
+                provider = setting.value.lower()
+            else:
+                # Fallback to old llm_provider setting
+                setting = db.query(SystemSettings).filter(
+                    SystemSettings.key == 'llm_provider'
+                ).first()
+                if setting:
+                    provider = setting.value.lower()
+        except Exception as e:
+            logger.warning(f"Error getting provider from settings: {str(e)}, using default: {provider}")
         
-        if provider == 'openai':
-            model = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
-            logger.info(f"Base lesson service initialized with OpenAI using model {model}")
-        elif provider == 'groq':
-            model = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
-            logger.info(f"Base lesson service initialized with Groq using model {model}")
+        # Use cached LLM instance to avoid recreating on every call (same as RAG)
+        if user_id:
+            # Include provider in cache key to ensure correct provider is used (same as RAG)
+            cache_key = f"{user_id}_{provider}_factory"
+            with _llm_cache_lock:
+                if cache_key not in _llm_cache:
+                    logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
+                    try:
+                        # Call get_chat_model exactly as RAG service does - it handles all provider/model selection
+                        _llm_cache[cache_key] = get_chat_model(user_id=user_id, timeout=120, temperature=0.7)
+                        logger.info(f"Created and cached {provider} LLM instance for user {user_id}")
+                    except ValueError as e:
+                        # On API key error: fall back to session/user key (same source as RAG chat)
+                        error_msg = str(e)
+                        if "API key" in error_msg.lower() or "required" in error_msg.lower():
+                            from app.utils.rag_service import get_rag_llm, _get_api_key_from_admin_settings
+                            fallback_key = self.api_key
+                            if not fallback_key:
+                                try:
+                                    from flask import has_request_context, session
+                                    if has_request_context():
+                                        fallback_key = session.get('groq_api_key')
+                                except Exception:
+                                    pass
+                            if not fallback_key:
+                                admin_key, _ = _get_api_key_from_admin_settings()
+                                fallback_key = admin_key
+                            if fallback_key:
+                                logger.info("Using session/admin API key fallback (same as RAG)")
+                                _llm_cache[cache_key] = get_rag_llm(api_key=fallback_key, provider=provider)
+                            else:
+                                provider_setting = db.query(SystemSettings).filter(
+                                    SystemSettings.key == 'active_provider'
+                                ).first()
+                                provider_name = provider_setting.value.upper() if provider_setting else provider.upper()
+                                raise ValueError(
+                                    f"{provider_name} API key is not configured. "
+                                    f"Please set your API key in Settings or configure it in Admin Panel."
+                                )
+                        else:
+                            raise
+                    except Exception as e:
+                        # Log unexpected errors but re-raise
+                        logger.error(f"Unexpected error initializing LLM: {str(e)}", exc_info=True)
+                        raise
+                else:
+                    logger.debug(f"Reusing cached LLM instance for user {user_id} with provider {provider}")
+                return _llm_cache[cache_key]
         else:
-            api_base = os.getenv('VLLM_API_BASE', 'http://69.28.92.113:8000/v1')
-            model = os.getenv('VLLM_MODEL', 'Qwen/Qwen2.5-14B-Instruct')
-            logger.info(f"Base lesson service initialized with vLLM at {api_base} using model {model}")
+            # No user_id, try get_chat_model then fall back to session/admin key
+            logger.debug(f"Creating LLM without user_id (no caching)")
+            try:
+                return get_chat_model(user_id=None, timeout=120, temperature=0.7)
+            except ValueError as e:
+                if "API key" in str(e).lower() or "required" in str(e).lower():
+                    from app.utils.rag_service import get_rag_llm, _get_api_key_from_admin_settings
+                    fallback_key = self.api_key
+                    if not fallback_key:
+                        try:
+                            from flask import has_request_context, session
+                            if has_request_context():
+                                fallback_key = session.get('groq_api_key')
+                        except Exception:
+                            pass
+                    if not fallback_key:
+                        admin_key, _ = _get_api_key_from_admin_settings()
+                        fallback_key = admin_key
+                    if fallback_key:
+                        return get_rag_llm(api_key=fallback_key, provider=provider)
+                raise
 
     def allowed_file(self, filename: str) -> bool:
         """Check if file extension is supported"""

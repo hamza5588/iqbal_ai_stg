@@ -1125,10 +1125,10 @@
                         title="Configure API Key">
                         <i class="fas fa-key text-gray-500 text-xs sm:text-sm"></i>
                     </button>
-                    <!-- New Download Lecture button (last AI message) -->
+                    <!-- Download/Save Lecture: uses last finalized lecture when available -->
                     <button id="lectureDownloadBtn" onclick="saveLastLectureToMyLessons()"
                         class="hidden sm:inline-flex w-8 h-8 sm:w-10 sm:h-10 border border-gray-200 rounded-lg items-center justify-center hover:bg-gray-50 transition-colors"
-                        title="Save last AI lecture to My Lessons">
+                        title="Save last finalized lecture to My Lessons">
                         <i class="fas fa-book text-gray-500 text-xs sm:text-sm"></i>
                     </button>
                     <button id="chatDownloadBtn" onclick="downloadCurrentChat()"
@@ -2213,7 +2213,7 @@ async function initializeApp() {
         currentRAGConversationId = null;
         currentChatId = null;
         isRAGChatMode = false;
-        await startNewChat();
+        await startNewChat(true);  // true = from init, do not reload
         
         // Initialize mobile state
         if (window.innerWidth < 768) {
@@ -2352,9 +2352,11 @@ async function initializeApp() {
             if (uploadPDFBtn) uploadPDFBtn.style.display = 'none';
         }
         
-        // Show Set Prompt button if in RAG mode OR if user is teacher/admin
+        // Set Prompt: always visible for teacher/admin; for students show only in RAG mode
         if (ragPromptBtn) {
-            if (isRAGChatMode || (userRole === 'teacher' || userRole === 'admin')) {
+            if (userRole === 'teacher' || userRole === 'admin') {
+                ragPromptBtn.classList.remove('hidden');
+            } else if (isRAGChatMode) {
                 ragPromptBtn.classList.remove('hidden');
             } else {
                 ragPromptBtn.classList.add('hidden');
@@ -4784,7 +4786,7 @@ async function initializeApp() {
                 }
                 
                 // Switch to RAG chat mode in existing interface
-                switchToRAGChatMode(data.thread_id, data.filename);
+                switchToRAGChatMode(data.thread_id, data.filename, data.markdown_download_url, data.processing_time_seconds);
             } else {
                 throw new Error(data.error || 'Upload failed');
             }
@@ -5214,8 +5216,8 @@ async function initializeApp() {
         }
     }
 
-    // Switch to RAG chat mode
-    function switchToRAGChatMode(threadId, filename) {
+    // Switch to RAG chat mode (markdownDownloadUrl: optional; processingTimeSeconds: optional, shown in welcome message)
+    function switchToRAGChatMode(threadId, filename, markdownDownloadUrl, processingTimeSeconds) {
         isRAGChatMode = true;
         currentRAGThreadId = threadId;
         
@@ -5308,7 +5310,16 @@ async function initializeApp() {
         // When switching threads (filename is null), don't add message here - 
         // it will be added by switchToRAGThread after loading thread info
         if (filename) {
-            const welcomeMessage = `PDF "${filename}" uploaded successfully! You can now ask questions about it.`;
+            let welcomeMessage = `PDF "${filename}" uploaded successfully! You can now ask questions about it.`;
+            if (typeof processingTimeSeconds === 'number' && !isNaN(processingTimeSeconds)) {
+                welcomeMessage += ` (processed in ${processingTimeSeconds} sec)`;
+            }
+            if (markdownDownloadUrl) {
+                const fullUrl = (typeof window !== 'undefined' && window.location && window.location.origin)
+                    ? (window.location.origin + markdownDownloadUrl) : markdownDownloadUrl;
+                console.log('Download PDF text as Markdown (click to open):', fullUrl);
+                welcomeMessage += `\n\nDownload extracted text as Markdown: ${fullUrl}`;
+            }
             addMessageToChat('ai', welcomeMessage);
         }
         
@@ -5327,20 +5338,26 @@ async function initializeApp() {
     async function handleRAGChat(message) {
         hideTypingIndicator();
         showTypingIndicator();
-        
         try {
-            const response = await authenticatedFetch('/api/rag/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: message,
-                    thread_id: currentRAGThreadId || null, // Always send thread_id if available (from localStorage or current session)
-                    conversation_id: currentRAGConversationId || currentChatId || null // Send conversation_id if available (prefer RAG conversation, fallback to current chat)
-                })
-            });
-            
+            // RAG chat can take 20+ seconds; use 120s timeout so we don't hang forever (backend invoke can take up to LLM timeout)
+            const RAG_CHAT_TIMEOUT_MS = 120000;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), RAG_CHAT_TIMEOUT_MS);
+            let response;
+            try {
+                response = await authenticatedFetch('/api/rag/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        thread_id: currentRAGThreadId || null,
+                        conversation_id: currentRAGConversationId || currentChatId || null
+                    }),
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
             hideTypingIndicator();
             
             if (!response) {
@@ -5354,22 +5371,28 @@ async function initializeApp() {
                 return;
             }
             
-            const data = await response.json();
-            
-            if (data.error) {
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseErr) {
+                hideTypingIndicator();
+                addMessageToChat('ai', 'Invalid response from server. Please try again.');
+                return;
+            }
+            if (data && data.error) {
                 addMessageToChat('ai', `Error: ${data.error}`);
                 return;
             }
             
-            // Get the AI response
-            const aiResponse = data.message || 'No response received';
+            // Get the AI response (coerce to string so addMessageToChat never gets non-string)
+            const aiResponse = (data && data.message != null && data.message !== '') ? String(data.message) : 'No response received';
             
-            // Store conversation_id if returned from backend
-            if (data.conversation_id) {
-                currentRAGConversationId = data.conversation_id;
-                // Also set currentChatId so download/export functions work
-                currentChatId = data.conversation_id;
-                localStorage.setItem('currentChatId', currentChatId);
+            // Store conversation_id if returned from backend (coerce for consistent localStorage/next request)
+            if (data && data.conversation_id != null && data.conversation_id !== '') {
+                const convId = data.conversation_id;
+                currentRAGConversationId = convId;
+                currentChatId = convId;
+                localStorage.setItem('currentChatId', String(convId));
             }
             
             // Store thread_id if returned from backend (for auto-selected threads when frontend didn't send one)
@@ -5404,7 +5427,8 @@ async function initializeApp() {
         } catch (error) {
             hideTypingIndicator();
             console.error('Error in RAG chat:', error);
-            addMessageToChat('ai', `Error: ${error.message || 'Failed to get response'}`);
+            const isTimeout = error && (error.name === 'AbortError' || (error.message && error.message.toLowerCase().indexOf('abort') !== -1));
+            addMessageToChat('ai', isTimeout ? 'The request took too long. The document may be large—please try again or ask a shorter question.' : `Error: ${error.message || 'Failed to get response'}`);
         }
     }
 
@@ -5422,6 +5446,12 @@ async function initializeApp() {
                         <h3 class="text-xl font-semibold text-white">Upload PDF Document</h3>
                     </div>
                     <div class="p-6">
+                        <div id="ragUploadOnePdfMessage" class="hidden p-4 mb-4 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p class="text-amber-800 text-sm font-medium mb-2">
+                                <i class="fas fa-info-circle mr-2"></i>You can upload 1 PDF per thread.
+                            </p>
+                            <p class="text-amber-700 text-sm">This thread already has a PDF attached. Start a new chat to upload a different PDF.</p>
+                        </div>
                         <div id="ragUploadArea" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-all mb-4">
                             <input type="file" id="ragFileInput" accept=".pdf" class="hidden">
                             <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
@@ -5490,6 +5520,38 @@ async function initializeApp() {
                 }
             });
         }
+        // Reset modal state every time it opens so user can upload again (e.g. after starting new chat)
+        const uploadProgress = document.getElementById('ragUploadProgress');
+        const uploadBar = document.getElementById('ragUploadBar');
+        const uploadPercent = document.getElementById('ragUploadPercent');
+        const uploadStatus = document.getElementById('ragUploadStatus');
+        const fileInput = document.getElementById('ragFileInput');
+        const uploadArea = document.getElementById('ragUploadArea');
+        const onePdfMessage = document.getElementById('ragUploadOnePdfMessage');
+        if (uploadProgress) uploadProgress.classList.add('hidden');
+        if (fileInput) {
+            fileInput.value = '';
+            fileInput.disabled = false;
+        }
+        if (uploadArea) {
+            uploadArea.style.pointerEvents = 'auto';
+            uploadArea.style.opacity = '1';
+            uploadArea.classList.remove('hidden');
+        }
+        if (uploadBar) uploadBar.style.width = '0%';
+        if (uploadPercent) uploadPercent.textContent = '0%';
+        if (uploadStatus) uploadStatus.textContent = 'Uploading...';
+        // Show "1 PDF per thread" message if current thread already has a PDF; otherwise show upload area
+        const currentThreadHasPdf = currentRAGThreadId && ragThreads.find(t => t.thread_id === currentRAGThreadId)?.has_document;
+        if (onePdfMessage && uploadArea) {
+            if (currentThreadHasPdf) {
+                onePdfMessage.classList.remove('hidden');
+                uploadArea.classList.add('hidden');
+            } else {
+                onePdfMessage.classList.add('hidden');
+                uploadArea.classList.remove('hidden');
+            }
+        }
         modal.classList.remove('hidden');
     }
 
@@ -5498,7 +5560,17 @@ async function initializeApp() {
         if (modal) {
             modal.classList.add('hidden');
             const fileInput = document.getElementById('ragFileInput');
-            if (fileInput) fileInput.value = '';
+            if (fileInput) {
+                fileInput.value = '';
+                fileInput.disabled = false;
+            }
+            const uploadProgress = document.getElementById('ragUploadProgress');
+            const uploadArea = document.getElementById('ragUploadArea');
+            if (uploadProgress) uploadProgress.classList.add('hidden');
+            if (uploadArea) {
+                uploadArea.style.pointerEvents = 'auto';
+                uploadArea.style.opacity = '1';
+            }
         }
     }
 
@@ -5842,7 +5914,7 @@ async function initializeApp() {
                             if (threadId) {
                                 currentRAGThreadId = threadId;
                                 localStorage.setItem('currentRAGThreadId', threadId);
-                                switchToRAGChatMode(threadId, filename);
+                                switchToRAGChatMode(threadId, filename, statusData.markdown_download_url, statusData.processing_time_seconds);
                             } else {
                                 // If no thread_id, find the most recent thread with document
                                 if (ragThreads && ragThreads.length > 0) {
@@ -5918,7 +5990,7 @@ async function initializeApp() {
                 if (data.thread_id) {
                     currentRAGThreadId = data.thread_id;
                     localStorage.setItem('currentRAGThreadId', data.thread_id);
-                    switchToRAGChatMode(data.thread_id, data.filename);
+                    switchToRAGChatMode(data.thread_id, data.filename, data.markdown_download_url, data.processing_time_seconds);
                 }
             }
             
@@ -6156,7 +6228,7 @@ async function initializeApp() {
                         ragThreadSelector.classList.add('hidden');
                     }
                     const ragPromptBtn = document.getElementById('ragPromptBtn');
-                    if (ragPromptBtn) {
+                    if (ragPromptBtn && userRole !== 'teacher' && userRole !== 'admin') {
                         ragPromptBtn.classList.add('hidden');
                     }
                 }
@@ -6208,9 +6280,9 @@ async function initializeApp() {
         if (selector) {
             selector.classList.add('hidden');
         }
-        // Also hide prompt button
+        // Hide prompt button only for students (teachers/admins keep Set Prompt visible)
         const promptBtn = document.getElementById('ragPromptBtn');
-        if (promptBtn) {
+        if (promptBtn && userRole !== 'teacher' && userRole !== 'admin') {
             promptBtn.classList.add('hidden');
         }
     }
@@ -8562,13 +8634,13 @@ async function initializeApp() {
                 
                 // If no valid existing chat, start a new one (but only if not in RAG mode)
                 if (!isRAGChatMode) {
-                    await startNewChat();
+                    await startNewChat(true);
                 }
             } catch (error) {
                 console.error('Error restoring chat:', error);
                 // Fallback to starting new chat (but only if not in RAG mode)
                 if (!isRAGChatMode) {
-                    await startNewChat();
+                    await startNewChat(true);
                 }
             }
         }
@@ -8613,8 +8685,16 @@ async function initializeApp() {
             }
         }
         
-    async function startNewChat() {
-        // Reset lesson chat mode when starting a new chat
+    async function startNewChat(skipReload) {
+        // When user clicks "New Chat" (skipReload false/undefined): clear state and reload so Upload PDF shows the form
+        if (!skipReload) {
+            localStorage.removeItem('currentRAGThreadId');
+            localStorage.removeItem('currentConversationId');
+            localStorage.removeItem('currentChatId');
+            location.reload();
+            return;
+        }
+        // When called from init (skipReload true): set up new chat UI without reload
         if (isLessonChatMode) {
             resetLessonChatMode();
         }
@@ -8631,10 +8711,8 @@ async function initializeApp() {
             if (response.ok) {
                 const data = await response.json();
                 currentChatId = data.conversation_id;
-                // Save chat ID to localStorage for persistence
                 localStorage.setItem('currentChatId', currentChatId);
                 localStorage.setItem('currentConversationId', currentChatId);
-                // Reload chat history to show new conversation
                 await loadChatHistory();
             } else {
                 currentChatId = Date.now();
@@ -8645,10 +8723,7 @@ async function initializeApp() {
             currentChatId = Date.now();
         }
 
-            // Only reset RAG mode if we're actually switching away from it
-            // Don't reset if we're just initializing and there are RAG threads
             const shouldResetRAG = isRAGChatMode && !ragThreads.some(t => t.thread_id === currentRAGThreadId);
-            
             if (shouldResetRAG) {
                 isRAGChatMode = false;
                 currentRAGThreadId = null;
@@ -8659,7 +8734,6 @@ async function initializeApp() {
             isLessonChatMode = false;
             currentLessonChatId = null;
             
-            // Reset header to New Chat
             document.getElementById('chatTitle').textContent = 'New Chat';
             document.getElementById('chatStatus').textContent = 'Online';
             
@@ -8681,10 +8755,8 @@ async function initializeApp() {
         
         const messageInput = document.getElementById('messageInput');
         messageInput.value = '';
-        // Reset textarea height after clearing
         autoResizeTextarea(messageInput);
             
-            // Clear old chat data from localStorage when starting new chat
             clearOldChatData();
             
         loadChatHistory();
@@ -9746,13 +9818,13 @@ async function initializeApp() {
                     promptBtn.classList.remove('hidden');
                 }
             } else {
-                // Hide thread selector and prompt button if not in RAG mode
+                // Hide thread selector if not in RAG mode; keep Set Prompt visible for teacher/admin
                 const selector = document.getElementById('ragThreadSelector');
                 const promptBtn = document.getElementById('ragPromptBtn');
                 if (selector) {
                     selector.classList.add('hidden');
                 }
-                if (promptBtn) {
+                if (promptBtn && userRole !== 'teacher' && userRole !== 'admin') {
                     promptBtn.classList.add('hidden');
                 }
             }
@@ -11063,17 +11135,51 @@ async function initializeApp() {
         }
     }
 
-    // Save the last AI message into My Lessons
+    // Parse "Lesson Title: \"...\"" or "Lesson Title: ..." from text (matches backend format)
+    function parseLessonTitleFromContent(text) {
+        if (!text || typeof text !== 'string') return '';
+        const quoted = text.match(/Lesson\s+Title\s*:\s*["']([^"']+)["']/i);
+        if (quoted) return quoted[1].trim();
+        const unquoted = text.match(/Lesson\s+Title\s*:\s*(.+?)(?:\n|$)/i);
+        return unquoted ? unquoted[1].trim() : '';
+    }
+
+    // Download/save only the last created (finalized) lesson, not the last AI message
     async function saveLastLectureToMyLessons() {
-        const content = (lastAIMessage || '').trim();
-        if (!content) {
-            showNotification('No AI lecture found to save yet', 'error');
-            return;
+        let content = '';
+        let title = '';
+
+        // In RAG mode: use only the finalized lesson from DB (intelligent download)
+        if (currentRAGThreadId) {
+            try {
+                const lessonRes = await authenticatedFetch(`/api/rag/thread/${encodeURIComponent(currentRAGThreadId)}/finalized-lesson`, { method: 'GET' });
+                const lessonData = await lessonRes.json().catch(() => ({}));
+                if (lessonRes.ok && lessonData && lessonData.success && lessonData.lesson_finalized) {
+                    content = (lessonData.last_lesson_text || '').trim();
+                    title = (lessonData.lesson_title || '').trim();
+                }
+            } catch (e) {
+                console.warn('Could not fetch finalized lesson:', e);
+            }
+
+            if (!content) {
+                showNotification('No finalized lesson yet. Say "finalize", "final", or "create the lesson" to save your lesson, then click Download.', 'info');
+                return;
+            }
+        } else {
+            // Non-RAG: fallback to last AI message
+            content = (lastAIMessage || '').trim();
+            if (!content) {
+                showNotification('No AI lecture found to save yet', 'error');
+                return;
+            }
         }
 
-        // Unique title to avoid "title already used" errors
-        const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-        const title = `AI Lecture ${stamp}`;
+        // Unique title if we did not get one from finalized lesson
+        if (!title) {
+            const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            title = `AI Lecture ${stamp}`;
+        }
 
         showFullPageLoading('Saving lecture to My Lessons...');
 
@@ -11086,7 +11192,7 @@ async function initializeApp() {
                     content,
                     focus_area: 'Lecture',
                     grade_level: 'General',
-                    summary: 'Saved from chat (last AI message).'
+                    summary: 'Saved from chat.'
                 })
             });
 

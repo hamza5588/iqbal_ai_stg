@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       - ./static:/app/static
       - ./nginx.conf:/etc/nginx/nginx.conf
@@ -15,18 +15,12 @@ services:
     depends_on:
       flask_app1:
         condition: service_healthy
-      # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
-      # flask_app2:
-      #   condition: service_healthy
-      # flask_app3:
-      #   condition: service_healthy
-      # flask_app4:
-      #   condition: service_healthy
     networks:
       - app_network
+    restart: unless-stopped
 
   # ----------------------------
-  # POSTGRES DATABASE (primary)
+  # POSTGRES DATABASE (prod)
   # ----------------------------
   postgres:
     image: postgres:17
@@ -36,9 +30,9 @@ services:
       POSTGRES_PASSWORD: mypassword
       POSTGRES_DB: mydatabase
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_prod:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
       interval: 10s
@@ -48,15 +42,39 @@ services:
       - app_network
 
   # ----------------------------
-  # REDIS (for Celery broker and result backend)
+  # MILVUS (prod)
+  # ----------------------------
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    command: ["milvus", "run", "standalone"]
+    restart: always
+    ports:
+      - "19531:19530"
+      - "9092:9091"
+    volumes:
+      - milvus_data_prod:/var/lib/milvus
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: local
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9091/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
+  # ----------------------------
+  # REDIS (prod)
   # ----------------------------
   redis:
     image: redis:7-alpine
     restart: always
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
-      - redis_data:/data
+      - redis_data_prod:/data
     command: redis-server --appendonly yes
     networks:
       - app_network
@@ -67,7 +85,7 @@ services:
       retries: 5
 
   # ----------------------------
-  # PRIMARY FLASK INSTANCE
+  # PRIMARY FLASK INSTANCE (prod)
   # ----------------------------
   flask_app1:
     build:
@@ -90,7 +108,7 @@ services:
       - DB_MODE=primary
       - INSTANCE_ROLE=primary
 
-      # PostgreSQL URL (IMPORTANT)
+      # PostgreSQL URL (container-to-container, do NOT change)
       - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
 
       # APIs
@@ -101,12 +119,18 @@ services:
       # vLLM API
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
       - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
-
       - VLLM_TIMEOUT=600
 
       # Celery Configuration
+      - USE_CELERY_FOR_INGESTION=true
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+      # Milvus
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_DIM=384
 
     volumes:
       - .:/app
@@ -115,7 +139,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # - ollama  # Removed - using external vLLM API instead
+      milvus:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -134,7 +159,7 @@ services:
       - app_network
 
   # ----------------------------
-  # CELERY WORKER
+  # CELERY WORKER (prod)
   # ----------------------------
   celery_worker:
     build:
@@ -148,20 +173,28 @@ services:
       - PYTHONPATH=/app
       - TOKENIZERS_PARALLELISM=false
       - TQDM_DISABLE=1
-      
+
       # Database
       - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
-      
-      # Celery Configuration
+
+      # Celery
+      - USE_CELERY_FOR_INGESTION=true
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      
-      # APIs (if needed by tasks)
+
+      # APIs
       - GROQ_API_KEY=${GROQ_API_KEY}
       - NOMIC_APIC_KEY=${NOMIC_API_KEY}
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
       - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
       - VLLM_TIMEOUT=600
+
+      # Milvus
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_DIM=384
+
     volumes:
       - .:/app
     depends_on:
@@ -169,7 +202,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=2
+      milvus:
+        condition: service_healthy
+    command: celery -A app.celery_worker_entry.celery worker --loglevel=info --concurrency=2
     deploy:
       resources:
         limits:
@@ -182,150 +217,10 @@ services:
       - app_network
     restart: unless-stopped
 
-  # ----------------------------
-  # FLASK REPLICA 1
-  # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
-  # ----------------------------
-  # flask_app2:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   expose:
-  #     - "5000"
-  #   environment:
-  #     - FLASK_APP=run.py
-  #     - FLASK_ENV=production
-  #     - FLASK_DEBUG=0
-  #     - PYTHONUNBUFFERED=1
-  #     - PYTHONPATH=/app
-  #     - DB_MODE=readonly
-  #     - INSTANCE_ROLE=replica
-  #     # CPU optimization for better performance
-  #     - OPENBLAS_NUM_THREADS=4
-  #     - OMP_NUM_THREADS=4
-  #     - MKL_NUM_THREADS=4
-  #     - RAYON_NUM_THREADS=4
-  #     - TOKENIZERS_PARALLELISM=false
-  #     - TQDM_DISABLE=1
-  #
-  #     - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
-  #
-  #     - OLLAMA_BASE_URL=http://ollama:11434
-  #     - OLLAMA_MODEL=qwen2.5:1.5b
-  #     - OLLAMA_TIMEOUT=600
-  #
-  #   volumes:
-  #     - .:/app
-  #   depends_on:
-  #     - postgres
-  #     - ollama
-  #     - flask_app1
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 40s
-  #   networks:
-  #     - app_network
-
-  # ----------------------------
-  # FLASK REPLICA 2
-  # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
-  # ----------------------------
-  # flask_app3:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   expose:
-  #     - "5000"
-  #   environment:
-  #     - FLASK_APP=run.py
-  #     - FLASK_ENV=production
-  #     - FLASK_DEBUG=0
-  #     - PYTHONUNBUFFERED=1
-  #     - PYTHONPATH=/app
-  #     - DB_MODE=readonly
-  #     - INSTANCE_ROLE=replica
-  #     # CPU optimization for better performance
-  #     - OPENBLAS_NUM_THREADS=4
-  #     - OMP_NUM_THREADS=4
-  #     - MKL_NUM_THREADS=4
-  #     - RAYON_NUM_THREADS=4
-  #     - TOKENIZERS_PARALLELISM=false
-  #     - TQDM_DISABLE=1
-  #
-  #     - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
-  #
-  #     - OLLAMA_BASE_URL=http://ollama:11434
-  #     - OLLAMA_MODEL=qwen2.5:1.5b
-  #     - OLLAMA_TIMEOUT=600
-  #
-  #   volumes:
-  #     - .:/app
-  #   depends_on:
-  #     - postgres
-  #     - ollama
-  #     - flask_app1
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 40s
-  #   networks:
-  #     - app_network
-
-  # ----------------------------
-  # FLASK REPLICA 3
-  # TEMPORARILY COMMENTED OUT FOR PERFORMANCE TESTING - UNCOMMENT TO RESTORE
-  # ----------------------------
-  # flask_app4:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   expose:
-  #     - "5000"
-  #   environment:
-  #     - FLASK_APP=run.py
-  #     - FLASK_ENV=production
-  #     - FLASK_DEBUG=0
-  #     - PYTHONUNBUFFERED=1
-  #     - PYTHONPATH=/app
-  #     - DB_MODE=readonly
-  #     - INSTANCE_ROLE=replica
-  #     # CPU optimization for better performance
-  #     - OPENBLAS_NUM_THREADS=4
-  #     - OMP_NUM_THREADS=4
-  #     - MKL_NUM_THREADS=4
-  #     - RAYON_NUM_THREADS=4
-  #     - TOKENIZERS_PARALLELISM=false
-  #     - TQDM_DISABLE=1
-  #
-  #     - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
-  #
-  #     - OLLAMA_BASE_URL=http://ollama:11434
-  #     - OLLAMA_MODEL=qwen2.5:1.5b
-  #     - OLLAMA_TIMEOUT=600
-  #
-  #   volumes:
-  #     - .:/app
-  #   depends_on:
-  #     - postgres
-  #     - ollama
-  #     - flask_app1
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 40s
-  #   networks:
-  #     - app_network
-
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_data_prod:
+  redis_data_prod:
+  milvus_data_prod:
 
 networks:
   app_network:

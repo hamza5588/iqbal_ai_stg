@@ -4486,7 +4486,7 @@
         }, 500);
       }
 
-      // Step 2 processing - API: POST /api/lessons/create_lesson with FormData (file + lessonTitle, focusArea, gradeLevel, additionalNotes)
+      // Step 2 processing - API: POST /api/rag/ingest (RAG document ingest for chat), NOT create_lesson
       async function processCreateLessonStep2(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
         const modal = document.getElementById('createLessonModal');
         if (!modal) return;
@@ -4500,12 +4500,10 @@
           return;
         }
         const formData = new FormData();
-        formData.append('lessonTitle', lessonTitle);
-        formData.append('focusArea', lessonSubject || 'General');
-        formData.append('gradeLevel', lessonGrade || 'General');
-        formData.append('additionalNotes', lessonContext || '');
-        formData.append('lessonPrompt', '');
         formData.append('file', file);
+        formData.append('create_new_thread', 'true');
+        const convId = window.currentRAGConversationId || (typeof currentChatId !== 'undefined' ? currentChatId : null);
+        if (convId != null) formData.append('conversation_id', String(convId));
         let progress = 0;
         const progressInterval = setInterval(() => {
           progress += Math.random() * 8 + 2;
@@ -4513,13 +4511,13 @@
           if (progressBar) progressBar.style.width = progress + '%';
           if (progressPercent) progressPercent.textContent = Math.round(progress) + '%';
           if (progressStatus) {
-            if (progress < 30) progressStatus.textContent = 'Uploading file...';
-            else if (progress < 60) progressStatus.textContent = 'Extracting text from PDF...';
-            else progressStatus.textContent = 'Generating lesson...';
+            if (progress < 40) progressStatus.textContent = 'Uploading PDF...';
+            else if (progress < 80) progressStatus.textContent = 'Extracting text and indexing for chat...';
+            else progressStatus.textContent = 'Finalizing...';
           }
         }, 400);
         try {
-          const response = await fetch('/api/lessons/create_lesson', {
+          const response = await fetch('/api/rag/ingest', {
             method: 'POST',
             body: formData,
             credentials: 'include'
@@ -4530,9 +4528,46 @@
           if (progressStatus) progressStatus.textContent = 'Finalizing...';
           if (!response.ok) {
             const err = await response.json().catch(() => ({}));
-            showToast(err.error || 'Lesson creation failed', 'error');
+            showToast(err.error || 'PDF ingest failed', 'error');
             closeCreateLessonModal();
             return;
+          }
+          const data = await response.json().catch(() => ({}));
+          let threadId = data.thread_id || null;
+          let conversationId = data.conversation_id != null ? data.conversation_id : null;
+          if (data.task_id && data.status === 'processing') {
+            if (progressStatus) progressStatus.textContent = 'Processing in background...';
+            threadId = data.thread_id || null;
+            conversationId = data.conversation_id != null ? data.conversation_id : null;
+            const taskId = data.task_id;
+            const pollMax = 120;
+            for (let i = 0; i < pollMax; i++) {
+              await new Promise(r => setTimeout(r, 2000));
+              const statusRes = await fetch('/api/rag/ingest/status/' + taskId, { method: 'GET', credentials: 'include' });
+              if (!statusRes.ok) continue;
+              const statusData = await statusRes.json().catch(() => ({}));
+              if (progressBar) progressBar.style.width = (statusData.progress || 0) + '%';
+              if (progressPercent) progressPercent.textContent = Math.round(statusData.progress || 0) + '%';
+              if (progressStatus && statusData.message) progressStatus.textContent = statusData.message;
+              if (statusData.status === 'success') {
+                threadId = statusData.thread_id || threadId;
+                conversationId = statusData.conversation_id != null ? statusData.conversation_id : conversationId;
+                break;
+              }
+              if (statusData.status === 'failed' || statusData.status === 'failure' || statusData.state === 'FAILURE') {
+                showToast(statusData.error || statusData.message || 'PDF processing failed', 'error');
+                closeCreateLessonModal();
+                return;
+              }
+            }
+          }
+          if (threadId) {
+            window.currentRAGThreadId = threadId;
+            try { localStorage.setItem('teacher_currentRAGThreadId', threadId); } catch (e) {}
+          }
+          if (conversationId != null) {
+            window.currentRAGConversationId = conversationId;
+            try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
           }
           setTimeout(() => {
             showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);

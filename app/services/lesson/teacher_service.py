@@ -103,12 +103,10 @@ class InteractiveChatResponse(BaseModel):
 
 def check_lesson_response(text: str, groq_api_key: str):
     """Check if the AI response indicates a complete lesson has been generated"""
-    # Use dynamic LLM factory - supports OpenAI and vLLM via environment variables
-    llm = create_llm(
-        temperature=0.7,
-        max_tokens=512,
-        api_key=groq_api_key if os.getenv('LLM_PROVIDER', 'openai').lower() == 'openai' else None
-    )
+    # Use the same central/provider-aware logic as RAG (Admin settings + decrypted DB API key).
+    # This avoids depending on environment variables like GROQ_API_KEY in production.
+    from app.utils.llm_factory import get_chat_model
+    llm = get_chat_model(timeout=120, temperature=0.7)
     
     # Create a prompt to analyze if the response is a complete lesson or just an outline/draft
     analysis_prompt = f"""Analyze the following AI response and determine if it contains a COMPLETE LESSON or just an OUTLINE/DRAFT.
@@ -158,20 +156,12 @@ class TeacherLessonService(BaseLessonService):
         teacher_logger.info("RAG service initialized with persistent memory")
         
         # Initialize separate multimodal LLM for image descriptions
-        # Use dynamic LLM factory - supports OpenAI and vLLM via environment variables
-        provider = os.getenv('LLM_PROVIDER', 'openai').lower()
-        if provider == 'openai':
-            multimodal_model = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
-        else:
-            multimodal_model = os.getenv('VLLM_MULTIMODAL_MODEL', os.getenv('VLLM_MODEL', 'Qwen/Qwen2.5-14B-Instruct'))
-        
-        self.multimodal_llm = create_llm(
-            temperature=0.7,
-            max_tokens=1024,
-            model_name=multimodal_model,
-            api_key=self.api_key if provider == 'openai' else None
-        )
-        teacher_logger.info(f"Multimodal LLM initialized for image descriptions: {multimodal_model} (provider: {provider})")
+        # Use the same central/provider-aware logic as RAG (Admin settings + decrypted DB API key).
+        # If you want a dedicated model for images, it should still be created via get_chat_model()
+        # so it doesn't require GROQ_API_KEY/OPENAI_API_KEY env vars.
+        from app.utils.llm_factory import get_chat_model
+        self.multimodal_llm = get_chat_model(timeout=120, temperature=0.7)
+        teacher_logger.info("Multimodal LLM initialized for image descriptions (central provider)")
     
     def _detect_pages_with_tables(self, file_path: str) -> List[int]:
         """Quickly detect which pages likely contain tables by scanning for table-like structures"""
@@ -2312,6 +2302,9 @@ Answer:"""
             # Generate improved content using LLM
             response = self.llm.invoke(prompt)
             improved_content = response.content.strip()
+
+            # Strip Groq reasoning/thinking blocks (<think>...</think>) - keep only the final answer
+            improved_content = re.sub(r'<think>.*?</think>', '', improved_content, flags=re.DOTALL).strip()
             
             # Check if the response is in JSON format and extract the actual content
             try:

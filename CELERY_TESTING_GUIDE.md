@@ -1,6 +1,15 @@
 # Celery Implementation Testing Guide
 
-## Prerequisites
+## Local vs production (config-driven)
+
+PDF ingestion can run **with or without Celery**:
+
+- **Local / no Redis:** Set `USE_CELERY_FOR_INGESTION=false` (default) in config or env. Ingestion runs **synchronously in-process**; no Redis or Celery worker needed. Use this when you don’t have enough resources to run a Celery worker.
+- **Production:** Set `USE_CELERY_FOR_INGESTION=true` (e.g. in `.env` or environment). Ingestion runs as **Celery tasks** in the background; you need Redis and a Celery worker.
+
+Config is in `app/config.py`; override with env var: `USE_CELERY_FOR_INGESTION=true` or `USE_CELERY_FOR_INGESTION=false`.
+
+## Prerequisites (for Celery / production mode)
 
 1. **Install Dependencies**
    ```bash
@@ -36,9 +45,8 @@ flask run
 
 ### Step 2: Start Celery Worker
 ```bash
-# In terminal 2 (new terminal)
-cd "d:\AI LABRATORY\UNI PROJECTS\iqbalAI_1.0"
-celery -A app.celery_app.celery worker --loglevel=info
+# In terminal 2 (new terminal) - use celery_worker_entry so tasks run with Flask app context
+celery -A app.celery_worker_entry.celery worker --loglevel=info
 ```
 
 **Expected Output:**
@@ -182,11 +190,10 @@ Watch the Celery worker terminal for:
 - Check worker logs for errors
 - Verify Redis connection
 
-### Issue: Database errors in Celery task
+### Issue: "Working outside of application context" or database errors in Celery task
 **Solution:** 
-- Verify Flask app context is properly set up
-- Check database connection string
-- Ensure `get_session_factory()` is used (not `get_db()`)
+- Use `celery -A app.celery_worker_entry.celery worker` (not `app.celery_app.celery`) so tasks run with Flask app context
+- Set `USE_CELERY_FOR_INGESTION=true` so init_celery runs and ContextTask is used
 
 ### Issue: Task completes but no database record
 **Solution:**
@@ -198,17 +205,17 @@ Watch the Celery worker terminal for:
 
 ### Check Active Tasks
 ```bash
-celery -A app.celery_app.celery inspect active
+celery -A app.celery_worker_entry.celery inspect active
 ```
 
 ### Check Registered Tasks
 ```bash
-celery -A app.celery_app.celery inspect registered
+celery -A app.celery_worker_entry.celery inspect registered
 ```
 
 ### Check Worker Stats
 ```bash
-celery -A app.celery_app.celery inspect stats
+celery -A app.celery_worker_entry.celery inspect stats
 ```
 
 ## Using Flower (Optional - Celery Monitoring Tool)
@@ -220,7 +227,7 @@ pip install flower
 
 Start Flower:
 ```bash
-celery -A app.celery_app.celery flower
+celery -A app.celery_worker_entry.celery flower
 ```
 
 Access at: `http://localhost:5555`

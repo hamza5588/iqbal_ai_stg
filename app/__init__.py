@@ -282,8 +282,12 @@ def create_app():
     
     print(f"Flask app template folder: {app.template_folder}")
     
-    # Initialize Celery with Flask app context
-    init_celery(app)
-    
+    # Initialize Celery only when PDF ingestion uses Celery (production).
+    # When USE_CELERY_FOR_INGESTION is False (e.g. local dev), no Redis/Celery worker is needed.
+    if app.config.get('USE_CELERY_FOR_INGESTION', False):
+        init_celery(app)
+    else:
+        print("Celery disabled for ingestion (USE_CELERY_FOR_INGESTION=false). PDF ingestion will run in-process.")
+
     return app
 

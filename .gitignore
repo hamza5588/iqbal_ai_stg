@@ -19,6 +19,8 @@ chatbot.db-shm
 chatbot.db-wal
 rag_metadata.json
 uploaded_files
+markdown_exports
+fix_boolean_columns.sql
 instance
 chat.db
 teacherfrontend
@@ -28,5 +30,11 @@ frontend
 chroma_data
 migrations
 speed.txt
-SPEED_IMPROVEMENTSmd
-rag_metadata.json
+SPEED_IMPROVEMENTS.md
+fix_boolean_columns.sql
+.cursor
+.vscode
+milvus_data
+shared_vector_store.pkl
+MILVUS_STAGING.md
+chatbot.db

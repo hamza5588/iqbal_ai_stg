@@ -170,26 +170,32 @@ class UserPrompt(Base):
 
 
 class UserDocument(Base):
-    """User document model"""
+    """User document model for RAG PDF ingestion"""
     __tablename__ = 'user_documents'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    thread_id = Column(String(255), ForeignKey('rag_threads.thread_id', ondelete='CASCADE'), nullable=True)
     file_name = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=False)
     file_type = Column(String(100), nullable=False)
-    vector_db_ids = Column(Text, nullable=True)
+    vector_db_ids = Column(Text, nullable=True)  # deprecated; kept for backward compat
     processed = Column(Boolean, default=False, server_default='0')
+    processing_status = Column(String(50), default='uploaded', server_default='uploaded')  # uploaded|processing|processed|failed
+    last_error = Column(Text, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     last_accessed_at = Column(DateTime, nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="user_documents")
+    rag_thread = relationship("RAGThread", back_populates="user_documents")
     
     __table_args__ = (
         Index('idx_user_documents_user_id', 'user_id'),
         Index('idx_user_documents_file_type', 'file_type'),
+        Index('idx_user_documents_thread_id', 'thread_id'),
+        Index('idx_user_documents_processing_status', 'processing_status'),
     )
 
 
@@ -285,6 +291,28 @@ class PasswordResetToken(Base):
     )
 
 
+class RAGChunk(Base):
+    """RAG chunk model - PostgreSQL stores chunk text. Vector DB stores vectors only."""
+    __tablename__ = 'rag_chunks'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    thread_id = Column(String(255), ForeignKey('rag_threads.thread_id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey('user_documents.id', ondelete='SET NULL'), nullable=True)
+    chunk_index = Column(Integer, nullable=False)
+    page = Column(Integer, nullable=False)
+    text = Column(Text, nullable=False)
+    source = Column(String(512), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    thread = relationship("RAGThread", back_populates="rag_chunks")
+
+    __table_args__ = (
+        Index('idx_rag_chunk_thread_user', 'thread_id', 'user_id'),
+        Index('idx_rag_chunk_page', 'thread_id', 'user_id', 'page'),
+    )
+
+
 class RAGThread(Base):
     """RAG Thread model for storing PDF chat threads"""
     __tablename__ = 'rag_threads'
@@ -294,16 +322,28 @@ class RAGThread(Base):
     thread_id = Column(String(255), nullable=False, unique=True, index=True)
     name = Column(String(255), nullable=False)
     filename = Column(String(255), nullable=True)
+    has_document = Column(Boolean, default=False, server_default='0')
+    doc_count = Column(Integer, default=0, server_default='0')
+    num_pages = Column(Integer, nullable=True)
+    last_ingested_at = Column(DateTime, nullable=True)
+    embedding_model = Column(String(255), nullable=True)
+    embedding_dim = Column(Integer, nullable=True)
+    lesson_finalized = Column(Boolean, default=False, server_default='0')
+    last_lesson_text = Column(Text, nullable=True)
+    lesson_title = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
     
     # Relationships
     user = relationship("User", back_populates="rag_threads")
     rag_prompts = relationship("RAGPrompt", back_populates="thread", cascade="all, delete-orphan")
+    user_documents = relationship("UserDocument", back_populates="rag_thread")
+    rag_chunks = relationship("RAGChunk", back_populates="thread", cascade="all, delete-orphan")
     
     __table_args__ = (
         Index('idx_rag_thread_user_id', 'user_id'),
         Index('idx_rag_thread_thread_id', 'thread_id'),
+        Index('idx_rag_thread_has_document', 'has_document'),
     )
 
 

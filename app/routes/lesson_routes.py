@@ -13,6 +13,23 @@ import tempfile
 
 logger = logging.getLogger(__name__)
 
+
+def _get_lesson_api_key() -> str:
+    """
+    Resolve the API key for lesson generation/download.
+    Priority:
+    1) Session `groq_api_key`
+    2) `GROQ_API_KEY` environment variable
+    3) `OPENAI_API_KEY` environment variable
+    """
+    return (
+        session.get('groq_api_key')
+        or os.getenv('GROQ_API_KEY')
+        or os.getenv('OPENAI_API_KEY')
+        or ''
+    )
+
+
 # Create a custom logger for lesson checks
 lesson_check_logger = logging.getLogger('lesson_check')
 lesson_check_logger.setLevel(logging.DEBUG)
@@ -55,8 +72,8 @@ def create_lesson():
         
         logger.info(f"Form data - Title: {lesson_title}, Focus: {focus_area}, Grade: {grade_level}")
         
-        # Get API key from session
-        api_key = session.get('groq_api_key')
+        # Get API key (session or environment fallback)
+        api_key = _get_lesson_api_key()
         if not api_key:
             logger.warning("API key not found in session")
             return jsonify({'error': 'API key not configured. Please set your API key first.'}), 400
@@ -589,14 +606,9 @@ def download_lesson(lesson_id):
             'activities': [],
             'quiz': []
         }
-        
-        # Get API key from session
-        api_key = session.get('groq_api_key')
-        if not api_key:
-            return jsonify({'error': 'API key not configured. Please set your API key first.'}), 400
-        
-        # Generate DOCX
-        lesson_service = LessonService(api_key=api_key)
+
+        # Generate DOCX (no API key required for download)
+        lesson_service = LessonService()
         docx_bytes = lesson_service._create_docx(lesson_data)
         
         # Create filename
@@ -605,14 +617,6 @@ def download_lesson(lesson_id):
         # Create BytesIO object
         docx_buffer = BytesIO(docx_bytes)
         docx_buffer.seek(0)
-        
-        # Delete FAISS index after successful download
-        try:
-            lesson_service = LessonService(api_key=api_key)
-            lesson_service._delete_faiss_index(lesson_id)
-            logger.info(f"Deleted FAISS index after download for lesson {lesson_id}")
-        except Exception as e:
-            logger.warning(f"Failed to delete FAISS index for lesson {lesson_id}: {str(e)}")
         
         return send_file(
             docx_buffer,
@@ -661,13 +665,9 @@ def download_lesson_ppt(lesson_id):
         'quiz': []
     }
     
-    # Get API key from session
-    api_key = session.get('groq_api_key')
-    if not api_key:
-        return jsonify({'error': 'API key not configured. Please set your API key first.'}), 400
-    
     try:
-        lesson_service = LessonService(api_key=api_key)
+        # Generate PPT (no API key required for download)
+        lesson_service = LessonService()
         ppt_bytes = lesson_service.create_ppt(lesson_data)
         
         # Create filename
@@ -1081,13 +1081,9 @@ def create_ai_lesson_version(lesson_id):
         data = request.get_json()
         improvement_prompt = data.get('improvement_prompt', '')
         
-        # Get API key from session
-        api_key = session.get('groq_api_key')
-        if not api_key:
-            return jsonify({'error': 'API key not configured. Please set your API key first.'}), 400
-        
-        # Use LessonService to improve the lesson
-        lesson_service = LessonService(api_key=api_key)
+        # Use LessonService with central LLM provider (same as chat/RAG)
+        # No need for per-user API key - uses central admin settings
+        lesson_service = LessonService(api_key=None)
         
         # Generate improved lesson content
         improved_content = lesson_service.improve_lesson_content(
@@ -1494,16 +1490,12 @@ def apply_prompt_to_lesson(lesson_id):
         if not prompt.strip():
             return jsonify({'error': 'Prompt is required'}), 400
         
-        # Get API key from session
-        api_key = session.get('groq_api_key')
-        if not api_key:
-            return jsonify({'error': 'API key not configured. Please set your API key first.'}), 400
-        
         # Get current content (use draft if available, otherwise original)
         current_draft = LessonModel.get_draft_content(lesson_id)
         content_to_edit = current_draft if current_draft else lesson.get('original_content', lesson['content'])
         
-        # Use LessonService to apply the prompt
+        # Use LessonService with API key from session (user profile) or env - same source as RAG
+        api_key = session.get('groq_api_key') or os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY')
         lesson_service = LessonService(api_key=api_key)
         improved_content = lesson_service.improve_lesson_content(
             lesson_id=lesson_id,
@@ -1619,7 +1611,7 @@ def finalize_lesson_version(lesson_id):
         
         # Delete FAISS index after storing in database
         try:
-            lesson_service = LessonService(api_key=session.get('groq_api_key'))
+            lesson_service = LessonService(api_key=None)
             lesson_service._delete_faiss_index(new_lesson_id)
             logger.info(f"Deleted FAISS index for finalized lesson {new_lesson_id}")
         except Exception as e:
