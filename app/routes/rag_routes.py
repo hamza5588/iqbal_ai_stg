@@ -13,7 +13,7 @@ from app.utils.rag_service import (
     MARKDOWN_EXPORTS_DIR,
 )
 from app.utils.db import get_db
-from app.models.database_models import RAGThread, RAGPrompt, UserDocument
+from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk
 from app.services.chat_service import ChatService
 from app.tasks.ingest_tasks import ingest_pdf_task
 from langchain_core.messages import HumanMessage
@@ -27,6 +27,35 @@ import time
 import base64
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
+
+
+def _strip_lesson_finalization_from_response(text):
+    """
+    Remove internal lesson-finalization lines from AI response so they are never
+    shown on the frontend or stored in chat history.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    import re
+    # Remove lines like "Lesson Finalized", "lesson_finalized = true", "lesson_title = \"...\""
+    cleaned = re.sub(r'^\s*Lesson\s+Finalized\s*$', '', text, flags=re.IGNORECASE | re.MULTILINE)
+    cleaned = re.sub(r'^\s*lesson_finalized\s*=\s*(?:true|false)\s*$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'^\s*lesson_title\s*=\s*["\'][^"\']*["\']\s*$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'^\s*last_lesson_text\s*=\s*.*$', '', cleaned, flags=re.MULTILINE)
+    # Collapse multiple blank lines and trim
+    cleaned = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned).strip()
+    return cleaned
+
+
+def _get_openai_client():
+    """
+    Lazily create an OpenAI client for Whisper STT.
+    Expects OPENAI_API_KEY in environment.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY environment variable is not set")
+    return OpenAI(api_key=api_key)
 
 
 def _get_thread_id(user_id: int, conversation_id: int = None) -> str:
@@ -462,6 +491,26 @@ def chat():
                 'code': 'VOICE_NOT_SUPPORTED'
             }), 400
 
+        # If audio is sent (voice input), transcribe using local Whisper base model
+        audio_text = None
+        tmp_path = None
+        try:
+            audio_file = request.files.get('audio')
+            if audio_file and audio_file.filename:
+                from app.utils.whisper_stt import transcribe_audio
+                with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+                    audio_file.save(tmp.name)
+                    tmp_path = tmp.name
+                audio_text = transcribe_audio(tmp_path)
+        except Exception as stt_error:
+            logger.error(f"Error transcribing audio for RAG chat: {str(stt_error)}", exc_info=True)
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+        
         # Try to get JSON data first
         data = request.get_json(force=True, silent=True)
         
@@ -480,16 +529,40 @@ def chat():
                     'conversation_id': request.args.get('conversation_id', type=int)
                 }
         
-        if not data:
-            return jsonify({'error': 'No data provided. Please send JSON, form-data with \"message\" field, or an audio file.'}), 400
+            elif audio_text:
+                # Pure audio request – use transcribed text as the message
+                data = {
+                    'message': audio_text,
+                    'thread_id': request.args.get('thread_id') if request.args else None,
+                    'conversation_id': request.args.get('conversation_id', type=int) if request.args else None
+                }
+        # FormData with audio file: form may have thread_id/conversation_id but no message; use transcription
+        if data and not (data.get('message') or '').strip() and audio_text:
+            data['message'] = audio_text
+            if data.get('thread_id') is None and request.form:
+                data['thread_id'] = request.form.get('thread_id') or None
+            if data.get('conversation_id') is None and request.form:
+                try:
+                    data['conversation_id'] = request.form.get('conversation_id', type=int) or None
+                except (TypeError, ValueError):
+                    data['conversation_id'] = None
 
-        message = data.get('message', '').strip()
+        if not data:
+            logger.warning("RAG chat 400: No data provided (no JSON/form/audio)")
+            return jsonify({'error': 'No data provided. Please send JSON, form-data with "message" field, or an audio file.', 'code': 'NO_DATA'}), 400
+
+        message = (data.get('message') or '').strip()
         if not message:
-            return jsonify({'error': 'Message is required'}), 400
+            logger.warning("RAG chat 400: Empty message")
+            return jsonify({'error': 'Message is required', 'code': 'MESSAGE_REQUIRED'}), 400
 
         # thread_id is REQUIRED for RAG chat (no auto-create, no auto-pick)
         provided_thread_id = data.get('thread_id')
+        if isinstance(provided_thread_id, str):
+            provided_thread_id = provided_thread_id.strip() or None
         raw_conversation_id = data.get('conversation_id')
+        if raw_conversation_id == '' or (isinstance(raw_conversation_id, str) and not raw_conversation_id.strip()):
+            raw_conversation_id = None
         conversation_id = None
         if raw_conversation_id is not None:
             try:
@@ -498,10 +571,11 @@ def chat():
                 conversation_id = None
 
         if provided_thread_id:
-            thread_id = provided_thread_id
-        elif raw_conversation_id is not None and conversation_id is not None:
+            thread_id = str(provided_thread_id).strip()
+        elif conversation_id is not None:
             thread_id = _get_thread_id(user_id, conversation_id)
         else:
+            logger.warning("RAG chat 400: Missing thread_id and conversation_id (user_id=%s)", user_id)
             return jsonify({
                 'error': 'thread_id or conversation_id is required for RAG chat. Please select a conversation with an uploaded PDF or upload a PDF first.',
                 'code': 'MISSING_THREAD_ID'
@@ -511,17 +585,38 @@ def chat():
         db = get_db()
         thread_row = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
         if not thread_row:
+            logger.warning("RAG chat 400: No thread found for thread_id=%s user_id=%s", thread_id, user_id)
             return jsonify({
                 'error': 'No PDF has been uploaded for this conversation yet. Please upload a PDF document first to chat with your document.',
-                'code': 'NO_DOCUMENT_UPLOADED'
-            }), 400
-
-        if not thread_row.has_document:
-            return jsonify({
-                'error': 'No PDF has been uploaded for this thread yet. Please upload a PDF first.',
-                'code': 'NO_DOCUMENT',
+                'code': 'NO_DOCUMENT_UPLOADED',
                 'thread_id': thread_id
             }), 400
+
+        if not getattr(thread_row, 'has_document', False):
+            # Auto-repair: if chunks exist in DB, ingest completed but has_document was never set
+            chunk_count = db.query(RAGChunk).filter_by(thread_id=thread_id, user_id=user_id).count()
+            if chunk_count > 0:
+                try:
+                    thread_row.has_document = True
+                    if getattr(thread_row, 'doc_count', None) is None or thread_row.doc_count == 0:
+                        thread_row.doc_count = chunk_count
+                    db.commit()
+                    logger.info("RAG chat: repaired has_document=True for thread_id=%s (chunk_count=%s)", thread_id, chunk_count)
+                except Exception as e:
+                    logger.warning("RAG chat: failed to repair has_document for thread_id=%s: %s", thread_id, e)
+                    db.rollback()
+                    return jsonify({
+                        'error': 'Your PDF may still be processing. Please wait a moment and try again, or upload the PDF again.',
+                        'code': 'NO_DOCUMENT',
+                        'thread_id': thread_id
+                    }), 400
+            else:
+                logger.warning("RAG chat 400: Thread exists but has_document=False and no chunks thread_id=%s", thread_id)
+                return jsonify({
+                    'error': 'Your PDF may still be processing. Please wait a moment and try again, or upload the PDF again.',
+                    'code': 'NO_DOCUMENT',
+                    'thread_id': thread_id
+                }), 400
 
         # Prepare config for LangGraph
         config = {
@@ -574,6 +669,9 @@ def chat():
                 response_content = last_msg.get('content', str(last_msg))
             else:
                 response_content = str(last_msg)
+
+        # Remove internal lesson-finalization fields so they never appear on frontend or in history
+        response_content = _strip_lesson_finalization_from_response(response_content)
 
         # Save messages to database for chat history
         db_conversation_id = None
@@ -858,6 +956,9 @@ def get_thread_document(thread_id):
             }), 404
 
         metadata = thread_document_metadata(thread_id)
+        # Do not expose lesson-finalization fields to frontend
+        if isinstance(metadata, dict):
+            metadata = {k: v for k, v in metadata.items() if k not in ('lesson_finalized', 'lesson_title', 'last_lesson_text')}
         return jsonify({
             'thread_id': thread_id,
             'metadata': metadata

@@ -223,8 +223,17 @@ def register():
                 DBEmailVerificationToken.email == email
             ).update({DBEmailVerificationToken.used: True})
             db.commit()
-                    
-            return redirect(url_for('auth.login'))
+            
+            # Auto-login and redirect to dashboard (no alert, no login page)
+            session.clear()
+            session['user_id'] = user_id
+            session['username'] = username
+            session['role'] = role or 'student'
+            session['groq_api_key'] = groq_api_key or ''
+            session.permanent = True
+            if role == 'admin':
+                return redirect('/admin/')
+            return redirect(url_for('chat.index'))
         except ValueError as e:
             logger.error(f"Registration validation error: {str(e)}")
             return render_template('register.html', error=str(e))
@@ -250,15 +259,29 @@ def login():
                 session['groq_api_key'] = user.get('groq_api_key', '')  # Default to empty string if not present
                 session.permanent = True  # Make session permanent for 24 hours
                 
-                # Redirect admins to admin dashboard
+                # JSON response for fetch/AJAX so frontend can redirect without relying on 302
+                if _wants_json():
+                    if user.get('role') == 'admin':
+                        return jsonify({'success': True, 'redirect_url': '/admin/'})
+                    if user.get('role') == 'teacher':
+                        return jsonify({'success': True, 'redirect_url': url_for('chat.teacher_dashboard')})
+                    return jsonify({'success': True, 'redirect_url': url_for('chat.index')})
+                
                 if user.get('role') == 'admin':
                     return redirect('/admin/')
-                
+                if user.get('role') == 'teacher':
+                    return redirect(url_for('chat.teacher_dashboard'))
                 return redirect(url_for('chat.index'))
-            return render_template('login.html', error="Invalid credentials")
+            err_msg = "Invalid credentials"
+            if _wants_json():
+                return jsonify({'success': False, 'error': err_msg}), 401
+            return render_template('login.html', error=err_msg)
         except Exception as e:
             logger.error(f"Login error: {str(e)}")
-            return render_template('login.html', error="Login failed")
+            err_msg = "Login failed"
+            if _wants_json():
+                return jsonify({'success': False, 'error': err_msg}), 500
+            return render_template('login.html', error=err_msg)
     return render_template('login.html')
 
 # @bp.route('/logout',methods=['GET','POST'])
@@ -471,6 +494,13 @@ def get_session():
         logger.error(f"Error getting session token: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+def _wants_json():
+    return (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+        request.accept_mimetypes.best_match(['application/json', 'text/html']) == 'application/json'
+    )
+
+
 @bp.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
@@ -480,6 +510,8 @@ def forgot_password():
             # Check if email exists
             user = UserModel.get_user_by_email(email)
             if not user:
+                if _wants_json():
+                    return jsonify({'success': False, 'error': 'Email not found'}), 400
                 return render_template('forgot_password.html', error="Email not found")
             
             # Generate OTP
@@ -517,10 +549,14 @@ If you didn't request this password reset, please ignore this email.'''
             mail.send(msg)
             logger.info(f"Password reset OTP sent to {email}")
             
+            if _wants_json():
+                return jsonify({'success': True, 'email': email})
             return render_template('reset_password.html', email=email)
             
         except Exception as e:
             logger.error(f"Password reset error: {str(e)}")
+            if _wants_json():
+                return jsonify({'success': False, 'error': 'Failed to send OTP'}), 500
             return render_template('forgot_password.html', error="Failed to send OTP")
             
     return render_template('forgot_password.html')
@@ -536,6 +572,8 @@ def reset_password():
             
             # Validate passwords match
             if new_password != confirm_password:
+                if _wants_json():
+                    return jsonify({'success': False, 'error': 'Passwords do not match'}), 400
                 return render_template('reset_password.html', email=email, error="Passwords do not match")
             
             # Check if OTP exists and is valid
@@ -548,16 +586,22 @@ def reset_password():
             ).first()
             
             if not reset_token:
+                if _wants_json():
+                    return jsonify({'success': False, 'error': 'Invalid or expired OTP'}), 400
                 return render_template('reset_password.html', email=email, error="Invalid or expired OTP")
             
             # Check if expired
             if datetime.utcnow() > reset_token.expires_at:
                 reset_token.used = True
                 db.commit()
+                if _wants_json():
+                    return jsonify({'success': False, 'error': 'OTP has expired'}), 400
                 return render_template('reset_password.html', email=email, error="OTP has expired")
             
             # Verify OTP
             if reset_token.otp != otp:
+                if _wants_json():
+                    return jsonify({'success': False, 'error': 'Invalid OTP'}), 400
                 return render_template('reset_password.html', email=email, error="Invalid OTP")
             
             # Update password in database
@@ -571,10 +615,14 @@ def reset_password():
             reset_token.used = True
             db.commit()
             
+            if _wants_json():
+                return jsonify({'success': True, 'redirect_url': url_for('auth.login')})
             return redirect(url_for('auth.login'))
             
         except Exception as e:
             logger.error(f"Password reset error: {str(e)}")
+            if _wants_json():
+                return jsonify({'success': False, 'error': 'Failed to reset password'}), 500
             return render_template('reset_password.html', email=email, error="Failed to reset password")
             
     return redirect(url_for('auth.forgot_password'))

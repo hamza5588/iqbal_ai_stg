@@ -268,6 +268,13 @@ def create_app():
     app.register_blueprint(subscription_bp, url_prefix='/subscription')
     app.register_blueprint(admin_bp)
     
+    # Serve teacher dashboard static assets (css, js, assets from teacherfrontend)
+    from flask import send_from_directory
+    teacherfrontend_dir = os.path.join(base_dir, 'teacherfrontend')
+    @app.route('/teacher-static/<path:filename>')
+    def teacher_static(filename):
+        return send_from_directory(teacherfrontend_dir, filename)
+
     # Register RBAC template helpers
     from app.rbac.template_helpers import TEMPLATE_HELPERS
     for name, func in TEMPLATE_HELPERS.items():

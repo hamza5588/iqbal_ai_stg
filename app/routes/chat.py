@@ -56,10 +56,24 @@ def _get_openai_client():
         raise RuntimeError("OPENAI_API_KEY environment variable is not set")
     return OpenAI(api_key=api_key)
 
+@bp.route('/teacher-dashboard')
+@login_required
+@teacher_required
+def teacher_dashboard():
+    """Render teacher dashboard (teacher-only). Teachers use this page only, not chat.html. Template: teacher_dashboard.html; assets: /teacher-static/."""
+    try:
+        return render_template('teacher_dashboard.html')
+    except Exception as e:
+        logger.error(f"Error serving teacher dashboard: {str(e)}")
+        return redirect(url_for('chat.index'))
+
+
 @bp.route('/')
 @login_required
 def index():
-    """Render the main chat interface"""
+    """Render the main chat interface. Teachers use teacher_dashboard.html only and are redirected there."""
+    if session.get('role') == 'teacher':
+        return redirect(url_for('chat.teacher_dashboard'))
     has_submitted_survey = False
     subscription_tier = 'free'
     try:
@@ -559,6 +573,12 @@ def get_user_info():
 @bp.route('/api/stt', methods=['POST'])
 @login_required
 def speech_to_text():
+    """
+    Convert uploaded speech audio to text using local Whisper base model.
+
+    Expects multipart/form-data with field "audio".
+    Returns JSON: {"text": "..."} on success.
+    """
     try:
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
@@ -568,23 +588,31 @@ def speech_to_text():
             return jsonify({'error': 'Empty audio filename'}), 400
 
         from tempfile import NamedTemporaryFile
+        from app.utils.whisper_stt import transcribe_audio
 
-        with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-            audio_file.save(tmp.name)
-            tmp_path = tmp.name
+        tmp_path = None
+        try:
+            with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+                audio_file.save(tmp.name)
+                tmp_path = tmp.name
 
-        # 👇 LOCAL WHISPER HERE
-        result = whisper_model.transcribe(
-            tmp_path,
-            fp16=False,      # important if no GPU
-            language="en"    # optional but faster if known
-        )
+            result = whisper_model.transcribe(
+                tmp_path,
+                fp16=False,      # important if no GPU
+                language="en"    # optional but faster if known
+            )
 
-        text = result.get("text", "").strip()
-        if not text:
-            return jsonify({'error': 'Transcription failed'}), 500
+            text = result.get("text", "").strip()
+            if not text:
+                return jsonify({'error': 'Transcription failed'}), 500
 
-        return jsonify({'text': text})
+            return jsonify({'text': text})
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     except Exception as e:
         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
