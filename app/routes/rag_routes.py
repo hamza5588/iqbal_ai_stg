@@ -28,6 +28,24 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 
 
+def _strip_lesson_finalization_from_response(text):
+    """
+    Remove internal lesson-finalization lines from AI response so they are never
+    shown on the frontend or stored in chat history.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    import re
+    # Remove lines like "Lesson Finalized", "lesson_finalized = true", "lesson_title = \"...\""
+    cleaned = re.sub(r'^\s*Lesson\s+Finalized\s*$', '', text, flags=re.IGNORECASE | re.MULTILINE)
+    cleaned = re.sub(r'^\s*lesson_finalized\s*=\s*(?:true|false)\s*$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'^\s*lesson_title\s*=\s*["\'][^"\']*["\']\s*$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'^\s*last_lesson_text\s*=\s*.*$', '', cleaned, flags=re.MULTILINE)
+    # Collapse multiple blank lines and trim
+    cleaned = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned).strip()
+    return cleaned
+
+
 def _get_openai_client():
     """
     Lazily create an OpenAI client for Whisper STT.
@@ -412,27 +430,25 @@ def chat():
 
         user_id = session['user_id']
 
-        # If audio is sent (voice input), transcribe it first using Whisper
+        # If audio is sent (voice input), transcribe using local Whisper base model
         audio_text = None
+        tmp_path = None
         try:
             audio_file = request.files.get('audio')
             if audio_file and audio_file.filename:
-                client = _get_openai_client()
+                from app.utils.whisper_stt import transcribe_audio
                 with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
                     audio_file.save(tmp.name)
                     tmp_path = tmp.name
-
-                with open(tmp_path, "rb") as f:
-                    transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=f,
-                        response_format="json"
-                    )
-
-                audio_text = getattr(transcription, "text", None) or transcription.get("text")
+                audio_text = transcribe_audio(tmp_path)
         except Exception as stt_error:
             logger.error(f"Error transcribing audio for RAG chat: {str(stt_error)}", exc_info=True)
-            # Continue without audio_text; will fall back to text message if provided
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
         
         # Try to get JSON data first
         data = request.get_json(force=True, silent=True)
@@ -458,7 +474,17 @@ def chat():
                     'thread_id': request.args.get('thread_id') if request.args else None,
                     'conversation_id': request.args.get('conversation_id', type=int) if request.args else None
                 }
-        
+        # FormData with audio file: form may have thread_id/conversation_id but no message; use transcription
+        if data and not (data.get('message') or '').strip() and audio_text:
+            data['message'] = audio_text
+            if data.get('thread_id') is None and request.form:
+                data['thread_id'] = request.form.get('thread_id') or None
+            if data.get('conversation_id') is None and request.form:
+                try:
+                    data['conversation_id'] = request.form.get('conversation_id', type=int) or None
+                except (TypeError, ValueError):
+                    data['conversation_id'] = None
+
         if not data:
             return jsonify({'error': 'No data provided. Please send JSON, form-data with \"message\" field, or an audio file.'}), 400
 
@@ -537,6 +563,9 @@ def chat():
                 response_content = last_msg.get('content', str(last_msg))
             else:
                 response_content = str(last_msg)
+
+        # Remove internal lesson-finalization fields so they never appear on frontend or in history
+        response_content = _strip_lesson_finalization_from_response(response_content)
 
         # Save messages to database for chat history
         db_conversation_id = None
@@ -831,6 +860,9 @@ def get_thread_document(thread_id):
             }), 404
 
         metadata = thread_document_metadata(thread_id)
+        # Do not expose lesson-finalization fields to frontend
+        if isinstance(metadata, dict):
+            metadata = {k: v for k, v in metadata.items() if k not in ('lesson_finalized', 'lesson_title', 'last_lesson_text')}
         return jsonify({
             'thread_id': thread_id,
             'metadata': metadata

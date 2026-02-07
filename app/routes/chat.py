@@ -39,10 +39,22 @@ def _get_openai_client():
         raise RuntimeError("OPENAI_API_KEY environment variable is not set")
     return OpenAI(api_key=api_key)
 
+@bp.route('/teacher-dashboard')
+@login_required
+@teacher_required
+def teacher_dashboard():
+    """Render teacher dashboard (teacher-only). Template lives in templates/; assets served at /teacher-static/."""
+    try:
+        return render_template('teacher_dashboard.html')
+    except Exception as e:
+        logger.error(f"Error serving teacher dashboard: {str(e)}")
+        return redirect(url_for('chat.index'))
+
+
 @bp.route('/')
 @login_required
 def index():
-    """Render the main chat interface"""
+    """Render the main chat interface. Teachers are redirected to teacher dashboard from auth."""
     try:
         # Check if user has submitted survey
         survey_model = SurveyModel(session['user_id'])
@@ -538,7 +550,7 @@ def get_user_info():
 @login_required
 def speech_to_text():
     """
-    Convert uploaded speech audio to text using OpenAI Whisper.
+    Convert uploaded speech audio to text using local Whisper base model.
 
     Expects multipart/form-data with field "audio".
     Returns JSON: {"text": "..."} on success.
@@ -551,29 +563,26 @@ def speech_to_text():
         if audio_file.filename == '':
             return jsonify({'error': 'Empty audio filename'}), 400
 
-        # OpenAI client for Whisper
-        client = _get_openai_client()
-
-        # Whisper works best with binary file-like objects
-        # We read into memory here as recordings are short (voice messages)
         from tempfile import NamedTemporaryFile
+        from app.utils.whisper_stt import transcribe_audio
 
-        with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-            audio_file.save(tmp.name)
-            tmp_path = tmp.name
+        tmp_path = None
+        try:
+            with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+                audio_file.save(tmp.name)
+                tmp_path = tmp.name
 
-        with open(tmp_path, "rb") as f:
-            transcription = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=f,
-                response_format="json"
-            )
+            text = transcribe_audio(tmp_path)
+            if not text:
+                return jsonify({'error': 'Transcription failed or not available (install openai-whisper)'}), 500
 
-        text = getattr(transcription, "text", None) or transcription.get("text")  # handle both object/dict
-        if not text:
-            return jsonify({'error': 'Transcription failed'}), 500
-
-        return jsonify({'text': text})
+            return jsonify({'text': text})
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     except Exception as e:
         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
