@@ -1979,6 +1979,9 @@
     let userRole = 'student'; // Will be set from API
     let userInfo = null;
     let currentQuestionLessonId = null;
+    let isStudentLessonQAMode = false; // Student asking questions about a lesson on main screen (no modal)
+    let currentStudentLessonQAId = null;
+    let currentStudentLessonQATitle = '';
     let generatedLessonContent = '';
     let currentLessonForFAQ = null;
     let availableLessons = [];
@@ -5216,6 +5219,100 @@ async function initializeApp() {
         }
     }
 
+    // Show main chat screen in "student lesson Q&A" mode (no modal) – like teacher PDF Q&A on main screen
+    async function showStudentLessonQAMainScreen(lessonId, lessonTitle) {
+        if (isLessonChatMode) {
+            resetLessonChatMode();
+        }
+        isStudentLessonQAMode = true;
+        currentStudentLessonQAId = lessonId;
+        currentStudentLessonQATitle = lessonTitle || 'Lesson';
+
+        hideAllContentAreas();
+        const lessonGenContent = document.getElementById('lessonGeneratorContent');
+        if (lessonGenContent) {
+            lessonGenContent.classList.add('hidden');
+        }
+
+        document.getElementById('chatMessages').classList.remove('hidden');
+        const chatInputArea = document.getElementById('chatInputArea');
+        if (chatInputArea) {
+            chatInputArea.classList.remove('hidden');
+        }
+
+        const finalizeBtn = document.getElementById('lessonChatFinalizeBtn');
+        if (finalizeBtn) {
+            finalizeBtn.classList.add('hidden');
+        }
+
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = '';
+
+        document.getElementById('chatTitle').textContent = currentStudentLessonQATitle;
+        document.getElementById('chatStatus').textContent = 'Ask questions about this lesson';
+
+        try {
+            const response = await fetch(`/api/lessons/lesson_chat_history/${lessonId}`, {
+                method: 'GET',
+                credentials: 'include'
+            });
+            const data = await response.json().catch(() => ({}));
+            const history = data.history || [];
+            if (history.length > 0) {
+                history.forEach(function (item) {
+                    addMessageToChat('user', item.question);
+                    addMessageToChat('ai', item.answer || '');
+                });
+            } else {
+                addMessageToChat('ai', 'Ask me anything about this lesson. I\'ll answer based on the lesson content.');
+            }
+        } catch (e) {
+            console.warn('Load lesson chat history', e);
+            addMessageToChat('ai', 'Ask me anything about this lesson. I\'ll answer based on the lesson content.');
+        }
+
+        currentView = 'chat';
+        try {
+            history.replaceState({}, document.title, window.location.pathname || '/');
+        } catch (err) {}
+
+        setTimeout(function () {
+            const input = document.getElementById('messageInput');
+            if (input) {
+                input.focus();
+            }
+        }, 100);
+    }
+
+    // Handle sending a message when in student lesson Q&A mode (main screen, same API as modal)
+    async function handleStudentLessonQA(message) {
+        if (!currentStudentLessonQAId) return;
+        showTypingIndicator();
+        try {
+            const response = await fetch('/api/lessons/ask_question', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lesson_id: currentStudentLessonQAId, question: message }),
+                credentials: 'include'
+            });
+            hideTypingIndicator();
+            const data = await response.json().catch(() => ({}));
+            if (response.ok && data.answer != null) {
+                addMessageToChat('ai', data.answer);
+            } else {
+                addMessageToChat('ai', data.error || 'Sorry, I couldn\'t process that question. Please try again.');
+            }
+        } catch (err) {
+            hideTypingIndicator();
+            console.error('Student lesson QA error', err);
+            addMessageToChat('ai', 'Sorry, something went wrong. Please try again.');
+        }
+        setTimeout(function () {
+            var inp = document.getElementById('messageInput');
+            if (inp) inp.focus();
+        }, 100);
+    }
+
     // Switch to RAG chat mode (markdownDownloadUrl: optional; processingTimeSeconds: optional, shown in welcome message)
     function switchToRAGChatMode(threadId, filename, markdownDownloadUrl, processingTimeSeconds) {
         isRAGChatMode = true;
@@ -8373,6 +8470,13 @@ async function initializeApp() {
             if (threadIdFromUrl) {
                 switchToRAGChatMode(threadIdFromUrl, null);
             }
+            // Redirect from student dashboard "Ask Question": show lesson Q&A on main screen (no modal), like teacher PDF Q&A
+            const askLessonId = urlParams.get('ask_lesson_id');
+            const askLessonTitle = urlParams.get('ask_lesson_title');
+            if (askLessonId && typeof showStudentLessonQAMainScreen === 'function') {
+                const title = askLessonTitle ? decodeURIComponent(askLessonTitle) : 'Lesson';
+                setTimeout(function() { showStudentLessonQAMainScreen(askLessonId, title); }, 100);
+            }
         const questionInput = document.getElementById('questionInput');
         if (questionInput) {
                 questionInput.addEventListener('keypress', function (event) {
@@ -8858,6 +8962,11 @@ async function initializeApp() {
             showTypingIndicator();
             
             try {
+                // Student lesson Q&A on main screen (from student dashboard "Ask Question")
+                if (isStudentLessonQAMode && currentStudentLessonQAId) {
+                    await handleStudentLessonQA(message);
+                    return;
+                }
                 // Check if we're in lesson chat mode
                 if (isLessonChatMode && currentLessonChatId) {
                     // Use interactive chat API for lesson

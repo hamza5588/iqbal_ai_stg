@@ -265,12 +265,16 @@ def login():
                         return jsonify({'success': True, 'redirect_url': '/admin/'})
                     if user.get('role') == 'teacher':
                         return jsonify({'success': True, 'redirect_url': url_for('chat.teacher_dashboard')})
+                    if user.get('role') == 'student':
+                        return jsonify({'success': True, 'redirect_url': url_for('chat.student_dashboard')})
                     return jsonify({'success': True, 'redirect_url': url_for('chat.index')})
                 
                 if user.get('role') == 'admin':
                     return redirect('/admin/')
                 if user.get('role') == 'teacher':
                     return redirect(url_for('chat.teacher_dashboard'))
+                if user.get('role') == 'student':
+                    return redirect(url_for('chat.student_dashboard'))
                 return redirect(url_for('chat.index'))
             err_msg = "Invalid credentials"
             if _wants_json():

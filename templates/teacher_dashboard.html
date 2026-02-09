@@ -208,7 +208,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
 
   <!-- marked: Markdown → HTML -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
   <!-- DOMPurify: XSS-safe HTML -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <!-- KaTeX: Math formulas -->
@@ -2749,95 +2749,15 @@
         </div>
       </section>
 
-      <!-- Prompt Tab Area (replaces Set Prompt modal as a tab) -->
+      <!-- Prompt Tab: opens Set Prompt modal (same as chat.html - one place to set prompt) -->
       <section id="promptArea" class="hidden p-6 overflow-y-auto custom-scrollbar" style="display: none !important;">
-        <div class="max-w-3xl mx-auto">
-          <div class="bg-white rounded-2xl p-4 md:p-8 w-full mx-4 my-auto">
-            <div class="flex items-center justify-between mb-6 md:mb-8">
-              <div>
-                <h3 class="text-2xl font-bold text-gray-900">Customize AI Assistant</h3>
-                <p class="text-gray-600 text-sm md:text-base mt-1">Tailor the AI's behavior with custom instructions</p>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-              <div class="lg:col-span-2">
-                <div class="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 p-4 md:p-6">
-                  <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center gap-3">
-                      <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                        <i class="fas fa-edit text-primary-600"></i>
-                      </div>
-                      <div>
-                        <h4 class="text-lg font-semibold text-gray-900">Your Custom Prompt</h4>
-                        <p class="text-sm text-gray-500">Define how the AI should respond</p>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <button onclick="savePromptAsTemplate()"
-                        class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                        <i class="fas fa-save mr-1.5"></i>Save as Template
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="flex justify-between items-center mb-3">
-                    <span class="text-sm font-medium text-gray-700">Character count: <span
-                        id="charCount">0</span>/2000</span>
-                    <button onclick="clearPrompt()"
-                      class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
-                      <i class="fas fa-trash-alt"></i> Clear
-                    </button>
-                  </div>
-
-                  <div class="relative">
-                    <textarea id="customPrompt"
-                      class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
-                      placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
-                      oninput="updateCharCount(this)"></textarea>
-                    <div class="absolute bottom-3 right-3">
-                      <button onclick="generatePrompt()"
-                        class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 flex items-center justify-center">
-                        <i class="fas fa-magic text-sm"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <div class="flex items-start">
-                    <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-3 text-lg"></i>
-                    <div>
-                      <h4 class="text-sm font-semibold text-blue-800 mb-1">Important Information</h4>
-                      <p class="text-sm text-blue-700">
-                        Your custom prompt will be combined with the default RAG instructions for PDF queries. This
-                        prompt will apply to all your threads, not just the current conversation.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            <div class="flex flex-col md:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
-              <button onclick="loadCurrentPrompt()"
-                class="flex-1 md:flex-none bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2">
-                <i class="fas fa-sync-alt"></i>
-                <span>Load Current</span>
-              </button>
-              <button onclick="testPrompt()"
-                class="flex-1 md:flex-none bg-blue-100 text-blue-700 py-3 px-6 rounded-xl hover:bg-blue-200 transition-colors font-medium flex items-center justify-center gap-2">
-                <i class="fas fa-vial"></i>
-                <span>Test Prompt</span>
-              </button>
-              <button onclick="saveCustomPrompt()"
-                class="flex-1 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 px-6 rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg">
-                <i class="fas fa-save"></i>
-                <span>Save & Apply</span>
-              </button>
-            </div>
-          </div>
+        <div class="max-w-2xl mx-auto text-center py-12">
+          <h3 class="text-xl font-bold text-gray-900 mb-2">Set Custom System Prompt</h3>
+          <p class="text-gray-600 text-sm mb-6">Customize how the AI assistant behaves. Your prompt will apply to all your threads.</p>
+          <button onclick="openSetPromptModal()"
+            class="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium">
+            <i class="fas fa-edit mr-2"></i>Open Set Prompt
+          </button>
         </div>
       </section>
 
@@ -2971,133 +2891,42 @@
 
   <!-- All Modals - Outside main container to avoid overflow-hidden clipping -->
 
-  <!-- Redesigned Set Prompt Modal -->
+  <!-- Set Prompt Modal (same as chat.html: simple layout, Load Current / Delete Prompt / Cancel / Save Prompt) -->
   <div id="setPromptModal"
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center z-[100] overflow-y-auto py-4 hidden">
-    <div class="bg-white rounded-2xl p-0 md:p-0 w-full max-w-3xl mx-4 my-auto max-h-[90vh] overflow-y-auto shadow-lg">
-      <!-- Gradient Header -->
-      <div class="rounded-t-2xl bg-gradient-to-r from-primary-600 to-primary-700 text-white p-4 md:p-6">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h3 class="text-2xl font-bold">Customize AI Assistant</h3>
-            <p class="text-primary-100 text-sm md:text-base mt-1">Tailor the AI's behavior with concise instructions</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <button onclick="closeSetPromptModal()"
-              class="w-10 h-10 rounded-full flex items-center justify-center bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors text-white">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] overflow-y-auto py-4 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 rounded-t-lg">
+        <h3 class="text-xl font-semibold text-white">Set Custom System Prompt</h3>
+        <p class="text-primary-100 text-sm mt-1">Customize how the AI assistant behaves. This prompt will apply to all your threads.</p>
+      </div>
+      <div class="p-6 flex-1 overflow-y-auto">
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-semibold mb-2">Custom Prompt</label>
+          <textarea id="customPrompt"
+            class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
+            placeholder="Enter your custom system prompt here. This will be combined with the default RAG instructions..."></textarea>
+          <p class="text-xs text-gray-500 mt-2">
+            <i class="fas fa-info-circle mr-1"></i>
+            Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt will apply to all your threads.
+          </p>
+        </div>
+        <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p class="text-xs text-blue-800 font-semibold mb-1">Note:</p>
+          <p class="text-xs text-blue-700">
+            The default RAG instructions (for PDF queries) will always be included along with your custom prompt. This prompt applies to all your threads, not just the current one.
+          </p>
         </div>
       </div>
-      <div class="p-4 md:p-8 bg-white rounded-b-2xl">
-
-        <!-- Main Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-          <!-- Left Column: Custom Prompt Input (main) -->
-          <div class="lg:col-span-2">
-            <!-- Card Container -->
-            <div class="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 p-4 md:p-6">
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                    <i class="fas fa-edit text-primary-600"></i>
-                  </div>
-                  <div>
-                    <h4 class="text-lg font-semibold text-gray-900">Your Custom Prompt</h4>
-                    <p class="text-sm text-gray-500">Define how the AI should respond</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <button onclick="savePromptAsTemplate()"
-                    class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                    <i class="fas fa-save mr-1.5"></i>Save as Template
-                  </button>
-                </div>
-              </div>
-
-              <!-- Character Count -->
-              <div class="flex justify-between items-center mb-3">
-                <span class="text-sm font-medium text-gray-700">Character count: <span
-                    id="charCount">0</span>/2000</span>
-                <button onclick="clearPrompt()" class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
-                  <i class="fas fa-trash-alt"></i> Clear
-                </button>
-              </div>
-
-              <!-- Textarea -->
-              <div class="relative">
-                <textarea id="customPrompt"
-                  class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
-                  placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
-                  oninput="updateCharCount(this)">Explore a world where human emotions are traded as currency. In this society, happiness, love, fear, and anger can be harvested, sold, or stolen. Follow the story of a reluctant 'emotion thief' who discovers a secret that could upend the entire system. As they navigate political intrigue, moral dilemmas, and forbidden connections, they must decide whether to exploit the system for personal gain or risk everything to restore emotional freedom to humanity.</textarea>
-                <div class="absolute bottom-3 right-3">
-                  <button onclick="generatePrompt()"
-                    class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 flex items-center justify-center">
-                    <i class="fas fa-magic text-sm"></i>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Tone Selector -->
-              <div class="mt-4 flex flex-wrap gap-2" aria-hidden="false">
-                <button data-tone="friendly" onclick="selectTone('friendly')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Friendly</button>
-                <button data-tone="concise" onclick="selectTone('concise')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Concise</button>
-                <button data-tone="detailed" onclick="selectTone('detailed')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Detailed</button>
-                <button data-tone="encouraging" onclick="selectTone('encouraging')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Encouraging</button>
-              </div>
-
-            </div>
-
-            <!-- Note Box -->
-            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div class="flex items-start">
-                <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-3 text-lg"></i>
-                <div>
-                  <h4 class="text-sm font-semibold text-blue-800 mb-1">Important Information</h4>
-                  <p class="text-sm text-blue-700">
-                    Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt
-                    will apply to all your threads, not just the current conversation.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-       
-
-            <!-- end right column -->
-          </div>
-
-
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex flex-col md:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
-          <button onclick="loadCurrentPrompt()"
-            class="flex-1 md:flex-none bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2">
-            <i class="fas fa-sync-alt"></i>
-            <span>Load Current</span>
-          </button>
-          <button onclick="testPrompt()"
-            class="flex-1 md:flex-none bg-blue-100 text-blue-700 py-3 px-6 rounded-xl hover:bg-blue-200 transition-colors font-medium flex items-center justify-center gap-2">
-            <i class="fas fa-vial"></i>
-            <span>Test Prompt</span>
-          </button>
-          <button onclick="closeSetPromptModal()"
-            class="flex-1 md:flex-none bg-gray-200 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-medium flex items-center justify-center gap-2">
-            <i class="fas fa-times"></i>
-            <span>Cancel</span>
-          </button>
-          <button onclick="saveCustomPrompt()"
-            class="flex-1 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 px-6 rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg">
-            <i class="fas fa-save"></i>
-            <span>Save & Apply</span>
-          </button>
-        </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex flex-wrap gap-3">
+        <button onclick="loadCurrentPrompt()"
+          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Load Current</button>
+        <button onclick="clearPrompt()"
+          class="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50">Delete Prompt</button>
+        <div class="flex-1"></div>
+        <button onclick="closeSetPromptModal()"
+          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+        <button onclick="saveCustomPrompt()"
+          class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Save Prompt</button>
       </div>
     </div>
     <!-- Save Template Modal -->
@@ -5270,6 +5099,34 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      // Format lesson content for view: markdown → HTML (# ## headings, tables, bullets, formulas)
+      function formatLessonContentForView(content) {
+        if (!content || (typeof content === 'string' && content.trim() === '')) {
+          return '<p class="text-gray-500 italic">No content yet</p>';
+        }
+        let raw = typeof content === 'string' ? content : String(content);
+        if (raw.includes('"response_type"') || raw.includes('"answer"')) {
+          try {
+            const p = JSON.parse(raw);
+            raw = p.answer || p.content || raw;
+          } catch (e) {}
+        }
+        raw = raw
+          .replace(/^Lesson Title:.*$/gm, '').replace(/^Grade Level:.*$/gm, '').replace(/^Focus Area:.*$/gm, '')
+          .replace(/^Subject:.*$/gm, '').replace(/^Topic:.*$/gm, '').replace(/^Duration:.*$/gm, '').replace(/^Materials:.*$/gm, '')
+          .replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+        try {
+          if (typeof marked !== 'undefined') {
+            marked.setOptions({ breaks: true, gfm: true });
+            const html = marked.parse(raw);
+            return '<div class="prose prose-sm max-w-none text-gray-700 leading-relaxed lesson-content-formatted">' +
+              '<style>.lesson-content-formatted table{border-collapse:collapse;width:100%;}.lesson-content-formatted th,.lesson-content-formatted td{border:1px solid #e5e7eb;padding:0.5rem 0.75rem;text-align:left;}.lesson-content-formatted th{background:#f3f4f6;font-weight:700;}.lesson-content-formatted ul,.lesson-content-formatted ol{margin:0.75rem 0;padding-left:1.5rem;}.lesson-content-formatted li{margin:0.4rem 0;font-weight:500;line-height:1.6;}.lesson-content-formatted li::marker{color:#0ea5e9;font-weight:700;}.lesson-content-formatted strong{font-weight:700;color:#111827;}.lesson-content-formatted h1{font-size:1.6rem;font-weight:700;margin-top:1rem;margin-bottom:0.5rem;color:#111827;letter-spacing:-0.02em;}.lesson-content-formatted h2{font-size:1.35rem;font-weight:700;margin-top:0.9rem;margin-bottom:0.45rem;color:#111827;letter-spacing:-0.01em;}.lesson-content-formatted h3{font-size:1.2rem;font-weight:700;margin-top:0.8rem;margin-bottom:0.4rem;color:#1f2937;}.lesson-content-formatted h4,.lesson-content-formatted h5,.lesson-content-formatted h6{font-size:1.05rem;font-weight:700;margin-top:0.7rem;margin-bottom:0.35rem;color:#1f2937;}.lesson-content-formatted p{margin:0.4rem 0;line-height:1.65;}</style>' +
+              html + '</div>';
+          }
+        } catch (e) { console.warn('formatLessonContentForView', e); }
+        return '<div class="text-gray-700 leading-relaxed whitespace-pre-wrap">' + (typeof escapeHtml === 'function' ? escapeHtml(raw) : raw.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</div>';
+      }
+
       // Populate the view lesson modal with data
       function populateViewLessonModal(lesson) {
         try {
@@ -5297,11 +5154,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const subjectEl = document.getElementById('viewLessonSubject');
           if (subjectEl) subjectEl.textContent = lesson.subject || 'General';
 
-          // Populate current version preview (support markdown via marked if available)
+          // Populate current version preview (tables, bullets, formulas — same as teacher chat)
           const rawContent = lesson.content || lesson.body || 'No content yet';
-          const currentVersionHtml = (typeof marked !== 'undefined' && rawContent) ? marked.parse(rawContent) : escapeHtml(rawContent);
           const currentEl = document.getElementById('viewLessonCurrent');
-          if (currentEl) currentEl.innerHTML = currentVersionHtml;
+          if (currentEl) {
+            currentEl.innerHTML = formatLessonContentForView(rawContent);
+            if (window.MathJax && window.MathJax.typesetPromise) {
+              window.MathJax.typesetPromise([currentEl]).catch(function (err) { console.warn('MathJax in view lesson:', err); });
+            }
+          }
 
           // Load saved draft from localStorage
           const draftKey = `teacher_lesson_draft_${lesson.id}`;
@@ -7628,15 +7489,12 @@ To continue your learning journey:
           'For enterprise accounts, additional compliance features are available.');
       }
 
-      // Logout
+      // Logout: call logout route then redirect to login page
       function logout() {
         if (confirm('Are you sure you want to logout?')) {
-          // Clear sensitive data
           localStorage.removeItem('teacher_custom_prompt');
           localStorage.removeItem('teacher_prompt_tone');
-
-          // Redirect to login
-          window.location.href = 'login.html';
+          window.location.href = '/auth/logout';
         }
       }
 
@@ -7976,13 +7834,13 @@ To continue your learning journey:
         });
       }
 
-      // Clear prompt (UI + backend DELETE /api/rag/prompt + localStorage)
+      // Clear prompt (UI + backend DELETE /api/rag/prompt + localStorage) — same as chat.html "Delete Prompt"
       async function clearPrompt() {
-        if (!confirm('Are you sure you want to clear the prompt? This will remove it from the server and all RAG chats will use the default instructions.')) return;
+        if (!confirm('Are you sure you want to delete the custom prompt? This will remove it from all your threads. The default prompt will be used.')) return;
         const textarea = document.getElementById('customPrompt');
         if (textarea) {
           textarea.value = '';
-          updateCharCount(textarea);
+          if (typeof updateCharCount === 'function') updateCharCount(textarea);
         }
         try {
           const response = await fetch('/api/rag/prompt', { method: 'DELETE', credentials: 'include' });
@@ -8273,9 +8131,9 @@ To continue your learning journey:
             return;
           }
           localStorage.setItem('teacher_custom_prompt', prompt);
-          localStorage.setItem('teacher_prompt_tone', selectedTone);
-          if (textarea) updateCharCount(textarea);
-          showToast('✅ Custom prompt saved. It will apply to all your RAG chats.', 'success', 3000);
+          if (typeof selectedTone !== 'undefined') localStorage.setItem('teacher_prompt_tone', selectedTone);
+          if (textarea && typeof updateCharCount === 'function') updateCharCount(textarea);
+          showToast('Prompt saved. It will apply to all your threads.', 'success', 3000);
           closeSetPromptModal();
         } catch (e) {
           console.error('Save prompt error:', e);
@@ -8291,19 +8149,17 @@ To continue your learning journey:
           const response = await fetch('/api/rag/prompt', { method: 'GET', credentials: 'include' });
           const data = await response.json().catch(() => ({}));
           const prompt = (response.ok && data.prompt != null) ? (data.prompt || '') : (localStorage.getItem('teacher_custom_prompt') || '');
-          const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
           textarea.value = prompt;
-          selectTone(savedTone);
-          updateCharCount(textarea);
+          if (typeof updateCharCount === 'function') updateCharCount(textarea);
+          if (typeof selectTone === 'function') selectTone(localStorage.getItem('teacher_prompt_tone') || 'professional');
           localStorage.setItem('teacher_custom_prompt', prompt);
           if (response.ok && data.prompt != null) showToast('Prompt loaded from server', 'info');
         } catch (e) {
           console.error('Load prompt error:', e);
           const savedPrompt = localStorage.getItem('teacher_custom_prompt') || '';
-          const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
           textarea.value = savedPrompt;
-          selectTone(savedTone);
-          updateCharCount(textarea);
+          if (typeof updateCharCount === 'function') updateCharCount(textarea);
+          if (typeof selectTone === 'function') selectTone(localStorage.getItem('teacher_prompt_tone') || 'professional');
           showToast('Using locally saved prompt', 'info');
         }
       }
