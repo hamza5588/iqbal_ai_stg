@@ -320,9 +320,45 @@
       animation: slideInUp 0.5s ease-out forwards;
     }
 
+    /* Full-width chat area and messages */
+    #chatArea {
+      padding-left: 1% !important;
+      padding-right: 1% !important;
+      width: 100% !important;
+      box-sizing: border-box;
+    }
+
+    #chatMessages {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-sizing: border-box;
+    }
+
+    #chatArea .max-w-6xl,
+    #chatArea .mx-auto {
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+
+    .chat-message {
+      width: 100%;
+    }
+
+    .chat-message.user {
+      justify-content: flex-end;
+    }
+
+    .chat-message.assistant {
+      justify-content: flex-start;
+    }
+
     /* User messages on RIGHT side */
     .chat-message.user {
       flex-direction: row-reverse;
+      justify-content: flex-end;
     }
 
     /* Assistant messages on LEFT side */
@@ -373,6 +409,7 @@
       background: linear-gradient(135deg, #0ea5e9, #3b82f6);
       color: white;
       border-bottom-left-radius: 0.25rem;
+      margin-left: auto;
     }
 
     /* Assistant message content (right side) */
@@ -6842,6 +6879,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         showTypingIndicator();
 
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 60000);
           const body = {
             message: message,
             thread_id: window.currentRAGThreadId || null,
@@ -6851,9 +6890,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal: controller.signal
           });
-          removeTypingIndicator();
+          clearTimeout(timeoutId);
 
           if (!response.ok) {
             const err = await response.json().catch(function() { return {}; });
@@ -6878,8 +6918,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
           addAssistantMessage(formatted);
         } catch (e) {
+          const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
+          addAssistantMessage(isAbort
+            ? 'Error: Request timed out. Please try again.'
+            : 'Error: ' + (e.message || 'Network error. Please try again.'));
+        } finally {
           removeTypingIndicator();
-          addAssistantMessage('Error: ' + (e.message || 'Network error. Please try again.'));
         }
       }
 
@@ -7435,6 +7479,14 @@ To continue your learning journey:
       // Show typing indicator on RIGHT side
       function showTypingIndicator() {
         const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        // Remove any existing indicator to avoid duplicates
+        const existing = document.getElementById('typing-indicator');
+        if (existing) {
+          existing.remove();
+        }
+
         const typingDiv = document.createElement('div');
         typingDiv.id = 'typing-indicator';
         typingDiv.className = 'chat-message assistant animate-fade-in';
