@@ -3221,11 +3221,17 @@
                   placeholder="Modify your lesson content here..."></textarea>
               </div>
 
+              <!-- Apply-prompt input (same as chat.html AI versioning) -->
+              <div class="mb-3 md:mb-4">
+                <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2">Improvement prompt</label>
+                <textarea id="viewLessonApplyPromptInput" rows="2" placeholder="e.g. Add more examples for grade 5, simplify language..."
+                  class="w-full p-2 md:p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"></textarea>
+              </div>
               <!-- Draft Actions -->
               <div class="flex flex-col gap-2 md:gap-3">
-                <button onclick="applyPromptToLessonDraft()"
+                <button id="viewLessonApplyPromptBtn" onclick="applyPromptToLessonDraft()"
                   class="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
-                  <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
+                  <i class="fas fa-wand-magic-sparkles"></i>Apply Prompt
                 </button>
                 <button onclick="saveLessonDraftVisible()"
                   class="w-full bg-gray-100 text-gray-800 py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2 text-sm md:text-base">
@@ -4502,8 +4508,7 @@
         const formData = new FormData();
         formData.append('file', file);
         formData.append('create_new_thread', 'true');
-        const convId = window.currentRAGConversationId || (typeof currentChatId !== 'undefined' ? currentChatId : null);
-        if (convId != null) formData.append('conversation_id', String(convId));
+        // Do NOT send conversation_id: Create Lesson always gets a new conversation/thread so we never hit "this conversation already has a PDF".
         let progress = 0;
         const progressInterval = setInterval(() => {
           progress += Math.random() * 8 + 2;
@@ -5193,7 +5198,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const currentVersion = sortedVersions[0] || lesson;
           window.currentLessonVersions = sortedVersions;
           const forModal = {
-            id: lesson.id,
+            id: currentVersion.id,
             title: lesson.title,
             subject: lesson.focus_area || lesson.focusArea,
             grade: lesson.grade_level || lesson.gradeLevel,
@@ -5206,9 +5211,25 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           };
           populateViewLessonModal(forModal);
           showViewLessonModal();
+          await loadDraftForViewLesson(currentVersion.id);
         } catch (err) {
           console.error('viewLesson error:', err);
           showToast('Error loading lesson: ' + (err.message || 'Unknown'), 'error');
+        }
+      }
+
+      // Load draft from server when viewing a lesson (same as chat.html flow)
+      async function loadDraftForViewLesson(lessonId) {
+        if (!lessonId) return;
+        try {
+          const response = await fetch('/api/lessons/lesson/' + lessonId + '/get_draft', { method: 'GET', credentials: 'include' });
+          if (!response.ok) return;
+          const data = await response.json();
+          const draft = (data.draft_content && data.draft_content.trim()) ? data.draft_content : (data.current_content || '');
+          const draftEl = document.getElementById('viewLessonDraft');
+          if (draftEl) draftEl.value = draft;
+        } catch (e) {
+          console.warn('loadDraftForViewLesson:', e);
         }
       }
 
@@ -5422,48 +5443,89 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
-      // Apply custom prompt to lesson draft
-      function applyPromptToLessonDraft() {
-        const customPrompt = localStorage.getItem('teacher_custom_prompt') || '';
-        if (!customPrompt) {
-          showToast('No custom prompt set. Please set a prompt first.', 'info', 3000);
+      // Apply prompt via API (same as chat.html: POST /api/lessons/lesson/:id/apply_prompt)
+      async function applyPromptToLessonDraft() {
+        const lessonId = window.currentViewLessonId;
+        if (!lessonId) {
+          showToast('No lesson selected', 'error');
+          return;
+        }
+        const promptInput = document.getElementById('viewLessonApplyPromptInput');
+        const prompt = (promptInput && promptInput.value && promptInput.value.trim()) ? promptInput.value.trim() : (localStorage.getItem('teacher_custom_prompt') || '').trim();
+        if (!prompt) {
+          showToast('Enter an improvement prompt above or set a default prompt in settings.', 'info', 3000);
           return;
         }
 
-        const lessonId = window.currentViewLessonId;
-        const lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = findLessonById(lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          const currentContent = lesson.content || lesson.body || '';
-          const updatedContent = `${currentContent}\n\n---\n\n**AI Enhancement Note:**\nApplied prompt: ${customPrompt.substring(0, 100)}...`;
-
-          document.getElementById('viewLessonDraft').value = updatedContent;
-          saveLessonDraftVisible();
-          showToast('Prompt applied to draft!', 'success', 2000);
+        const applyBtn = document.getElementById('viewLessonApplyPromptBtn');
+        if (applyBtn) {
+          applyBtn.disabled = true;
+          applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Applying...';
+        }
+        try {
+          const response = await fetch('/api/lessons/lesson/' + lessonId + '/apply_prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ prompt: prompt })
+          });
+          const result = await response.json().catch(function() { return {}; });
+          if (response.ok && result.draft_content != null) {
+            const draftEl = document.getElementById('viewLessonDraft');
+            if (draftEl) draftEl.value = result.draft_content;
+            if (promptInput) promptInput.value = '';
+            showToast('Prompt applied successfully', 'success', 2000);
+          } else {
+            showToast(result.error || 'Failed to apply prompt', 'error', 3000);
+          }
+        } catch (e) {
+          console.error('applyPromptToLessonDraft:', e);
+          showToast('Error applying prompt', 'error');
+        } finally {
+          if (applyBtn) {
+            applyBtn.disabled = false;
+            applyBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i>Apply Prompt';
+          }
         }
       }
 
-      // Save the currently visible draft
-      function saveLessonDraftVisible() {
+      // Save the currently visible draft via API (same as chat: POST /api/lessons/lesson/:id/save_draft)
+      async function saveLessonDraftVisible() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftContent = document.getElementById('viewLessonDraft').value;
-        const draftKey = `teacher_lesson_draft_${lessonId}`;
-        localStorage.setItem(draftKey, draftContent);
-        showToast('Draft saved!', 'success', 2000);
+        const draftEl = document.getElementById('viewLessonDraft');
+        const draftContent = draftEl ? draftEl.value : '';
+        try {
+          const response = await fetch('/api/lessons/lesson/' + lessonId + '/save_draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ draft_content: draftContent })
+          });
+          const result = await response.json().catch(function() { return {}; });
+          if (response.ok) {
+            const draftKey = `teacher_lesson_draft_${lessonId}`;
+            localStorage.setItem(draftKey, draftContent);
+            showToast('Draft saved!', 'success', 2000);
+          } else {
+            showToast(result.error || 'Failed to save draft', 'error');
+          }
+        } catch (e) {
+          console.error('saveLessonDraftVisible:', e);
+          showToast('Error saving draft', 'error');
+        }
       }
 
-      // Finalize new version
-      function finalizeNewVersionLesson() {
+      // Finalize new version via API (same as chat: save_draft then POST /api/lessons/lesson/:id/finalize_version)
+      async function finalizeNewVersionLesson() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftContent = document.getElementById('viewLessonDraft').value.trim();
+        const draftEl = document.getElementById('viewLessonDraft');
+        const draftContent = draftEl ? draftEl.value.trim() : '';
         if (!draftContent) {
-          showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
+          showToast('Draft is empty. Apply a prompt or edit the content before finalizing.', 'warning', 3000);
           return;
         }
 
@@ -5471,45 +5533,40 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = findLessonById(lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-
-          // Initialize versions array if it doesn't exist
-          if (!lesson.versions) {
-            lesson.versions = [{
-              version: lesson.version || 1,
-              content: lesson.content || lesson.body || '',
-              createdAt: lesson.createdAt || new Date().toISOString()
-            }];
+        try {
+          // Save current draft to server so finalize_version can use it
+          const saveRes = await fetch('/api/lessons/lesson/' + lessonId + '/save_draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ draft_content: draftContent })
+          });
+          if (!saveRes.ok) {
+            const err = await saveRes.json().catch(function() { return {}; });
+            showToast(err.error || 'Failed to save draft before finalizing', 'error');
+            return;
           }
 
-          // Create new version
-          const newVersion = {
-            version: (lesson.version || 1) + 1,
-            content: draftContent,
-            createdAt: new Date().toISOString()
-          };
+          const finalizeRes = await fetch('/api/lessons/lesson/' + lessonId + '/finalize_version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({})
+          });
+          const result = await finalizeRes.json().catch(function() { return {}; });
 
-          // Update lesson
-          lesson.versions.push(newVersion);
-          lesson.version = newVersion.version;
-          lesson.content = draftContent;
-          lesson.status = 'published';
-          lesson.updatedAt = new Date().toISOString();
-
-          // Save to localStorage
-          localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
-
-          // Clear draft
-          const draftKey = `teacher_lesson_draft_${lessonId}`;
-          localStorage.removeItem(draftKey);
-
-          showToast(`✅ New version created! (v${newVersion.version})`, 'success', 3000);
-          closeViewLessonModal();
-          showMyLessonsPage(); // Refresh lessons list
+          if (finalizeRes.ok && result.success) {
+            const draftKey = `teacher_lesson_draft_${lessonId}`;
+            localStorage.removeItem(draftKey);
+            showToast('New version created successfully!', 'success', 3000);
+            closeViewLessonModal();
+            showMyLessonsPage();
+          } else {
+            showToast(result.error || 'Failed to create new version', 'error', 3000);
+          }
+        } catch (e) {
+          console.error('finalizeNewVersionLesson:', e);
+          showToast('Error finalizing version', 'error');
         }
       }
 
