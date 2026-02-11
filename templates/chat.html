@@ -5297,7 +5297,39 @@ async function initializeApp() {
             });
             hideTypingIndicator();
             const data = await response.json().catch(() => ({}));
-            if (response.ok && data.answer != null) {
+            // Approach 3: needs_rag_confirmation - show in-chat message with Yes/No buttons
+            if (response.ok && data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+                const promptMsg = data.permission_request.message ||
+                    'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+                const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const chatMessages = document.getElementById('chatMessages');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'flex items-start gap-3 mb-2 message-container';
+                msgDiv.innerHTML = '<div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">AI</div>' +
+                    '<div class="bg-gray-100 rounded-2xl px-4 py-3 w-full message-bubble"><p class="text-gray-700 leading-relaxed mb-3">' + promptEscaped + '</p>' +
+                    '<div class="flex gap-2"><button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button>' +
+                    '<button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button></div></div>';
+                chatMessages.appendChild(msgDiv);
+                const bubble = msgDiv.querySelector('.message-bubble');
+                const yesBtn = msgDiv.querySelector('.rag-confirm-yes');
+                const noBtn = msgDiv.querySelector('.rag-confirm-no');
+                yesBtn.onclick = function() {
+                    yesBtn.disabled = true; noBtn.disabled = true;
+                    bubble.innerHTML = '<p class="text-gray-500 italic">Searching PDF...</p>';
+                    fetch('/api/lessons/ask_question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                        body: JSON.stringify({ lesson_id: currentStudentLessonQAId, question: message, allow_rag: true })
+                    }).then(function(r) { return r.json(); }).then(function(d) {
+                        const ans = (d && d.answer != null) ? d.answer : (d.error || 'Sorry, I couldn\'t process that question. Please try again.');
+                        bubble.innerHTML = '<div class="text-gray-700 leading-relaxed prose max-w-none markdown-content">' + formatMessageContent(ans) + '</div>';
+                    }).catch(function() {
+                        bubble.innerHTML = '<p class="text-red-600">Sorry, I couldn\'t process that question. Please try again.</p>';
+                    });
+                };
+                noBtn.onclick = function() {
+                    yesBtn.disabled = true; noBtn.disabled = true;
+                    bubble.innerHTML = '<p class="text-gray-700 leading-relaxed">Your question is not covered in the lesson content.</p>';
+                };
+            } else if (response.ok && data.answer != null) {
                 addMessageToChat('ai', data.answer);
             } else {
                 addMessageToChat('ai', data.error || 'Sorry, I couldn\'t process that question. Please try again.');
@@ -7837,7 +7869,8 @@ async function initializeApp() {
                     lesson_prompt: '',
                     focus_area: 'General',
                     grade_level: 'General',
-                    summary: 'Lesson generated from chat conversation'
+                    summary: 'Lesson generated from chat conversation',
+                    rag_thread_id: currentRAGThreadId || undefined
                 })
             });
 
@@ -7916,7 +7949,8 @@ async function initializeApp() {
                     lesson_prompt: '',
                     focus_area: 'General',
                     grade_level: 'General',
-                    summary: 'Lesson generated from chat conversation'
+                    summary: 'Lesson generated from chat conversation',
+                    rag_thread_id: currentRAGThreadId || undefined
                 })
             });
 
@@ -8410,6 +8444,36 @@ async function initializeApp() {
 
             if (response.ok) {
                 const data = await response.json();
+                // Approach 3: needs_rag_confirmation - show in-chat message with Yes/No buttons
+                if (data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+                    const promptMsg = data.permission_request.message ||
+                        'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+                    const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const loadingDiv = document.getElementById(loadingId);
+                    if (loadingDiv) {
+                        loadingDiv.innerHTML = '<span class="font-semibold text-green-700">AI:</span> <div class="text-gray-800 prose max-w-none mt-1"><p class="mb-2">' + promptEscaped + '</p><div class="flex gap-2 mt-2"><button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button><button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button></div></div>';
+                        const yesBtn = loadingDiv.querySelector('.rag-confirm-yes');
+                        const noBtn = loadingDiv.querySelector('.rag-confirm-no');
+                        yesBtn.onclick = function() {
+                            yesBtn.disabled = true; noBtn.disabled = true;
+                            loadingDiv.innerHTML = '<span class="font-semibold text-green-700">AI:</span> <span class="text-gray-500 italic">Searching PDF...</span>';
+                            fetch('/api/lessons/ask_question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson_id: lessonIdToSend, question: question, allow_rag: true }), credentials: 'include' })
+                                .then(function(r) { return r.json(); })
+                                .then(function(retryData) {
+                                    const formattedAnswer = formatMessageContent(retryData.answer || retryData.error || 'Sorry, could not get an answer.');
+                                    loadingDiv.innerHTML = '<span class="font-semibold text-green-700">AI:</span> <div class="text-gray-800 prose max-w-none mt-1">' + formattedAnswer + '</div><div class="text-xs text-gray-500 mt-1">' + new Date().toLocaleString() + '</div>';
+                                })
+                                .catch(function() {
+                                    loadingDiv.innerHTML = '<span class="font-semibold text-green-700">AI:</span> <span class="text-red-600">Sorry, could not get an answer.</span>';
+                                });
+                        };
+                        noBtn.onclick = function() {
+                            yesBtn.disabled = true; noBtn.disabled = true;
+                            loadingDiv.innerHTML = '<span class="font-semibold text-green-700">AI:</span> <div class="text-gray-800 prose max-w-none mt-1">Your question is not covered in the lesson content.</div><div class="text-xs text-gray-500 mt-1">' + new Date().toLocaleString() + '</div>';
+                        };
+                    }
+                    if (qnaDiv) qnaDiv.scrollTop = qnaDiv.scrollHeight;
+                } else {
                     // Find the loading div by the specific ID we created
                     const loadingDiv = document.getElementById(loadingId);
                     if (loadingDiv) {
@@ -11301,7 +11365,8 @@ async function initializeApp() {
                     content,
                     focus_area: 'Lecture',
                     grade_level: 'General',
-                    summary: 'Saved from chat.'
+                    summary: 'Saved from chat.',
+                    rag_thread_id: currentRAGThreadId || undefined
                 })
             });
 
@@ -12329,6 +12394,38 @@ async function initializeApp() {
             }
         }
 
+        // Add RAG confirmation message with Yes/No buttons (in-chat, no alert)
+        function addStudentChatRagConfirmation(promptMsg, lessonId, question) {
+            const messagesDiv = document.getElementById('studentChatMessages');
+            if (!messagesDiv) return;
+            const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const msgHtml = '<div class="flex justify-start animate-fade-in"><div class="flex gap-3 max-w-[80%] flex-row"><div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center flex-shrink-0"><i class="fas fa-robot text-white"></i></div><div class="flex flex-col items-start"><div class="bg-white border-2 border-gray-200 text-gray-800 rounded-2xl px-4 py-3 shadow-md rag-confirm-bubble"><p class="mb-2">' + promptEscaped + '</p><div class="flex gap-2 mt-2"><button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button><button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button></div></div><span class="text-xs text-gray-400 mt-1 px-1">' + new Date().toLocaleTimeString() + '</span></div></div></div>';
+            messagesDiv.innerHTML += msgHtml;
+            const allBubbles = messagesDiv.querySelectorAll('.rag-confirm-bubble');
+            const bubble = allBubbles[allBubbles.length - 1];
+            const yesBtn = bubble.querySelector('.rag-confirm-yes');
+            const noBtn = bubble.querySelector('.rag-confirm-no');
+            yesBtn.onclick = function() {
+                yesBtn.disabled = true; noBtn.disabled = true;
+                bubble.innerHTML = '<p class="text-gray-500 italic">Searching PDF...</p>';
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                fetch('/api/lessons/ask_question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson_id: lessonId, question: question, allow_rag: true }), credentials: 'include' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        const ans = (d && d.answer) ? d.answer : (d.error || 'Sorry, could not get an answer.');
+                        bubble.innerHTML = formatMessageContent(ans);
+                    })
+                    .catch(function() {
+                        bubble.innerHTML = '<p class="text-red-600">Sorry, could not get an answer.</p>';
+                    });
+            };
+            noBtn.onclick = function() {
+                yesBtn.disabled = true; noBtn.disabled = true;
+                bubble.innerHTML = '<p>Your question is not covered in the lesson content.</p>';
+            };
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
         // Add message to chat interface
         function addStudentChatMessage(content, role, timestamp) {
             const messagesDiv = document.getElementById('studentChatMessages');
@@ -12433,10 +12530,13 @@ async function initializeApp() {
 
                 if (response.ok) {
                     const data = await response.json();
-                    
-                    // Add AI response to chat
-                    addStudentChatMessage(data.answer, 'assistant');
-                    
+                    if (data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+                        const promptMsg = data.permission_request.message ||
+                            'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+                        addStudentChatRagConfirmation(promptMsg, lessonId, question);
+                    } else {
+                        addStudentChatMessage(data.answer || 'Sorry, could not get an answer.', 'assistant');
+                    }
                     showNotification('Question answered successfully!', 'success');
                 } else {
                     const errorData = await response.json();
@@ -12496,11 +12596,53 @@ async function initializeApp() {
 
                 if (response.ok) {
                     const data = await response.json();
-                    
+                    let answerToShow = data.answer;
+                    if (data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+                        const promptMsg = data.permission_request.message ||
+                            'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+                        // Add a confirmation card in QnA history instead of alert
+                        const uid = Date.now().toString();
+                        const qnaDiv = document.getElementById('studentLessonQnAHistory');
+                        const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        const confirmCard = document.createElement('div');
+                        confirmCard.id = 'qnaCard-' + uid;
+                        confirmCard.className = 'bg-white rounded-xl p-4 border border-gray-200 shadow-[0_1px_4px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-shadow';
+                        confirmCard.innerHTML = '<button type="button" class="w-full flex items-start gap-3 text-left focus:outline-none rounded-lg p-1 min-h-[44px]" aria-expanded="true"><div class="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"><i class="fas fa-question text-white text-[11px]"></i></div><div class="flex-1 min-w-0"><div class="text-[15px] font-semibold text-gray-900">' + escapeHtml(question) + '</div><div class="text-[12px] text-gray-600 mt-0.5"><i class="far fa-clock mr-1"></i>' + new Date().toLocaleString() + '</div></div></button><div class="mt-3 flex items-start bg-gray-50 rounded-lg p-3 border border-gray-200 rag-confirm-area"><p class="mb-2 text-gray-800">' + promptEscaped + '</p><div class="flex gap-2"><button type="button" class="rag-confirm-yes-modal px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button><button type="button" class="rag-confirm-no-modal px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button></div></div>';
+                        if (qnaDiv) {
+                            if (qnaDiv.innerHTML.includes('No previous questions')) qnaDiv.innerHTML = '';
+                            qnaDiv.insertBefore(confirmCard, qnaDiv.firstChild);
+                        }
+                        const answerArea = confirmCard.querySelector('.rag-confirm-area');
+                        const yesBtn = confirmCard.querySelector('.rag-confirm-yes-modal');
+                        const noBtn = confirmCard.querySelector('.rag-confirm-no-modal');
+                        const setAnswer = function(html) {
+                            answerArea.innerHTML = '<div class="text-gray-800 prose max-w-none text-[14px] leading-7">' + html + '</div>';
+                        };
+                        yesBtn.onclick = function() {
+                            yesBtn.disabled = true; noBtn.disabled = true;
+                            setAnswer('<span class="text-gray-500 italic">Searching PDF...</span>');
+                            fetch('/api/lessons/ask_question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson_id: lessonId, question: question, allow_rag: true }), credentials: 'include' })
+                                .then(function(r) { return r.json(); })
+                                .then(function(retryData) {
+                                    const ans = (retryData && retryData.answer) ? retryData.answer : (retryData.error || 'Sorry, could not get an answer.');
+                                    setAnswer(formatMessageContent(ans));
+                                })
+                                .catch(function() { setAnswer('<p class="text-red-600">Sorry, could not get an answer.</p>'); });
+                        };
+                        noBtn.onclick = function() {
+                            yesBtn.disabled = true; noBtn.disabled = true;
+                            setAnswer('<p>Your question is not covered in the lesson content.</p>');
+                        };
+                        submitBtn.innerHTML = originalText;
+                        submitBtn.disabled = false;
+                        questionInput.value = '';
+                        showNotification('Please choose an option above', 'info');
+                        return;
+                    }
                     // Add the new Q&A to the history display
                     const qnaDiv = document.getElementById('studentLessonQnAHistory');
                     if (qnaDiv) {
-                        const formattedAnswer = formatMessageContent(data.answer);
+                        const formattedAnswer = formatMessageContent(answerToShow || 'Sorry, could not get an answer.');
                         const uid = Date.now().toString();
                         const newQnA = `
                             <div class=\"bg-white rounded-xl p-4 border border-gray-200 shadow-[0_1px_4px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-shadow\" id=\"qnaCard-${uid}\"> 

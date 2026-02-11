@@ -4936,6 +4936,50 @@
         return { html: escaped, className: baseClass + ' whitespace-pre-wrap' };
       }
 
+      function appendLessonQARagConfirmation(container, promptMsg, lessonId, question) {
+        if (!container) return;
+        var aiDiv = document.createElement('div');
+        aiDiv.className = 'chat-message assistant animate-fade-in';
+        var contentDiv = document.createElement('div');
+        contentDiv.className = 'chat-message-content prose prose-sm max-w-none text-gray-700 leading-relaxed lesson-qa-answer';
+        var promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        contentDiv.innerHTML = '<p class="mb-3">' + promptEscaped + '</p>' +
+          '<div class="flex gap-2 mt-2">' +
+          '<button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button>' +
+          '<button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button>' +
+          '</div>';
+        aiDiv.innerHTML = '<div class="chat-message-avatar"><img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI" onerror="this.style.display=\'none\'"></div>';
+        aiDiv.appendChild(contentDiv);
+        container.appendChild(aiDiv);
+        var yesBtn = contentDiv.querySelector('.rag-confirm-yes');
+        var noBtn = contentDiv.querySelector('.rag-confirm-no');
+        function disableBtns() { yesBtn.disabled = true; noBtn.disabled = true; }
+        yesBtn.onclick = function() {
+          disableBtns();
+          contentDiv.innerHTML = '<p class="text-gray-500 italic">Searching PDF...</p>';
+          if (typeof scrollToBottom === 'function') scrollToBottom();
+          fetch('/api/lessons/ask_question', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ lesson_id: lessonId, question: question, allow_rag: true })
+          }).then(function(r) { return r.json(); }).then(function(d) {
+            var ans = (d && d.answer != null) ? d.answer : (d.error || 'Sorry, I couldn\'t process that. Please try again.');
+            var fmt = formatLessonQAAnswer(ans);
+            contentDiv.className = fmt.className;
+            contentDiv.innerHTML = fmt.html;
+            if (window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise([contentDiv]).catch(function() {});
+          }).catch(function() {
+            contentDiv.innerHTML = '<p class="text-red-600">Sorry, I couldn\'t process that. Please try again.</p>';
+          });
+        };
+        noBtn.onclick = function() {
+          disableBtns();
+          contentDiv.innerHTML = '<p>Your question is not covered in the lesson content.</p>';
+        };
+        if (typeof scrollToBottom === 'function') scrollToBottom();
+      }
+
       function appendLessonQAMessagePair(container, userText, assistantText) {
         if (!container) return;
         if (userText) {
@@ -4983,7 +5027,17 @@
           });
           var data = await response.json().catch(function() { return {}; });
           removeTypingIndicator();
-          var answer = (response.ok && data.answer != null) ? data.answer : (data.error || 'Sorry, I couldn\'t process that. Please try again.');
+          // Approach 3: needs_rag_confirmation - show in-chat message with Yes/No buttons
+          if (response.ok && data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+            var promptMsg = data.permission_request.message ||
+              'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+            appendLessonQARagConfirmation(chatMessages, promptMsg, lessonId, message);
+            return;
+          }
+
+          var answer = (response.ok && data.answer != null)
+            ? data.answer
+            : (data.error || 'Sorry, I couldn\'t process that. Please try again.');
           appendLessonQAMessagePair(chatMessages, null, answer);
         } catch (err) {
           removeTypingIndicator();
@@ -5243,12 +5297,48 @@
             body: JSON.stringify({ lesson_id: lessonId, question: message })
           });
           const data = await response.json().catch(() => ({}));
-          const answer = response.ok && data.answer ? data.answer : (data.error || 'Sorry, could not get an answer.');
-          const aiMsgEl = document.createElement('div');
-          aiMsgEl.className = 'mb-4 flex justify-start';
-          const answerHtml = String(answer).replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;br&gt;/g, '<br>');
-          aiMsgEl.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none"><div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p></div>';
-          messagesEl.appendChild(aiMsgEl);
+          // Approach 3: needs_rag_confirmation - show in-chat message with Yes/No buttons
+          if (response.ok && data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+            const promptMsg = data.permission_request.message ||
+              'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+            const aiMsgEl = document.createElement('div');
+            aiMsgEl.className = 'mb-4 flex justify-start';
+            const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            aiMsgEl.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none">' +
+              '<p class="mb-3">' + promptEscaped + '</p>' +
+              '<div class="flex gap-2 mt-2"><button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button>' +
+              '<button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button></div></div>';
+            messagesEl.appendChild(aiMsgEl);
+            const yesBtn = aiMsgEl.querySelector('.rag-confirm-yes');
+            const noBtn = aiMsgEl.querySelector('.rag-confirm-no');
+            const innerDiv = aiMsgEl.querySelector('div > div');
+            yesBtn.onclick = function() {
+              yesBtn.disabled = true; noBtn.disabled = true;
+              innerDiv.innerHTML = '<p class="text-gray-500 italic">Searching PDF...</p>';
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+              fetch('/api/lessons/ask_question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                body: JSON.stringify({ lesson_id: lessonId, question: message, allow_rag: true })
+              }).then(function(r) { return r.json(); }).then(function(d) {
+                const ans = (d && d.answer) ? d.answer : (d.error || 'Sorry, could not get an answer.');
+                const answerHtml = String(ans).replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;br&gt;/g, '<br>');
+                innerDiv.innerHTML = '<div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p>';
+              }).catch(function() {
+                innerDiv.innerHTML = '<p class="text-red-600">Sorry, could not get an answer.</p>';
+              });
+            };
+            noBtn.onclick = function() {
+              yesBtn.disabled = true; noBtn.disabled = true;
+              innerDiv.innerHTML = '<p>Your question is not covered in the lesson content.</p>';
+            };
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          } else {
+            const answer = response.ok && data.answer ? data.answer : (data.error || 'Sorry, could not get an answer.');
+            const aiMsgEl = document.createElement('div');
+            aiMsgEl.className = 'mb-4 flex justify-start';
+            const answerHtml = String(answer).replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;br&gt;/g, '<br>');
+            aiMsgEl.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none"><div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p></div>';
+            messagesEl.appendChild(aiMsgEl);
+          }
         } catch (e) {
           console.error('ask_question', e);
           const aiMsgEl = document.createElement('div');
@@ -6312,13 +6402,25 @@
           'For enterprise accounts, additional compliance features are available.');
       }
 
-      // Logout
+      // Logout: call backend logout API then redirect to login page
       function logout() {
-        if (confirm('Are you sure you want to logout?')) {
-          // Clear sensitive data
-          // Redirect to login
-          window.location.href = 'login.html';
-        }
+        if (!confirm('Are you sure you want to logout?')) return;
+        fetch('{{ url_for("auth.logout") }}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          credentials: 'include'
+        })
+          .then(function (res) { return res.json().catch(function () { return {}; }); })
+          .then(function (data) {
+            var url = (data && data.redirect_url) ? data.redirect_url : '{{ url_for("auth.login") }}';
+            window.location.href = url;
+          })
+          .catch(function () {
+            window.location.href = '{{ url_for("auth.login") }}';
+          });
       }
 
       // ===== TOAST NOTIFICATION SYSTEM =====

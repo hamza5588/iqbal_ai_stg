@@ -6695,14 +6695,64 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         input.click();
       }
 
-      // Save Lesson from Chat
-      function saveLessonFromChat() {
-        if (!currentPDFData || !currentLessonMarkdown) {
-          showToast('No lesson to save. Please upload a PDF and create a lesson first.', 'warning', 3000);
+      // Save Lesson from Chat: check lesson_finalized in DB; if true save to DB, else show "First create the lesson please"
+      async function saveLessonFromChat() {
+        await saveFinalizedLessonToDatabaseIfReady();
+      }
+
+      // Check lesson_finalized for current thread; if true save lesson to database, else show "First create the lesson please"
+      async function saveFinalizedLessonToDatabaseIfReady() {
+        const threadId = window.currentRAGThreadId || (typeof localStorage !== 'undefined' ? localStorage.getItem('teacher_currentRAGThreadId') : null);
+        if (!threadId || !threadId.trim()) {
+          showToast('First create the lesson please. Upload a PDF and create a lesson in chat, then say "finalize" before saving.', 'warning', 4000);
           return;
         }
-
-        saveLessonToMyLessons();
+        try {
+          const res = await fetch('/api/rag/thread/' + encodeURIComponent(threadId) + '/finalized-lesson', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          const data = await res.json().catch(function() { return {}; });
+          if (!res.ok) {
+            showToast(data.error || 'First create the lesson please.', 'warning', 3500);
+            return;
+          }
+          if (!data.lesson_finalized) {
+            showToast('First create the lesson please. Say "finalize" (or "finalize the lesson") in chat when your lesson is ready, then click Save Lesson.', 'warning', 4000);
+            return;
+          }
+          const lastLessonText = (data.last_lesson_text || '').trim();
+          if (!lastLessonText) {
+            showToast('No lesson content to save. Please finalize the lesson first.', 'warning', 3500);
+            return;
+          }
+          const lessonTitle = (data.lesson_title || '').trim() || ('Lesson from Chat - ' + new Date().toLocaleDateString());
+          const createRes = await fetch('/api/lessons/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: lessonTitle,
+              content: lastLessonText,
+              focus_area: 'General',
+              grade_level: 'General',
+              summary: lessonTitle ? 'Lesson: ' + lessonTitle : '',
+              rag_thread_id: threadId || undefined
+            })
+          });
+          const createData = await createRes.json().catch(function() { return {}; });
+          if (!createRes.ok) {
+            showToast(createData.error || 'Failed to save lesson.', 'error', 3500);
+            return;
+          }
+          showToast('Lesson saved to My Lessons!', 'success', 3000);
+          currentPDFData = null;
+          currentLessonMarkdown = null;
+          if (typeof clearPDFDataFromStorage === 'function') clearPDFDataFromStorage();
+        } catch (e) {
+          console.error('saveFinalizedLessonToDatabaseIfReady:', e);
+          showToast('Error saving lesson. Please try again.', 'error', 3000);
+        }
       }
 
       // RAG chat: store thread_id and conversation_id from API for PDF context
@@ -7242,75 +7292,9 @@ To continue your learning journey:
              </div>`;
       }
 
-      // Save lesson to My Lessons
-      function saveLessonToMyLessons() {
-        if (!currentPDFData || !currentLessonMarkdown) {
-          alert('No lesson to save. Please upload a PDF and create a lesson first.');
-          return;
-        }
-
-        // Create complete lesson object
-        const newLesson = {
-          ...currentPDFData,
-          content: currentLessonMarkdown,
-          versions: [{
-            version: 1,
-            content: currentLessonMarkdown,
-            createdAt: new Date().toISOString()
-          }]
-        };
-
-        // Save to localStorage
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        lessons.push(newLesson);
-        localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
-
-        // Show success message
-        showToast(`✅ Lesson "${newLesson.title}" saved to My Lessons!`, 'success', 3000);
-
-        // Display full lesson with formatting
-        const lessonHTML = `
-        <div style="background: #f9fafb; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb;">
-          <h3 style="color: #10b981; font-size: 1.2rem; margin: 0 0 1rem 0;"><strong>✅ Lesson Created & Saved!</strong></h3>
-          
-          <div style="background: white; padding: 1.25rem; border-radius: 0.5rem; max-height: 600px; overflow-y: auto; border: 1px solid #e5e7eb; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;">
-            ${currentLessonMarkdown.split('\n').map(line => {
-          if (line.startsWith('# ')) return `<h2 style="color: #0ea5e9; font-size: 1.4rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('# ', '')}</strong></h2>`;
-          if (line.startsWith('## ')) return `<h3 style="color: #0284c7; font-size: 1.15rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('## ', '')}</strong></h3>`;
-          if (line.startsWith('### ')) return `<h4 style="color: #06b6d4; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;"><strong>${line.replace('### ', '')}</strong></h4>`;
-          if (line.startsWith('- ')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.25rem 0;">• ${line.replace('- ', '')}</div>`;
-          if (line.startsWith('  - ')) return `<div style="margin-left: 2.5rem; color: #6b7280; margin: 0.25rem 0;">◦ ${line.replace('  - ', '')}</div>`;
-          if (line.startsWith('    - ')) return `<div style="margin-left: 3.75rem; color: #9ca3af; font-size: 0.9rem; margin: 0.25rem 0;">▪ ${line.replace('    - ', '')}</div>`;
-          if (line.startsWith('- **')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.5rem 0;"><strong>• ${line.replace('- **', '').replace(':**', ':')}</strong></div>`;
-          if (line.startsWith('**') && line.endsWith('**')) return `<div style="color: #1f2937; margin: 0.5rem 0;"><strong>${line}</strong></div>`;
-          if (line.trim() === '') return '<div style="height: 0.5rem;"></div>';
-          return `<div style="color: #374151; margin: 0.3rem 0;">${line}</div>`;
-        }).join('')}
-          </div>
-          
-          <div style="background: #f0fdf4; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #10b981; margin-bottom: 1rem;">
-            <p style="color: #166534; margin: 0;"><strong>✅ Your lesson "${newLesson.title}" has been saved to <strong>My Lessons</strong>!</strong></p>
-          </div>
-          
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button onclick="showMyLessonsPage()" 
-                    style="background: #0ea5e9; color: white; padding: 0.75rem 1.25rem; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">
-              <i class="fas fa-book" style="margin-right: 0.5rem;"></i>View My Lessons
-            </button>
-            <button onclick="showCreateLessonWizard()" 
-                    style="background: #f3f4f6; color: #1f2937; padding: 0.75rem 1.25rem; border: 1px solid #d1d5db; border-radius: 0.5rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">
-              <i class="fas fa-plus" style="margin-right: 0.5rem;"></i>Create Another
-            </button>
-          </div>
-        </div>
-      `;
-
-        addAssistantMessage(lessonHTML);
-
-        // Clear the current PDF data (both memory and storage)
-        currentPDFData = null;
-        currentLessonMarkdown = null;
-        clearPDFDataFromStorage();
+      // Save lesson to My Lessons: same as Save Lesson button — checks lesson_finalized in DB, then saves to database or shows "First create the lesson please"
+      async function saveLessonToMyLessons() {
+        await saveFinalizedLessonToDatabaseIfReady();
       }
 
       // Edit lesson content (placeholder)
