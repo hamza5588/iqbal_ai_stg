@@ -12,114 +12,72 @@ from sqlalchemy.pool import StaticPool
 logger = logging.getLogger(__name__)
 
 
+def _run_ingest_in_context(self, file_bytes_b64: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
+    """Run ingestion logic inside a Flask application context (for get_db(), current_app, etc.)."""
+    # Update task state to processing
+    self.update_state(
+        state='PROCESSING',
+        meta={'step': 'init', 'progress': 5, 'message': 'Starting PDF ingestion...'}
+    )
+    file_bytes = base64.b64decode(file_bytes_b64)
+
+    def progress_callback(step: str, progress: int, message: str):
+        try:
+            self.update_state(state='PROCESSING', meta={'step': step, 'progress': progress, 'message': message})
+        except Exception as e:
+            logger.warning(f"Error updating task progress: {e}")
+
+    result = ingest_pdf(
+        file_bytes=file_bytes,
+        thread_id=thread_id,
+        filename=filename,
+        progress_callback=progress_callback,
+        user_id=user_id,
+    )
+    _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
+    return {
+        'success': True,
+        'message': 'PDF ingested successfully',
+        'thread_id': thread_id,
+        'conversation_id': conversation_id,
+        'filename': result.get('filename', filename),
+        'documents': result.get('documents', result.get('num_pages', 0)),
+        'num_pages': result.get('num_pages', result.get('documents', 0)),
+        'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
+        'chunks': result.get('chunks', 0),
+        'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
+        'processing_time_seconds': result.get('processing_time_seconds'),
+    }
+
+
 @celery.task(bind=True, name='app.tasks.ingest_tasks.ingest_pdf_task')
 def ingest_pdf_task(self, file_bytes_b64: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
     """
     Celery task to ingest a PDF document in the background.
-    
-    Args:
-        self: Celery task instance (for updating state)
-        file_bytes_b64: Base64 encoded file bytes
-        thread_id: Thread ID for the RAG service
-        filename: Original filename
-        user_id: User ID who uploaded the file
-        conversation_id: Optional conversation ID
-    
-    Returns:
-        dict: Result containing ingestion details
+    Runs inside a Flask application context so get_db() and current_app work.
     """
-    try:
-        # Update task state to processing
-        self.update_state(
-            state='PROCESSING',
-            meta={'step': 'init', 'progress': 5, 'message': 'Starting PDF ingestion...'}
-        )
-        
-        # Decode file bytes
-        file_bytes = base64.b64decode(file_bytes_b64)
-        
-        # Progress callback for Celery task
-        def progress_callback(step: str, progress: int, message: str):
-            """Update task state with progress information."""
-            try:
-                self.update_state(
-                    state='PROCESSING',
-                    meta={
-                        'step': step,
-                        'progress': progress,
-                        'message': message
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Error updating task progress: {e}")
-        
-        # Ingest the PDF
-        result = ingest_pdf(
-            file_bytes=file_bytes,
-            thread_id=thread_id,
-            filename=filename,
-            progress_callback=progress_callback,
-            user_id=user_id,
-        )
-        
-        # Save thread to database with ingest result
-        _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
-        
-        # Return success result
-        return {
-            'success': True,
-            'message': 'PDF ingested successfully',
-            'thread_id': thread_id,
-            'conversation_id': conversation_id,
-            'filename': result.get('filename', filename),
-            'documents': result.get('documents', result.get('num_pages', 0)),
-            'num_pages': result.get('num_pages', result.get('documents', 0)),
-            'pages': result.get('pages', result.get('num_pages', result.get('documents', 0))),
-            'chunks': result.get('chunks', 0),
-            'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
-            'processing_time_seconds': result.get('processing_time_seconds'),
-        }
-        
-    except ValueError as e:
-        error_msg = str(e)
-        logger.error(f"Value error in ingest_pdf_task: {error_msg}")
-        # Update state with error info
-        self.update_state(
-            state='FAILURE',
-            meta={
-                'error': error_msg,
-                'message': f'Validation error: {error_msg}',
-                'exc_type': 'ValueError',
-                'exc_message': error_msg
-            }
-        )
-        # Don't re-raise - let Celery handle it with the state we set
-        return {
-            'success': False,
-            'error': error_msg,
-            'message': f'Validation error: {error_msg}'
-        }
-    except Exception as e:
-        error_msg = f'Failed to ingest PDF: {str(e)}'
-        exc_type = type(e).__name__
-        logger.error(f"Error in ingest_pdf_task: {error_msg}", exc_info=True)
-        # Update state with error info including exception type
-        self.update_state(
-            state='FAILURE',
-            meta={
-                'error': error_msg,
-                'message': error_msg,
-                'exc_type': exc_type,
-                'exc_message': str(e)
-            }
-        )
-        # Don't re-raise - let Celery handle it with the state we set
-        return {
-            'success': False,
-            'error': error_msg,
-            'message': error_msg,
-            'exc_type': exc_type
-        }
+    from app import create_app
+    app = create_app()
+    with app.app_context():
+        try:
+            return _run_ingest_in_context(self, file_bytes_b64, thread_id, filename, user_id, conversation_id)
+        except ValueError as e:
+            error_msg = str(e)
+            logger.error(f"Value error in ingest_pdf_task: {error_msg}")
+            self.update_state(
+                state='FAILURE',
+                meta={'error': error_msg, 'message': f'Validation error: {error_msg}', 'exc_type': 'ValueError', 'exc_message': error_msg}
+            )
+            return {'success': False, 'error': error_msg, 'message': f'Validation error: {error_msg}'}
+        except Exception as e:
+            error_msg = f'Failed to ingest PDF: {str(e)}'
+            exc_type = type(e).__name__
+            logger.error(f"Error in ingest_pdf_task: {error_msg}", exc_info=True)
+            self.update_state(
+                state='FAILURE',
+                meta={'error': error_msg, 'message': error_msg, 'exc_type': exc_type, 'exc_message': str(e)}
+            )
+            return {'success': False, 'error': error_msg, 'message': error_msg, 'exc_type': exc_type}
 
 
 def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
