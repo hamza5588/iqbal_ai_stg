@@ -208,7 +208,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
 
   <!-- marked: Markdown → HTML -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
   <!-- DOMPurify: XSS-safe HTML -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <!-- KaTeX: Math formulas -->
@@ -2749,95 +2749,15 @@
         </div>
       </section>
 
-      <!-- Prompt Tab Area (replaces Set Prompt modal as a tab) -->
+      <!-- Prompt Tab: opens Set Prompt modal (same as chat.html - one place to set prompt) -->
       <section id="promptArea" class="hidden p-6 overflow-y-auto custom-scrollbar" style="display: none !important;">
-        <div class="max-w-3xl mx-auto">
-          <div class="bg-white rounded-2xl p-4 md:p-8 w-full mx-4 my-auto">
-            <div class="flex items-center justify-between mb-6 md:mb-8">
-              <div>
-                <h3 class="text-2xl font-bold text-gray-900">Customize AI Assistant</h3>
-                <p class="text-gray-600 text-sm md:text-base mt-1">Tailor the AI's behavior with custom instructions</p>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-              <div class="lg:col-span-2">
-                <div class="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 p-4 md:p-6">
-                  <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center gap-3">
-                      <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                        <i class="fas fa-edit text-primary-600"></i>
-                      </div>
-                      <div>
-                        <h4 class="text-lg font-semibold text-gray-900">Your Custom Prompt</h4>
-                        <p class="text-sm text-gray-500">Define how the AI should respond</p>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <button onclick="savePromptAsTemplate()"
-                        class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                        <i class="fas fa-save mr-1.5"></i>Save as Template
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="flex justify-between items-center mb-3">
-                    <span class="text-sm font-medium text-gray-700">Character count: <span
-                        id="charCount">0</span>/2000</span>
-                    <button onclick="clearPrompt()"
-                      class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
-                      <i class="fas fa-trash-alt"></i> Clear
-                    </button>
-                  </div>
-
-                  <div class="relative">
-                    <textarea id="customPrompt"
-                      class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
-                      placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
-                      oninput="updateCharCount(this)"></textarea>
-                    <div class="absolute bottom-3 right-3">
-                      <button onclick="generatePrompt()"
-                        class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 flex items-center justify-center">
-                        <i class="fas fa-magic text-sm"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <div class="flex items-start">
-                    <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-3 text-lg"></i>
-                    <div>
-                      <h4 class="text-sm font-semibold text-blue-800 mb-1">Important Information</h4>
-                      <p class="text-sm text-blue-700">
-                        Your custom prompt will be combined with the default RAG instructions for PDF queries. This
-                        prompt will apply to all your threads, not just the current conversation.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            <div class="flex flex-col md:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
-              <button onclick="loadCurrentPrompt()"
-                class="flex-1 md:flex-none bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2">
-                <i class="fas fa-sync-alt"></i>
-                <span>Load Current</span>
-              </button>
-              <button onclick="testPrompt()"
-                class="flex-1 md:flex-none bg-blue-100 text-blue-700 py-3 px-6 rounded-xl hover:bg-blue-200 transition-colors font-medium flex items-center justify-center gap-2">
-                <i class="fas fa-vial"></i>
-                <span>Test Prompt</span>
-              </button>
-              <button onclick="saveCustomPrompt()"
-                class="flex-1 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 px-6 rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg">
-                <i class="fas fa-save"></i>
-                <span>Save & Apply</span>
-              </button>
-            </div>
-          </div>
+        <div class="max-w-2xl mx-auto text-center py-12">
+          <h3 class="text-xl font-bold text-gray-900 mb-2">Set Custom System Prompt</h3>
+          <p class="text-gray-600 text-sm mb-6">Customize how the AI assistant behaves. Your prompt will apply to all your threads.</p>
+          <button onclick="openSetPromptModal()"
+            class="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium">
+            <i class="fas fa-edit mr-2"></i>Open Set Prompt
+          </button>
         </div>
       </section>
 
@@ -2971,133 +2891,42 @@
 
   <!-- All Modals - Outside main container to avoid overflow-hidden clipping -->
 
-  <!-- Redesigned Set Prompt Modal -->
+  <!-- Set Prompt Modal (same as chat.html: simple layout, Load Current / Delete Prompt / Cancel / Save Prompt) -->
   <div id="setPromptModal"
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center z-[100] overflow-y-auto py-4 hidden">
-    <div class="bg-white rounded-2xl p-0 md:p-0 w-full max-w-3xl mx-4 my-auto max-h-[90vh] overflow-y-auto shadow-lg">
-      <!-- Gradient Header -->
-      <div class="rounded-t-2xl bg-gradient-to-r from-primary-600 to-primary-700 text-white p-4 md:p-6">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h3 class="text-2xl font-bold">Customize AI Assistant</h3>
-            <p class="text-primary-100 text-sm md:text-base mt-1">Tailor the AI's behavior with concise instructions</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <button onclick="closeSetPromptModal()"
-              class="w-10 h-10 rounded-full flex items-center justify-center bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors text-white">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] overflow-y-auto py-4 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 rounded-t-lg">
+        <h3 class="text-xl font-semibold text-white">Set Custom System Prompt</h3>
+        <p class="text-primary-100 text-sm mt-1">Customize how the AI assistant behaves. This prompt will apply to all your threads.</p>
+      </div>
+      <div class="p-6 flex-1 overflow-y-auto">
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-semibold mb-2">Custom Prompt</label>
+          <textarea id="customPrompt"
+            class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
+            placeholder="Enter your custom system prompt here. This will be combined with the default RAG instructions..."></textarea>
+          <p class="text-xs text-gray-500 mt-2">
+            <i class="fas fa-info-circle mr-1"></i>
+            Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt will apply to all your threads.
+          </p>
+        </div>
+        <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p class="text-xs text-blue-800 font-semibold mb-1">Note:</p>
+          <p class="text-xs text-blue-700">
+            The default RAG instructions (for PDF queries) will always be included along with your custom prompt. This prompt applies to all your threads, not just the current one.
+          </p>
         </div>
       </div>
-      <div class="p-4 md:p-8 bg-white rounded-b-2xl">
-
-        <!-- Main Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-          <!-- Left Column: Custom Prompt Input (main) -->
-          <div class="lg:col-span-2">
-            <!-- Card Container -->
-            <div class="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 p-4 md:p-6">
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                    <i class="fas fa-edit text-primary-600"></i>
-                  </div>
-                  <div>
-                    <h4 class="text-lg font-semibold text-gray-900">Your Custom Prompt</h4>
-                    <p class="text-sm text-gray-500">Define how the AI should respond</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <button onclick="savePromptAsTemplate()"
-                    class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                    <i class="fas fa-save mr-1.5"></i>Save as Template
-                  </button>
-                </div>
-              </div>
-
-              <!-- Character Count -->
-              <div class="flex justify-between items-center mb-3">
-                <span class="text-sm font-medium text-gray-700">Character count: <span
-                    id="charCount">0</span>/2000</span>
-                <button onclick="clearPrompt()" class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
-                  <i class="fas fa-trash-alt"></i> Clear
-                </button>
-              </div>
-
-              <!-- Textarea -->
-              <div class="relative">
-                <textarea id="customPrompt"
-                  class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
-                  placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
-                  oninput="updateCharCount(this)">Explore a world where human emotions are traded as currency. In this society, happiness, love, fear, and anger can be harvested, sold, or stolen. Follow the story of a reluctant 'emotion thief' who discovers a secret that could upend the entire system. As they navigate political intrigue, moral dilemmas, and forbidden connections, they must decide whether to exploit the system for personal gain or risk everything to restore emotional freedom to humanity.</textarea>
-                <div class="absolute bottom-3 right-3">
-                  <button onclick="generatePrompt()"
-                    class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 flex items-center justify-center">
-                    <i class="fas fa-magic text-sm"></i>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Tone Selector -->
-              <div class="mt-4 flex flex-wrap gap-2" aria-hidden="false">
-                <button data-tone="friendly" onclick="selectTone('friendly')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Friendly</button>
-                <button data-tone="concise" onclick="selectTone('concise')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Concise</button>
-                <button data-tone="detailed" onclick="selectTone('detailed')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Detailed</button>
-                <button data-tone="encouraging" onclick="selectTone('encouraging')"
-                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Encouraging</button>
-              </div>
-
-            </div>
-
-            <!-- Note Box -->
-            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div class="flex items-start">
-                <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-3 text-lg"></i>
-                <div>
-                  <h4 class="text-sm font-semibold text-blue-800 mb-1">Important Information</h4>
-                  <p class="text-sm text-blue-700">
-                    Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt
-                    will apply to all your threads, not just the current conversation.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-       
-
-            <!-- end right column -->
-          </div>
-
-
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex flex-col md:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
-          <button onclick="loadCurrentPrompt()"
-            class="flex-1 md:flex-none bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2">
-            <i class="fas fa-sync-alt"></i>
-            <span>Load Current</span>
-          </button>
-          <button onclick="testPrompt()"
-            class="flex-1 md:flex-none bg-blue-100 text-blue-700 py-3 px-6 rounded-xl hover:bg-blue-200 transition-colors font-medium flex items-center justify-center gap-2">
-            <i class="fas fa-vial"></i>
-            <span>Test Prompt</span>
-          </button>
-          <button onclick="closeSetPromptModal()"
-            class="flex-1 md:flex-none bg-gray-200 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-medium flex items-center justify-center gap-2">
-            <i class="fas fa-times"></i>
-            <span>Cancel</span>
-          </button>
-          <button onclick="saveCustomPrompt()"
-            class="flex-1 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 px-6 rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg">
-            <i class="fas fa-save"></i>
-            <span>Save & Apply</span>
-          </button>
-        </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex flex-wrap gap-3">
+        <button onclick="loadCurrentPrompt()"
+          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Load Current</button>
+        <button onclick="clearPrompt()"
+          class="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50">Delete Prompt</button>
+        <div class="flex-1"></div>
+        <button onclick="closeSetPromptModal()"
+          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+        <button onclick="saveCustomPrompt()"
+          class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Save Prompt</button>
       </div>
     </div>
     <!-- Save Template Modal -->
@@ -3258,11 +3087,17 @@
                   placeholder="Modify your lesson content here..."></textarea>
               </div>
 
+              <!-- Apply-prompt input (same as chat.html AI versioning) -->
+              <div class="mb-3 md:mb-4">
+                <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2">Improvement prompt</label>
+                <textarea id="viewLessonApplyPromptInput" rows="2" placeholder="e.g. Add more examples for grade 5, simplify language..."
+                  class="w-full p-2 md:p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"></textarea>
+              </div>
               <!-- Draft Actions -->
               <div class="flex flex-col gap-2 md:gap-3">
-                <button onclick="applyPromptToLessonDraft()"
+                <button id="viewLessonApplyPromptBtn" onclick="applyPromptToLessonDraft()"
                   class="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
-                  <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
+                  <i class="fas fa-wand-magic-sparkles"></i>Apply Prompt
                 </button>
                 <button onclick="saveLessonDraftVisible()"
                   class="w-full bg-gray-100 text-gray-800 py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2 text-sm md:text-base">
@@ -4539,8 +4374,7 @@
         const formData = new FormData();
         formData.append('file', file);
         formData.append('create_new_thread', 'true');
-        const convId = window.currentRAGConversationId || (typeof currentChatId !== 'undefined' ? currentChatId : null);
-        if (convId != null) formData.append('conversation_id', String(convId));
+        // Do NOT send conversation_id: Create Lesson always gets a new conversation/thread so we never hit "this conversation already has a PDF".
         let progress = 0;
         const progressInterval = setInterval(() => {
           progress += Math.random() * 8 + 2;
@@ -5230,7 +5064,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const currentVersion = sortedVersions[0] || lesson;
           window.currentLessonVersions = sortedVersions;
           const forModal = {
-            id: lesson.id,
+            id: currentVersion.id,
             title: lesson.title,
             subject: lesson.focus_area || lesson.focusArea,
             grade: lesson.grade_level || lesson.gradeLevel,
@@ -5243,10 +5077,54 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           };
           populateViewLessonModal(forModal);
           showViewLessonModal();
+          await loadDraftForViewLesson(currentVersion.id);
         } catch (err) {
           console.error('viewLesson error:', err);
           showToast('Error loading lesson: ' + (err.message || 'Unknown'), 'error');
         }
+      }
+
+      // Load draft from server when viewing a lesson (same as chat.html flow)
+      async function loadDraftForViewLesson(lessonId) {
+        if (!lessonId) return;
+        try {
+          const response = await fetch('/api/lessons/lesson/' + lessonId + '/get_draft', { method: 'GET', credentials: 'include' });
+          if (!response.ok) return;
+          const data = await response.json();
+          const draft = (data.draft_content && data.draft_content.trim()) ? data.draft_content : (data.current_content || '');
+          const draftEl = document.getElementById('viewLessonDraft');
+          if (draftEl) draftEl.value = draft;
+        } catch (e) {
+          console.warn('loadDraftForViewLesson:', e);
+        }
+      }
+
+      // Format lesson content for view: markdown → HTML (# ## headings, tables, bullets, formulas)
+      function formatLessonContentForView(content) {
+        if (!content || (typeof content === 'string' && content.trim() === '')) {
+          return '<p class="text-gray-500 italic">No content yet</p>';
+        }
+        let raw = typeof content === 'string' ? content : String(content);
+        if (raw.includes('"response_type"') || raw.includes('"answer"')) {
+          try {
+            const p = JSON.parse(raw);
+            raw = p.answer || p.content || raw;
+          } catch (e) {}
+        }
+        raw = raw
+          .replace(/^Lesson Title:.*$/gm, '').replace(/^Grade Level:.*$/gm, '').replace(/^Focus Area:.*$/gm, '')
+          .replace(/^Subject:.*$/gm, '').replace(/^Topic:.*$/gm, '').replace(/^Duration:.*$/gm, '').replace(/^Materials:.*$/gm, '')
+          .replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+        try {
+          if (typeof marked !== 'undefined') {
+            marked.setOptions({ breaks: true, gfm: true });
+            const html = marked.parse(raw);
+            return '<div class="prose prose-sm max-w-none text-gray-700 leading-relaxed lesson-content-formatted">' +
+              '<style>.lesson-content-formatted table{border-collapse:collapse;width:100%;}.lesson-content-formatted th,.lesson-content-formatted td{border:1px solid #e5e7eb;padding:0.5rem 0.75rem;text-align:left;}.lesson-content-formatted th{background:#f3f4f6;font-weight:700;}.lesson-content-formatted ul,.lesson-content-formatted ol{margin:0.75rem 0;padding-left:1.5rem;}.lesson-content-formatted li{margin:0.4rem 0;font-weight:500;line-height:1.6;}.lesson-content-formatted li::marker{color:#0ea5e9;font-weight:700;}.lesson-content-formatted strong{font-weight:700;color:#111827;}.lesson-content-formatted h1{font-size:1.6rem;font-weight:700;margin-top:1rem;margin-bottom:0.5rem;color:#111827;letter-spacing:-0.02em;}.lesson-content-formatted h2{font-size:1.35rem;font-weight:700;margin-top:0.9rem;margin-bottom:0.45rem;color:#111827;letter-spacing:-0.01em;}.lesson-content-formatted h3{font-size:1.2rem;font-weight:700;margin-top:0.8rem;margin-bottom:0.4rem;color:#1f2937;}.lesson-content-formatted h4,.lesson-content-formatted h5,.lesson-content-formatted h6{font-size:1.05rem;font-weight:700;margin-top:0.7rem;margin-bottom:0.35rem;color:#1f2937;}.lesson-content-formatted p{margin:0.4rem 0;line-height:1.65;}</style>' +
+              html + '</div>';
+          }
+        } catch (e) { console.warn('formatLessonContentForView', e); }
+        return '<div class="text-gray-700 leading-relaxed whitespace-pre-wrap">' + (typeof escapeHtml === 'function' ? escapeHtml(raw) : raw.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</div>';
       }
 
       // Populate the view lesson modal with data
@@ -5276,11 +5154,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const subjectEl = document.getElementById('viewLessonSubject');
           if (subjectEl) subjectEl.textContent = lesson.subject || 'General';
 
-          // Populate current version preview (support markdown via marked if available)
+          // Populate current version preview (tables, bullets, formulas — same as teacher chat)
           const rawContent = lesson.content || lesson.body || 'No content yet';
-          const currentVersionHtml = (typeof marked !== 'undefined' && rawContent) ? marked.parse(rawContent) : escapeHtml(rawContent);
           const currentEl = document.getElementById('viewLessonCurrent');
-          if (currentEl) currentEl.innerHTML = currentVersionHtml;
+          if (currentEl) {
+            currentEl.innerHTML = formatLessonContentForView(rawContent);
+            if (window.MathJax && window.MathJax.typesetPromise) {
+              window.MathJax.typesetPromise([currentEl]).catch(function (err) { console.warn('MathJax in view lesson:', err); });
+            }
+          }
 
           // Load saved draft from localStorage
           const draftKey = `teacher_lesson_draft_${lesson.id}`;
@@ -5459,48 +5341,89 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
-      // Apply custom prompt to lesson draft
-      function applyPromptToLessonDraft() {
-        const customPrompt = localStorage.getItem('teacher_custom_prompt') || '';
-        if (!customPrompt) {
-          showToast('No custom prompt set. Please set a prompt first.', 'info', 3000);
+      // Apply prompt via API (same as chat.html: POST /api/lessons/lesson/:id/apply_prompt)
+      async function applyPromptToLessonDraft() {
+        const lessonId = window.currentViewLessonId;
+        if (!lessonId) {
+          showToast('No lesson selected', 'error');
+          return;
+        }
+        const promptInput = document.getElementById('viewLessonApplyPromptInput');
+        const prompt = (promptInput && promptInput.value && promptInput.value.trim()) ? promptInput.value.trim() : (localStorage.getItem('teacher_custom_prompt') || '').trim();
+        if (!prompt) {
+          showToast('Enter an improvement prompt above or set a default prompt in settings.', 'info', 3000);
           return;
         }
 
-        const lessonId = window.currentViewLessonId;
-        const lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = findLessonById(lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          const currentContent = lesson.content || lesson.body || '';
-          const updatedContent = `${currentContent}\n\n---\n\n**AI Enhancement Note:**\nApplied prompt: ${customPrompt.substring(0, 100)}...`;
-
-          document.getElementById('viewLessonDraft').value = updatedContent;
-          saveLessonDraftVisible();
-          showToast('Prompt applied to draft!', 'success', 2000);
+        const applyBtn = document.getElementById('viewLessonApplyPromptBtn');
+        if (applyBtn) {
+          applyBtn.disabled = true;
+          applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Applying...';
+        }
+        try {
+          const response = await fetch('/api/lessons/lesson/' + lessonId + '/apply_prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ prompt: prompt })
+          });
+          const result = await response.json().catch(function() { return {}; });
+          if (response.ok && result.draft_content != null) {
+            const draftEl = document.getElementById('viewLessonDraft');
+            if (draftEl) draftEl.value = result.draft_content;
+            if (promptInput) promptInput.value = '';
+            showToast('Prompt applied successfully', 'success', 2000);
+          } else {
+            showToast(result.error || 'Failed to apply prompt', 'error', 3000);
+          }
+        } catch (e) {
+          console.error('applyPromptToLessonDraft:', e);
+          showToast('Error applying prompt', 'error');
+        } finally {
+          if (applyBtn) {
+            applyBtn.disabled = false;
+            applyBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i>Apply Prompt';
+          }
         }
       }
 
-      // Save the currently visible draft
-      function saveLessonDraftVisible() {
+      // Save the currently visible draft via API (same as chat: POST /api/lessons/lesson/:id/save_draft)
+      async function saveLessonDraftVisible() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftContent = document.getElementById('viewLessonDraft').value;
-        const draftKey = `teacher_lesson_draft_${lessonId}`;
-        localStorage.setItem(draftKey, draftContent);
-        showToast('Draft saved!', 'success', 2000);
+        const draftEl = document.getElementById('viewLessonDraft');
+        const draftContent = draftEl ? draftEl.value : '';
+        try {
+          const response = await fetch('/api/lessons/lesson/' + lessonId + '/save_draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ draft_content: draftContent })
+          });
+          const result = await response.json().catch(function() { return {}; });
+          if (response.ok) {
+            const draftKey = `teacher_lesson_draft_${lessonId}`;
+            localStorage.setItem(draftKey, draftContent);
+            showToast('Draft saved!', 'success', 2000);
+          } else {
+            showToast(result.error || 'Failed to save draft', 'error');
+          }
+        } catch (e) {
+          console.error('saveLessonDraftVisible:', e);
+          showToast('Error saving draft', 'error');
+        }
       }
 
-      // Finalize new version
-      function finalizeNewVersionLesson() {
+      // Finalize new version via API (same as chat: save_draft then POST /api/lessons/lesson/:id/finalize_version)
+      async function finalizeNewVersionLesson() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftContent = document.getElementById('viewLessonDraft').value.trim();
+        const draftEl = document.getElementById('viewLessonDraft');
+        const draftContent = draftEl ? draftEl.value.trim() : '';
         if (!draftContent) {
-          showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
+          showToast('Draft is empty. Apply a prompt or edit the content before finalizing.', 'warning', 3000);
           return;
         }
 
@@ -5508,45 +5431,40 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = findLessonById(lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-
-          // Initialize versions array if it doesn't exist
-          if (!lesson.versions) {
-            lesson.versions = [{
-              version: lesson.version || 1,
-              content: lesson.content || lesson.body || '',
-              createdAt: lesson.createdAt || new Date().toISOString()
-            }];
+        try {
+          // Save current draft to server so finalize_version can use it
+          const saveRes = await fetch('/api/lessons/lesson/' + lessonId + '/save_draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ draft_content: draftContent })
+          });
+          if (!saveRes.ok) {
+            const err = await saveRes.json().catch(function() { return {}; });
+            showToast(err.error || 'Failed to save draft before finalizing', 'error');
+            return;
           }
 
-          // Create new version
-          const newVersion = {
-            version: (lesson.version || 1) + 1,
-            content: draftContent,
-            createdAt: new Date().toISOString()
-          };
+          const finalizeRes = await fetch('/api/lessons/lesson/' + lessonId + '/finalize_version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({})
+          });
+          const result = await finalizeRes.json().catch(function() { return {}; });
 
-          // Update lesson
-          lesson.versions.push(newVersion);
-          lesson.version = newVersion.version;
-          lesson.content = draftContent;
-          lesson.status = 'published';
-          lesson.updatedAt = new Date().toISOString();
-
-          // Save to localStorage
-          localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
-
-          // Clear draft
-          const draftKey = `teacher_lesson_draft_${lessonId}`;
-          localStorage.removeItem(draftKey);
-
-          showToast(`✅ New version created! (v${newVersion.version})`, 'success', 3000);
-          closeViewLessonModal();
-          showMyLessonsPage(); // Refresh lessons list
+          if (finalizeRes.ok && result.success) {
+            const draftKey = `teacher_lesson_draft_${lessonId}`;
+            localStorage.removeItem(draftKey);
+            showToast('New version created successfully!', 'success', 3000);
+            closeViewLessonModal();
+            showMyLessonsPage();
+          } else {
+            showToast(result.error || 'Failed to create new version', 'error', 3000);
+          }
+        } catch (e) {
+          console.error('finalizeNewVersionLesson:', e);
+          showToast('Error finalizing version', 'error');
         }
       }
 
@@ -6777,14 +6695,64 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         input.click();
       }
 
-      // Save Lesson from Chat
-      function saveLessonFromChat() {
-        if (!currentPDFData || !currentLessonMarkdown) {
-          showToast('No lesson to save. Please upload a PDF and create a lesson first.', 'warning', 3000);
+      // Save Lesson from Chat: check lesson_finalized in DB; if true save to DB, else show "First create the lesson please"
+      async function saveLessonFromChat() {
+        await saveFinalizedLessonToDatabaseIfReady();
+      }
+
+      // Check lesson_finalized for current thread; if true save lesson to database, else show "First create the lesson please"
+      async function saveFinalizedLessonToDatabaseIfReady() {
+        const threadId = window.currentRAGThreadId || (typeof localStorage !== 'undefined' ? localStorage.getItem('teacher_currentRAGThreadId') : null);
+        if (!threadId || !threadId.trim()) {
+          showToast('First create the lesson please. Upload a PDF and create a lesson in chat, then say "finalize" before saving.', 'warning', 4000);
           return;
         }
-
-        saveLessonToMyLessons();
+        try {
+          const res = await fetch('/api/rag/thread/' + encodeURIComponent(threadId) + '/finalized-lesson', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          const data = await res.json().catch(function() { return {}; });
+          if (!res.ok) {
+            showToast(data.error || 'First create the lesson please.', 'warning', 3500);
+            return;
+          }
+          if (!data.lesson_finalized) {
+            showToast('First create the lesson please. Say "finalize" (or "finalize the lesson") in chat when your lesson is ready, then click Save Lesson.', 'warning', 4000);
+            return;
+          }
+          const lastLessonText = (data.last_lesson_text || '').trim();
+          if (!lastLessonText) {
+            showToast('No lesson content to save. Please finalize the lesson first.', 'warning', 3500);
+            return;
+          }
+          const lessonTitle = (data.lesson_title || '').trim() || ('Lesson from Chat - ' + new Date().toLocaleDateString());
+          const createRes = await fetch('/api/lessons/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: lessonTitle,
+              content: lastLessonText,
+              focus_area: 'General',
+              grade_level: 'General',
+              summary: lessonTitle ? 'Lesson: ' + lessonTitle : '',
+              rag_thread_id: threadId || undefined
+            })
+          });
+          const createData = await createRes.json().catch(function() { return {}; });
+          if (!createRes.ok) {
+            showToast(createData.error || 'Failed to save lesson.', 'error', 3500);
+            return;
+          }
+          showToast('Lesson saved to My Lessons!', 'success', 3000);
+          currentPDFData = null;
+          currentLessonMarkdown = null;
+          if (typeof clearPDFDataFromStorage === 'function') clearPDFDataFromStorage();
+        } catch (e) {
+          console.error('saveFinalizedLessonToDatabaseIfReady:', e);
+          showToast('Error saving lesson. Please try again.', 'error', 3000);
+        }
       }
 
       // RAG chat: store thread_id and conversation_id from API for PDF context
@@ -7324,75 +7292,9 @@ To continue your learning journey:
              </div>`;
       }
 
-      // Save lesson to My Lessons
-      function saveLessonToMyLessons() {
-        if (!currentPDFData || !currentLessonMarkdown) {
-          alert('No lesson to save. Please upload a PDF and create a lesson first.');
-          return;
-        }
-
-        // Create complete lesson object
-        const newLesson = {
-          ...currentPDFData,
-          content: currentLessonMarkdown,
-          versions: [{
-            version: 1,
-            content: currentLessonMarkdown,
-            createdAt: new Date().toISOString()
-          }]
-        };
-
-        // Save to localStorage
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        lessons.push(newLesson);
-        localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
-
-        // Show success message
-        showToast(`✅ Lesson "${newLesson.title}" saved to My Lessons!`, 'success', 3000);
-
-        // Display full lesson with formatting
-        const lessonHTML = `
-        <div style="background: #f9fafb; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb;">
-          <h3 style="color: #10b981; font-size: 1.2rem; margin: 0 0 1rem 0;"><strong>✅ Lesson Created & Saved!</strong></h3>
-          
-          <div style="background: white; padding: 1.25rem; border-radius: 0.5rem; max-height: 600px; overflow-y: auto; border: 1px solid #e5e7eb; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;">
-            ${currentLessonMarkdown.split('\n').map(line => {
-          if (line.startsWith('# ')) return `<h2 style="color: #0ea5e9; font-size: 1.4rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('# ', '')}</strong></h2>`;
-          if (line.startsWith('## ')) return `<h3 style="color: #0284c7; font-size: 1.15rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('## ', '')}</strong></h3>`;
-          if (line.startsWith('### ')) return `<h4 style="color: #06b6d4; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;"><strong>${line.replace('### ', '')}</strong></h4>`;
-          if (line.startsWith('- ')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.25rem 0;">• ${line.replace('- ', '')}</div>`;
-          if (line.startsWith('  - ')) return `<div style="margin-left: 2.5rem; color: #6b7280; margin: 0.25rem 0;">◦ ${line.replace('  - ', '')}</div>`;
-          if (line.startsWith('    - ')) return `<div style="margin-left: 3.75rem; color: #9ca3af; font-size: 0.9rem; margin: 0.25rem 0;">▪ ${line.replace('    - ', '')}</div>`;
-          if (line.startsWith('- **')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.5rem 0;"><strong>• ${line.replace('- **', '').replace(':**', ':')}</strong></div>`;
-          if (line.startsWith('**') && line.endsWith('**')) return `<div style="color: #1f2937; margin: 0.5rem 0;"><strong>${line}</strong></div>`;
-          if (line.trim() === '') return '<div style="height: 0.5rem;"></div>';
-          return `<div style="color: #374151; margin: 0.3rem 0;">${line}</div>`;
-        }).join('')}
-          </div>
-          
-          <div style="background: #f0fdf4; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #10b981; margin-bottom: 1rem;">
-            <p style="color: #166534; margin: 0;"><strong>✅ Your lesson "${newLesson.title}" has been saved to <strong>My Lessons</strong>!</strong></p>
-          </div>
-          
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button onclick="showMyLessonsPage()" 
-                    style="background: #0ea5e9; color: white; padding: 0.75rem 1.25rem; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">
-              <i class="fas fa-book" style="margin-right: 0.5rem;"></i>View My Lessons
-            </button>
-            <button onclick="showCreateLessonWizard()" 
-                    style="background: #f3f4f6; color: #1f2937; padding: 0.75rem 1.25rem; border: 1px solid #d1d5db; border-radius: 0.5rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">
-              <i class="fas fa-plus" style="margin-right: 0.5rem;"></i>Create Another
-            </button>
-          </div>
-        </div>
-      `;
-
-        addAssistantMessage(lessonHTML);
-
-        // Clear the current PDF data (both memory and storage)
-        currentPDFData = null;
-        currentLessonMarkdown = null;
-        clearPDFDataFromStorage();
+      // Save lesson to My Lessons: same as Save Lesson button — checks lesson_finalized in DB, then saves to database or shows "First create the lesson please"
+      async function saveLessonToMyLessons() {
+        await saveFinalizedLessonToDatabaseIfReady();
       }
 
       // Edit lesson content (placeholder)
@@ -7571,15 +7473,12 @@ To continue your learning journey:
           'For enterprise accounts, additional compliance features are available.');
       }
 
-      // Logout
+      // Logout: call logout route then redirect to login page
       function logout() {
         if (confirm('Are you sure you want to logout?')) {
-          // Clear sensitive data
           localStorage.removeItem('teacher_custom_prompt');
           localStorage.removeItem('teacher_prompt_tone');
-
-          // Redirect to login
-          window.location.href = 'login.html';
+          window.location.href = '/auth/logout';
         }
       }
 
@@ -7919,13 +7818,13 @@ To continue your learning journey:
         });
       }
 
-      // Clear prompt (UI + backend DELETE /api/rag/prompt + localStorage)
+      // Clear prompt (UI + backend DELETE /api/rag/prompt + localStorage) — same as chat.html "Delete Prompt"
       async function clearPrompt() {
-        if (!confirm('Are you sure you want to clear the prompt? This will remove it from the server and all RAG chats will use the default instructions.')) return;
+        if (!confirm('Are you sure you want to delete the custom prompt? This will remove it from all your threads. The default prompt will be used.')) return;
         const textarea = document.getElementById('customPrompt');
         if (textarea) {
           textarea.value = '';
-          updateCharCount(textarea);
+          if (typeof updateCharCount === 'function') updateCharCount(textarea);
         }
         try {
           const response = await fetch('/api/rag/prompt', { method: 'DELETE', credentials: 'include' });
@@ -8216,9 +8115,9 @@ To continue your learning journey:
             return;
           }
           localStorage.setItem('teacher_custom_prompt', prompt);
-          localStorage.setItem('teacher_prompt_tone', selectedTone);
-          if (textarea) updateCharCount(textarea);
-          showToast('✅ Custom prompt saved. It will apply to all your RAG chats.', 'success', 3000);
+          if (typeof selectedTone !== 'undefined') localStorage.setItem('teacher_prompt_tone', selectedTone);
+          if (textarea && typeof updateCharCount === 'function') updateCharCount(textarea);
+          showToast('Prompt saved. It will apply to all your threads.', 'success', 3000);
           closeSetPromptModal();
         } catch (e) {
           console.error('Save prompt error:', e);
@@ -8234,19 +8133,17 @@ To continue your learning journey:
           const response = await fetch('/api/rag/prompt', { method: 'GET', credentials: 'include' });
           const data = await response.json().catch(() => ({}));
           const prompt = (response.ok && data.prompt != null) ? (data.prompt || '') : (localStorage.getItem('teacher_custom_prompt') || '');
-          const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
           textarea.value = prompt;
-          selectTone(savedTone);
-          updateCharCount(textarea);
+          if (typeof updateCharCount === 'function') updateCharCount(textarea);
+          if (typeof selectTone === 'function') selectTone(localStorage.getItem('teacher_prompt_tone') || 'professional');
           localStorage.setItem('teacher_custom_prompt', prompt);
           if (response.ok && data.prompt != null) showToast('Prompt loaded from server', 'info');
         } catch (e) {
           console.error('Load prompt error:', e);
           const savedPrompt = localStorage.getItem('teacher_custom_prompt') || '';
-          const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
           textarea.value = savedPrompt;
-          selectTone(savedTone);
-          updateCharCount(textarea);
+          if (typeof updateCharCount === 'function') updateCharCount(textarea);
+          if (typeof selectTone === 'function') selectTone(localStorage.getItem('teacher_prompt_tone') || 'professional');
           showToast('Using locally saved prompt', 'info');
         }
       }

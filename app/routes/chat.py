@@ -68,12 +68,27 @@ def teacher_dashboard():
         return redirect(url_for('chat.index'))
 
 
+@bp.route('/student-dashboard')
+@login_required
+def student_dashboard():
+    """Render student dashboard (students use this page only, not chat.html). Template: student_dashboard.html."""
+    if session.get('role') not in ('student', 'admin'):
+        return redirect(url_for('chat.index'))
+    try:
+        return render_template('student_dashboard.html')
+    except Exception as e:
+        logger.error(f"Error serving student dashboard: {str(e)}")
+        return redirect(url_for('chat.index'))
+
+
 @bp.route('/')
 @login_required
 def index():
-    """Render the main chat interface. Teachers use teacher_dashboard.html only and are redirected there."""
+    """Render the main chat interface. Teachers -> teacher_dashboard; Students -> student_dashboard (or main chat when ask_lesson_id for Ask Question)."""
     if session.get('role') == 'teacher':
         return redirect(url_for('chat.teacher_dashboard'))
+    if session.get('role') == 'student' and not request.args.get('ask_lesson_id'):
+        return redirect(url_for('chat.student_dashboard'))
     has_submitted_survey = False
     subscription_tier = 'free'
     try:

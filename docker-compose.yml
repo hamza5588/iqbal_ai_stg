@@ -105,6 +105,9 @@ services:
       - TQDM_DISABLE=1
       - DB_MODE=primary
       - INSTANCE_ROLE=primary
+      - SERVER_URL=https://staging.iqbalai.com   # <-- add this line
+
+      
 
       # PostgreSQL URL (internal docker network)
       - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
