@@ -291,8 +291,8 @@ class AuthManager {
     localStorage.removeItem(AUTH_CONFIG.nameKey);
     localStorage.removeItem(AUTH_CONFIG.sessionTimestampKey);
 
-    // Redirect to login
-    window.location.href = 'login.html';
+    // Redirect to backend login route (works locally and on staging)
+    window.location.href = '/auth/login';
   }
 
   /**
@@ -451,7 +451,7 @@ function requireAuth() {
   if (!auth.isUserAuthenticated()) {
     console.log('🔒 Redirecting to login - not authenticated');
     localStorage.setItem(AUTH_CONFIG.loginRedirectKey, window.location.href);
-    window.location.href = 'login.html';
+    window.location.href = '/auth/login';
   }
 }
 
@@ -461,7 +461,7 @@ function requireAuth() {
 function requireRole(allowedRoles) {
   if (!auth.isUserAuthenticated()) {
     localStorage.setItem(AUTH_CONFIG.loginRedirectKey, window.location.href);
-    window.location.href = 'login.html';
+    window.location.href = '/auth/login';
     return;
   }
 
@@ -477,7 +477,7 @@ function requireRole(allowedRoles) {
 function requirePermission(action) {
   if (!auth.isUserAuthenticated()) {
     localStorage.setItem(AUTH_CONFIG.loginRedirectKey, window.location.href);
-    window.location.href = 'login.html';
+    window.location.href = '/auth/login';
     return;
   }
 
@@ -676,7 +676,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Handle redirect after login
   if (auth.isUserAuthenticated()) {
     const redirectUrl = localStorage.getItem(AUTH_CONFIG.loginRedirectKey);
-    if (redirectUrl && window.location.pathname === '/login.html') {
+    if (redirectUrl && window.location.pathname === '/auth/login') {
       localStorage.removeItem(AUTH_CONFIG.loginRedirectKey);
       window.location.href = redirectUrl;
     }

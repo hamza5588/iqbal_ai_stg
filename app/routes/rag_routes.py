@@ -536,6 +536,7 @@ def chat():
                     'thread_id': request.args.get('thread_id') if request.args else None,
                     'conversation_id': request.args.get('conversation_id', type=int) if request.args else None
                 }
+                
         # FormData with audio file: form may have thread_id/conversation_id but no message; use transcription
         if data and not (data.get('message') or '').strip() and audio_text:
             data['message'] = audio_text
