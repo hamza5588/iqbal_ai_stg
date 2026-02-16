@@ -8038,7 +8038,13 @@ async function initializeApp() {
         // Load lesson chat history from backend
         async function loadLessonChatHistory(lessonId) {
             try {
-                const response = await fetch(`/api/lessons/lesson_chat_history/${lessonId}`, {
+                // Teachers see full history for their own lesson across students;
+                // students see only their own history.
+                const isTeacherView = (window.userRole === 'teacher' || window.userRole === 'admin');
+                const endpoint = isTeacherView
+                    ? `/api/lessons/teacher/lesson_chat_history/${lessonId}`
+                    : `/api/lessons/lesson_chat_history/${lessonId}`;
+                const response = await fetch(endpoint, {
                     method: 'GET',
                     credentials: 'include'
                 });

@@ -5600,12 +5600,35 @@
       }
 
       // Logout
-      function logout() {
-        if (confirm('Are you sure you want to logout?')) {
-          // Clear sensitive data
-          // Redirect to login
-          window.location.href = 'login.html';
+      async function logout() {
+        if (!confirm('Are you sure you want to logout?')) return;
+
+        try {
+          // Call backend logout API so server session is cleared
+          const response = await fetch('/auth/logout', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'include'
+          });
+
+          // If backend returns a redirect URL, prefer it
+          if (response.ok) {
+            try {
+              const data = await response.json();
+              if (data && data.redirect_url) {
+                window.location.href = data.redirect_url;
+                return;
+              }
+            } catch (e) {
+              // Ignore JSON parse errors and fall through
+            }
+          }
+        } catch (e) {
+          console.error('Student logout API error:', e);
         }
+
+        // Final fallback redirect to login
+        window.location.href = '/auth/login';
       }
 
       // ===== TOAST NOTIFICATION SYSTEM =====

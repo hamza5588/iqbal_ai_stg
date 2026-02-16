@@ -972,6 +972,50 @@ def get_lesson_chat_history(lesson_id):
         logger.error(f"Error getting lesson chat history: {str(e)}")
         return jsonify({'error': 'Failed to get lesson chat history'}), 500
 
+@bp.route('/teacher/lesson_chat_history/<int:lesson_id>', methods=['GET'])
+@teacher_required
+def get_teacher_lesson_chat_history(lesson_id):
+    """Get full chat history for a lesson for the owning teacher (all students for that lesson)."""
+    try:
+        # Ensure the requesting teacher owns this lesson (or is admin via decorator/role)
+        lesson = LessonModel.get_lesson_by_id(lesson_id)
+        if not lesson:
+            return jsonify({'error': 'Lesson not found'}), 404
+
+        user_id = session['user_id']
+        user_role = session.get('role', 'student')
+        lesson_teacher_id = lesson.get('teacher_id')
+
+        # Only the owning teacher (or admin) may see full lesson history
+        if user_role != 'admin' and lesson_teacher_id != user_id:
+            return jsonify({'error': 'Access denied'}), 403
+
+        # Query all history rows for this lesson across users
+        from app.models.database_models import LessonChatHistory as DBLessonChatHistory, User as DBUser
+        db = get_db()
+        rows = (
+            db.query(DBLessonChatHistory, DBUser)
+            .outerjoin(DBUser, DBLessonChatHistory.user_id == DBUser.id)
+            .filter(DBLessonChatHistory.lesson_id == lesson_id)
+            .order_by(DBLessonChatHistory.created_at.asc())
+            .all()
+        )
+
+        history = []
+        for record, user in rows:
+            history.append({
+                'question': record.question,
+                'answer': record.answer,
+                'created_at': record.created_at.isoformat() if record.created_at else None,
+                'user_id': record.user_id,
+                'user_email': getattr(user, 'email', None) if user else None
+            })
+
+        return jsonify({'history': history})
+    except Exception as e:
+        logger.error(f"Error getting teacher lesson chat history: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to get lesson chat history'}), 500
+
 @bp.route('/clear_lesson_chat_history/<int:lesson_id>', methods=['DELETE'])
 @login_required
 def clear_lesson_chat_history(lesson_id):

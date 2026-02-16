@@ -62,13 +62,18 @@ def _get_openai_client():
 def _get_thread_id(user_id: int, conversation_id: int = None) -> str:
     """
     Generate a unique thread_id for the RAG service.
-    Creates a new unique thread ID for each upload.
+    Always creates a new unique thread ID for each upload,
+    while still encoding the conversation_id when available.
+    This allows multiple PDFs per conversation.
     """
-    if conversation_id:
-        return f"user_{user_id}_conv_{conversation_id}"
-    # Generate unique thread ID with timestamp and UUID
+    # Generate unique suffix with timestamp and UUID
     unique_id = str(uuid.uuid4())[:8]
     timestamp = int(datetime.utcnow().timestamp())
+    if conversation_id:
+        # Keep conversation_id in the pattern so existing regex-based
+        # logic (e.g. extracting conv_id from thread_id) continues to work,
+        # but allow multiple threads per conversation by adding a unique suffix.
+        return f"user_{user_id}_conv_{conversation_id}_{timestamp}_{unique_id}"
     return f"user_{user_id}_thread_{timestamp}_{unique_id}"
 
 
@@ -152,16 +157,17 @@ def ingest():
                 # Continue without conversation_id if creation fails
                 conversation_id = None
         
-        # ENFORCE: Check if conversation already has a PDF
+        # Verify conversation ownership (but allow multiple PDFs per conversation)
         if conversation_id:
-            # First verify conversation ownership
             try:
                 from app.models.models import ConversationModel
                 conversation_model = ConversationModel(user_id)
                 conv = conversation_model.get_conversation_by_id(conversation_id)
                 if not conv:
                     # Conversation doesn't exist or doesn't belong to user - create a new one
-                    logger.warning(f"Conversation {conversation_id} not found or doesn't belong to user {user_id}, creating new conversation")
+                    logger.warning(
+                        f"Conversation {conversation_id} not found or doesn't belong to user {user_id}, creating new conversation"
+                    )
                     filename = file.filename
                     conversation_title = f"Chat: {filename}" if filename else "New Chat"
                     conversation_id = conversation_model.create_conversation(conversation_title)
@@ -181,19 +187,6 @@ def ingest():
                     return jsonify({
                         'error': 'Error verifying conversation ownership. Please try again.'
                     }), 500
-            
-            # Check if this conversation already has a PDF uploaded (DB-based)
-            expected_thread_id = f"user_{user_id}_conv_{conversation_id}"
-            db = get_db()
-            existing_thread = db.query(RAGThread).filter_by(
-                user_id=user_id,
-                thread_id=expected_thread_id
-            ).first()
-            if existing_thread and existing_thread.has_document:
-                return jsonify({
-                    'error': 'This conversation already has a PDF uploaded. Each conversation can only have one PDF. Please create a new conversation to upload another PDF.',
-                    'existing_filename': existing_thread.filename
-                }), 400
         
         # If create_new_thread is False AND a thread_id is provided, use existing thread
         # (This is rare - normally each upload creates a new thread)
