@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Login | Iqbal AI - Secure Learning Platform</title>
     <!-- Global Theme Colors CSS -->
-    <link rel="stylesheet" href="css/theme-colors.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -1096,13 +1096,13 @@
               },
             });
 
-            loadingOverlay.classList.add("opacity-0", "pointer-events-none");
-
             const contentType = response.headers.get("content-type") || "";
             if (contentType.includes("application/json")) {
               const data = await response.json().catch(() => ({}));
               if (response.ok && data.success && data.redirect_url) {
-                window.location.href = data.redirect_url;
+                // Keep the loading overlay visible until navigation starts to
+                // avoid a brief flash of the login form.
+                window.location.replace(data.redirect_url);
                 return;
               }
               const errMsg = data.error || (response.status === 401 ? "Invalid credentials" : "Login failed. Please try again.");
@@ -1111,7 +1111,7 @@
             } else if (response.type === "opaqueredirect" || response.status === 302) {
               const location = response.headers.get("Location");
               if (location) {
-                window.location.href = location;
+                window.location.replace(location);
                 return;
               }
               if (loginErrorText) loginErrorText.textContent = "Login failed. Please try again.";
@@ -1122,6 +1122,8 @@
               if (loginErrorEl) loginErrorEl.classList.remove("hidden");
             }
 
+            // Only hide loading overlay on error paths
+            loadingOverlay.classList.add("opacity-0", "pointer-events-none");
             restoreButton(submitBtn);
           } catch (err) {
             loadingOverlay.classList.add("opacity-0", "pointer-events-none");
@@ -1262,10 +1264,10 @@ window.resetForm = function() {
       });
     </script>
     <!-- Authentication System -->
-    <script src="js/auth.js"></script>
+    <script src="{{ url_for('static', filename='teacher/js/auth.js') }}"></script>
     <!-- Demo Data System -->
-    <script src="js/demo-data.js"></script>
+    <script src="{{ url_for('static', filename='teacher/js/demo-data.js') }}"></script>
     <!-- Global Theme Switcher -->
-    <script src="js/theme-switcher.js"></script>
+    <script src="{{ url_for('static', filename='teacher/js/theme-switcher.js') }}"></script>
   </body>
 </html>

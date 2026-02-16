@@ -6170,10 +6170,6 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           stored.forEach(msg => {
             renderMessageDOM(msg.role, msg.content);
           });
-        } else if (chatId === 'chat1') {
-          // Fallback sample for chat1 (demo data if empty)
-          renderMessageDOM('user', 'Can you help me create a lesson plan about photosynthesis?');
-          renderMessageDOM('assistant', `<h4 class="font-display font-semibold text-surface-900 mb-2">Photosynthesis Lesson Plan Assistance</h4>\n              <p class="text-surface-700">I can help you create a comprehensive lesson plan about photosynthesis for 10th grade biology.</p>\n              <div class="mt-3 p-3 bg-primary-50 rounded-lg border border-primary-100">\n                <p class="text-primary-700 text-sm">\n                  <i class="fas fa-lightbulb mr-2"></i>\n                  What specific aspects would you like to focus on?\n                </p>\n              </div>`);
         } else {
           // No messages for this chat - show welcome
           renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');

@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, redirect
 from app.utils.auth import login_required
+from app.utils.routes import get_default_route_by_role
 from app.utils.rag_service import (
     ingest_pdf,
     chatbot,
@@ -78,8 +79,9 @@ def chatbot_page():
     Render the PDF chat interface.
     """
     try:
-        # Redirect to main chat interface instead of separate chatbot page
-        return render_template('chat.html')
+        # Legacy behavior previously rendered `chat.html`. Keep backwards
+        # compatibility but ensure legacy UI is only reachable explicitly.
+        return redirect('/legacy/chat')
     except Exception as e:
         logger.error(f"Error rendering chatbot page: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to render page: {str(e)}'}), 500

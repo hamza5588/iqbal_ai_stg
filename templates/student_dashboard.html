@@ -7,10 +7,10 @@
   <title>Student Dashboard | Iqbal AI - Secure Learning Platform</title>
 
   <!-- Global Theme Colors CSS -->
-  <link rel="stylesheet" href="css/theme-colors.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
 
   <!-- Markdown Styles -->
-  <link rel="stylesheet" href="css/markdown-styles.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/markdown-styles.css') }}" />
 
   <!-- Tailwind CSS with same config as login page -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -209,13 +209,13 @@
 
 
   <!-- Markdown Parser -->
-  <script src="js/markdown-parser.js"></script>
+  <script src="{{ url_for('static', filename='teacher/js/markdown-parser.js') }}"></script>
 
   <!-- Backend Response Formatter -->
-  <script src="js/backend-formatter.js"></script>
+  <script src="{{ url_for('static', filename='teacher/js/backend-formatter.js') }}"></script>
 
   <!-- Markdown Examples (demo helper functions) -->
-  <script src="js/markdown-examples.js"></script>
+  <script src="{{ url_for('static', filename='teacher/js/markdown-examples.js') }}"></script>
 
   <!-- Google Fonts (same as login page) -->
   <link
@@ -3820,274 +3820,29 @@
       }
 
 
-      // Show My Lessons Page (matching your screenshot)
-      // Initialize dummy lessons for students
-      function initializeDummyLessons() {
-        const dummyLessons = [
-          {
-            id: 'lesson_1',
-            title: 'Introduction to Algebra',
-            subject: 'Mathematics',
-            grade: 'High School',
-            createdBy: 'Mr. Johnson',
-            version: 2,
-            status: 'published',
-            createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-            content: `<div class="space-y-6">
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Variables and Expressions</h3>
-                <p class="text-gray-700 leading-relaxed">Algebra is a branch of mathematics that uses letters and symbols to represent numbers and quantities. Variables like $x$, $y$, and $z$ allow us to write general expressions that apply to many situations.</p>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Key Concepts</h3>
-                <ul class="list-disc list-inside space-y-2 text-gray-700">
-                  <li>Variables represent unknown quantities</li>
-                  <li>Expressions combine variables with operations</li>
-                  <li>Equations show that two expressions are equal</li>
-                  <li>Solving means finding the value of the variable</li>
-                </ul>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Linear Equations</h3>
-                <p class="text-gray-700 mb-2">A simple linear equation:</p>
-                <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-3">
-                  $$2x + 3 = 11$$
-                  <p class="text-sm text-gray-600 mt-3">Solving: subtract 3 from both sides to get $2x = 8$, then divide by 2 to get $x = 4$</p>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Quadratic Formula</h3>
-                <p class="text-gray-700 mb-2">For any quadratic equation $ax^2 + bx + c = 0$, the solutions are:</p>
-                <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                  $$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$
-                  <p class="text-sm text-gray-600 mt-3">Example: For $x^2 - 5x + 6 = 0$, we have $(x-2)(x-3) = 0$, so $x = 2$ or $x = 3$</p>
-                </div>
-              </section>
-            </div>`
-          },
-          {
-            id: 'lesson_2',
-            title: 'Photosynthesis Process',
-            subject: 'Biology',
-            grade: 'High School',
-            createdBy: 'Dr. Smith',
-            version: 1,
-            status: 'published',
-            createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            content: `<div class="space-y-6">
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">What is Photosynthesis?</h3>
-                <p class="text-gray-700 leading-relaxed">Photosynthesis is the process by which plants convert light energy into chemical energy. This process occurs in the chloroplasts of plant cells and is essential for life on Earth.</p>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">The Two Main Stages</h3>
-                <div class="space-y-3">
-                  <div class="border-l-4 border-green-500 pl-4">
-                    <h4 class="font-bold text-green-700">Light-Dependent Reactions</h4>
-                    <p class="text-sm text-gray-700">Occur in the thylakoid membranes. Sunlight is captured by chlorophyll, exciting electrons to create ATP and NADPH. The energy transformation: $\\Delta G° = -n \\cdot F \\cdot E°$</p>
-                  </div>
-                  <div class="border-l-4 border-green-500 pl-4">
-                    <h4 class="font-bold text-green-700">Light-Independent Reactions (Calvin Cycle)</h4>
-                    <p class="text-sm text-gray-700">Occur in the stroma. ATP and NADPH from the light reactions are used to fix CO₂ into glucose.</p>
-                  </div>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">The Overall Equation</h3>
-                <div class="bg-green-50 p-4 rounded text-center">
-                  $$6CO_2 + 6H_2O + \\text{light energy} \\rightarrow C_6H_{12}O_6 + 6O_2$$
-                  <p class="text-sm text-gray-600 mt-3">This equation shows that 6 molecules of carbon dioxide and 6 molecules of water, powered by light energy, produce 1 molecule of glucose and 6 molecules of oxygen.</p>
-                </div>
-              </section>
-            </div>`
-          },
-          {
-            id: 'lesson_3',
-            title: 'World War II History',
-            subject: 'History',
-            grade: 'High School',
-            createdBy: 'Prof. Williams',
-            version: 1,
-            status: 'published',
-            createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-            content: `<div class="space-y-6">
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Timeline and Overview</h3>
-                <p class="text-gray-700 leading-relaxed">World War II (1939-1945) was the deadliest and most destructive conflict in human history, involving most of the world's nations divided between two opposing military alliances: the Allies and the Axis.</p>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Major Turning Points</h3>
-                <ul class="space-y-3 text-gray-700">
-                  <li class="flex gap-3"><span class="font-bold text-blue-600">1941:</span> Germany invades Soviet Union; Japan attacks Pearl Harbor</li>
-                  <li class="flex gap-3"><span class="font-bold text-blue-600">1942-43:</span> Battle of Stalingrad and North Africa campaigns</li>
-                  <li class="flex gap-3"><span class="font-bold text-blue-600">1944:</span> D-Day invasion of Normandy begins liberation of Western Europe</li>
-                  <li class="flex gap-3"><span class="font-bold text-blue-600">1945:</span> Germany surrenders in May; Japan in August after atomic bombs</li>
-                </ul>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Casualty Statistics</h3>
-                <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded">
-                  <p class="text-gray-700 mb-2">Estimated deaths by region:</p>
-                  <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                    <li>Soviet Union: Approximately 27 million</li>
-                    <li>China: Approximately 15-20 million</li>
-                    <li>Germany: Approximately 7 million</li>
-                    <li>Others: 15-25 million</li>
-                  </ul>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Impact</h3>
-                <p class="text-gray-700 leading-relaxed">Approximately 70-85 million total casualties. Creation of the United Nations, division of Europe, emergence of superpowers, and the Holocaust revealed. The war fundamentally reshaped global politics and led to the beginning of the Cold War.</p>
-              </section>
-            </div>`
-          },
-          {
-            id: 'lesson_4',
-            title: 'English Literature Basics',
-            subject: 'English',
-            grade: 'Middle School',
-            createdBy: 'Ms. Brown',
-            version: 3,
-            status: 'published',
-            createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-            content: `<div class="space-y-6">
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Literary Elements</h3>
-                <p class="text-gray-700 leading-relaxed">Understanding the building blocks of literature helps us analyze and appreciate stories, poems, and plays more deeply. A formula for understanding literature: <span class="bg-purple-100 px-2 py-1 rounded">C + P + S + T = Meaning</span> (Character + Plot + Setting + Theme).</p>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Core Components</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div class="bg-purple-50 p-3 rounded">
-                    <h4 class="font-bold text-purple-700">Character</h4>
-                    <p class="text-sm text-gray-700">Individuals in the story with personalities, motivations, and arcs</p>
-                  </div>
-                  <div class="bg-purple-50 p-3 rounded">
-                    <h4 class="font-bold text-purple-700">Plot</h4>
-                    <p class="text-sm text-gray-700">The sequence of events: exposition, rising action, climax, falling action, resolution</p>
-                  </div>
-                  <div class="bg-purple-50 p-3 rounded">
-                    <h4 class="font-bold text-purple-700">Setting</h4>
-                    <p class="text-sm text-gray-700">The time, place, and social context where the story unfolds</p>
-                  </div>
-                  <div class="bg-purple-50 p-3 rounded">
-                    <h4 class="font-bold text-purple-700">Theme</h4>
-                    <p class="text-sm text-gray-700">The central idea or message that the author wants to convey</p>
-                  </div>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Analysis Framework</h3>
-                <div class="bg-purple-50 border-l-4 border-purple-500 p-4 rounded">
-                  <p class="text-gray-700 mb-2"><strong>Question Checklist:</strong></p>
-                  <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                    <li>Who are the main characters and how do they change?</li>
-                    <li>What is the central conflict or problem?</li>
-                    <li>When and where does the story take place?</li>
-                    <li>What is the author trying to teach us?</li>
-                  </ul>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Practice Activity</h3>
-                <p class="text-gray-700">Choose a book or short story and identify these elements. How do they work together to create meaning? Create a brief analysis using the framework above.</p>
-              </section>
-            </div>`
-          },
-          {
-            id: 'lesson_5',
-            title: 'Chemistry Fundamentals',
-            subject: 'Chemistry',
-            grade: 'High School',
-            createdBy: 'Dr. Davis',
-            version: 1,
-            status: 'published',
-            createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            content: `<div class="space-y-6">
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">What is Chemistry?</h3>
-                <p class="text-gray-700 leading-relaxed">Chemistry is the science that studies matter, its reactions, properties, and interactions. It bridges physics and biology, explaining everything from simple atoms to complex molecules.</p>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Fundamental Concepts</h3>
-                <ul class="list-disc list-inside space-y-2 text-gray-700">
-                  <li><strong>Atoms:</strong> The smallest units of elements with protons, neutrons, and electrons</li>
-                  <li><strong>Bonds:</strong> Forces that hold atoms together (ionic, covalent, metallic)</li>
-                  <li><strong>Reactions:</strong> Processes where bonds break and form, creating new substances</li>
-                  <li><strong>Solutions:</strong> Homogeneous mixtures where one substance is dissolved in another</li>
-                </ul>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Molar Mass Calculation</h3>
-                <p class="text-gray-700 mb-2">Calculate molar mass as the sum of atomic masses:</p>
-                <div class="bg-orange-50 border-l-4 border-orange-500 p-4 rounded mb-3">
-                  $$M = \\sum (\\text{atomic mass} \\times \\text{number of atoms})$$
-                  <p class="text-sm text-gray-600 mt-3">Example: For H₂O, $M = 2(1) + 16 = 18$ g/mol</p>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Chemical Equation Example</h3>
-                <div class="bg-orange-50 p-4 rounded text-center">
-                  $$2H_2 + O_2 \\rightarrow 2H_2O$$
-                  <p class="text-sm text-gray-600 mt-2">Combustion of hydrogen gas produces water</p>
-                </div>
-              </section>
-            </div>`
-          },
-          {
-            id: 'lesson_6',
-            title: 'Physics Motion Laws',
-            subject: 'Physics',
-            grade: 'High School',
-            createdBy: 'Prof. Miller',
-            version: 2,
-            status: 'published',
-            createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-            content: `<div class="space-y-6">
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Newton's Laws of Motion</h3>
-                <p class="text-gray-700 leading-relaxed">Isaac Newton's three laws explain how objects move and respond to forces. These form the foundation of classical mechanics.</p>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Second Law - Force</h3>
-                <div class="bg-yellow-50 border-l-4 border-yellow-600 p-4 rounded mb-4">
-                  <p class="font-bold text-yellow-800 mb-2">Newton's Second Law:</p>
-                  $$\\vec{F} = m \\vec{a}$$
-                  <p class="text-sm text-gray-600 mt-3">Force equals mass times acceleration. A 10 kg object with 5 m/s² acceleration requires: $F = 10 \\times 5 = 50$ N</p>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">Kinematic Equations</h3>
-                <p class="text-gray-700 mb-2">For constant acceleration motion:</p>
-                <div class="bg-yellow-50 p-4 rounded">
-                  $$v = v_0 + at$$
-                  $$s = v_0 t + \\frac{1}{2}at^2$$
-                  $$v^2 = v_0^2 + 2as$$
-                  <p class="text-sm text-gray-600 mt-3">Where $v$ is velocity, $a$ is acceleration, $t$ is time, and $s$ is displacement.</p>
-                </div>
-              </section>
-              <section>
-                <h3 class="text-xl font-bold text-primary-600 mb-3">The Three Laws Summary</h3>
-                <ul class="list-disc list-inside space-y-2 text-gray-700">
-                  <li><strong>First Law:</strong> An object at rest stays at rest unless $F_{net} \\neq 0$</li>
-                  <li><strong>Second Law:</strong> $\\vec{F}_{net} = m\\vec{a}$ determines motion</li>
-                  <li><strong>Third Law:</strong> $\\vec{F}_{AB} = -\\vec{F}_{BA}$ (action-reaction pairs)</li>
-                </ul>
-              </section>
-            </div>`
-          }
-        ];
-        
-        // Store dummy lessons
-        localStorage.setItem('Student_lessons', JSON.stringify(dummyLessons));
-        return dummyLessons;
+      // Show My Lessons Page (API-integrated for students)
+      // Students browse available lessons from the backend; no dummy seed data.
+
+      // In-memory cache to avoid refetching repeatedly during a single page session
+      let _studentLessonsCache = null;
+      let _studentLessonsCacheAt = 0;
+
+      async function fetchStudentLessons() {
+        const now = Date.now();
+        // short cache (10s) to keep UI responsive without showing stale dummy data
+        if (_studentLessonsCache && (now - _studentLessonsCacheAt) < 10_000) {
+          return _studentLessonsCache;
+        }
+        const response = await fetch('/api/lessons/browse_lessons', { method: 'GET', credentials: 'include' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data || data.success !== true) {
+          const msg = (data && (data.error || data.message)) || `Failed to load lessons (${response.status})`;
+          throw new Error(msg);
+        }
+        const lessons = Array.isArray(data.lessons) ? data.lessons : [];
+        _studentLessonsCache = lessons;
+        _studentLessonsCacheAt = now;
+        return lessons;
       }
 
       // Validate MathJax rendering in content
@@ -4177,17 +3932,41 @@
         const chatArea = document.getElementById('chatArea');
         if (chatArea) chatArea.style.display = 'block';
 
-        // Get lessons from localStorage, or initialize with dummy lessons
-        let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        
-        // If no lessons or lessons don't have content, initialize fresh dummy lessons
-        const hasContent = lessons.length > 0 && lessons.some(lesson => lesson.content || lesson.body);
-        if (lessons.length === 0 || !hasContent) {
-          lessons = initializeDummyLessons();
-        }
+        // Fetch lessons from API (no dummy/localStorage lessons)
+        let lessons = [];
+        // NOTE: showMyLessonsPage is called from click handlers; keep it non-async
+        // by rendering a quick loading state then hydrating with API results.
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = `
+          <div class="max-w-6xl mx-auto">
+            <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
+              <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View Lessons</h1>
+              <p class="text-primary-100 text-sm md:text-base">Loading lessons...</p>
+            </div>
+          </div>
+        `;
+
+        fetchStudentLessons()
+          .then(apiLessons => {
+            lessons = apiLessons || [];
+            // Continue rendering below by re-invoking the function that renders with `lessons`
+            renderLessonsTable(lessons);
+          })
+          .catch(err => {
+            console.error('Failed to fetch student lessons', err);
+            showToast(err.message || 'Failed to load lessons', 'error', 4000);
+            renderLessonsTable([]); // empty state
+          });
+
+        return; // rendering continues in renderLessonsTable()
+
+      }
+
+      function renderLessonsTable(lessons) {
+        lessons = Array.isArray(lessons) ? lessons : [];
 
         // Sort lessons by date (newest first)
-        lessons.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        lessons.sort((a, b) => new Date(b.created_at || b.createdAt || b.updated_at || b.updatedAt || 0) - new Date(a.created_at || a.createdAt || a.updated_at || a.updatedAt || 0));
 
         // Apply search filter and paginate
         const filteredLessons = getFilteredLessons(lessons);
@@ -4198,7 +3977,7 @@
 
         // Format lessons for display
         const formattedLessons = pageLessons.map((lesson, index) => {
-          const date = new Date(lesson.createdAt || lesson.updatedAt);
+          const date = new Date(lesson.created_at || lesson.createdAt || lesson.updated_at || lesson.updatedAt || Date.now());
           const now = new Date();
           const diffTime = Math.abs(now - date);
           const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -4222,9 +4001,9 @@
             no: startIdx + index + 1,
             id: lesson.id,
             title: lesson.title || 'Untitled Lesson',
-            subject: lesson.subject || 'General',
-            grade: lesson.grade || 'General',
-            createdBy: lesson.createdBy || 'Student',
+            subject: lesson.focus_area || lesson.subject || 'General',
+            grade: lesson.grade_level || lesson.grade || 'General',
+            createdBy: lesson.teacher_name || lesson.createdBy || 'Teacher',
             versions: `<span class="version-badge">v${lesson.version || 1}</span>`,
             timestamp: timestamp,
             fullDate: date,
@@ -4233,7 +4012,6 @@
         });
 
         // Clear chat area and show lessons page
-        const chatMessages = document.getElementById('chatMessages');
         chatMessages.innerHTML = `
     <div class="max-w-6xl mx-auto">
       <!-- Header with Background -->
@@ -4274,7 +4052,7 @@
             </tr>
           </thead>
         <tbody id="lessonsTableBody">
-            ${formattedLessons.map(lesson => `
+            ${formattedLessons.length ? formattedLessons.map(lesson => `
               <tr data-lesson-id="${lesson.id}">
                 <td class="font-medium" data-label="Lesson Title">${lesson.title}</td>
                 <td data-label="Subject">${lesson.subject}</td>
@@ -4298,7 +4076,13 @@
                   </div>
                 </td>
               </tr>
-            `).join('')}
+            `).join('') : `
+              <tr>
+                <td colspan="7" class="py-10 text-center text-gray-500">
+                  No lessons available yet.
+                </td>
+              </tr>
+            `}
           </tbody>
         </table>
         
@@ -4334,9 +4118,8 @@
 
       // Find lesson by ID
       function findLessonById(lessonId) {
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
+        const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
         if (!lessonId) return -1;
-        // Normalize to string for comparison because data-lesson-id attributes are strings
         const needle = String(lessonId);
         return lessons.findIndex(lesson => String(lesson.id) === needle);
       }
@@ -4353,27 +4136,22 @@
             return;
           }
 
-          const index = findLessonById(lessonId);
-          console.log('🔍 findLessonById returned index:', index);
+          // Ensure cache is hydrated
+          fetchStudentLessons().then(() => {
+            const index = findLessonById(lessonId);
+            console.log('🔍 findLessonById returned index:', index);
+            const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
 
-          let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-          console.log('🔍 Total lessons in localStorage:', lessons.length);
-          console.log('🔍 Lessons:', lessons);
-
-          if (index !== -1 && lessons[index]) {
-            console.log('✅ Lesson found at index', index, ':', lessons[index]);
-            populateViewLessonModal(lessons[index]);
-            console.log('✅ populateViewLessonModal completed');
-            showViewLessonModal();
-            console.log('✅ showViewLessonModal completed');
-          } else {
-            console.error('❌ Lesson not found - index:', index, 'lessons.length:', lessons.length);
-            console.error('❌ Searching for lessonId:', lessonId);
-            lessons.forEach((lesson, idx) => {
-              console.log(`  Lesson ${idx}: id="${lesson.id}" (type: ${typeof lesson.id})`);
-            });
-            alert('Error: Lesson not found. Please refresh and try again.');
-          }
+            if (index !== -1 && lessons[index]) {
+              populateViewLessonModal(lessons[index]);
+              showViewLessonModal();
+            } else {
+              alert('Error: Lesson not found. Please refresh and try again.');
+            }
+          }).catch(err => {
+            console.error('❌ viewLesson fetch error:', err);
+            showToast(err.message || 'Failed to load lesson', 'error', 4000);
+          });
         } catch (err) {
           console.error('❌ viewLesson error:', err);
           console.error('❌ Stack trace:', err.stack);
@@ -4538,114 +4316,17 @@
 
       // Finalize new version
       function finalizeNewVersionLesson() {
-        const lessonId = window.currentViewLessonId;
-        if (!lessonId) return;
-
-        const draftContent = document.getElementById('viewLessonDraft').value.trim();
-        if (!draftContent) {
-          showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
-          return;
-        }
-
-        if (!confirm('Finalize this new version? This will create a new published version from the draft.')) {
-          return;
-        }
-
-        let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        const index = findLessonById(lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-
-          // Initialize versions array if it doesn't exist
-          if (!lesson.versions) {
-            lesson.versions = [{
-              version: lesson.version || 1,
-              content: lesson.content || lesson.body || '',
-              createdAt: lesson.createdAt || new Date().toISOString()
-            }];
-          }
-
-          // Create new version
-          const newVersion = {
-            version: (lesson.version || 1) + 1,
-            content: draftContent,
-            createdAt: new Date().toISOString()
-          };
-
-          // Update lesson
-          lesson.versions.push(newVersion);
-          lesson.version = newVersion.version;
-          lesson.content = draftContent;
-          lesson.status = 'published';
-          lesson.updatedAt = new Date().toISOString();
-
-          // Save to localStorage
-          localStorage.setItem('Student_lessons', JSON.stringify(lessons));
-
-          // Clear draft
-          const draftKey = `Student_lesson_draft_${lessonId}`;
-          localStorage.removeItem(draftKey);
-
-          showToast(`✅ New version created! (v${newVersion.version})`, 'success', 3000);
-          closeViewLessonModal();
-          showMyLessonsPage(); // Refresh lessons list
-        }
+        // Students are read-only; versioning/editing is managed by teachers/admins via API.
+        showToast('This lesson is read-only for students.', 'info', 3000);
       }
 
       // Delete lesson function
       function deleteLesson(lessonId) {
-        if (!confirm('Are you sure you want to permanently delete this lesson?')) {
-          return;
-        }
-
-        let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        const initialLength = lessons.length;
-        lessons = lessons.filter(l => String(l.id) !== String(lessonId));
-
-        if (lessons.length < initialLength) {
-          localStorage.setItem('Student_lessons', JSON.stringify(lessons));
-          showToast('Lesson deleted successfully', 'success');
-          showMyLessonsPage(); // Refresh list
-        } else {
-          showToast('Error: Lesson not found', 'error');
-        }
+        showToast('Students cannot delete lessons.', 'info', 3000);
       }
 
       function loadVersionIntoDraft(lessonId, versionNumber) {
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        const index = lessons.findIndex(lesson => lesson.id === lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          let versionContent = null;
-
-          // Find the version in the versions array
-          if (lesson.versions && Array.isArray(lesson.versions)) {
-            const version = lesson.versions.find(v => v.version === versionNumber);
-            versionContent = version ? version.content : null;
-          }
-
-          // If version 1 and no versions array exists, use the current content
-          if (!versionContent && versionNumber === 1) {
-            versionContent = lesson.content || lesson.body || '';
-          }
-
-          if (versionContent) {
-            // Load into draft textarea
-            const draftTextarea = document.getElementById('viewLessonDraft');
-            draftTextarea.value = versionContent;
-            draftTextarea.focus();
-
-            // Save to localStorage
-            saveLessonDraftVisible();
-
-            // Show success message
-            showToast(`✅ Loaded v${versionNumber} into draft editor. Make your changes and click "Finalize New Version" to create v${lesson.version + 1}.`, 'success', 3500);
-          } else {
-            showToast('Version content not found.', 'error', 2000);
-          }
-        }
+        showToast('Version editing is not available for students.', 'info', 3000);
       }
 
       // Edit with human feedback
@@ -4676,45 +4357,33 @@
 
       // Download lesson as PPT
       function downloadLessonPPT(lessonId) {
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        const index = findLessonById(lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          const content = lesson.content || lesson.body || 'Lesson content';
-
-          // Create a simple text file as fallback (PPT generation would require backend)
-          const element = document.createElement('a');
-          const blob = new Blob([`${lesson.title}\n\nSubject: ${lesson.subject}\nGrade: ${lesson.grade}\n\n${content}`], { type: 'text/plain' });
-          element.href = URL.createObjectURL(blob);
-          element.download = `${lesson.title.replace(/\s+/g, '_')}_v${lesson.version || 1}.txt`;
-          document.body.appendChild(element);
-          element.click();
-          document.body.removeChild(element);
-
-          showToast('Lesson downloaded! (Text format)', 'success', 2000);
-        }
+        // API-integrated download (same endpoint as teacher dashboard)
+        fetch('/api/lessons/download_lesson_ppt/' + encodeURIComponent(String(lessonId)), { method: 'GET', credentials: 'include' })
+          .then(async (res) => {
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data.error || `Download failed (${res.status})`);
+            }
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `lesson_${lessonId}.pptx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            showToast('Lesson downloaded', 'success', 2000);
+          })
+          .catch(err => {
+            console.error('Download PPT error', err);
+            showToast(err.message || 'Download failed', 'error', 3000);
+          });
       }
 
       // Download lesson as DOCX (fallback to text)
       function downloadLessonDocx(lessonId) {
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        const index = findLessonById(lessonId);
-
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          const content = lesson.content || lesson.body || 'Lesson content';
-
-          const element = document.createElement('a');
-          const blob = new Blob([`${lesson.title}\n\nSubject: ${lesson.subject}\nGrade: ${lesson.grade}\n\n${content}`], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-          element.href = URL.createObjectURL(blob);
-          element.download = `${lesson.title.replace(/\s+/g, '_')}_v${lesson.version || 1}.docx`;
-          document.body.appendChild(element);
-          element.click();
-          document.body.removeChild(element);
-
-          showToast('Lesson downloaded! (DOCX fallback)', 'success', 2000);
-        }
+        showToast('DOCX download is not available on the student dashboard yet.', 'info', 3000);
       }
 
       // Open full chat page asking a question about the currently viewed lesson
@@ -4740,14 +4409,12 @@
 
       // Switch lesson context (when user selects a different lesson)
       function switchLessonContext(lessonId) {
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
+        const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
         const index = findLessonById(lessonId);
-        
         if (index === -1 || !lessons[index]) {
           showToast('Lesson not found', 'error', 2000);
           return false;
         }
-
         const lesson = lessons[index];
         
         // If we're in a lesson-bound chat, clear it and start fresh
@@ -4786,7 +4453,7 @@
           return;
         }
 
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
+        const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
         const index = findLessonById(lessonId);
         if (index === -1 || !lessons[index]) {
           showToast('Lesson not found', 'error', 2000);
@@ -5135,145 +4802,23 @@
       }
 
       function editLesson(lessonId) {
-        const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          // Show edit modal
-          const modalHtml = `
-          <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Edit Lesson</h3>
-                <button onclick="this.parentElement.parentElement.parentElement.remove()" 
-                        class="text-gray-400 hover:text-gray-600">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-              
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Lesson Title</label>
-                <input type="text" id="editLessonTitle" 
-                       value="${lesson.title}"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-              </div>
-              
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-                <select id="editLessonSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${lesson.subject === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Math" ${lesson.subject === 'Math' ? 'selected' : ''}>Mathematics</option>
-                  <option value="Science" ${lesson.subject === 'Science' ? 'selected' : ''}>Science</option>
-                  <option value="English" ${lesson.subject === 'English' ? 'selected' : ''}>English</option>
-                  <option value="History" ${lesson.subject === 'History' ? 'selected' : ''}>History</option>
-                </select>
-              </div>
-              
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Grade Level</label>
-                <select id="editLessonGrade" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${lesson.grade === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Elementary" ${lesson.grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
-                  <option value="Middle School" ${lesson.grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
-                  <option value="High School" ${lesson.grade === 'High School' ? 'selected' : ''}>High School</option>
-                  <option value="College" ${lesson.grade === 'College' ? 'selected' : ''}>College</option>
-                </select>
-              </div>
-              
-              <div class="flex gap-3">
-                <button onclick="saveLessonEdit('${lessonId}')" 
-                        class="flex-1 bg-primary-600 text-white py-2.5 px-4 rounded-lg hover:bg-primary-700 transition-colors">
-                  Save Changes
-                </button>
-                <button onclick="this.parentElement.parentElement.parentElement.remove()" 
-                        class="flex-1 bg-gray-200 text-gray-800 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        `;
-
-          const modalContainer = document.createElement('div');
-          modalContainer.innerHTML = modalHtml;
-          document.body.appendChild(modalContainer);
-        }
+        showToast('Students cannot edit lessons.', 'info', 3000);
       }
 
       function saveLessonEdit(lessonId) {
-        const title = document.getElementById('editLessonTitle').value;
-        const subject = document.getElementById('editLessonSubject').value;
-        const grade = document.getElementById('editLessonGrade').value;
-
-        const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        if (index !== -1 && lessons[index]) {
-          lessons[index].title = title;
-          lessons[index].subject = subject;
-          lessons[index].grade = grade;
-          lessons[index].updatedAt = new Date().toISOString();
-
-          localStorage.setItem('Student_lessons', JSON.stringify(lessons));
-
-          // Close modal
-          document.querySelector('[onclick="saveLessonEdit(\'' + lessonId + '\')"]').closest('.fixed').remove();
-
-          // Refresh the lessons page
-          showMyLessonsPage();
-
-          // Show success toast notification
-          showToast(`✅ Lesson "${title}" updated successfully!`, 'success', 4000);
-        }
+        showToast('Students cannot edit lessons.', 'info', 3000);
       }
 
       function deleteLesson(lessonId) {
-        if (confirm('Are you sure you want to delete this lesson? This action cannot be undone.')) {
-          const index = findLessonById(lessonId);
-          let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-          if (index !== -1) {
-            const lessonTitle = lessons[index]?.title || 'this lesson';
-
-            lessons.splice(index, 1);
-            localStorage.setItem('Student_lessons', JSON.stringify(lessons));
-
-            // Show warning toast notification
-            showToast(`🗑️ Lesson "${lessonTitle}" deleted`, 'warning', 4000);
-
-            // Refresh the lessons page
-            showMyLessonsPage();
-          }
-        }
+        showToast('Students cannot delete lessons.', 'info', 3000);
       }
 
       function deleteAllLessonsConfirm() {
-        if (confirm('Are you sure you want to delete ALL lessons? This action cannot be undone.')) {
-          localStorage.removeItem('Student_lessons');
-          showMyLessonsPage();
-          showToast('🗑️ All lessons deleted', 'warning', 4000);
-          addAssistantMessage('✅ All lessons have been deleted.');
-        }
+        showToast('This action is not available for students.', 'info', 3000);
       }
 
       function exportAllLessons() {
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        if (lessons.length === 0) {
-          showToast('❌ No lessons to export', 'error', 3000);
-          return;
-        }
-
-        const dataStr = JSON.stringify(lessons, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `lessons-export-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        showToast(`✅ Exported ${lessons.length} lesson(s) successfully!`, 'success', 4000);
-        addAssistantMessage('✅ All lessons exported successfully!');
+        showToast('Export is not available on the student dashboard.', 'info', 3000);
       }
 
       // Pagination + search state
@@ -5310,7 +4855,7 @@
       }
 
       function nextPage() {
-        const lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
+        const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
         const filteredLessons = getFilteredLessons(lessons);
         const totalPages = Math.max(1, Math.ceil(filteredLessons.length / lessonsPerPage));
 
@@ -5330,7 +4875,7 @@
       // Helper function for lesson actions
       function generateQuizFromLesson(lessonId) {
         const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
+        let lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
         if (index !== -1 && lessons[index]) {
           const lesson = lessons[index];
           document.getElementById('messageInput').value = `Generate a quiz from the lesson: ${lesson.title}`;
@@ -5341,66 +4886,7 @@
       }
 
       function shareLesson(lessonId) {
-        const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('Student_lessons') || '[]');
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          const modalHtml = `
-          <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Share Lesson</h3>
-                <button onclick="this.parentElement.parentElement.parentElement.remove()" 
-                        class="text-gray-400 hover:text-gray-600">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-              
-              <div class="mb-6">
-                <p class="text-gray-700 mb-4">Share <strong>"${lesson.title}"</strong> with other Students or students.</p>
-                
-                <div class="mb-4">
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Share Link</label>
-                  <div class="flex gap-2">
-                    <input type="text" 
-                           id="shareLink" 
-                           value="https://iqbalai.com/lesson/${lesson.id}"
-                           readonly
-                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                    <button onclick="copyShareLink()" 
-                            class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors">
-                      Copy
-                    </button>
-                  </div>
-                </div>
-                
-                <div class="mb-4">
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Share via Email</label>
-                  <input type="email" 
-                         id="shareEmail" 
-                         placeholder="Enter email address"
-                         class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                </div>
-              </div>
-              
-              <div class="flex gap-3">
-                <button onclick="sendLessonViaEmail('${lessonId}')" 
-                        class="flex-1 bg-primary-600 text-white py-2.5 px-4 rounded-lg hover:bg-primary-700 transition-colors">
-                  Send Email
-                </button>
-                <button onclick="this.parentElement.parentElement.parentElement.remove()" 
-                        class="flex-1 bg-gray-200 text-gray-800 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors">
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        `;
-
-          const modalContainer = document.createElement('div');
-          modalContainer.innerHTML = modalHtml;
-          document.body.appendChild(modalContainer);
-        }
+        showToast('Sharing is not available on the student dashboard.', 'info', 3000);
       }
 
       function copyShareLink() {

@@ -4,6 +4,7 @@ from app.services import ChatService, PromptService
 from app.models.models import SurveyModel, LessonModel
 # from app.utils.decorators import login_required
 from app.utils.auth import login_required
+from app.utils.routes import get_default_route_by_role
 from app.utils.decorators import teacher_required
 import logging
 from app.utils.db import get_db
@@ -71,33 +72,69 @@ def teacher_dashboard():
 @bp.route('/')
 @login_required
 def index():
-    """Render the main chat interface. Teachers use teacher_dashboard.html only and are redirected there."""
-    if session.get('role') == 'teacher':
+    """
+    Canonical authenticated landing.
+
+    `chat.html` is legacy and must not be the default entrypoint for the new UI.
+    We always redirect to the role dashboard.
+    """
+    return redirect(get_default_route_by_role(session.get('role')))
+
+
+@bp.route('/student-dashboard')
+@login_required
+def student_dashboard():
+    """
+    Render the new student dashboard UI.
+
+    Teachers/admins are redirected to their canonical dashboards.
+    """
+    role = session.get('role')
+    if role == 'admin':
+        return redirect('/admin/')
+    if role == 'teacher':
         return redirect(url_for('chat.teacher_dashboard'))
+    return render_template('student_dashboard.html')
+
+
+def _render_legacy_chat():
+    """
+    Legacy UI renderer (`chat.html`).
+    Kept for backward compatibility, but only reachable via explicit /legacy/* routes.
+    """
     has_submitted_survey = False
     subscription_tier = 'free'
     try:
-        # Check if user has submitted survey
         survey_model = SurveyModel(session['user_id'])
         has_submitted_survey = survey_model.has_submitted_survey()
     except Exception as e:
-        logger.warning(f"Survey check failed in index: {e}")
+        logger.warning(f"Survey check failed in legacy chat: {e}")
+
     try:
-        # Get user subscription tier
         from app.models.database_models import User as DBUser
         db = get_db()
         user = db.query(DBUser).filter(DBUser.id == session['user_id']).first()
         if user and getattr(user, 'subscription_tier', None):
             subscription_tier = user.subscription_tier
     except Exception as e:
-        logger.warning(f"Subscription tier check failed in index: {e}")
+        logger.warning(f"Subscription tier check failed in legacy chat: {e}")
+
     try:
-        return render_template('chat.html',
-                               has_submitted_survey=has_submitted_survey,
-                               subscription_tier=subscription_tier)
+        return render_template(
+            'chat.html',
+            has_submitted_survey=has_submitted_survey,
+            subscription_tier=subscription_tier,
+        )
     except Exception as e:
-        logger.error(f"Error rendering chat template: {str(e)}", exc_info=True)
+        logger.error(f"Error rendering legacy chat template: {str(e)}", exc_info=True)
         return render_template('chat.html', has_submitted_survey=False, subscription_tier='free')
+
+
+@bp.route('/legacy/chat')
+@login_required
+def legacy_chat():
+    """Explicit legacy route for `chat.html` (old UI)."""
+    return _render_legacy_chat()
 
 # Add these routes to chat.py
 
