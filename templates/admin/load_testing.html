@@ -58,8 +58,13 @@
         <aside class="w-64 bg-white shadow-lg min-h-screen">
             <div class="p-4">
                 <nav class="space-y-2">
-                    <a href="#" onclick="showTab('tests'); return false;"
+                    <a href="#" onclick="showTab('settings'); return false;"
                         class="sidebar-item active flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-cog w-5 mr-3"></i>
+                        <span>Settings</span>
+                    </a>
+                    <a href="#" onclick="showTab('tests'); return false;"
+                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
                         <i class="fas fa-play-circle w-5 mr-3"></i>
                         <span>Run Tests</span>
                     </a>
@@ -80,8 +85,54 @@
         <!-- Main Content -->
         <main class="flex-1 p-8">
 
+            <!-- SETTINGS TAB -->
+            <div id="settings-tab" class="tab-content block">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Global Settings</h2>
+                    <div id="current-env-badge"
+                        class="px-3 py-1 rounded-full text-sm font-semibold bg-gray-200 text-gray-700">
+                        Current: Localhost
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">Target Environment</h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Configure where tests will run and where assets (User Sets, Document Sets) will be managed.
+                    </p>
+
+                    <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Target Base URL</label>
+                            <input type="text" id="global-target-url" class="w-full border rounded px-3 py-2"
+                                placeholder="http://localhost:5000" value="http://localhost:5000">
+                            <p class="text-xs text-gray-500 mt-1">
+                                e.g. <code>http://localhost:5000</code> or <code>https://staging.iqbalai.com</code>
+                            </p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Admin API Key (for Remote
+                                Env)</label>
+                            <input type="password" id="global-api-key" class="w-full border rounded px-3 py-2"
+                                placeholder="Leave empty for localhost">
+                            <p class="text-xs text-gray-500 mt-1">
+                                Required if managing assets on a remote server.
+                            </p>
+                        </div>
+
+                        <div class="pt-4">
+                            <button type="submit"
+                                class="bg-[#05B0FC] text-white px-6 py-2 rounded hover:bg-[#0490cf] transition-colors">
+                                Save Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- TESTS TAB -->
-            <div id="tests-tab" class="tab-content">
+            <div id="tests-tab" class="tab-content hidden">
                 <h2 class="text-2xl font-bold mb-6">Execute Load Tests</h2>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -98,20 +149,12 @@
                                         <option value="teacher_flow_concurrent">Test 2: Teacher Full Flow</option>
                                         <option value="student_chat_concurrent">Test 3: Student Lesson Chat</option>
                                         <option value="teacher_rag_sequential">Test 4: Teacher Sequential RAG</option>
-                                        <option value="student_lesson_sequential">Test 5: Student Sequential Chat
-                                        </option>
-                                        <option value="doc_upload_repeat">Test 6: Repeat Doc Upload</option>
-                                        <option value="rag_quality_benchmark">Test 7: RAG Quality Benchmark</option>
+                                        <option value="student_chat_sequential">Test 5: Student Sequential Chat</option>
+                                        <option value="teacher_repeat_ingest">Test 6: Repeated Ingest</option>
+                                        <option value="rag_quality_benchmark">Test 7: RAG Pipeline Quality</option>
                                     </select>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Target
-                                        Environment</label>
-                                    <select id="target-env" class="w-full border rounded px-3 py-2">
-                                        <option value="http://localhost:5000">Localhost (5000)</option>
-                                        <option value="https://staging.iqbalai.com">Staging</option>
-                                    </select>
-                                </div>
+                                <!-- Base URL removed, using global setting -->
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Concurrent Users</label>
                                     <input type="number" id="concurrent-users" value="1" min="1" max="100"
@@ -164,6 +207,7 @@
                 <h2 class="text-2xl font-bold mb-6">Test Assets</h2>
 
                 <!-- User Sets -->
+                <!-- User Sets -->
                 <div class="bg-white rounded-lg shadow p-6 mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold">User Sets</h3>
@@ -172,21 +216,10 @@
                             + Create Users
                         </button>
                     </div>
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead>
-                            <tr>
-                                <th class="text-left py-2">ID</th>
-                                <th class="text-left py-2">Name</th>
-                                <th class="text-left py-2">Role</th>
-                                <th class="text-left py-2">Count</th>
-                                <th class="text-left py-2">Created</th>
-                                <th class="text-left py-2">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="user-sets-tbody">
-                            <!-- Populated via JS -->
-                        </tbody>
-                    </table>
+                    <div id="user-sets-list" class="space-y-2">
+                        <!-- Populated via JS -->
+                        <p class="text-gray-500 text-sm">Loading user sets...</p>
+                    </div>
                 </div>
 
 
@@ -200,7 +233,7 @@
                         </button>
                     </div>
 
-                    <div id="doc-sets-container" class="space-y-4">
+                    <div id="doc-sets-list" class="space-y-4">
                         <!-- Populated via JS -->
                         <p class="text-gray-500">Loading document sets...</p>
                     </div>
@@ -323,13 +356,162 @@
     </div>
 
     <script>
-        // --- Navigation ---
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load settings
+            const savedUrl = localStorage.getItem('loadTestTargetUrl') || 'http://localhost:5000';
+            const savedKey = localStorage.getItem('loadTestApiKey') || '';
+
+            document.getElementById('global-target-url').value = savedUrl;
+            document.getElementById('global-api-key').value = savedKey;
+
+            // Explicitly set the variables (in case they were used elsewhere before load)
+            // But main logic is in checkEnv
+            updateEnvBadge(savedUrl);
+
+            // Let's default to tests if configured, else settings?
+            // Actually, keep default behavior but update badge.
+
+            loadUserSets();
+            loadDocSets();
+            loadResults(); // Changed from loadTestResults() to loadResults() to match existing function name
+        });
+
+        function updateEnvBadge(url) {
+            const badge = document.getElementById('current-env-badge');
+            if (badge) { // Added check for badge existence
+                if (url.includes('localhost') || url.includes('127.0.0.1')) {
+                    badge.className = 'px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800';
+                    badge.textContent = 'Current: Localhost';
+                } else {
+                    badge.className = 'px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800';
+                    badge.textContent = `Current: ${url}`;
+                }
+            }
+        }
+
+        function saveSettings(e) {
+            e.preventDefault();
+            const url = document.getElementById('global-target-url').value.replace(/\/$/, ''); // Remove trailing slash
+            const key = document.getElementById('global-api-key').value;
+
+            localStorage.setItem('loadTestTargetUrl', url);
+            localStorage.setItem('loadTestApiKey', key);
+
+            updateEnvBadge(url);
+            alert('Settings saved! Asset lists will refresh from the new target.');
+
+            // Refresh assets from new target
+            loadUserSets();
+            loadDocSets();
+        }
+
+        function getTargetConfig() {
+            return {
+                url: localStorage.getItem('loadTestTargetUrl') || 'http://localhost:5000',
+                key: localStorage.getItem('loadTestApiKey') || ''
+            };
+        }
+
+        // Helper to determine if we need proxy
+        function isRemote() {
+            const config = getTargetConfig();
+            return !config.url.includes(window.location.hostname);
+        }
+
+        async function fetchWithProxy(endpoint, options = {}) {
+            const config = getTargetConfig();
+
+            let url = endpoint;
+
+            try {
+                // Ensure protocol
+                let targetStr = config.url;
+                if (!targetStr.startsWith('http')) targetStr = 'http://' + targetStr;
+                const target = new URL(targetStr);
+
+                const currentHostname = window.location.hostname;
+                const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+                const targetPort = target.port || (target.protocol === 'https:' ? '443' : '80');
+
+                const isLocal = (h) => h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0';
+
+                // Check if effective origin is the same
+                // Case 1: Exact match of host and port
+                let sameOrigin = (target.hostname === currentHostname && targetPort === currentPort);
+
+                // Case 2: Localhost aliases (127.0.0.1 vs localhost)
+                if (!sameOrigin && isLocal(currentHostname) && isLocal(target.hostname)) {
+                    if (targetPort === currentPort) {
+                        sameOrigin = true;
+                    }
+                }
+
+                if (!endpoint.startsWith('http') && !sameOrigin) {
+                    url = `${config.url}${endpoint}`;
+                } else {
+                    // Force relative path if same origin to avoid ANY CORS issues
+                    if (!endpoint.startsWith('http')) {
+                        // Ensure we don't double slash if config.url had path
+                        url = endpoint;
+                    }
+                }
+
+                console.log(`[Proxy] Fetching ${endpoint} -> ${url} (SameOrigin: ${sameOrigin})`);
+
+            } catch (e) {
+                console.warn("URL Parse Error:", e);
+                // Fallback: prepend if not http
+                if (!endpoint.startsWith('http')) {
+                    url = `${config.url}${endpoint}`;
+                }
+            }
+
+            const headers = options.headers || {};
+            // Add API Key if present
+            if (config.key) {
+                headers['X-Admin-API-Key'] = config.key;
+            }
+
+            // Merge headers
+            // Determine content-type: default to JSON unless body is FormData
+            if (!options.body || !(options.body instanceof FormData)) {
+                if (!headers['Content-Type']) {
+                    headers['Content-Type'] = 'application/json';
+                }
+            }
+
+            options.headers = headers;
+
+            try {
+                const res = await fetch(url, options);
+                return res;
+            } catch (err) {
+                console.error("Fetch error details:", err);
+                // Throwing allows caller to catch and show UI error
+                throw new Error(`Connection failed to ${url}. ${err.message}`);
+            }
+        }
+
+        // --- TABS ---
         function showTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            document.getElementById(tabName + '-tab').classList.remove('hidden');
 
-            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+            // Fix: remove active class from all sidebar items first
+            document.querySelectorAll('.sidebar-item').forEach(el => {
+                el.classList.remove('active');
+                // Restore default style logic if needed, but CSS handles hover
+                el.style.background = '';
+                el.style.borderLeft = '';
+            });
+
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+
+            // Highlight active link
+            const activeLink = document.querySelector(`a[onclick="showTab('${tabName}'); return false;"]`);
+            if (activeLink) {
+                activeLink.classList.add('active');
+            }
 
             if (tabName === 'assets') {
                 loadUserSets();
@@ -361,101 +543,148 @@
             }
         }
 
-        // --- API Calls ---
+        // --- ASSETS: USER SETS ---
         async function loadUserSets() {
-            const res = await fetch('/api/load-test/users');
-            const sets = await res.json();
-            const tbody = document.getElementById('user-sets-tbody');
-            const select = document.getElementById('user-set-select');
+            try {
+                // Use fetchWithProxy instead of direct relative path
+                const res = await fetchWithProxy('/api/load-test/users');
+                const data = await res.json();
+                const container = document.getElementById('user-sets-list');
+                container.innerHTML = '';
 
-            tbody.innerHTML = '';
-            select.innerHTML = '';
+                // Update Select in Run Test tab
+                const select = document.getElementById('test-user-set');
+                select.innerHTML = '';
 
-            sets.forEach(set => {
-                // Populate Table
-                tbody.innerHTML += `
-                    <tr class="border-b">
-                        <td class="py-2">${set.id}</td>
-                        <td class="py-2">${set.name}</td>
-                        <td class="py-2">${set.role}</td>
-                        <td class="py-2">${set.user_count}</td>
-                        <td class="py-2">${set.created_at}</td>
-                        <td class="py-2">
-                            <button onclick="deleteUserSet(${set.id})" class="text-red-500 hover:text-red-700">Delete</button>
-                        </td>
-                    </tr>
-                `;
-                // Populate Select
-                select.innerHTML += `<option value="${set.id}">${set.name} (${set.role}, ${set.user_count})</option>`;
-            });
-        }
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No user sets found. Create one above.</div>';
+                }
 
-        async function deleteUserSet(id) {
-            if (!confirm('Delete this user set and all associated users?')) return;
-            await fetch(`/api/load-test/users/${id}`, { method: 'DELETE' });
-            loadUserSets();
-        }
+                data.forEach(set => {
+                    // Start Button Select
+                    const option = document.createElement('option');
+                    option.value = set.id;
+                    option.textContent = `${set.name_prefix} (${set.count} users)`;
+                    select.appendChild(option);
 
-        async function loadDocSets() {
-            const container = document.getElementById('doc-sets-container');
-            const res = await fetch('/api/load-test/doc-sets');
-            const sets = await res.json();
-
-            if (sets.length === 0) {
-                container.innerHTML = '<p class="text-gray-500">No document sets. Create one to start.</p>';
-                return;
-            }
-
-            container.innerHTML = sets.map(set => `
-                <div class="border rounded p-4 flex justify-between items-center bg-gray-50">
-                    <div>
-                        <div class="font-bold text-lg">${set.name} <span class="text-gray-400 text-sm">(ID: ${set.id})</span></div>
-                        <div class="text-sm text-gray-600">Created: ${set.created_at}</div>
-                        <div class="text-sm text-gray-600 font-semibold">${set.doc_count} Documents</div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="openUploadModal(${set.id})" class="text-blue-500 hover:text-blue-700 border px-2 py-1 rounded bg-white">
-                            <i class="fas fa-upload mr-1"></i> Upload PDF
-                        </button>
-                        <button onclick="deleteDocSet(${set.id})" class="text-red-500 hover:text-red-700 border px-2 py-1 rounded bg-white">
+                    // List Item
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200';
+                    div.innerHTML = `
+                        <div>
+                            <div class="font-medium text-gray-800">${set.name_prefix}</div>
+                            <div class="text-xs text-gray-500">${set.count} users • Created ${new Date(set.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <button onclick="deleteUserSet(${set.id})" class="text-red-500 hover:text-red-700 text-sm">
                             <i class="fas fa-trash"></i>
                         </button>
-                    </div>
-                </div>
-            `).join('');
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to load user sets", e);
+                document.getElementById('user-sets-list').innerHTML =
+                    `<div class="text-red-600 text-sm p-2 bg-red-50 rounded border border-red-200">
+                        Failed to load user sets: ${e.message}
+                    </div>`;
+            }
         }
 
         async function createUserSet(e) {
             e.preventDefault();
-            const payload = {
-                name: document.getElementById('set-name').value,
-                role: document.getElementById('set-role').value,
-                count: document.getElementById('set-count').value
-            };
-
-            const btn = e.target.querySelector('button[type="submit"]');
-            btn.textContent = 'Creating...';
-            btn.disabled = true;
+            const prefix = document.getElementById('user-prefix').value;
+            const count = document.getElementById('user-count').value;
+            const password = document.getElementById('user-password').value;
 
             try {
-                const res = await fetch('/api/load-test/users/create', {
+                const res = await fetchWithProxy('/api/load-test/users/create', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ prefix, count, password })
                 });
                 const data = await res.json();
+
                 if (data.success) {
-                    document.getElementById('create-users-modal').classList.add('hidden');
+                    document.getElementById('create-user-set-modal').classList.add('hidden');
+                    document.getElementById('user-prefix').value = '';
                     loadUserSets();
-                    alert(`Created set with ID ${data.user_set_id}`);
                 } else {
-                    alert('Error: ' + JSON.stringify(data.details || data.error));
+                    alert('Error: ' + data.error);
                 }
+            } catch (err) {
+                alert('Request failed');
+            }
+        }
+
+        async function deleteUserSet(setId) {
+            if (!confirm("Delete this user set?")) return;
+            try {
+                const res = await fetchWithProxy(`/api/load-test/users/${setId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadUserSets();
+                else alert(data.error);
             } catch (e) {
-                alert('Request failed: ' + e);
-            } finally {
-                btn.textContent = 'Create';
-                btn.disabled = false;
+                alert("Delete failed");
+            }
+        }
+
+
+        // --- ASSETS: DOC SETS ---
+        async function loadDocSets() {
+            try {
+                const res = await fetchWithProxy('/api/load-test/doc-sets');
+                const data = await res.json();
+                const container = document.getElementById('doc-sets-list');
+                container.innerHTML = '';
+
+                const select = document.getElementById('test-doc-set');
+                select.innerHTML = '<option value="">Select Document Set</option>';
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No document sets found. Create one above.</div>';
+                }
+
+                data.forEach(set => {
+                    // Select Option
+                    const option = document.createElement('option');
+                    option.value = set.id;
+                    option.textContent = `${set.name} (${set.doc_count} docs)`;
+                    select.appendChild(option);
+
+                    // List Item
+                    const div = document.createElement('div');
+                    div.className = 'border border-gray-200 rounded p-3 bg-gray-50 mb-2';
+                    div.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 class="font-medium text-gray-800">${set.name}</h4>
+                                <span class="text-xs text-gray-500">${set.doc_count} documents</span>
+                            </div>
+                            <div class="space-x-2">
+                                <button onclick="openUploadModal(${set.id})" class="text-blue-500 text-xs hover:underline">
+                                    <i class="fas fa-upload"></i> Upload
+                                </button>
+                                <button onclick="deleteDocSet(${set.id})" class="text-red-500 text-xs hover:underline">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-1 pl-2 border-l-2 border-gray-200">
+                            ${set.documents.map(d => `
+                                <div class="text-xs text-gray-600 flex justify-between">
+                                    <span><i class="fas fa-file-pdf mr-1"></i> ${d.filename}</span>
+                                    <span class="text-gray-400">${(d.file_size / 1024).toFixed(1)}KB</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to load doc sets", e);
+                document.getElementById('doc-sets-list').innerHTML =
+                    `<div class="text-red-600 text-sm p-2 bg-red-50 rounded border border-red-200">
+                        Failed to load doc sets: ${e.message}
+                    </div>`;
             }
         }
 
@@ -464,9 +693,8 @@
             const name = document.getElementById('doc-set-name').value;
 
             try {
-                const res = await fetch('/api/load-test/doc-sets/create', {
+                const res = await fetchWithProxy('/api/load-test/doc-sets/create', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name })
                 });
                 const data = await res.json();
@@ -478,7 +706,17 @@
                     alert('Error: ' + data.error);
                 }
             } catch (e) {
-                alert('Request failed: ' + e);
+                alert("Create failed");
+            }
+        }
+
+        async function deleteDocSet(id) {
+            if (!confirm('Delete this document set and all files?')) return;
+            try {
+                await fetchWithProxy(`/api/load-test/doc-sets/${id}`, { method: 'DELETE' });
+                loadDocSets();
+            } catch (e) {
+                alert("Delete failed");
             }
         }
 
@@ -499,7 +737,7 @@
             btn.disabled = true;
 
             try {
-                const res = await fetch(`/api/load-test/doc-sets/${setId}/upload`, {
+                const res = await fetchWithProxy(`/api/load-test/doc-sets/${setId}/upload`, {
                     method: 'POST',
                     body: formData
                 });
@@ -519,30 +757,26 @@
                 btn.disabled = false;
             }
         }
-
-        async function deleteDocSet(id) {
-            if (!confirm('Delete this document set and all files?')) return;
-            await fetch(`/api/load-test/doc-sets/${id}`, { method: 'DELETE' });
-            loadDocSets();
-        }
-
         async function startTest(e) {
             e.preventDefault();
-            const config = {
+
+            // Get Global Config
+            const config = getTargetConfig();
+
+            const payload = {
                 test_type: document.getElementById('test-type').value,
-                target_env: document.getElementById('target-env').value,
-                concurrent_users: document.getElementById('concurrent-users').value,
-                test_user_set_id: document.getElementById('user-set-select').value,
-                test_doc_set_id: document.getElementById('doc-set-id').value,
-                lesson_id: document.getElementById('lesson-id').value,
-                requests_per_user: document.getElementById('requests-per-user').value
+                base_url: config.url, // Use global URL
+                concurrent_users: parseInt(document.getElementById('concurrent-users').value),
+                requests_per_user: parseInt(document.getElementById('requests-per-user').value || 1),
+                test_user_set_id: document.getElementById('test-user-set').value || null,
+                test_doc_set_id: document.getElementById('test-doc-set').value || null,
             };
 
             try {
                 const res = await fetch('/api/load-test/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ config })
+                    body: JSON.stringify(payload)
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -558,26 +792,31 @@
         }
 
         async function loadResults() {
-            const res = await fetch('/api/load-test/results');
-            const data = await res.json();
-            const tbody = document.getElementById('results-tbody');
-            tbody.innerHTML = '';
+            try {
+                const res = await fetchWithProxy('/api/load-test/results');
+                const data = await res.json();
+                const tbody = document.getElementById('results-tbody');
+                tbody.innerHTML = '';
 
-            data.forEach(r => {
-                tbody.innerHTML += `
-                    <tr class="border-b hover:bg-gray-50 cursor-pointer" onclick="viewResult(${r.id})">
-                        <td class="px-6 py-4">${r.id}</td>
-                        <td class="px-6 py-4">${r.test_type}</td>
-                        <td class="px-6 py-4">
-                            <span class="px-2 py-1 rounded text-xs ${r.status === 'completed' ? 'bg-green-100 text-green-800' : r.status === 'running' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
-                                ${r.status}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4">${r.started_at}</td>
-                        <td class="px-6 py-4 text-blue-500">View</td>
-                    </tr>
-                `;
-            });
+                data.forEach(r => {
+                    tbody.innerHTML += `
+                        <tr class="border-b hover:bg-gray-50 cursor-pointer" onclick="viewResult(${r.id})">
+                            <td class="px-6 py-4">${r.id}</td>
+                            <td class="px-6 py-4">${r.test_type}</td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-1 rounded text-xs ${r.status === 'completed' ? 'bg-green-100 text-green-800' : r.status === 'running' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
+                                    ${r.status}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">${r.started_at}</td>
+                            <td class="px-6 py-4 text-blue-500">View</td>
+                        </tr>
+                    `;
+                });
+            } catch (e) {
+                console.error("Failed to load results", e);
+                document.getElementById('results-tbody').innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Failed to load results: ${e.message}</td></tr>`;
+            }
         }
 
         let currentResultId = null;
@@ -594,9 +833,9 @@
             try {
                 let res;
                 if (type === 'technical') {
-                    res = await fetch(`/api/load-test/report/${currentResultId}/technical`);
+                    res = await fetchWithProxy(`/api/load-test/report/${currentResultId}/technical`);
                 } else {
-                    res = await fetch(`/api/load-test/report/${currentResultId}/executive`, { method: 'POST' });
+                    res = await fetchWithProxy(`/api/load-test/report/${currentResultId}/executive`, { method: 'POST' });
                 }
                 const data = await res.json();
 
