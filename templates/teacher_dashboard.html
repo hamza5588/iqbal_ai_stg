@@ -4974,10 +4974,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
         const pages = Math.ceil(fileSize / 50000);
 
-        // Generate markdown content for the lesson
-        const markdownContent = generateMarkdownLessonFromPDF(lessonTitle, fileName, lessonContext, lessonSubject, lessonGrade);
-
-        // Store PDF data and lesson in global variables (NOT saved yet)
+        // Store PDF metadata only. Do NOT set currentLessonMarkdown to the template here –
+        // the actual lesson comes from the AI when the user says "create a lesson" in chat and is stored by RAG.
         currentPDFData = {
           id: 'lesson_' + Date.now(),
           title: lessonTitle,
@@ -4994,7 +4992,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           version: 1
         };
 
-        currentLessonMarkdown = markdownContent;
+        currentLessonMarkdown = null;
 
         // Save to localStorage so it persists across tab switches
         savePDFDataToStorage();
@@ -6190,7 +6188,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // ════════════════════════════════════════════════════════════════════════════════
         // SPECIFICATION #2: MESSAGE ISOLATION
         // Load ONLY messages from this specific conversation ID
-        // Fetch from localStorage['teacher_chat_messages_' + chatId]
+        // Backend /get_messages/<id> expects integer conversation_id; client-only ids (chat_*) use localStorage.
         // NO context from other conversations
         // ════════════════════════════════════════════════════════════════════════════════
 
@@ -6229,19 +6227,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           }
         }
 
-        // Load ONLY this conversation's messages from backend (ConversationModel)
-        fetch(`/get_messages/${chatId}`, {
-          method: 'GET',
-          credentials: 'include'
-        }).then(function (res) {
-          if (!res.ok) {
-            throw new Error('Failed to load messages');
-          }
-          return res.json();
-        }).then(function (data) {
-          const messages = (data && data.messages) || [];
+        // Only call backend when chatId is a backend conversation (integer). Client-only ids (chat_*) use localStorage.
+        const isBackendConversationId = (function() {
+          if (typeof chatId === 'number' && Number.isInteger(chatId)) return true;
+          if (typeof chatId === 'string' && chatId.startsWith('chat_')) return false;
+          const n = parseInt(chatId, 10);
+          return !isNaN(n) && String(n) === String(chatId);
+        })();
+
+        function applyLoadedMessages(messages) {
           chatMessages.innerHTML = '';
-          if (messages.length > 0) {
+          if (messages && messages.length > 0) {
             messages.forEach(function (msg) {
               const role = msg.role === 'bot' ? 'assistant' : 'user';
               const content = msg.content || msg.message || '';
@@ -6250,10 +6246,34 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           } else {
             renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
           }
-        }).catch(function (err) {
-          console.error('Error loading chat messages', err);
-          renderMessageDOM('assistant', 'Unable to load previous messages for this conversation.');
-        });
+        }
+
+        if (isBackendConversationId) {
+          // Load from backend (integer conversation_id)
+          const numericId = typeof chatId === 'number' ? chatId : parseInt(chatId, 10);
+          fetch(`/get_messages/${numericId}`, {
+            method: 'GET',
+            credentials: 'include'
+          }).then(function (res) {
+            if (!res.ok) throw new Error('Failed to load messages');
+            return res.json();
+          }).then(function (data) {
+            applyLoadedMessages((data && data.messages) || []);
+          }).catch(function (err) {
+            console.error('Error loading chat messages', err);
+            applyLoadedMessages([]);
+            renderMessageDOM('assistant', 'Unable to load previous messages for this conversation.');
+          });
+        } else {
+          // Client-only chat (e.g. chat_1771259540797): load from localStorage
+          try {
+            const messages = loadMessagesForChat(chatId);
+            applyLoadedMessages(messages);
+          } catch (e) {
+            console.error('Error loading chat messages from localStorage', e);
+            applyLoadedMessages([]);
+          }
+        }
 
         // Show chat input area, floating button, and hide prompt area
         const chatInputArea = document.getElementById('chatInputArea');
@@ -6853,14 +6873,31 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         input.click();
       }
 
-      // Save Lesson from Chat
-      function saveLessonFromChat() {
-        if (!currentPDFData || !currentLessonMarkdown) {
-          showToast('No lesson to save. Please upload a PDF and create a lesson first.', 'warning', 3000);
+      // Save Lesson from Chat (prefer RAG finalized/in-progress lesson over local template so we save actual AI lesson)
+      async function saveLessonFromChat() {
+        let pdfData = currentPDFData;
+        let lessonContent = currentLessonMarkdown;
+
+        // When we have a RAG thread, always try to get the actual AI lesson from backend first (not the upload template)
+        if (window.currentRAGThreadId) {
+          try {
+            const res = await fetch('/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson', { method: 'GET', credentials: 'include' });
+            const data = await res.json().catch(function() { return {}; });
+            if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
+              lessonContent = (data.last_lesson_text || '').trim();
+              pdfData = pdfData || { title: (data.lesson_title || '').trim() || 'Lesson from RAG', subject: 'General', grade: 'General' };
+            }
+          } catch (e) {
+            console.warn('Failed to fetch RAG finalized lesson:', e);
+          }
+        }
+
+        if (!lessonContent) {
+          showToast('No lesson to save. Please upload a PDF, create a lesson, or finalize a lesson in chat first.', 'warning', 3000);
           return;
         }
 
-        saveLessonToMyLessons();
+        saveLessonToMyLessons(pdfData, lessonContent);
       }
 
       // RAG chat: store thread_id and conversation_id from API for PDF context
@@ -6932,6 +6969,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           if (data.conversation_id) {
             window.currentRAGConversationId = data.conversation_id;
             try { localStorage.setItem('teacher_currentRAGConversationId', data.conversation_id); } catch (e) {}
+          }
+          // Keep currentLessonMarkdown in sync with the actual AI lesson (so Save stores the real lesson, not the template)
+          if (window.currentRAGThreadId && aiResponse && (aiResponse.length > 200 || (aiResponse.indexOf('#') !== -1 && aiResponse.indexOf('\n\n') !== -1))) {
+            currentLessonMarkdown = aiResponse;
           }
           var formatted = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
             ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
@@ -7395,39 +7436,50 @@ To continue your learning journey:
              </div>`;
       }
 
-      // Save lesson to My Lessons
-      function saveLessonToMyLessons() {
-        if (!currentPDFData || !currentLessonMarkdown) {
-          alert('No lesson to save. Please upload a PDF and create a lesson first.');
+      // Save lesson to My Lessons (saves to database via API)
+      async function saveLessonToMyLessons(pdfDataOverride, lessonContentOverride) {
+        const pdfData = pdfDataOverride || currentPDFData;
+        const lessonContent = lessonContentOverride || currentLessonMarkdown;
+
+        if (!lessonContent) {
+          showToast('No lesson content to save. Please create a lesson first.', 'warning', 3000);
           return;
         }
 
-        // Create complete lesson object
-        const newLesson = {
-          ...currentPDFData,
-          content: currentLessonMarkdown,
-          versions: [{
-            version: 1,
-            content: currentLessonMarkdown,
-            createdAt: new Date().toISOString()
-          }]
-        };
+        const title = (pdfData && pdfData.title) ? String(pdfData.title).trim() : '';
+        const finalTitle = title || ('Lesson ' + new Date().toLocaleDateString());
+        const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
+        const gradeLevel = (pdfData && pdfData.grade) ? String(pdfData.grade) : (pdfData && pdfData.gradeLevel) || 'General';
+        const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
 
-        // Save to localStorage
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        lessons.push(newLesson);
-        localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
+        showToast('Saving lesson to My Lessons...', 'info', 2000);
 
-        // Show success message
-        showToast(`✅ Lesson "${newLesson.title}" saved to My Lessons!`, 'success', 3000);
+        try {
+          const response = await fetch('/api/lessons/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: finalTitle,
+              content: lessonContent,
+              focus_area: focusArea,
+              grade_level: gradeLevel,
+              summary: summary
+            })
+          });
 
-        // Display full lesson with formatting
-        const lessonHTML = `
+          const data = await response.json().catch(function() { return {}; });
+
+          if (response.ok && data && data.success) {
+            showToast(`✅ Lesson "${finalTitle}" saved to My Lessons!`, 'success', 3000);
+
+            // Display full lesson with formatting
+            const lessonHTML = `
         <div style="background: #f9fafb; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb;">
           <h3 style="color: #10b981; font-size: 1.2rem; margin: 0 0 1rem 0;"><strong>✅ Lesson Created & Saved!</strong></h3>
           
           <div style="background: white; padding: 1.25rem; border-radius: 0.5rem; max-height: 600px; overflow-y: auto; border: 1px solid #e5e7eb; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;">
-            ${currentLessonMarkdown.split('\n').map(line => {
+            ${(lessonContent || '').split('\n').map(line => {
           if (line.startsWith('# ')) return `<h2 style="color: #0ea5e9; font-size: 1.4rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('# ', '')}</strong></h2>`;
           if (line.startsWith('## ')) return `<h3 style="color: #0284c7; font-size: 1.15rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('## ', '')}</strong></h3>`;
           if (line.startsWith('### ')) return `<h4 style="color: #06b6d4; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;"><strong>${line.replace('### ', '')}</strong></h4>`;
@@ -7442,7 +7494,7 @@ To continue your learning journey:
           </div>
           
           <div style="background: #f0fdf4; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #10b981; margin-bottom: 1rem;">
-            <p style="color: #166534; margin: 0;"><strong>✅ Your lesson "${newLesson.title}" has been saved to <strong>My Lessons</strong>!</strong></p>
+            <p style="color: #166534; margin: 0;"><strong>✅ Your lesson "${finalTitle}" has been saved to <strong>My Lessons</strong>!</strong></p>
           </div>
           
           <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
@@ -7458,12 +7510,19 @@ To continue your learning journey:
         </div>
       `;
 
-        addAssistantMessage(lessonHTML);
+            addAssistantMessage(lessonHTML);
 
-        // Clear the current PDF data (both memory and storage)
-        currentPDFData = null;
-        currentLessonMarkdown = null;
-        clearPDFDataFromStorage();
+            // Clear the current PDF data (both memory and storage)
+            currentPDFData = null;
+            currentLessonMarkdown = null;
+            clearPDFDataFromStorage();
+          } else {
+            showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
+          }
+        } catch (e) {
+          console.error('Save lesson error:', e);
+          showToast('Failed to save lesson. Please try again.', 'error', 4000);
+        }
       }
 
       // Edit lesson content (placeholder)
