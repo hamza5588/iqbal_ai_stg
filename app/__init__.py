@@ -268,6 +268,9 @@ def create_app():
     app.register_blueprint(subscription_bp, url_prefix='/subscription')
     app.register_blueprint(admin_bp)
     
+    from app.routes.load_test_routes import bp as load_test_bp
+    app.register_blueprint(load_test_bp, url_prefix='/api/load-test')
+    
     # Register RBAC template helpers
     from app.rbac.template_helpers import TEMPLATE_HELPERS
     for name, func in TEMPLATE_HELPERS.items():

@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load Testing - Iqbal AI Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'iqbal-primary': '#05B0FC',
+                        'iqbal-bg': '#F0F9FF'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .sidebar-item:hover {
+            background: linear-gradient(90deg, rgba(5, 176, 252, 0.1) 0%, transparent 100%);
+        }
+
+        .sidebar-item.active {
+            background: linear-gradient(90deg, rgba(5, 176, 252, 0.2) 0%, transparent 100%);
+            border-left: 3px solid #05B0FC;
+        }
+
+        .tab-btn.active {
+            border-bottom: 2px solid #05B0FC;
+            color: #05B0FC;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-[#05B0FC]">Load Testing Console</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/admin" class="text-gray-600 hover:text-[#05B0FC] transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flex">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-white shadow-lg min-h-screen">
+            <div class="p-4">
+                <nav class="space-y-2">
+                    <a href="#" onclick="showTab('tests'); return false;"
+                        class="sidebar-item active flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-play-circle w-5 mr-3"></i>
+                        <span>Run Tests</span>
+                    </a>
+                    <a href="#" onclick="showTab('assets'); return false;"
+                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-database w-5 mr-3"></i>
+                        <span>Test Assets</span>
+                    </a>
+                    <a href="#" onclick="showTab('results'); return false;"
+                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-chart-bar w-5 mr-3"></i>
+                        <span>Results & Reports</span>
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-8">
+
+            <!-- TESTS TAB -->
+            <div id="tests-tab" class="tab-content">
+                <h2 class="text-2xl font-bold mb-6">Execute Load Tests</h2>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Config Form -->
+                    <div class="lg:col-span-2 bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold mb-4">Start New Test</h3>
+                        <form id="start-test-form" onsubmit="startTest(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Test Scenario</label>
+                                    <select id="test-type" class="w-full border rounded px-3 py-2"
+                                        onchange="updateFormFields()">
+                                        <option value="multi_user_sign_in">Test 1: Multi-User Sign-In</option>
+                                        <option value="teacher_flow_concurrent">Test 2: Teacher Full Flow</option>
+                                        <option value="student_chat_concurrent">Test 3: Student Lesson Chat</option>
+                                        <option value="teacher_rag_sequential">Test 4: Teacher Sequential RAG</option>
+                                        <option value="student_lesson_sequential">Test 5: Student Sequential Chat
+                                        </option>
+                                        <option value="doc_upload_repeat">Test 6: Repeat Doc Upload</option>
+                                        <option value="rag_quality_benchmark">Test 7: RAG Quality Benchmark</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Target
+                                        Environment</label>
+                                    <select id="target-env" class="w-full border rounded px-3 py-2">
+                                        <option value="http://localhost:5000">Localhost (5000)</option>
+                                        <option value="https://staging.iqbalai.com">Staging</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Concurrent Users</label>
+                                    <input type="number" id="concurrent-users" value="1" min="1" max="100"
+                                        class="w-full border rounded px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">User Set</label>
+                                    <select id="user-set-select" class="w-full border rounded px-3 py-2">
+                                        <option value="">Loading...</option>
+                                    </select>
+                                </div>
+                                <div id="doc-set-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Document Set</label>
+                                    <input type="number" id="doc-set-id" placeholder="ID (e.g. 1)"
+                                        class="w-full border rounded px-3 py-2">
+                                </div>
+                                <div id="lesson-id-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Lesson ID</label>
+                                    <input type="text" id="lesson-id" placeholder="L000..."
+                                        class="w-full border rounded px-3 py-2">
+                                </div>
+                                <div id="req-per-user-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Requests/Loops per
+                                        User</label>
+                                    <input type="number" id="requests-per-user" value="10"
+                                        class="w-full border rounded px-3 py-2">
+                                </div>
+                            </div>
+                            <div class="mt-6 flex justify-end">
+                                <button type="submit"
+                                    class="bg-iqbal-primary text-white px-6 py-2 rounded hover:bg-blue-600">
+                                    Start Test
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Active Tests -->
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold mb-4">Active Tests</h3>
+                        <div id="active-tests-list" class="space-y-4">
+                            <p class="text-gray-500 text-sm">No tests running.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ASSETS TAB -->
+            <div id="assets-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6">Test Assets</h2>
+
+                <!-- User Sets -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">User Sets</h3>
+                        <button onclick="document.getElementById('create-users-modal').classList.remove('hidden')"
+                            class="bg-green-500 text-white px-4 py-2 rounded">
+                            + Create Users
+                        </button>
+                    </div>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="text-left py-2">ID</th>
+                                <th class="text-left py-2">Name</th>
+                                <th class="text-left py-2">Role</th>
+                                <th class="text-left py-2">Count</th>
+                                <th class="text-left py-2">Created</th>
+                                <th class="text-left py-2">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-sets-tbody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+
+                <!-- Doc Sets -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">Document Sets</h3>
+                        <button onclick="document.getElementById('create-doc-set-modal').classList.remove('hidden')"
+                            class="bg-green-500 text-white px-4 py-2 rounded">
+                            + Create Doc Set
+                        </button>
+                    </div>
+
+                    <div id="doc-sets-container" class="space-y-4">
+                        <!-- Populated via JS -->
+                        <p class="text-gray-500">Loading document sets...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RESULTS TAB -->
+            <div id="results-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6">Test Results</h2>
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-tbody" class="bg-white divide-y divide-gray-200">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Create Users Modal -->
+    <div id="create-users-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Create Test User Set</h3>
+            <form onsubmit="createUserSet(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Set Name</label>
+                    <input type="text" id="set-name" required class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Role</label>
+                    <select id="set-role" class="w-full border rounded px-3 py-2">
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Count</label>
+                    <input type="number" id="set-count" value="10" min="1" max="50"
+                        class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button"
+                        onclick="document.getElementById('create-users-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Doc Set Modal -->
+    <div id="create-doc-set-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Create Document Set</h3>
+            <form onsubmit="createDocSet(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Set Name</label>
+                    <input type="text" id="doc-set-name" required class="w-full border rounded px-3 py-2"
+                        placeholder="e.g. Physics PDFs">
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button"
+                        onclick="document.getElementById('create-doc-set-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Doc Modal -->
+    <div id="upload-doc-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Upload Document (PDF)</h3>
+            <input type="hidden" id="upload-set-id">
+            <form onsubmit="uploadDocument(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Select PDF</label>
+                    <input type="file" id="doc-file" accept=".pdf" required class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="document.getElementById('upload-doc-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Result Details Modal -->
+    <div id="result-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-10 mx-auto p-5 border w-3/4 shadow-lg rounded-md bg-white h-5/6 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Result Details</h3>
+                <button onclick="document.getElementById('result-modal').classList.add('hidden')"
+                    class="text-2xl">&times;</button>
+            </div>
+            <div class="flex-1 overflow-auto border p-4 bg-gray-50 font-mono text-sm" id="result-content"></div>
+            <div class="mt-4 flex gap-2">
+                <button onclick="generateReport('technical')" class="bg-gray-600 text-white px-4 py-2 rounded">Technical
+                    Report</button>
+                <button onclick="generateReport('executive')" class="bg-purple-600 text-white px-4 py-2 rounded">AI
+                    Executive Summary</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Navigation ---
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabName + '-tab').classList.remove('hidden');
+
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            if (tabName === 'assets') {
+                loadUserSets();
+                loadDocSets();
+            }
+            if (tabName === 'results') loadResults();
+        }
+
+        function updateFormFields() {
+            const type = document.getElementById('test-type').value;
+            const docField = document.getElementById('doc-set-field');
+            const lessonField = document.getElementById('lesson-id-field');
+            const reqField = document.getElementById('req-per-user-field');
+
+            docField.classList.add('hidden');
+            lessonField.classList.add('hidden');
+            reqField.classList.add('hidden');
+
+            if (['teacher_flow_concurrent', 'teacher_rag_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(type)) {
+                docField.classList.remove('hidden');
+            }
+
+            if (['student_chat_concurrent', 'student_lesson_sequential'].includes(type)) {
+                lessonField.classList.remove('hidden');
+            }
+
+            if (['teacher_rag_sequential', 'doc_upload_repeat', 'student_lesson_sequential'].includes(type)) {
+                reqField.classList.remove('hidden');
+            }
+        }
+
+        // --- API Calls ---
+        async function loadUserSets() {
+            const res = await fetch('/api/load-test/users');
+            const sets = await res.json();
+            const tbody = document.getElementById('user-sets-tbody');
+            const select = document.getElementById('user-set-select');
+
+            tbody.innerHTML = '';
+            select.innerHTML = '';
+
+            sets.forEach(set => {
+                // Populate Table
+                tbody.innerHTML += `
+                    <tr class="border-b">
+                        <td class="py-2">${set.id}</td>
+                        <td class="py-2">${set.name}</td>
+                        <td class="py-2">${set.role}</td>
+                        <td class="py-2">${set.user_count}</td>
+                        <td class="py-2">${set.created_at}</td>
+                        <td class="py-2">
+                            <button onclick="deleteUserSet(${set.id})" class="text-red-500 hover:text-red-700">Delete</button>
+                        </td>
+                    </tr>
+                `;
+                // Populate Select
+                select.innerHTML += `<option value="${set.id}">${set.name} (${set.role}, ${set.user_count})</option>`;
+            });
+        }
+
+        async function deleteUserSet(id) {
+            if (!confirm('Delete this user set and all associated users?')) return;
+            await fetch(`/api/load-test/users/${id}`, { method: 'DELETE' });
+            loadUserSets();
+        }
+
+        async function loadDocSets() {
+            const container = document.getElementById('doc-sets-container');
+            const res = await fetch('/api/load-test/doc-sets');
+            const sets = await res.json();
+
+            if (sets.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">No document sets. Create one to start.</p>';
+                return;
+            }
+
+            container.innerHTML = sets.map(set => `
+                <div class="border rounded p-4 flex justify-between items-center bg-gray-50">
+                    <div>
+                        <div class="font-bold text-lg">${set.name} <span class="text-gray-400 text-sm">(ID: ${set.id})</span></div>
+                        <div class="text-sm text-gray-600">Created: ${set.created_at}</div>
+                        <div class="text-sm text-gray-600 font-semibold">${set.doc_count} Documents</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="openUploadModal(${set.id})" class="text-blue-500 hover:text-blue-700 border px-2 py-1 rounded bg-white">
+                            <i class="fas fa-upload mr-1"></i> Upload PDF
+                        </button>
+                        <button onclick="deleteDocSet(${set.id})" class="text-red-500 hover:text-red-700 border px-2 py-1 rounded bg-white">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function createUserSet(e) {
+            e.preventDefault();
+            const payload = {
+                name: document.getElementById('set-name').value,
+                role: document.getElementById('set-role').value,
+                count: document.getElementById('set-count').value
+            };
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.textContent = 'Creating...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/load-test/users/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('create-users-modal').classList.add('hidden');
+                    loadUserSets();
+                    alert(`Created set with ID ${data.user_set_id}`);
+                } else {
+                    alert('Error: ' + JSON.stringify(data.details || data.error));
+                }
+            } catch (e) {
+                alert('Request failed: ' + e);
+            } finally {
+                btn.textContent = 'Create';
+                btn.disabled = false;
+            }
+        }
+
+        async function createDocSet(e) {
+            e.preventDefault();
+            const name = document.getElementById('doc-set-name').value;
+
+            try {
+                const res = await fetch('/api/load-test/doc-sets/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('create-doc-set-modal').classList.add('hidden');
+                    document.getElementById('doc-set-name').value = '';
+                    loadDocSets();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Request failed: ' + e);
+            }
+        }
+
+        function openUploadModal(setId) {
+            document.getElementById('upload-set-id').value = setId;
+            document.getElementById('upload-doc-modal').classList.remove('hidden');
+        }
+
+        async function uploadDocument(e) {
+            e.preventDefault();
+            const setId = document.getElementById('upload-set-id').value;
+            const fileInput = document.getElementById('doc-file');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.textContent = 'Uploading...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/load-test/doc-sets/${setId}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Uploaded: ' + data.filename);
+                    document.getElementById('upload-doc-modal').classList.add('hidden');
+                    fileInput.value = '';
+                    loadDocSets();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Upload failed: ' + e);
+            } finally {
+                btn.textContent = 'Upload';
+                btn.disabled = false;
+            }
+        }
+
+        async function deleteDocSet(id) {
+            if (!confirm('Delete this document set and all files?')) return;
+            await fetch(`/api/load-test/doc-sets/${id}`, { method: 'DELETE' });
+            loadDocSets();
+        }
+
+        async function startTest(e) {
+            e.preventDefault();
+            const config = {
+                test_type: document.getElementById('test-type').value,
+                target_env: document.getElementById('target-env').value,
+                concurrent_users: document.getElementById('concurrent-users').value,
+                test_user_set_id: document.getElementById('user-set-select').value,
+                test_doc_set_id: document.getElementById('doc-set-id').value,
+                lesson_id: document.getElementById('lesson-id').value,
+                requests_per_user: document.getElementById('requests-per-user').value
+            };
+
+            try {
+                const res = await fetch('/api/load-test/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Test Started! ID: ' + data.test_id);
+                    document.getElementById('active-tests-list').dataset.testId = data.test_id;
+                    pollStatus(data.test_id);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Failed to start: ' + e);
+            }
+        }
+
+        async function loadResults() {
+            const res = await fetch('/api/load-test/results');
+            const data = await res.json();
+            const tbody = document.getElementById('results-tbody');
+            tbody.innerHTML = '';
+
+            data.forEach(r => {
+                tbody.innerHTML += `
+                    <tr class="border-b hover:bg-gray-50 cursor-pointer" onclick="viewResult(${r.id})">
+                        <td class="px-6 py-4">${r.id}</td>
+                        <td class="px-6 py-4">${r.test_type}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 rounded text-xs ${r.status === 'completed' ? 'bg-green-100 text-green-800' : r.status === 'running' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
+                                ${r.status}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">${r.started_at}</td>
+                        <td class="px-6 py-4 text-blue-500">View</td>
+                    </tr>
+                `;
+            });
+        }
+
+        let currentResultId = null;
+        async function viewResult(id) {
+            currentResultId = id;
+            document.getElementById('result-modal').classList.remove('hidden');
+            generateReport('technical'); // Default load
+        }
+
+        async function generateReport(type) {
+            const content = document.getElementById('result-content');
+            content.textContent = 'Loading...';
+
+            try {
+                let res;
+                if (type === 'technical') {
+                    res = await fetch(`/api/load-test/report/${currentResultId}/technical`);
+                } else {
+                    res = await fetch(`/api/load-test/report/${currentResultId}/executive`, { method: 'POST' });
+                }
+                const data = await res.json();
+
+                if (type === 'executive' && data.analysis) {
+                    content.innerHTML = `<pre class="whitespace-pre-wrap font-sans text-base">${data.analysis}</pre>`;
+                } else {
+                    // Render Technical Report HTML
+                    let html = `
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div class="p-4 bg-blue-50 rounded">
+                                <div class="text-xs text-gray-500 uppercase">Success Rate</div>
+                                <div class="text-2xl font-bold ${data.summary.success_rate < 90 ? 'text-red-600' : 'text-green-600'}">
+                                    ${data.summary.success_rate}%
+                                </div>
+                            </div>
+                            <div class="p-4 bg-gray-100 rounded">
+                                <div class="text-xs text-gray-500 uppercase">Total Requests</div>
+                                <div class="text-2xl font-bold">${data.summary.total_requests}</div>
+                            </div>
+                        </div>
+                    `;
+
+                    if (Object.keys(data.errors).length > 0) {
+                        html += `<h4 class="font-bold mb-2 text-red-600">Error Summary</h4>
+                        <table class="min-w-full text-sm mb-6 border">
+                            <thead class="bg-gray-50"><tr><th class="p-2 border">Count</th><th class="p-2 border">Error Message</th></tr></thead>
+                            <tbody>${Object.entries(data.errors).map(([msg, count]) => `
+                                <tr><td class="p-2 border text-center font-bold">${count}</td><td class="p-2 border">${msg}</td></tr>
+                            `).join('')}</tbody>
+                        </table>`;
+                    }
+
+                    if (data.detailed_logs && data.detailed_logs.length > 0) {
+                        html += `<h4 class="font-bold mb-2">Failure Logs</h4>
+                        <div class="bg-black text-white p-4 rounded text-xs font-mono h-96 overflow-y-auto">
+                            ${data.detailed_logs.map(l => `
+                                <div class="mb-1 ${l.level === 'ERROR' ? 'text-red-400' : 'text-yellow-400'}">
+                                    [${l.timestamp.split('T')[1].split('.')[0]}] ${l.level}: ${l.message}
+                                </div>
+                            `).join('')}
+                        </div>`;
+                    }
+
+                    html += `<h4 class="font-bold mb-2 mt-4">Raw JSON Data</h4><pre class="text-xs bg-gray-50 p-4 rounded overflow-auto h-40">${JSON.stringify(data, null, 2)}</pre>`;
+                    content.innerHTML = html;
+                }
+            } catch (e) {
+                content.textContent = 'Error: ' + e;
+            }
+        }
+
+        async function pollStatus(testId) {
+            const list = document.getElementById('active-tests-list');
+            const logConsole = document.getElementById('live-log-console') || createLogConsole(list);
+
+            // Poll status
+            const res = await fetch(`/api/load-test/status/${testId}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'completed' || data.status === 'failed') {
+                    document.getElementById('status-badge-' + testId).className =
+                        `px-2 py-1 rounded text-xs ${data.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+                    document.getElementById('status-badge-' + testId).textContent = data.status;
+                    return; // Stop polling
+                }
+            }
+
+            // Poll logs
+            const lastTimestamp = logConsole.getAttribute('data-last-timestamp') || '';
+            const logRes = await fetch(`/api/load-test/status/${testId}/logs?since=${lastTimestamp}`);
+            if (logRes.ok) {
+                const logs = await logRes.json();
+                const container = logConsole.querySelector('.log-container');
+
+                logs.forEach(l => {
+                    const line = document.createElement('div');
+                    line.className = `text-xs font-mono mb-1 ${l.level === 'ERROR' ? 'text-red-400' : l.level === 'WARNING' ? 'text-yellow-400' : 'text-gray-300'}`;
+                    line.textContent = `[${l.timestamp.split('T')[1].split('.')[0]}] ${l.message}`;
+                    container.appendChild(line);
+                    logConsole.setAttribute('data-last-timestamp', l.timestamp);
+                });
+
+                if (logs.length > 0) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+
+            setTimeout(() => pollStatus(testId), 2000);
+        }
+
+        function createLogConsole(parent) {
+            const div = document.createElement('div');
+            div.id = 'live-log-console';
+            div.className = 'mt-4 bg-gray-900 rounded p-4 border border-gray-700';
+            div.innerHTML = `
+                <div class="flex justify-between items-center mb-2 border-b border-gray-700 pb-2">
+                    <span class="text-gray-400 text-xs uppercase font-bold">Live Logs</span>
+                    <span class="text-xs text-green-400 animate-pulse">● Live</span>
+                </div>
+                <div class="log-container h-64 overflow-y-auto"></div>
+            `;
+            parent.innerHTML = ''; // Clear previous
+            parent.appendChild(div);
+
+            // Re-add status badge wrapper
+            const badge = document.createElement('div');
+            badge.className = 'mb-2 flex justify-between';
+            badge.innerHTML = `<span class="font-bold">Test Running...</span><span id="status-badge-${parent.dataset.testId}" class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">running</span>`;
+            parent.insertBefore(badge, div);
+
+            return div;
+        }
+
+        // Init
+        loadUserSets();
+        updateFormFields();
+    </script>
+</body>
+
+</html>

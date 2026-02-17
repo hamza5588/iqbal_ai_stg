@@ -1,0 +1,12 @@
+{"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": "user_22_conv_1"}, "timestamp": 1771090884524.516, "sessionId": "debug-session", "hypothesisId": "H2,H4"}
+{"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": 1771090884524.792, "sessionId": "debug-session", "hypothesisId": "H4"}
+{"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": "name 'llm' is not defined"}, "timestamp": 1771090884563.21, "sessionId": "debug-session", "hypothesisId": "H4"}
+{"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": "user_22_conv_2"}, "timestamp": 1771090892274.215, "sessionId": "debug-session", "hypothesisId": "H2,H4"}
+{"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": 1771090892274.7842, "sessionId": "debug-session", "hypothesisId": "H4"}
+{"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": "name 'llm' is not defined"}, "timestamp": 1771090892287.5898, "sessionId": "debug-session", "hypothesisId": "H4"}
+{"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": "user_32_conv_3"}, "timestamp": 1771091499937.398, "sessionId": "debug-session", "hypothesisId": "H2,H4"}
+{"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": 1771091499937.9949, "sessionId": "debug-session", "hypothesisId": "H4"}
+{"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": "get_rag_llm() got an unexpected keyword argument 'timeout'"}, "timestamp": 1771091499976.188, "sessionId": "debug-session", "hypothesisId": "H4"}
+{"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": "user_32_conv_4"}, "timestamp": 1771091814974.179, "sessionId": "debug-session", "hypothesisId": "H2,H4"}
+{"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": 1771091814974.572, "sessionId": "debug-session", "hypothesisId": "H4"}
+{"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": "get_rag_llm() got an unexpected keyword argument 'timeout'"}, "timestamp": 1771091815007.617, "sessionId": "debug-session", "hypothesisId": "H4"}
