@@ -2,8 +2,11 @@ import os
 from dotenv import load_dotenv
 from datetime import timedelta
 
-# Load environment variables
+# Load environment variables (project root .env, then app/utils/.env so both are applied)
 load_dotenv()
+_load_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'utils', '.env')
+if os.path.isfile(_load_env_path):
+    load_dotenv(_load_env_path, override=True)
 
 class Config:
     # Basic Flask configuration
@@ -44,7 +47,19 @@ class Config:
     DATABASE_URL = os.getenv('DATABASE_URL','postgresql://myuser:mypassword@localhost:5432/mydatabase')
     
     # SQLAlchemy configuration
-    SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    if DATABASE_URL.startswith('sqlite'):
+        # Resolve to absolute path and create parent dir so SQLite can open the file
+        _db_path = DATABASE_URL.replace('sqlite:///', '').replace('sqlite:////', '')
+        if not os.path.isabs(_db_path):
+            _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            _db_path = os.path.join(_project_root, _db_path)
+        _db_dir = os.path.dirname(_db_path)
+        if _db_dir and not os.path.isdir(_db_dir):
+            os.makedirs(_db_dir, exist_ok=True)
+        # Use three slashes for absolute path (Windows: sqlite:///C:/path; Unix: sqlite:////path)
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.normpath(_db_path).replace('\\', '/')
+    else:
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,  # Verify connections before using

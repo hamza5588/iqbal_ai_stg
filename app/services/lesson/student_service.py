@@ -6,7 +6,6 @@ import re
 from typing import Dict, List, Any, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-
 from .base_service import BaseLessonService
 
 logger = logging.getLogger(__name__)
@@ -33,84 +32,52 @@ class StudentLessonService(BaseLessonService):
         logger.info("Student lesson service initialized")
 
     def answer_lesson_question(self, lesson_id: int, question: str, conversation_history: list = None) -> Dict[str, str]:
-        """Answer a student's question about a specific lesson, letting the AI infer affirmatives."""
+        """
+        Answer a student's question about a lesson using the LangGraph workflow.
+
+        This replaces the old static approach that:
+          - directly called RAG first, then
+          - fell back to a handcrafted prompt over lesson content.
+
+        Instead, we delegate to the LangGraph-powered pipeline:
+          1) Load lesson.
+          2) Decide if lesson content is enough.
+          3) If yes  -> answer from lesson content.
+          4) If no   -> ask for RAG permission via interrupt().
+
+        For this internal helper (used by general-question flows), we auto-approve
+        RAG (allow_rag=True) since there is no human to confirm.
+        """
         try:
-            from app.models.models import LessonModel
-            lesson = LessonModel.get_lesson_by_id(lesson_id)
-            if not lesson:
-                return {"error": "Lesson not found"}
+            from flask import session
+            from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 
-            lesson_content = lesson.get('content', '')
-            lesson_title = lesson.get('title', 'this lesson')
+            user_id = session.get("user_id") if "user_id" in session else 0
 
-            # Limit history for clarity but include enough for context
-            history = (conversation_history or [])[-3:]
-            formatted_history = "\n".join(
-                f"Student Question: {h.get('question', '')}\nAI Answer: {h.get('answer', '')}"
-                for h in history if h
-            ) or "No previous conversation."
+            result = invoke_lesson_qa(
+                lesson_id=int(lesson_id),
+                question=question,
+                user_id=int(user_id),
+                allow_rag=True,  # Auto-approve for non-interactive internal path
+            )
 
-            # Debug prints
-            print("\n" + "="*80)
-            print("CONVERSATION HISTORY SENT TO PROMPT:")
-            print("="*80)
-            print(formatted_history)
-            print("="*80)
-            print(f"Current Question: {question}")
-            print("="*80 + "\n")
+            answer = (result.get("answer") or "").strip()
+            if not answer:
+                return {
+                    "error": "Failed to generate an answer.",
+                    "lesson_id": lesson_id,
+                    "question": question,
+                }
 
-            # ---- AI prompt (NO hard-coded logic, LLM interprets affirmatives) ----
-            prompt = ChatPromptTemplate.from_template("""
-        You are a helpful teaching assistant.
-
-        Your job is to answer the student's question based on the *lesson content* when possible.
-
-        Follow these rules:
-
-        1. If the student's current message indicates they want you to answer the previous question (e.g., "yes", "yes please", "sure"), then simply answer the **previous question** directly using your general knowledge.
-        - Do NOT explain your reasoning.
-        - Do NOT restate the previous conversation.
-
-        2. If the student's question is related to the lesson:
-        - Provide a clear, educational answer using the lesson content.
-
-        3. If the student's question is NOT related to the lesson:
-        - Respond exactly with two sentences:
-            "<question> is not related to the lesson. Would you like me to answer it using my own knowledge?"
-        - Do NOT provide any additional explanation.
-
-        4. If no relevant lesson info exists:
-        - Say: "No relevant information about this topic is found in the lesson content. Would you like me to answer it using my own knowledge?"
-        - If the student's next message implies consent, answer using your general knowledge — directly, without explaining your decision.
-
-        Lesson Title: {lesson_title}
-        Lesson Content: {lesson_content}
-
-        Current Student Question: {question}
-
-        Conversation History:
-        {formatted_history}
-        """)
-
-
-            chain = prompt | self.llm | StrOutputParser()
-
-            answer = chain.invoke({
-                "lesson_title": lesson_title,
-                "lesson_content": lesson_content,
-                "question": question,
-                "formatted_history": formatted_history,
-            })
-
-            answer = _strip_reasoning(answer)
             return {
-                "answer": answer.strip(),
+                "answer": answer,
                 "lesson_id": lesson_id,
-                "question": question
+                "question": question,
+                "source": "lesson_or_rag_graph",
             }
 
         except Exception as e:
-            logger.exception("Error answering lesson question")
+            logger.exception("Error answering lesson question via LangGraph")
             return {"error": str(e)}
 
 
