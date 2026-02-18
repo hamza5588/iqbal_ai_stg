@@ -127,22 +127,43 @@ class LoadTestRunner:
                         logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
                         return True
                     else:
-                        logger.warning(f"User {user.email} login redirect but no session cookie")
+                        logger.warning(f"User {user.email} login redirect but no session cookie found for {self.config.base_url}")
                         self._log(f"User {user.email} no session cookie", level="WARNING")
                         return False
                 elif response.status == 200:
-                    # Sometimes it might return 200 if it renders the page again (failure)
                     text = await response.text()
-                    if "Invalid credentials" in text:
-                        logger.warning(f"User {user.email} invalid credentials")
+                    try:
+                        data = json.loads(text)
+                        if data.get("success") is True:
+                            # Verify we got a session cookie
+                            cookies = session.cookie_jar.filter_cookies(self.config.base_url)
+                            if 'session' in cookies:
+                                logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
+                                return True
+                            else:
+                                logger.warning(f"User {user.email} login success JSON but no session cookie")
+                                self._log(f"User {user.email} no session cookie", level="WARNING")
+                                return False
+                        else:
+                            logger.warning(f"User {user.email} login failed via JSON: {data.get('error')}")
+                            self._log(f"User {user.email} login failed: {data.get('error')}", level="ERROR")
+                            return False
+                    except json.JSONDecodeError:
+                        if "Invalid credentials" in text:
+                            logger.warning(f"User {user.email} invalid credentials")
+                            self._log(f"User {user.email} invalid credentials", level="ERROR")
+                        else:
+                            logger.warning(f"User {user.email} login returned 200 but not redirected and not JSON success. Text: {text[:100]}...")
+                            self._log(f"User {user.email} login returned 200 (unexpected)", level="WARNING")
                         return False
-                    logger.warning(f"User {user.email} login returned 200 (unexpected)")
-                    return False
                 else:
-                    logger.warning(f"User {user.email} login failed with status {response.status}")
+                    text = await response.text()
+                    logger.warning(f"User {user.email} login failed with status {response.status}. Text: {text[:200]}...")
+                    self._log(f"User {user.email} login failed with status {response.status}", level="ERROR")
                     return False
         except Exception as e:
             logger.error(f"User {user.email} login exception: {str(e)}")
+            self._log(f"User {user.email} login exception: {str(e)}", level="ERROR")
             return False
 
     async def _dispatch_scenario(self, session: aiohttp.ClientSession, user: TestUser, config: LoadTestConfig):
