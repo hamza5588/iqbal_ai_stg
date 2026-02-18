@@ -204,17 +204,29 @@ class LoadTestRunner:
             self._log(f"Unknown test type: {test_type}", level="ERROR")
 
     def _get_test_users(self) -> List[TestUser]:
-        """Retrieve test users from DB using a separate sync session"""
+        """Retrieve test users from DB, joining with main User table to get live passwords"""
+        from app.models.database_models import User
         session = self._session_factory()
         try:
             if self.config.test_user_set_id:
-                users = session.query(TestUser).filter_by(
-                    user_set_id=self.config.test_user_set_id, 
-                    is_active=True
+                # Query TestUser but join with User to get the latest password
+                # We overwrite the password in the TestUser objects with the live one
+                results = session.query(TestUser, User.password.label('live_password')).join(
+                    User, TestUser.real_user_id == User.id
+                ).filter(
+                    TestUser.user_set_id == self.config.test_user_set_id,
+                    TestUser.is_active == True
                 ).all()
-                # Detach objects from session so they can be used after session closes
+                
+                users = []
+                for test_user, live_password in results:
+                    # Update the detached object with the live password
+                    test_user.password = live_password
+                    users.append(test_user)
+                
+                # Detach objects from session
                 session.expunge_all()
-                self._log(f"Successfully loaded {len(users)} users from Set ID {self.config.test_user_set_id}")
+                self._log(f"Successfully loaded {len(users)} users from Set ID {self.config.test_user_set_id} with live passwords")
                 return users
             return []
         finally:
