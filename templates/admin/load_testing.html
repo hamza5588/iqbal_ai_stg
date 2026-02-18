@@ -149,8 +149,9 @@
                                         <option value="teacher_flow_concurrent">Test 2: Teacher Full Flow</option>
                                         <option value="student_chat_concurrent">Test 3: Student Lesson Chat</option>
                                         <option value="teacher_rag_sequential">Test 4: Teacher Sequential RAG</option>
-                                        <option value="student_chat_sequential">Test 5: Student Sequential Chat</option>
-                                        <option value="teacher_repeat_ingest">Test 6: Repeated Ingest</option>
+                                        <option value="student_lesson_sequential">Test 5: Student Sequential Chat
+                                        </option>
+                                        <option value="doc_upload_repeat">Test 6: Repeated Ingest</option>
                                         <option value="rag_quality_benchmark">Test 7: RAG Pipeline Quality</option>
                                     </select>
                                 </div>
@@ -162,14 +163,15 @@
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">User Set</label>
-                                    <select id="user-set-select" class="w-full border rounded px-3 py-2">
+                                    <select id="test-user-set" class="w-full border rounded px-3 py-2">
                                         <option value="">Loading...</option>
                                     </select>
                                 </div>
                                 <div id="doc-set-field" class="hidden">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Document Set</label>
-                                    <input type="number" id="doc-set-id" placeholder="ID (e.g. 1)"
-                                        class="w-full border rounded px-3 py-2">
+                                    <select id="test-doc-set" class="w-full border rounded px-3 py-2">
+                                        <option value="">Loading...</option>
+                                    </select>
                                 </div>
                                 <div id="lesson-id-field" class="hidden">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Lesson ID</label>
@@ -211,7 +213,7 @@
                 <div class="bg-white rounded-lg shadow p-6 mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold">User Sets</h3>
-                        <button onclick="document.getElementById('create-users-modal').classList.remove('hidden')"
+                        <button onclick="document.getElementById('create-user-set-modal').classList.remove('hidden')"
                             class="bg-green-500 text-white px-4 py-2 rounded">
                             + Create Users
                         </button>
@@ -265,30 +267,35 @@
     </div>
 
     <!-- Create Users Modal -->
-    <div id="create-users-modal"
+    <div id="create-user-set-modal"
         class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <h3 class="text-lg font-bold mb-4">Create Test User Set</h3>
             <form onsubmit="createUserSet(event)">
                 <div class="mb-4">
                     <label class="block text-sm mb-1">Set Name</label>
-                    <input type="text" id="set-name" required class="w-full border rounded px-3 py-2">
+                    <input type="text" id="user-prefix" required class="w-full border rounded px-3 py-2"
+                        placeholder="e.g. StagingUsers">
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm mb-1">Role</label>
-                    <select id="set-role" class="w-full border rounded px-3 py-2">
+                    <select id="user-role" class="w-full border rounded px-3 py-2">
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
                     </select>
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm mb-1">Count</label>
-                    <input type="number" id="set-count" value="10" min="1" max="50"
+                    <input type="number" id="user-count" value="10" min="1" max="50"
                         class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Password</label>
+                    <input type="text" id="user-password" value="TestPass123!" class="w-full border rounded px-3 py-2">
                 </div>
                 <div class="flex justify-end gap-2">
                     <button type="button"
-                        onclick="document.getElementById('create-users-modal').classList.add('hidden')"
+                        onclick="document.getElementById('create-user-set-modal').classList.add('hidden')"
                         class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
                     <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Create</button>
                 </div>
@@ -554,17 +561,22 @@
 
                 // Update Select in Run Test tab
                 const select = document.getElementById('test-user-set');
-                select.innerHTML = '';
+                select.innerHTML = '<option value="">Select User Set</option>';
 
                 if (data.length === 0) {
                     container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No user sets found. Create one above.</div>';
                 }
 
+                console.log("User Sets API Response:", data);
                 data.forEach(set => {
+                    // Fallback to name_prefix/count if name/user_count missing
+                    const setName = set.name || set.name_prefix || 'Unnamed Set';
+                    const setCount = set.user_count !== undefined ? set.user_count : (set.count || 0);
+
                     // Start Button Select
                     const option = document.createElement('option');
                     option.value = set.id;
-                    option.textContent = `${set.name_prefix} (${set.count} users)`;
+                    option.textContent = `${setName} (${setCount} users)`;
                     select.appendChild(option);
 
                     // List Item
@@ -572,8 +584,8 @@
                     div.className = 'flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200';
                     div.innerHTML = `
                         <div>
-                            <div class="font-medium text-gray-800">${set.name_prefix}</div>
-                            <div class="text-xs text-gray-500">${set.count} users • Created ${new Date(set.created_at).toLocaleDateString()}</div>
+                            <div class="font-medium text-gray-800">${setName}</div>
+                            <div class="text-xs text-gray-500">${setCount} users • Created ${new Date(set.created_at).toLocaleDateString()}</div>
                         </div>
                         <button onclick="deleteUserSet(${set.id})" class="text-red-500 hover:text-red-700 text-sm">
                             <i class="fas fa-trash"></i>
@@ -592,14 +604,15 @@
 
         async function createUserSet(e) {
             e.preventDefault();
-            const prefix = document.getElementById('user-prefix').value;
-            const count = document.getElementById('user-count').value;
+            const name = document.getElementById('user-prefix').value;
+            const count = parseInt(document.getElementById('user-count').value);
+            const role = document.getElementById('user-role').value;
             const password = document.getElementById('user-password').value;
 
             try {
                 const res = await fetchWithProxy('/api/load-test/users/create', {
                     method: 'POST',
-                    body: JSON.stringify({ prefix, count, password })
+                    body: JSON.stringify({ name, count, role, password })
                 });
                 const data = await res.json();
 
@@ -611,7 +624,7 @@
                     alert('Error: ' + data.error);
                 }
             } catch (err) {
-                alert('Request failed');
+                alert('Request failed: ' + err.message);
             }
         }
 
@@ -643,11 +656,16 @@
                     container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No document sets found. Create one above.</div>';
                 }
 
+                console.log("Doc Sets API Response:", data);
                 data.forEach(set => {
+                    const docName = set.name || 'Unnamed Doc Set';
+                    const docCount = set.doc_count !== undefined ? set.doc_count : 0;
+                    const documents = set.documents || [];
+
                     // Select Option
                     const option = document.createElement('option');
                     option.value = set.id;
-                    option.textContent = `${set.name} (${set.doc_count} docs)`;
+                    option.textContent = `${docName} (${docCount} docs)`;
                     select.appendChild(option);
 
                     // List Item
@@ -656,8 +674,8 @@
                     div.innerHTML = `
                         <div class="flex justify-between items-start mb-2">
                             <div>
-                                <h4 class="font-medium text-gray-800">${set.name}</h4>
-                                <span class="text-xs text-gray-500">${set.doc_count} documents</span>
+                                <h4 class="font-medium text-gray-800">${docName}</h4>
+                                <span class="text-xs text-gray-500">${docCount} documents</span>
                             </div>
                             <div class="space-x-2">
                                 <button onclick="openUploadModal(${set.id})" class="text-blue-500 text-xs hover:underline">
@@ -669,10 +687,10 @@
                             </div>
                         </div>
                         <div class="space-y-1 pl-2 border-l-2 border-gray-200">
-                            ${set.documents.map(d => `
+                            ${documents.map(d => `
                                 <div class="text-xs text-gray-600 flex justify-between">
                                     <span><i class="fas fa-file-pdf mr-1"></i> ${d.filename}</span>
-                                    <span class="text-gray-400">${(d.file_size / 1024).toFixed(1)}KB</span>
+                                    <span class="text-gray-400">${((d.file_size || 0) / 1024).toFixed(1)}KB</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -763,20 +781,21 @@
             // Get Global Config
             const config = getTargetConfig();
 
-            const payload = {
+            const configData = {
                 test_type: document.getElementById('test-type').value,
-                base_url: config.url, // Use global URL
+                target_env: 'custom',
+                custom_url: config.url,
                 concurrent_users: parseInt(document.getElementById('concurrent-users').value),
                 requests_per_user: parseInt(document.getElementById('requests-per-user').value || 1),
                 test_user_set_id: document.getElementById('test-user-set').value || null,
                 test_doc_set_id: document.getElementById('test-doc-set').value || null,
+                lesson_id: document.getElementById('lesson-id').value || null
             };
 
             try {
-                const res = await fetch('/api/load-test/start', {
+                const res = await fetchWithProxy('/api/load-test/start', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ config: configData })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -892,7 +911,7 @@
             const logConsole = document.getElementById('live-log-console') || createLogConsole(list);
 
             // Poll status
-            const res = await fetch(`/api/load-test/status/${testId}`);
+            const res = await fetchWithProxy(`/api/load-test/status/${testId}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.status === 'completed' || data.status === 'failed') {
@@ -905,7 +924,7 @@
 
             // Poll logs
             const lastTimestamp = logConsole.getAttribute('data-last-timestamp') || '';
-            const logRes = await fetch(`/api/load-test/status/${testId}/logs?since=${lastTimestamp}`);
+            const logRes = await fetchWithProxy(`/api/load-test/status/${testId}/logs?since=${lastTimestamp}`);
             if (logRes.ok) {
                 const logs = await logRes.json();
                 const container = logConsole.querySelector('.log-container');

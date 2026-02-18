@@ -154,8 +154,9 @@ def create_user_set():
     name = data.get('name')
     role = data.get('role', 'student')
     count = int(data.get('count', 10))
+    password = data.get('password', 'TestPass123!')
     
-    user_set, errors = UserSetManager.create_user_set(name, role, count)
+    user_set, errors = UserSetManager.create_user_set(name, role, count, password)
     
     if user_set:
         return jsonify({
@@ -198,7 +199,12 @@ def list_doc_sets():
         'id': s.id,
         'name': s.name,
         'created_at': s.created_at.isoformat(),
-        'doc_count': len(s.documents)
+        'doc_count': len(s.documents) if s.documents else 0,
+        'documents': [{
+            'id': d.id,
+            'filename': d.filename,
+            'file_size': d.file_size_bytes
+        } for d in (s.documents or [])]
     } for s in sets])
 
 @bp.route('/doc-sets/create', methods=['POST'])
