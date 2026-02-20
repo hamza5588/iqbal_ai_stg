@@ -62,3 +62,5 @@ class TestResultSummary:
     consistency_stdev: Optional[float] = None
     latency_trend: List[float] = field(default_factory=list)
     lesson_saved: bool = False
+    stop_requested: bool = False
+    rate_limit_hits: int = 0

@@ -56,10 +56,10 @@ async def run(
         benchmark_results = []
         
         for i, doc in enumerate(documents):
+            if summary.stop_requested:
+                log_func(f"[{user.email}] Benchmark stopped by user")
+                break
             file_path = doc.file_path
-            filename = doc.filename
-            
-            log_func(f"[{user.email}] Processing doc {i+1}/{len(documents)}: {filename}")
             
             if not os.path.exists(file_path):
                 log_func(f"[{user.email}] File not found on disk: {file_path}", level="ERROR")
@@ -74,6 +74,8 @@ async def run(
             async with session.post(create_conv_url, json={"title": f"Benchmark {filename}"}) as resp:
                 conv_duration = (time.time() - start_conv) * 1000
                 summary.total_requests += 1 # Action 1: Create Conv
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
                 if resp.status == 200:
                     data = await resp.json()
                     conversation_id = data.get('conversation_id')
@@ -97,6 +99,8 @@ async def run(
             async with session.post(ingest_url, data=form_data) as resp:
                 upload_duration = (time.time() - upload_start) * 1000
                 summary.total_requests += 1 # Action 2: Ingest Action
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
@@ -122,6 +126,9 @@ async def run(
                 log_func(f"[{user.email}] Ingest processing (Async)...")
                 
                 while retry_count < max_retries:
+                    if summary.stop_requested:
+                        log_func(f"[{user.email}] Benchmark poll stopped by user")
+                        return
                     retry_count += 1
                     async with session.get(poll_url) as resp:
                         if resp.status == 200:
@@ -156,6 +163,9 @@ async def run(
             keyword_hits = 0
             
             for idx, question in enumerate(msg_list):
+                if summary.stop_requested:
+                    log_func(f"[{user.email}] Benchmark chat stopped by user")
+                    break
                 log_func(f"[{user.email}] Sending question {idx+1}/{len(msg_list)}: \"{question[:30]}...\"")
                 chat_url = f"{config.base_url}/api/rag/chat"
                 
@@ -167,6 +177,8 @@ async def run(
                 }) as resp:
                     chat_duration = time.time() - chat_start
                     summary.total_requests += 1 # Action: Quality Check Question
+                    if resp.status == 429:
+                        summary.rate_limit_hits += 1
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get('success'):

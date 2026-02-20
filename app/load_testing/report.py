@@ -68,9 +68,8 @@ class ReportGenerator:
                     "success_rate": round(success_rate, 2),
                     "requests_per_second": round(rps, 2),
                     "concurrent_users": result.config.get('concurrent_users', 1) if result.config else 1,
-                    "messages_sent": metrics.get('messages_sent', 0),
-                    "total_file_size_mb": metrics.get('total_file_size_mb', 0),
-                    "total_ingestion_time": metrics.get('total_ingestion_time', 0)
+                    # Merge all other metrics from the DB
+                    **{k: v for k, v in metrics.items() if k not in ['errors']}
                 },
                 "errors": error_counts,
                 "raw_errors": errors[:100], 

@@ -72,12 +72,17 @@ async def run(
         chat_responses = []
 
         for i in range(iterations):
+            if summary.stop_requested:
+                log_func(f"[{user.email}] Repeated ingest stopped by user")
+                break
             log_func(f"Iteration {i+1}/{iterations}...")
             
             # 1. Create Conversation
             create_conv_url = f"{config.base_url}/create_conversation"
             conversation_id = None
             async with session.post(create_conv_url, json={"title": f"Repeat Test {i+1}"}) as resp:
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
                 if resp.status == 200:
                     data = await resp.json()
                     conversation_id = data.get('conversation_id')
@@ -101,6 +106,8 @@ async def run(
             
             async with session.post(ingest_url, data=form_data) as resp:
                 summary.total_requests += 1
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
@@ -124,6 +131,9 @@ async def run(
                 success = False
                 
                 while retry_count < max_retries:
+                    if summary.stop_requested:
+                        log_func(f"[{user.email}] Ingest poll stopped by user")
+                        return
                     async with session.get(poll_url) as resp:
                         summary.total_requests += 1
                         if resp.status == 200:
@@ -166,6 +176,8 @@ async def run(
                     "conversation_id": conversation_id
                 }) as resp:
                     summary.total_requests += 1
+                    if resp.status == 429:
+                        summary.rate_limit_hits += 1
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get('success'):

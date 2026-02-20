@@ -54,6 +54,9 @@ async def run(
     url = f"{config.base_url}/api/lessons/ask_question"
 
     for i, question in enumerate(msg_list):
+        if summary.stop_requested:
+            log_func(f"[{user.email}] Chat stopped by user")
+            break
         log_func(f"[{user.email}] Sending message {i+1}/{total_messages}: \"{question[:60]}\"")
 
         payload = {
@@ -67,6 +70,8 @@ async def run(
                 duration = time.time() - start_time
                 summary.total_requests += 1
 
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
                 if resp.status == 200:
                     data = await resp.json()
                     answer = data.get('answer', '')

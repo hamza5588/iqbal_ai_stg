@@ -69,6 +69,8 @@ async def run(
         async with session.post(create_conv_url, json={"title": f"Stress Test {time.time()}"}) as resp:
             setup_duration = (time.time() - start_setup) * 1000
             summary.total_requests += 1 # Action 1: Create Conversation
+            if resp.status == 429:
+                summary.rate_limit_hits += 1
             if resp.status == 200:
                 data = await resp.json()
                 conversation_id = data.get('conversation_id')
@@ -95,6 +97,8 @@ async def run(
         async with session.post(ingest_url, data=form_data) as resp:
             upload_duration = (time.time() - upload_start) * 1000
             summary.total_requests += 1 # Action 2: Ingest Action
+            if resp.status == 429:
+                summary.rate_limit_hits += 1
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('success'):
@@ -119,6 +123,9 @@ async def run(
             retry_count = 0
             poll_start = time.time()
             while retry_count < max_retries:
+                if summary.stop_requested:
+                    log_func(f"[{user.email}] Ingest poll stopped by user")
+                    return
                 retry_count += 1
                 async with session.get(poll_url) as resp:
                     if resp.status == 200:
@@ -153,6 +160,9 @@ async def run(
         chat_url = f"{config.base_url}/api/rag/chat"
         
         for i, msg in enumerate(msg_list):
+            if summary.stop_requested:
+                log_func(f"[{user.email}] Sequential loop stopped by user")
+                break
             payload = {
                 "message": msg,
                 "thread_id": thread_id,
@@ -164,7 +174,8 @@ async def run(
             async with session.post(chat_url, json=payload, headers={"Content-Type": "application/json"}) as resp:
                 duration = time.time() - start_req
                 summary.total_requests += 1 # Each chat message is an Action
-                
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):

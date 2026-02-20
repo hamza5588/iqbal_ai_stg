@@ -638,8 +638,30 @@
             if (tabName === 'results') loadResults();
         }
 
+        function updateUserSetFiltering() {
+            const type = document.getElementById('test-type').value;
+            const select = document.getElementById('test-user-set');
+            const options = select.options;
+
+            let targetRole = '';
+            if (type.includes('teacher')) targetRole = 'teacher';
+            if (type.includes('student')) targetRole = 'student';
+
+            for (let i = 1; i < options.length; i++) {
+                const opt = options[i];
+                if (!targetRole || opt.dataset.role === targetRole) {
+                    opt.classList.remove('hidden');
+                    opt.disabled = false;
+                } else {
+                    opt.classList.add('hidden');
+                    opt.disabled = true;
+                }
+            }
+        }
+
         function updateFormFields() {
             const type = document.getElementById('test-type').value;
+            updateUserSetFiltering();
             const docField = document.getElementById('doc-set-field');
             const lessonField = document.getElementById('lesson-id-field');
             const reqField = document.getElementById('req-per-user-field');
@@ -679,7 +701,7 @@
                 }
             }
 
-            if (['teacher_flow_concurrent', 'student_chat_concurrent', 'teacher_rag_sequential', 'student_lesson_sequential'].includes(type)) {
+            if (['teacher_flow_concurrent', 'student_chat_concurrent', 'teacher_rag_sequential', 'student_lesson_sequential', 'rag_quality_benchmark'].includes(type)) {
                 document.getElementById('csv-file-field').classList.remove('hidden');
             }
 
@@ -694,6 +716,7 @@
             const userCount = selectedUser?.dataset.count ? parseInt(selectedUser.dataset.count) : 100;
             const concurrentInput = document.getElementById('concurrent-users');
             concurrentInput.max = userCount;
+            // Only update value if it's currently invalid OR if it was never set (defaulting to 1)
             if (parseInt(concurrentInput.value) > userCount || concurrentInput.value === '1') {
                 concurrentInput.value = userCount;
             }
@@ -745,7 +768,8 @@
                     const option = document.createElement('option');
                     option.value = set.id;
                     option.dataset.count = setCount;
-                    option.textContent = `${setName} (${setCount} users)`;
+                    option.dataset.role = set.role || (set.is_teacher ? 'teacher' : 'student');
+                    option.textContent = `${setName} (${setCount} users) - ${option.dataset.role}`;
                     select.appendChild(option);
 
                     // List Item
@@ -1225,6 +1249,12 @@
                                     <div class="text-2xl font-bold text-pink-700">${(data.summary.latency_trend.reduce((a, b) => a + b, 0) / data.summary.latency_trend.length).toFixed(2)}s</div>
                                 </div>
                             ` : ''}
+                            ${data.summary.rate_limit_hits > 0 ? `
+                                <div class="p-4 bg-red-50 rounded border border-red-100">
+                                    <div class="text-xs text-red-600 uppercase font-semibold">Rate Limit Hits</div>
+                                    <div class="text-2xl font-bold text-red-700">${data.summary.rate_limit_hits}</div>
+                                </div>
+                            ` : ''}
                         </div>
 
                         <!-- Primary Checks Verification -->
@@ -1249,10 +1279,15 @@
                                         Lesson Saved to DB
                                     </div>
                                 ` : ''}
-                                ${(data.test_type.includes('sequential') || data.test_type === 'rag_quality_benchmark') ? `
+                                ${(data.test_type.includes('sequential') || data.test_type === 'rag_quality_benchmark' || data.test_type === 'student_chat_concurrent') ? `
                                     <div class="flex items-center text-sm">
                                         <i class="fas ${data.summary.messages_sent > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2"></i>
-                                        Chat Sequence Complete
+                                        Chat Responses Received
+                                    </div>
+                                ` : ''}
+                                ${data.summary.stop_requested ? `
+                                    <div class="flex items-center text-sm text-orange-600">
+                                        <i class="fas fa-hand-paper mr-2"></i> Stop Requested
                                     </div>
                                 ` : ''}
                             </div>
@@ -1366,12 +1401,23 @@
             if (!confirm("Stop the currently running test?")) return;
 
             try {
+                const btn = document.querySelector('#test-actions-footer button');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Stopping...';
+
                 const res = await fetchWithProxy(`/api/load-test/stop/${testId}`, { method: 'POST' });
                 const data = await res.json();
                 if (data.message) {
-                    // Logs will show termination soon
+                    const logContainer = document.getElementById('active-tests-list');
+                    const stopMsg = document.createElement('div');
+                    stopMsg.className = 'text-orange-400 font-bold mt-2';
+                    stopMsg.innerHTML = '>>> Stop signal sent. Graceful termination in progress...';
+                    logContainer.appendChild(stopMsg);
+                    logContainer.scrollTop = logContainer.scrollHeight;
                 } else {
                     alert("Stop failed: " + data.error);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-stop-circle mr-2"></i>Stop Test';
                 }
             } catch (e) {
                 alert("Request error: " + e.message);

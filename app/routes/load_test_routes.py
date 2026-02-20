@@ -68,21 +68,33 @@ def start_test():
         db.add(result)
         db.commit()
         
-        # Initialize Runner
+        # Initialize Runner (or Celery task)
         from flask import current_app
-        runner = LoadTestRunner(current_app._get_current_object(), config, result.id)
-        active_runners[result.id] = runner
+        use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
         
-        # Start in background thread
-        thread = threading.Thread(target=run_async_test, args=(runner,))
-        thread.daemon = True
-        thread.start()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Test started',
-            'test_id': result.id
-        })
+        if use_celery:
+            from app.tasks.load_test_tasks import run_load_test_task
+            task = run_load_test_task.delay(config_data, result.id)
+            return jsonify({
+                'success': True,
+                'message': 'Test started via Celery',
+                'test_id': result.id,
+                'task_id': task.id
+            })
+        else:
+            runner = LoadTestRunner(current_app._get_current_object(), config, result.id)
+            active_runners[result.id] = runner
+            
+            # Start in background thread
+            thread = threading.Thread(target=run_async_test, args=(runner,))
+            thread.daemon = True
+            thread.start()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Test started via Thread',
+                'test_id': result.id
+            })
         
     except ValueError as e:
         return jsonify({'error': f"Invalid configuration: {str(e)}"}), 400
@@ -93,16 +105,21 @@ def start_test():
 @bp.route('/stop/<int:test_id>', methods=['POST'])
 @admin_only
 def stop_test(test_id):
-    """Stop a running test"""
+    """Stop a running test (Global DB-backed stop)"""
+    db = get_db()
+    result = db.query(LoadTestResult).get(test_id)
+    if not result:
+        return jsonify({'error': 'Test not found'}), 404
+        
+    # Mark status as STOPPED in DB. The runner heartbeat will pick this up.
+    result.status = LoadTestStatus.STOPPED.value
+    db.commit()
+    
+    # Also notify active runner if it's in this process
     if test_id in active_runners:
-        runner = active_runners[test_id]
-        runner.stop()
-        # We keep it in active_runners until it actually finishes or let the runner handle removal?
-        # Better to keep it until pollStatus sees it's done. 
-        # But we'll remove it here as well for cleanliness if needed, 
-        # or just rely on the fact that is_running becomes False.
-        return jsonify({'message': 'Stop signal sent'})
-    return jsonify({'error': 'Test not found or not running'}), 404
+        active_runners[test_id].stop()
+        
+    return jsonify({'message': 'Stop signal sent to database'})
 
 @bp.route('/status/<int:test_id>', methods=['GET'])
 @admin_only

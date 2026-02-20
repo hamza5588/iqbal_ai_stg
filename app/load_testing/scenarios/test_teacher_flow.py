@@ -71,6 +71,8 @@ async def run(
         async with session.post(create_conv_url, json={"title": "Load Test Chat"}, headers={"Content-Type": "application/json"}) as resp:
             duration = (time.time() - start_time) * 1000
             summary.total_requests += 1 # Action 1: Create Conversation
+            if resp.status == 429:
+                summary.rate_limit_hits += 1
             if resp.status == 200:
                 data = await resp.json()
                 conversation_id = data.get('conversation_id')
@@ -97,6 +99,8 @@ async def run(
         async with session.post(ingest_url, data=form_data) as resp:
             upload_duration = (time.time() - upload_start) * 1000
             summary.total_requests += 1 # Action 2: Ingest Action
+            if resp.status == 429:
+                summary.rate_limit_hits += 1
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('success'):
@@ -123,6 +127,9 @@ async def run(
             poll_start = time.time()
             
             while retry_count < max_retries:
+                if summary.stop_requested:
+                    log_func(f"[{user.email}] Ingest poll stopped by user")
+                    return
                 retry_count += 1
                 async with session.get(poll_url) as resp:
                     if resp.status == 200:
@@ -152,6 +159,9 @@ async def run(
         log_func(f"[{user.email}] Step 4: Iterative Chat starting for {len(msg_list)} messages...")
         
         for idx, chat_msg in enumerate(msg_list):
+            if summary.stop_requested:
+                log_func(f"[{user.email}] Chat sequence stopped by user")
+                break
             log_func(f"[{user.email}] Sending message {idx+1}/{len(msg_list)}: \"{chat_msg[:50]}...\"")
             chat_url = f"{config.base_url}/api/rag/chat"
             payload = {"message": chat_msg, "thread_id": thread_id, "conversation_id": conversation_id}
@@ -160,6 +170,8 @@ async def run(
             async with session.post(chat_url, json=payload, headers={"Content-Type": "application/json"}) as resp:
                 chat_duration = time.time() - chat_start
                 summary.total_requests += 1 # Action: Chat Message
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):

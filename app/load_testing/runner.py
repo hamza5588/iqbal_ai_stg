@@ -29,6 +29,7 @@ class LoadTestRunner:
     def stop(self):
         """Signal the runner to stop"""
         self.stop_requested = True
+        self.summary.stop_requested = True
         self._log("Stop signal received. Terminating workers...", level="WARNING")
 
     async def run(self):
@@ -66,6 +67,10 @@ class LoadTestRunner:
 
                 start_time = time.time()
                 tasks = []
+                
+                # Add stop signal checker
+                tasks.append(self._check_stop_signal())
+                
                 for i, user in enumerate(users):
                     tasks.append(self._worker(i, user, start_time))
                 
@@ -90,9 +95,30 @@ class LoadTestRunner:
                 self._update_status(LoadTestStatus.FAILED)
             finally:
                 self.is_running = False
+                # If it was stopped, make sure final status is STOPPED unless it failed
+                if self.stop_requested:
+                    self._update_status(LoadTestStatus.STOPPED)
                 self._save_metrics()
                 # Important: cleanup session at end of thread
                 close_db()
+
+    async def _check_stop_signal(self):
+        """Poll the database to see if a stop has been requested (global stop)"""
+        while self.is_running:
+            try:
+                db = get_db()
+                result = db.get(LoadTestResult, self.result_id)
+                if result and result.status == LoadTestStatus.STOPPED.value:
+                    if not self.stop_requested:
+                        self.stop_requested = True
+                        self.summary.stop_requested = True
+                        self._log("Stop signal detected in Database. Terminating workers...", level="WARNING")
+                    break
+            except Exception as e:
+                logger.error(f"Error checking stop signal: {e}")
+            finally:
+                close_db()
+            await asyncio.sleep(2) # Poll every 2 seconds
 
     async def _worker(self, worker_id: int, user: TestUser, start_time: float):
         """Async worker for a single user"""

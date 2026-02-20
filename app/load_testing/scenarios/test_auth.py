@@ -27,9 +27,12 @@ async def run(
     start = time.time()
     
     try:
+        if summary.stop_requested: return
         async with session.get(url, allow_redirects=True) as response:
             duration = time.time() - start
             summary.total_requests += 1
+            if response.status == 429:
+                summary.rate_limit_hits += 1
             
             if response.status == 200:
                 text = await response.text()
@@ -52,12 +55,15 @@ async def run(
                 return # Exit if dashboard failed
                 
         # 3. Logout
+        if summary.stop_requested: return
         log_func(f"[{user.email}] Step 3: Performing logout...")
         logout_url = f"{config.base_url}/logout"
         start_logout = time.time()
         async with session.get(logout_url, allow_redirects=True) as response:
             logout_duration = (time.time() - start_logout) * 1000
             summary.total_requests += 1
+            if response.status == 429:
+                summary.rate_limit_hits += 1
             if response.status == 200:
                 summary.successful_requests += 1
                 summary.successful_logouts += 1
