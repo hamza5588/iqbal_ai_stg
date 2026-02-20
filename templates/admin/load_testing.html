@@ -630,6 +630,7 @@
             docField.classList.add('hidden');
             lessonField.classList.add('hidden');
             reqField.classList.add('hidden');
+            document.getElementById('csv-file-field').classList.add('hidden');
 
             // Sequential tests (4,5,6): hide concurrent users, lock to 1
             const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat'].includes(type);
@@ -650,6 +651,13 @@
 
             if (['teacher_rag_sequential', 'doc_upload_repeat', 'student_lesson_sequential'].includes(type)) {
                 reqField.classList.remove('hidden');
+                // Dynamic label for Test 6
+                const label = reqField.querySelector('label');
+                if (type === 'doc_upload_repeat') {
+                    label.innerHTML = 'Upload Iterations <span class="text-red-500">*</span>';
+                } else {
+                    label.innerHTML = 'Messages to Send <span class="text-red-500">*</span>';
+                }
             }
 
             if (['teacher_flow_concurrent', 'student_chat_concurrent', 'teacher_rag_sequential', 'student_lesson_sequential'].includes(type)) {
@@ -672,12 +680,23 @@
             }
 
             // --- Messages to Send max = selected CSV's message count ---
-            const csvSelect = document.getElementById('test-message-csv');
-            const selectedCsv = csvSelect.selectedOptions[0];
-            const msgCount = selectedCsv?.dataset.count ? parseInt(selectedCsv.dataset.count) : 10;
+            // Only applies if CSV field is visible
+            const csvField = document.getElementById('csv-file-field');
             const reqInput = document.getElementById('requests-per-user');
-            reqInput.max = msgCount;
-            reqInput.value = msgCount;  // default = max
+
+            if (!csvField.classList.contains('hidden')) {
+                const csvSelect = document.getElementById('test-message-csv');
+                const selectedCsv = csvSelect.selectedOptions[0];
+                const msgCount = selectedCsv?.dataset.count ? parseInt(selectedCsv.dataset.count) : 10;
+                reqInput.max = msgCount;
+                reqInput.value = msgCount;
+                reqInput.title = `Max: ${msgCount} messages available`;
+            } else {
+                // For test 6 (iterations), remove max constraint or set a reasonable default
+                reqInput.removeAttribute('max');
+                reqInput.value = 5;
+                reqInput.title = "Number of repeated uploads";
+            }
         }
 
         // --- ASSETS: USER SETS ---

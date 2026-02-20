@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, g
 from app.utils.auth import login_required
 from app.utils.rag_service import (
     ingest_pdf,
@@ -741,7 +741,9 @@ def chat():
             'message': response_content,
             'thread_id': thread_id,
             'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-            'has_document': thread_has_document(thread_id)
+            'has_document': thread_has_document(thread_id),
+            'retrieval_score': getattr(g, 'rag_retrieval_score', None),
+            'retrieval_count': getattr(g, 'rag_retrieval_count', None)
         })
 
     except Exception as e:
