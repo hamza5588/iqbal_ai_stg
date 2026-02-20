@@ -514,12 +514,7 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
                 c = chunk_map.get(cid) if cid else {}
                 doc = Document(
                     page_content=c.get("text", ""),
-                    metadata={
-                        "source": c.get("source", ""), 
-                        "page": r.get("page", 0), 
-                        "chunk_index": r.get("chunk_index", 0),
-                        "score": r.get("score", 0.0)
-                    },
+                    metadata={"source": c.get("source", ""), "page": r.get("page", 0), "chunk_index": r.get("chunk_index", 0)},
                 )
                 docs.append(doc)
             _step("retriever_done")
@@ -1542,30 +1537,6 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     except Exception:
         pass
     # #endregion
-
-    # Calculate average score (if available) for metrics
-    try:
-        if result:
-            # result is a list of Document objects
-            scores = [doc.metadata.get("score", 0.0) for doc in result]
-            avg_score = sum(scores) / len(scores) if scores else 0.0
-            
-            # Store in Flask g for API response (side-channel)
-            try:
-                from flask import has_request_context, g
-                logger.info(f"rag_tool: checking request context. has_context={has_request_context()}")
-                if has_request_context():
-                    g.rag_retrieval_score = avg_score
-                    g.rag_retrieval_count = len(result)
-                    logger.info(f"rag_tool: stored retrieval metrics in g: score={avg_score:.2f} count={len(result)}")
-                else:
-                    logger.warning("rag_tool: NO REQUEST CONTEXT. Cannot store metrics in g.")
-            except ImportError:
-                logger.error("rag_tool: ImportError importing flask")
-            except Exception as e:
-                logger.warning(f"rag_tool: failed to store metrics in g: {e}")
-    except Exception as e:
-        logger.warning(f"rag_tool: error calculating metrics: {e}")
 
     _write_speed_log("rag_tool", thread_id, rag_steps, rag_started)
     return content_for_llm

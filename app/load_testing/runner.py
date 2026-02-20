@@ -24,6 +24,12 @@ class LoadTestRunner:
         self.result_id = result_id
         self.summary = TestResultSummary()
         self.is_running = False
+        self.stop_requested = False
+
+    def stop(self):
+        """Signal the runner to stop"""
+        self.stop_requested = True
+        self._log("Stop signal received. Terminating workers...", level="WARNING")
 
     async def run(self):
         """Main entry point to run the load test"""
@@ -66,8 +72,16 @@ class LoadTestRunner:
                 await asyncio.gather(*tasks)
                 
                 total_duration = time.time() - start_time
-                self._update_status(LoadTestStatus.COMPLETED)
-                self._log(f"Test run completed successfully in {total_duration:.1f}s")
+                
+                if self.stop_requested:
+                    self._update_status(LoadTestStatus.FAILED) # Or we could add STOPPED, but FAILED is safer for now
+                    self._log(f"Test stopped by user after {total_duration:.1f}s", level="WARNING")
+                elif self.summary.failed_requests > 0:
+                    self._update_status(LoadTestStatus.FAILED)
+                    self._log(f"Test completed with {self.summary.failed_requests} failures in {total_duration:.1f}s", level="ERROR")
+                else:
+                    self._update_status(LoadTestStatus.COMPLETED)
+                    self._log(f"Test run completed successfully in {total_duration:.1f}s")
                 
             except Exception as e:
                 total_duration = time.time() - (start_time if 'start_time' in locals() else time.time())

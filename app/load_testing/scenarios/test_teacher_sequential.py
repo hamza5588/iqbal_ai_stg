@@ -171,9 +171,7 @@ async def run(
                         summary.messages_sent += 1
                         summary.successful_requests += 1
                         ans_snippet = (data.get('answer') or data.get('message') or "")[:50].replace('\n', ' ')
-                        ret_score = data.get('retrieval_score')
-                        score_msg = f" (Confidence: {ret_score:.2f})" if ret_score is not None else ""
-                        log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"{score_msg}")
+                        log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"")
                     else:
                         summary.failed_requests += 1
                         log_func(f"[{user.email}] Chat {i+1} logic fail in {duration:.1f}s: {data.get('error')}", level="ERROR")

@@ -49,7 +49,22 @@ async def run(
                 summary.failed_requests += 1
                 summary.errors.append({"user": user.email, "error": f"Dashboard returned {response.status}"})
                 log_func(f"Dashboard failed with status {response.status} in {duration:.2f}s", level="ERROR")
+                return # Exit if dashboard failed
                 
+        # 3. Logout
+        log_func(f"[{user.email}] Step 3: Performing logout...")
+        logout_url = f"{config.base_url}/logout"
+        start_logout = time.time()
+        async with session.get(logout_url, allow_redirects=True) as response:
+            logout_duration = (time.time() - start_logout) * 1000
+            summary.total_requests += 1
+            if response.status == 200:
+                summary.successful_requests += 1
+                log_func(f"[{user.email}] Logout confirmed in {logout_duration:.0f}ms")
+            else:
+                summary.failed_requests += 1
+                log_func(f"[{user.email}] Logout failed with status {response.status}", level="ERROR")
+
         total_duration = time.time() - scenario_start
         log_func(f"Auth Test Complete. Total Duration: {total_duration:.1f}s")
     except Exception as e:

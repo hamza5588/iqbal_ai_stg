@@ -148,8 +148,12 @@ async def run(
                 log_func(f"[{user.email}] Processing (Sync) completed during upload.")
 
             # 4. Standard Question (Iterative if messages provided)
-            msg_list = messages if messages else ["Search the document for information about what to do if I didn't receive the verification email."]
+            msg_list = messages if messages else ["Summarize the key points of this document in 3 bullet points."]
             ai_response = ""
+            
+            # Simple keyword list for benchmark scoring (can be expanded)
+            target_keywords = ["summary", "key", "important", "conclusion", "details", "chapter", "section"]
+            keyword_hits = 0
             
             for idx, question in enumerate(msg_list):
                 log_func(f"[{user.email}] Sending question {idx+1}/{len(msg_list)}: \"{question[:30]}...\"")
@@ -167,11 +171,13 @@ async def run(
                         data = await resp.json()
                         if data.get('success'):
                             ai_response = data.get('answer', '') or data.get('message', '')
-                            ret_score = data.get('retrieval_score')
                             summary.successful_requests += 1
+                            log_func(f"[{user.email}] Response {idx+1} received in {chat_duration:.1f}s")
                             
-                            score_msg = f" (Confidence: {ret_score:.2f})" if ret_score is not None else ""
-                            log_func(f"[{user.email}] Response {idx+1} received in {chat_duration:.1f}s{score_msg}")
+                            # Simple keyword scoring
+                            hits = sum(1 for word in target_keywords if word.lower() in ai_response.lower())
+                            keyword_hits += hits
+                            log_func(f"[{user.email}] Keyword analysis: {hits} hits found in response {idx+1}")
                         else:
                             summary.failed_requests += 1
                             log_func(f"[{user.email}] Chat {idx+1} logic fail in {chat_duration:.1f}s: {data.get('error')}", level="ERROR")
@@ -184,21 +190,15 @@ async def run(
                 "filename": filename,
                 "processing_time": processing_time,
                 "response_length": len(ai_response),
+                "keyword_hits": keyword_hits,
                 "response": ai_response,
-                "retrieval_score": ret_score if 'ret_score' in locals() else None,
-                "status": "PASS" if ai_response else "FAIL"
+                "status": "PASS" if ai_response and keyword_hits > 0 else "FAIL"
             }
             benchmark_results.append(result_entry)
 
         # Store benchmark results in logs
-        # Store benchmark results in logs
         total_bench_duration = time.time() - scenario_start
-        
-        # Calculate mean confidence
-        conf_scores = [r.get('retrieval_score') for r in benchmark_results if r.get('retrieval_score') is not None]
-        mean_conf = sum(conf_scores) / len(conf_scores) if conf_scores else 0.0
-        
-        log_func(f"Quality Benchmark Complete. Total Duration: {total_bench_duration:.1f}s. Mean Confidence: {mean_conf:.2f}", details={"benchmark_data": benchmark_results, "mean_confidence": mean_conf})
+        log_func(f"Quality Benchmark Complete. Total Duration: {total_bench_duration:.1f}s. Avg Keywords: {sum(r['keyword_hits'] for r in benchmark_results)/len(benchmark_results) if benchmark_results else 0}", details={"benchmark_data": benchmark_results})
 
     except Exception as e:
         total_bench_duration = time.time() - scenario_start

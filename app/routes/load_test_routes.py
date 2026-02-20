@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, session, current_app
 from app.rbac.decorators import admin_only
 from app.utils.db import get_db
+from app.models.database_models import Lesson
 from app.load_testing.models import TestUserSet, LoadTestResult, LoadTestStatus, LoadTestLog, TestMessageCSV
 from app.load_testing.config import TestType, TargetEnvironment, LoadTestConfig
 from app.load_testing.user_set_manager import UserSetManager
@@ -26,7 +27,7 @@ def run_async_test(runner):
     asyncio.run(runner.run())
 
 @bp.route('/start', methods=['POST'])
-# @admin_only
+@admin_only
 def start_test():
     """Start a new load test"""
     data = request.json
@@ -94,10 +95,12 @@ def start_test():
 def stop_test(test_id):
     """Stop a running test"""
     if test_id in active_runners:
-        # Implement stop logic in runner (e.g. setting a flag)
-        # For now, we just remove from dict, but the thread keeps running until it checks the flag
-        # We need to add a stop method to LoadTestRunner
-        pass
+        runner = active_runners[test_id]
+        runner.stop()
+        # We keep it in active_runners until it actually finishes or let the runner handle removal?
+        # Better to keep it until pollStatus sees it's done. 
+        # But we'll remove it here as well for cleanliness if needed, 
+        # or just rely on the fact that is_running becomes False.
         return jsonify({'message': 'Stop signal sent'})
     return jsonify({'error': 'Test not found or not running'}), 404
 
@@ -118,7 +121,7 @@ def get_status(test_id):
     })
 
 @bp.route('/status/<int:test_id>/logs', methods=['GET'])
-# @admin_only
+@admin_only
 def get_test_logs(test_id):
     """Get recent logs for a test (live streaming)"""
     db = get_db()
@@ -180,8 +183,19 @@ def delete_all_results():
         db.rollback()
         return jsonify({'error': str(e)}), 500
 
+@bp.route('/lessons', methods=['GET'])
+@admin_only
+def list_lessons():
+    """List all finalized lessons for the dropdown"""
+    db = get_db()
+    lessons = db.query(Lesson).filter(Lesson.status == 'finalized').order_by(Lesson.created_at.desc()).all()
+    return jsonify([{
+        'id': l.id,
+        'title': l.title
+    } for l in lessons])
+
 @bp.route('/users/create', methods=['POST'])
-# @admin_only
+@admin_only
 def create_user_set():
     """Create a new set of test users"""
     data = request.json
@@ -242,7 +256,7 @@ def list_doc_sets():
     } for s in sets])
 
 @bp.route('/doc-sets/create', methods=['POST'])
-# @admin_only
+@admin_only
 def create_doc_set():
     """Create a new document set"""
     try:
@@ -261,7 +275,7 @@ def create_doc_set():
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/doc-sets/<int:set_id>/upload', methods=['POST'])
-# @admin_only
+@admin_only
 def upload_document(set_id):
     """Upload a document to a set"""
     if 'file' not in request.files:

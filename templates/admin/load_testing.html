@@ -154,28 +154,31 @@
             <div id="tests-tab" class="tab-content block">
                 <h2 class="text-2xl font-bold mb-6">Execute Load Tests</h2>
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="flex flex-col gap-6">
                     <!-- Config Form -->
-                    <div class="lg:col-span-2 bg-white rounded-lg shadow p-6">
+                    <div id="test-config-container" class="bg-white rounded-lg shadow p-6">
                         <h3 class="text-lg font-semibold mb-4">Start New Test</h3>
                         <form id="start-test-form" onsubmit="startTest(event)">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Test Scenario <span
                                             class="text-red-500">*</span></label>
                                     <select id="test-type" class="w-full border rounded px-3 py-2"
                                         onchange="updateFormFields()">
-                                        <option value="multi_user_sign_in">Test 1: Multi-User Sign-In</option>
-                                        <option value="teacher_flow_concurrent">Test 2: Teacher Full Flow</option>
-                                        <option value="student_chat_concurrent">Test 3: Student Lesson Chat</option>
-                                        <option value="teacher_rag_sequential">Test 4: Teacher Sequential RAG</option>
-                                        <option value="student_lesson_sequential">Test 5: Student Sequential Chat
+                                        <option value="multi_user_sign_in">Test 1: Auth & Dashboard</option>
+                                        <option value="teacher_flow_concurrent">Test 2/8: Teacher Full Flow (Critical
+                                            Path)</option>
+                                        <option value="student_chat_concurrent">Test 3: Student Lesson Chat (Concurrent)
                                         </option>
-                                        <option value="doc_upload_repeat">Test 6: Repeated Ingest</option>
-                                        <option value="rag_quality_benchmark">Test 7: RAG Pipeline Quality</option>
+                                        <option value="teacher_rag_sequential">Test 4: Teacher Sequential RAG (Stress
+                                            Test)</option>
+                                        <option value="student_lesson_sequential">Test 5: Student Sequential Chat
+                                            (Stress Test)</option>
+                                        <option value="doc_upload_repeat">Test 6: Repeated Ingest (Stability)</option>
+                                        <option value="rag_quality_benchmark">Test 7: RAG Pipeline Quality (Benchmark)
+                                        </option>
                                     </select>
                                 </div>
-                                <!-- Base URL removed, using global setting -->
                                 <div id="concurrent-users-field">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Concurrent Users <span
                                             class="text-red-500">*</span></label>
@@ -198,10 +201,11 @@
                                     </select>
                                 </div>
                                 <div id="lesson-id-field" class="hidden">
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Lesson ID <span
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Lesson <span
                                             class="text-red-500">*</span></label>
-                                    <input type="text" id="lesson-id" placeholder="L000..."
-                                        class="w-full border rounded px-3 py-2">
+                                    <select id="lesson-id" class="w-full border rounded px-3 py-2">
+                                        <option value="">Loading lessons...</option>
+                                    </select>
                                 </div>
                                 <div id="req-per-user-field" class="hidden">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Messages to Send <span
@@ -220,18 +224,34 @@
                             </div>
                             <div class="mt-6 flex justify-end">
                                 <button type="submit"
-                                    class="bg-iqbal-primary text-white px-6 py-2 rounded hover:bg-blue-600">
-                                    Start Test
+                                    class="bg-iqbal-primary text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors shadow-sm font-medium">
+                                    <i class="fas fa-play mr-2"></i>Start Test
                                 </button>
                             </div>
                         </form>
                     </div>
 
-                    <!-- Active Tests -->
-                    <div class="bg-white rounded-lg shadow p-6">
-                        <h3 class="text-lg font-semibold mb-4">Active Tests</h3>
-                        <div id="active-tests-list" class="space-y-4">
-                            <p class="text-gray-500 text-sm">No tests running.</p>
+                    <!-- Active Tests & Live Logs -->
+                    <div class="bg-white rounded-lg shadow p-6 border-t-2 border-iqbal-primary">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold flex items-center">
+                                <i class="fas fa-terminal mr-2 text-gray-600"></i>Active Tests & Live Logs
+                            </h3>
+                            <div id="test-status-badge"
+                                class="hidden px-3 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-800">
+                                Test Running
+                            </div>
+                        </div>
+                        <div id="active-tests-list"
+                            class="space-y-2 overflow-y-auto font-mono text-sm bg-gray-900 text-green-400 p-4 rounded-lg shadow-inner"
+                            style="max-height: 500px; min-height: 200px;">
+                            <p class="text-gray-500 italic opacity-50">Waiting for test to start...</p>
+                        </div>
+                        <div id="test-actions-footer" class="mt-4 hidden flex justify-end">
+                            <button onclick="stopActiveTest()"
+                                class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors shadow-sm flex items-center text-sm font-medium">
+                                <i class="fas fa-stop-circle mr-2"></i>Stop Test
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -463,16 +483,13 @@
             document.getElementById('global-target-url').value = savedUrl;
             document.getElementById('global-api-key').value = savedKey;
 
-            // Explicitly set the variables (in case they were used elsewhere before load)
-            // But main logic is in checkEnv
             updateEnvBadge(savedUrl);
-
-            // Let's default to tests if configured, else settings?
-            // Actually, keep default behavior but update badge.
 
             loadUserSets();
             loadDocSets();
-            loadResults(); // Changed from loadTestResults() to loadResults() to match existing function name
+            loadMessageCSVs();
+            loadLessons();
+            loadResults();
         });
 
         function updateEnvBadge(url) {
@@ -779,7 +796,7 @@
         }
 
         async function deleteUserSet(setId) {
-            if (!confirm("Delete this user set?")) return;
+            if (!confirm("Delete this user set? This will also delete all users in this set. Proceed?")) return;
             try {
                 const res = await fetchWithProxy(`/api/load-test/users/${setId}`, { method: 'DELETE' });
                 const data = await res.json();
@@ -787,6 +804,25 @@
                 else alert(data.error);
             } catch (e) {
                 alert("Delete failed");
+            }
+        }
+
+        async function loadLessons() {
+            try {
+                const res = await fetchWithProxy('/api/load-test/lessons');
+                const data = await res.json();
+                const select = document.getElementById('lesson-id');
+                select.innerHTML = '<option value="">Select a finalized lesson</option>';
+
+                data.forEach(l => {
+                    const option = document.createElement('option');
+                    option.value = l.id;
+                    option.textContent = `${l.title} (ID: ${l.id})`;
+                    select.appendChild(option);
+                });
+            } catch (e) {
+                console.error("Failed to load lessons", e);
+                document.getElementById('lesson-id').innerHTML = '<option value="">Error loading lessons</option>';
             }
         }
 
@@ -927,24 +963,36 @@
         }
         // --- BLUR / DISABLE WHILE TEST RUNS ---
         function setTestRunning(running) {
-            const overlay = document.getElementById('running-overlay');
             const startBtn = document.querySelector('#start-test-form button[type="submit"]');
-            const formArea = document.getElementById('start-test-form');
+            const configArea = document.getElementById('test-config-container');
+            const actionFooter = document.getElementById('test-actions-footer');
+            const statusBadge = document.getElementById('test-status-badge');
+
             if (running) {
-                overlay.style.display = 'block';
                 startBtn.disabled = true;
-                startBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                formArea.classList.add('opacity-40', 'pointer-events-none');
+                startBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Running...';
+                configArea.classList.add('opacity-40', 'pointer-events-none');
+                actionFooter.classList.remove('hidden');
+                statusBadge.classList.remove('hidden');
+                statusBadge.textContent = 'Test Running';
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-800 animate-pulse';
             } else {
-                overlay.style.display = 'none';
                 startBtn.disabled = false;
-                startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                formArea.classList.remove('opacity-40', 'pointer-events-none');
+                startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Start Test';
+                configArea.classList.remove('opacity-40', 'pointer-events-none');
+                actionFooter.classList.add('hidden');
+                statusBadge.classList.remove('animate-pulse');
+                statusBadge.classList.add('bg-green-100', 'text-green-800');
+                statusBadge.textContent = 'Test Finished';
             }
         }
 
         async function startTest(e) {
             e.preventDefault();
+
+            // Clear previous logs
+            const logList = document.getElementById('active-tests-list');
+            logList.innerHTML = '<div class="text-blue-400">Initializing test scenario...</div>';
 
             // --- Validation ---
             const testType = document.getElementById('test-type').value;
@@ -957,8 +1005,8 @@
             if (needsDoc && !document.getElementById('test-doc-set').value) {
                 alert('Please select a Document Set for this test type.'); return;
             }
-            if (needsLesson && !document.getElementById('lesson-id').value.trim()) {
-                alert('Please enter a Lesson ID for this test type.'); return;
+            if (needsLesson && !document.getElementById('lesson-id').value) {
+                alert('Please select a Lesson for this test type.'); return;
             }
 
             // Get Global Config
@@ -975,7 +1023,7 @@
             const concurrentMax = parseInt(concurrentInput.max) || 100;
             const reqMax = parseInt(reqInput.max) || 10;
             if (concurrentVal > concurrentMax) concurrentVal = concurrentMax;
-            if (reqVal > reqMax) reqVal = reqMax;
+            if (reqVal > reqMax) reqVal = reqVal; // Keep original if no max or valid
 
             const configData = {
                 test_type: testType,
@@ -997,8 +1045,7 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('Test Started! ID: ' + data.test_id);
-                    document.getElementById('active-tests-list').dataset.testId = data.test_id;
+                    logList.dataset.testId = data.test_id;
                     pollStatus(data.test_id);
                 } else {
                     setTestRunning(false);
@@ -1051,7 +1098,7 @@
         }
 
         async function deleteResult(id) {
-            if (!confirm('Delete this test result?')) return;
+            // No confirm for individual delete as requested
             try {
                 const res = await fetchWithProxy(`/api/load-test/results/${id}`, { method: 'DELETE' });
                 const data = await res.json();
@@ -1201,35 +1248,38 @@
 
         async function pollStatus(testId) {
             const list = document.getElementById('active-tests-list');
-            const logConsole = document.getElementById('live-log-console') || createLogConsole(list);
 
-            // 1. Poll logs FIRST
-            const lastTimestamp = logConsole.getAttribute('data-last-timestamp') || '';
+            // Log Management: Clear if it's the first pull and contains placeholder
+            if (list.innerHTML.includes('Waiting for test') || list.innerHTML.includes('Initializing')) {
+                list.innerHTML = '';
+                list.setAttribute('data-last-timestamp', '');
+            }
+
+            const lastTimestamp = list.getAttribute('data-last-timestamp') || '';
             try {
                 const logRes = await fetchWithProxy(`/api/load-test/status/${testId}/logs?since=${lastTimestamp}`);
                 if (logRes.ok) {
                     const logs = await logRes.json();
-                    const container = logConsole.querySelector('.log-container');
 
                     logs.forEach(l => {
                         const line = document.createElement('div');
                         const ts = l.timestamp.split('T')[1].split('.')[0];
 
-                        // Color coding based on level and content
+                        // Color coding
                         let colorClass = 'text-gray-300';
                         if (l.level === 'ERROR') colorClass = 'text-red-400';
                         else if (l.level === 'WARNING') colorClass = 'text-yellow-400';
                         else if (l.message.includes('success') || l.message.includes('complete')) colorClass = 'text-green-400';
-                        else if (l.message.includes('[') && l.message.includes(']')) colorClass = 'text-blue-300'; // Match progress/percentages
+                        else if (l.message.includes('[') && l.message.includes(']')) colorClass = 'text-blue-300';
 
                         line.className = `text-xs font-mono mb-1 ${colorClass}`;
                         line.innerHTML = `<span class="text-gray-500">[${ts}]</span> ${l.message}`;
-                        container.appendChild(line);
-                        logConsole.setAttribute('data-last-timestamp', l.timestamp);
+                        list.appendChild(line);
+                        list.setAttribute('data-last-timestamp', l.timestamp);
                     });
 
                     if (logs.length > 0) {
-                        container.scrollTop = container.scrollHeight;
+                        list.scrollTop = list.scrollHeight;
                     }
                 }
             } catch (err) {
@@ -1242,21 +1292,14 @@
                 if (res.ok) {
                     const data = await res.json();
                     if (data.status === 'completed' || data.status === 'failed') {
-                        const badge = document.getElementById('status-badge-' + testId);
-                        if (badge) {
-                            badge.className = `px-2 py-1 rounded text-xs ${data.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-                            badge.textContent = data.status;
-                        }
-
-                        // Pulse 'Live' to static 'Finished'
-                        const liveIndicator = logConsole.querySelector('.animate-pulse');
-                        if (liveIndicator) {
-                            liveIndicator.className = 'text-xs text-gray-500';
-                            liveIndicator.textContent = '● Finished';
-                        }
-
-                        // Re-enable the form
+                        // Re-enable the form & update labels
                         setTestRunning(false);
+
+                        // Auto-open Result after 500ms
+                        setTimeout(() => {
+                            viewResult(testId);
+                            loadResults(); // Refresh table
+                        }, 500);
 
                         return; // Stop polling
                     }
@@ -1265,30 +1308,27 @@
                 console.warn("Status polling failed:", err);
             }
 
-            setTimeout(() => pollStatus(testId), 2000);
+            setTimeout(() => pollStatus(testId), 1500);
         }
 
-        function createLogConsole(parent) {
-            const div = document.createElement('div');
-            div.id = 'live-log-console';
-            div.className = 'mt-4 bg-gray-900 rounded p-4 border border-gray-700';
-            div.innerHTML = `
-                <div class="flex justify-between items-center mb-2 border-b border-gray-700 pb-2">
-                    <span class="text-gray-400 text-xs uppercase font-bold">Live Logs</span>
-                    <span class="text-xs text-green-400 animate-pulse">● Live</span>
-                </div>
-                <div class="log-container h-64 overflow-y-auto"></div>
-            `;
-            parent.innerHTML = ''; // Clear previous
-            parent.appendChild(div);
+        async function stopActiveTest() {
+            const list = document.getElementById('active-tests-list');
+            const testId = list.dataset.testId;
+            if (!testId) return;
 
-            // Re-add status badge wrapper
-            const badge = document.createElement('div');
-            badge.className = 'mb-2 flex justify-between';
-            badge.innerHTML = `<span class="font-bold">Test Running...</span><span id="status-badge-${parent.dataset.testId}" class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">running</span>`;
-            parent.insertBefore(badge, div);
+            if (!confirm("Stop the currently running test?")) return;
 
-            return div;
+            try {
+                const res = await fetchWithProxy(`/api/load-test/stop/${testId}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.message) {
+                    // Logs will show termination soon
+                } else {
+                    alert("Stop failed: " + data.error);
+                }
+            } catch (e) {
+                alert("Request error: " + e.message);
+            }
         }
 
         // --- ASSETS: MESSAGE CSVS ---
