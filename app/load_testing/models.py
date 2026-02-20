@@ -86,6 +86,16 @@ class LoadTestResult(Base):
     # Relationships
     logs = relationship("LoadTestLog", back_populates="result", cascade="all, delete-orphan")
 
+class TestMessageCSV(Base):
+    """CSV containing messages for sequence-based load tests"""
+    __tablename__ = 'load_test_message_csvs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    file_path = Column(String(512), nullable=False)
+    message_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class LoadTestLog(Base):
     """Detailed log entry for a load test"""
     __tablename__ = 'load_test_logs'

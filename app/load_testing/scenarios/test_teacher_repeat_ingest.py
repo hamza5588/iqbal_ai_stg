@@ -18,7 +18,8 @@ async def run(
     user: Any, 
     config: LoadTestConfig, 
     summary: TestResultSummary, 
-    log_func: Callable
+    log_func: Callable,
+    messages: List[str] = None
 ):
     """
     Execute Test 6: Same Document Uploaded N Times (Consistency/Stress).
@@ -103,6 +104,7 @@ async def run(
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
+                        summary.total_file_size_mb += os.path.getsize(file_path) / (1024 * 1024)
                         task_id = data.get('task_id')
                         summary.successful_requests += 1
                     else:
@@ -132,6 +134,7 @@ async def run(
                             if status == 'success':
                                 thread_id = data.get('thread_id')
                                 p_time = data.get('processing_time_seconds', 0)
+                                summary.total_ingestion_time += float(p_time) if p_time else 0
                                 chunks = data.get('chunks', 0)
                                 
                                 processing_times.append(float(p_time) if p_time else 0)
@@ -166,6 +169,7 @@ async def run(
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get('success'):
+                            summary.messages_sent += 1
                             chat_responses.append(data.get('message', ''))
                             summary.successful_requests += 1
                         else:

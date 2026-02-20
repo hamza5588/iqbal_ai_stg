@@ -1,8 +1,9 @@
 import time
+import asyncio
 import aiohttp
 import logging
 import random
-from typing import Callable, Any
+from typing import Callable, Any, List
 from app.load_testing.config import LoadTestConfig, TestResultSummary
 
 logger = logging.getLogger(__name__)
@@ -31,27 +32,32 @@ async def run(
     user: Any, 
     config: LoadTestConfig, 
     summary: TestResultSummary, 
-    log_func: Callable
+    log_func: Callable,
+    messages: List[str] = None
 ):
     """
     Execute Test 5: Single Student Sequential Lesson Chat (Stress Test).
     Flow:
     1. Loop N times: Send question -> await response
     """
+    scenario_start = time.time()
     if not config.lesson_id:
         msg = "Test 5 requires a valid lesson_id"
         log_func(msg, level="ERROR")
         summary.errors.append({"user": user.email, "error": msg})
         return
 
-    requests_count = config.requests_per_user or 10
-    log_func(f"Starting sequential student chat loop ({requests_count} interactions)...")
+    msg_list = messages if messages else SAMPLE_QUESTIONS
+    # Limit to config.requests_per_user if set
+    if config.requests_per_user and config.requests_per_user > 0:
+        msg_list = msg_list[:config.requests_per_user]
+    requests_per_user = len(msg_list)
+    
+    log_func(f"[{user.email}] Starting student chat for {requests_per_user} messages...")
     url = f"{config.base_url}/api/lessons/ask_question"
     
-    for i in range(requests_count):
-        question = SAMPLE_QUESTIONS[i % len(SAMPLE_QUESTIONS)]
-        # Add index to make it unique?
-        question = f"[{i+1}/{requests_count}] {question}"
+    for i, question in enumerate(msg_list):
+        log_func(f"[{user.email}] Sending message {i+1}/{requests_per_user}: \"{question[:50]}...\"")
         
         payload = {
             "lesson_id": config.lesson_id,
@@ -68,17 +74,22 @@ async def run(
                     data = await resp.json()
                     answer = data.get('answer', '')
                     if answer:
+                        summary.messages_sent += 1
                         summary.successful_requests += 1
-                        # log_func(f"Q {i+1}/{requests_count}: Answer received ({duration:.2f}s)")
+                        ans_snippet = answer[:50].replace('\n', ' ')
+                        log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"")
                     else:
                         summary.failed_requests += 1
-                        log_func(f"Q {i+1}/{requests_count}: Empty answer", level="ERROR")
+                        log_func(f"[{user.email}] Chat {i+1} empty response in {duration:.1f}s", level="ERROR")
                 else:
                     summary.failed_requests += 1
-                    log_func(f"Q {i+1}/{requests_count}: Failed {resp.status}", level="ERROR")
+                    log_func(f"[{user.email}] Chat {i+1} HTTP error {resp.status} in {duration:.1f}s", level="ERROR")
                     
         except Exception as e:
-            log_func(f"Student sequential exception: {str(e)}", level="ERROR")
+            log_func(f"[{user.email}] student chat exception: {str(e)}", level="ERROR")
             summary.errors.append({"user": user.email, "error": str(e)})
             
-    log_func("Sequential student chat loop completed.")
+        await asyncio.sleep(0.5)
+            
+    total_user_duration = time.time() - scenario_start
+    log_func(f"[{user.email}] Student Test Complete. Total Duration: {total_user_duration:.1f}s")

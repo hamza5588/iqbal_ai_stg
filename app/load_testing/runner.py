@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.load_testing.config import LoadTestConfig, TestType, TestResultSummary
 from app.load_testing.models import TestUser, LoadTestResult, LoadTestLog, LoadTestStatus
-from app.utils.db import get_session_factory
+from app.utils.db import get_db, close_db
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -18,68 +18,67 @@ logger = logging.getLogger(__name__)
 class LoadTestRunner:
     """Core execution engine for load tests"""
     
-    def __init__(self, config: LoadTestConfig, result_id: int):
+    def __init__(self, app, config: LoadTestConfig, result_id: int):
+        self.app = app
         self.config = config
         self.result_id = result_id
         self.summary = TestResultSummary()
         self.is_running = False
-        self._session_factory = get_session_factory()
 
     async def run(self):
         """Main entry point to run the load test"""
-        self.is_running = True
-        logger.info(f"Starting load test {self.result_id}: {self.config.test_type.value} with {self.config.concurrent_users} users")
-        
-        # Update status to RUNNING
-        self._update_status(LoadTestStatus.RUNNING)
-        self._log(f"Test started. Configuration: {self.config}")
+        with self.app.app_context():
+            self.is_running = True
+            logger.info(f"Starting load test {self.result_id}: {self.config.test_type.value} with {self.config.concurrent_users} users")
+            
+            # Update status to RUNNING
+            self._update_status(LoadTestStatus.RUNNING)
+            self._log(f"Test started. Configuration: {self.config}")
+            
+            # Load messages upfront (safety First)
+            self.messages = []
+            if self.config.csv_file_id:
+                try:
+                    from app.load_testing.message_csv_manager import MessageCSVManager
+                    self.messages = MessageCSVManager.get_messages(self.config.csv_file_id)
+                    self._log(f"Loaded {len(self.messages)} messages from CSV ID {self.config.csv_file_id}")
+                except Exception as e:
+                    logger.error(f"Failed to load messages from CSV {self.config.csv_file_id}: {e}")
+                    self._log(f"Failed to load messages from CSV: {str(e)}", level="ERROR")
 
-        try:
-            # Get test users
-            users = self._get_test_users()
-            if not users:
-                raise ValueError(f"No users found for test set {self.config.test_user_set_id}")
-            
-            # Limit users to concurrent_users count if we have more users than needed
-            # Or cycle through them if we have fewer (though usually we matched them)
-            if len(users) > self.config.concurrent_users:
-                users = users[:self.config.concurrent_users]
-            
-            logger.info(f"Using {len(users)} users for the test")
+            try:
+                # Get test users
+                users = self._get_test_users()
+                if not users:
+                    raise ValueError(f"No users found for test set {self.config.test_user_set_id}")
+                
+                # Limit users to concurrent_users count
+                if len(users) > self.config.concurrent_users:
+                    users = users[:self.config.concurrent_users]
+                
+                logger.info(f"Using {len(users)} users for the test")
 
-            # Create async tasks for each user/worker
-            tasks = []
-            start_time = time.time()
-            
-            # Use a semaphore to control concurrency if needed, though we span workers per user
-            # For now, we spawn one worker per user up to concurrent_users
-            
-            async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(unsafe=True)) as session:
-                # We might need separate sessions for each user to simulate real browsers properly
-                # actually, aiohttp ClientSession shares cookies if reused. 
-                # So we MUST create a separate session for each worker/user to isolate cookies.
-                pass
-
-            # Launch workers
-            # We use a list of worker coroutines
-            for i, user in enumerate(users):
-                tasks.append(self._worker(i, user, start_time))
-            
-            # Wait for all tasks to complete
-            await asyncio.gather(*tasks)
-            
-            # Test run complete
-            self._update_status(LoadTestStatus.COMPLETED)
-            self._log("Test run completed successfully")
-            
-        except Exception as e:
-            logger.error(f"Test run failed: {str(e)}")
-            self._log(f"Test run failed: {str(e)}", level="ERROR", details={"traceback": traceback.format_exc()})
-            self._update_status(LoadTestStatus.FAILED)
-        finally:
-            self.is_running = False
-            # Save final metrics
-            self._save_metrics()
+                start_time = time.time()
+                tasks = []
+                for i, user in enumerate(users):
+                    tasks.append(self._worker(i, user, start_time))
+                
+                await asyncio.gather(*tasks)
+                
+                total_duration = time.time() - start_time
+                self._update_status(LoadTestStatus.COMPLETED)
+                self._log(f"Test run completed successfully in {total_duration:.1f}s")
+                
+            except Exception as e:
+                total_duration = time.time() - (start_time if 'start_time' in locals() else time.time())
+                logger.error(f"Test run failed after {total_duration:.1f}s: {str(e)}")
+                self._log(f"Test run failed: {str(e)}", level="ERROR")
+                self._update_status(LoadTestStatus.FAILED)
+            finally:
+                self.is_running = False
+                self._save_metrics()
+                # Important: cleanup session at end of thread
+                close_db()
 
     async def _worker(self, worker_id: int, user: TestUser, start_time: float):
         """Async worker for a single user"""
@@ -103,7 +102,7 @@ class LoadTestRunner:
                 
         except Exception as e:
             logger.error(f"Worker {worker_id} execution error: {str(e)}")
-            self.summary.errors.append({"user": user_email, "error": str(e), "traceback": traceback.format_exc()})
+            self.summary.errors.append({"user": user_email, "error": str(e)})
             self._log(f"Worker {worker_id} error: {str(e)}", level="ERROR")
 
     async def _login(self, session: aiohttp.ClientSession, user: TestUser) -> bool:
@@ -177,27 +176,27 @@ class LoadTestRunner:
             
         elif test_type == TestType.TEACHER_FLOW_CONCURRENT:
             from app.load_testing.scenarios import test_teacher_flow
-            await test_teacher_flow.run(session, user, config, self.summary, self._log)
+            await test_teacher_flow.run(session, user, config, self.summary, self._log, messages=self.messages)
             
         elif test_type == TestType.STUDENT_CHAT_CONCURRENT:
             from app.load_testing.scenarios import test_student_chat
-            await test_student_chat.run(session, user, config, self.summary, self._log)
+            await test_student_chat.run(session, user, config, self.summary, self._log, messages=self.messages)
             
         elif test_type == TestType.TEACHER_RAG_SEQUENTIAL:
             from app.load_testing.scenarios import test_teacher_sequential
-            await test_teacher_sequential.run(session, user, config, self.summary, self._log)
+            await test_teacher_sequential.run(session, user, config, self.summary, self._log, messages=self.messages)
             
         elif test_type == TestType.STUDENT_LESSON_SEQUENTIAL:
             from app.load_testing.scenarios import test_student_sequential
-            await test_student_sequential.run(session, user, config, self.summary, self._log)
+            await test_student_sequential.run(session, user, config, self.summary, self._log, messages=self.messages)
             
         elif test_type == TestType.DOC_UPLOAD_REPEAT:
             from app.load_testing.scenarios import test_teacher_repeat_ingest
-            await test_teacher_repeat_ingest.run(session, user, config, self.summary, self._log)
+            await test_teacher_repeat_ingest.run(session, user, config, self.summary, self._log, messages=self.messages)
             
         elif test_type == TestType.RAG_QUALITY_BENCHMARK:
             from app.load_testing.scenarios import test_rag_pipeline_quality
-            await test_rag_pipeline_quality.run(session, user, config, self.summary, self._log)
+            await test_rag_pipeline_quality.run(session, user, config, self.summary, self._log, messages=self.messages)
             
         else:
             logger.error(f"Unknown test type: {test_type}")
@@ -206,56 +205,45 @@ class LoadTestRunner:
     def _get_test_users(self) -> List[TestUser]:
         """Retrieve test users from DB, joining with main User table to get live passwords"""
         from app.models.database_models import User
-        session = self._session_factory()
-        try:
-            if self.config.test_user_set_id:
-                # Query TestUser but join with User to get the latest password
-                # We overwrite the password in the TestUser objects with the live one
-                results = session.query(TestUser, User.password.label('live_password')).join(
-                    User, TestUser.real_user_id == User.id
-                ).filter(
-                    TestUser.user_set_id == self.config.test_user_set_id,
-                    TestUser.is_active == True
-                ).all()
-                
-                users = []
-                for test_user, live_password in results:
-                    # Update the detached object with the live password
-                    test_user.password = live_password
-                    users.append(test_user)
-                
-                # Detach objects from session
-                session.expunge_all()
-                self._log(f"Successfully loaded {len(users)} users from Set ID {self.config.test_user_set_id} with live passwords")
-                return users
-            return []
-        finally:
-            session.close()
+        db = get_db()
+        if self.config.test_user_set_id:
+            results = db.query(TestUser, User.password.label('live_password')).join(
+                User, TestUser.real_user_id == User.id
+            ).filter(
+                TestUser.user_set_id == self.config.test_user_set_id,
+                TestUser.is_active == True
+            ).all()
+            
+            users = []
+            for test_user, live_password in results:
+                test_user.password = live_password
+                users.append(test_user)
+            
+            self._log(f"Successfully loaded {len(users)} users from Set ID {self.config.test_user_set_id} with live passwords")
+            return users
+        return []
 
     def _update_status(self, status: LoadTestStatus):
         """Update test status in DB"""
-        session = self._session_factory()
+        db = get_db()
         try:
-            result = session.query(LoadTestResult).get(self.result_id)
+            result = db.get(LoadTestResult, self.result_id)
             if result:
                 result.status = status.value
                 if status == LoadTestStatus.COMPLETED or status == LoadTestStatus.FAILED:
                     result.completed_at = datetime.utcnow()
-                session.commit()
+                db.commit()
         except Exception as e:
             logger.error(f"Failed to update status: {str(e)}")
-        finally:
-            session.close()
 
     def _log(self, message: str, level: str = "INFO", details: Optional[Dict] = None):
         """Write a log entry to DB"""
-        # Also log to file/console
         if level == "ERROR":
             logger.error(f"[Test {self.result_id}] {message}")
         else:
             logger.info(f"[Test {self.result_id}] {message}")
             
-        session = self._session_factory()
+        db = get_db()
         try:
             log_entry = LoadTestLog(
                 result_id=self.result_id,
@@ -264,28 +252,27 @@ class LoadTestRunner:
                 details=details,
                 timestamp=datetime.utcnow()
             )
-            session.add(log_entry)
-            session.commit()
+            db.add(log_entry)
+            db.commit()
         except Exception as e:
             logger.error(f"Failed to write log to DB: {str(e)}")
-        finally:
-            session.close()
 
     def _save_metrics(self):
         """Save final metrics to DB"""
-        session = self._session_factory()
+        db = get_db()
         try:
-            result = session.query(LoadTestResult).get(self.result_id)
+            result = db.get(LoadTestResult, self.result_id)
             if result:
                 metrics = {
                     "total_requests": self.summary.total_requests,
                     "successful_requests": self.summary.successful_requests,
                     "failed_requests": self.summary.failed_requests,
+                    "messages_sent": self.summary.messages_sent,
+                    "total_file_size_mb": round(self.summary.total_file_size_mb, 2),
+                    "total_ingestion_time": round(self.summary.total_ingestion_time, 2),
                     "errors": self.summary.errors
                 }
                 result.metrics = metrics
-                session.commit()
+                db.commit()
         except Exception as e:
             logger.error(f"Failed to save metrics: {str(e)}")
-        finally:
-            session.close()

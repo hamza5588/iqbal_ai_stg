@@ -52,3 +52,6 @@ class TestResultSummary:
     p95_response_time: float = 0.0
     errors: List[Dict[str, Any]] = field(default_factory=list)
     llm_consistency_score: Optional[float] = None  # For Test 6
+    messages_sent: int = 0
+    total_file_size_mb: float = 0.0
+    total_ingestion_time: float = 0.0

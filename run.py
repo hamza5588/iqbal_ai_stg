@@ -20,8 +20,10 @@ if __name__ == '__main__':
     # Get port from command line argument or default to 5000
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     
-    # Enable debug mode but disable reloader to avoid permission issues in containers
+    # Enable debug mode
     debug = os.environ.get('FLASK_DEBUG', '0') == '1'
     
-    # Never use reloader in containerized environments
-    app.run(debug=debug, host='0.0.0.0', port=port, use_reloader=False, threaded=False)
+    # Enable reloader in debug mode if not explicitly disabled
+    use_reloader = debug and os.environ.get('FLASK_USE_RELOADER', '1') == '1'
+    
+    app.run(debug=debug, host='0.0.0.0', port=port, use_reloader=use_reloader, threaded=False)

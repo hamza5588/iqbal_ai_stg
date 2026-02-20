@@ -4,7 +4,7 @@ import aiohttp
 import logging
 import random
 import os
-from typing import Callable, Any
+from typing import Callable, Any, List
 from app.load_testing.config import LoadTestConfig, TestResultSummary
 from app.load_testing.models import TestDocument, TestDocumentSet
 from app.utils.db import get_session_factory
@@ -16,7 +16,8 @@ async def run(
     user: Any, 
     config: LoadTestConfig, 
     summary: TestResultSummary, 
-    log_func: Callable
+    log_func: Callable,
+    messages: List[str] = None
 ):
     """
     Execute Test 4: Single Teacher Sequential RAG Chat (Stress Test).
@@ -24,6 +25,7 @@ async def run(
     1. Create Conversation & Upload PDF (Once)
     2. Loop N times: Send chat message -> await response
     """
+    scenario_start = time.time()
     try:
         # 0. Get a document to upload
         if not config.test_doc_set_id:
@@ -57,24 +59,29 @@ async def run(
             db_session.close()
 
         # 1. Setup: Create Conversation & Upload PDF
-        log_func("Setting up RAG session...")
+        log_func(f"[{user.email}] Step 1: Setting up conversation...")
         
         # Create Conversation
         create_conv_url = f"{config.base_url}/create_conversation"
         conversation_id = None
+        start_setup = time.time()
+        
         async with session.post(create_conv_url, json={"title": f"Stress Test {time.time()}"}) as resp:
+            setup_duration = (time.time() - start_setup) * 1000
+            summary.total_requests += 1 # Action 1: Create Conversation
             if resp.status == 200:
                 data = await resp.json()
                 conversation_id = data.get('conversation_id')
-                summary.total_requests += 1
                 summary.successful_requests += 1
+                log_func(f"[{user.email}] Conv created: {conversation_id} in {setup_duration:.0f}ms")
             else:
                 summary.total_requests += 1
                 summary.failed_requests += 1
-                log_func(f"Failed to create conversation: {resp.status}", level="ERROR")
+                log_func(f"[{user.email}] Failed to create conv: {resp.status} in {setup_duration:.0f}ms", level="ERROR")
                 return
 
         # Upload PDF
+        log_func(f"[{user.email}] Step 2: Uploading {filename}...")
         ingest_url = f"{config.base_url}/api/rag/ingest"
         form_data = aiohttp.FormData()
         form_data.add_field('file', open(file_path, 'rb'), filename=filename, content_type='application/pdf')
@@ -83,95 +90,101 @@ async def run(
         
         task_id = None
         thread_id = None
+        upload_start = time.time()
         
         async with session.post(ingest_url, data=form_data) as resp:
-            summary.total_requests += 1
+            upload_duration = (time.time() - upload_start) * 1000
+            summary.total_requests += 1 # Action 2: Ingest Action
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('success'):
                     task_id = data.get('task_id')
+                    summary.total_file_size_mb += os.path.getsize(file_path) / (1024 * 1024)
                     summary.successful_requests += 1
+                    log_func(f"[{user.email}] Upload success in {upload_duration:.0f}ms")
                 else:
                     summary.failed_requests += 1
-                    log_func(f"Upload failed: {data.get('error')}", level="ERROR")
+                    log_func(f"[{user.email}] Upload logic fail in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
                     return
             else:
                 summary.failed_requests += 1
-                log_func(f"Upload HTTP error: {resp.status}", level="ERROR")
+                log_func(f"[{user.email}] Upload HTTP error in {upload_duration:.0f}ms: {resp.status}", level="ERROR")
                 return
 
         # Poll Status
         if task_id:
+            log_func(f"[{user.email}] Step 3: Ingestion processing (Async)...")
             poll_url = f"{config.base_url}/api/rag/ingest/status/{task_id}"
             max_retries = 30
             retry_count = 0
+            poll_start = time.time()
             while retry_count < max_retries:
+                retry_count += 1
                 async with session.get(poll_url) as resp:
-                    summary.total_requests += 1
                     if resp.status == 200:
                         data = await resp.json()
                         status = data.get('status')
-                        summary.successful_requests += 1
                         if status == 'success':
                             thread_id = data.get('thread_id')
-                            log_func(f"Setup complete. Thread ID: {thread_id}")
+                            summary.total_ingestion_time += time.time() - poll_start
+                            log_func(f"[{user.email}] Setup complete in {time.time() - poll_start:.1f}s")
                             break
                         elif status in ['failure', 'revoked']:
-                            log_func(f"Ingest failed: {status}", level="ERROR")
+                            log_func(f"[{user.email}] Ingest failed in {time.time() - poll_start:.1f}s: {status}", level="ERROR")
                             return
                     else:
-                        summary.failed_requests += 1
-                retry_count += 1
+                        log_func(f"[{user.email}] Poll error {resp.status}", level="WARNING")
                 await asyncio.sleep(2)
             
             if not thread_id:
-                log_func("Ingest timed out", level="ERROR")
+                log_func(f"[{user.email}] Ingest timed out in {time.time() - poll_start:.1f}s", level="ERROR")
                 return
+        else:
+            log_func(f"[{user.email}] Step 3: Processing (Synchronous) completed during Step 2.")
 
         # 2. Sequential Chat Loop
-        requests_count = config.requests_per_user or 10
-        log_func(f"Starting sequential chat loop ({requests_count} interactions)...")
+        msg_list = messages if messages else ["Hello, summarize this."]
+        # Limit to config.requests_per_user if set
+        if config.requests_per_user and config.requests_per_user > 0:
+            msg_list = msg_list[:config.requests_per_user]
+        requests_per_user = len(msg_list)
+        
+        log_func(f"[{user.email}] Starting sequential chat loop for {requests_per_user} messages...")
         chat_url = f"{config.base_url}/api/rag/chat"
         
-        chat_questions = [
-            "Summarize the first page.",
-            "What is the main argument?",
-            "Explain the conclusion.",
-            "List three key points.",
-            "How does this relate to previous topics?",
-        ]
-        
-        for i in range(requests_count):
-            msg = chat_questions[i % len(chat_questions)]
+        for i, msg in enumerate(msg_list):
             payload = {
-                "message": f"[{i+1}/{requests_count}] {msg}",
+                "message": msg,
                 "thread_id": thread_id,
                 "conversation_id": conversation_id
             }
             
+            log_func(f"[{user.email}] Sending message {i+1}/{requests_per_user}: \"{msg[:50]}...\"")
             start_req = time.time()
             async with session.post(chat_url, json=payload, headers={"Content-Type": "application/json"}) as resp:
                 duration = time.time() - start_req
-                summary.total_requests += 1
+                summary.total_requests += 1 # Each chat message is an Action
                 
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
+                        summary.messages_sent += 1
                         summary.successful_requests += 1
-                        # log_func(f"Req {i+1}/{requests_count}: Success ({duration:.2f}s)")
+                        ans_snippet = (data.get('answer') or data.get('message') or "")[:50].replace('\n', ' ')
+                        log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"")
                     else:
                         summary.failed_requests += 1
-                        log_func(f"Req {i+1}/{requests_count}: Logic fail - {data.get('error')}", level="ERROR")
+                        log_func(f"[{user.email}] Chat {i+1} logic fail in {duration:.1f}s: {data.get('error')}", level="ERROR")
                 else:
                     summary.failed_requests += 1
-                    log_func(f"Req {i+1}/{requests_count}: HTTP {resp.status}", level="ERROR")
+                    log_func(f"[{user.email}] Chat {i+1} HTTP error {resp.status} in {duration:.1f}s", level="ERROR")
             
-            # Small delay to be realistic? Or stress test implies minimal delay?
-            # Config might have a delay parameter, but for stress test usually minimal.
-            # await asyncio.sleep(0.1) 
+            await asyncio.sleep(0.5) 
 
-        log_func(f"Sequential chat loop completed.")
+        total_user_duration = time.time() - scenario_start
+        log_func(f"[{user.email}] Sequential Test Complete. Total Duration: {total_user_duration:.1f}s")
 
     except Exception as e:
-        log_func(f"Sequential test exception: {str(e)}", level="ERROR")
+        total_user_duration = time.time() - scenario_start
+        log_func(f"[{user.email}] Sequential test exception after {total_user_duration:.1f}s: {str(e)}", level="ERROR")
         summary.errors.append({"user": user.email, "error": str(e)})

@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify, session, current_app
 from app.rbac.decorators import admin_only
 from app.utils.db import get_db
-from app.load_testing.models import TestUserSet, LoadTestResult, LoadTestStatus, LoadTestLog
+from app.load_testing.models import TestUserSet, LoadTestResult, LoadTestStatus, LoadTestLog, TestMessageCSV
 from app.load_testing.config import TestType, TargetEnvironment, LoadTestConfig
 from app.load_testing.user_set_manager import UserSetManager
 from app.load_testing.document_set_manager import DocumentSetManager
+from app.load_testing.message_csv_manager import MessageCSVManager
 from app.load_testing.runner import LoadTestRunner
 from app.load_testing.report import ReportGenerator
 import threading
@@ -48,8 +49,11 @@ def start_test():
             ramp_up_seconds=int(config_data.get('ramp_up_seconds', 0)),
             test_user_set_id=int(config_data.get('test_user_set_id')) if config_data.get('test_user_set_id') else None,
             test_doc_set_id=int(config_data.get('test_doc_set_id')) if config_data.get('test_doc_set_id') else None,
+            csv_file_id=int(config_data.get('csv_file_id')) if config_data.get('csv_file_id') else None,
             requests_per_user=int(config_data.get('requests_per_user', 10)),
-            lesson_id=config_data.get('lesson_id')
+            lesson_id=config_data.get('lesson_id'),
+            headless=config_data.get('headless', True),
+            stop_on_error=config_data.get('stop_on_error', False)
         )
         
         # Create Result record
@@ -64,7 +68,8 @@ def start_test():
         db.commit()
         
         # Initialize Runner
-        runner = LoadTestRunner(config, result.id)
+        from flask import current_app
+        runner = LoadTestRunner(current_app._get_current_object(), config, result.id)
         active_runners[result.id] = runner
         
         # Start in background thread
@@ -145,6 +150,35 @@ def list_results():
         'started_at': r.started_at.isoformat() if r.started_at else None,
         'metrics': r.metrics
     } for r in results])
+
+@bp.route('/results/<int:test_id>', methods=['DELETE'])
+@admin_only
+def delete_result(test_id):
+    """Delete a specific test result and its logs"""
+    db = get_db()
+    result = db.query(LoadTestResult).get(test_id)
+    if not result:
+        return jsonify({'error': 'Result not found'}), 404
+        
+    # Delete logs first
+    db.query(LoadTestLog).filter_by(result_id=test_id).delete()
+    db.delete(result)
+    db.commit()
+    return jsonify({'success': True})
+
+@bp.route('/results/all', methods=['DELETE'])
+@admin_only
+def delete_all_results():
+    """Delete all test results and logs"""
+    db = get_db()
+    try:
+        db.query(LoadTestLog).delete()
+        db.query(LoadTestResult).delete()
+        db.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/users/create', methods=['POST'])
 @admin_only
@@ -280,3 +314,52 @@ def generate_executive_report(test_id):
     generator.save_analysis(analysis)
     
     return jsonify({'analysis': analysis})
+
+@bp.route('/message-csvs', methods=['GET'])
+@admin_only
+def list_message_csvs():
+    """List all message CSVs"""
+    csvs = MessageCSVManager.get_all_csvs()
+    return jsonify([{
+        'id': c.id,
+        'name': c.name,
+        'message_count': c.message_count,
+        'created_at': c.created_at.isoformat()
+    } for c in csvs])
+
+@bp.route('/message-csvs/upload', methods=['POST'])
+@admin_only
+def upload_message_csv():
+    """Upload a new message CSV"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+        
+    file = request.files['file']
+    name = request.form.get('name', file.filename)
+    
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+        
+    if not file.filename.lower().endswith('.csv'):
+        return jsonify({'error': 'Only CSV files are allowed'}), 400
+        
+    csv_record, error = MessageCSVManager.create_message_csv(name, file)
+    
+    if csv_record:
+        return jsonify({
+            'success': True,
+            'id': csv_record.id,
+            'name': csv_record.name,
+            'message_count': csv_record.message_count
+        })
+    else:
+        return jsonify({'error': error}), 500
+
+@bp.route('/message-csvs/<int:csv_id>', methods=['DELETE'])
+@admin_only
+def delete_message_csv(csv_id):
+    """Delete a message CSV"""
+    success = MessageCSVManager.delete_message_csv(csv_id)
+    if success:
+        return jsonify({'success': True})
+    return jsonify({'error': 'Failed to delete message CSV'}), 500

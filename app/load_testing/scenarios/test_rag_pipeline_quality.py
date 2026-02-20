@@ -16,7 +16,8 @@ async def run(
     user: Any, 
     config: LoadTestConfig, 
     summary: TestResultSummary, 
-    log_func: Callable
+    log_func: Callable,
+    messages: List[str] = None
 ):
     """
     Execute Test 7: Multi-File RAG Pipeline Quality Benchmark.
@@ -25,6 +26,7 @@ async def run(
     2. For each document: Upload -> Chat (Standard Question) -> Store Response.
     3. The collected responses will be analyzed by LLM in the reporting phase.
     """
+    scenario_start = time.time()
     try:
         if not config.test_doc_set_id:
             msg = "Test 7 requires a test document set ID"
@@ -57,27 +59,28 @@ async def run(
             file_path = doc.file_path
             filename = doc.filename
             
-            log_func(f"Processing doc {i+1}/{len(documents)}: {filename}...")
+            log_func(f"[{user.email}] Processing doc {i+1}/{len(documents)}: {filename}")
             
             if not os.path.exists(file_path):
-                log_func(f"File not found: {file_path}", level="ERROR")
+                log_func(f"[{user.email}] File not found on disk: {file_path}", level="ERROR")
                 summary.errors.append({"user": user.email, "error": f"File not found: {file_path}"})
                 continue
 
             # 1. Create Conversation
             create_conv_url = f"{config.base_url}/create_conversation"
             conversation_id = None
-            start_time = time.time()
+            start_conv = time.time()
             
             async with session.post(create_conv_url, json={"title": f"Benchmark {filename}"}) as resp:
+                conv_duration = (time.time() - start_conv) * 1000
+                summary.total_requests += 1 # Action 1: Create Conv
                 if resp.status == 200:
                     data = await resp.json()
                     conversation_id = data.get('conversation_id')
-                    summary.total_requests += 1
+                    log_func(f"[{user.email}] Conv created in {conv_duration:.0f}ms")
                 else:
-                    summary.total_requests += 1
                     summary.failed_requests += 1
-                    log_func(f"Failed to create conv for {filename}: {resp.status}", level="ERROR")
+                    log_func(f"[{user.email}] Failed to create conv in {conv_duration:.0f}ms: {resp.status}", level="ERROR")
                     continue
 
             # 2. Upload PDF
@@ -92,18 +95,21 @@ async def run(
             upload_start = time.time()
             
             async with session.post(ingest_url, data=form_data) as resp:
-                summary.total_requests += 1
+                upload_duration = (time.time() - upload_start) * 1000
+                summary.total_requests += 1 # Action 2: Ingest Action
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
                         task_id = data.get('task_id')
+                        thread_id = data.get('thread_id')
+                        log_func(f"[{user.email}] Upload success for {filename} in {upload_duration:.0f}ms")
                     else:
                         summary.failed_requests += 1
-                        log_func(f"Upload failed for {filename}: {data.get('error')}", level="ERROR")
+                        log_func(f"[{user.email}] Upload logic fail for {filename} in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
                         continue
                 else:
                     summary.failed_requests += 1
-                    log_func(f"Upload HTTP error for {filename}: {resp.status}", level="ERROR")
+                    log_func(f"[{user.email}] Upload HTTP error for {filename} in {upload_duration:.0f}ms: {resp.status}", level="ERROR")
                     continue
 
             # 3. Poll
@@ -112,10 +118,12 @@ async def run(
                 poll_url = f"{config.base_url}/api/rag/ingest/status/{task_id}"
                 max_retries = 60
                 retry_count = 0
+                poll_start = time.time()
+                log_func(f"[{user.email}] Ingest processing (Async)...")
                 
                 while retry_count < max_retries:
+                    retry_count += 1
                     async with session.get(poll_url) as resp:
-                        summary.total_requests += 1
                         if resp.status == 200:
                             data = await resp.json()
                             status = data.get('status')
@@ -124,42 +132,49 @@ async def run(
                                 thread_id = data.get('thread_id')
                                 processing_time = data.get('processing_time_seconds', 0)
                                 summary.successful_requests += 1
+                                log_func(f"[{user.email}] Ingest complete in {time.time() - poll_start:.1f}s")
                                 break
                             elif status in ['failure', 'revoked']:
-                                log_func(f"Ingest failed for {filename}: {status}", level="ERROR")
+                                log_func(f"[{user.email}] Ingest failed in {time.time() - poll_start:.1f}s: {status}", level="ERROR")
                                 break
                         else:
-                            summary.failed_requests += 1
-                    retry_count += 1
+                            log_func(f"[{user.email}] Poll error {resp.status}", level="WARNING")
                     await asyncio.sleep(1)
                 
                 if not thread_id:
-                    log_func(f"Ingest timed out for {filename}", level="ERROR")
+                    log_func(f"[{user.email}] Ingest timed out for {filename}", level="ERROR")
                     continue
+            else:
+                log_func(f"[{user.email}] Processing (Sync) completed during upload.")
 
-            # 4. Standard Question
-            question = "Summarize the key points of this document in 3 bullet points."
-            chat_url = f"{config.base_url}/api/rag/chat"
+            # 4. Standard Question (Iterative if messages provided)
+            msg_list = messages if messages else ["Summarize the key points of this document in 3 bullet points."]
             ai_response = ""
             
-            chat_start = time.time()
-            async with session.post(chat_url, json={
-                "message": question,
-                "thread_id": thread_id,
-                "conversation_id": conversation_id
-            }) as resp:
-                summary.total_requests += 1
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get('success'):
-                        ai_response = data.get('message', '')
-                        summary.successful_requests += 1
+            for idx, question in enumerate(msg_list):
+                log_func(f"[{user.email}] Sending question {idx+1}/{len(msg_list)}: \"{question[:30]}...\"")
+                chat_url = f"{config.base_url}/api/rag/chat"
+                
+                chat_start = time.time()
+                async with session.post(chat_url, json={
+                    "message": question,
+                    "thread_id": thread_id,
+                    "conversation_id": conversation_id
+                }) as resp:
+                    chat_duration = time.time() - chat_start
+                    summary.total_requests += 1 # Action: Quality Check Question
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get('success'):
+                            ai_response = data.get('answer', '') or data.get('message', '')
+                            summary.successful_requests += 1
+                            log_func(f"[{user.email}] Response {idx+1} received in {chat_duration:.1f}s")
+                        else:
+                            summary.failed_requests += 1
+                            log_func(f"[{user.email}] Chat {idx+1} logic fail in {chat_duration:.1f}s: {data.get('error')}", level="ERROR")
                     else:
                         summary.failed_requests += 1
-                        log_func(f"Chat failed for {filename}: {data.get('error')}", level="ERROR")
-                else:
-                    summary.failed_requests += 1
-                    log_func(f"Chat HTTP error for {filename}: {resp.status}", level="ERROR")
+                        log_func(f"[{user.email}] Chat {idx+1} HTTP error in {chat_duration:.1f}s: {resp.status}", level="ERROR")
 
             # Store result
             result_entry = {
@@ -170,12 +185,12 @@ async def run(
                 "status": "PASS" if ai_response else "FAIL"
             }
             benchmark_results.append(result_entry)
-            log_func(f"Finished {filename}. Time: {processing_time}s. Response len: {len(ai_response)}")
 
-        # Store benchmark results in logs (or metrics)
-        # We can store strictly structured data in logs details
-        log_func("Benchmark Results", details={"benchmark_data": benchmark_results})
+        # Store benchmark results in logs
+        total_bench_duration = time.time() - scenario_start
+        log_func(f"Quality Benchmark Complete. Total Duration: {total_bench_duration:.1f}s", details={"benchmark_data": benchmark_results})
 
     except Exception as e:
-        log_func(f"Benchmark exception: {str(e)}", level="ERROR")
+        total_bench_duration = time.time() - scenario_start
+        log_func(f"[{user.email}] Benchmark exception after {total_bench_duration:.1f}s: {str(e)}", level="ERROR")
         summary.errors.append({"user": user.email, "error": str(e)})

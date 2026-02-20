@@ -33,6 +33,23 @@
             border-bottom: 2px solid #05B0FC;
             color: #05B0FC;
         }
+
+        .test-running-blur {
+            filter: blur(4px);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        #running-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.3);
+            z-index: 40;
+        }
     </style>
 </head>
 
@@ -53,18 +70,15 @@
         </div>
     </nav>
 
-    <div class="flex">
+    <div id="running-overlay"></div>
+
+    <div id="main-container" class="flex transition-all duration-300">
         <!-- Sidebar -->
         <aside class="w-64 bg-white shadow-lg min-h-screen">
             <div class="p-4">
                 <nav class="space-y-2">
-                    <a href="#" onclick="showTab('settings'); return false;"
-                        class="sidebar-item active flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
-                        <i class="fas fa-cog w-5 mr-3"></i>
-                        <span>Settings</span>
-                    </a>
                     <a href="#" onclick="showTab('tests'); return false;"
-                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        class="sidebar-item active flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
                         <i class="fas fa-play-circle w-5 mr-3"></i>
                         <span>Run Tests</span>
                     </a>
@@ -78,6 +92,11 @@
                         <i class="fas fa-chart-bar w-5 mr-3"></i>
                         <span>Results & Reports</span>
                     </a>
+                    <a href="#" onclick="showTab('settings'); return false;"
+                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-cog w-5 mr-3"></i>
+                        <span>Settings</span>
+                    </a>
                 </nav>
             </div>
         </aside>
@@ -86,7 +105,7 @@
         <main class="flex-1 p-8">
 
             <!-- SETTINGS TAB -->
-            <div id="settings-tab" class="tab-content block">
+            <div id="settings-tab" class="tab-content hidden">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-2xl font-bold">Global Settings</h2>
                     <div id="current-env-badge"
@@ -132,7 +151,7 @@
             </div>
 
             <!-- TESTS TAB -->
-            <div id="tests-tab" class="tab-content hidden">
+            <div id="tests-tab" class="tab-content block">
                 <h2 class="text-2xl font-bold mb-6">Execute Load Tests</h2>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -142,7 +161,8 @@
                         <form id="start-test-form" onsubmit="startTest(event)">
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Test Scenario</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Test Scenario <span
+                                            class="text-red-500">*</span></label>
                                     <select id="test-type" class="w-full border rounded px-3 py-2"
                                         onchange="updateFormFields()">
                                         <option value="multi_user_sign_in">Test 1: Multi-User Sign-In</option>
@@ -156,33 +176,46 @@
                                     </select>
                                 </div>
                                 <!-- Base URL removed, using global setting -->
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Concurrent Users</label>
+                                <div id="concurrent-users-field">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Concurrent Users <span
+                                            class="text-red-500">*</span></label>
                                     <input type="number" id="concurrent-users" value="1" min="1" max="100"
                                         class="w-full border rounded px-3 py-2">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">User Set</label>
-                                    <select id="test-user-set" class="w-full border rounded px-3 py-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">User Set <span
+                                            class="text-red-500">*</span></label>
+                                    <select id="test-user-set" class="w-full border rounded px-3 py-2"
+                                        onchange="updateFieldConstraints()">
                                         <option value="">Loading...</option>
                                     </select>
                                 </div>
                                 <div id="doc-set-field" class="hidden">
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Document Set</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Document Set <span
+                                            class="text-red-500">*</span></label>
                                     <select id="test-doc-set" class="w-full border rounded px-3 py-2">
                                         <option value="">Loading...</option>
                                     </select>
                                 </div>
                                 <div id="lesson-id-field" class="hidden">
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Lesson ID</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Lesson ID <span
+                                            class="text-red-500">*</span></label>
                                     <input type="text" id="lesson-id" placeholder="L000..."
                                         class="w-full border rounded px-3 py-2">
                                 </div>
                                 <div id="req-per-user-field" class="hidden">
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Requests/Loops per
-                                        User</label>
-                                    <input type="number" id="requests-per-user" value="10"
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Messages to Send <span
+                                            class="text-red-500">*</span></label>
+                                    <input type="number" id="requests-per-user" value="10" min="1"
                                         class="w-full border rounded px-3 py-2">
+                                </div>
+                                <div id="csv-file-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Message CSV
+                                        (Optional)</label>
+                                    <select id="test-message-csv" class="w-full border rounded px-3 py-2"
+                                        onchange="updateFieldConstraints()">
+                                        <option value="" data-count="10">Default Messages</option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="mt-6 flex justify-end">
@@ -240,11 +273,33 @@
                         <p class="text-gray-500">Loading document sets...</p>
                     </div>
                 </div>
+
+                <!-- Message CSVs -->
+                <div class="bg-white rounded-lg shadow p-6 mt-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">Message CSVs</h3>
+                        <button onclick="document.getElementById('upload-message-csv-modal').classList.remove('hidden')"
+                            class="bg-blue-600 text-white px-4 py-2 rounded">
+                            + Upload Message CSV
+                        </button>
+                    </div>
+
+                    <div id="message-csv-list" class="space-y-4">
+                        <!-- Populated via JS -->
+                        <p class="text-gray-500">Loading message CSVs...</p>
+                    </div>
+                </div>
             </div>
 
             <!-- RESULTS TAB -->
             <div id="results-tab" class="tab-content hidden">
-                <h2 class="text-2xl font-bold mb-6">Test Results</h2>
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Test Results</h2>
+                    <button onclick="deleteAllResults()"
+                        class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded flex items-center">
+                        <i class="fas fa-trash-alt mr-2"></i> Delete All Results
+                    </button>
+                </div>
                 <div class="bg-white rounded-lg shadow overflow-hidden">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
@@ -253,7 +308,9 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-24 text-right">
+                                    Actions</th>
                             </tr>
                         </thead>
                         <tbody id="results-tbody" class="bg-white divide-y divide-gray-200">
@@ -344,15 +401,49 @@
         </div>
     </div>
 
+    <!-- Upload Message CSV Modal -->
+    <div id="upload-message-csv-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Upload Message CSV</h3>
+            <form onsubmit="uploadMessageCSV(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Display Name</label>
+                    <input type="text" id="csv-display-name" required class="w-full border rounded px-3 py-2"
+                        placeholder="e.g. Science Questions">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Select CSV</label>
+                    <input type="file" id="message-csv-file" accept=".csv" required
+                        class="w-full border rounded px-3 py-2">
+                    <p class="text-xs text-gray-400 mt-1">One message per line (first column).</p>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button"
+                        onclick="document.getElementById('upload-message-csv-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <!-- Result Details Modal -->
     <div id="result-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-10 mx-auto p-5 border w-3/4 shadow-lg rounded-md bg-white h-5/6 flex flex-col">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-bold">Result Details</h3>
-                <button onclick="document.getElementById('result-modal').classList.add('hidden')"
-                    class="text-2xl">&times;</button>
+                <div class="flex gap-2">
+                    <button id="raw-json-btn" onclick="toggleRawJson()"
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm flex items-center border">
+                        <i class="fas fa-code mr-2"></i> Raw JSON
+                    </button>
+                    <button onclick="document.getElementById('result-modal').classList.add('hidden')"
+                        class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                </div>
             </div>
             <div class="flex-1 overflow-auto border p-4 bg-gray-50 font-mono text-sm" id="result-content"></div>
+            <div id="raw-json-content"
+                class="hidden flex-1 overflow-auto border p-4 bg-black text-green-400 font-mono text-xs"></div>
             <div class="mt-4 flex gap-2">
                 <button onclick="generateReport('technical')" class="bg-gray-600 text-white px-4 py-2 rounded">Technical
                     Report</button>
@@ -523,6 +614,7 @@
             if (tabName === 'assets') {
                 loadUserSets();
                 loadDocSets();
+                loadMessageCSVs();
             }
             if (tabName === 'results') loadResults();
         }
@@ -532,10 +624,21 @@
             const docField = document.getElementById('doc-set-field');
             const lessonField = document.getElementById('lesson-id-field');
             const reqField = document.getElementById('req-per-user-field');
+            const concurrentField = document.getElementById('concurrent-users-field');
+            const concurrentInput = document.getElementById('concurrent-users');
 
             docField.classList.add('hidden');
             lessonField.classList.add('hidden');
             reqField.classList.add('hidden');
+
+            // Sequential tests (4,5,6): hide concurrent users, lock to 1
+            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat'].includes(type);
+            if (isSequential) {
+                concurrentField.classList.add('hidden');
+                concurrentInput.value = 1;
+            } else {
+                concurrentField.classList.remove('hidden');
+            }
 
             if (['teacher_flow_concurrent', 'teacher_rag_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(type)) {
                 docField.classList.remove('hidden');
@@ -548,6 +651,33 @@
             if (['teacher_rag_sequential', 'doc_upload_repeat', 'student_lesson_sequential'].includes(type)) {
                 reqField.classList.remove('hidden');
             }
+
+            if (['teacher_flow_concurrent', 'student_chat_concurrent', 'teacher_rag_sequential', 'student_lesson_sequential'].includes(type)) {
+                document.getElementById('csv-file-field').classList.remove('hidden');
+            }
+
+            // Update max constraints after visibility changes
+            updateFieldConstraints();
+        }
+
+        function updateFieldConstraints() {
+            // --- Concurrent Users max = selected user set's user count ---
+            const userSetSelect = document.getElementById('test-user-set');
+            const selectedUser = userSetSelect.selectedOptions[0];
+            const userCount = selectedUser?.dataset.count ? parseInt(selectedUser.dataset.count) : 100;
+            const concurrentInput = document.getElementById('concurrent-users');
+            concurrentInput.max = userCount;
+            if (parseInt(concurrentInput.value) > userCount || concurrentInput.value === '1') {
+                concurrentInput.value = userCount;
+            }
+
+            // --- Messages to Send max = selected CSV's message count ---
+            const csvSelect = document.getElementById('test-message-csv');
+            const selectedCsv = csvSelect.selectedOptions[0];
+            const msgCount = selectedCsv?.dataset.count ? parseInt(selectedCsv.dataset.count) : 10;
+            const reqInput = document.getElementById('requests-per-user');
+            reqInput.max = msgCount;
+            reqInput.value = msgCount;  // default = max
         }
 
         // --- ASSETS: USER SETS ---
@@ -576,6 +706,7 @@
                     // Start Button Select
                     const option = document.createElement('option');
                     option.value = set.id;
+                    option.dataset.count = setCount;
                     option.textContent = `${setName} (${setCount} users)`;
                     select.appendChild(option);
 
@@ -775,24 +906,72 @@
                 btn.disabled = false;
             }
         }
+        // --- BLUR / DISABLE WHILE TEST RUNS ---
+        function setTestRunning(running) {
+            const overlay = document.getElementById('running-overlay');
+            const startBtn = document.querySelector('#start-test-form button[type="submit"]');
+            const formArea = document.getElementById('start-test-form');
+            if (running) {
+                overlay.style.display = 'block';
+                startBtn.disabled = true;
+                startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                formArea.classList.add('opacity-40', 'pointer-events-none');
+            } else {
+                overlay.style.display = 'none';
+                startBtn.disabled = false;
+                startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                formArea.classList.remove('opacity-40', 'pointer-events-none');
+            }
+        }
+
         async function startTest(e) {
             e.preventDefault();
+
+            // --- Validation ---
+            const testType = document.getElementById('test-type').value;
+            const userSetId = document.getElementById('test-user-set').value;
+            if (!userSetId) { alert('Please select a User Set.'); return; }
+
+            const needsDoc = ['teacher_flow_concurrent', 'teacher_rag_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(testType);
+            const needsLesson = ['student_chat_concurrent', 'student_lesson_sequential'].includes(testType);
+
+            if (needsDoc && !document.getElementById('test-doc-set').value) {
+                alert('Please select a Document Set for this test type.'); return;
+            }
+            if (needsLesson && !document.getElementById('lesson-id').value.trim()) {
+                alert('Please enter a Lesson ID for this test type.'); return;
+            }
 
             // Get Global Config
             const config = getTargetConfig();
 
+            // Force concurrent_users=1 for sequential tests
+            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat'].includes(testType);
+
+            // Clamp values to max constraints
+            const concurrentInput = document.getElementById('concurrent-users');
+            const reqInput = document.getElementById('requests-per-user');
+            let concurrentVal = isSequential ? 1 : parseInt(concurrentInput.value);
+            let reqVal = parseInt(reqInput.value || 1);
+            const concurrentMax = parseInt(concurrentInput.max) || 100;
+            const reqMax = parseInt(reqInput.max) || 10;
+            if (concurrentVal > concurrentMax) concurrentVal = concurrentMax;
+            if (reqVal > reqMax) reqVal = reqMax;
+
             const configData = {
-                test_type: document.getElementById('test-type').value,
+                test_type: testType,
                 target_env: 'custom',
                 custom_url: config.url,
-                concurrent_users: parseInt(document.getElementById('concurrent-users').value),
-                requests_per_user: parseInt(document.getElementById('requests-per-user').value || 1),
-                test_user_set_id: document.getElementById('test-user-set').value || null,
+                concurrent_users: concurrentVal,
+                requests_per_user: reqVal,
+                test_user_set_id: userSetId || null,
                 test_doc_set_id: document.getElementById('test-doc-set').value || null,
+                csv_file_id: document.getElementById('test-message-csv').value || null,
                 lesson_id: document.getElementById('lesson-id').value || null
             };
 
             try {
+                setTestRunning(true);
                 const res = await fetchWithProxy('/api/load-test/start', {
                     method: 'POST',
                     body: JSON.stringify({ config: configData })
@@ -803,9 +982,11 @@
                     document.getElementById('active-tests-list').dataset.testId = data.test_id;
                     pollStatus(data.test_id);
                 } else {
+                    setTestRunning(false);
                     alert('Error: ' + data.error);
                 }
             } catch (e) {
+                setTestRunning(false);
                 alert('Failed to start: ' + e);
             }
         }
@@ -817,18 +998,30 @@
                 const tbody = document.getElementById('results-tbody');
                 tbody.innerHTML = '';
 
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">No test results yet.</td></tr>';
+                    return;
+                }
+
                 data.forEach(r => {
                     tbody.innerHTML += `
-                        <tr class="border-b hover:bg-gray-50 cursor-pointer" onclick="viewResult(${r.id})">
-                            <td class="px-6 py-4">${r.id}</td>
-                            <td class="px-6 py-4">${r.test_type}</td>
-                            <td class="px-6 py-4">
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">${r.id}</td>
+                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">${r.test_type}</td>
+                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">
                                 <span class="px-2 py-1 rounded text-xs ${r.status === 'completed' ? 'bg-green-100 text-green-800' : r.status === 'running' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
                                     ${r.status}
                                 </span>
                             </td>
-                            <td class="px-6 py-4">${r.started_at}</td>
-                            <td class="px-6 py-4 text-blue-500">View</td>
+                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">${r.started_at}</td>
+                            <td class="px-6 py-4 text-right">
+                                <button onclick="event.stopPropagation(); viewResult(${r.id})" class="text-blue-500 hover:text-blue-700 mr-3" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button onclick="event.stopPropagation(); deleteResult(${r.id})" class="text-red-500 hover:text-red-700" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
                         </tr>
                     `;
                 });
@@ -838,11 +1031,57 @@
             }
         }
 
+        async function deleteResult(id) {
+            if (!confirm('Delete this test result?')) return;
+            try {
+                const res = await fetchWithProxy(`/api/load-test/results/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadResults();
+                else alert('Error: ' + (data.error || 'Unknown error'));
+            } catch (e) {
+                alert('Delete failed: ' + e);
+            }
+        }
+
+        async function deleteAllResults() {
+            if (!confirm('Delete ALL test results? This cannot be undone.')) return;
+            try {
+                const res = await fetchWithProxy('/api/load-test/results/all', { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadResults();
+                else alert('Error: ' + (data.error || 'Unknown error'));
+            } catch (e) {
+                alert('Delete failed: ' + e);
+            }
+        }
+
         let currentResultId = null;
+        let currentReportRawJson = null;
+
         async function viewResult(id) {
             currentResultId = id;
+            currentReportRawJson = null;
+            document.getElementById('raw-json-content').classList.add('hidden');
+            document.getElementById('result-content').classList.remove('hidden');
             document.getElementById('result-modal').classList.remove('hidden');
             generateReport('technical'); // Default load
+        }
+
+        function toggleRawJson() {
+            const rawEl = document.getElementById('raw-json-content');
+            const mainEl = document.getElementById('result-content');
+            if (rawEl.classList.contains('hidden')) {
+                rawEl.classList.remove('hidden');
+                mainEl.classList.add('hidden');
+                if (currentReportRawJson) {
+                    rawEl.textContent = currentReportRawJson;
+                } else {
+                    rawEl.textContent = 'Load a Technical Report first.';
+                }
+            } else {
+                rawEl.classList.add('hidden');
+                mainEl.classList.remove('hidden');
+            }
         }
 
         async function generateReport(type) {
@@ -861,9 +1100,23 @@
                 if (type === 'executive' && data.analysis) {
                     content.innerHTML = `<pre class="whitespace-pre-wrap font-sans text-base">${data.analysis}</pre>`;
                 } else {
+                    // Store raw JSON for toggle
+                    currentReportRawJson = JSON.stringify(data, null, 2);
+
+                    // Calculate total time from logs
+                    let totalTimeSec = 0;
+                    if (data.detailed_logs && data.detailed_logs.length > 1) {
+                        const first = new Date(data.detailed_logs[0].timestamp);
+                        const last = new Date(data.detailed_logs[data.detailed_logs.length - 1].timestamp);
+                        totalTimeSec = ((last - first) / 1000).toFixed(1);
+                    }
+                    const msgsSent = data.summary.messages_sent || 0;
+                    const fileSizeMB = data.summary.total_file_size_mb || 0;
+                    const ingestionTime = data.summary.total_ingestion_time || 0;
+
                     // Render Technical Report HTML
                     let html = `
-                        <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                             <div class="p-4 bg-blue-50 rounded">
                                 <div class="text-xs text-gray-500 uppercase">Success Rate</div>
                                 <div class="text-2xl font-bold ${data.summary.success_rate < 90 ? 'text-red-600' : 'text-green-600'}">
@@ -873,6 +1126,22 @@
                             <div class="p-4 bg-gray-100 rounded">
                                 <div class="text-xs text-gray-500 uppercase">Total Requests</div>
                                 <div class="text-2xl font-bold">${data.summary.total_requests}</div>
+                            </div>
+                            <div class="p-4 bg-indigo-50 rounded">
+                                <div class="text-xs text-gray-500 uppercase">Total Time Taken</div>
+                                <div class="text-2xl font-bold">${totalTimeSec}s</div>
+                            </div>
+                            <div class="p-4 bg-green-50 rounded">
+                                <div class="text-xs text-gray-500 uppercase">Messages Sent</div>
+                                <div class="text-2xl font-bold">${msgsSent}</div>
+                            </div>
+                            <div class="p-4 bg-yellow-50 rounded">
+                                <div class="text-xs text-gray-500 uppercase">File Size</div>
+                                <div class="text-2xl font-bold">${fileSizeMB > 0 ? fileSizeMB.toFixed(2) + ' MB' : '—'}</div>
+                            </div>
+                            <div class="p-4 bg-orange-50 rounded">
+                                <div class="text-xs text-gray-500 uppercase">Ingestion Time</div>
+                                <div class="text-2xl font-bold">${ingestionTime > 0 ? ingestionTime.toFixed(1) + 's' : '—'}</div>
                             </div>
                         </div>
                     `;
@@ -888,17 +1157,22 @@
                     }
 
                     if (data.detailed_logs && data.detailed_logs.length > 0) {
-                        html += `<h4 class="font-bold mb-2">Failure Logs</h4>
-                        <div class="bg-black text-white p-4 rounded text-xs font-mono h-96 overflow-y-auto">
-                            ${data.detailed_logs.map(l => `
-                                <div class="mb-1 ${l.level === 'ERROR' ? 'text-red-400' : 'text-yellow-400'}">
-                                    [${l.timestamp.split('T')[1].split('.')[0]}] ${l.level}: ${l.message}
-                                </div>
-                            `).join('')}
+                        html += `<h4 class="font-bold mb-2">Test Timeline</h4>
+                        <div class="bg-black text-white p-4 rounded text-xs font-mono h-96 overflow-y-auto mb-4">
+                            ${data.detailed_logs.map(l => {
+                            const ts = l.timestamp.split('T')[1].split('.')[0];
+                            let colorClass = 'text-gray-300';
+                            if (l.level === 'ERROR') colorClass = 'text-red-400';
+                            else if (l.level === 'WARNING') colorClass = 'text-yellow-400';
+                            else if (l.message.includes('success') || l.message.includes('complete')) colorClass = 'text-green-400';
+                            return `
+                                    <div class="mb-1 ${colorClass}">
+                                        <span class="text-gray-500">[${ts}]</span> ${l.message}
+                                    </div>`;
+                        }).join('')}
                         </div>`;
                     }
 
-                    html += `<h4 class="font-bold mb-2 mt-4">Raw JSON Data</h4><pre class="text-xs bg-gray-50 p-4 rounded overflow-auto h-40">${JSON.stringify(data, null, 2)}</pre>`;
                     content.innerHTML = html;
                 }
             } catch (e) {
@@ -910,36 +1184,66 @@
             const list = document.getElementById('active-tests-list');
             const logConsole = document.getElementById('live-log-console') || createLogConsole(list);
 
-            // Poll status
-            const res = await fetchWithProxy(`/api/load-test/status/${testId}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.status === 'completed' || data.status === 'failed') {
-                    document.getElementById('status-badge-' + testId).className =
-                        `px-2 py-1 rounded text-xs ${data.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-                    document.getElementById('status-badge-' + testId).textContent = data.status;
-                    return; // Stop polling
+            // 1. Poll logs FIRST
+            const lastTimestamp = logConsole.getAttribute('data-last-timestamp') || '';
+            try {
+                const logRes = await fetchWithProxy(`/api/load-test/status/${testId}/logs?since=${lastTimestamp}`);
+                if (logRes.ok) {
+                    const logs = await logRes.json();
+                    const container = logConsole.querySelector('.log-container');
+
+                    logs.forEach(l => {
+                        const line = document.createElement('div');
+                        const ts = l.timestamp.split('T')[1].split('.')[0];
+
+                        // Color coding based on level and content
+                        let colorClass = 'text-gray-300';
+                        if (l.level === 'ERROR') colorClass = 'text-red-400';
+                        else if (l.level === 'WARNING') colorClass = 'text-yellow-400';
+                        else if (l.message.includes('success') || l.message.includes('complete')) colorClass = 'text-green-400';
+                        else if (l.message.includes('[') && l.message.includes(']')) colorClass = 'text-blue-300'; // Match progress/percentages
+
+                        line.className = `text-xs font-mono mb-1 ${colorClass}`;
+                        line.innerHTML = `<span class="text-gray-500">[${ts}]</span> ${l.message}`;
+                        container.appendChild(line);
+                        logConsole.setAttribute('data-last-timestamp', l.timestamp);
+                    });
+
+                    if (logs.length > 0) {
+                        container.scrollTop = container.scrollHeight;
+                    }
                 }
+            } catch (err) {
+                console.warn("Log polling failed:", err);
             }
 
-            // Poll logs
-            const lastTimestamp = logConsole.getAttribute('data-last-timestamp') || '';
-            const logRes = await fetchWithProxy(`/api/load-test/status/${testId}/logs?since=${lastTimestamp}`);
-            if (logRes.ok) {
-                const logs = await logRes.json();
-                const container = logConsole.querySelector('.log-container');
+            // 2. Poll status SECOND
+            try {
+                const res = await fetchWithProxy(`/api/load-test/status/${testId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'completed' || data.status === 'failed') {
+                        const badge = document.getElementById('status-badge-' + testId);
+                        if (badge) {
+                            badge.className = `px-2 py-1 rounded text-xs ${data.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+                            badge.textContent = data.status;
+                        }
 
-                logs.forEach(l => {
-                    const line = document.createElement('div');
-                    line.className = `text-xs font-mono mb-1 ${l.level === 'ERROR' ? 'text-red-400' : l.level === 'WARNING' ? 'text-yellow-400' : 'text-gray-300'}`;
-                    line.textContent = `[${l.timestamp.split('T')[1].split('.')[0]}] ${l.message}`;
-                    container.appendChild(line);
-                    logConsole.setAttribute('data-last-timestamp', l.timestamp);
-                });
+                        // Pulse 'Live' to static 'Finished'
+                        const liveIndicator = logConsole.querySelector('.animate-pulse');
+                        if (liveIndicator) {
+                            liveIndicator.className = 'text-xs text-gray-500';
+                            liveIndicator.textContent = '● Finished';
+                        }
 
-                if (logs.length > 0) {
-                    container.scrollTop = container.scrollHeight;
+                        // Re-enable the form
+                        setTestRunning(false);
+
+                        return; // Stop polling
+                    }
                 }
+            } catch (err) {
+                console.warn("Status polling failed:", err);
             }
 
             setTimeout(() => pollStatus(testId), 2000);
@@ -968,8 +1272,102 @@
             return div;
         }
 
+        // --- ASSETS: MESSAGE CSVS ---
+        async function loadMessageCSVs() {
+            try {
+                const res = await fetchWithProxy('/api/load-test/message-csvs');
+                const data = await res.json();
+                const container = document.getElementById('message-csv-list');
+                container.innerHTML = '';
+
+                const select = document.getElementById('test-message-csv');
+                select.innerHTML = '<option value="" data-count="10">Default Messages (Built-in pool)</option>';
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No message CSVs found. Upload one above.</div>';
+                }
+
+                data.forEach(csv => {
+                    // Select Option
+                    const option = document.createElement('option');
+                    option.value = csv.id;
+                    option.dataset.count = csv.message_count;
+                    option.textContent = `${csv.name} (${csv.message_count} messages)`;
+                    select.appendChild(option);
+
+                    // List Item
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200';
+                    div.innerHTML = `
+                        <div>
+                            <div class="font-medium text-gray-800">${csv.name}</div>
+                            <div class="text-xs text-gray-500">${csv.message_count} messages • Uploaded ${new Date(csv.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <button onclick="deleteMessageCSV(${csv.id})" class="text-red-500 hover:text-red-700 text-sm">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to load message CSVs", e);
+                document.getElementById('message-csv-list').innerHTML =
+                    `<div class="text-red-600 text-sm p-2 bg-red-50 rounded border border-red-200">
+                        Failed to load message CSVs: ${e.message}
+                    </div>`;
+            }
+        }
+
+        async function uploadMessageCSV(e) {
+            e.preventDefault();
+            const name = document.getElementById('csv-display-name').value;
+            const fileInput = document.getElementById('message-csv-file');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('name', name);
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.textContent = 'Uploading...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetchWithProxy('/api/load-test/message-csvs/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('upload-message-csv-modal').classList.add('hidden');
+                    document.getElementById('csv-display-name').value = '';
+                    fileInput.value = '';
+                    loadMessageCSVs();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Upload failed: ' + e);
+            } finally {
+                btn.textContent = 'Upload';
+                btn.disabled = false;
+            }
+        }
+
+        async function deleteMessageCSV(id) {
+            if (!confirm('Delete this message CSV?')) return;
+            try {
+                const res = await fetchWithProxy(`/api/load-test/message-csvs/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadMessageCSVs();
+                else alert(data.error);
+            } catch (e) {
+                alert("Delete failed");
+            }
+        }
+
         // Init
         loadUserSets();
+        loadDocSets();
+        loadMessageCSVs();
         updateFormFields();
     </script>
 </body>
