@@ -60,6 +60,7 @@ async def run(
             summary.total_requests += 1
             if response.status == 200:
                 summary.successful_requests += 1
+                summary.successful_logouts += 1
                 log_func(f"[{user.email}] Logout confirmed in {logout_duration:.0f}ms")
             else:
                 summary.failed_requests += 1

@@ -195,6 +195,7 @@ async def run(
                 "status": "PASS" if ai_response and keyword_hits > 0 else "FAIL"
             }
             benchmark_results.append(result_entry)
+            summary.keyword_hits += keyword_hits
 
         # Store benchmark results in logs
         total_bench_duration = time.time() - scenario_start

@@ -55,3 +55,10 @@ class TestResultSummary:
     messages_sent: int = 0
     total_file_size_mb: float = 0.0
     total_ingestion_time: float = 0.0
+    
+    # New Advanced Metrics
+    successful_logouts: int = 0
+    keyword_hits: int = 0
+    consistency_stdev: Optional[float] = None
+    latency_trend: List[float] = field(default_factory=list)
+    lesson_saved: bool = False

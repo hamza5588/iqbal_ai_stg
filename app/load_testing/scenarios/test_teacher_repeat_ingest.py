@@ -190,6 +190,7 @@ async def run(
             
             # Store in summary.errors (abuse slightly or add a new field)
             # We'll log it as a special INFO message with details
+            summary.consistency_stdev = stdev_time
             stats = {
                 "avg_processing_time": avg_time,
                 "stdev_processing_time": stdev_time,

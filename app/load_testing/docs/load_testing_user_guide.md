@@ -3,6 +3,12 @@
 
 This guide explains the available test scenarios and how to execute performance tests using the Admin Load Testing Dashboard.
 
+## System Architecture & Proxying
+
+- **No Celery Required**: Unlike PDF ingestion, the load testing engine uses standard Python threads for concurrency. You do **not** need to start a Celery worker to run these tests.
+- **Unified Proxying**: The dashboard uses a "Fetch Proxy" system. All requests (starting tests, viewing results, etc.) are automatically routed to your **Target Environment** (configured in the Settings tab).
+- **Isolation**: Each simulated user has its own isolated session (cookie jar), mimicking real-world browser behavior.
+
 ## Available Test Scenarios
 
 | Test | Name | What it Does | When to Use |

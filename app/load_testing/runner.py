@@ -284,6 +284,11 @@ class LoadTestRunner:
                     "messages_sent": self.summary.messages_sent,
                     "total_file_size_mb": round(self.summary.total_file_size_mb, 2),
                     "total_ingestion_time": round(self.summary.total_ingestion_time, 2),
+                    "successful_logouts": self.summary.successful_logouts,
+                    "keyword_hits": self.summary.keyword_hits,
+                    "consistency_stdev": self.summary.consistency_stdev,
+                    "latency_trend": self.summary.latency_trend,
+                    "lesson_saved": self.summary.lesson_saved,
                     "errors": self.summary.errors
                 }
                 result.metrics = metrics

@@ -211,6 +211,7 @@ async def run(
                 data = await resp.json()
                 if data.get('success'):
                     summary.successful_requests += 1
+                    summary.lesson_saved = True
                     log_func(f"[{user.email}] Lesson saved in {save_duration:.0f}ms")
                 else:
                     summary.failed_requests += 1
