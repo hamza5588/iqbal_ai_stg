@@ -4,6 +4,7 @@ import aiohttp
 import logging
 import os
 import json
+import statistics
 from typing import Callable, Any, List, Dict
 from app.load_testing.config import LoadTestConfig, TestResultSummary
 from app.load_testing.models import TestDocument, TestDocumentSet
@@ -20,16 +21,17 @@ async def run(
     messages: List[str] = None
 ):
     """
-    Execute Test 7: Multi-File RAG Pipeline Quality Benchmark.
+    Execute Test 8: Multi-File RAG Pipeline Quality Benchmark.
     Flow:
     1. Iterate through ALL documents in the set.
     2. For each document: Upload -> Chat (Standard Question) -> Store Response.
     3. The collected responses will be analyzed by LLM in the reporting phase.
     """
     scenario_start = time.time()
+    processing_times = []
     try:
         if not config.test_doc_set_id:
-            msg = "Test 7 requires a test document set ID"
+            msg = "Test 8 requires a test document set ID"
             log_func(msg, level="ERROR")
             summary.errors.append({"user": user.email, "error": msg})
             return
@@ -108,7 +110,15 @@ async def run(
                         summary.successful_requests += 1
                         task_id = data.get('task_id')
                         thread_id = data.get('thread_id')
-                        log_func(f"[{user.email}] Upload success for {doc.filename} in {upload_duration:.0f}ms")
+                        
+                        if not task_id:
+                            # Synchronous processing
+                            summary.ingestion_iterations += 1
+                            summary.total_ingestion_time += upload_duration / 1000
+                            processing_time = upload_duration / 1000
+                            log_func(f"[{user.email}] Upload & Processing (Sync) for {doc.filename} in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s")
+                        else:
+                            log_func(f"[{user.email}] Upload success for {doc.filename} in {upload_duration:.0f}ms")
                     else:
                         summary.failed_requests += 1
                         log_func(f"[{user.email}] Upload logic fail for {doc.filename} in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
@@ -140,8 +150,12 @@ async def run(
                             if status == 'success':
                                 thread_id = data.get('thread_id')
                                 processing_time = data.get('processing_time_seconds', 0)
+                                processing_times.append(processing_time)
+                                summary.ingestion_iterations += 1
+                                total_ingest_time = time.time() - poll_start
+                                summary.total_ingestion_time += total_ingest_time
                                 summary.successful_requests += 1
-                                log_func(f"[{user.email}] Ingest complete in {time.time() - poll_start:.1f}s")
+                                log_func(f"[{user.email}] Ingest complete for {doc.filename} in {total_ingest_time:.1f}s - Total Ingest Time: {total_ingest_time:.1f}s")
                                 
                                 # Add extracted text artifact metadata
                                 summary.artifacts.append({
@@ -243,6 +257,15 @@ async def run(
                 "keyword_hits": keyword_hits,
                 "transcript": chat_transcript
             })
+
+        # Calculate consistency stats
+        if processing_times:
+            stdev_time = statistics.stdev(processing_times) if len(processing_times) > 1 else 0
+            summary.consistency_stdev = stdev_time
+            log_func(f"Ingestion Consistency (Stdev): {stdev_time:.2f}s across {len(processing_times)} files")
+            
+            # Phase 13: Green summary
+            log_func(f"Total File Processing Time across {len(processing_times)} documents: {sum(processing_times):.2f}s (Complete)")
 
         # Store benchmark results in logs
         total_bench_duration = time.time() - scenario_start

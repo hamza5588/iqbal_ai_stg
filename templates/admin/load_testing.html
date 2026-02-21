@@ -7,7 +7,19 @@
     <title>Load Testing - Iqbal AI Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        window.TEST_TYPE_MAP = {
+            'multi_user_sign_in': 'Test 1: System Access',
+            'teacher_flow_concurrent': 'Test 2/3: Teacher Critical Path',
+            'student_chat_concurrent': 'Test 4: Student Concurrent Chat',
+            'teacher_rag_sequential': 'Test 5: Teacher Long Chat',
+            'student_lesson_sequential': 'Test 6: Student Q&A',
+            'doc_upload_repeat': 'Test 7: Ingest Stress',
+            'rag_quality_benchmark': 'Test 8: RAG Quality Benchmark'
+        };
+
         tailwind.config = {
             theme: {
                 extend: {
@@ -49,6 +61,46 @@
             height: 100%;
             background: rgba(255, 255, 255, 0.3);
             z-index: 40;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 1024px) {
+            #main-container {
+                flex-direction: column;
+            }
+
+            aside {
+                width: 100%;
+                min-height: auto;
+                border-bottom: 1px solid #e5e7eb;
+                box-shadow: none;
+            }
+
+            aside>div {
+                padding: 1rem;
+            }
+
+            aside nav {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            aside nav a {
+                flex: 1;
+                min-width: 120px;
+                justify-content: center;
+                padding: 0.5rem;
+                text-align: center;
+            }
+
+            main {
+                padding: 1.5rem;
+            }
+        }
+
+        .overflow-x-auto {
+            -webkit-overflow-scrolling: touch;
         }
     </style>
 </head>
@@ -266,10 +318,10 @@
                 <!-- User Sets -->
                 <!-- User Sets -->
                 <div class="bg-white rounded-lg shadow p-6 mb-6">
-                    <div class="flex justify-between items-center mb-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
                         <h3 class="text-lg font-semibold">User Sets</h3>
                         <button onclick="document.getElementById('create-user-set-modal').classList.remove('hidden')"
-                            class="bg-green-500 text-white px-4 py-2 rounded">
+                            class="w-full sm:w-auto bg-green-500 text-white px-4 py-2 rounded">
                             + Create Users
                         </button>
                     </div>
@@ -282,10 +334,10 @@
 
                 <!-- Doc Sets -->
                 <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex justify-between items-center mb-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
                         <h3 class="text-lg font-semibold">Document Sets</h3>
                         <button onclick="document.getElementById('create-doc-set-modal').classList.remove('hidden')"
-                            class="bg-green-500 text-white px-4 py-2 rounded">
+                            class="w-full sm:w-auto bg-green-500 text-white px-4 py-2 rounded">
                             + Create Doc Set
                         </button>
                     </div>
@@ -306,7 +358,7 @@
                         </button>
                     </div>
 
-                    <div id="message-csv-list" class="space-y-4">
+                    <div id="message-csv-list" class="space-y-4 overflow-x-auto">
                         <!-- Populated via JS -->
                         <p class="text-gray-500">Loading message CSVs...</p>
                     </div>
@@ -315,14 +367,14 @@
 
             <!-- RESULTS TAB -->
             <div id="results-tab" class="tab-content hidden">
-                <div class="flex justify-between items-center mb-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <h2 class="text-2xl font-bold">Test Results</h2>
                     <button onclick="deleteAllResults()"
-                        class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded flex items-center">
+                        class="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded flex items-center justify-center">
                         <i class="fas fa-trash-alt mr-2"></i> Delete All Results
                     </button>
                 </div>
-                <div class="bg-white rounded-lg shadow overflow-hidden">
+                <div class="bg-white rounded-lg shadow overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
@@ -453,7 +505,7 @@
     <div id="result-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-10 mx-auto p-5 border w-3/4 shadow-lg rounded-md bg-white h-5/6 flex flex-col">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold">Result Details</h3>
+                <h3 id="report-title" class="text-xl font-bold">Result Details</h3>
                 <div class="flex gap-2">
                     <button id="raw-json-btn" onclick="toggleRawJson()"
                         class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm flex items-center border">
@@ -846,7 +898,7 @@
         }
 
         async function deleteUserSet(setId) {
-            if (!confirm("Delete this user set? This will also delete all users in this set. Proceed?")) return;
+            if (!confirm("Delete this user set? This will also permanently remove all associated test users, their account history, and RAG session data. Proceed?")) return;
             try {
                 const res = await fetchWithProxy(`/api/load-test/users/${setId}`, { method: 'DELETE' });
                 const data = await res.json();
@@ -965,7 +1017,7 @@
         }
 
         async function deleteDocSet(id) {
-            if (!confirm('Delete this document set and all files?')) return;
+            if (!confirm('Delete this document set? This will permanently remove all associated PDF files from the storage directory. Continue?')) return;
             try {
                 await fetchWithProxy(`/api/load-test/doc-sets/${id}`, { method: 'DELETE' });
                 loadDocSets();
@@ -1132,10 +1184,11 @@
                 }
 
                 data.forEach(r => {
+                    const typeName = window.TEST_TYPE_MAP[r.test_type] || r.test_type;
                     tbody.innerHTML += `
                         <tr class="border-b hover:bg-gray-50">
-                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">${r.id}</td>
-                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">${r.test_type}</td>
+                            <td class="px-6 py-4 cursor-pointer text-sm text-gray-900" onclick="viewResult(${r.id})">${r.id}</td>
+                            <td class="px-6 py-4 cursor-pointer font-medium text-iqbal-primary" onclick="viewResult(${r.id})">${typeName}</td>
                             <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">
                                 <span class="px-2 py-1 rounded text-xs ${r.status === 'completed' ? 'bg-green-100 text-green-800' : r.status === 'running' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
                                     ${r.status}
@@ -1160,7 +1213,7 @@
         }
 
         async function deleteResult(id) {
-            // No confirm for individual delete as requested
+            if (!confirm('Delete this test result? This will also purge its associated extracted text files and RAG history traces. Continue?')) return;
             try {
                 const res = await fetchWithProxy(`/api/load-test/results/${id}`, { method: 'DELETE' });
                 const data = await res.json();
@@ -1172,7 +1225,7 @@
         }
 
         async function deleteAllResults() {
-            if (!confirm('Delete ALL test results? This cannot be undone.')) return;
+            if (!confirm('Delete ALL test results? This will permanently remove all logs, metrics, extracted text files, and RAG history associated with these tests. PROCEED?')) return;
             try {
                 const res = await fetchWithProxy('/api/load-test/results/all', { method: 'DELETE' });
                 const data = await res.json();
@@ -1313,9 +1366,76 @@
             }
         }
 
+        function renderTrajectoryChart(containerId, data) {
+            const canvas = document.createElement('canvas');
+            canvas.className = 'w-full max-h-[300px] mt-4';
+            document.getElementById(containerId).appendChild(canvas);
+
+            // Extract Latency Trend from Logs if available
+            const latencies = [];
+            const labels = [];
+
+            if (data.detailed_logs) {
+                data.detailed_logs.forEach((log) => {
+                    // Look for patterns like "Iter X: Success in Y.Ys" or "Total Ingest Time: Y.Ys"
+                    const iterMatch = log.message.match(/Iter\s*(\d+)/i);
+                    const timeMatch = log.message.match(/in\s*([\d\.]+)\s*s/i) || log.message.match(/Time:\s*([\d\.]+)\s*s/i);
+
+                    if (iterMatch && timeMatch) {
+                        const iterNum = parseInt(iterMatch[1]);
+                        const timeVal = parseFloat(timeMatch[1]);
+                        latencies.push({ x: iterNum, y: timeVal });
+                    }
+                });
+            }
+
+            // Sort by iteration
+            latencies.sort((a, b) => a.x - b.x);
+            const sortedLabels = latencies.map(l => `Iter ${l.x}`);
+            const sortedData = latencies.map(l => l.y);
+
+            new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: sortedLabels,
+                    datasets: [{
+                        label: 'Processing Time (s)',
+                        data: sortedData,
+                        borderColor: '#05B0FC',
+                        backgroundColor: 'rgba(5, 176, 252, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#05B0FC'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        title: { display: true, text: 'Processing Performance trajectory' }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Seconds' }
+                        }
+                    }
+                }
+            });
+        }
+
         async function generateReport(type) {
             const content = document.getElementById('result-content');
-            content.textContent = 'Loading...';
+
+            // Premium Loading State
+            content.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-20 text-gray-500">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                    <p class="animate-pulse">${type === 'executive' ? 'AI is analyzing metrics and logs...' : 'Generating technical report...'}</p>
+                </div>
+            `;
 
             try {
                 let res;
@@ -1326,8 +1446,62 @@
                 }
                 const data = await res.json();
 
+                if (data.error) {
+                    content.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded border border-red-200">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const typeName = window.TEST_TYPE_MAP[data.test_type] || data.test_type;
+                const titleEl = document.getElementById('report-title');
+                if (titleEl) titleEl.textContent = `${typeName} - Report #${currentResultId}`;
+
                 if (type === 'executive' && data.analysis) {
-                    content.innerHTML = `<pre class="whitespace-pre-wrap font-sans text-base">${data.analysis}</pre>`;
+                    // Unified Premium Executive Summary View
+                    content.innerHTML = `
+                        <div class="prose max-w-none p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6" id="executive-summary-content">
+                            ${marked.parse(data.analysis)}
+                        </div>
+                        <div id="executive-charts" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-inner" id="latency-chart-container">
+                                <h3 class="text-sm font-bold text-gray-700 mb-2 px-1"><i class="fas fa-chart-line mr-2"></i>Latency Trajectory</h3>
+                            </div>
+                            <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-inner" id="status-chart-container">
+                                <h3 class="text-sm font-bold text-gray-700 mb-2 px-1"><i class="fas fa-chart-pie mr-2"></i>Status Distribution</h3>
+                            </div>
+                        </div>
+                    `;
+
+                    // Render Charts
+                    renderTrajectoryChart('latency_chart_container', data);
+
+                    // Status Distribution Chart
+                    const total = data.summary.total_requests || 0;
+                    const success = data.summary.successful_requests || 0;
+                    const failed = data.summary.failed_requests || 0;
+
+                    const statusCtx = document.createElement('canvas');
+                    statusCtx.className = 'w-full max-h-[300px] mt-4';
+                    document.getElementById('status-chart-container').appendChild(statusCtx);
+
+                    new Chart(statusCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Success', 'Failed'],
+                            datasets: [{
+                                data: [success, failed],
+                                backgroundColor: ['#10B981', '#EF4444'],
+                                hoverOffset: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'bottom' }
+                            }
+                        }
+                    });
+
                 } else {
                     // Store raw JSON for toggle
                     currentReportRawJson = JSON.stringify(data, null, 2);
@@ -1342,99 +1516,155 @@
                     const msgsSent = data.summary.messages_sent || 0;
                     const fileSizeMB = data.summary.total_file_size_mb || 0;
                     const ingestionTime = data.summary.total_ingestion_time || 0;
+                    const ingestIters = data.summary.ingestion_iterations || (ingestionTime > 0 ? 1 : 0);
 
                     // Render Technical Report HTML
-                    let html = `
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                            <div class="p-4 bg-blue-50 rounded border border-blue-100">
-                                <div class="text-xs text-gray-500 uppercase font-semibold">Success Rate</div>
-                                <div class="text-2xl font-bold ${data.summary.success_rate < 90 ? 'text-red-600' : 'text-green-600'}">
-                                    ${data.summary.success_rate}%
-                                </div>
-                            </div>
-                            <div class="p-4 bg-gray-50 rounded border">
-                                <div class="text-xs text-gray-500 uppercase font-semibold">Total Requests</div>
-                                <div class="text-2xl font-bold">${data.summary.total_requests}</div>
-                            </div>
-                            <div class="p-4 bg-indigo-50 rounded border border-indigo-100">
-                                <div class="text-xs text-gray-500 uppercase font-semibold">Time Taken</div>
-                                <div class="text-2xl font-bold">${totalTimeSec}s</div>
-                            </div>
-                            <div class="p-4 bg-green-50 rounded border border-green-100">
-                                <div class="text-xs text-gray-500 uppercase font-semibold">Msgs Sent</div>
-                                <div class="text-2xl font-bold">${msgsSent}</div>
+                    // Unified Metric Cards Grid (Balanced & Responsive)
+                    let metricCards = [];
+
+                    // Row 1: Core Metrics (First 4 cards)
+                    metricCards.push(`
+                        <div class="p-4 bg-blue-50 rounded border border-blue-100 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-blue-600 uppercase font-bold mb-1">Success Rate</div>
+                            <div class="text-2xl font-black ${data.summary.success_rate < 90 ? 'text-red-600' : 'text-green-600'}">
+                                ${data.summary.success_rate}%
                             </div>
                         </div>
+                    `);
+                    metricCards.push(`
+                        <div class="p-4 bg-gray-50 rounded border border-gray-200 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-gray-500 uppercase font-bold mb-1">Total Requests</div>
+                            <div class="text-2xl font-black text-gray-800">${data.summary.total_requests}</div>
+                        </div>
+                    `);
+                    metricCards.push(`
+                        <div class="p-4 bg-indigo-50 rounded border border-indigo-100 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-indigo-600 uppercase font-bold mb-1">Time Taken</div>
+                            <div class="text-2xl font-black text-indigo-800">${totalTimeSec}s</div>
+                        </div>
+                    `);
 
-                        <!-- Advanced Scenario Metrics -->
-                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                            ${(data.test_type === 'rag_quality_benchmark' || data.summary.keyword_hits > 0) ? `
-                                <div class="p-4 bg-purple-50 rounded border border-purple-100">
-                                    <div class="text-xs text-purple-600 uppercase font-semibold">Keyword Hits</div>
-                                    <div class="text-2xl font-bold text-purple-700">${data.summary.keyword_hits || 0}</div>
+                    // Avg. File Processing (Fixed Logic)
+                    if (ingestIters > 0) {
+                        const avgIngest = (ingestionTime / ingestIters).toFixed(2);
+                        metricCards.push(`
+                            <div class="p-4 bg-orange-50 rounded border border-orange-100 min-h-[90px] flex flex-col justify-center">
+                                <div class="text-xs text-orange-600 uppercase font-bold mb-1">Avg. File Processing</div>
+                                <div class="text-2xl font-black text-orange-700">
+                                    ${avgIngest}s
                                 </div>
-                            ` : ''}
-                            ${(data.summary.total_ingestion_time > 0 || data.test_type === 'doc_upload_repeat' || data.test_type === 'rag_quality_benchmark') ? `
-                                <div class="p-4 bg-orange-50 rounded border border-orange-100">
-                                    <div class="text-xs text-orange-600 uppercase font-semibold">Ingest Consistency (SD)</div>
-                                    <div class="text-2xl font-bold text-orange-700">${data.summary.consistency_stdev !== null && data.summary.consistency_stdev !== undefined ? data.summary.consistency_stdev.toFixed(2) + 's' : '0.00s'}</div>
-                                </div>
-                            ` : ''}
-                            ${(msgsSent > 0 && data.test_type !== 'doc_upload_repeat') ? `
-                                <div class="p-4 bg-pink-50 rounded border border-pink-100">
-                                    <div class="text-xs text-pink-600 uppercase font-semibold">Msg Avg. Turn Latency</div>
-                                    <div class="text-2xl font-bold text-pink-700">
-                                        ${data.summary.latency_trend && data.summary.latency_trend.length > 0
+                            </div>
+                        `);
+                    }
+                    metricCards.push(`
+                        <div class="p-4 bg-green-50 rounded border border-green-100 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-green-600 uppercase font-bold mb-1">Msgs Sent</div>
+                            <div class="text-2xl font-black text-green-800">${msgsSent}</div>
+                        </div>
+                    `);
+
+                    // Row 2: Scenario Specific Metrics
+                    if (data.test_type === 'rag_quality_benchmark' || data.summary.keyword_hits > 0) {
+                        metricCards.push(`
+                            <div class="p-4 bg-purple-50 rounded border border-purple-100">
+                                <div class="text-xs text-purple-600 uppercase font-bold mb-1">Keyword Hits</div>
+                                <div class="text-2xl font-black text-purple-700">${data.summary.keyword_hits || 0}</div>
+                            </div>
+                        `);
+                    }
+                    if (data.summary.total_ingestion_time > 0 || data.test_type === 'doc_upload_repeat' || data.test_type === 'rag_quality_benchmark') {
+                        metricCards.push(`
+                            <div class="p-4 bg-orange-50 rounded border border-orange-100">
+                                <div class="text-xs text-orange-600 uppercase font-bold mb-1">Ingest Consistency (SD)</div>
+                                <div class="text-2xl font-black text-orange-700">${data.summary.consistency_stdev !== null && data.summary.consistency_stdev !== undefined ? data.summary.consistency_stdev.toFixed(2) + 's' : '0.00s'}</div>
+                            </div>
+                        `);
+                    }
+                    if (msgsSent > 0 && data.test_type !== 'doc_upload_repeat') {
+                        metricCards.push(`
+                            <div class="p-4 bg-pink-50 rounded border border-pink-100">
+                                <div class="text-xs text-pink-600 uppercase font-bold mb-1">Avg. Turn Latency</div>
+                                <div class="text-2xl font-black text-pink-700">
+                                    ${data.summary.latency_trend && data.summary.latency_trend.length > 0
                                 ? (data.summary.latency_trend.reduce((a, b) => a + b, 0) / data.summary.latency_trend.length).toFixed(2) + 's'
                                 : 'N/A'}
-                                    </div>
                                 </div>
-                            ` : ''}
-                            ${data.summary.ingestion_iterations > 0 ? `
-                                <div class="p-4 bg-cyan-50 rounded border border-cyan-100">
-                                    <div class="text-xs text-cyan-600 uppercase font-semibold">Ingestion Iterations</div>
-                                    <div class="text-2xl font-bold text-cyan-700">${data.summary.ingestion_iterations}</div>
-                                </div>
-                            ` : ''}
-                            ${data.summary.rate_limit_hits > 0 ? `
-                                <div class="p-4 bg-red-50 rounded border border-red-100">
-                                    <div class="text-xs text-red-600 uppercase font-semibold">Rate Limit Hits</div>
-                                    <div class="text-2xl font-bold text-red-700">${data.summary.rate_limit_hits}</div>
-                                </div>
-                            ` : ''}
+                            </div>
+                        `);
+                    }
+                    if (data.summary.rate_limit_hits > 0) {
+                        metricCards.push(`
+                            <div class="p-4 bg-red-50 rounded border border-red-100">
+                                <div class="text-xs text-red-600 uppercase font-bold mb-1">Rate Limit Hits</div>
+                                <div class="text-2xl font-black text-red-700">${data.summary.rate_limit_hits}</div>
+                            </div>
+                        `);
+                    }
+                    if (data.summary.ingestion_iterations > 0) {
+                        metricCards.push(`
+                            <div class="p-4 bg-cyan-50 rounded border border-cyan-100">
+                                <div class="text-xs text-cyan-600 uppercase font-bold mb-1">Ingest Iterations</div>
+                                <div class="text-2xl font-black text-cyan-700">${data.summary.ingestion_iterations}</div>
+                            </div>
+                        `);
+                    }
+
+                    // Standardize Grid Columns for Balance
+                    let gridCols = "lg:grid-cols-4";
+                    if (metricCards.length === 6) gridCols = "lg:grid-cols-3";
+                    else if (metricCards.length <= 3) gridCols = "lg:grid-cols-" + metricCards.length;
+
+                    let html = `
+                        <div class="grid grid-cols-2 ${gridCols} gap-4 mb-6">
+                            ${metricCards.join('')}
                         </div>
 
                         <!-- Primary Checks Verification -->
-                        <div class="mb-6 p-4 bg-white rounded border">
-                            <h4 class="text-sm font-bold mb-3 text-gray-700 flex items-center">
-                                <i class="fas fa-clipboard-check mr-2 text-blue-500"></i> Primary Checks Verification
+                        <div class="mb-6 p-5 bg-white rounded-xl border border-gray-100 shadow-sm">
+                            <h4 class="text-sm font-bold mb-4 text-gray-800 flex items-center">
+                                <i class="fas fa-tasks mr-2 text-iqbal-primary"></i> Primary Scenario Verifications
                             </h4>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                <div class="flex items-center text-sm">
-                                    <i class="fas ${data.summary.successful_requests > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2"></i>
-                                    Login Success & Dashboard
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-6">
+                                <div class="flex items-center text-sm font-medium text-gray-700">
+                                    <i class="fas ${data.summary.successful_requests > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                    Auth & Profile Accessible
                                 </div>
+                                
                                 ${data.test_type === 'multi_user_sign_in' ? `
-                                    <div class="flex items-center text-sm">
-                                        <i class="fas ${data.summary.successful_logouts > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2"></i>
-                                        Logout Verified
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.successful_logouts > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        Graceful Logout Verified
                                     </div>
                                 ` : ''}
+
+                                ${(data.test_type === 'teacher_flow_concurrent' || data.test_type === 'doc_upload_repeat' || data.test_type === 'rag_quality_benchmark') ? `
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.total_ingestion_time > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        RAG Ingestion Polling
+                                    </div>
+                                ` : ''}
+
                                 ${(data.test_type === 'teacher_flow_concurrent') ? `
-                                    <div class="flex items-center text-sm">
-                                        <i class="fas ${data.summary.lesson_saved ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2"></i>
-                                        Lesson Saved to DB
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.lesson_saved ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        Lesson Draft Finalized
                                     </div>
                                 ` : ''}
+
                                 ${(data.test_type.includes('sequential') || data.test_type === 'rag_quality_benchmark' || data.test_type === 'student_chat_concurrent') ? `
-                                    <div class="flex items-center text-sm">
-                                        <i class="fas ${data.summary.messages_sent > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2"></i>
-                                        Chat Responses Received
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.messages_sent > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        RAG Context Retrieval
+                                    </div>
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.messages_sent > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        LLM Response Streams
                                     </div>
                                 ` : ''}
+
                                 ${data.summary.stop_requested ? `
-                                    <div class="flex items-center text-sm text-orange-600">
-                                        <i class="fas fa-hand-paper mr-2"></i> Stop Requested
+                                    <div class="flex items-center text-sm font-medium text-orange-600">
+                                        <i class="fas fa-hand-paper mr-2 text-lg"></i> Premature Stop Handled
                                     </div>
                                 ` : ''}
                             </div>
@@ -1652,7 +1882,7 @@
         }
 
         async function deleteMessageCSV(id) {
-            if (!confirm('Delete this message CSV?')) return;
+            if (!confirm('Delete this message CSV? This will remove the source file used for sequential and concurrent chat tests. Continue?')) return;
             try {
                 const res = await fetchWithProxy(`/api/load-test/message-csvs/${id}`, { method: 'DELETE' });
                 const data = await res.json();

@@ -93,48 +93,67 @@ class ReportGenerator:
         """
         tech_report = self.generate_technical_report()
         
-        # Construct prompt
-        prompt = f"""
-        Analyze the following load test report for the Iqbal AI application.
+        if "error" in tech_report:
+            return f"Cannot generate analysis: {tech_report['error']}"
+
+        # Construct a detailed prompt for the LLM
+        # We pass the full JSON as requested by the user
+        report_json = json.dumps(tech_report, indent=2)
         
-        Test Type: {tech_report['test_type']}
-        Status: {tech_report['status']}
-        Duration: {tech_report['duration_seconds']}s
-        Success Rate: {tech_report['summary']['success_rate']}%
-        RPS: {tech_report['summary']['requests_per_second']}
+        system_prompt = """
+        You are a Senior Performance Engineer and AI Analyst at Iqbal AI. 
+        Your task is to analyze raw load test data and provide a premium executive summary.
         
-        Error Summary:
-        {json.dumps(tech_report['errors'], indent=2)}
+        Guidelines:
+        1. BE PROFESSIONAL: Use formal, concise, and technical language.
+        2. BE DATA-DRIVEN: Reference specific metrics (Success Rate, RPS, Latency, Stdev).
+        3. IDENTIFY PATTERNS: Look for bottlenecks, degradation over time, or concurrency issues.
+        4. PASS/FAIL: Strictly judge the test based on a 95% success rate threshold unless specified otherwise.
+        5. FORMATTING: Use Markdown for better readability (headers, bold text, bullet points).
         
-        Please provide:
-        1. An executive summary of the performance.
-        2. Identify any bottlenecks or failure patterns.
-        3. Recommendations for improvement.
-        4. A 'Pass/Fail' judgment based on a 95% success rate threshold.
+        The report you receive is a JSON object containing metrics and logs.
         """
         
-        # Call LLM
+        user_prompt = f"""
+        Please analyze the following Load Test Report JSON and provide an executive summary:
+        
+        {report_json}
+        
+        Structure your response as follows:
+        # Executive Summary
+        (A high-level summary of the test purpose and overall result)
+        
+        ## Performance KPIs
+        (Bullet points highlighting key performance indicators like avg latency, max RPS, and success rate)
+        
+        ## Bottlenecks & Anomalies
+        (Detailed analysis of any issues found in the logs or metrics)
+        
+        ## Recommendations
+        (Clear, actionable steps for the engineering team)
+        
+        ## Final Verdict: [PASS/FAIL]
+        """
+        
         try:
-            # We can use the ChatService or a direct call. 
-            # For simplicity in this module, we might want to isolate it or use the common service.
-            from app.services.chat_service import ChatService
-            # We need a user_id, but this is a system calls. 
-            # ChatService might be tied to user context.
-            # Let's try to use groq client directly if possible or mock it if no key.
+            from app.models import ChatModel
             
             if not api_key:
-                return "LLM Analysis unavailable: No API key provided."
+                return "LLM Analysis unavailable: No API key provided. Please configure it in the Admin Dashboard."
 
-            # Mock for now as we don't have the exact ChatService signature handy and want to avoid circular deps if any.
-            # But the plan says "On-Demand LLM Analysis".
-            # Let's assume we can use a simple placeholder that would be replaced by actual call.
+            # Instantiate ChatModel (system call, user_id=None)
+            chat_model = ChatModel(api_key=api_key, user_id=None)
             
-            # To actually work, we'd need:
-            # client = Groq(api_key=api_key)
-            # chat_completion = client.chat.completions.create(...)
-            return f"**Executive Summary**\n\nThe test executed with a success rate of {tech_report['summary']['success_rate']}%. \n\n(Note: Real LLM call pending integration with Groq client in report.py)"
+            # Generate response
+            analysis = chat_model.generate_response(
+                input_text=user_prompt,
+                system_prompt=system_prompt
+            )
+            
+            return analysis
             
         except Exception as e:
+            logger.error(f"Failed to generate LLM analysis: {str(e)}")
             return f"Failed to generate analysis: {str(e)}"
 
     def save_analysis(self, analysis_text: str):

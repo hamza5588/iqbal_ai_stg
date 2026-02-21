@@ -108,7 +108,16 @@ async def run(
                     thread_id = data.get('thread_id') 
                     summary.total_file_size_mb += os.path.getsize(file_path) / (1024 * 1024)
                     summary.successful_requests += 1
-                    log_func(f"[{user.email}] Upload success in {upload_duration:.0f}ms. Task: {task_id}")
+                    
+                    if not task_id:
+                        # Synchronous processing
+                        summary.ingestion_iterations += 1
+                        summary.total_ingestion_time += upload_duration / 1000
+                        log_func(f"[{user.email}] Upload & Processing (Sync) success in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s")
+                        # Phase 13: Green summary
+                        log_func(f"[{user.email}] Total File Processing Time: {upload_duration/1000:.1f}s (Complete)")
+                    else:
+                        log_func(f"[{user.email}] Upload success in {upload_duration:.0f}ms. Task: {task_id}")
                 else:
                     summary.failed_requests += 1
                     log_func(f"[{user.email}] Upload logic fail in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
@@ -137,8 +146,12 @@ async def run(
                         status = data.get('status')
                         if status == 'success':
                             thread_id = data.get('thread_id')
-                            summary.total_ingestion_time += time.time() - poll_start
-                            log_func(f"[{user.email}] Ingest complete in {time.time() - poll_start:.1f}s (Processing time: {data.get('processing_time_seconds')}s)")
+                            summary.ingestion_iterations += 1
+                            total_ingest_time = time.time() - poll_start
+                            summary.total_ingestion_time += total_ingest_time
+                            log_func(f"[{user.email}] Ingest complete in {total_ingest_time:.1f}s (Processing time: {data.get('processing_time_seconds')}s) - Total Ingest Time: {total_ingest_time:.1f}s")
+                            # Phase 13: Green summary
+                            log_func(f"[{user.email}] Total File Processing Time: {total_ingest_time:.1f}s (Complete)")
                             
                             # Add extracted text artifact metadata
                             summary.artifacts.append({

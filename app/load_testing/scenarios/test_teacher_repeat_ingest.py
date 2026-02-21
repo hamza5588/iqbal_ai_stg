@@ -124,11 +124,7 @@ async def run(
                             chunks = data.get('chunks', 0)
                             p_time = data.get('processing_time_seconds', 0)
                             
-                            processing_times.append(total_duration)
-                            chunk_counts.append(int(chunks) if chunks else 0)
-                            thread_ids.append(thread_id)
-                            
-                            log_func(f"Iter {i+1}: Success (Sync) in {total_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s)")
+                            log_func(f"Iter {i+1}: Success (Sync) in {total_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {total_duration:.1f}s")
                             
                             summary.artifacts.append({
                                 "user_email": user.email,
@@ -172,11 +168,7 @@ async def run(
                                 chunks = data.get('chunks', 0)
                                 
                                 # Record polling_duration for SD calculation
-                                processing_times.append(polling_duration)
-                                chunk_counts.append(int(chunks) if chunks else 0)
-                                thread_ids.append(thread_id)
-                                
-                                log_func(f"Iter {i+1}: Success in {polling_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s)")
+                                log_func(f"Iter {i+1}: Success in {polling_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {polling_duration:.1f}s")
                                 
                                 # Add iteration-specific extracted text artifact
                                 summary.artifacts.append({
@@ -251,6 +243,9 @@ async def run(
                 log_func(f"WARNING: Inconsistent chunk counts: {set(chunk_counts)}", level="WARNING")
             else:
                 log_func("Chunk count consistency: PASS")
+            
+            # Green summary log for Phase 13
+            log_func(f"Total File Processing Time across {len(processing_times)} iterations: {sum(processing_times):.2f}s (Complete)")
 
     except Exception as e:
         log_func(f"Repeat ingest exception: {str(e)}", level="ERROR")

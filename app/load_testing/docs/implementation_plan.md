@@ -1,95 +1,52 @@
-# Bug Fixes & Infrastructure Alignment Plan
+# Implementation Plan - Fix Load Test 'Stop' Functionality
 
-This plan addresses reported UI bugs, reporting inaccuracies, and infrastructure considerations for Docker/Celery environments.
+The 'Stop' button currently suffers from two issues:
+1. **Busy Loop**: The background stop signal checker polls the database without a delay, potentially pinning the CPU.
+2. **Graceful but Slow**: The runner waits for all workers to return naturally. If a worker is stuck in a long HTTP request (e.g., 30s LLM response), it won't see the stop signal until that request finishes.
 
 ## Proposed Changes
 
-### 1. Unified Background Execution (Celery & DB-Backed)
-
-#### [NEW] [load_test_tasks.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/tasks/load_test_tasks.py)
-- **Goal**: Provide a distributed-safe entry point for load tests.
-- **Implementation**:
-  - Define `run_load_test_task` that initializes `LoadTestRunner` and calls `.run()`.
-  - Runs inside Flask app context (via `create_app()`).
-
-#### [MODIFY] [load_test_routes.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/routes/load_test_routes.py)
-- **Start Test**: Change logic to trigger Celery task via `.delay()` if `USE_CELERY_FOR_INGESTION` is True; fall back to background thread otherwise.
-- **Stop Test**: Simplify logic to just set `status = LoadTestStatus.STOPPED.value` in the database. This acts as a global kill-switch for Docker/distributed workers.
-
+### [Component] Load Testing Runner
 #### [MODIFY] [runner.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/runner.py)
-- **Heartbeat & Stop Polling**:
-  - In the main worker loop, periodically (every 2-5s) fetch the latest `LoadTestResult` from the DB.
-  - If `status == STOPPED`, terminate all async workers gracefully.
-- **Status Mapping**: Map `LoadTestStatus.STOPPED` correctly in logs and database.
+- **Stop Signal Polling**: Add `await asyncio.sleep(2)` to `_check_stop_signal` to prevent high CPU usage.
+- **Task Cancellation**:
+    - Store worker tasks as a list.
+    - Use `asyncio.wait` with a timeout or a periodic check for `self.stop_requested`.
+    - If `self.stop_requested` becomes true, explicitly `cancel()` all worker tasks.
+- **Graceful Cleanup**: Add `try...except asyncio.CancelledError` in `_worker` to ensure clean exit and logging when a task is cancelled.
 
----
+### [Component] System-Wide Safety Optimizations
+- **Global Request Timeouts (High-Tolerance)**:
+    - Modify `runner.py` to initialize `aiohttp.ClientSession` with a `ClientTimeout`.
+    - **Values**: `total=300` seconds (5 mins), `connect=10` seconds.
+    - **Rationale**: Protects long RAG/Ingestion tasks while catching truly dead connections.
+- **Polling Standardization**:
+    - Audit all `while` loops in `app/load_testing/scenarios/*.py`.
+    - Ensure `await asyncio.sleep(2)` is present to prevent CPU pinning.
 
-### 2. Reporting & Metrics Fixes
+### [Component] UI Scaling
+- **Increased Limits**:
+    - Update `load_testing.html` to allow up to **1000** users in "Create User Set".
+    - Update `load_testing.html` to allow up to **1000** "Concurrent Users" in test execution.
 
-#### [MODIFY] [scenarios/*.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/)
-- **Goal**: Respect "Stop" signal and track rate limiting.
-- Change: In all loops (chats, ingest polls), check `summary.stop_requested`.
-- Change: Check for `429` status codes and increment `summary.rate_limit_hits`.
-- **Test 3 Specific**: Add a check to confirm all messages were received for the "All responses received" metric.
-- **Test 7 Specific**: Optimize logging order by ensuring iteration logs are flushed before status updates.
-
----
-
-### 3. Dashboard Fixes (templates/admin/load_testing.html)
-- **Fix Concurrent Users Reset**: Update `updateFieldConstraints` to only reset the input if it's invalid, rather than on every CSV change.
-- **User Set Filtering**: Modify `loadUserSets` to filter role based on test type (Teacher vs Student).
-- **Test 8 Fix**: Show CSV select field for `rag_quality_benchmark`.
-- **Report Badges**: Fix logic in `generateReport` to correctly check for `successful_requests` and `lesson_saved` now that they are available in the response.
-- **New Metrics**:
-  - Add **Avg Message Response Time** card (calculated from `latency_trend`).
-  - Add **Rate Limit Alert** card (visible only if `rate_limit_hits > 0`).
-  - Add **All Responses Received** checkmark for Test 3.
-
----
-
-### 4. Infrastructure (Celery & Docker)
-- **Core Logic Interaction**: Since the LoadTestRunner calls the app's existing APIs, it will naturally trigger the existing Celery-based ingestion if it's enabled. The runner already polls the ingest status, so no changes are needed to "wait" for the core Celery tasks.
-
----
-
-## Phase 5: Refinement & Stability
-
-> [!NOTE]
-> This phase addresses UI bugs, execution crashes, and reporting gaps identified during final verification.
-
-### [Component] Frontend Dashboard
-#### [MODIFY] [load_testing.html](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/templates/admin/load_testing.html)
-- **Fix Input Reset**: Prevent `concurrent-users` from resetting to default when selecting a CSV file.
-- **Auto-Clear User Sets**: Clear the "User Set" selection if the selected set's role (Teacher/Student) doesn't match the required role for the new test type.
-- **Start-Test Validation**: Add a check to ensure a User Set is selected and matches the test's role requirements.
-- **Enhanced Metrics Display**: 
-  - Show "Avg Message Response Time" for Tests 2, 3, and 4.
-  - **Mandatory Pairing**: Ensure that whenever a "Msgs Sent" card is displayed, an "Avg Turn Latency" card is also shown with relevant data.
-  - Show "Ingestion Iterations" for Test 7.
-
-### [Component] Load Test Scenarios
-#### [MODIFY] [test_rag_pipeline_quality.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_rag_pipeline_quality.py)
-- **Fix Crash**: Define `filename` correctly from `doc.filename`.
-- **Metrics**: Populate `latency_trend`.
-
-#### [MODIFY] [test_teacher_flow.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_teacher_flow.py)
-- **Metrics**: Populate `latency_trend` during iterative chat.
-
-#### [MODIFY] [test_student_chat.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_student_chat.py)
-- **Metrics**: Populate `latency_trend` during chat sequence.
-
-#### [MODIFY] [test_teacher_repeat_ingest.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_teacher_repeat_ingest.py)
-- **Metrics**: Track `ingestion_iterations`.
-
-### [Component] Configuration & Runner
-#### [MODIFY] [config.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/config.py)
-- Add `ingestion_iterations: int = 0` to `TestResultSummary`.
-
-#### [MODIFY] [runner.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/runner.py)
-- Ensure `ingestion_iterations` is saved in `_save_metrics`.
+### [Component] Data Residue & Cleanup
+- **Selective Purging (No Leaks)**:
+    - In `load_test_routes.py`, update `delete_result(test_id)`:
+        1. Fetch result and extract `thread_id`s from `metrics['artifacts']`.
+        2. **Safety Check**: Only purge `thread_id`s that follow the `user_[id]_conv_[id]` pattern and were specifically created for this test run.
+        3. Delete matching files in `markdown_exports/`.
+        4. Delete matching `RAGThread` entries in the database.
+- **UI Interaction (Explicit Warnings)**:
+    - Update `load_testing.html`:
+        - Change individual delete confirmation: "Deleting this result will also purge its extracted text files and RAG history. Continue?"
+        - Change "Delete All" confirmation: "This will permanently remove ALL test results, logs, and associated files/history. Continue?"
 
 ## Verification Plan
-- Run Test 8 and verify it completes without `filename` error.
-- Verify User Set dropdown clears correctly when alternating between Teacher/Student tests.
-- Verify "Avg Message Response Time" appears for Test 2, 3, 4.
-- Verify "Ingestion Iterations" appears for Test 7.
+
+### Automated Verification
+1. Start a long-running test (e.g., Test 7 with 60 iterations).
+2. Click "Stop".
+3. Verify that logs immediately show "Stop signal detected" and all workers terminate within ~2-3 seconds, rather than waiting for their current polling/chat step to finish.
+
+### Manual Verification
+- Check server CPU usage during a run to ensure `_check_stop_signal` is no longer a busy loop.

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session, current_app, send_file
 from app.rbac.decorators import admin_only
 from app.utils.db import get_db
-from app.models.database_models import Lesson, User, ChatHistory, LessonChatHistory
+from app.models.database_models import Lesson, User, ChatHistory, LessonChatHistory, RAGThread
 from app.load_testing.models import TestUserSet, LoadTestResult, LoadTestStatus, LoadTestLog, TestMessageCSV
 from app.load_testing.config import TestType, TargetEnvironment, LoadTestConfig
 from app.load_testing.user_set_manager import UserSetManager
@@ -182,29 +182,90 @@ def list_results():
 @bp.route('/results/<int:test_id>', methods=['DELETE'])
 @admin_only
 def delete_result(test_id):
-    """Delete a specific test result and its logs"""
+    """Delete a specific test result and its associated artifacts/history"""
     db = get_db()
     result = db.query(LoadTestResult).get(test_id)
     if not result:
         return jsonify({'error': 'Result not found'}), 404
+    
+    try:
+        # --- Selective Purging (Files & RAG Threads) ---
+        metrics = result.metrics or {}
+        artifacts = metrics.get('artifacts', [])
         
-    db.query(LoadTestLog).filter_by(result_id=test_id).delete()
-    db.delete(result)
-    db.commit()
-    return jsonify({'success': True})
+        # Extract unique thread IDs from this specific test
+        thread_ids = set()
+        for art in artifacts:
+            t_id = art.get('thread_id')
+            if t_id:
+                thread_ids.add(t_id)
+        
+        for t_id in thread_ids:
+            # 1. Purge Markdown Artifacts from Disk
+            # Only delete if it matches the thread_id
+            matches = list(MARKDOWN_EXPORTS_DIR.glob(f"{t_id}_*.md"))
+            for match in matches:
+                try:
+                    os.remove(match)
+                    logger.info(f"Purged residue artifact: {match.name}")
+                except Exception as e:
+                    logger.error(f"Failed to purge artifact {match.name}: {e}")
+            
+            # 2. Purge RAG History from DB
+            # This will cascade to RAGChunks automatically
+            db.query(RAGThread).filter_by(thread_id=t_id).delete()
+            logger.info(f"Purged residue RAG Thread: {t_id}")
+
+        # 3. Purge Logs and Result Record
+        db.query(LoadTestLog).filter_by(result_id=test_id).delete()
+        db.delete(result)
+        db.commit()
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error during result deletion: {e}")
+        return jsonify({'error': f"Partial deletion occurred: {str(e)}"}), 500
 
 @bp.route('/results/all', methods=['DELETE'])
 @admin_only
 def delete_all_results():
-    """Delete all test results and logs"""
+    """Delete all test results and associated artifacts/history selectively"""
     db = get_db()
     try:
+        results = db.query(LoadTestResult).all()
+        
+        # Collect all thread_ids from all results
+        all_thread_ids = set()
+        for result in results:
+            metrics = result.metrics or {}
+            artifacts = metrics.get('artifacts', [])
+            for art in artifacts:
+                t_id = art.get('thread_id')
+                if t_id:
+                    all_thread_ids.add(t_id)
+        
+        # Purge all collected artifacts and threads
+        for t_id in all_thread_ids:
+            # 1. Purge Files
+            matches = list(MARKDOWN_EXPORTS_DIR.glob(f"{t_id}_*.md"))
+            for match in matches:
+                try:
+                    os.remove(match)
+                except:
+                    pass
+            
+            # 2. Purge RAG History
+            db.query(RAGThread).filter_by(thread_id=t_id).delete()
+
+        # 3. Final database wipe
         db.query(LoadTestLog).delete()
         db.query(LoadTestResult).delete()
         db.commit()
         return jsonify({'success': True})
     except Exception as e:
         db.rollback()
+        logger.error(f"Error during bulk deletion: {e}")
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/lessons', methods=['GET'])
