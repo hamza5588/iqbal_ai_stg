@@ -1369,7 +1369,9 @@
         function renderTrajectoryChart(containerId, data) {
             const canvas = document.createElement('canvas');
             canvas.className = 'w-full max-h-[300px] mt-4';
-            document.getElementById(containerId).appendChild(canvas);
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.appendChild(canvas);
 
             // Extract Latency Trend from Logs if available
             const latencies = [];
@@ -1472,12 +1474,13 @@
                     `;
 
                     // Render Charts
-                    renderTrajectoryChart('latency_chart_container', data);
+                    renderTrajectoryChart('latency-chart-container', data);
 
                     // Status Distribution Chart
-                    const total = data.summary.total_requests || 0;
-                    const success = data.summary.successful_requests || 0;
-                    const failed = data.summary.failed_requests || 0;
+                    const summary = data.summary || {};
+                    const total = summary.total_requests || 0;
+                    const success = summary.successful_requests || 0;
+                    const failed = summary.failed_requests || 0;
 
                     const statusCtx = document.createElement('canvas');
                     statusCtx.className = 'w-full max-h-[300px] mt-4';

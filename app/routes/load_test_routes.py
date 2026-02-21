@@ -408,10 +408,13 @@ def generate_executive_report(test_id):
     api_key = session.get('groq_api_key') or current_app.config.get('GROQ_API_KEY')
     
     generator = ReportGenerator(test_id)
+    report = generator.generate_technical_report()
     analysis = generator.generate_llm_analysis(api_key)
     generator.save_analysis(analysis)
     
-    return jsonify({'analysis': analysis})
+    # Merge analysis into report data so charts can render
+    report['analysis'] = analysis
+    return jsonify(report)
 
 @bp.route('/message-csvs', methods=['GET'])
 @admin_only
