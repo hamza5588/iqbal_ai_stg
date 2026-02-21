@@ -644,18 +644,27 @@
             const options = select.options;
 
             let targetRole = '';
-            if (type.includes('teacher')) targetRole = 'teacher';
+            if (type.includes('teacher') || type === 'rag_quality_benchmark' || type === 'multi_user_sign_in' || type.includes('sequential') && !type.includes('student')) targetRole = 'teacher';
             if (type.includes('student')) targetRole = 'student';
 
+            let currentValid = false;
             for (let i = 1; i < options.length; i++) {
                 const opt = options[i];
-                if (!targetRole || opt.dataset.role === targetRole) {
+                const matches = !targetRole || opt.dataset.role === targetRole;
+                if (matches) {
                     opt.classList.remove('hidden');
                     opt.disabled = false;
+                    if (opt.selected) currentValid = true;
                 } else {
                     opt.classList.add('hidden');
                     opt.disabled = true;
+                    if (opt.selected) opt.selected = false;
                 }
+            }
+
+            // If current selection was cleared, reset to first valid option or empty
+            if (!currentValid && select.value !== '') {
+                select.value = '';
             }
         }
 
@@ -716,8 +725,8 @@
             const userCount = selectedUser?.dataset.count ? parseInt(selectedUser.dataset.count) : 100;
             const concurrentInput = document.getElementById('concurrent-users');
             concurrentInput.max = userCount;
-            // Only update value if it's currently invalid OR if it was never set (defaulting to 1)
-            if (parseInt(concurrentInput.value) > userCount || concurrentInput.value === '1') {
+            // Only update value if it's currently invalid (over max) or empty
+            if (parseInt(concurrentInput.value) > userCount || !concurrentInput.value) {
                 concurrentInput.value = userCount;
             }
 
@@ -1022,8 +1031,20 @@
 
             // --- Validation ---
             const testType = document.getElementById('test-type').value;
-            const userSetId = document.getElementById('test-user-set').value;
+            const userSetSelect = document.getElementById('test-user-set');
+            const userSetId = userSetSelect.value;
             if (!userSetId) { alert('Please select a User Set.'); return; }
+
+            // Validate Role
+            const selectedRole = userSetSelect.selectedOptions[0].dataset.role;
+            let targetRole = '';
+            if (testType.includes('teacher') || testType === 'rag_quality_benchmark' || testType === 'multi_user_sign_in' || testType.includes('sequential') && !testType.includes('student')) targetRole = 'teacher';
+            if (testType.includes('student')) targetRole = 'student';
+
+            if (targetRole && selectedRole !== targetRole) {
+                alert(`Role Mismatch! This test requires a ${targetRole} user set, but you selected a ${selectedRole} set.`);
+                return;
+            }
 
             const needsDoc = ['teacher_flow_concurrent', 'teacher_rag_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(testType);
             const needsLesson = ['student_chat_concurrent', 'student_lesson_sequential'].includes(testType);
@@ -1243,10 +1264,20 @@
                                     <div class="text-2xl font-bold text-orange-700">${data.summary.consistency_stdev ? data.summary.consistency_stdev.toFixed(2) + 's' : '0.00s'}</div>
                                 </div>
                             ` : ''}
-                            ${data.summary.latency_trend && data.summary.latency_trend.length > 0 ? `
+                            ${(data.summary.latency_trend && data.summary.latency_trend.length > 0) || msgsSent > 0 ? `
                                 <div class="p-4 bg-pink-50 rounded border border-pink-100">
                                     <div class="text-xs text-pink-600 uppercase font-semibold">Avg Turn Latency</div>
-                                    <div class="text-2xl font-bold text-pink-700">${(data.summary.latency_trend.reduce((a, b) => a + b, 0) / data.summary.latency_trend.length).toFixed(2)}s</div>
+                                    <div class="text-2xl font-bold text-pink-700">
+                                        ${data.summary.latency_trend && data.summary.latency_trend.length > 0
+                                ? (data.summary.latency_trend.reduce((a, b) => a + b, 0) / data.summary.latency_trend.length).toFixed(2) + 's'
+                                : 'N/A'}
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${data.summary.ingestion_iterations > 0 ? `
+                                <div class="p-4 bg-cyan-50 rounded border border-cyan-100">
+                                    <div class="text-xs text-cyan-600 uppercase font-semibold">Ingestion Iterations</div>
+                                    <div class="text-2xl font-bold text-cyan-700">${data.summary.ingestion_iterations}</div>
                                 </div>
                             ` : ''}
                             ${data.summary.rate_limit_hits > 0 ? `
@@ -1373,7 +1404,7 @@
                 const res = await fetchWithProxy(`/api/load-test/status/${testId}`);
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.status === 'completed' || data.status === 'failed') {
+                    if (data.status === 'completed' || data.status === 'failed' || data.status === 'stopped') {
                         // Re-enable the form & update labels
                         setTestRunning(false);
 

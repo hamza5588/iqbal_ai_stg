@@ -71,7 +71,7 @@ async def run(
             conversation_id = None
             start_conv = time.time()
             
-            async with session.post(create_conv_url, json={"title": f"Benchmark {filename}"}) as resp:
+            async with session.post(create_conv_url, json={"title": f"Benchmark {doc.filename}"}) as resp:
                 conv_duration = (time.time() - start_conv) * 1000
                 summary.total_requests += 1 # Action 1: Create Conv
                 if resp.status == 429:
@@ -88,7 +88,7 @@ async def run(
             # 2. Upload PDF
             ingest_url = f"{config.base_url}/api/rag/ingest"
             form_data = aiohttp.FormData()
-            form_data.add_field('file', open(file_path, 'rb'), filename=filename, content_type='application/pdf')
+            form_data.add_field('file', open(file_path, 'rb'), filename=doc.filename, content_type='application/pdf')
             form_data.add_field('create_new_thread', 'true')
             form_data.add_field('conversation_id', str(conversation_id))
             
@@ -106,14 +106,14 @@ async def run(
                     if data.get('success'):
                         task_id = data.get('task_id')
                         thread_id = data.get('thread_id')
-                        log_func(f"[{user.email}] Upload success for {filename} in {upload_duration:.0f}ms")
+                        log_func(f"[{user.email}] Upload success for {doc.filename} in {upload_duration:.0f}ms")
                     else:
                         summary.failed_requests += 1
-                        log_func(f"[{user.email}] Upload logic fail for {filename} in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
+                        log_func(f"[{user.email}] Upload logic fail for {doc.filename} in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
                         continue
                 else:
                     summary.failed_requests += 1
-                    log_func(f"[{user.email}] Upload HTTP error for {filename} in {upload_duration:.0f}ms: {resp.status}", level="ERROR")
+                    log_func(f"[{user.email}] Upload HTTP error for {doc.filename} in {upload_duration:.0f}ms: {resp.status}", level="ERROR")
                     continue
 
             # 3. Poll
@@ -149,7 +149,7 @@ async def run(
                     await asyncio.sleep(1)
                 
                 if not thread_id:
-                    log_func(f"[{user.email}] Ingest timed out for {filename}", level="ERROR")
+                    log_func(f"[{user.email}] Ingest timed out for {doc.filename}", level="ERROR")
                     continue
             else:
                 log_func(f"[{user.email}] Processing (Sync) completed during upload.")
@@ -184,6 +184,8 @@ async def run(
                         if data.get('success'):
                             ai_response = data.get('answer', '') or data.get('message', '')
                             summary.successful_requests += 1
+                            summary.messages_sent += 1
+                            summary.latency_trend.append(chat_duration)
                             log_func(f"[{user.email}] Response {idx+1} received in {chat_duration:.1f}s")
                             
                             # Simple keyword scoring
@@ -199,7 +201,7 @@ async def run(
 
             # Store result
             result_entry = {
-                "filename": filename,
+                "filename": doc.filename,
                 "processing_time": processing_time,
                 "response_length": len(ai_response),
                 "keyword_hits": keyword_hits,

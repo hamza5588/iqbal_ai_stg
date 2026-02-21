@@ -142,6 +142,7 @@ async def run(
                             summary.successful_requests += 1
                             
                             if status == 'success':
+                                summary.ingestion_iterations += 1
                                 thread_id = data.get('thread_id')
                                 p_time = data.get('processing_time_seconds', 0)
                                 summary.total_ingestion_time += float(p_time) if p_time else 0

@@ -38,6 +38,81 @@ The system has been meticulously aligned with the finalized scenario methodology
 - **Test 7: Ingest System Reliability (Stability)**: Consistency check for repeated document processing.
 - **Test 8: IQ (RAG Quality) Benchmark**: Automated quality scoring using keyword hit analysis.
 
+### Phase 4: Bug Fixes & Celery Alignment
+
+> [!IMPORTANT]
+> This phase ensures the load testing system is production-ready for Dockerized environments by moving from memory-based state to persistent database-backed signaling.
+
+#### Key Enhancements
+- **Celery Task Wrapper**: Created `load_test_tasks.py` to allow distributed execution of load tests across Celery workers.
+- **Global Stop Signal**: The "Stop" button now sets the test status to `STOPPED` in the database. A heartbeat in the `LoadTestRunner` polls this status every 2 seconds, ensuring all workers across different containers terminate gracefully.
+- **Reporting Data Passthrough**: Fixed `ReportGenerator` to merge all collected metrics from the JSON database blob directly into the response, ensuring scenario-specific data (Keyword Hits, Ingest Consistency) is always visible.
+- **Dashboard UI Stability**:
+  - Fixed the bug where the "Concurrent Users" input would reset to default whenever a CSV was selected.
+  - Implemented **User Set Filtering**: The dropdown now only shows user sets relevant to the selected role (Teacher vs Student).
+  - Added **Rate Limit Alert** card to the report, triggered if any 429 errors are detected during the test.
+- **Scenario Instrumentation**: Updated all 8 scenarios to respect the `stop_requested` flag and track 429 status codes.
+- **SQLAlchemy Session Fix**: Resolved a critical "Instance not bound to Session" error by isolating the stop signal heartbeat session and expunging user objects after loading.
+- **Deadlock Fix in Runner**: Fixed a critical hang where the heartbeat task was blocking the primary test execution from completing.
+- **Frontend Status Sync**: Updated `load_testing.html` to recognize the `STOPPED` status.
+
+## Phase 5: Refinement & Stability (Completed)
+- **Execution Crash**: Resolved the `filename` undefined error in Test 8 (RAG Quality Benchmark).
+- **UI Stability & Logic**:
+  - Fixed **Concurrent Users Reset**: Selecting a CSV file no longer resets the user count to default.
+  - **Dynamic User Set Management**: Implemented auto-clearing and role-based validation for Teacher vs Student tests.
+- **Reporting Enhancements**:
+  - **Mandatory Pairing**: Avg Turn Latency is now automatically displayed alongside Messages Sent.
+  - **Scenario Instrumentation**: Tests 2, 3, and 4 now correctly populate `latency_trend`.
+  - **New Metrics**: Added an "Ingestion Iterations" card for Test 7 (Repeated Ingest).
+  - **Generic Rate Limiting**: Refined 429 status code handling to be provider-agnostic.
+
+---
+
+## Technical Architecture Overview
+
+The following diagram illustrates the new unified execution flow:
+
+```mermaid
+sequenceDiagram
+    participant UI as Load Test Dashboard
+    participant API as Load Test API
+    participant DB as SQL Database
+    participant CW as Celery Worker / Background Thread
+    participant Target as App API (Local/Custom)
+
+    UI->>API: POST /api/load-test/start (config)
+    API->>DB: Create LoadTestResult (status=running)
+    API->>CW: Trigger Task (via Celery or Thread)
+    CW->>DB: Poll status every 2s (Heartbeat)
+    Loop Test Execution
+        CW->>Target: POST /api/rag/chat
+        Target-->>CW: 200 OK / 429 Rate Limit
+        CW->>DB: Save intermittent logs & metrics
+    End
+    UI->>API: POST /api/load-test/stop
+    API->>DB: Update status to STOPPED
+    CW->>DB: Heartbeat sees STOPPED status
+    CW->>CW: Terminate workers gracefully
+    CW->>DB: Final status: STOPPED + Metrics
+    UI->>DB: Polling sees status=STOPPED
+    UI->>UI: Show Final Report
+```
+
+---
+
+## Verification Results
+
+### Cross-Scenario Reporting
+Successfully verified that scenario-specific metrics are persisted and displayed correctly:
+- **Test 1**: Logout Verification badge shown.
+- **Test 3**: All responses received checkmark.
+- **Test 7**: Ingest Consistency (SD) calculated and displayed.
+- **Test 8**: Keyword analysis aggregation.
+
+### Stop Functionality
+Verified that clicking "Stop Test" immediately sends a signal to the database, which is picked up by the background runner, leading to a "Stop signal detected in Database" log and graceful worker termination.
+
 ### Advanced Reporting & Scenario-Aware Metrics
 To fulfill the "Primary Checks" and "Goals" from the scenario methodology, we implemented a dynamic reporting layer:
 - **Scenario-Specific Cards**: The dashboard now automatically displays context-relevant metrics:

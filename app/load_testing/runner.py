@@ -66,15 +66,21 @@ class LoadTestRunner:
                 logger.info(f"Using {len(users)} users for the test")
 
                 start_time = time.time()
-                tasks = []
                 
-                # Add stop signal checker
-                tasks.append(self._check_stop_signal())
+                # Start stop signal checker as a background task
+                stop_checker = asyncio.create_task(self._check_stop_signal())
                 
+                # Create worker tasks
+                worker_tasks = []
                 for i, user in enumerate(users):
-                    tasks.append(self._worker(i, user, start_time))
+                    worker_tasks.append(self._worker(i, user, start_time))
                 
-                await asyncio.gather(*tasks)
+                # Wait for workers only
+                await asyncio.gather(*worker_tasks)
+                
+                # Signal heartbeat to stop and wait for it
+                self.is_running = False
+                await stop_checker
                 
                 total_duration = time.time() - start_time
                 
@@ -104,9 +110,13 @@ class LoadTestRunner:
 
     async def _check_stop_signal(self):
         """Poll the database to see if a stop has been requested (global stop)"""
+        # Use a fresh session each time to avoid interference with the main session in 'g'
+        from app.utils.db import get_session_factory
+        session_factory = get_session_factory()
+        
         while self.is_running:
+            db = session_factory()
             try:
-                db = get_db()
                 result = db.get(LoadTestResult, self.result_id)
                 if result and result.status == LoadTestStatus.STOPPED.value:
                     if not self.stop_requested:
@@ -117,7 +127,7 @@ class LoadTestRunner:
             except Exception as e:
                 logger.error(f"Error checking stop signal: {e}")
             finally:
-                close_db()
+                db.close()
             await asyncio.sleep(2) # Poll every 2 seconds
 
     async def _worker(self, worker_id: int, user: TestUser, start_time: float):
@@ -256,7 +266,9 @@ class LoadTestRunner:
             
             users = []
             for test_user, live_password in results:
+                # Set password and expunge from session so it's safe to use across threads/tasks
                 test_user.password = live_password
+                db.expunge(test_user)
                 users.append(test_user)
             
             self._log(f"Successfully loaded {len(users)} users from Set ID {self.config.test_user_set_id} with live passwords")
@@ -315,6 +327,8 @@ class LoadTestRunner:
                     "consistency_stdev": self.summary.consistency_stdev,
                     "latency_trend": self.summary.latency_trend,
                     "lesson_saved": self.summary.lesson_saved,
+                    "rate_limit_hits": self.summary.rate_limit_hits,
+                    "ingestion_iterations": self.summary.ingestion_iterations,
                     "errors": self.summary.errors
                 }
                 result.metrics = metrics

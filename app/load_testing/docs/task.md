@@ -17,6 +17,25 @@
 - [x] Frontend: Implement dynamic cards and "Primary Check" badges
 - [x] Final Verification: Verify results across all 8 scenarios
 
+### [x] Phase 4: Bug Fixes & Celery Alignment
+- [x] Unified Background Execution: Implement `load_test_tasks.py` for Celery support
+- [x] DB-Backed Stop Logic: Implement global stop signal via database status
+- [x] Reporting Fixes: Ensure `ReportGenerator` passes all backend metrics to frontend
+- [x] UI Stability: Fix input resets and filtering logic in `load_testing.html`
+- [x] Scenario Updates: Respect stop signal and track rate limiting (429s)
+- [x] SQLAlchemy Session Fix: Resolve detached instance errors in runner
+- [x] Final Verification: Stress test the stop button and verify reporting accuracy
+
+### Phase 5: Refinement & Stability [x]
+- [x] Fix Test 8 `filename` crash
+- [x] Fix Frontend `concurrent-users` reset logic
+- [x] Implement Frontend User Set Role validation & auto-clearing
+- [x] Update Scenarios (T2, T3, T4, T8) to populate `latency_trend`
+- [x] Implement Frontend mandatory Pairing: Logic to show Avg Latency whenever Msgs Sent > 0
+- [x] Update Test 7 to track `ingestion_iterations`
+- [x] Update Frontend to show new metric cards (Avg Latency, Ingestion Iterations)
+- [x] Final end-to-end verification of all 8 scenarios
+
 ---
 
 ## Detailed Task History

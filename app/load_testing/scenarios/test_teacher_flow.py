@@ -177,6 +177,7 @@ async def run(
                     if data.get('success'):
                         summary.messages_sent += 1
                         summary.successful_requests += 1
+                        summary.latency_trend.append(chat_duration)
                         ans_snippet = (data.get('answer') or data.get('message') or "")[:50].replace('\n', ' ')
                         log_func(f"[{user.email}] Response {idx+1} received in {chat_duration:.1f}s: \"{ans_snippet}...\"")
                     else:

@@ -64,3 +64,4 @@ class TestResultSummary:
     lesson_saved: bool = False
     stop_requested: bool = False
     rate_limit_hits: int = 0
+    ingestion_iterations: int = 0

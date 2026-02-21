@@ -1,67 +1,95 @@
-# Reporting Enhancement Implementation Plan
+# Bug Fixes & Infrastructure Alignment Plan
 
-This plan outlines the technical steps to surface deep metrics and "Primary Check" verification in the Load Testing Dashboard.
+This plan addresses reported UI bugs, reporting inaccuracies, and infrastructure considerations for Docker/Celery environments.
 
 ## Proposed Changes
 
-### 1. Data Layer & Core Engine
-To store specialized metrics, we need to expand the shared summary object and the persistence logic.
+### 1. Unified Background Execution (Celery & DB-Backed)
 
-#### [MODIFY] [config.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/config.py)
-- Expand `TestResultSummary` to include:
-  - `successful_logouts: int` (For Test 1)
-  - `keyword_hits: int` (For Test 8)
-  - `consistency_stdev: float` (For Test 7)
-  - `latency_trend: List[float]` (For Stress Tests 5 & 6)
-  - `lesson_saved: bool` (For Test 2/3)
+#### [NEW] [load_test_tasks.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/tasks/load_test_tasks.py)
+- **Goal**: Provide a distributed-safe entry point for load tests.
+- **Implementation**:
+  - Define `run_load_test_task` that initializes `LoadTestRunner` and calls `.run()`.
+  - Runs inside Flask app context (via `create_app()`).
+
+#### [MODIFY] [load_test_routes.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/routes/load_test_routes.py)
+- **Start Test**: Change logic to trigger Celery task via `.delay()` if `USE_CELERY_FOR_INGESTION` is True; fall back to background thread otherwise.
+- **Stop Test**: Simplify logic to just set `status = LoadTestStatus.STOPPED.value` in the database. This acts as a global kill-switch for Docker/distributed workers.
 
 #### [MODIFY] [runner.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/runner.py)
-- Update `_save_metrics()` to map these new summary fields into the JSON `metrics` column in the database.
+- **Heartbeat & Stop Polling**:
+  - In the main worker loop, periodically (every 2-5s) fetch the latest `LoadTestResult` from the DB.
+  - If `status == STOPPED`, terminate all async workers gracefully.
+- **Status Mapping**: Map `LoadTestStatus.STOPPED` correctly in logs and database.
 
 ---
 
-### 2. Scenario Instrumentation
-Each scenario must be updated to populate the new fields in the `summary` object.
+### 2. Reporting & Metrics Fixes
 
-#### [MODIFY] [test_auth.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_auth.py)
-- Increment `summary.successful_logouts` upon successful logout.
+#### [MODIFY] [scenarios/*.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/)
+- **Goal**: Respect "Stop" signal and track rate limiting.
+- Change: In all loops (chats, ingest polls), check `summary.stop_requested`.
+- Change: Check for `429` status codes and increment `summary.rate_limit_hits`.
+- **Test 3 Specific**: Add a check to confirm all messages were received for the "All responses received" metric.
+- **Test 7 Specific**: Optimize logging order by ensuring iteration logs are flushed before status updates.
+
+---
+
+### 3. Dashboard Fixes (templates/admin/load_testing.html)
+- **Fix Concurrent Users Reset**: Update `updateFieldConstraints` to only reset the input if it's invalid, rather than on every CSV change.
+- **User Set Filtering**: Modify `loadUserSets` to filter role based on test type (Teacher vs Student).
+- **Test 8 Fix**: Show CSV select field for `rag_quality_benchmark`.
+- **Report Badges**: Fix logic in `generateReport` to correctly check for `successful_requests` and `lesson_saved` now that they are available in the response.
+- **New Metrics**:
+  - Add **Avg Message Response Time** card (calculated from `latency_trend`).
+  - Add **Rate Limit Alert** card (visible only if `rate_limit_hits > 0`).
+  - Add **All Responses Received** checkmark for Test 3.
+
+---
+
+### 4. Infrastructure (Celery & Docker)
+- **Core Logic Interaction**: Since the LoadTestRunner calls the app's existing APIs, it will naturally trigger the existing Celery-based ingestion if it's enabled. The runner already polls the ingest status, so no changes are needed to "wait" for the core Celery tasks.
+
+---
+
+## Phase 5: Refinement & Stability
+
+> [!NOTE]
+> This phase addresses UI bugs, execution crashes, and reporting gaps identified during final verification.
+
+### [Component] Frontend Dashboard
+#### [MODIFY] [load_testing.html](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/templates/admin/load_testing.html)
+- **Fix Input Reset**: Prevent `concurrent-users` from resetting to default when selecting a CSV file.
+- **Auto-Clear User Sets**: Clear the "User Set" selection if the selected set's role (Teacher/Student) doesn't match the required role for the new test type.
+- **Start-Test Validation**: Add a check to ensure a User Set is selected and matches the test's role requirements.
+- **Enhanced Metrics Display**: 
+  - Show "Avg Message Response Time" for Tests 2, 3, and 4.
+  - **Mandatory Pairing**: Ensure that whenever a "Msgs Sent" card is displayed, an "Avg Turn Latency" card is also shown with relevant data.
+  - Show "Ingestion Iterations" for Test 7.
+
+### [Component] Load Test Scenarios
+#### [MODIFY] [test_rag_pipeline_quality.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_rag_pipeline_quality.py)
+- **Fix Crash**: Define `filename` correctly from `doc.filename`.
+- **Metrics**: Populate `latency_trend`.
 
 #### [MODIFY] [test_teacher_flow.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_teacher_flow.py)
-- Set `summary.lesson_saved = True` upon successful DB persistence.
+- **Metrics**: Populate `latency_trend` during iterative chat.
 
-#### [MODIFY] [test_rag_pipeline_quality.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_rag_pipeline_quality.py)
-- Populate `summary.keyword_hits` using the existing analysis logic.
+#### [MODIFY] [test_student_chat.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_student_chat.py)
+- **Metrics**: Populate `latency_trend` during chat sequence.
 
 #### [MODIFY] [test_teacher_repeat_ingest.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/test_teacher_repeat_ingest.py)
-- Calculate and populate `summary.consistency_stdev`.
+- **Metrics**: Track `ingestion_iterations`.
 
-#### [MODIFY] [Sequential Tests (T5/T6)](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/scenarios/)
-- Record `duration` of each chat turn into `summary.latency_trend`.
+### [Component] Configuration & Runner
+#### [MODIFY] [config.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/config.py)
+- Add `ingestion_iterations: int = 0` to `TestResultSummary`.
 
----
-
-### 3. Frontend Dashboard
-Update the reporting interface to be "Scenario Aware."
-
-#### [MODIFY] [load_testing.html](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/templates/admin/load_testing.html)
-- **Dynamic Cards**: Modify `generateReport()` to show different cards based on `test_type`:
-  - Show **Keyword Hits** for Test 8.
-  - Show **Ingestion Consistency** for Test 7.
-- **Primary Check Badges**: Add a "Verification" section displaying green/red checkmarks for:
-  - `Login Success`
-  - `Logout Verified` (If applicable)
-  - `Lesson Saved` (If applicable)
-- **Latency Trend**: Render a simple list or "Stability Score" for Stress Tests.
-
----
+#### [MODIFY] [runner.py](file:///Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/load_testing/runner.py)
+- Ensure `ingestion_iterations` is saved in `_save_metrics`.
 
 ## Verification Plan
-
-### Automated Verification
-- Run **Test 1** and verify the "Logout Verified" badge appears in the report.
-- Run **Test 8** and verify "Total Keyword Hits" appears as a metric card.
-- Run **Test 7** and verify "Ingestion Stability (SD)" is visible.
-
-### Safety Checks
-- **Backward Compatibility**: Ensure that old test results without these new fields still render correctly (using optional chaining/null checks in JS).
-- **Concurrency Safety**: Verify that updating the shared `summary` object across concurrent workers does not cause race conditions (using atomic increments or thread-safe patterns).
+- Run Test 8 and verify it completes without `filename` error.
+- Verify User Set dropdown clears correctly when alternating between Teacher/Student tests.
+- Verify "Avg Message Response Time" appears for Test 2, 3, 4.
+- Verify "Ingestion Iterations" appears for Test 7.
