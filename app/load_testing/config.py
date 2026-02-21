@@ -65,3 +65,4 @@ class TestResultSummary:
     stop_requested: bool = False
     rate_limit_hits: int = 0
     ingestion_iterations: int = 0
+    artifacts: list[dict] = field(default_factory=list)

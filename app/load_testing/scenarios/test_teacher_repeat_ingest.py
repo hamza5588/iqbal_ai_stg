@@ -103,7 +103,7 @@ async def run(
             
             task_id = None
             thread_id = None
-            
+            start_time = time.time()
             async with session.post(ingest_url, data=form_data) as resp:
                 summary.total_requests += 1
                 if resp.status == 429:
@@ -113,7 +113,30 @@ async def run(
                     if data.get('success'):
                         summary.total_file_size_mb += os.path.getsize(file_path) / (1024 * 1024)
                         task_id = data.get('task_id')
+                        thread_id = data.get('thread_id')
                         summary.successful_requests += 1
+                        
+                        # Handle synchronous success (no task_id but has thread_id)
+                        if not task_id and thread_id:
+                            total_duration = time.time() - start_time
+                            summary.ingestion_iterations += 1
+                            summary.total_ingestion_time += total_duration
+                            chunks = data.get('chunks', 0)
+                            p_time = data.get('processing_time_seconds', 0)
+                            
+                            processing_times.append(total_duration)
+                            chunk_counts.append(int(chunks) if chunks else 0)
+                            thread_ids.append(thread_id)
+                            
+                            log_func(f"Iter {i+1}: Success (Sync) in {total_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s)")
+                            
+                            summary.artifacts.append({
+                                "user_email": user.email,
+                                "type": "extracted_text",
+                                "thread_id": thread_id,
+                                "doc_name": filename,
+                                "iteration": i + 1
+                            })
                     else:
                         summary.failed_requests += 1
                         log_func(f"Upload failed: {data.get('error')}", level="ERROR")
@@ -123,36 +146,46 @@ async def run(
                     log_func(f"Upload HTTP error: {resp.status}", level="ERROR")
                     continue
 
-            # 3. Poll Status
+            # 3. Poll Status (only if async task was started)
             if task_id:
                 poll_url = f"{config.base_url}/api/rag/ingest/status/{task_id}"
                 max_retries = 60
                 retry_count = 0
                 success = False
-                
+                poll_start = time.time()
                 while retry_count < max_retries:
                     if summary.stop_requested:
                         log_func(f"[{user.email}] Ingest poll stopped by user")
                         return
                     async with session.get(poll_url) as resp:
-                        summary.total_requests += 1
                         if resp.status == 200:
                             data = await resp.json()
                             status = data.get('status')
-                            summary.successful_requests += 1
                             
                             if status == 'success':
                                 summary.ingestion_iterations += 1
                                 thread_id = data.get('thread_id')
                                 p_time = data.get('processing_time_seconds', 0)
-                                summary.total_ingestion_time += float(p_time) if p_time else 0
+                                
+                                polling_duration = time.time() - poll_start
+                                summary.total_ingestion_time += polling_duration
                                 chunks = data.get('chunks', 0)
                                 
-                                processing_times.append(float(p_time) if p_time else 0)
+                                # Record polling_duration for SD calculation
+                                processing_times.append(polling_duration)
                                 chunk_counts.append(int(chunks) if chunks else 0)
                                 thread_ids.append(thread_id)
                                 
-                                log_func(f"Iter {i+1}: Success (Time: {p_time}s, Chunks: {chunks})")
+                                log_func(f"Iter {i+1}: Success in {polling_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s)")
+                                
+                                # Add iteration-specific extracted text artifact
+                                summary.artifacts.append({
+                                    "user_email": user.email,
+                                    "type": "extracted_text",
+                                    "thread_id": thread_id,
+                                    "doc_name": filename,
+                                    "iteration": i + 1
+                                })
                                 success = True
                                 break
                             elif status in ['failure', 'revoked']:
@@ -161,7 +194,7 @@ async def run(
                         else:
                             summary.failed_requests += 1
                     retry_count += 1
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2) # Prevent busy loop
                 
                 if not success:
                     log_func(f"Iter {i+1}: Timed out", level="ERROR")

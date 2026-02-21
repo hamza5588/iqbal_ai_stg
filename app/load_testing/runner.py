@@ -73,10 +73,22 @@ class LoadTestRunner:
                 # Create worker tasks
                 worker_tasks = []
                 for i, user in enumerate(users):
-                    worker_tasks.append(self._worker(i, user, start_time))
+                    worker_tasks.append(asyncio.create_task(self._worker(i, user, start_time)))
                 
-                # Wait for workers only
-                await asyncio.gather(*worker_tasks)
+                # Monitor workers and stop signal
+                while worker_tasks and not self.stop_requested:
+                    # Check if all tasks are done
+                    done, pending = await asyncio.wait(worker_tasks, timeout=1.0)
+                    worker_tasks = list(pending)
+                    if not worker_tasks:
+                        break
+                
+                # If stopped, cancel remaining workers
+                if self.stop_requested and worker_tasks:
+                    self._log(f"Cancelling {len(worker_tasks)} active workers...", level="WARNING")
+                    for t in worker_tasks:
+                        t.cancel()
+                    await asyncio.gather(*worker_tasks, return_exceptions=True)
                 
                 # Signal heartbeat to stop and wait for it
                 self.is_running = False
@@ -128,7 +140,7 @@ class LoadTestRunner:
                 logger.error(f"Error checking stop signal: {e}")
             finally:
                 db.close()
-            await asyncio.sleep(2) # Poll every 2 seconds
+            await asyncio.sleep(2) # Prevent pinning CPU
 
     async def _worker(self, worker_id: int, user: TestUser, start_time: float):
         """Async worker for a single user"""
@@ -136,8 +148,13 @@ class LoadTestRunner:
         logger.info(f"Worker {worker_id} started for user {user_email}")
         
         try:
-            # Create a dedicated session for this user to isolate cookies
-            async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(unsafe=True)) as session:
+            # Create a dedicated session for this user with a high-tolerance timeout (5 mins)
+            # connect=10s catches dead servers quickly, total=300s allows slow AI/Ingest tasks.
+            timeout = aiohttp.ClientTimeout(total=300, connect=10)
+            async with aiohttp.ClientSession(
+                cookie_jar=aiohttp.CookieJar(unsafe=True),
+                timeout=timeout
+            ) as session:
                 
                 # 1. Login
                 login_success = await self._login(session, user)
@@ -147,9 +164,10 @@ class LoadTestRunner:
                     return
 
                 # 2. Execute Scenario based on test type
-                # We will import scenarios dynamically or use a dispatcher
                 await self._dispatch_scenario(session, user, self.config)
                 
+        except asyncio.CancelledError:
+            self._log(f"Worker {worker_id} ({user_email}) cancelled by user", level="WARNING")
         except Exception as e:
             logger.error(f"Worker {worker_id} execution error: {str(e)}")
             self.summary.errors.append({"user": user_email, "error": str(e)})
@@ -165,6 +183,7 @@ class LoadTestRunner:
         
         start = time.time()
         try:
+            self.summary.total_requests += 1
             async with session.post(url, data=payload, allow_redirects=False) as response:
                 duration = time.time() - start
                 
@@ -174,6 +193,7 @@ class LoadTestRunner:
                     cookies = session.cookie_jar.filter_cookies(self.config.base_url)
                     if 'session' in cookies:
                         logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
+                        self.summary.successful_requests += 1
                         return True
                     else:
                         logger.warning(f"User {user.email} login redirect but no session cookie found for {self.config.base_url}")
@@ -188,6 +208,7 @@ class LoadTestRunner:
                             cookies = session.cookie_jar.filter_cookies(self.config.base_url)
                             if 'session' in cookies:
                                 logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
+                                self.summary.successful_requests += 1
                                 return True
                             else:
                                 logger.warning(f"User {user.email} login success JSON but no session cookie")
@@ -329,9 +350,14 @@ class LoadTestRunner:
                     "lesson_saved": self.summary.lesson_saved,
                     "rate_limit_hits": self.summary.rate_limit_hits,
                     "ingestion_iterations": self.summary.ingestion_iterations,
-                    "errors": self.summary.errors
+                    "errors": self.summary.errors,
+                    "artifacts": self.summary.artifacts
                 }
+                from sqlalchemy.orm.attributes import flag_modified
+                logger.info(f"Saving metrics for test {self.result_id}: {len(self.summary.artifacts)} artifacts, SD={self.summary.consistency_stdev}")
                 result.metrics = metrics
+                flag_modified(result, "metrics")
                 db.commit()
+                logger.info(f"Metrics saved and committed for test {self.result_id}")
         except Exception as e:
             logger.error(f"Failed to save metrics: {str(e)}")

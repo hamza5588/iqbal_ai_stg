@@ -79,6 +79,7 @@ async def run(
                 if resp.status == 200:
                     data = await resp.json()
                     conversation_id = data.get('conversation_id')
+                    summary.successful_requests += 1
                     log_func(f"[{user.email}] Conv created in {conv_duration:.0f}ms")
                 else:
                     summary.failed_requests += 1
@@ -104,6 +105,7 @@ async def run(
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
+                        summary.successful_requests += 1
                         task_id = data.get('task_id')
                         thread_id = data.get('thread_id')
                         log_func(f"[{user.email}] Upload success for {doc.filename} in {upload_duration:.0f}ms")
@@ -140,19 +142,34 @@ async def run(
                                 processing_time = data.get('processing_time_seconds', 0)
                                 summary.successful_requests += 1
                                 log_func(f"[{user.email}] Ingest complete in {time.time() - poll_start:.1f}s")
+                                
+                                # Add extracted text artifact metadata
+                                summary.artifacts.append({
+                                    "user_email": user.email,
+                                    "type": "extracted_text",
+                                    "thread_id": thread_id,
+                                    "doc_name": doc.filename
+                                })
                                 break
                             elif status in ['failure', 'revoked']:
                                 log_func(f"[{user.email}] Ingest failed in {time.time() - poll_start:.1f}s: {status}", level="ERROR")
                                 break
                         else:
                             log_func(f"[{user.email}] Poll error {resp.status}", level="WARNING")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2) # Prevent busy loop
                 
                 if not thread_id:
                     log_func(f"[{user.email}] Ingest timed out for {doc.filename}", level="ERROR")
                     continue
-            else:
+            elif thread_id:
                 log_func(f"[{user.email}] Processing (Sync) completed during upload.")
+                # Add extracted text artifact metadata for sync path
+                summary.artifacts.append({
+                    "user_email": user.email,
+                    "type": "extracted_text",
+                    "thread_id": thread_id,
+                    "doc_name": doc.filename
+                })
 
             # 4. Standard Question (Iterative if messages provided)
             msg_list = messages if messages else ["Summarize the key points of this document in 3 bullet points."]
@@ -161,6 +178,7 @@ async def run(
             # Simple keyword list for benchmark scoring (can be expanded)
             target_keywords = ["summary", "key", "important", "conclusion", "details", "chapter", "section"]
             keyword_hits = 0
+            chat_transcript = []
             
             for idx, question in enumerate(msg_list):
                 if summary.stop_requested:
@@ -182,12 +200,17 @@ async def run(
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get('success'):
-                            ai_response = data.get('answer', '') or data.get('message', '')
+                            ans_text = data.get('answer', '') or data.get('message', '')
+                            ai_response = ans_text
                             summary.successful_requests += 1
                             summary.messages_sent += 1
                             summary.latency_trend.append(chat_duration)
                             log_func(f"[{user.email}] Response {idx+1} received in {chat_duration:.1f}s")
                             
+                            # Add to transcript
+                            chat_transcript.append({"role": "user", "content": question})
+                            chat_transcript.append({"role": "bot", "content": ans_text, "latency": chat_duration})
+
                             # Simple keyword scoring
                             hits = sum(1 for word in target_keywords if word.lower() in ai_response.lower())
                             keyword_hits += hits
@@ -210,6 +233,16 @@ async def run(
             }
             benchmark_results.append(result_entry)
             summary.keyword_hits += keyword_hits
+            
+            # Add chat transcript artifact metadata
+            summary.artifacts.append({
+                "user_email": user.email,
+                "type": "chat_transcript",
+                "conversation_id": conversation_id,
+                "doc_name": doc.filename,
+                "keyword_hits": keyword_hits,
+                "transcript": chat_transcript
+            })
 
         # Store benchmark results in logs
         total_bench_duration = time.time() - scenario_start

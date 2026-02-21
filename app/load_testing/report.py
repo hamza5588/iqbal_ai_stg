@@ -24,7 +24,7 @@ class ReportGenerator:
             if not result:
                 return {"error": "Result not found"}
                 
-            logs = session.query(LoadTestLog).filter_by(result_id=self.result_id).all()
+            logs = session.query(LoadTestLog).filter_by(result_id=self.result_id).order_by(LoadTestLog.timestamp.asc(), LoadTestLog.id.asc()).all()
             
             # Basic Metrics
             metrics = result.metrics or {}

@@ -37,17 +37,20 @@ async def run(
             if response.status == 200:
                 text = await response.text()
                 # Verify we are actually on the dashboard and not redirected back to login
-                if "Welcome" in text or "Chat" in text or "Iqbal AI" in text:
+                # Broadened check for Student Dashboard and general Iqbal AI content
+                success_keywords = ["Welcome", "Chat", "Iqbal AI", "Student", "Dashboard", "Teacher"]
+                if any(kw.lower() in text.lower() for kw in success_keywords):
                     summary.successful_requests += 1
-                    log_func(f"Dashboard access confirmed in {duration:.2f}s")
+                    log_func(f"Dashboard access confirmed at {response.url} in {duration:.2f}s")
                 else:
-                    if "Login" in text:
+                    if "Login" in text or "Sign In" in text:
                         summary.failed_requests += 1
-                        summary.errors.append({"user": user.email, "error": "Redirected to login page"})
-                        log_func(f"Failed: Redirected to login page in {duration:.2f}s", level="ERROR")
+                        summary.errors.append({"user": user.email, "error": f"Redirected to login. URL: {response.url}"})
+                        log_func(f"Failed: Redirected to login page ({response.url}) in {duration:.2f}s", level="ERROR")
                     else:
-                        summary.successful_requests += 1
-                        log_func(f"Dashboard loaded in {duration:.2f}s")
+                        summary.failed_requests += 1
+                        summary.errors.append({"user": user.email, "error": f"Internal content mismatch at {response.url}"})
+                        log_func(f"Failed: Content mismatch at {response.url}. SNIPPET: {text[:150]}...", level="ERROR")
             else:
                 summary.failed_requests += 1
                 summary.errors.append({"user": user.email, "error": f"Dashboard returned {response.status}"})

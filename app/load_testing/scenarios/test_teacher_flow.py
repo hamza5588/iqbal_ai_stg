@@ -139,6 +139,14 @@ async def run(
                             thread_id = data.get('thread_id')
                             summary.total_ingestion_time += time.time() - poll_start
                             log_func(f"[{user.email}] Ingest complete in {time.time() - poll_start:.1f}s (Processing time: {data.get('processing_time_seconds')}s)")
+                            
+                            # Add extracted text artifact metadata
+                            summary.artifacts.append({
+                                "user_email": user.email,
+                                "type": "extracted_text",
+                                "thread_id": thread_id,
+                                "doc_name": filename
+                            })
                             break
                         elif status in ['failure', 'revoked']:
                             log_func(f"[{user.email}] Ingest failed in {time.time() - poll_start:.1f}s: {status}", level="ERROR")
@@ -154,10 +162,10 @@ async def run(
         else:
             log_func(f"[{user.email}] Step 3: Processing (Synchronous) completed during Step 2.")
 
-        # 4. Chat with PDF (Iterative)
         msg_list = messages if messages else ["Create a lesson plan based on this document."]
         log_func(f"[{user.email}] Step 4: Iterative Chat starting for {len(msg_list)} messages...")
         
+        chat_transcript = []
         for idx, chat_msg in enumerate(msg_list):
             if summary.stop_requested:
                 log_func(f"[{user.email}] Chat sequence stopped by user")
@@ -178,8 +186,13 @@ async def run(
                         summary.messages_sent += 1
                         summary.successful_requests += 1
                         summary.latency_trend.append(chat_duration)
-                        ans_snippet = (data.get('answer') or data.get('message') or "")[:50].replace('\n', ' ')
+                        ans_text = data.get('answer') or data.get('message') or ""
+                        ans_snippet = ans_text[:50].replace('\n', ' ')
                         log_func(f"[{user.email}] Response {idx+1} received in {chat_duration:.1f}s: \"{ans_snippet}...\"")
+                        
+                        # Add to transcript
+                        chat_transcript.append({"role": "user", "content": chat_msg})
+                        chat_transcript.append({"role": "bot", "content": ans_text, "latency": chat_duration})
                     else:
                         summary.failed_requests += 1
                         log_func(f"[{user.email}] Chat {idx+1} fail in {chat_duration:.1f}s: {data.get('error')}", level="ERROR")
@@ -226,6 +239,21 @@ async def run(
                     summary.successful_requests += 1
                     summary.lesson_saved = True
                     log_func(f"[{user.email}] Lesson saved in {save_duration:.0f}ms")
+                    
+                    # Add remaining artifact metadata (Chat & Lesson)
+                    summary.artifacts.append({
+                        "user_email": user.email,
+                        "type": "chat_transcript",
+                        "conversation_id": conversation_id,
+                        "doc_name": filename,
+                        "transcript": chat_transcript
+                    })
+                    summary.artifacts.append({
+                        "user_email": user.email,
+                        "type": "lesson_content",
+                        "lesson_id": data.get('id'),
+                        "doc_name": filename
+                    })
                 else:
                     summary.failed_requests += 1
                     log_func(f"[{user.email}] Save logic fail in {save_duration:.0f}ms: {data.get('error')}", level="ERROR")

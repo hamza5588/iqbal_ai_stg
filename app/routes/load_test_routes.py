@@ -1,7 +1,7 @@
-from flask import Blueprint, request, jsonify, session, current_app
+from flask import Blueprint, request, jsonify, session, current_app, send_file
 from app.rbac.decorators import admin_only
 from app.utils.db import get_db
-from app.models.database_models import Lesson
+from app.models.database_models import Lesson, User, ChatHistory, LessonChatHistory
 from app.load_testing.models import TestUserSet, LoadTestResult, LoadTestStatus, LoadTestLog, TestMessageCSV
 from app.load_testing.config import TestType, TargetEnvironment, LoadTestConfig
 from app.load_testing.user_set_manager import UserSetManager
@@ -12,19 +12,33 @@ from app.load_testing.report import ReportGenerator
 import threading
 import asyncio
 import logging
+import io
+import os
+import re
+from pathlib import Path
 from datetime import datetime
+from app.utils.rag_service import MARKDOWN_EXPORTS_DIR
 
 bp = Blueprint('load_test', __name__)
 logger = logging.getLogger(__name__)
 
 # Global dictionary to track active runners
-# In a multi-worker production environment, this would need Redis or DB state.
-# But for a load testing tool likely running on a single admin instance or manageable scale, this is fine.
 active_runners = {}
 
 def run_async_test(runner):
     """Helper to run async test in a thread"""
     asyncio.run(runner.run())
+
+def sanitize_filename(name, ext=".md"):
+    """Helper to create clean filenames with correct extensions"""
+    # Remove existing common extensions
+    for suffix in [".pdf", ".csv", ".txt", ".md"]:
+        if name.lower().endswith(suffix):
+            name = name[:-len(suffix)]
+    
+    # Replace spaces and special chars with underscores
+    name = re.sub(r'[^\w\s-]', '', name).strip().replace(' ', '_')
+    return f"{name}{ext}"
 
 @bp.route('/start', methods=['POST'])
 @admin_only
@@ -68,8 +82,6 @@ def start_test():
         db.add(result)
         db.commit()
         
-        # Initialize Runner (or Celery task)
-        from flask import current_app
         use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
         
         if use_celery:
@@ -85,7 +97,6 @@ def start_test():
             runner = LoadTestRunner(current_app._get_current_object(), config, result.id)
             active_runners[result.id] = runner
             
-            # Start in background thread
             thread = threading.Thread(target=run_async_test, args=(runner,))
             thread.daemon = True
             thread.start()
@@ -111,11 +122,9 @@ def stop_test(test_id):
     if not result:
         return jsonify({'error': 'Test not found'}), 404
         
-    # Mark status as STOPPED in DB. The runner heartbeat will pick this up.
     result.status = LoadTestStatus.STOPPED.value
     db.commit()
     
-    # Also notify active runner if it's in this process
     if test_id in active_runners:
         active_runners[test_id].stop()
         
@@ -142,14 +151,13 @@ def get_status(test_id):
 def get_test_logs(test_id):
     """Get recent logs for a test (live streaming)"""
     db = get_db()
-    # Get logs created after a certain timestamp if provided, or last 50
     since = request.args.get('since')
     
     query = db.query(LoadTestLog).filter_by(result_id=test_id)
     if since:
         query = query.filter(LoadTestLog.timestamp > datetime.fromisoformat(since))
     
-    logs = query.order_by(LoadTestLog.timestamp.asc()).limit(100).all()
+    logs = query.order_by(LoadTestLog.timestamp.asc(), LoadTestLog.id.asc()).limit(100).all()
     
     return jsonify([{
         'level': l.level,
@@ -180,7 +188,6 @@ def delete_result(test_id):
     if not result:
         return jsonify({'error': 'Result not found'}), 404
         
-    # Delete logs first
     db.query(LoadTestLog).filter_by(result_id=test_id).delete()
     db.delete(result)
     db.commit()
@@ -337,7 +344,6 @@ def get_technical_report(test_id):
 @admin_only
 def generate_executive_report(test_id):
     """Generate executive report using LLM"""
-    # Use session API key or fallback
     api_key = session.get('groq_api_key') or current_app.config.get('GROQ_API_KEY')
     
     generator = ReportGenerator(test_id)
@@ -394,3 +400,122 @@ def delete_message_csv(csv_id):
     if success:
         return jsonify({'success': True})
     return jsonify({'error': 'Failed to delete message CSV'}), 500
+
+@bp.route('/report/<int:test_id>/artifacts', methods=['GET'])
+@admin_only
+def get_test_artifacts(test_id):
+    """Get artifact list for a test"""
+    db = get_db()
+    result = db.query(LoadTestResult).get(test_id)
+    if not result:
+        return jsonify({'error': 'Test not found'}), 404
+    
+    metrics = result.metrics or {}
+    artifacts = metrics.get('artifacts', [])
+    
+    return jsonify({'artifacts': artifacts})
+
+@bp.route('/artifact/download', methods=['GET'])
+@admin_only
+def download_artifact():
+    """Download a specific artifact as Markdown"""
+    test_id = request.args.get('test_id')
+    user_email = request.args.get('user_email')
+    artifact_type = request.args.get('type')
+    doc_name = request.args.get('doc_name', 'document')
+    
+    # Optional IDs
+    thread_id = request.args.get('thread_id')
+    conversation_id = request.args.get('conversation_id')
+    lesson_id = request.args.get('lesson_id')
+    
+    if not test_id or not artifact_type:
+        return jsonify({'error': 'test_id and type are required'}), 400
+
+    db = get_db()
+    
+    # Better filename construction
+    base_name = f"load_test_{test_id}_{user_email}_{artifact_type}_{doc_name}"
+    filename = sanitize_filename(base_name, ".md")
+
+    # Color coding helper
+    def get_latency_emoji(latency):
+        if latency < 3.0: return "🟢"
+        if latency <= 7.0: return "🟡"
+        return "🔴"
+
+    if artifact_type == 'extracted_text' and thread_id:
+        # Search for file in MARKDOWN_EXPORTS_DIR
+        matches = list(MARKDOWN_EXPORTS_DIR.glob(f"{thread_id}_*.md"))
+        if matches:
+            # We use the sanitized name for the download
+            return send_file(str(matches[0]), as_attachment=True, download_name=filename)
+        else:
+            return jsonify({'error': 'Extracted text file not found'}), 404
+
+    elif artifact_type == 'chat_transcript':
+        # Reconstruct from captured metadata in result.metrics
+        result = db.query(LoadTestResult).get(int(test_id))
+        if not result:
+            return jsonify({'error': 'Test not found'}), 404
+        
+        artifacts = (result.metrics or {}).get('artifacts', [])
+        target = None
+        
+        # Match the specific artifact by user and conversation/lesson/doc_name
+        for art in artifacts:
+            if art.get('user_email') == user_email and art.get('type') == 'chat_transcript':
+                # Check IDs loosely (convert to str for safety)
+                art_conv_id = str(art.get('conversation_id')) if art.get('conversation_id') else ''
+                art_lesson_id = str(art.get('lesson_id')) if art.get('lesson_id') else ''
+                
+                if (conversation_id and str(conversation_id) == art_conv_id) or \
+                   (lesson_id and str(lesson_id) == art_lesson_id) or \
+                   (doc_name and art.get('doc_name') == doc_name):
+                    target = art
+                    break
+        
+        if not target:
+            return jsonify({'error': 'Transcript data not found in report'}), 404
+        
+        transcript = target.get('transcript', [])
+        content = f"# Chat Transcript: {doc_name}\n"
+        content += f"**User:** {user_email}\n"
+        content += f"**Test:** {result.test_type} (ID: {test_id})\n"
+        if target.get('keyword_hits') is not None:
+            content += f"**Keyword Hits:** {target.get('keyword_hits')}\n"
+        content += "\n---\n\n"
+        
+        for msg in transcript:
+            role = "User" if msg['role'] == 'user' else "Assistant"
+            content += f"### {role}\n{msg['content']}\n\n"
+            if 'latency' in msg:
+                emoji = get_latency_emoji(msg['latency'])
+                content += f"> [!NOTE]\n> **Response Time:** {emoji} {msg['latency']:.2f}s\n\n"
+
+    elif artifact_type == 'lesson_content' and lesson_id:
+        lesson = db.query(Lesson).get(int(lesson_id))
+        if lesson:
+            content = f"# Lesson: {lesson.title}\n"
+            content += f"**User:** {user_email}\n"
+            content += f"**Test ID:** {test_id}\n\n---\n\n"
+            content += lesson.content
+        else:
+            return jsonify({'error': f'Lesson ID {lesson_id} not found in database'}), 404
+    else:
+        # If lesson_id was expected but missing
+        if artifact_type == 'lesson_content' and not lesson_id:
+            return jsonify({'error': 'lesson_id is required for lesson_content'}), 400
+
+    if content:
+        buffer = io.BytesIO()
+        buffer.write(content.encode('utf-8'))
+        buffer.seek(0)
+        return send_file(
+            buffer, 
+            as_attachment=True, 
+            download_name=filename, 
+            mimetype='text/markdown'
+        )
+
+    return jsonify({'error': 'Invalid artifact request or missing data'}), 400

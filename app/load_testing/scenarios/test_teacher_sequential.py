@@ -135,6 +135,14 @@ async def run(
                             thread_id = data.get('thread_id')
                             summary.total_ingestion_time += time.time() - poll_start
                             log_func(f"[{user.email}] Setup complete in {time.time() - poll_start:.1f}s")
+                            
+                            # Add extracted text artifact metadata
+                            summary.artifacts.append({
+                                "user_email": user.email,
+                                "type": "extracted_text",
+                                "thread_id": thread_id,
+                                "doc_name": filename
+                            })
                             break
                         elif status in ['failure', 'revoked']:
                             log_func(f"[{user.email}] Ingest failed in {time.time() - poll_start:.1f}s: {status}", level="ERROR")
@@ -159,6 +167,7 @@ async def run(
         log_func(f"[{user.email}] Starting sequential chat loop for {requests_per_user} messages...")
         chat_url = f"{config.base_url}/api/rag/chat"
         
+        chat_transcript = []
         for i, msg in enumerate(msg_list):
             if summary.stop_requested:
                 log_func(f"[{user.email}] Sequential loop stopped by user")
@@ -182,8 +191,13 @@ async def run(
                         summary.messages_sent += 1
                         summary.successful_requests += 1
                         summary.latency_trend.append(duration)
-                        ans_snippet = (data.get('answer') or data.get('message') or "")[:50].replace('\n', ' ')
+                        ans_text = data.get('answer') or data.get('message') or ""
+                        ans_snippet = ans_text[:50].replace('\n', ' ')
                         log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"")
+                        
+                        # Add to transcript
+                        chat_transcript.append({"role": "user", "content": msg})
+                        chat_transcript.append({"role": "bot", "content": ans_text, "latency": duration})
                     else:
                         summary.failed_requests += 1
                         log_func(f"[{user.email}] Chat {i+1} logic fail in {duration:.1f}s: {data.get('error')}", level="ERROR")
@@ -195,6 +209,15 @@ async def run(
 
         total_user_duration = time.time() - scenario_start
         log_func(f"[{user.email}] Sequential Test Complete. Total Duration: {total_user_duration:.1f}s")
+        
+        # Add chat_transcript artifact metadata (Sequential tests don't have lessons at the end)
+        summary.artifacts.append({
+            "user_email": user.email,
+            "type": "chat_transcript",
+            "conversation_id": conversation_id,
+            "doc_name": filename,
+            "transcript": chat_transcript
+        })
 
     except Exception as e:
         total_user_duration = time.time() - scenario_start

@@ -56,6 +56,7 @@ async def run(
     log_func(f"[{user.email}] Starting student chat for {requests_per_user} messages...")
     url = f"{config.base_url}/api/lessons/ask_question"
     
+    chat_transcript = []
     for i, question in enumerate(msg_list):
         if summary.stop_requested:
             log_func(f"[{user.email}] Chat sequence stopped by user")
@@ -83,6 +84,10 @@ async def run(
                         summary.latency_trend.append(duration)
                         ans_snippet = answer[:50].replace('\n', ' ')
                         log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"")
+                        
+                        # Add to transcript
+                        chat_transcript.append({"role": "user", "content": question})
+                        chat_transcript.append({"role": "bot", "content": answer, "latency": duration})
                     else:
                         summary.failed_requests += 1
                         log_func(f"[{user.email}] Chat {i+1} empty response in {duration:.1f}s", level="ERROR")
@@ -94,7 +99,22 @@ async def run(
             log_func(f"[{user.email}] student chat exception: {str(e)}", level="ERROR")
             summary.errors.append({"user": user.email, "error": str(e)})
             
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(2) # Prevent hammering/busy loop
             
     total_user_duration = time.time() - scenario_start
     log_func(f"[{user.email}] Student Test Complete. Total Duration: {total_user_duration:.1f}s")
+    
+    # Add Student Lesson & Chat artifacts
+    summary.artifacts.append({
+        "user_email": user.email,
+        "type": "lesson_content",
+        "lesson_id": config.lesson_id,
+        "doc_name": f"Lesson_{config.lesson_id}"
+    })
+    summary.artifacts.append({
+        "user_email": user.email,
+        "type": "chat_transcript",
+        "lesson_id": config.lesson_id,
+        "doc_name": f"Lesson_{config.lesson_id}",
+        "transcript": chat_transcript
+    })

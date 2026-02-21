@@ -184,7 +184,7 @@
                                 <div id="concurrent-users-field">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Concurrent Users <span
                                             class="text-red-500">*</span></label>
-                                    <input type="number" id="concurrent-users" value="1" min="1" max="100"
+                                    <input type="number" id="concurrent-users" value="1" min="1" max="1000"
                                         class="w-full border rounded px-3 py-2">
                                 </div>
                                 <div>
@@ -365,7 +365,7 @@
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm mb-1">Count</label>
-                    <input type="number" id="user-count" value="10" min="1" max="50"
+                    <input type="number" id="user-count" value="10" min="1" max="1000"
                         class="w-full border rounded px-3 py-2">
                 </div>
                 <div class="mb-4">
@@ -463,7 +463,22 @@
                         class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
                 </div>
             </div>
-            <div class="flex-1 overflow-auto border p-4 bg-gray-50 font-mono text-sm" id="result-content"></div>
+            <div class="flex border-b mb-4">
+                <button onclick="showResultSubTab('summary')" id="tab-summary"
+                    class="tab-btn px-4 py-2 text-sm font-medium active">Summary</button>
+                <button onclick="showResultSubTab('artifacts')" id="tab-artifacts"
+                    class="tab-btn px-4 py-2 text-sm font-medium">Artifacts</button>
+            </div>
+
+            <div class="flex-1 overflow-auto border p-4 bg-gray-50" id="result-content-container">
+                <div id="result-content" class="font-mono text-sm h-full"></div>
+                <div id="artifact-content" class="hidden h-full">
+                    <div id="artifact-list" class="space-y-6">
+                        <!-- Grouped by user -->
+                        <p class="text-gray-500 italic">No artifacts available for this test.</p>
+                    </div>
+                </div>
+            </div>
             <div id="raw-json-content"
                 class="hidden flex-1 overflow-auto border p-4 bg-black text-green-400 font-mono text-xs"></div>
             <div class="mt-4 flex gap-2">
@@ -644,7 +659,7 @@
             const options = select.options;
 
             let targetRole = '';
-            if (type.includes('teacher') || type === 'rag_quality_benchmark' || type === 'multi_user_sign_in' || type.includes('sequential') && !type.includes('student')) targetRole = 'teacher';
+            if (type.includes('teacher') || type === 'rag_quality_benchmark' || type.includes('sequential') && !type.includes('student')) targetRole = 'teacher';
             if (type.includes('student')) targetRole = 'student';
 
             let currentValid = false;
@@ -683,7 +698,7 @@
             document.getElementById('csv-file-field').classList.add('hidden');
 
             // Sequential tests (4,5,6): hide concurrent users, lock to 1
-            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat'].includes(type);
+            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(type);
             if (isSequential) {
                 concurrentField.classList.add('hidden');
                 concurrentInput.value = 1;
@@ -722,7 +737,7 @@
             // --- Concurrent Users max = selected user set's user count ---
             const userSetSelect = document.getElementById('test-user-set');
             const selectedUser = userSetSelect.selectedOptions[0];
-            const userCount = selectedUser?.dataset.count ? parseInt(selectedUser.dataset.count) : 100;
+            const userCount = selectedUser?.dataset.count ? parseInt(selectedUser.dataset.count) : 1000;
             const concurrentInput = document.getElementById('concurrent-users');
             concurrentInput.max = userCount;
             // Only update value if it's currently invalid (over max) or empty
@@ -1038,7 +1053,7 @@
             // Validate Role
             const selectedRole = userSetSelect.selectedOptions[0].dataset.role;
             let targetRole = '';
-            if (testType.includes('teacher') || testType === 'rag_quality_benchmark' || testType === 'multi_user_sign_in' || testType.includes('sequential') && !testType.includes('student')) targetRole = 'teacher';
+            if (testType.includes('teacher') || testType === 'rag_quality_benchmark' || testType.includes('sequential') && !testType.includes('student')) targetRole = 'teacher';
             if (testType.includes('student')) targetRole = 'student';
 
             if (targetRole && selectedRole !== targetRole) {
@@ -1060,14 +1075,14 @@
             const config = getTargetConfig();
 
             // Force concurrent_users=1 for sequential tests
-            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat'].includes(testType);
+            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(testType);
 
             // Clamp values to max constraints
             const concurrentInput = document.getElementById('concurrent-users');
             const reqInput = document.getElementById('requests-per-user');
             let concurrentVal = isSequential ? 1 : parseInt(concurrentInput.value);
             let reqVal = parseInt(reqInput.value || 1);
-            const concurrentMax = parseInt(concurrentInput.max) || 100;
+            const concurrentMax = parseInt(concurrentInput.max) || 1000;
             const reqMax = parseInt(reqInput.max) || 10;
             if (concurrentVal > concurrentMax) concurrentVal = concurrentMax;
             if (reqVal > reqMax) reqVal = reqVal; // Keep original if no max or valid
@@ -1177,7 +1192,108 @@
             document.getElementById('raw-json-content').classList.add('hidden');
             document.getElementById('result-content').classList.remove('hidden');
             document.getElementById('result-modal').classList.remove('hidden');
+
+            // Reset tabs
+            showResultSubTab('summary');
             generateReport('technical'); // Default load
+        }
+
+        function showResultSubTab(tab) {
+            const sumTab = document.getElementById('tab-summary');
+            const artTab = document.getElementById('tab-artifacts');
+            const sumCont = document.getElementById('result-content');
+            const artCont = document.getElementById('artifact-content');
+
+            if (tab === 'summary') {
+                sumTab.classList.add('active');
+                artTab.classList.remove('active');
+                sumCont.classList.remove('hidden');
+                artCont.classList.add('hidden');
+            } else {
+                artTab.classList.add('active');
+                sumTab.classList.remove('active');
+                artCont.classList.remove('hidden');
+                sumCont.classList.add('hidden');
+                loadArtifacts();
+            }
+        }
+
+        async function loadArtifacts() {
+            const list = document.getElementById('artifact-list');
+            list.innerHTML = '<p class="text-gray-500 italic">Loading artifacts...</p>';
+
+            try {
+                const res = await fetchWithProxy(`/api/load-test/report/${currentResultId}/artifacts`);
+                const data = await res.json();
+                const artifacts = data.artifacts || [];
+
+                if (artifacts.length === 0) {
+                    list.innerHTML = '<p class="text-gray-500 italic">No artifacts available for this test.</p>';
+                    return;
+                }
+
+                // Group by user email
+                const grouped = {};
+                artifacts.forEach(art => {
+                    if (!grouped[art.user_email]) grouped[art.user_email] = [];
+                    grouped[art.user_email].push(art);
+                });
+
+                let html = '';
+                for (const [email, userArts] of Object.entries(grouped)) {
+                    html += `
+                        <div class="bg-white p-4 rounded border shadow-sm">
+                            <h4 class="font-bold text-gray-700 mb-3 flex items-center">
+                                <i class="fas fa-user-circle mr-2 text-iqbal-primary"></i> ${email}
+                            </h4>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                ${userArts.map((art, idx) => {
+                        let label = art.type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                        if (art.iteration) label += ` (Iteration ${art.iteration})`;
+                        let color = 'bg-blue-50 text-blue-700 border-blue-200';
+
+                        if (art.type === 'extracted_text') {
+                            icon = 'fa-file-pdf';
+                            color = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                        } else if (art.type === 'lesson_content') {
+                            icon = 'fa-chalkboard-teacher';
+                            color = 'bg-purple-50 text-purple-700 border-purple-200';
+                        } else if (art.type === 'chat_transcript') {
+                            icon = 'fa-comments';
+                            color = 'bg-green-50 text-green-700 border-green-200';
+                        }
+
+                        const query = new URLSearchParams({
+                            test_id: currentResultId,
+                            user_email: email,
+                            type: art.type,
+                            doc_name: art.doc_name || '',
+                            thread_id: art.thread_id || '',
+                            conversation_id: art.conversation_id || '',
+                            lesson_id: art.lesson_id || '',
+                            idx: idx
+                        }).toString();
+
+                        return `
+                                        <a href="/api/load-test/artifact/download?${query}" target="_blank"
+                                           class="flex items-center p-3 rounded border ${color} hover:shadow-md transition-all text-sm font-medium">
+                                            <i class="fas ${icon} mr-3 text-lg opacity-75"></i>
+                                            <div class="truncate">
+                                                <div class="font-bold">${label}</div>
+                                                <div class="text-xs opacity-75 truncate">${art.doc_name || 'Document'}</div>
+                                            </div>
+                                            <i class="fas fa-download ml-auto opacity-50"></i>
+                                        </a>
+                                    `;
+                    }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                list.innerHTML = html;
+            } catch (e) {
+                list.innerHTML = `<p class="text-red-500">Error loading artifacts: ${e}</p>`;
+            }
         }
 
         function toggleRawJson() {
@@ -1258,15 +1374,15 @@
                                     <div class="text-2xl font-bold text-purple-700">${data.summary.keyword_hits || 0}</div>
                                 </div>
                             ` : ''}
-                            ${(data.test_type === 'doc_upload_repeat' || data.summary.consistency_stdev !== null) ? `
+                            ${(data.summary.total_ingestion_time > 0 || data.test_type === 'doc_upload_repeat' || data.test_type === 'rag_quality_benchmark') ? `
                                 <div class="p-4 bg-orange-50 rounded border border-orange-100">
                                     <div class="text-xs text-orange-600 uppercase font-semibold">Ingest Consistency (SD)</div>
-                                    <div class="text-2xl font-bold text-orange-700">${data.summary.consistency_stdev ? data.summary.consistency_stdev.toFixed(2) + 's' : '0.00s'}</div>
+                                    <div class="text-2xl font-bold text-orange-700">${data.summary.consistency_stdev !== null && data.summary.consistency_stdev !== undefined ? data.summary.consistency_stdev.toFixed(2) + 's' : '0.00s'}</div>
                                 </div>
                             ` : ''}
-                            ${(data.summary.latency_trend && data.summary.latency_trend.length > 0) || msgsSent > 0 ? `
+                            ${(msgsSent > 0 && data.test_type !== 'doc_upload_repeat') ? `
                                 <div class="p-4 bg-pink-50 rounded border border-pink-100">
-                                    <div class="text-xs text-pink-600 uppercase font-semibold">Avg Turn Latency</div>
+                                    <div class="text-xs text-pink-600 uppercase font-semibold">Msg Avg. Turn Latency</div>
                                     <div class="text-2xl font-bold text-pink-700">
                                         ${data.summary.latency_trend && data.summary.latency_trend.length > 0
                                 ? (data.summary.latency_trend.reduce((a, b) => a + b, 0) / data.summary.latency_trend.length).toFixed(2) + 's'
