@@ -1,6 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/run.py", line 7, in <module>
-    from app import create_app
-  File "/Users/abdurrehman/Documents/GitHub/iqbal_ai_stg/app/__init__.py", line 166, in <module>
-    from flask_cors import CORS
-ModuleNotFoundError: No module named 'flask_cors'

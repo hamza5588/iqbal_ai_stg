@@ -42,3 +42,12 @@ chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/data_level0.bin
 chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/header.bin
 chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/length.bin
 chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/link_lists.bin
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+app_restart.log
+filee.txt
+.DS_Store
+.idea/
+tests/
