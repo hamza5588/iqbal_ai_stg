@@ -29,6 +29,16 @@ def run_async_test(runner):
     """Helper to run async test in a thread"""
     asyncio.run(runner.run())
 
+def run_analysis_bg(app, test_id, api_key):
+    """Helper to run analysis in a background thread"""
+    with app.app_context():
+        try:
+            generator = ReportGenerator(test_id)
+            analysis = generator.generate_llm_analysis(api_key)
+            generator.save_analysis(analysis)
+        except Exception as e:
+            logger.error(f"Error in background analysis thread: {str(e)}")
+
 def sanitize_filename(name, ext=".md"):
     """Helper to create clean filenames with correct extensions"""
     # Remove existing common extensions
@@ -405,16 +415,55 @@ def get_technical_report(test_id):
 @admin_only
 def generate_executive_report(test_id):
     """Generate executive report using LLM"""
-    api_key = session.get('groq_api_key') or current_app.config.get('GROQ_API_KEY')
+    # Correct 3-tier API key lookup matching llm_factory.py pattern:
+    # 1. Per-user session key (set at login or via /api_key/update)
+    # 2. Admin SystemSettings 'groq_api_key' (encrypted, set in Admin Dashboard LLM Settings)
+    # 3. Environment variable / app config fallback
+    api_key = session.get('groq_api_key') or ''
+
+    if not api_key:
+        # Check Admin SystemSettings (the key configured in Admin Dashboard → LLM Settings)
+        try:
+            from app.models.database_models import SystemSettings
+            from app.utils.encryption import decrypt_api_key
+            db = get_db()
+            api_key_setting = db.query(SystemSettings).filter(
+                SystemSettings.key == 'groq_api_key'
+            ).first()
+            if api_key_setting and api_key_setting.value:
+                api_key = decrypt_api_key(api_key_setting.value)
+        except Exception as e:
+            logger.warning(f"Could not retrieve admin Groq API key from SystemSettings: {e}")
+
+    if not api_key:
+        # Final fallback: GROQ_API_KEY env var
+        api_key = current_app.config.get('GROQ_API_KEY', '')
+
+
     
     generator = ReportGenerator(test_id)
     report = generator.generate_technical_report()
-    analysis = generator.generate_llm_analysis(api_key)
-    generator.save_analysis(analysis)
     
-    # Merge analysis into report data so charts can render
-    report['analysis'] = analysis
-    return jsonify(report)
+    # Check if analysis already exists
+    if report['summary'].get('llm_analysis'):
+        report['analysis'] = report['summary'].get('llm_analysis') # For frontend compatibility
+        return jsonify(report)
+    
+    # Start generation in background
+    if current_app.config.get('USE_CELERY_FOR_INGESTION', False):
+        from app.tasks.load_test_tasks import generate_analysis_task
+        generate_analysis_task.delay(test_id, api_key)
+    else:
+        thread = threading.Thread(
+            target=run_analysis_bg, 
+            args=(current_app._get_current_object(), test_id, api_key)
+        )
+        thread.start()
+    
+    return jsonify({
+        'status': 'generating',
+        'message': 'AI analysis is being generated in the background'
+    })
 
 @bp.route('/message-csvs', methods=['GET'])
 @admin_only

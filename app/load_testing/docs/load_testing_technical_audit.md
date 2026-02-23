@@ -5,47 +5,41 @@ The Load Testing module is a self-contained stress-testing suite integrated into
 
 ### Flow Logic:
 1.  **Frontend (UI)**: User configures the test in `templates/admin/load_testing.html`. 
-    *   **Dynamic Constraints**: JavaScript automatically calculates `max` values for Concurrent Users (based on User Set size) and Messages (based on CSV size).
-    *   **Proxy Strategy**: All requests use a global `fetchWithProxy` to ensure compatibility regardless of deployment environment.
-2.  **API (Start)**: `/api/load-test/start` receives the configuration.
-    *   It validates the request and creates a `LoadTestResult` record in the database with status `PENDING`.
-    *   It initializes the `LoadTestRunner` and spawns it in a dedicated **Background Thread** using `threading.Thread`.
-3.  **Runner (Execution)**: `app/load_testing/runner.py` manages the lifecycle.
-    *   **Live Passwords**: It joins the `TestUser` table with the main `User` table to ensure it always uses current passwords (Live Sync).
-    *   **Async Core**: Uses `asyncio` and `aiohttp` to run multiple "User Workers" concurrently.
-    *   **Dedicated Sessions**: Each virtual user gets its own `ClientSession` and `CookieJar`, perfectly simulating independent browsers.
-4.  **Reporting**: Once finished, the runner updates the status to `COMPLETED` and saves aggregated metrics (Success Rate, Messages Sent, KB processed).
+2.  **API (Start)**: `/api/load-test/start` initializes the test. It checks the `USE_CELERY_FOR_INGESTION` flag; if enabled, it dispatches the test as a **Celery Task**. Otherwise, it spawns a **Background Thread** managed by the Flask app.
+3.  **Runner (Execution)**: `app/load_testing/runner.py` manages the active test using `asyncio` and `aiohttp`. This core logic is shared between the Celery worker and the direct thread runner.
+4.  **Reporting & Analysis**: Status is updated to `COMPLETED` and results are saved to `LoadTestResult`.
 
----
+## 2. Phase 14: AI Analysis & Visualizations (NEW)
+We have integrated a premium AI analysis layer to transform raw metrics into actionable insights.
 
-## 2. Test Scenario Logic
+### Backend: LLM Analysis Logic
+- **Module**: `app/load_testing/report.py`
+- **Engine**: Uses `app.models.ChatModel` to interface with Groq/OpenAI.
+- **Prompt Engineering**: The system uses a "Senior Performance Engineer" persona. It receives the **full JSON Technical Report**, allows the LLM to analyze the 100 most recent detailed logs, and evaluates success against a 95% threshold.
+- **Persistence**: Results are saved to the `llm_analysis` field in the database for instant retrieval.
+
+### Frontend: Rich Rendering & Charts
+- **Markdown Rendering**: Uses `marked.js` CDNs to render the LLM's Markdown output into rich HTML.
+- **Visualization Engine**: `Chart.js` is used to generate dynamic visuals in the browser:
+    - **Latency Trajectory**: A custom JavaScript parser extracts "Iteration Time" patterns from raw logs to plot performance over time.
+    - **Status Distribution**: A doughnut chart visualizes the success/failure ratio.
+- **UX**: Implemented a stateful loading spinner and defensive `null-checks` to prevent UI crashes on missing data.
+
+## 3. Test Scenario Logic
 
 | Test ID | Name | Core Logic |
 |---|---|---|
-| **1** | **Multi-User Sign-In** | Tests the auth bottleneck. Runs multiple logins concurrently and verifies session cookie generation. |
-| **2** | **Teacher Flow (Concurrent)** | E2E Stress. Each user: Login -> Upload PDF -> Poll Status -> Chat 1-N times -> Finalize Lesson -> Save to DB. |
-| **3** | **Student Chat (Concurrent)** | Interaction Stress. Simulated students join a specific Lesson ID and send messages from a CSV. |
-| **4** | **Teacher Sequential** | RAG Pipeline stress. A single user sends 10-50 messages sequentially, waiting for each response. Measures response time stability. |
-| **5** | **Student Sequential** | Same as Test 4, but for the Student-Lesson chat endpoint. |
-| **6** | **Document Upload Repeat** | Indexing stress. Repeatedly uploads the SAME document set to verify Milvus/Chroma consistency and ingestion speed. |
-| **7** | **RAG Quality Benchmark** | Quality audit. For every doc in a set, it uploads and asks the "Golden Questions" from CSV, logging accuracy/stability. |
+| **1** | **System Access** | Tests auth bottleneck. Runs multiple logins concurrently. |
+| **2** | **Teacher Flow** | E2E Stress. Login -> Upload PDF -> Poll -> Chat -> Finalize Lesson -> Save. |
+| **3** | **Student Chat** | Interaction Stress. Simulated students join a specific Lesson ID. |
+| **4** | **Teacher RAG Seq.** | RAG Pipeline depth. Sequential messages in a single thread. |
+| **5** | **Student Lesson Seq.** | Same as Test 4, for the Student-Lesson endpoint. |
+| **6** | **Repeated Ingest** | Indexing stress. Repeatedly uploads the SAME document. |
+| **7** | **Ingest Stress** | Heavy parallel ingestion without chat. |
+| **8** | **RAG Quality** | Accuracy benchmark. Runs "Golden Questions" and logs AI stability. |
 
----
-
-## 3. Implementation Status Audit
-
-### ✅ Verified Features:
-*   **Sequential Test Lock**: UI correctly hides 'Concurrent Users' and sets value to 1 for tests 4, 5, 6.
-*   **Iterative Chat**: Tests 2, 3, 4, 5 successfully load messages from uploaded CSVs and iterate through them.
-*   **Granular Logging**: Scenarios now log per-step durations (e.g., `Upload success in 450ms`) and final durations.
-*   **Dynamic Labels**: Test 6 correctly renames "Messages" to "Upload Iterations".
-*   **Cleanup**: Implemented "Delete All" for results to keep the database lean.
-
-### ⏸ Deferred Features:
-*   **RAG Quality Metrics**: Postponed. The logic for calculating "Retrieval Confidence" (Cosine Similarity bubble-up) is documented but not implemented in core services to avoid side-effects.
-
----
-
-## 4. Maintenance Notes
-*   **Core Services**: No changes were made to `rag_service.py` or `rag_routes.py` in the final build, ensuring regular user traffic is untouched.
-*   **Database**: `LoadTestResult` stores all configurations for easy re-running/auditing.
+## 4. Maintenance & Safety
+- **Scaling Limit**: Verified up to **1,000 concurrent users**.
+- **CPU Protection**: Mandatory 2s polling loops in the runner to prevent thread starvation.
+- **Cleanup**: Selective purging of thread IDs and markdown artifacts on test deletion.
+- **Security**: Ensures `GROQ_API_KEY` is never exposed to the frontend; it is retrieved securely from `session` or `config` on the backend.

@@ -1366,66 +1366,644 @@
             }
         }
 
-        function renderTrajectoryChart(containerId, data) {
+        // ─────────────────────────────────────────────────────────────────────
+        // Helper: create a chart card inside a grid container
+        // ─────────────────────────────────────────────────────────────────────
+        function makeChartCard(gridEl, title, icon) {
+            const card = document.createElement('div');
+            card.className = 'p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-inner';
+            card.innerHTML = `<h3 class="text-sm font-bold text-gray-700 mb-3 px-1"><i class="fas fa-${icon} mr-2"></i>${title}</h3>`;
             const canvas = document.createElement('canvas');
-            canvas.className = 'w-full max-h-[300px] mt-4';
-            const container = document.getElementById(containerId);
-            if (!container) return;
-            container.appendChild(canvas);
+            canvas.style.maxHeight = '280px';
+            card.appendChild(canvas);
+            gridEl.appendChild(card);
+            return canvas;
+        }
 
-            // Extract Latency Trend from Logs if available
-            const latencies = [];
-            const labels = [];
+        // ─────────────────────────────────────────────────────────────────────
+        // Per-test chart builders
+        // ─────────────────────────────────────────────────────────────────────
+        function renderChartsForTest(testType, data, gridEl) {
+            const logs = data.detailed_logs || [];
+            const summary = data.summary || {};
+            const latencyTrend = summary.latency_trend || [];
 
-            if (data.detailed_logs) {
-                data.detailed_logs.forEach((log) => {
-                    // Look for patterns like "Iter X: Success in Y.Ys" or "Total Ingest Time: Y.Ys"
-                    const iterMatch = log.message.match(/Iter\s*(\d+)/i);
-                    const timeMatch = log.message.match(/in\s*([\d\.]+)\s*s/i) || log.message.match(/Time:\s*([\d\.]+)\s*s/i);
+            // ── Shared colours ──────────────────────────────────────────────
+            const BLUE = '#3b82f6', BLUE_BG = 'rgba(59,130,246,0.15)';
+            const GREEN = '#10b981', GREEN_BG = 'rgba(16,185,129,0.15)';
+            const ORANGE = '#f59e0b', ORANGE_BG = 'rgba(245,158,11,0.15)';
+            const RED = '#ef4444', RED_BG = 'rgba(239,68,68,0.15)';
+            const PURPLE = '#8b5cf6', PURPLE_BG = 'rgba(139,92,246,0.15)';
+            const lineDefaults = { fill: true, tension: 0.35, pointRadius: 4, borderWidth: 2 };
 
-                    if (iterMatch && timeMatch) {
-                        const iterNum = parseInt(iterMatch[1]);
-                        const timeVal = parseFloat(timeMatch[1]);
-                        latencies.push({ x: iterNum, y: timeVal });
+            // ── Helper: extract ingestion times from logs ────────────────────
+            function extractIngestTimes() {
+                // Matches: "Total File Processing Time: X.Xs (Complete)"
+                const times = [];
+                logs.forEach(l => {
+                    const m = l.message.match(/Total File Processing Time:\s*([\d.]+)s/i);
+                    if (m) times.push(parseFloat(m[1]));
+                });
+                return times;
+            }
+
+            // ── Helper: per-user latency breakdown ──────────────────────────
+            function extractLatencyByUser() {
+                const byUser = {};
+                logs.forEach(l => {
+                    const emailMatch = l.message.match(/\[([^\]]+@[^\]]+)\]/);
+                    const latMatch = l.message.match(/Response \d+ received in ([\d.]+)s/);
+                    if (emailMatch && latMatch) {
+                        const user = emailMatch[1].split('@')[0]; // just local part
+                        if (!byUser[user]) byUser[user] = [];
+                        byUser[user].push(parseFloat(latMatch[1]));
+                    }
+                });
+                return byUser;
+            }
+
+            // ── Helper: per-iteration ingestion times (Test 6) ──────────────
+            function extractIterationIngest() {
+                const iters = {};
+                logs.forEach(l => {
+                    // "Iter X: Success in Y.Ys"
+                    const m = l.message.match(/Iter (\d+).*?in ([\d.]+)s/i);
+                    if (m) iters[parseInt(m[1])] = parseFloat(m[2]);
+                });
+                const sorted = Object.keys(iters).sort((a, b) => a - b);
+                return { labels: sorted.map(k => `Iter ${k}`), data: sorted.map(k => iters[k]) };
+            }
+
+            // ── Helper: per-doc ingestion times (Test 8) ────────────────────
+            function extractPerDocIngest() {
+                const docs = {};
+                logs.forEach(l => {
+                    // Matches both Sync and Async T8 logs to get doc name and time
+                    const m = l.message.match(/for (.+?) in.+?-\s*Total Ingest Time:\s*([\d.]+)s/i);
+                    if (m) docs[m[1].trim()] = parseFloat(m[2]);
+                });
+                return docs;
+            }
+
+            // ── Helper: Unified Per-File Ingest Latency Trend ───────────────
+            function renderIngestLatencyTrend(logs, gridEl) {
+                const orderTimes = [];
+                logs.forEach(l => {
+                    // Unique marker generated exactly once per successfully fully ingested item
+                    // across all tests (T2, T7, T8) in both Sync and Async modes.
+                    const m = l.message.match(/-\s*Total Ingest Time:\s*([\d.]+)s/i);
+                    if (m) orderTimes.push(parseFloat(m[1]));
+                });
+
+                if (orderTimes.length > 0) {
+                    const c = makeChartCard(gridEl, 'Per-File Ingest Latency (All Docs)', 'chart-line');
+                    new Chart(c, {
+                        type: 'line',
+                        data: {
+                            labels: orderTimes.map((_, i) => `Item ${i + 1}`),
+                            datasets: [{
+                                label: 'Ingest Latency (s)', data: orderTimes,
+                                borderColor: PURPLE, backgroundColor: PURPLE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T1: Multi-User Sign-In
+            // ════════════════════════════════════════════════════════════════
+            if (testType === 'multi_user_sign_in') {
+                // Chart 1: Success vs Failed bar
+                const c1 = makeChartCard(gridEl, 'Request Outcome Breakdown', 'check-circle');
+                new Chart(c1, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Successful Requests', 'Failed Requests'],
+                        datasets: [{
+                            label: 'Count',
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true, plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, title: { display: true, text: 'Count' } } }
+                    }
+                });
+
+                // Chart 2: Successful logouts vs total
+                const logouts = summary.successful_logouts || 0;
+                const loFailed = (summary.concurrent_users || 1) - logouts;
+                const c2 = makeChartCard(gridEl, 'Logout Completion Rate', 'sign-out-alt');
+                new Chart(c2, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Successful Logouts', 'Failed / Missing'],
+                        datasets: [{
+                            data: [logouts, loFailed],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true, cutout: '68%',
+                        plugins: { legend: { position: 'bottom' } }
                     }
                 });
             }
 
-            // Sort by iteration
-            latencies.sort((a, b) => a.x - b.x);
-            const sortedLabels = latencies.map(l => `Iter ${l.x}`);
-            const sortedData = latencies.map(l => l.y);
-
-            new Chart(canvas, {
-                type: 'line',
-                data: {
-                    labels: sortedLabels,
-                    datasets: [{
-                        label: 'Processing Time (s)',
-                        data: sortedData,
-                        borderColor: '#05B0FC',
-                        backgroundColor: 'rgba(5, 176, 252, 0.1)',
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#05B0FC'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: true, position: 'top' },
-                        title: { display: true, text: 'Processing Performance trajectory' }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Seconds' }
-                        }
+            // ════════════════════════════════════════════════════════════════
+            // T2: Teacher Flow (Concurrent)
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'teacher_flow_concurrent') {
+                // Chart 1: Ingestion time per user (one bar per teacher)
+                const ingestByUser = {};
+                logs.forEach(l => {
+                    const emailM = l.message.match(/\[([^\]]+@[^\]]+)\]/);
+                    const procM = l.message.match(/Total File Processing Time:\s*([\d.]+)s/i);
+                    if (emailM && procM) {
+                        ingestByUser[emailM[1].split('@')[0]] = parseFloat(procM[1]);
                     }
+                });
+                const uLabels = Object.keys(ingestByUser);
+                const uData = uLabels.map(k => ingestByUser[k]);
+                const avgIngest = uData.length ? (uData.reduce((a, b) => a + b, 0) / uData.length).toFixed(1) : 0;
+
+                const c1 = makeChartCard(gridEl, `Ingestion Time per Teacher (avg ${avgIngest}s)`, 'file-upload');
+                new Chart(c1, {
+                    type: 'bar',
+                    data: {
+                        labels: uLabels.length ? uLabels : ['No data'],
+                        datasets: [{
+                            label: 'Ingest Time (s)',
+                            data: uData.length ? uData : [0],
+                            backgroundColor: ORANGE_BG, borderColor: ORANGE,
+                            borderWidth: 2, borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                    }
+                });
+
+                // Chart 2: Chat turn latency trend
+                if (latencyTrend.length) {
+                    const c2 = makeChartCard(gridEl, 'Chat Turn Latency Trend', 'comments');
+                    new Chart(c2, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Msg ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: BLUE, backgroundColor: BLUE_BG,
+                                ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
                 }
-            });
+
+                // Chart: Ingest Latency Trend
+                renderIngestLatencyTrend(logs, gridEl);
+
+                // Chart 3: Lesson saved success
+                const lessonOk = summary.lesson_saved ? 1 : 0;
+                const lessonFail = (summary.concurrent_users || 1) - (summary.successful_requests > 0 ? lessonOk : 0);
+                const c3 = makeChartCard(gridEl, 'Pipeline Stage Success Rates', 'tasks');
+                new Chart(c3, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Requests', 'Messages Sent', 'Rate Limit Hits'],
+                        datasets: [
+                            { label: 'Success', data: [summary.successful_requests || 0, summary.messages_sent || 0, 0], backgroundColor: GREEN, borderRadius: 4 },
+                            { label: 'Failed / Hits', data: [summary.failed_requests || 0, 0, summary.rate_limit_hits || 0], backgroundColor: RED, borderRadius: 4 }
+                        ]
+                    },
+                    options: { responsive: true, scales: { x: { stacked: false }, y: { beginAtZero: true } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T3: Student Chat (Concurrent)
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'student_chat_concurrent') {
+                // Chart 1: Per-user avg latency comparison
+                const byUser = extractLatencyByUser();
+                const userNames = Object.keys(byUser);
+                const avgLats = userNames.map(u => {
+                    const arr = byUser[u];
+                    return +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2);
+                });
+                if (userNames.length) {
+                    const c1 = makeChartCard(gridEl, 'Avg. Chat Latency per Student', 'users');
+                    new Chart(c1, {
+                        type: 'bar',
+                        data: {
+                            labels: userNames,
+                            datasets: [{
+                                label: 'Avg Latency (s)', data: avgLats,
+                                backgroundColor: BLUE_BG, borderColor: BLUE,
+                                borderWidth: 2, borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 2: Global latency trend across all messages
+                if (latencyTrend.length) {
+                    const c2 = makeChartCard(gridEl, 'Global Chat Latency Trend (All Students)', 'chart-line');
+                    new Chart(c2, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Msg ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: BLUE, backgroundColor: BLUE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 3: Success vs Empty responses
+                const c3 = makeChartCard(gridEl, 'Response Quality Breakdown', 'check-double');
+                new Chart(c3, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Successful', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T4: Teacher RAG Sequential
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'teacher_rag_sequential') {
+                // Chart 1: Chat turn latency over the full sequence
+                if (latencyTrend.length) {
+                    const c1 = makeChartCard(gridEl, 'Sequential RAG Turn Latency', 'stopwatch');
+                    // Add linear regression overlay
+                    const n = latencyTrend.length;
+                    const xMean = (n - 1) / 2;
+                    const yMean = latencyTrend.reduce((a, b) => a + b, 0) / n;
+                    let num = 0, den = 0;
+                    latencyTrend.forEach((y, x) => { num += (x - xMean) * (y - yMean); den += (x - xMean) ** 2; });
+                    const slope = den ? num / den : 0;
+                    const intercept = yMean - slope * xMean;
+                    const trendLine = latencyTrend.map((_, x) => +(slope * x + intercept).toFixed(2));
+                    new Chart(c1, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Turn ${i + 1}`),
+                            datasets: [
+                                {
+                                    label: 'Latency (s)', data: latencyTrend,
+                                    borderColor: BLUE, backgroundColor: BLUE_BG, ...lineDefaults
+                                },
+                                {
+                                    label: 'Trend', data: trendLine,
+                                    borderColor: RED, borderDash: [6, 4], borderWidth: 2,
+                                    fill: false, pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 2: Requests breakdown
+                const c2 = makeChartCard(gridEl, 'Request Outcome', 'clipboard-check');
+                new Chart(c2, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Success', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T5: Student Lesson Sequential
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'student_lesson_sequential') {
+                // Chart 1: Turn latency with trend line
+                if (latencyTrend.length) {
+                    const n = latencyTrend.length;
+                    const xMean = (n - 1) / 2;
+                    const yMean = latencyTrend.reduce((a, b) => a + b, 0) / n;
+                    let num = 0, den = 0;
+                    latencyTrend.forEach((y, x) => { num += (x - xMean) * (y - yMean); den += (x - xMean) ** 2; });
+                    const slope = den ? num / den : 0;
+                    const intercept = yMean - slope * xMean;
+                    const trendLine = latencyTrend.map((_, x) => +(slope * x + intercept).toFixed(2));
+
+                    const c1 = makeChartCard(gridEl, 'Sequential Question Latency + Trend', 'stopwatch');
+                    new Chart(c1, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Q${i + 1}`),
+                            datasets: [
+                                {
+                                    label: 'Latency (s)', data: latencyTrend,
+                                    borderColor: PURPLE, backgroundColor: PURPLE_BG, ...lineDefaults
+                                },
+                                {
+                                    label: 'Trend', data: trendLine,
+                                    borderColor: ORANGE, borderDash: [5, 4], borderWidth: 2,
+                                    fill: false, pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+
+                    // Chart 2: Latency distribution histogram (buckets)
+                    const buckets = {};
+                    latencyTrend.forEach(v => {
+                        const b = Math.floor(v);
+                        buckets[b] = (buckets[b] || 0) + 1;
+                    });
+                    const bKeys = Object.keys(buckets).sort((a, b) => +a - +b);
+                    const c2 = makeChartCard(gridEl, 'Latency Distribution (1s buckets)', 'chart-bar');
+                    new Chart(c2, {
+                        type: 'bar',
+                        data: {
+                            labels: bKeys.map(k => `${k}–${+k + 1}s`),
+                            datasets: [{
+                                label: 'Messages', data: bKeys.map(k => buckets[k]),
+                                backgroundColor: PURPLE_BG, borderColor: PURPLE,
+                                borderWidth: 2, borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Count' } } }
+                        }
+                    });
+                }
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T6: Repeated Ingestion
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'doc_upload_repeat') {
+                const iterData = extractIterationIngest();
+
+                // Chart 1: Ingest Latency Trend (Unified)
+                renderIngestLatencyTrend(logs, gridEl);
+
+                // Chart 2: Variance box — min/mean/max bar
+                if (iterData.data.length) {
+                    const vals = iterData.data;
+                    const mn = +Math.min(...vals).toFixed(2);
+                    const mx = +Math.max(...vals).toFixed(2);
+                    const avg = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+                    const std = +(Math.sqrt(vals.map(v => (v - avg) ** 2).reduce((a, b) => a + b, 0) / vals.length)).toFixed(2);
+                    const c2 = makeChartCard(gridEl, 'Ingestion Consistency (Min / Avg / Max / Stdev)', 'balance-scale');
+                    new Chart(c2, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Min', 'Average', 'Max', 'Stdev'],
+                            datasets: [{
+                                label: 'Seconds',
+                                data: [mn, avg, mx, std],
+                                backgroundColor: [GREEN_BG, BLUE_BG, RED_BG, ORANGE_BG],
+                                borderColor: [GREEN, BLUE, RED, ORANGE],
+                                borderWidth: 2, borderRadius: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 3: Chat outcome
+                const c3 = makeChartCard(gridEl, 'Per-Iteration Chat Outcome', 'comments');
+                new Chart(c3, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Successful', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T8: RAG Quality Benchmark
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'rag_quality_benchmark') {
+                const docIngest = extractPerDocIngest();
+                const docNames = Object.keys(docIngest);
+                const docTimes = docNames.map(k => docIngest[k]);
+
+                // Chart 1: Per-document ingestion time
+                if (docNames.length) {
+                    const c1 = makeChartCard(gridEl, 'Per-Document Ingestion Time', 'file-pdf');
+                    new Chart(c1, {
+                        type: 'bar',
+                        data: {
+                            labels: docNames.map(n => n.length > 18 ? n.slice(0, 16) + '…' : n),
+                            datasets: [{
+                                label: 'Ingest (s)', data: docTimes,
+                                backgroundColor: ORANGE_BG, borderColor: ORANGE,
+                                borderWidth: 2, borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true, indexAxis: 'y',
+                            plugins: { legend: { display: false } },
+                            scales: { x: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 2: Per-document keyword hits (from artifacts)
+                const artifacts = summary.artifacts || [];
+                const hitMap = {};
+                artifacts.forEach(a => {
+                    if (a.type === 'chat_transcript' && a.doc_name && typeof a.keyword_hits === 'number') {
+                        hitMap[a.doc_name] = (hitMap[a.doc_name] || 0) + a.keyword_hits;
+                    }
+                });
+                const hitDocs = Object.keys(hitMap);
+                if (hitDocs.length) {
+                    const c2 = makeChartCard(gridEl, 'Per-Document Keyword Hit Score', 'star');
+                    new Chart(c2, {
+                        type: 'bar',
+                        data: {
+                            labels: hitDocs.map(n => n.length > 18 ? n.slice(0, 16) + '…' : n),
+                            datasets: [{
+                                label: 'Keyword Hits', data: hitDocs.map(k => hitMap[k]),
+                                backgroundColor: hitDocs.map(k => hitMap[k] > 0 ? GREEN_BG : RED_BG),
+                                borderColor: hitDocs.map(k => hitMap[k] > 0 ? GREEN : RED),
+                                borderWidth: 2, borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true, indexAxis: 'y',
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: {
+                                    beginAtZero: true, ticks: { stepSize: 1 },
+                                    title: { display: true, text: 'Hits' }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Chart 3: Chat latency trend across all docs
+                if (latencyTrend.length) {
+                    const c3 = makeChartCard(gridEl, 'Per-Message Chat Latency (All Docs)', 'chart-line');
+                    new Chart(c3, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Msg ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: PURPLE, backgroundColor: PURPLE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 4: Ingest Latency Trend
+                renderIngestLatencyTrend(logs, gridEl);
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // Fallback: generic success/fail + latency (for unknown test types)
+            // ════════════════════════════════════════════════════════════════
+            else {
+                const c1 = makeChartCard(gridEl, 'Request Outcomes', 'check-circle');
+                new Chart(c1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Success', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+                if (latencyTrend.length) {
+                    const c2 = makeChartCard(gridEl, 'Response Latency Trend', 'chart-line');
+                    new Chart(c2, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Req ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: BLUE, backgroundColor: BLUE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } }
+                        }
+                    });
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // renderExecutiveView — renders AI analysis + per-test charts
+        // ─────────────────────────────────────────────────────────────────────
+        async function renderExecutiveView(data) {
+            const content = document.getElementById('result-content');
+            if (!data.analysis) return;
+
+            const testType = data.test_type || '';
+
+            // Strip model thinking/preamble — only show from the first # heading that
+            // starts with 'Executive Summary' (the model sometimes "thinks aloud" first).
+            let analysisText = data.analysis;
+            const execIdx = analysisText.search(/^#{1,3}\s*Executive Summary/mi);
+            if (execIdx > 0) analysisText = analysisText.slice(execIdx);
+
+            content.innerHTML = `
+                <div class="prose max-w-none p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6" id="executive-summary-content">
+                    ${marked.parse(analysisText)}
+                </div>
+                <div id="executive-charts" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"></div>
+            `;
+
+            const chartGrid = document.getElementById('executive-charts');
+            renderChartsForTest(testType, data, chartGrid);
+        }
+
+        async function pollForAnalysis(testId) {
+            const content = document.getElementById('result-content');
+
+            // Re-show loading state if not already there
+            if (!content.querySelector('.animate-spin')) {
+                content.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 text-gray-500">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                        <p class="animate-pulse">AI is still analyzing metrics... almost there.</p>
+                    </div>
+                `;
+            }
+
+            try {
+                const res = await fetchWithProxy(`/api/load-test/report/${testId}/technical`);
+                const data = await res.json();
+
+                if (data.summary && data.summary.llm_analysis) {
+                    data.analysis = data.summary.llm_analysis;
+                    renderExecutiveView(data);
+                } else {
+                    // Poll again in 2 seconds
+                    setTimeout(() => pollForAnalysis(testId), 2000);
+                }
+            } catch (err) {
+                console.error("Polling error:", err);
+                setTimeout(() => pollForAnalysis(testId), 2000);
+            }
         }
 
         async function generateReport(type) {
@@ -1457,54 +2035,12 @@
                 const titleEl = document.getElementById('report-title');
                 if (titleEl) titleEl.textContent = `${typeName} - Report #${currentResultId}`;
 
-                if (type === 'executive' && data.analysis) {
-                    // Unified Premium Executive Summary View
-                    content.innerHTML = `
-                        <div class="prose max-w-none p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6" id="executive-summary-content">
-                            ${marked.parse(data.analysis)}
-                        </div>
-                        <div id="executive-charts" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-inner" id="latency-chart-container">
-                                <h3 class="text-sm font-bold text-gray-700 mb-2 px-1"><i class="fas fa-chart-line mr-2"></i>Latency Trajectory</h3>
-                            </div>
-                            <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-inner" id="status-chart-container">
-                                <h3 class="text-sm font-bold text-gray-700 mb-2 px-1"><i class="fas fa-chart-pie mr-2"></i>Status Distribution</h3>
-                            </div>
-                        </div>
-                    `;
-
-                    // Render Charts
-                    renderTrajectoryChart('latency-chart-container', data);
-
-                    // Status Distribution Chart
-                    const summary = data.summary || {};
-                    const total = summary.total_requests || 0;
-                    const success = summary.successful_requests || 0;
-                    const failed = summary.failed_requests || 0;
-
-                    const statusCtx = document.createElement('canvas');
-                    statusCtx.className = 'w-full max-h-[300px] mt-4';
-                    document.getElementById('status-chart-container').appendChild(statusCtx);
-
-                    new Chart(statusCtx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: ['Success', 'Failed'],
-                            datasets: [{
-                                data: [success, failed],
-                                backgroundColor: ['#10B981', '#EF4444'],
-                                hoverOffset: 4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { position: 'bottom' }
-                            }
-                        }
-                    });
-
+                if (type === 'executive') {
+                    if (data.status === 'generating' || !data.analysis) {
+                        pollForAnalysis(currentResultId);
+                        return;
+                    }
+                    renderExecutiveView(data);
                 } else {
                     // Store raw JSON for toggle
                     currentReportRawJson = JSON.stringify(data, null, 2);

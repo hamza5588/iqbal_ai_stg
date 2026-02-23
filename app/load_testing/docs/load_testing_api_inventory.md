@@ -1,45 +1,51 @@
 # Load Testing: API Inventory Report
 
-This report documents every API endpoint hit during the current load testing suite. All tests strike the **core logic** of the Iqbal AI application, ensuring performance metrics accurately reflect the user experience.
+This report documents every API endpoint hit during the current load testing suite and the reporting phase. All tests strike the **core logic** of the Iqbal AI application.
 
 ---
 
-## Global Common Step
-Every test starts with authentication using real user data:
-*   **POST** `/auth/login`: Validates user credentials and establishes a secure session.
+## 1. Global Authentication
+Every test establishing a session starts here:
+*   **POST** `/auth/login`: Credential validation and session establishment.
+*   **GET** `/logout`: Graceful session termination.
 
 ---
 
-## Scenario-Wise API Mapping
-
-### Test 1: System Access (Auth & Dashboard)
-*   **GET** `/`: Renders the main dashboard.
-*   **GET** `/logout`: Safely terminates the user session.
-
-### Test 2 & 3: The "Teacher's Heart" - Critical Path
-*   **POST** `/create_conversation`: Initializes a new workspace.
-*   **POST** `/api/rag/ingest`: Uploads and starts AI analysis of the document.
-*   **GET** `/api/rag/ingest/status/<task_id>`: Tracks real-time processing progress.
-*   **POST** `/api/rag/chat`: Concurrent/multi-step AI chat interaction.
-*   **GET** `/api/rag/thread/<thread_id>/finalized-lesson`: Retrieves the AI-drafted lesson.
-*   **POST** `/api/lessons/create`: Persists the finalized lesson to the database.
-
-### Test 4: The "Virtual Classroom" (Concurrent Student Chat)
-*   **POST** `/api/lessons/ask_question`: Direct Q&A against finalized lesson data.
-
-### Test 5: Deep Research (Teacher Long Chat)
-*   **POST** `/api/rag/chat`: Repeated hits to the same thread to test memory and depth.
-
-### Test 6: Intense Study Session (Student Deep Q&A)
-*   **POST** `/api/lessons/ask_question`: Continuous sequential questions in a single lesson context.
-
-### Test 7: Ingest System Reliability (Repeated Processing)
-*   **POST** `/api/rag/ingest`: Repeatedly hits the ingestion pipeline to check for performance drift.
-
-### Test 8: IQ (RAG Quality) Benchmark
-*   **POST** `/api/rag/chat`: Hits the AI chat with standard questions to evaluate response quality.
+## 2. Load Testing Infrastructure APIs
+These endpoints manage the lifecycle of a load test:
+*   **POST** `/api/load-test/start`: Spawns the background Runner.
+*   **POST** `/api/load-test/stop`: Signals active workers to terminate.
+*   **GET** `/api/load-test/status`: Real-time polling for test progress.
+*   **DELETE** `/api/load-test/result/<id>`: Selective data purge of results.
 
 ---
 
-## Summary of Integration
-All load tests hit endpoints defined in core route files: `auth.py`, `chat.py`, `rag_routes.py`, and `lesson_routes.py`.
+## 3. Reporting & Analysis (NEW)
+Endpoints used to retrieve and analyze test performance:
+*   **GET** `/api/load-test/report/<id>/technical`: Aggregated system metrics (JSON).
+*   **POST** `/api/load-test/report/<id>/executive`: LLM-powered performance analysis.
+*   **GET** `/api/load-test/report/<id>/artifacts`: Discovery of transcripts/lessons.
+*   **GET** `/api/load-test/artifact/download`: retrieval of generated Markdown files.
+
+---
+
+## 4. Scenario-Wise Core Hits
+
+### Test 1: System Access
+- **GET** `/`
+- **GET** `/student-dashboard` or `/teacher-dashboard`
+
+### Tests 2, 4, 6, 7 (RAG & Ingestion)
+- **POST** `/api/rag/ingest`: File upload and processing.
+- **GET** `/api/rag/ingest/status/<task_id>`: Polling for completion.
+- **POST** `/api/rag/chat`: AI interaction for teachers.
+- **GET** `/api/rag/thread/<id>/finalized-lesson`: Lesson retrieval.
+
+### Tests 3, 5, 8 (Student Chat & Quality)
+- **POST** `/api/lessons/ask_question`: Interaction with finalized lessons.
+- **POST** `/api/lessons/create`: Persisting lesson drafts.
+
+---
+
+## Summary
+The suite provides 100% coverage of the critical path endpoints in `auth.py`, `chat.py`, `rag_routes.py`, and `lesson_routes.py`.

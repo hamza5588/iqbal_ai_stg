@@ -38,6 +38,8 @@ Internal boundaries designed to prevent CPU spinning or "zombie" processes.
 *   **Memory Management**:
     *   **CSV Loading**: Large CSVs are loaded into memory at the start of the test. Extremely large files (e.g. 10,000+ rows) may cause memory pressure on the staging server.
 
-## 4. Scaling Boundaries
+## 4. AI & Reporting Boundaries
+*   **LLM Analysis Required**: The AI Executive Summary is **on-demand**. It is not generated automatically. Users must click the button, and it relies on a valid `GROQ_API_KEY` being present in the session or config.
+*   **Log Sampling**: For AI analysis, the system sends the **Technical Report** which includes aggregated metrics and the most recent logs. Extremely large log sets are sampled to fit LLM context tokens.
 *   **Database Logs**: Live logging is capped at the **last 100 entries** per request to prevent browser lag during long tests.
-*   **Parallel Tests**: The system supports multiple *different* tests running in the background, but they share the same backend worker pool (Threading), which can lead to contention if total concurrent users across all tests exceed ~200.
+*   **Parallel Tests**: The system supports multiple *different* tests running in the background, but they share the same backend worker pool. Contention may occur if total concurrent users across all tests exceed ~200.

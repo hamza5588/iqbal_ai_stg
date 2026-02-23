@@ -27,7 +27,7 @@ teacherfrontend
 temp
 markdown_exports
 frontend
-chroma_data
+chroma_data/
 migrations
 speed.txt
 SPEED_IMPROVEMENTS.md

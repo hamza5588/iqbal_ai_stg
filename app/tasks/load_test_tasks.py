@@ -46,3 +46,22 @@ def run_load_test_task(self, config_data: dict, result_id: int):
         except Exception as e:
             logger.error(f"Error in run_load_test_task: {str(e)}", exc_info=True)
             return {'success': False, 'error': str(e)}
+
+@celery.task(bind=True, name='app.tasks.load_test_tasks.generate_analysis_task')
+def generate_analysis_task(self, test_id: int, api_key: str):
+    """
+    Celery task to generate AI executive analysis for a report.
+    """
+    from app import create_app
+    from app.load_testing.report import ReportGenerator
+    
+    app = create_app()
+    with app.app_context():
+        try:
+            generator = ReportGenerator(test_id)
+            analysis = generator.generate_llm_analysis(api_key)
+            generator.save_analysis(analysis)
+            return {'success': True, 'test_id': test_id}
+        except Exception as e:
+            logger.error(f"Error in generate_analysis_task: {str(e)}", exc_info=True)
+            return {'success': False, 'error': str(e)}
