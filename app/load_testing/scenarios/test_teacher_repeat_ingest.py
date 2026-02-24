@@ -111,7 +111,8 @@ async def run(
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
-                        summary.total_file_size_mb += os.path.getsize(file_path) / (1024 * 1024)
+                        file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
+                        summary.total_file_size_mb += file_size_mb
                         task_id = data.get('task_id')
                         thread_id = data.get('thread_id')
                         summary.successful_requests += 1
@@ -124,14 +125,15 @@ async def run(
                             chunks = data.get('chunks', 0)
                             p_time = data.get('processing_time_seconds', 0)
                             
-                            log_func(f"Iter {i+1}: Success (Sync) in {total_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {total_duration:.1f}s")
+                            log_func(f"Iter {i+1}: Success (Sync) in {total_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {total_duration:.1f}s ({file_size_mb}MB)")
                             
                             summary.artifacts.append({
                                 "user_email": user.email,
                                 "type": "extracted_text",
                                 "thread_id": thread_id,
                                 "doc_name": filename,
-                                "iteration": i + 1
+                                "iteration": i + 1,
+                                "size_mb": file_size_mb
                             })
                     else:
                         summary.failed_requests += 1
@@ -168,7 +170,7 @@ async def run(
                                 chunks = data.get('chunks', 0)
                                 
                                 # Record polling_duration for SD calculation
-                                log_func(f"Iter {i+1}: Success in {polling_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {polling_duration:.1f}s")
+                                log_func(f"Iter {i+1}: Success in {polling_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {polling_duration:.1f}s ({file_size_mb}MB)")
                                 
                                 # Add iteration-specific extracted text artifact
                                 summary.artifacts.append({
@@ -176,7 +178,8 @@ async def run(
                                     "type": "extracted_text",
                                     "thread_id": thread_id,
                                     "doc_name": filename,
-                                    "iteration": i + 1
+                                    "iteration": i + 1,
+                                    "size_mb": file_size_mb
                                 })
                                 success = True
                                 break

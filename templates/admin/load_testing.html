@@ -1333,7 +1333,10 @@
                                             <i class="fas ${icon} mr-3 text-lg opacity-75"></i>
                                             <div class="truncate">
                                                 <div class="font-bold">${label}</div>
-                                                <div class="text-xs opacity-75 truncate">${art.doc_name || 'Document'}</div>
+                                                <div class="text-xs opacity-75 truncate text-gray-500">
+                                                    ${art.doc_name || 'Document'} 
+                                                </div>
+                                                ${art.size_mb ? `<div class="text-[10px] text-gray-400 mt-0.5"><i class="fas fa-hdd mr-1"></i>${art.size_mb} MB</div>` : ''}
                                             </div>
                                             <i class="fas fa-download ml-auto opacity-50"></i>
                                         </a>

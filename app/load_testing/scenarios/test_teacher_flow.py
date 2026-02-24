@@ -106,14 +106,15 @@ async def run(
                 if data.get('success'):
                     task_id = data.get('task_id')
                     thread_id = data.get('thread_id') 
-                    summary.total_file_size_mb += os.path.getsize(file_path) / (1024 * 1024)
+                    file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
+                    summary.total_file_size_mb += file_size_mb
                     summary.successful_requests += 1
                     
                     if not task_id:
                         # Synchronous processing
                         summary.ingestion_iterations += 1
                         summary.total_ingestion_time += upload_duration / 1000
-                        log_func(f"[{user.email}] Upload & Processing (Sync) success in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s")
+                        log_func(f"[{user.email}] Upload & Processing (Sync) success in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s ({file_size_mb}MB)")
                         # Phase 13: Green summary
                         log_func(f"[{user.email}] Total File Processing Time: {upload_duration/1000:.1f}s (Complete)")
                     else:
@@ -149,7 +150,7 @@ async def run(
                             summary.ingestion_iterations += 1
                             total_ingest_time = time.time() - poll_start
                             summary.total_ingestion_time += total_ingest_time
-                            log_func(f"[{user.email}] Ingest complete in {total_ingest_time:.1f}s (Processing time: {data.get('processing_time_seconds')}s) - Total Ingest Time: {total_ingest_time:.1f}s")
+                            log_func(f"[{user.email}] Ingest complete in {total_ingest_time:.1f}s (Processing time: {data.get('processing_time_seconds')}s) - Total Ingest Time: {total_ingest_time:.1f}s ({file_size_mb}MB)")
                             # Phase 13: Green summary
                             log_func(f"[{user.email}] Total File Processing Time: {total_ingest_time:.1f}s (Complete)")
                             
@@ -158,7 +159,8 @@ async def run(
                                 "user_email": user.email,
                                 "type": "extracted_text",
                                 "thread_id": thread_id,
-                                "doc_name": filename
+                                "doc_name": filename,
+                                "size_mb": file_size_mb
                             })
                             break
                         elif status in ['failure', 'revoked']:
