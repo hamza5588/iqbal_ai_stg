@@ -60,7 +60,7 @@ async def run(
         # 3. Logout
         if summary.stop_requested: return
         log_func(f"[{user.email}] Step 3: Performing logout...")
-        logout_url = f"{config.base_url}/logout"
+        logout_url = f"{config.base_url}/auth/logout"
         start_logout = time.time()
         async with session.get(logout_url, allow_redirects=True) as response:
             logout_duration = (time.time() - start_logout) * 1000
@@ -82,3 +82,5 @@ async def run(
         summary.failed_requests += 1
         summary.errors.append({"user": user.email, "error": str(e)})
         log_func(f"Auth exception after {total_duration:.1f}s: {str(e)}", level="ERROR")
+
+
