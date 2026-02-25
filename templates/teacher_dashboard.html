@@ -4020,19 +4020,22 @@
         textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
       }
 
-      // Update send button state
+      // Request in flight: block second message and keep Send disabled until response is received
+      window.teacherChatRequestInFlight = false;
+
+      // Update send button state (disabled when waiting for response or when input is empty)
       function updateSendButton() {
         const input = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
         const hasText = input.value.trim().length > 0;
-        sendBtn.disabled = !hasText;
+        sendBtn.disabled = window.teacherChatRequestInFlight || !hasText;
       }
 
-      // Handle keyboard shortcuts
+      // Handle keyboard shortcuts (do not send if a request is already in flight)
       function handleKeyDown(event) {
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
-          if (!event.repeat && document.getElementById('messageInput').value.trim()) {
+          if (!event.repeat && !window.teacherChatRequestInFlight && document.getElementById('messageInput').value.trim()) {
             sendMessage();
           }
         }
@@ -6915,6 +6918,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const message = input.value.trim();
 
         if (!message) return;
+        if (window.teacherChatRequestInFlight) {
+          if (typeof showToast === 'function') showToast('Please wait for the current response.', 'warning', 2000);
+          return;
+        }
+
+        window.teacherChatRequestInFlight = true;
+        updateSendButton();
 
         // Auto-generate title from first message if needed
         const chat = chatHistory.find(c => c.id === currentChatId);
@@ -6983,6 +6993,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             ? 'Error: Request timed out. Please try again.'
             : 'Error: ' + (e.message || 'Network error. Please try again.'));
         } finally {
+          window.teacherChatRequestInFlight = false;
+          updateSendButton();
           removeTypingIndicator();
         }
       }

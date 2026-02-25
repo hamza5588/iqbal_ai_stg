@@ -29,6 +29,16 @@ import base64
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 
+# Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
+_user_chat_locks = {}
+_locks_lock = threading.Lock()
+
+def _get_user_chat_lock(user_id):
+    with _locks_lock:
+        if user_id not in _user_chat_locks:
+            _user_chat_locks[user_id] = threading.Lock()
+        return _user_chat_locks[user_id]
+
 
 def _strip_lesson_finalization_from_response(text):
     """
@@ -613,130 +623,141 @@ def chat():
                     'thread_id': thread_id
                 }), 400
 
-        # Prepare config for LangGraph
-        config = {
-            "configurable": {
-                "thread_id": thread_id
+        # One message at a time per user: queue by rejecting concurrent requests
+        user_lock = _get_user_chat_lock(user_id)
+        if not user_lock.acquire(blocking=False):
+            return jsonify({
+                'error': 'Please wait for your current message to be answered before sending another.',
+                'code': 'CONCURRENT_REQUEST'
+            }), 429
+
+        try:
+            # Prepare config for LangGraph
+            config = {
+                "configurable": {
+                    "thread_id": thread_id
+                }
             }
-        }
-        # #region agent log
-        try:
-            os.makedirs(_log_dir, exist_ok=True)
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        # Create HumanMessage
-        human_message = HumanMessage(content=message)
+            # #region agent log
+            try:
+                os.makedirs(_log_dir, exist_ok=True)
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            # Create HumanMessage
+            human_message = HumanMessage(content=message)
 
-        # Invoke the chatbot - LangGraph returns the final state
-        # #region agent log
-        try:
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        state = chatbot.invoke(
-            {"messages": [human_message]},
-            config=config
-        )
-        # #region agent log
-        _msgs = state.get("messages", [])
-        try:
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
+            # Invoke the chatbot - LangGraph returns the final state
+            # #region agent log
+            try:
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            state = chatbot.invoke(
+                {"messages": [human_message]},
+                config=config
+            )
+            # #region agent log
+            _msgs = state.get("messages", [])
+            try:
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
 
-        # Extract the last message from the state
-        messages = state.get("messages", [])
-        if not messages:
-            response_content = "I'm sorry, I couldn't generate a response."
-        else:
-            # Get the last message (should be the AI response)
-            last_msg = messages[-1]
-            if hasattr(last_msg, 'content'):
-                response_content = last_msg.content
-            elif isinstance(last_msg, dict):
-                response_content = last_msg.get('content', str(last_msg))
+            # Extract the last message from the state
+            messages = state.get("messages", [])
+            if not messages:
+                response_content = "I'm sorry, I couldn't generate a response."
             else:
-                response_content = str(last_msg)
-
-        # Remove internal lesson-finalization fields so they never appear on frontend or in history
-        response_content = _strip_lesson_finalization_from_response(response_content)
-
-        # Save messages to database for chat history
-        db_conversation_id = None
-        try:
-            from app.models.models import ConversationModel
-            conversation_model = ConversationModel(user_id)
-            
-            # Priority 1: Use conversation_id from request if provided (most reliable)
-            if conversation_id:
-                conv = conversation_model.get_conversation_by_id(conversation_id)
-                if conv:
-                    db_conversation_id = conversation_id
-                    logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
+                # Get the last message (should be the AI response)
+                last_msg = messages[-1]
+                if hasattr(last_msg, 'content'):
+                    response_content = last_msg.content
+                elif isinstance(last_msg, dict):
+                    response_content = last_msg.get('content', str(last_msg))
                 else:
-                    # Conversation doesn't exist or doesn't belong to user, create new one
-                    db_conversation_id = conversation_model.create_conversation(
-                        title=message[:50] if len(message) > 50 else message
-                    )
-                    logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
-            else:
-                # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
-                import re
-                thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
-                if thread_conv_match:
-                    db_conversation_id = int(thread_conv_match.group(1))
-                    conv = conversation_model.get_conversation_by_id(db_conversation_id)
-                    if not conv:
+                    response_content = str(last_msg)
+
+            # Remove internal lesson-finalization fields so they never appear on frontend or in history
+            response_content = _strip_lesson_finalization_from_response(response_content)
+
+            # Save messages to database for chat history
+            db_conversation_id = None
+            try:
+                from app.models.models import ConversationModel
+                conversation_model = ConversationModel(user_id)
+                
+                # Priority 1: Use conversation_id from request if provided (most reliable)
+                if conversation_id:
+                    conv = conversation_model.get_conversation_by_id(conversation_id)
+                    if conv:
+                        db_conversation_id = conversation_id
+                        logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
+                    else:
+                        # Conversation doesn't exist or doesn't belong to user, create new one
                         db_conversation_id = conversation_model.create_conversation(
                             title=message[:50] if len(message) > 50 else message
                         )
-                    logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                        logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
                 else:
-                    db_conversation_id = conversation_model.create_conversation(
-                        title=message[:50] if len(message) > 50 else message
-                    )
-                    logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
-            
-            # Save user message
-            conversation_model.save_message(
-                conversation_id=db_conversation_id,
-                message=message,
-                role='user'
-            )
-            
-            # Save AI response
-            conversation_model.save_message(
-                conversation_id=db_conversation_id,
-                message=response_content,
-                role='bot'  # Database constraint requires 'bot' not 'assistant'
-            )
-            
-            logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
-        except Exception as save_error:
-            # Don't fail the request if saving to database fails
-            logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
+                    # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
+                    import re
+                    thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
+                    if thread_conv_match:
+                        db_conversation_id = int(thread_conv_match.group(1))
+                        conv = conversation_model.get_conversation_by_id(db_conversation_id)
+                        if not conv:
+                            db_conversation_id = conversation_model.create_conversation(
+                                title=message[:50] if len(message) > 50 else message
+                            )
+                        logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                    else:
+                        db_conversation_id = conversation_model.create_conversation(
+                            title=message[:50] if len(message) > 50 else message
+                        )
+                        logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
+                
+                # Save user message
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=message,
+                    role='user'
+                )
+                
+                # Save AI response
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=response_content,
+                    role='bot'  # Database constraint requires 'bot' not 'assistant'
+                )
+                
+                logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
+            except Exception as save_error:
+                # Don't fail the request if saving to database fails
+                logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
 
-        # #region agent log
-        try:
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        return jsonify({
-            'success': True,
-            'message': response_content,
-            'thread_id': thread_id,
-            'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-            'has_document': thread_has_document(thread_id)
-        })
+            # #region agent log
+            try:
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            return jsonify({
+                'success': True,
+                'message': response_content,
+                'thread_id': thread_id,
+                'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
+                'has_document': thread_has_document(thread_id)
+            })
+        finally:
+            user_lock.release()
 
     except Exception as e:
         # #region agent log

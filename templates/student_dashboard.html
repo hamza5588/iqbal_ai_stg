@@ -2612,7 +2612,7 @@
         <div class="absolute inset-2 rounded-full border-4 border-primary-300 animate-spin animation-delay-150"></div>
         <div class="absolute inset-4 rounded-full border-4 border-primary-500 animate-spin animation-delay-300"></div>
         <div class="absolute inset-0 flex items-center justify-center">
-          <img src="assets/midLogo.png" class="w-10 h-10" alt="Loading" />
+          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" class="w-10 h-10" alt="Loading" />
         </div>
       </div>
       <p class="text-primary-600 font-medium">Loading Student Dashboard...</p>
@@ -2630,7 +2630,7 @@
         <!-- Sidebar Header - Logo + Collapse Button -->
         <div class="p-4 border-b border-gray-200 flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <img src="assets/midLogo.png" alt="Logo" class="w-10 h-10 rounded-md object-contain"/>
+            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="Logo" class="w-10 h-10 rounded-md object-contain"/>
             <div class="sb-hide-when-collapsed">
               <h2 class="text-lg font-bold text-gray-900">Student Portal</h2>
               <p class="text-xs text-gray-500">Welcome</p>
@@ -2784,7 +2784,7 @@
           <!-- Welcome message - AI on RIGHT side -->
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="assets/midLogo.png" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Student Portal!</h4>
@@ -3449,16 +3449,16 @@
         try {
           const saved = JSON.parse(localStorage.getItem('Student_chat_threads') || 'null');
           if (saved && Array.isArray(saved) && saved.length) {
-            chatHistory = saved;
+            // One-time cleanup: if this looks like old seeded dummy data (only chat1–chat4), clear it
+            var legacyOnly = saved.length <= 4 && saved.every(function (c) { return /^chat[1-4]$/.test(String(c.id)); });
+            if (legacyOnly) {
+              chatHistory = [];
+              saveChatThreads();
+            } else {
+              chatHistory = saved;
+            }
           } else {
-            // Default starter chats if none saved
-            chatHistory = [
-              { id: 'chat1', title: 'Lesson planning assistance', timestamp: new Date().toISOString(), active: true, lastMessageSnippet: '', unreadCount: 0 },
-              { id: 'chat2', title: 'Assessment questions', timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), active: false, lastMessageSnippet: '', unreadCount: 0 },
-              { id: 'chat3', title: 'Classroom strategies', timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), active: false, lastMessageSnippet: '', unreadCount: 0 },
-              { id: 'chat4', title: 'Machine Learning basics', timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), active: false, lastMessageSnippet: '', unreadCount: 0 }
-            ];
-            saveChatThreads();
+            chatHistory = [];
           }
         } catch (e) {
           console.error('Failed to load chat threads', e);
@@ -3778,7 +3778,7 @@
             msgDiv.className = 'chat-message assistant animate-fade-in';
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
-                <img src="assets/midLogo.png" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+                <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
               </div>
               <div class="chat-message-content">${content}</div>
             `;
@@ -3796,7 +3796,7 @@
           chatMessages.innerHTML = `
             <div class="chat-message assistant animate-fade-in">
               <div class="chat-message-avatar">
-                <img src="assets/midLogo.png" alt="AI Assistant">
+                <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
               </div>
               <div class="chat-message-content">
                 <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Student Portal!</h4>
@@ -4995,7 +4995,7 @@
         <!-- AI message on RIGHT side -->
         <div class="chat-message assistant animate-fade-in">
           <div class="chat-message-avatar">
-            <img src="assets/midLogo.png" alt="AI Assistant">
+            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
           </div>
           <div class="chat-message-content">
             <h4 class="font-display font-semibold text-surface-900 mb-2">📚 Welcome to Learning</h4>
@@ -5374,7 +5374,7 @@
         
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="assets/midLogo.png" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
         </div>
       `;
         messageDiv.appendChild(contentDiv);
@@ -5486,7 +5486,7 @@
         typingDiv.className = 'chat-message assistant animate-fade-in';
         typingDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="assets/midLogo.png" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -5564,7 +5564,7 @@
         successMsg.className = 'chat-message assistant animate-fade-in';
         successMsg.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="assets/midLogo.png" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -5784,7 +5784,7 @@
           chatMessages.innerHTML = `
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="assets/midLogo.png" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Chat Reset</h4>

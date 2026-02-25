@@ -39,3 +39,7 @@ shared_vector_store.pkl
 MILVUS_STAGING.md
 chatbot.db
 tests
+__pycache__
+.cursor
+.pytest_cache
+.vscode
