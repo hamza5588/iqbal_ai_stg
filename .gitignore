@@ -38,3 +38,4 @@ milvus_data
 shared_vector_store.pkl
 MILVUS_STAGING.md
 chatbot.db
+tests

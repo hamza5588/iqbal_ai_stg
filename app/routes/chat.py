@@ -31,8 +31,20 @@ logger = logging.getLogger(__name__)
 # those hardware-specific crashes.
 torch.backends.mkldnn.enabled = False  # avoid oneDNN primitive creation issues
 
-# ✅ LOAD ONCE — app startup
-whisper_model = whisper.load_model("base", device="cpu")
+# Lazy-load Whisper on first STT request to avoid startup OOM (DefaultCPUAllocator: not enough memory)
+_whisper_model = None
+
+def _get_whisper_model():
+    """Load Whisper base model on first use; cache or return None if OOM."""
+    global _whisper_model
+    if _whisper_model is not None:
+        return _whisper_model
+    try:
+        _whisper_model = whisper.load_model("base", device="cpu")
+        return _whisper_model
+    except Exception as e:
+        logger.warning("Whisper model load failed (STT disabled): %s", e)
+        return None
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('chat', __name__)
@@ -625,7 +637,10 @@ def speech_to_text():
             return jsonify({'error': 'Empty audio filename'}), 400
 
         from tempfile import NamedTemporaryFile
-        from app.utils.whisper_stt import transcribe_audio
+
+        model = _get_whisper_model()
+        if model is None:
+            return jsonify({'error': 'Speech-to-text unavailable (model could not be loaded)'}), 503
 
         tmp_path = None
         try:
@@ -633,7 +648,7 @@ def speech_to_text():
                 audio_file.save(tmp.name)
                 tmp_path = tmp.name
 
-            result = whisper_model.transcribe(
+            result = model.transcribe(
                 tmp_path,
                 fp16=False,      # important if no GPU
                 language="en"    # optional but faster if known
