@@ -13,6 +13,7 @@ class TestUserSet(Base):
     role = Column(String(50), nullable=False)  # 'teacher' or 'student'
     user_count = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    set_prompt = Column(Text, nullable=True)  # Custom RAG prompt for teacher sets
     
     # Relationships
     users = relationship("TestUser", back_populates="user_set", cascade="all, delete-orphan")

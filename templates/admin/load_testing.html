@@ -410,7 +410,8 @@
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm mb-1">Role</label>
-                    <select id="user-role" class="w-full border rounded px-3 py-2">
+                    <select id="user-role" class="w-full border rounded px-3 py-2"
+                        onchange="document.getElementById('set-prompt-field').classList.toggle('hidden', this.value !== 'teacher')">
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
                     </select>
@@ -423,6 +424,12 @@
                 <div class="mb-4">
                     <label class="block text-sm mb-1">Password</label>
                     <input type="text" id="user-password" value="TestPass123!" class="w-full border rounded px-3 py-2">
+                </div>
+                <div id="set-prompt-field" class="mb-4 hidden">
+                    <label class="block text-sm mb-1">Set Prompt <span class="text-xs text-gray-400">(Teacher only)</span></label>
+                    <textarea id="user-set-prompt" rows="3" class="w-full border rounded px-3 py-2"
+                        placeholder="e.g. You are a Physics teacher. Always explain concepts with real-world examples."></textarea>
+                    <p class="text-xs text-gray-400 mt-1">This prompt will be set for all teachers in this set via /api/rag/prompt before tests run.</p>
                 </div>
                 <div class="flex justify-end gap-2">
                     <button type="button"
@@ -855,6 +862,7 @@
                         <div>
                             <div class="font-medium text-gray-800">${setName}</div>
                             <div class="text-xs text-gray-500">${setCount} users • Created ${new Date(set.created_at).toLocaleDateString()}</div>
+                            ${set.set_prompt ? `<div class="text-xs text-blue-500 mt-1"><i class="fas fa-comment-dots mr-1"></i>Prompt: "${set.set_prompt.length > 50 ? set.set_prompt.substring(0, 50) + '...' : set.set_prompt}"</div>` : ''}
                         </div>
                         <button onclick="deleteUserSet(${set.id})" class="text-red-500 hover:text-red-700 text-sm">
                             <i class="fas fa-trash"></i>
@@ -877,11 +885,12 @@
             const count = parseInt(document.getElementById('user-count').value);
             const role = document.getElementById('user-role').value;
             const password = document.getElementById('user-password').value;
+            const set_prompt = document.getElementById('user-set-prompt')?.value || '';
 
             try {
                 const res = await fetchWithProxy('/api/load-test/users/create', {
                     method: 'POST',
-                    body: JSON.stringify({ name, count, role, password })
+                    body: JSON.stringify({ name, count, role, password, set_prompt })
                 });
                 const data = await res.json();
 

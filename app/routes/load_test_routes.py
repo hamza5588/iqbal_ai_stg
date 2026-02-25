@@ -298,8 +298,9 @@ def create_user_set():
     role = data.get('role', 'student')
     count = int(data.get('count', 10))
     password = data.get('password', 'TestPass123!')
+    set_prompt = (data.get('set_prompt') or '').strip() or None
     
-    user_set, errors = UserSetManager.create_user_set(name, role, count, password)
+    user_set, errors = UserSetManager.create_user_set(name, role, count, password, set_prompt)
     
     if user_set:
         return jsonify({
@@ -321,7 +322,8 @@ def list_user_sets():
         'name': s.name,
         'role': s.role,
         'user_count': s.user_count,
-        'created_at': s.created_at.isoformat()
+        'created_at': s.created_at.isoformat(),
+        'set_prompt': s.set_prompt
     } for s in sets])
 
 @bp.route('/users/<int:set_id>', methods=['DELETE'])
