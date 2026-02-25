@@ -131,3 +131,141 @@ def fetch_chunks_by_ids(chunk_ids: List[int]) -> Dict[int, Dict[str, Any]]:
 
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
+
+
+def _simple_lexical_score(query: str, text: str) -> float:
+    """
+    Very lightweight lexical scoring: counts overlap of cleaned tokens.
+    This is NOT full BM25, but gives a useful keyword signal for hybrid scoring
+    without requiring additional DB indexes.
+    """
+    if not query or not text:
+        return 0.0
+    import re
+
+    # Lowercase, split on non-word chars, drop very short tokens
+    def _tokens(s: str):
+        return [t for t in re.split(r"\W+", s.lower()) if len(t) > 2]
+
+    q_tokens = set(_tokens(query))
+    if not q_tokens:
+        return 0.0
+    t_tokens = _tokens(text)
+    if not t_tokens:
+        return 0.0
+
+    overlap = sum(1 for tok in t_tokens if tok in q_tokens)
+    # Normalize by text length to avoid bias towards huge chunks
+    return overlap / max(len(t_tokens), 1)
+
+
+def hybrid_search(
+    query: str,
+    query_vector: List[float],
+    thread_id: str,
+    user_id: int,
+    k: int = 12,
+    w_semantic: float = 0.7,
+    w_lexical: float = 0.3,
+) -> List[Dict[str, Any]]:
+    """
+    Hybrid retrieval: combines dense vector similarity search with a simple lexical signal.
+
+    - Runs existing similarity_search() to get semantic hits (from Milvus/Chroma).
+    - Uses query_all_chunks() to compute a per-chunk lexical score from raw text.
+    - Fuses scores via weighted sum and returns top-k chunks with the same shape
+      as similarity_search(): [{chunk_id, page, chunk_index, score}].
+    """
+    print("[RAG] hybrid_search running (dense + lexical fusion) thread_id=%s k=%d" % (thread_id, k))
+    logger.info(
+        "hybrid_search: start query_len=%d thread_id=%s user_id=%s k=%d w_sem=%.2f w_lex=%.2f",
+        len(query), thread_id, user_id, k, w_semantic, w_lexical,
+    )
+    # 1) Dense similarity search
+    dense_results = similarity_search(
+        query_vector=query_vector,
+        thread_id=thread_id,
+        user_id=user_id,
+        k=k,
+    )
+
+    # 2) Get all chunks for this thread/user with text for lexical scoring
+    #    Note: this only returns text + metadata, not chunk_id, so we do a second
+    #    lightweight query by IDs for the dense hits to attach IDs to text.
+    from app.utils.db import get_db
+    from app.models.database_models import RAGChunk
+
+    db = None
+    chunk_text_by_id: Dict[int, str] = {}
+    try:
+        db = get_db()
+        dense_ids = [r["chunk_id"] for r in dense_results if r.get("chunk_id") is not None]
+        if dense_ids:
+            rows = (
+                db.query(RAGChunk.id, RAGChunk.text)
+                .filter(
+                    RAGChunk.id.in_(dense_ids),
+                )
+                .all()
+            )
+            chunk_text_by_id = {row[0]: row[1] or "" for row in rows}
+    except Exception as e:
+        logger.warning("hybrid_search: error loading chunk texts for lexical scoring: %s", e)
+
+    # 3) Compute lexical scores for chunks we have text for
+    lexical_scores: Dict[int, float] = {}
+    for cid, text in chunk_text_by_id.items():
+        lexical_scores[cid] = _simple_lexical_score(query, text)
+
+    # 4) Normalize scores and compute weighted fusion
+    #    Dense scores from Milvus are distances; smaller is better, so invert.
+    dense_scores: Dict[int, float] = {}
+    for r in dense_results:
+        cid = r.get("chunk_id")
+        dist = float(r.get("score", 0.0))
+        if cid is None:
+            continue
+        dense_scores[cid] = 1.0 / (1.0 + dist)
+
+    def _normalize(d: Dict[int, float]) -> Dict[int, float]:
+        if not d:
+            return {}
+        vals = list(d.values())
+        v_min, v_max = min(vals), max(vals)
+        if v_max == v_min:
+            return {k: 1.0 for k in d.keys()}
+        return {k: (v - v_min) / (v_max - v_min) for k, v in d.items()}
+
+    dense_norm = _normalize(dense_scores)
+    lexical_norm = _normalize(lexical_scores)
+
+    combined: Dict[int, Dict[str, Any]] = {}
+    for r in dense_results:
+        cid = r.get("chunk_id")
+        if cid is None:
+            continue
+        combined[cid] = {
+            "chunk_id": cid,
+            "page": r.get("page", 0),
+            "chunk_index": r.get("chunk_index", 0),
+        }
+
+    all_ids = set(dense_norm.keys()) | set(lexical_norm.keys())
+    out: List[Dict[str, Any]] = []
+    for cid in all_ids:
+        sem = dense_norm.get(cid, 0.0)
+        lex = lexical_norm.get(cid, 0.0)
+        final_score = w_semantic * sem + w_lexical * lex
+        base = combined.get(cid, {"chunk_id": cid, "page": 0, "chunk_index": 0})
+        base["score"] = final_score
+        out.append(base)
+
+    # Sort descending by fused score (higher is better) and take top-k
+    out.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    top = out[:k]
+    print("[RAG] hybrid_search done: dense_hits=%d fused_top_k=%d" % (len(dense_results), len(top)))
+    logger.info(
+        "hybrid_search: done dense_hits=%d chunks_with_lexical=%d fused_top_k=%d thread_id=%s",
+        len(dense_results), len(lexical_scores), len(top), thread_id,
+    )
+    return top
