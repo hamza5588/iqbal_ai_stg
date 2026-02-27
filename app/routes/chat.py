@@ -303,11 +303,33 @@ def get_conversations():
 @bp.route('/get_messages/<int:conversation_id>')
 @login_required
 def get_messages(conversation_id):
-    """Get messages for a specific conversation"""
+    """Get messages for a specific conversation. Includes thread_id when this conversation has an uploaded PDF."""
     try:
-        chat_service = ChatService(session['user_id'], session['groq_api_key'])
+        user_id = session['user_id']
+        chat_service = ChatService(user_id, session['groq_api_key'])
         messages = chat_service.get_conversation_messages(conversation_id)
-        return jsonify({'messages': messages})  # <-- wrap in dict for frontend
+        # Resolve RAG thread_id and filename for this conversation (for correct chat context and preamble)
+        thread_id = None
+        uploaded_filename = None
+        try:
+            from app.models.database_models import RAGThread
+            db = get_db()
+            prefix = f"user_{user_id}_conv_{conversation_id}_"
+            row = db.query(RAGThread.thread_id, RAGThread.filename).filter(
+                RAGThread.user_id == user_id,
+                RAGThread.thread_id.like(prefix + "%"),
+                RAGThread.has_document == True,
+            ).order_by(RAGThread.created_at.desc()).first()
+            if row:
+                thread_id = row[0] if isinstance(row, (tuple, list)) else row.thread_id
+                uploaded_filename = (row[1] if isinstance(row, (tuple, list)) and len(row) > 1 else getattr(row, 'filename', None)) or None
+        except Exception:
+            pass
+        return jsonify({
+            'messages': messages,
+            'thread_id': thread_id,
+            'uploaded_filename': uploaded_filename,
+        })
     except Exception as e:
         logger.error(f"Error retrieving messages: {str(e)}")
         return jsonify({'error': 'Failed to retrieve messages'}), 500

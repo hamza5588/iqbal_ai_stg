@@ -4276,6 +4276,10 @@
 
       // Helper function to close the modal
       function closeCreateLessonModal() {
+        window._ingestTaskId = null;
+        window._ingestAbortController = null;
+        window._ingestCancelRequested = false;
+        window._ingestCompletedSuccessfully = false;
         const modal = document.getElementById('createLessonModal');
         if (modal) {
           modal.remove();
@@ -4567,7 +4571,7 @@
             </div>
             
             <div class="flex flex-col md:flex-row gap-4">
-                <button onclick="closeCreateLessonModal()" 
+                <button onclick="cancelCreateLessonUpload()" 
                         class="flex-1 bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-all font-bold text-lg">
                   Cancel
                 </button>
@@ -4576,10 +4580,22 @@
       `;
 
         window._createLessonFile = file;
-        window._createLessonMeta = { lessonTitle, lessonContext, lessonSubject, lessonGrade };
+        window._createLessonMeta = { lessonTitle, lessonContext, lessonSubject, lessonGrade, conversationId: null, threadId: null };
         setTimeout(() => {
           processCreateLessonStep2(file.name, file.size, lessonTitle, lessonContext, lessonSubject, lessonGrade);
         }, 500);
+      }
+
+      // Graceful cancel for create-lesson upload: abort in-flight request or revoke Celery task, then close modal
+      function cancelCreateLessonUpload() {
+        if (window._ingestTaskId) {
+          fetch('/api/rag/ingest/cancel/' + window._ingestTaskId, { method: 'POST', credentials: 'include' }).catch(function() {});
+          window._ingestCancelRequested = true;
+        }
+        if (window._ingestAbortController) {
+          window._ingestAbortController.abort();
+        }
+        closeCreateLessonModal();
       }
 
       // Step 2 processing - API: POST /api/rag/ingest (RAG document ingest for chat), NOT create_lesson
@@ -4595,11 +4611,14 @@
           closeCreateLessonModal();
           return;
         }
+        window._ingestAbortController = new AbortController();
+        window._ingestTaskId = null;
+        window._ingestCancelRequested = false;
+        window._ingestCompletedSuccessfully = false;
         const formData = new FormData();
         formData.append('file', file);
         formData.append('create_new_thread', 'true');
-        const convId = window.currentRAGConversationId || (typeof currentChatId !== 'undefined' ? currentChatId : null);
-        if (convId != null) formData.append('conversation_id', String(convId));
+        // Do NOT send conversation_id: each upload gets a new conversation and thread (isolated instance)
         let progress = 0;
         const progressInterval = setInterval(() => {
           progress += Math.random() * 8 + 2;
@@ -4616,7 +4635,8 @@
           const response = await fetch('/api/rag/ingest', {
             method: 'POST',
             body: formData,
-            credentials: 'include'
+            credentials: 'include',
+            signal: window._ingestAbortController.signal
           });
           clearInterval(progressInterval);
           if (progressBar) progressBar.style.width = '100%';
@@ -4632,22 +4652,36 @@
           let threadId = data.thread_id || null;
           let conversationId = data.conversation_id != null ? data.conversation_id : null;
           if (data.task_id && data.status === 'processing') {
+            window._ingestTaskId = data.task_id;
             if (progressStatus) progressStatus.textContent = 'Processing in background...';
             threadId = data.thread_id || null;
             conversationId = data.conversation_id != null ? data.conversation_id : null;
             const taskId = data.task_id;
             const pollMax = 120;
             for (let i = 0; i < pollMax; i++) {
+              if (window._ingestCancelRequested) {
+                showToast('Upload cancelled.', 'warning');
+                break;
+              }
               await new Promise(r => setTimeout(r, 2000));
+              if (window._ingestCancelRequested) {
+                showToast('Upload cancelled.', 'warning');
+                break;
+              }
               const statusRes = await fetch('/api/rag/ingest/status/' + taskId, { method: 'GET', credentials: 'include' });
               if (!statusRes.ok) continue;
               const statusData = await statusRes.json().catch(() => ({}));
               if (progressBar) progressBar.style.width = (statusData.progress || 0) + '%';
               if (progressPercent) progressPercent.textContent = Math.round(statusData.progress || 0) + '%';
               if (progressStatus && statusData.message) progressStatus.textContent = statusData.message;
+              if (statusData.status === 'revoked') {
+                showToast('Upload cancelled.', 'warning');
+                break;
+              }
               if (statusData.status === 'success') {
                 threadId = statusData.thread_id || threadId;
                 conversationId = statusData.conversation_id != null ? statusData.conversation_id : conversationId;
+                window._ingestCompletedSuccessfully = true;
                 break;
               }
               if (statusData.status === 'failed' || statusData.status === 'failure' || statusData.state === 'FAILURE') {
@@ -4664,13 +4698,22 @@
           if (conversationId != null) {
             window.currentRAGConversationId = conversationId;
             try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
+            if (window._createLessonMeta) {
+              window._createLessonMeta.conversationId = conversationId;
+              window._createLessonMeta.threadId = threadId;
+            }
           }
-          setTimeout(() => {
-            showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
-          }, 500);
+          if (!window._ingestCancelRequested && (window._ingestCompletedSuccessfully || (!data.task_id && threadId)) && threadId) {
+            setTimeout(() => {
+              showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
+            }, 500);
+          } else {
+            closeCreateLessonModal();
+          }
         } catch (e) {
           clearInterval(progressInterval);
-          showToast('Network error. Please try again.', 'error');
+          const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
+          if (!isAbort) showToast('Network error. Please try again.', 'error');
           closeCreateLessonModal();
         }
       }
@@ -5003,32 +5046,41 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // Show upload success - NOT auto-saving
         showToast(`✅ PDF "${lessonTitle}" uploaded successfully!`, 'success', 4000);
 
-        // Enable chat tab and start a fresh chat for this lesson
+        // Enable chat tab and switch to the NEW backend conversation (do not start a client-side chat)
         enableChatTab();
-        // Finalize previous chat and initialize a brand new conversation ID
-        startNewChat();
-        // Open chat UI for the newly created conversation
         showChatTab();
 
-        // Show success message in the NEW chat (persisted under new chatId)
-        addUserMessage(`📚 Uploaded PDF: ${lessonTitle}`);
-
-        setTimeout(() => {
-          addAssistantMessage(`✅ <strong>Successfully uploaded "${fileName}"!</strong><br><br>
-          <strong>PDF Details:</strong><br>
-          • <strong>Title:</strong> ${lessonTitle}<br>
-          • <strong>Subject:</strong> ${lessonSubject}<br>
-          • <strong>Grade:</strong> ${lessonGrade}<br>
-          • <strong>File Size:</strong> ${fileSizeMB} MB<br>
-          • <strong>Estimated Pages:</strong> ${pages}<br><br>
-          
-          <strong>📝 What would you like to do?</strong><br>
-          Type one of these commands:<br>
-          • "create a lesson" - Generate a lesson from this PDF<br>
-          • "summarize" - Get a brief summary<br>
-          • "ask me questions" - Generate quiz questions<br>
-          • Or ask your own questions about the content!`);
-        }, 500);
+        // Prefer the conversation/thread created for THIS upload, fall back to global if needed
+        var metaConvId = (window._createLessonMeta && window._createLessonMeta.conversationId) || null;
+        var newConvId = metaConvId != null ? metaConvId : window.currentRAGConversationId;
+        if (newConvId != null) {
+          loadChatHistoryFromBackend().then(function () {
+            return loadChatPromise(newConvId);
+          }).then(function () {
+            addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
+            setTimeout(function () {
+              addAssistantMessage('✅ <strong>Successfully uploaded "' + fileName + '"!</strong><br><br>' +
+                '<strong>PDF Details:</strong><br>' +
+                '• <strong>Title:</strong> ' + lessonTitle + '<br>' +
+                '• <strong>Subject:</strong> ' + lessonSubject + '<br>' +
+                '• <strong>Grade:</strong> ' + lessonGrade + '<br>' +
+                '• <strong>File Size:</strong> ' + fileSizeMB + ' MB<br>' +
+                '• <strong>Estimated Pages:</strong> ' + pages + '<br><br>' +
+                '<strong>📝 What would you like to do?</strong><br>' +
+                'Type one of these commands:<br>' +
+                '• "create a lesson" - Generate a lesson from this PDF<br>' +
+                '• "summarize" - Get a brief summary<br>' +
+                '• "ask me questions" - Generate quiz questions<br>' +
+                '• Or ask your own questions about the content!');
+            }, 300);
+          }).catch(function (e) { console.error('Error switching to new conversation', e); });
+        } else {
+          startNewChat();
+          addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
+          setTimeout(function () {
+            addAssistantMessage('✅ <strong>Successfully uploaded "' + fileName + '"!</strong><br><br>You can ask questions about this document.');
+          }, 300);
+        }
       }
 
       // Show My Lessons Page (API-integrated: fetches from /api/lessons/my_lessons)
@@ -6162,6 +6214,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Load only that chat's messages, clear previous context
       // ════════════════════════════════════════════════════════════════════════════════
       function loadChat(chatId) {
+        window._loadChatPromise = Promise.resolve();
+        window._loadChatResolve = null;
         // 1. Clear previous context (no carryover from other chats)
         clearChatContext();
 
@@ -6238,15 +6292,55 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return !isNaN(n) && String(n) === String(chatId);
         })();
 
-        function applyLoadedMessages(messages) {
+        function renderRAGPreamble(uploadedFilename) {
+          // Welcome message (same as new RAG chat)
+          chatMessages.innerHTML = `
+        <div class="chat-message assistant animate-fade-in">
+          <div class="chat-message-avatar">
+            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          </div>
+          <div class="chat-message-content">
+            <h4 class="font-display font-semibold text-surface-900 mb-2">🎯 New Teaching Session Started</h4>
+            <p class="text-surface-700 mb-4">I'm ready to assist you with your teaching needs. What would you like to work on today?</p>
+            <div class="grid grid-cols-2 gap-3">
+              <button onclick="showCreateLessonWizard()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
+                <i class="fas fa-file-pdf mb-2"></i>
+                <p class="font-medium">Create Lesson</p>
+                <p class="text-sm opacity-75">From PDF upload</p>
+              </button>
+              <button onclick="quickQuestion('Generate assessment questions for')" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
+                <i class="fas fa-clipboard-check mb-2"></i>
+                <p class="font-medium">Assessments</p>
+                <p class="text-sm opacity-75">Create quizzes and tests</p>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="chat-message assistant animate-fade-in">
+          <div class="chat-message-avatar">
+            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+          </div>
+          <div class="chat-message-content">
+            ✅ <strong>Successfully uploaded \u201C${String(uploadedFilename || 'document').replace(/["<>]/g, '')}\u201D.</strong><br><br>
+            You can ask questions about this document below.
+          </div>
+        </div>`;
+        }
+
+        function applyLoadedMessages(messages, options) {
+          options = options || {};
+          const prependRAG = options.prependRAGPreamble && options.uploadedFilename !== undefined;
           chatMessages.innerHTML = '';
+          if (prependRAG) {
+            renderRAGPreamble(options.uploaded_filename || options.uploadedFilename || 'document');
+          }
           if (messages && messages.length > 0) {
             messages.forEach(function (msg) {
               const role = msg.role === 'bot' ? 'assistant' : 'user';
               const content = msg.content || msg.message || '';
               renderMessageDOM(role, content);
             });
-          } else {
+          } else if (!prependRAG) {
             renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
           }
         }
@@ -6254,6 +6348,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         if (isBackendConversationId) {
           // Load from backend (integer conversation_id)
           const numericId = typeof chatId === 'number' ? chatId : parseInt(chatId, 10);
+          window._loadChatResolve = null;
+          window._loadChatPromise = new Promise(function (resolve) { window._loadChatResolve = resolve; });
           fetch(`/get_messages/${numericId}`, {
             method: 'GET',
             credentials: 'include'
@@ -6261,11 +6357,24 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             if (!res.ok) throw new Error('Failed to load messages');
             return res.json();
           }).then(function (data) {
-            applyLoadedMessages((data && data.messages) || []);
+            if (data && data.thread_id) {
+              window.currentRAGThreadId = data.thread_id;
+              try { localStorage.setItem('teacher_currentRAGThreadId', data.thread_id); } catch (e) {}
+            }
+            var messages = (data && data.messages) || [];
+            var opts = {};
+            if (data && data.thread_id) {
+              opts.prependRAGPreamble = true;
+              opts.uploaded_filename = data.uploaded_filename || null;
+              opts.uploadedFilename = data.uploaded_filename || null;
+            }
+            applyLoadedMessages(messages, opts);
+            if (window._loadChatResolve) { window._loadChatResolve(); window._loadChatResolve = null; }
           }).catch(function (err) {
             console.error('Error loading chat messages', err);
             applyLoadedMessages([]);
             renderMessageDOM('assistant', 'Unable to load previous messages for this conversation.');
+            if (window._loadChatResolve) { window._loadChatResolve(); window._loadChatResolve = null; }
           });
         } else {
           // Client-only chat (e.g. chat_1771259540797): load from localStorage
@@ -6289,6 +6398,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         scrollToBottom();
         document.getElementById('messageInput').focus();
+        // Resolve promise for client-only path (backend path resolves in fetch .then/.catch)
+        if (!isBackendConversationId && window._loadChatResolve) {
+          window._loadChatResolve();
+          window._loadChatResolve = null;
+        }
+      }
+
+      // Returns a promise that resolves when messages have been applied (for backend chats). Client-only chats resolve immediately after applyLoadedMessages.
+      function loadChatPromise(chatId) {
+        loadChat(chatId);
+        return window._loadChatPromise || Promise.resolve();
       }
 
       // Update chat history UI
@@ -6788,7 +6908,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         document.body.appendChild(modalContainer);
       }
 
-      function processPDFUpload() {
+      async function processPDFUpload() {
         const pdfInput = document.getElementById('pdfUpload');
         const context = document.getElementById('pdfContext').value.trim();
 
@@ -6813,46 +6933,85 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        // Add user message
-        addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
-
-        if (context) {
-          addUserMessage(`📝 Context: ${context}`);
-        }
-
-        // Show processing
+        // Show processing in current chat while we create a NEW backend conversation/thread
         showTypingIndicator();
 
-        setTimeout(() => {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('create_new_thread', 'true'); // always create a fresh thread/conversation
+
+          const response = await fetch('/api/rag/ingest', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include'
+          });
+
           removeTypingIndicator();
 
-          // Store PDF context in localStorage for future chats
-          const pdfData = {
-            name: file.name,
-            size: file.size,
-            context: context,
-            uploadedAt: new Date().toISOString()
-          };
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            addAssistantMessage('Error: ' + (err.error || 'PDF ingest failed'));
+            return;
+          }
 
-          let uploadedPDFs = JSON.parse(localStorage.getItem('teacher_uploaded_pdfs') || '[]');
-          uploadedPDFs.push(pdfData);
-          localStorage.setItem('teacher_uploaded_pdfs', JSON.stringify(uploadedPDFs));
+          const data = await response.json().catch(() => ({}));
+          let threadId = data.thread_id || null;
+          let conversationId = data.conversation_id != null ? data.conversation_id : null;
 
-          // AI response
-          addAssistantMessage(`✅ Successfully uploaded and processed "${file.name}"!<br><br>
-          <strong>PDF Details:</strong><br>
-          • Size: ${fileSizeMB} MB<br>
-          • Pages: Estimated ${Math.ceil(file.size / 50000)} pages<br>
-          • Context saved: ${context || 'No specific context provided'}<br><br>
-          I can now answer questions based on this material. Try asking something like:<br>
-          • "Summarize the key concepts from this PDF"<br>
-          • "Create quiz questions from chapter 3"<br>
-          • "Explain the main topics in simple terms"`);
+          // Persist new thread/conversation ids
+          if (threadId) {
+            window.currentRAGThreadId = threadId;
+            try { localStorage.setItem('teacher_currentRAGThreadId', threadId); } catch (e) {}
+          }
+          if (conversationId != null) {
+            window.currentRAGConversationId = conversationId;
+            try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
+          }
 
-          // Remove modal
+          // Close the upload modal
           const modal = document.querySelector('[onclick="processPDFUpload()"]')?.closest('.fixed');
           if (modal) modal.remove();
-        }, 2000);
+
+          // If we have a backend conversation, switch UI into that conversation and show messages there
+          if (conversationId != null && threadId) {
+            enableChatTab();
+            showChatTab();
+
+            try {
+              await loadChatHistoryFromBackend();
+              await loadChatPromise(conversationId);
+            } catch (e) {
+              console.error('Error switching to new RAG conversation', e);
+            }
+
+            // Now, inside the NEW conversation, show upload + context + success messages
+            addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
+            if (context) {
+              addUserMessage(`📝 Context: ${context}`);
+            }
+            addAssistantMessage(`✅ Successfully uploaded and processed "${file.name}"!<br><br>
+            <strong>PDF Details:</strong><br>
+            • Size: ${fileSizeMB} MB<br>
+            • Pages: Estimated ${Math.ceil(file.size / 50000)} pages<br>
+            • Context: ${context || 'No specific context provided'}<br><br>
+            I can now answer questions based on this material. Try asking something like:<br>
+            • "Summarize the key concepts from this PDF"<br>
+            • "Create quiz questions from chapter 3"<br>
+            • "Explain the main topics in simple terms"`);
+          } else {
+            // Fallback: no conversation id returned – keep behavior local to current chat
+            addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
+            if (context) {
+              addUserMessage(`📝 Context: ${context}`);
+            }
+            addAssistantMessage('✅ PDF uploaded. You can now ask questions about this document.');
+          }
+        } catch (e) {
+          console.error('RAG upload error', e);
+          removeTypingIndicator();
+          addAssistantMessage('Error: Failed to upload PDF. Please try again.');
+        }
       }
 
       // Attach file
