@@ -2680,10 +2680,12 @@
             <div
               class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold cursor-pointer"
               id="userAvatar" onclick="openSettings()">
-              G
+              {{ (session.get('username') or 'Student')[:1] | upper }}
             </div>
             <div class="sb-hide-when-collapsed">
-              <p class="text-sm font-medium text-gray-900" id="userName">Good</p>
+              <p class="text-sm font-medium text-gray-900" id="userName">
+                {{ session.get('username', 'Student') }}
+              </p>
               <p class="text-xs text-gray-500">Student</p>
             </div>
           </div>
@@ -2747,10 +2749,12 @@
             <div
               class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold cursor-pointer"
               id="userAvatarMobile" onclick="openSettings(); toggleMobileSidebar();">
-              G
+              {{ (session.get('username') or 'Student')[:1] | upper }}
             </div>
             <div>
-              <p class="text-sm font-medium text-gray-900" id="userNameMobile">Good</p>
+              <p class="text-sm font-medium text-gray-900" id="userNameMobile">
+                {{ session.get('username', 'Student') }}
+              </p>
               <p class="text-xs text-gray-500">Student</p>
             </div>
           </div>
@@ -2944,7 +2948,7 @@
                 <h3 class="text-lg md:text-xl font-bold text-gray-800">Lesson Content</h3>
               </div>
               
-              <div id="viewLessonCurrent" class="prose prose-sm md:prose-base max-w-none text-gray-700 leading-relaxed space-y-4">
+              <div id="viewLessonCurrent" class="prose prose-sm md:prose-base max-w-none text-gray-700 leading-relaxed space-y-4 markdown-content">
                 <p class="text-gray-500 italic">Loading content...</p>
               </div>
             </div>
@@ -3302,12 +3306,6 @@
             loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
           }, 500);
         }
-
-        // Set Student name to "Good"
-        const userNameEl = document.getElementById('userName');
-        const userAvatarEl = document.getElementById('userAvatar');
-        if (userNameEl) userNameEl.textContent = "Good";
-        if (userAvatarEl) userAvatarEl.textContent = "G";
 
         // Close mobile sidebar with Escape for accessibility
         document.addEventListener('keydown', (e) => {
@@ -4184,11 +4182,20 @@
             subtitleEl.textContent = `📚 ${lesson.subject || 'General'} • Grade ${lesson.grade || 'N/A'}`;
           }
 
-          // Populate lesson content (render HTML directly, don't escape)
+          // Populate lesson content: parse markdown to HTML and sanitize for proper formatting
           const contentEl = document.getElementById('viewLessonCurrent');
           if (contentEl) {
-            const contentHtml = lesson.content || lesson.body || '<p class="text-gray-500 italic">No content available</p>';
+            const rawContent = (lesson.content || lesson.body || '').trim();
+            let contentHtml;
+            if (!rawContent) {
+              contentHtml = '<p class="text-gray-500 italic">No content available</p>';
+            } else if (typeof MarkdownParser !== 'undefined' && MarkdownParser.parse && MarkdownParser.sanitizeHtml) {
+              contentHtml = MarkdownParser.sanitizeHtml(MarkdownParser.parse(rawContent));
+            } else {
+              contentHtml = rawContent.replace(/\n/g, '<br>');
+            }
             contentEl.innerHTML = contentHtml;
+            contentEl.classList.add('markdown-content');
 
             // Trigger MathJax to reprocess the newly added content
             if (window.MathJax && window.MathJax.typesetPromise) {
@@ -4381,9 +4388,68 @@
           });
       }
 
-      // Download lesson as DOCX (fallback to text)
-      function downloadLessonDocx(lessonId) {
-        showToast('DOCX download is not available on the student dashboard yet.', 'info', 3000);
+      // Download lesson as DOCX with spinner/disabled state
+      async function downloadLessonDocx(lessonId) {
+        if (!lessonId) {
+          showToast('No lesson selected for download.', 'error', 3000);
+          return;
+        }
+
+        const btn = document.querySelector('button[onclick^="downloadLessonDocx"]');
+        let originalHtml = null;
+        if (btn) {
+          originalHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = `
+            <i class="fas fa-spinner fa-spin text-emerald-100"></i>
+            <span class="hidden md:inline">Preparing...</span>
+          `;
+        }
+
+        try {
+          const response = await fetch('/api/lessons/download_lesson/' + encodeURIComponent(String(lessonId)), {
+            method: 'GET',
+            credentials: 'include'
+          });
+
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            const msg = data.error || `Download failed (${response.status})`;
+            showToast(msg, 'error', 3000);
+            return;
+          }
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+
+          // Try to get filename from Content-Disposition header
+          const cd = response.headers.get('Content-Disposition');
+          let filename = `lesson_${lessonId}.docx`;
+          if (cd) {
+            const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (match && match[1]) {
+              filename = match[1].replace(/['"]/g, '');
+            }
+          }
+          a.download = filename;
+
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+
+          showToast('Lesson downloaded as DOCX!', 'success', 2000);
+        } catch (err) {
+          console.error('Download DOCX error', err);
+          showToast('Failed to download lesson.', 'error', 3000);
+        } finally {
+          if (btn && originalHtml !== null) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+          }
+        }
       }
 
       // Open full chat page asking a question about the currently viewed lesson
@@ -5577,15 +5643,13 @@
         scrollToBottom();
       }
 
-      // Open settings
+      // Open settings (placeholder without injecting chat messages)
       function openSettings() {
-        addAssistantMessage('⚙️ <strong>Student Settings</strong><br><br>' +
-          '• <strong>AI Model Preferences</strong> - Customize AI behavior<br>' +
-          '• <strong>Voice Settings</strong> - Adjust speech rate and voice<br>' +
-          '• <strong>Export Options</strong> - Set default export formats<br>' +
-          '• <strong>Privacy Controls</strong> - Manage data retention<br>' +
-          '• <strong>Classroom Integration</strong> - Connect to LMS systems<br><br>' +
-          '<em>Settings would be implemented in a dedicated settings panel.</em>');
+        if (typeof showToast === 'function') {
+          showToast('Profile & settings panel is coming soon.', 'info', 4000);
+        } else {
+          alert('Profile & settings panel is coming soon.');
+        }
       }
 
       // Show privacy info
