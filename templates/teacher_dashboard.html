@@ -1689,6 +1689,14 @@
       font-weight: 500;
     }
 
+    /* Ensure lesson headings are high-contrast and readable */
+    #viewLessonCurrent h1,
+    #viewLessonCurrent h2,
+    #viewLessonCurrent h3 {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
     @media (max-width: 1024px) {
       .view-lesson-grid {
         grid-template-columns: 1fr;
@@ -3249,13 +3257,27 @@
                 <h3 class="text-lg md:text-xl font-bold text-gray-900">Draft Content</h3>
               </div>
 
-              <!-- Draft Textarea -->
-              <div class="mb-3 md:mb-4">
-                <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-3">Edit Your
-                  Lesson</label>
-                <textarea id="viewLessonDraft"
-                  class="w-full h-40 md:h-56 p-3 md:p-4 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"
-                  placeholder="Modify your lesson content here..."></textarea>
+              <!-- Prompt + Draft -->
+              <div class="mb-3 md:mb-4 space-y-3">
+                <div>
+                  <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-2">
+                    AI Instructions (optional)
+                  </label>
+                  <textarea id="viewLessonPrompt"
+                    class="w-full h-16 md:h-20 p-2.5 md:p-3 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"
+                    placeholder="Describe how you want the lesson improved (e.g. simplify language, add examples, align to a standard)..."></textarea>
+                </div>
+
+                <div>
+                  <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-2">
+                    Draft (AI‑enhanced or manual edits)
+                  </label>
+                  <div id="viewLessonDraft"
+                    contenteditable="true"
+                    class="w-full h-40 md:h-56 p-3 md:p-4 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none overflow-y-auto bg-white"
+                    style="white-space: pre-wrap;"
+                    placeholder="Draft will appear here after applying AI or making manual edits..."></div>
+                </div>
               </div>
 
               <!-- Draft Actions -->
@@ -5188,7 +5210,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             versions: '<span class="version-badge">v' + (lesson.version_number || lesson.version || 1) + '</span>',
             timestamp: timestamp,
             fullDate: date,
-            status: lesson.status || 'draft'
+            status: lesson.status || 'draft',
+            hasChildVersion: lesson.has_child_version === true
           };
         });
 
@@ -5203,19 +5226,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             <p class="text-primary-100 text-sm md:text-base">View and manage all your created lessons</p>
           </div>
           
-          <!-- Action Buttons -->
-          <div id="myLessonsActionBtns" class="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <button onclick="exportAllLessons()" 
-                    class="sm:flex-none bg-white bg-opacity-20 text-white px-3 md:px-5 py-2 rounded-lg hover:bg-opacity-30 transition-colors font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap border border-white border-opacity-30 text-sm md:text-base">
-              <i class="fas fa-download"></i>
-              <span class="inline">Export All</span>
-            </button>
-            <button onclick="deleteAllLessonsConfirm()" 
-                    class="sm:flex-none bg-red-600 text-white px-3 md:px-5 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap shadow-md text-sm md:text-base">
-              <i class="fas fa-trash"></i>
-              <span class="inline">Delete All</span>
-            </button>
-          </div>
+          <!-- Action Buttons (none for now on teacher dashboard) -->
         </div>
       </div>
 
@@ -5273,10 +5284,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                     <button class="action-btn" style="background: #fef3c7; color: #92400e;" title="FAQ" onclick="showLessonFAQ('${lesson.id}')">
                       <i class="fas fa-circle-question"></i>
                     </button>
-                    
+                    ${!lesson.hasChildVersion ? `
                     <button class="action-btn delete-btn" title="Delete" onclick="deleteLesson('${lesson.id}')">
                       <i class="fas fa-trash"></i>
                     </button>
+                    ` : ''}
                   </div>
                 </td>
               </tr>
@@ -5359,7 +5371,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       // Populate the view lesson modal with data
-      function populateViewLessonModal(lesson) {
+      async function populateViewLessonModal(lesson) {
         try {
           console.log('📝 populateViewLessonModal called with lesson:', lesson);
 
@@ -5391,10 +5403,31 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const currentEl = document.getElementById('viewLessonCurrent');
           if (currentEl) currentEl.innerHTML = currentVersionHtml;
 
-          // Load saved draft from localStorage
-          const draftKey = `teacher_lesson_draft_${lesson.id}`;
-          const savedDraft = localStorage.getItem(draftKey) || '';
-          document.getElementById('viewLessonDraft').value = savedDraft;
+          // Load draft content from backend so edits persist across sessions
+          const draftTextarea = document.getElementById('viewLessonDraft');
+          if (draftTextarea) {
+            let draftValue = '';
+            try {
+              const draftResponse = await fetch(`/api/lessons/lesson/${lesson.id}/get_draft`, {
+                method: 'GET',
+                credentials: 'include'
+              });
+              if (draftResponse.ok) {
+                const draftData = await draftResponse.json().catch(function () { return {}; });
+                // Only pre-fill if there is an existing draft; otherwise start empty.
+                draftValue = draftData.draft_content || '';
+              }
+            } catch (e) {
+              console.warn('get_draft error:', e);
+            }
+            if (!draftValue) {
+              draftTextarea.innerHTML = '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>';
+            } else if (typeof marked !== 'undefined') {
+              draftTextarea.innerHTML = marked.parse(draftValue);
+            } else {
+              draftTextarea.textContent = draftValue;
+            }
+          }
 
           // Populate version history with dropdown
           let versionsHtml = '';
@@ -5569,45 +5602,103 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       // Apply custom prompt to lesson draft
-      function applyPromptToLessonDraft() {
-        const customPrompt = localStorage.getItem('teacher_custom_prompt') || '';
-        if (!customPrompt) {
-          showToast('No custom prompt set. Please set a prompt first.', 'info', 3000);
+      async function applyPromptToLessonDraft() {
+        const promptEl = document.getElementById('viewLessonPrompt');
+        const userPrompt = (promptEl?.value || '').trim();
+
+        if (!userPrompt) {
+          showToast('Please enter instructions for AI before applying.', 'info', 3000);
           return;
         }
 
         const lessonId = window.currentViewLessonId;
-        const lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = findLessonById(lessonId);
+        if (!lessonId) {
+          showToast('No lesson selected for AI enhancement.', 'error', 3000);
+          return;
+        }
 
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          const currentContent = lesson.content || lesson.body || '';
-          const updatedContent = `${currentContent}\n\n---\n\n**AI Enhancement Note:**\nApplied prompt: ${customPrompt.substring(0, 100)}...`;
+        const btn = document.querySelector('#viewLessonModal button[onclick="applyPromptToLessonDraft()"]');
+        let originalHtml = null;
+        if (btn) {
+          originalHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Applying...';
+        }
 
-          document.getElementById('viewLessonDraft').value = updatedContent;
-          saveLessonDraftVisible();
-          showToast('Prompt applied to draft!', 'success', 2000);
+        try {
+          const response = await fetch(`/api/lessons/lesson/${lessonId}/apply_prompt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ prompt: userPrompt })
+          });
+
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to apply AI enhancement');
+          }
+
+          const improved = data.draft_content || '';
+          const draftEl = document.getElementById('viewLessonDraft');
+          if (draftEl) {
+            // Render improved content as formatted HTML while preserving text content for backend via innerText
+            if (typeof marked !== 'undefined' && improved) {
+              draftEl.innerHTML = marked.parse(improved);
+            } else {
+              draftEl.textContent = improved;
+            }
+          }
+
+          showToast('AI enhancement applied to draft!', 'success', 2500);
+          if (promptEl) {
+            promptEl.value = '';
+          }
+        } catch (e) {
+          console.error('applyPromptToLessonDraft error:', e);
+          showToast(e.message || 'Failed to apply AI enhancement', 'error', 3000);
+        } finally {
+          if (btn && originalHtml !== null) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+          }
         }
       }
 
-      // Save the currently visible draft
-      function saveLessonDraftVisible() {
+      // Save the currently visible draft (persists to backend)
+      async function saveLessonDraftVisible() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftContent = document.getElementById('viewLessonDraft').value;
-        const draftKey = `teacher_lesson_draft_${lessonId}`;
-        localStorage.setItem(draftKey, draftContent);
-        showToast('Draft saved!', 'success', 2000);
+        const draftEl = document.getElementById('viewLessonDraft');
+        const draftContent = draftEl ? (draftEl.innerText || '').trim() : '';
+
+        try {
+          const response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ draft_content: draftContent })
+          });
+
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save draft');
+          }
+
+          showToast('Draft saved!', 'success', 2000);
+        } catch (e) {
+          console.error('saveLessonDraftVisible error:', e);
+          showToast(e.message || 'Failed to save draft', 'error', 3000);
+        }
       }
 
-      // Finalize new version
-      function finalizeNewVersionLesson() {
+      // Finalize new version (creates new version via backend)
+      async function finalizeNewVersionLesson() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftContent = document.getElementById('viewLessonDraft').value.trim();
+        const draftEl = document.getElementById('viewLessonDraft');
+        const draftContent = (draftEl ? draftEl.innerText : '').trim();
         if (!draftContent) {
           showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
           return;
@@ -5617,45 +5708,46 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = findLessonById(lessonId);
+        const finalizeBtn = document.querySelector('#viewLessonModal button[onclick="finalizeNewVersionLesson()"]');
+        if (typeof setButtonLoading === 'function') {
+          setButtonLoading(finalizeBtn, '<span class="flex items-center gap-2"><span class="loading-dots"><span></span><span></span><span></span></span><span>Finalizing...</span></span>');
+        }
 
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-
-          // Initialize versions array if it doesn't exist
-          if (!lesson.versions) {
-            lesson.versions = [{
-              version: lesson.version || 1,
-              content: lesson.content || lesson.body || '',
-              createdAt: lesson.createdAt || new Date().toISOString()
-            }];
+        try {
+          // First, persist the current draft to the backend
+          let response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ draft_content: draftContent })
+          });
+          let data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save draft before finalizing');
           }
 
-          // Create new version
-          const newVersion = {
-            version: (lesson.version || 1) + 1,
-            content: draftContent,
-            createdAt: new Date().toISOString()
-          };
+          // Then ask backend to create a new version from that draft
+          response = await fetch(`/api/lessons/lesson/${lessonId}/finalize_version`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({})
+          });
+          data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to finalize lesson version');
+          }
 
-          // Update lesson
-          lesson.versions.push(newVersion);
-          lesson.version = newVersion.version;
-          lesson.content = draftContent;
-          lesson.status = 'published';
-          lesson.updatedAt = new Date().toISOString();
-
-          // Save to localStorage
-          localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
-
-          // Clear draft
-          const draftKey = `teacher_lesson_draft_${lessonId}`;
-          localStorage.removeItem(draftKey);
-
-          showToast(`✅ New version created! (v${newVersion.version})`, 'success', 3000);
+          showToast('✅ New version created successfully!', 'success', 3000);
           closeViewLessonModal();
-          showMyLessonsPage(); // Refresh lessons list
+          showMyLessonsPage();
+        } catch (e) {
+          console.error('finalizeNewVersionLesson error:', e);
+          showToast(e.message || 'Failed to finalize version', 'error', 4000);
+        } finally {
+          if (typeof restoreButton === 'function') {
+            restoreButton(finalizeBtn);
+          }
         }
       }
 
@@ -5677,38 +5769,33 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       function loadVersionIntoDraft(lessonId, versionNumber) {
-        const lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = lessons.findIndex(lesson => lesson.id === lessonId);
+        const versions = window.currentLessonVersions || [];
+        if (!versions.length) {
+          showToast('Version history not available for this lesson.', 'error', 2000);
+          return;
+        }
 
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          let versionContent = null;
+        const version = versions.find(function (v) {
+          return (v.version_number || v.version || 1) === versionNumber;
+        });
 
-          // Find the version in the versions array
-          if (lesson.versions && Array.isArray(lesson.versions)) {
-            const version = lesson.versions.find(v => v.version === versionNumber);
-            versionContent = version ? version.content : null;
-          }
+        const versionContent = version && version.content ? version.content : null;
 
-          // If version 1 and no versions array exists, use the current content
-          if (!versionContent && versionNumber === 1) {
-            versionContent = lesson.content || lesson.body || '';
-          }
-
-          if (versionContent) {
-            // Load into draft textarea
-            const draftTextarea = document.getElementById('viewLessonDraft');
-            draftTextarea.value = versionContent;
+        if (versionContent) {
+          const draftTextarea = document.getElementById('viewLessonDraft');
+          if (draftTextarea) {
+            if (typeof marked !== 'undefined') {
+              draftTextarea.innerHTML = marked.parse(versionContent);
+            } else {
+              draftTextarea.textContent = versionContent;
+            }
             draftTextarea.focus();
-
-            // Save to localStorage
-            saveLessonDraftVisible();
-
-            // Show success message
-            showToast(`✅ Loaded v${versionNumber} into draft editor. Make your changes and click "Finalize New Version" to create v${lesson.version + 1}.`, 'success', 3500);
-          } else {
-            showToast('Version content not found.', 'error', 2000);
           }
+
+          saveLessonDraftVisible();
+          showToast(`✅ Loaded v${versionNumber} into draft editor. Make your changes and click "Finalize" to create a new version.`, 'success', 3500);
+        } else {
+          showToast('Version content not found.', 'error', 2000);
         }
       }
 
@@ -5832,17 +5919,20 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       function editLesson(lessonId) {
-        const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
+        const lessons = window.availableLessons || [];
+        const lesson = lessons.find(function (l) { return String(l.id) === String(lessonId); });
+
+        if (lesson) {
+          const subject = lesson.focus_area || lesson.focusArea || 'General';
+          const grade = lesson.grade_level || lesson.gradeLevel || 'General';
+
           // Show edit modal
           const modalHtml = `
-          <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div id="editLessonModal-${lessonId}" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold text-gray-900">Edit Lesson</h3>
-                <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                <button onclick="document.getElementById('editLessonModal-${lessonId}').remove()" 
                         class="text-gray-400 hover:text-gray-600">
                   <i class="fas fa-times"></i>
                 </button>
@@ -5851,29 +5941,29 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Lesson Title</label>
                 <input type="text" id="editLessonTitle" 
-                       value="${lesson.title}"
+                       value="${lesson.title || ''}"
                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
               </div>
               
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
                 <select id="editLessonSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${lesson.subject === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Math" ${lesson.subject === 'Math' ? 'selected' : ''}>Mathematics</option>
-                  <option value="Science" ${lesson.subject === 'Science' ? 'selected' : ''}>Science</option>
-                  <option value="English" ${lesson.subject === 'English' ? 'selected' : ''}>English</option>
-                  <option value="History" ${lesson.subject === 'History' ? 'selected' : ''}>History</option>
+                  <option value="General" ${subject === 'General' ? 'selected' : ''}>General</option>
+                  <option value="Math" ${subject === 'Math' ? 'selected' : ''}>Mathematics</option>
+                  <option value="Science" ${subject === 'Science' ? 'selected' : ''}>Science</option>
+                  <option value="English" ${subject === 'English' ? 'selected' : ''}>English</option>
+                  <option value="History" ${subject === 'History' ? 'selected' : ''}>History</option>
                 </select>
               </div>
               
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Grade Level</label>
                 <select id="editLessonGrade" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${lesson.grade === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Elementary" ${lesson.grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
-                  <option value="Middle School" ${lesson.grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
-                  <option value="High School" ${lesson.grade === 'High School' ? 'selected' : ''}>High School</option>
-                  <option value="College" ${lesson.grade === 'College' ? 'selected' : ''}>College</option>
+                  <option value="General" ${grade === 'General' ? 'selected' : ''}>General</option>
+                  <option value="Elementary" ${grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
+                  <option value="Middle School" ${grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
+                  <option value="High School" ${grade === 'High School' ? 'selected' : ''}>High School</option>
+                  <option value="College" ${grade === 'College' ? 'selected' : ''}>College</option>
                 </select>
               </div>
               
@@ -5897,47 +5987,51 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
-      function saveLessonEdit(lessonId) {
-        const title = document.getElementById('editLessonTitle').value;
-        const subject = document.getElementById('editLessonSubject').value;
-        const grade = document.getElementById('editLessonGrade').value;
+      async function saveLessonEdit(lessonId) {
+        const title = (document.getElementById('editLessonTitle')?.value || '').trim();
+        const subject = document.getElementById('editLessonSubject')?.value || 'General';
+        const grade = document.getElementById('editLessonGrade')?.value || 'General';
 
-        const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        if (index !== -1 && lessons[index]) {
-          lessons[index].title = title;
-          lessons[index].subject = subject;
-          lessons[index].grade = grade;
-          lessons[index].updatedAt = new Date().toISOString();
-
-          localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
-
-          // Close modal
-          document.querySelector('[onclick="saveLessonEdit(\'' + lessonId + '\')"]').closest('.fixed').remove();
-
-          // Refresh the lessons page
-          showMyLessonsPage();
-
-          // Show success toast notification
-          showToast(`✅ Lesson "${title}" updated successfully!`, 'success', 4000);
+        if (!title) {
+          showToast('Lesson title is required.', 'warning', 3000);
+          return;
         }
-      }
 
-      function deleteLesson(lessonId) {
-        if (confirm('Are you sure you want to delete this lesson? This action cannot be undone.')) {
-          const index = findLessonById(lessonId);
-          let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-          if (index !== -1) {
-            const lessonTitle = lessons[index]?.title || 'this lesson';
+        const saveBtn = document.querySelector(`#editLessonModal-${lessonId} button[onclick="saveLessonEdit('${lessonId}')"]`);
+        if (typeof setButtonLoading === 'function') {
+          setButtonLoading(saveBtn, '<span class="loading-dots"><span></span><span></span><span></span></span>');
+        }
 
-            lessons.splice(index, 1);
-            localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
+        try {
+          const response = await fetch(`/api/lessons/lesson/${lessonId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: title,
+              focus_area: subject,
+              grade_level: grade
+            })
+          });
 
-            // Show warning toast notification
-            showToast(`🗑️ Lesson "${lessonTitle}" deleted`, 'warning', 4000);
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to update lesson');
+          }
 
-            // Refresh the lessons page
-            showMyLessonsPage();
+          const modalEl = document.getElementById(`editLessonModal-${lessonId}`);
+          if (modalEl) {
+            modalEl.remove();
+          }
+
+          showToast(`✅ Lesson "${title}" updated successfully!`, 'success', 4000);
+          showMyLessonsPage();
+        } catch (e) {
+          console.error('saveLessonEdit error:', e);
+          showToast(e.message || 'Failed to update lesson', 'error', 4000);
+        } finally {
+          if (typeof restoreButton === 'function') {
+            restoreButton(saveBtn);
           }
         }
       }
