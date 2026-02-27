@@ -58,6 +58,26 @@ def _strip_lesson_finalization_from_response(text):
     return cleaned
 
 
+def _strip_tool_names_from_response(text):
+    """Remove tool names from AI response so they are never shown in chat."""
+    if not text or not isinstance(text, str):
+        return text
+    import re
+    # Tool names used by RAG (do not expose to user)
+    tool_names = [
+        r"rag_tool", r"get_page_tool", r"list_topics_whole_doc_tool",
+        r"count_pdf_words_tool", r"count_words_in_text_tool", r"calculator",
+        r"duckduckgo_search", r"stock_price",
+    ]
+    cleaned = text
+    for name in tool_names:
+        # Remove phrases like "I'll use rag_tool", "Calling get_page_tool", "using rag_tool"
+        cleaned = re.sub(rf"\b(?:using|use|call(?:ing)?|invok(?:e|ing)|via)\s+{name}\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(rf"\b{name}\s*(?:to|for)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def _get_openai_client():
     """
     Lazily create an OpenAI client for Whisper STT.
@@ -115,6 +135,26 @@ def _validate_thread_id(thread_id: str, user_id: int) -> bool:
     return thread_id.startswith(expected_prefix)
 
 
+def _get_thread_id_for_conversation(user_id: int, conversation_id: int):
+    """
+    Resolve the RAG thread_id for a given conversation (one thread per conversation).
+    Returns the most recent thread whose thread_id matches user_X_conv_Y_*.
+    """
+    db = get_db()
+    prefix = f"user_{user_id}_conv_{conversation_id}_"
+    row = (
+        db.query(RAGThread.thread_id)
+        .filter(
+            RAGThread.user_id == user_id,
+            RAGThread.thread_id.like(prefix + "%"),
+            RAGThread.has_document == True,
+        )
+        .order_by(RAGThread.created_at.desc())
+        .first()
+    )
+    return row.thread_id if row else None
+
+
 @bp.route('/ingest', methods=['POST'])
 @login_required
 def ingest():
@@ -146,13 +186,15 @@ def ingest():
             return jsonify({'error': 'Only PDF files are supported'}), 400
 
         # Get thread_id from request or create new thread
-        # IMPORTANT: By default, each PDF upload creates a NEW thread.
-        # This ensures that each uploaded document has its own separate thread/context.
-        conversation_id = request.form.get('conversation_id', type=int)
+        # IMPORTANT: Each new PDF upload must get its own conversation and thread.
+        # When create_new_thread is True, we never reuse the current conversation so we
+        # never override the existing thread the user is viewing.
         provided_thread_id = request.form.get('thread_id')
         create_new_thread = request.form.get('create_new_thread', 'true').lower() == 'true'
+        # For a new PDF we ignore conversation_id from the client so we always create a fresh thread
+        conversation_id = None if create_new_thread else request.form.get('conversation_id', type=int)
         
-        # If no conversation_id is provided, automatically create a new conversation
+        # If no conversation_id (new upload or not provided), create a new conversation
         if not conversation_id:
             try:
                 api_key = session.get('groq_api_key', '')
@@ -578,7 +620,14 @@ def chat():
         if provided_thread_id:
             thread_id = str(provided_thread_id).strip()
         elif conversation_id is not None:
-            thread_id = _get_thread_id(user_id, conversation_id)
+            # Resolve thread from conversation so each chat uses its own document (no cross-talk)
+            thread_id = _get_thread_id_for_conversation(user_id, conversation_id)
+            if not thread_id:
+                logger.warning("RAG chat 400: No thread with document for conversation_id=%s user_id=%s", conversation_id, user_id)
+                return jsonify({
+                    "error": "No PDF has been uploaded for this conversation yet. Please upload a PDF document first to chat with your document.",
+                    "code": "NO_DOCUMENT_UPLOADED",
+                }), 400
         else:
             logger.warning("RAG chat 400: Missing thread_id and conversation_id (user_id=%s)", user_id)
             return jsonify({
@@ -684,8 +733,9 @@ def chat():
                 else:
                     response_content = str(last_msg)
 
-            # Remove internal lesson-finalization fields so they never appear on frontend or in history
+            # Remove internal lesson-finalization fields and tool names so they never appear on frontend
             response_content = _strip_lesson_finalization_from_response(response_content)
+            response_content = _strip_tool_names_from_response(response_content)
 
             # Save messages to database for chat history
             db_conversation_id = None
@@ -770,6 +820,31 @@ def chat():
         # #endregion
         logger.error(f"Error in RAG chat: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+
+
+@bp.route('/ingest/cancel/<task_id>', methods=['POST'])
+@login_required
+def cancel_ingest(task_id):
+    """
+    Gracefully cancel a PDF ingestion task (Celery revoke).
+    When USE_CELERY_FOR_INGESTION is False, returns 400.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+        if not current_app.config.get('USE_CELERY_FOR_INGESTION', False):
+            return jsonify({
+                'error': 'Cancel is not available. PDF ingestion is running in-process (Celery is disabled).'
+            }), 400
+        task = ingest_pdf_task.AsyncResult(task_id)
+        if task.state not in ('PENDING', 'PROCESSING', 'RETRY'):
+            return jsonify({'message': 'Task already finished or not found', 'task_id': task_id}), 200
+        task.revoke(terminate=True)
+        logger.info(f"User {session['user_id']} cancelled ingest task {task_id}")
+        return jsonify({'message': 'Upload cancelled', 'task_id': task_id, 'status': 'revoked'}), 200
+    except Exception as e:
+        logger.error(f"Error cancelling ingest task: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/ingest/status/<task_id>', methods=['GET'])
