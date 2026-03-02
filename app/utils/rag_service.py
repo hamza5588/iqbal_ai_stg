@@ -1916,6 +1916,12 @@ def chat_node(state: ChatState, config=None):
     f"  * IMMEDIATELY call the PDF word count tool\n"
     f"  * NEVER guess or estimate the word count\n\n"
 
+    f"IRRELEVANT QUESTIONS:\n"
+    f"- If the user's question is NOT relevant to the uploaded PDF (e.g. unrelated topic, general knowledge, or not answerable from the document),\n"
+    f"  you MUST respond with exactly this phrase and nothing else for the main message:\n"
+    f"  \"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
+    f"- Do not mention any tool names (rag_tool, get_page_tool, etc.) in your response to the user.\n\n"
+
 )
 
         # Combine custom prompt with default RAG instructions

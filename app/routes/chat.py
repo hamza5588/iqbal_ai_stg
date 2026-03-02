@@ -4,6 +4,7 @@ from app.services import ChatService, PromptService
 from app.models.models import SurveyModel, LessonModel
 # from app.utils.decorators import login_required
 from app.utils.auth import login_required
+from app.utils.routes import get_default_route_by_role
 from app.utils.decorators import teacher_required
 import logging
 from app.utils.db import get_db
@@ -80,51 +81,72 @@ def teacher_dashboard():
         return redirect(url_for('chat.index'))
 
 
-@bp.route('/student-dashboard')
-@login_required
-def student_dashboard():
-    """Render student dashboard (students use this page only, not chat.html). Template: student_dashboard.html."""
-    if session.get('role') not in ('student', 'admin'):
-        return redirect(url_for('chat.index'))
-    try:
-        return render_template('student_dashboard.html')
-    except Exception as e:
-        logger.error(f"Error serving student dashboard: {str(e)}")
-        return redirect(url_for('chat.index'))
-
-
 @bp.route('/')
 @login_required
 def index():
-    """Render the main chat interface. Teachers -> teacher_dashboard; Students -> student_dashboard (or main chat when ask_lesson_id for Ask Question)."""
-    if session.get('role') == 'teacher':
+    """
+    Canonical authenticated landing.
+
+    `chat.html` is legacy and must not be the default entrypoint for the new UI.
+    We always redirect to the role dashboard.
+    """
+    return redirect(get_default_route_by_role(session.get('role')))
+
+
+@bp.route('/student-dashboard')
+@login_required
+def student_dashboard():
+    """
+    Render the new student dashboard UI.
+
+    Teachers/admins are redirected to their canonical dashboards.
+    """
+    role = session.get('role')
+    if role == 'admin':
+        return redirect('/admin/')
+    if role == 'teacher':
         return redirect(url_for('chat.teacher_dashboard'))
-    if session.get('role') == 'student' and not request.args.get('ask_lesson_id'):
-        return redirect(url_for('chat.student_dashboard'))
+    return render_template('student_dashboard.html')
+
+
+def _render_legacy_chat():
+    """
+    Legacy UI renderer (`chat.html`).
+    Kept for backward compatibility, but only reachable via explicit /legacy/* routes.
+    """
     has_submitted_survey = False
     subscription_tier = 'free'
     try:
-        # Check if user has submitted survey
         survey_model = SurveyModel(session['user_id'])
         has_submitted_survey = survey_model.has_submitted_survey()
     except Exception as e:
-        logger.warning(f"Survey check failed in index: {e}")
+        logger.warning(f"Survey check failed in legacy chat: {e}")
+
     try:
-        # Get user subscription tier
         from app.models.database_models import User as DBUser
         db = get_db()
         user = db.query(DBUser).filter(DBUser.id == session['user_id']).first()
         if user and getattr(user, 'subscription_tier', None):
             subscription_tier = user.subscription_tier
     except Exception as e:
-        logger.warning(f"Subscription tier check failed in index: {e}")
+        logger.warning(f"Subscription tier check failed in legacy chat: {e}")
+
     try:
-        return render_template('chat.html',
-                               has_submitted_survey=has_submitted_survey,
-                               subscription_tier=subscription_tier)
+        return render_template(
+            'chat.html',
+            has_submitted_survey=has_submitted_survey,
+            subscription_tier=subscription_tier,
+        )
     except Exception as e:
-        logger.error(f"Error rendering chat template: {str(e)}", exc_info=True)
+        logger.error(f"Error rendering legacy chat template: {str(e)}", exc_info=True)
         return render_template('chat.html', has_submitted_survey=False, subscription_tier='free')
+
+
+@bp.route('/legacy/chat')
+@login_required
+def legacy_chat():
+    """Explicit legacy route for `chat.html` (old UI)."""
+    return _render_legacy_chat()
 
 # Add these routes to chat.py
 
@@ -281,11 +303,33 @@ def get_conversations():
 @bp.route('/get_messages/<int:conversation_id>')
 @login_required
 def get_messages(conversation_id):
-    """Get messages for a specific conversation"""
+    """Get messages for a specific conversation. Includes thread_id when this conversation has an uploaded PDF."""
     try:
-        chat_service = ChatService(session['user_id'], session['groq_api_key'])
+        user_id = session['user_id']
+        chat_service = ChatService(user_id, session['groq_api_key'])
         messages = chat_service.get_conversation_messages(conversation_id)
-        return jsonify({'messages': messages})  # <-- wrap in dict for frontend
+        # Resolve RAG thread_id and filename for this conversation (for correct chat context and preamble)
+        thread_id = None
+        uploaded_filename = None
+        try:
+            from app.models.database_models import RAGThread
+            db = get_db()
+            prefix = f"user_{user_id}_conv_{conversation_id}_"
+            row = db.query(RAGThread.thread_id, RAGThread.filename).filter(
+                RAGThread.user_id == user_id,
+                RAGThread.thread_id.like(prefix + "%"),
+                RAGThread.has_document == True,
+            ).order_by(RAGThread.created_at.desc()).first()
+            if row:
+                thread_id = row[0] if isinstance(row, (tuple, list)) else row.thread_id
+                uploaded_filename = (row[1] if isinstance(row, (tuple, list)) and len(row) > 1 else getattr(row, 'filename', None)) or None
+        except Exception:
+            pass
+        return jsonify({
+            'messages': messages,
+            'thread_id': thread_id,
+            'uploaded_filename': uploaded_filename,
+        })
     except Exception as e:
         logger.error(f"Error retrieving messages: {str(e)}")
         return jsonify({'error': 'Failed to retrieve messages'}), 500

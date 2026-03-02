@@ -1689,6 +1689,14 @@
       font-weight: 500;
     }
 
+    /* Ensure lesson headings are high-contrast and readable */
+    #viewLessonCurrent h1,
+    #viewLessonCurrent h2,
+    #viewLessonCurrent h3 {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
     @media (max-width: 1024px) {
       .view-lesson-grid {
         grid-template-columns: 1fr;
@@ -2543,13 +2551,13 @@
         </button>
       </div>
 
-      <!-- Action Buttons Row -->
+      <!-- Action Buttons Row (match legacy chat: only Set Prompt/reset/history in chat area, so sidebar keeps a single Set Prompt entry) -->
       <div class="px-4 mb-4 space-y-2">
-        <!-- Prompt Tab Button -->
-        <button id="promptTabBtn" onclick="openSetPromptModal()"
+        <!-- Set Prompt button (opens simple RAG prompt modal like legacy chat.html) -->
+        <button id="ragPromptBtn" onclick="showRAGPromptModal()"
           class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
           <div class="flex items-center gap-3">
-            <i class="fas fa-sliders-h w-5 text-primary-500"></i>
+            <i class="fas fa-cog w-5 text-primary-500"></i>
             <span class="font-medium">Set Prompt</span>
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
@@ -2601,7 +2609,7 @@
       </div>
     </aside>
 
-    <!-- Mobile Sidebar -->
+      <!-- Mobile Sidebar -->
     <aside id="mobileSidebar"
       class="mobile-sidebar w-64 bg-white border-r border-gray-200 flex flex-col md:hidden overflow-y-auto">
       <!-- Close Button -->
@@ -2638,11 +2646,11 @@
 
       <!-- Action Buttons Row -->
       <div class="px-4 mb-4 space-y-2">
-        <!-- Prompt Tab Button -->
-        <button id="promptTabBtn" onclick="openSetPromptModal(); toggleMobileSidebar();"
+        <!-- Set Prompt button (mobile) -->
+        <button id="ragPromptBtnMobile" onclick="showRAGPromptModal(); toggleMobileSidebar();"
           class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
           <div class="flex items-center gap-3">
-            <i class="fas fa-sliders-h w-5 text-primary-500"></i>
+            <i class="fas fa-cog w-5 text-primary-500"></i>
             <span class="font-medium">Set Prompt</span>
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
@@ -2749,15 +2757,95 @@
         </div>
       </section>
 
-      <!-- Prompt Tab: opens Set Prompt modal (same as chat.html - one place to set prompt) -->
+      <!-- Prompt Tab Area (replaces Set Prompt modal as a tab) -->
       <section id="promptArea" class="hidden p-6 overflow-y-auto custom-scrollbar" style="display: none !important;">
-        <div class="max-w-2xl mx-auto text-center py-12">
-          <h3 class="text-xl font-bold text-gray-900 mb-2">Set Custom System Prompt</h3>
-          <p class="text-gray-600 text-sm mb-6">Customize how the AI assistant behaves. Your prompt will apply to all your threads.</p>
-          <button onclick="openSetPromptModal()"
-            class="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium">
-            <i class="fas fa-edit mr-2"></i>Open Set Prompt
-          </button>
+        <div class="max-w-3xl mx-auto">
+          <div class="bg-white rounded-2xl p-4 md:p-8 w-full mx-4 my-auto">
+            <div class="flex items-center justify-between mb-6 md:mb-8">
+              <div>
+                <h3 class="text-2xl font-bold text-gray-900">Customize AI Assistant</h3>
+                <p class="text-gray-600 text-sm md:text-base mt-1">Tailor the AI's behavior with custom instructions</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+              <div class="lg:col-span-2">
+                <div class="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 p-4 md:p-6">
+                  <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
+                        <i class="fas fa-edit text-primary-600"></i>
+                      </div>
+                      <div>
+                        <h4 class="text-lg font-semibold text-gray-900">Your Custom Prompt</h4>
+                        <p class="text-sm text-gray-500">Define how the AI should respond</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button onclick="savePromptAsTemplate()"
+                        class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                        <i class="fas fa-save mr-1.5"></i>Save as Template
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="flex justify-between items-center mb-3">
+                    <span class="text-sm font-medium text-gray-700">Character count: <span
+                        id="charCount">0</span>/2000</span>
+                    <button onclick="clearPrompt()"
+                      class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
+                      <i class="fas fa-trash-alt"></i> Clear
+                    </button>
+                  </div>
+
+                  <div class="relative">
+                    <textarea id="customPrompt"
+                      class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
+                      placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
+                      oninput="updateCharCount(this)"></textarea>
+                    <div class="absolute bottom-3 right-3">
+                      <button onclick="generatePrompt()"
+                        class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 flex items-center justify-center">
+                        <i class="fas fa-magic text-sm"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div class="flex items-start">
+                    <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-3 text-lg"></i>
+                    <div>
+                      <h4 class="text-sm font-semibold text-blue-800 mb-1">Important Information</h4>
+                      <p class="text-sm text-blue-700">
+                        Your custom prompt will be combined with the default RAG instructions for PDF queries. This
+                        prompt will apply to all your threads, not just the current conversation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
+              <button onclick="loadCurrentPrompt()"
+                class="flex-1 md:flex-none bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2">
+                <i class="fas fa-sync-alt"></i>
+                <span>Load Current</span>
+              </button>
+              <button onclick="testPrompt()"
+                class="flex-1 md:flex-none bg-blue-100 text-blue-700 py-3 px-6 rounded-xl hover:bg-blue-200 transition-colors font-medium flex items-center justify-center gap-2">
+                <i class="fas fa-vial"></i>
+                <span>Test Prompt</span>
+              </button>
+              <button onclick="saveCustomPrompt()"
+                class="flex-1 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 px-6 rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg">
+                <i class="fas fa-save"></i>
+                <span>Save & Apply</span>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2891,42 +2979,133 @@
 
   <!-- All Modals - Outside main container to avoid overflow-hidden clipping -->
 
-  <!-- Set Prompt Modal (same as chat.html: simple layout, Load Current / Delete Prompt / Cancel / Save Prompt) -->
+  <!-- Redesigned Set Prompt Modal -->
   <div id="setPromptModal"
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] overflow-y-auto py-4 hidden">
-    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
-      <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 rounded-t-lg">
-        <h3 class="text-xl font-semibold text-white">Set Custom System Prompt</h3>
-        <p class="text-primary-100 text-sm mt-1">Customize how the AI assistant behaves. This prompt will apply to all your threads.</p>
-      </div>
-      <div class="p-6 flex-1 overflow-y-auto">
-        <div class="mb-4">
-          <label class="block text-gray-700 text-sm font-semibold mb-2">Custom Prompt</label>
-          <textarea id="customPrompt"
-            class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
-            placeholder="Enter your custom system prompt here. This will be combined with the default RAG instructions..."></textarea>
-          <p class="text-xs text-gray-500 mt-2">
-            <i class="fas fa-info-circle mr-1"></i>
-            Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt will apply to all your threads.
-          </p>
-        </div>
-        <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p class="text-xs text-blue-800 font-semibold mb-1">Note:</p>
-          <p class="text-xs text-blue-700">
-            The default RAG instructions (for PDF queries) will always be included along with your custom prompt. This prompt applies to all your threads, not just the current one.
-          </p>
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center z-[100] overflow-y-auto py-4 hidden">
+    <div class="bg-white rounded-2xl p-0 md:p-0 w-full max-w-3xl mx-4 my-auto max-h-[90vh] overflow-y-auto shadow-lg">
+      <!-- Gradient Header -->
+      <div class="rounded-t-2xl bg-gradient-to-r from-primary-600 to-primary-700 text-white p-4 md:p-6">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-2xl font-bold">Customize AI Assistant</h3>
+            <p class="text-primary-100 text-sm md:text-base mt-1">Tailor the AI's behavior with concise instructions</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="closeSetPromptModal()"
+              class="w-10 h-10 rounded-full flex items-center justify-center bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors text-white">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
         </div>
       </div>
-      <div class="px-6 py-4 border-t border-gray-200 flex flex-wrap gap-3">
-        <button onclick="loadCurrentPrompt()"
-          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Load Current</button>
-        <button onclick="clearPrompt()"
-          class="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50">Delete Prompt</button>
-        <div class="flex-1"></div>
-        <button onclick="closeSetPromptModal()"
-          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
-        <button onclick="saveCustomPrompt()"
-          class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Save Prompt</button>
+      <div class="p-4 md:p-8 bg-white rounded-b-2xl">
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+          <!-- Left Column: Custom Prompt Input (main) -->
+          <div class="lg:col-span-2">
+            <!-- Card Container -->
+            <div class="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 p-4 md:p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
+                    <i class="fas fa-edit text-primary-600"></i>
+                  </div>
+                  <div>
+                    <h4 class="text-lg font-semibold text-gray-900">Your Custom Prompt</h4>
+                    <p class="text-sm text-gray-500">Define how the AI should respond</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="savePromptAsTemplate()"
+                    class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-save mr-1.5"></i>Save as Template
+                  </button>
+                </div>
+              </div>
+
+              <!-- Character Count -->
+              <div class="flex justify-between items-center mb-3">
+                <span class="text-sm font-medium text-gray-700">Character count: <span
+                    id="charCount">0</span>/2000</span>
+                <button onclick="clearPrompt()" class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
+                  <i class="fas fa-trash-alt"></i> Clear
+                </button>
+              </div>
+
+              <!-- Textarea -->
+              <div class="relative">
+                <textarea id="customPrompt"
+                  class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
+                  placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
+                  oninput="updateCharCount(this)">Explore a world where human emotions are traded as currency. In this society, happiness, love, fear, and anger can be harvested, sold, or stolen. Follow the story of a reluctant 'emotion thief' who discovers a secret that could upend the entire system. As they navigate political intrigue, moral dilemmas, and forbidden connections, they must decide whether to exploit the system for personal gain or risk everything to restore emotional freedom to humanity.</textarea>
+                <div class="absolute bottom-3 right-3">
+                  <button onclick="generatePrompt()"
+                    class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 flex items-center justify-center">
+                    <i class="fas fa-magic text-sm"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tone Selector -->
+              <div class="mt-4 flex flex-wrap gap-2" aria-hidden="false">
+                <button data-tone="friendly" onclick="selectTone('friendly')"
+                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Friendly</button>
+                <button data-tone="concise" onclick="selectTone('concise')"
+                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Concise</button>
+                <button data-tone="detailed" onclick="selectTone('detailed')"
+                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Detailed</button>
+                <button data-tone="encouraging" onclick="selectTone('encouraging')"
+                  class="tone-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200">Encouraging</button>
+              </div>
+
+            </div>
+
+            <!-- Note Box -->
+            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div class="flex items-start">
+                <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-3 text-lg"></i>
+                <div>
+                  <h4 class="text-sm font-semibold text-blue-800 mb-1">Important Information</h4>
+                  <p class="text-sm text-blue-700">
+                    Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt
+                    will apply to all your threads, not just the current conversation.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+       
+
+            <!-- end right column -->
+          </div>
+
+
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col md:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
+          <button onclick="loadCurrentPrompt()"
+            class="flex-1 md:flex-none bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2">
+            <i class="fas fa-sync-alt"></i>
+            <span>Load Current</span>
+          </button>
+          <button onclick="testPrompt()"
+            class="flex-1 md:flex-none bg-blue-100 text-blue-700 py-3 px-6 rounded-xl hover:bg-blue-200 transition-colors font-medium flex items-center justify-center gap-2">
+            <i class="fas fa-vial"></i>
+            <span>Test Prompt</span>
+          </button>
+          <button onclick="closeSetPromptModal()"
+            class="flex-1 md:flex-none bg-gray-200 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-medium flex items-center justify-center gap-2">
+            <i class="fas fa-times"></i>
+            <span>Cancel</span>
+          </button>
+          <button onclick="saveCustomPrompt()"
+            class="flex-1 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 px-6 rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg">
+            <i class="fas fa-save"></i>
+            <span>Save & Apply</span>
+          </button>
+        </div>
       </div>
     </div>
     <!-- Save Template Modal -->
@@ -3078,26 +3257,34 @@
                 <h3 class="text-lg md:text-xl font-bold text-gray-900">Draft Content</h3>
               </div>
 
-              <!-- Draft Textarea -->
-              <div class="mb-3 md:mb-4">
-                <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-3">Edit Your
-                  Lesson</label>
-                <textarea id="viewLessonDraft"
-                  class="w-full h-40 md:h-56 p-3 md:p-4 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"
-                  placeholder="Modify your lesson content here..."></textarea>
+              <!-- Prompt + Draft -->
+              <div class="mb-3 md:mb-4 space-y-3">
+                <div>
+                  <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-2">
+                    AI Instructions (optional)
+                  </label>
+                  <textarea id="viewLessonPrompt"
+                    class="w-full h-16 md:h-20 p-2.5 md:p-3 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"
+                    placeholder="Describe how you want the lesson improved (e.g. simplify language, add examples, align to a standard)..."></textarea>
+                </div>
+
+                <div>
+                  <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-2">
+                    Draft (AI‑enhanced or manual edits)
+                  </label>
+                  <div id="viewLessonDraft"
+                    contenteditable="true"
+                    class="w-full h-40 md:h-56 p-3 md:p-4 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none overflow-y-auto bg-white"
+                    style="white-space: pre-wrap;"
+                    placeholder="Draft will appear here after applying AI or making manual edits..."></div>
+                </div>
               </div>
 
-              <!-- Apply-prompt input (same as chat.html AI versioning) -->
-              <div class="mb-3 md:mb-4">
-                <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2">Improvement prompt</label>
-                <textarea id="viewLessonApplyPromptInput" rows="2" placeholder="e.g. Add more examples for grade 5, simplify language..."
-                  class="w-full p-2 md:p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"></textarea>
-              </div>
               <!-- Draft Actions -->
               <div class="flex flex-col gap-2 md:gap-3">
-                <button id="viewLessonApplyPromptBtn" onclick="applyPromptToLessonDraft()"
+                <button onclick="applyPromptToLessonDraft()"
                   class="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
-                  <i class="fas fa-wand-magic-sparkles"></i>Apply Prompt
+                  <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
                 </button>
                 <button onclick="saveLessonDraftVisible()"
                   class="w-full bg-gray-100 text-gray-800 py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2 text-sm md:text-base">
@@ -3318,8 +3505,56 @@
             window.teacherUserInfo = data.user;
             window.userInfo = data.user;
             window.userRole = data.user.role;
+
+            // Ensure any locally persisted teacher data is isolated per account
+            try {
+              ensureTeacherLocalStorageIsolation(data.user);
+            } catch (e) {
+              console.error('Failed to enforce teacher local storage isolation', e);
+            }
+
             return data.user;
           });
+      }
+
+      // Ensure localStorage keys used for teacher chat/lessons are scoped per teacher account
+      function ensureTeacherLocalStorageIsolation(user) {
+        if (!user || !user.id) return;
+        try {
+          const ownerKey = 'teacher_local_owner_id';
+          const currentOwner = localStorage.getItem(ownerKey);
+          const userIdStr = String(user.id);
+
+          // If owner matches, nothing to do
+          if (currentOwner === userIdStr) {
+            return;
+          }
+
+          // Different teacher logged in on same browser:
+          // clear any old, unscoped teacher data so lessons/history don't leak across accounts
+          try {
+            localStorage.removeItem('teacher_chat_threads');
+          } catch (e) {}
+
+          try {
+            // Remove any old global chat message keys and lesson caches
+            Object.keys(localStorage).forEach(function (key) {
+              if (key.startsWith('teacher_chat_messages_')) {
+                localStorage.removeItem(key);
+              }
+              if (key === 'teacher_lessons' || key.startsWith('teacher_lesson_draft_')) {
+                localStorage.removeItem(key);
+              }
+            });
+          } catch (e) {
+            console.error('Error while clearing old teacher local storage keys', e);
+          }
+
+          // Mark new owner
+          localStorage.setItem(ownerKey, userIdStr);
+        } catch (e) {
+          console.error('ensureTeacherLocalStorageIsolation error', e);
+        }
       }
 
       // Clear context when switching chats (prevents leakage)
@@ -3330,27 +3565,15 @@
 
       // Initialize chat state on page load per specification #6
       function initializeChatState() {
-        // Load chat history from storage
-        loadInitialChatHistory();
-        renderChatSidebar();
+        // Load chat history from backend and then render sidebar
+        // (uses ConversationModel just like legacy chat.html)
+        chatHistory = [];
+        loadChatHistoryFromBackend();
 
         // If chat history exists, load the most recent chat
-        if (chatHistory.length > 0) {
-          // Mark that at least one lesson/chat was created
-          lessonCreationCompleted = true;
-
-          // Find the most recent chat (highest timestamp)
-          const mostRecentChat = chatHistory.reduce((latest, chat) => {
-            return new Date(chat.timestamp) > new Date(latest.timestamp) ? chat : latest;
-          });
-
-          // Auto-select and load the most recent chat
-          currentChatId = mostRecentChat.id;
-          loadChat(mostRecentChat.id);
-        } else {
-          // No chats exist - show empty state
-          showEmptyChatState();
-        }
+        // We no longer rely on localStorage-only history here.
+        // When backend conversations exist, showChatTab/loadChat will restore them.
+        // If none exist yet, we show an empty state until the first chat is created.
       }
 
       // Show empty state when no chats exist
@@ -3527,20 +3750,27 @@
       // ================================
       // CHAT PERSISTENCE SYSTEM
       // ================================
-      // This system ensures all saved sidebar chats survive:
-      // ✅ Page Refresh - localStorage keeps chat threads and messages
-      // ✅ New Browser Session - localStorage persists across browser close/reopen
-      // 
-      // How it works:
-      // 1. Chat threads (metadata) are stored in localStorage key: 'teacher_chat_threads'
-      // 2. Individual messages for each chat are stored in: 'teacher_chat_messages_' + chatId
-      // 3. When page loads, loadInitialChatHistory() retrieves chat metadata
-      // 4. renderChatSidebar() dynamically renders the UI from loaded data
-      // 5. When messages are sent, appendMessageToChat() saves them to localStorage
-      // 6. Chat-specific actions (rename/duplicate/delete) trigger sidebar re-render
-      // ================================
+      // This system ensures chat history persists via backend conversations
+      // and mirrors the legacy chat.html behavior.
+      //
+      // Source of truth:
+      //   - Conversation list: GET /get_conversations
+      //   - Messages per conversation: GET /get_messages/<conversation_id>
+      //
+      // We still use localStorage minimally to remember the last-opened chat
+      // and the mapping between sidebar chat IDs and backend conversation IDs.
 
-      // Chat threads persistence - ENABLED
+      function getChatStoragePrefix() {
+        const user = window.teacherUserInfo || window.userInfo || {};
+        if (user && user.id) {
+          return 'teacher_' + String(user.id) + '_';
+        }
+        return 'teacher_anon_';
+      }
+
+      function getLastConversationKey() {
+        return getChatStoragePrefix() + 'last_conversation_id';
+      }
 
       // ================================
       // CHAT LIFECYCLE AND BEHAVIOR
@@ -3569,9 +3799,9 @@
       //     - Click to reopen and view past messages
       //
       // 5️⃣  PERSISTENCE
-      //     - Chat metadata: localStorage['teacher_chat_threads']
-      //     - Messages per chat: localStorage['teacher_chat_messages_' + chatId]
-      //     - Survives page refresh and new browser sessions
+      //     - Chat metadata: /get_conversations (backend ConversationModel)
+      //     - Messages per chat: /get_messages/<conversation_id>
+      //     - Survives page refresh and new browser sessions via DB
       //
       // USAGE:
       //   - Start new chat: startNewChat()
@@ -3580,34 +3810,33 @@
       //   - Reopen chat: Click sidebar item → loadChat() → loads stored messages
       // ================================
 
-      // Chat threads persistence - ENABLED
-      function saveChatThreads() {
+      // Load chat history metadata from backend (mirrors chat.html loadChatHistory)
+      async function loadChatHistoryFromBackend() {
         try {
-          localStorage.setItem('teacher_chat_threads', JSON.stringify(chatHistory || []));
+          const response = await fetch('/get_conversations', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          if (response.ok) {
+            const data = await response.json();
+            chatHistory = data.conversations || [];
+            renderChatSidebar();
+          } else {
+            console.error('Failed to load chat history from backend');
+            chatHistory = [];
+            renderChatSidebar();
+          }
         } catch (e) {
-          console.error('Failed to save chat threads', e);
+          console.error('Error loading chat history from backend', e);
+          chatHistory = [];
+          renderChatSidebar();
         }
       }
 
-      function loadInitialChatHistory() {
-        try {
-          const saved = JSON.parse(localStorage.getItem('teacher_chat_threads') || 'null');
-          if (saved && Array.isArray(saved) && saved.length) {
-            chatHistory = saved;
-          } else {
-            // Default starter chats if none saved
-            chatHistory = [
-              { id: 'chat1', title: 'Lesson planning assistance', timestamp: new Date().toISOString(), active: true, lastMessageSnippet: '', unreadCount: 0 },
-              { id: 'chat2', title: 'Assessment questions', timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), active: false, lastMessageSnippet: '', unreadCount: 0 },
-              { id: 'chat3', title: 'Classroom strategies', timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), active: false, lastMessageSnippet: '', unreadCount: 0 },
-              { id: 'chat4', title: 'Machine Learning basics', timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), active: false, lastMessageSnippet: '', unreadCount: 0 }
-            ];
-            saveChatThreads();
-          }
-        } catch (e) {
-          console.error('Failed to load chat threads', e);
-          chatHistory = [];
-        }
+      // Backwards-compat stub: some helpers still call saveChatThreads().
+      // Backend is now the source of truth for conversations, so this is a no-op.
+      function saveChatThreads() {
+        // Intentionally left blank – conversations come from /get_conversations.
       }
 
       // Render chat sidebar dynamically from chatHistory
@@ -3632,7 +3861,19 @@
         const olderChats = [];
 
         chatHistory.forEach(chat => {
-          const chatDate = new Date(chat.timestamp);
+          // Backend conversations may expose different timestamp fields.
+          // Prefer explicit timestamp, then updated_at, then created_at.
+          const rawTs = chat.timestamp || chat.updated_at || chat.created_at || null;
+          if (!rawTs) {
+            olderChats.push(chat);
+            return;
+          }
+
+          const chatDate = new Date(rawTs);
+          if (isNaN(chatDate.getTime())) {
+            olderChats.push(chat);
+            return;
+          }
           const chatDay = new Date(chatDate.getFullYear(), chatDate.getMonth(), chatDate.getDate());
 
           if (chatDay.getTime() === today.getTime()) {
@@ -3648,7 +3889,9 @@
 
         // Helper to format time
         function formatTime(timestamp) {
+          if (!timestamp) return '';
           const date = new Date(timestamp);
+          if (isNaN(date.getTime())) return '';
           const now = new Date();
 
           // Same day: show time
@@ -3799,19 +4042,22 @@
         textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
       }
 
-      // Update send button state
+      // Request in flight: block second message and keep Send disabled until response is received
+      window.teacherChatRequestInFlight = false;
+
+      // Update send button state (disabled when waiting for response or when input is empty)
       function updateSendButton() {
         const input = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
         const hasText = input.value.trim().length > 0;
-        sendBtn.disabled = !hasText;
+        sendBtn.disabled = window.teacherChatRequestInFlight || !hasText;
       }
 
-      // Handle keyboard shortcuts
+      // Handle keyboard shortcuts (do not send if a request is already in flight)
       function handleKeyDown(event) {
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
-          if (!event.repeat && document.getElementById('messageInput').value.trim()) {
+          if (!event.repeat && !window.teacherChatRequestInFlight && document.getElementById('messageInput').value.trim()) {
             sendMessage();
           }
         }
@@ -4052,6 +4298,10 @@
 
       // Helper function to close the modal
       function closeCreateLessonModal() {
+        window._ingestTaskId = null;
+        window._ingestAbortController = null;
+        window._ingestCancelRequested = false;
+        window._ingestCompletedSuccessfully = false;
         const modal = document.getElementById('createLessonModal');
         if (modal) {
           modal.remove();
@@ -4343,7 +4593,7 @@
             </div>
             
             <div class="flex flex-col md:flex-row gap-4">
-                <button onclick="closeCreateLessonModal()" 
+                <button onclick="cancelCreateLessonUpload()" 
                         class="flex-1 bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-all font-bold text-lg">
                   Cancel
                 </button>
@@ -4352,10 +4602,22 @@
       `;
 
         window._createLessonFile = file;
-        window._createLessonMeta = { lessonTitle, lessonContext, lessonSubject, lessonGrade };
+        window._createLessonMeta = { lessonTitle, lessonContext, lessonSubject, lessonGrade, conversationId: null, threadId: null };
         setTimeout(() => {
           processCreateLessonStep2(file.name, file.size, lessonTitle, lessonContext, lessonSubject, lessonGrade);
         }, 500);
+      }
+
+      // Graceful cancel for create-lesson upload: abort in-flight request or revoke Celery task, then close modal
+      function cancelCreateLessonUpload() {
+        if (window._ingestTaskId) {
+          fetch('/api/rag/ingest/cancel/' + window._ingestTaskId, { method: 'POST', credentials: 'include' }).catch(function() {});
+          window._ingestCancelRequested = true;
+        }
+        if (window._ingestAbortController) {
+          window._ingestAbortController.abort();
+        }
+        closeCreateLessonModal();
       }
 
       // Step 2 processing - API: POST /api/rag/ingest (RAG document ingest for chat), NOT create_lesson
@@ -4371,10 +4633,14 @@
           closeCreateLessonModal();
           return;
         }
+        window._ingestAbortController = new AbortController();
+        window._ingestTaskId = null;
+        window._ingestCancelRequested = false;
+        window._ingestCompletedSuccessfully = false;
         const formData = new FormData();
         formData.append('file', file);
         formData.append('create_new_thread', 'true');
-        // Do NOT send conversation_id: Create Lesson always gets a new conversation/thread so we never hit "this conversation already has a PDF".
+        // Do NOT send conversation_id: each upload gets a new conversation and thread (isolated instance)
         let progress = 0;
         const progressInterval = setInterval(() => {
           progress += Math.random() * 8 + 2;
@@ -4391,7 +4657,8 @@
           const response = await fetch('/api/rag/ingest', {
             method: 'POST',
             body: formData,
-            credentials: 'include'
+            credentials: 'include',
+            signal: window._ingestAbortController.signal
           });
           clearInterval(progressInterval);
           if (progressBar) progressBar.style.width = '100%';
@@ -4407,22 +4674,36 @@
           let threadId = data.thread_id || null;
           let conversationId = data.conversation_id != null ? data.conversation_id : null;
           if (data.task_id && data.status === 'processing') {
+            window._ingestTaskId = data.task_id;
             if (progressStatus) progressStatus.textContent = 'Processing in background...';
             threadId = data.thread_id || null;
             conversationId = data.conversation_id != null ? data.conversation_id : null;
             const taskId = data.task_id;
             const pollMax = 120;
             for (let i = 0; i < pollMax; i++) {
+              if (window._ingestCancelRequested) {
+                showToast('Upload cancelled.', 'warning');
+                break;
+              }
               await new Promise(r => setTimeout(r, 2000));
+              if (window._ingestCancelRequested) {
+                showToast('Upload cancelled.', 'warning');
+                break;
+              }
               const statusRes = await fetch('/api/rag/ingest/status/' + taskId, { method: 'GET', credentials: 'include' });
               if (!statusRes.ok) continue;
               const statusData = await statusRes.json().catch(() => ({}));
               if (progressBar) progressBar.style.width = (statusData.progress || 0) + '%';
               if (progressPercent) progressPercent.textContent = Math.round(statusData.progress || 0) + '%';
               if (progressStatus && statusData.message) progressStatus.textContent = statusData.message;
+              if (statusData.status === 'revoked') {
+                showToast('Upload cancelled.', 'warning');
+                break;
+              }
               if (statusData.status === 'success') {
                 threadId = statusData.thread_id || threadId;
                 conversationId = statusData.conversation_id != null ? statusData.conversation_id : conversationId;
+                window._ingestCompletedSuccessfully = true;
                 break;
               }
               if (statusData.status === 'failed' || statusData.status === 'failure' || statusData.state === 'FAILURE') {
@@ -4439,13 +4720,22 @@
           if (conversationId != null) {
             window.currentRAGConversationId = conversationId;
             try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
+            if (window._createLessonMeta) {
+              window._createLessonMeta.conversationId = conversationId;
+              window._createLessonMeta.threadId = threadId;
+            }
           }
-          setTimeout(() => {
-            showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
-          }, 500);
+          if (!window._ingestCancelRequested && (window._ingestCompletedSuccessfully || (!data.task_id && threadId)) && threadId) {
+            setTimeout(() => {
+              showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
+            }, 500);
+          } else {
+            closeCreateLessonModal();
+          }
         } catch (e) {
           clearInterval(progressInterval);
-          showToast('Network error. Please try again.', 'error');
+          const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
+          if (!isAbort) showToast('Network error. Please try again.', 'error');
           closeCreateLessonModal();
         }
       }
@@ -4752,10 +5042,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
         const pages = Math.ceil(fileSize / 50000);
 
-        // Generate markdown content for the lesson
-        const markdownContent = generateMarkdownLessonFromPDF(lessonTitle, fileName, lessonContext, lessonSubject, lessonGrade);
-
-        // Store PDF data and lesson in global variables (NOT saved yet)
+        // Store PDF metadata only. Do NOT set currentLessonMarkdown to the template here –
+        // the actual lesson comes from the AI when the user says "create a lesson" in chat and is stored by RAG.
         currentPDFData = {
           id: 'lesson_' + Date.now(),
           title: lessonTitle,
@@ -4772,7 +5060,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           version: 1
         };
 
-        currentLessonMarkdown = markdownContent;
+        currentLessonMarkdown = null;
 
         // Save to localStorage so it persists across tab switches
         savePDFDataToStorage();
@@ -4780,32 +5068,41 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // Show upload success - NOT auto-saving
         showToast(`✅ PDF "${lessonTitle}" uploaded successfully!`, 'success', 4000);
 
-        // Enable chat tab and start a fresh chat for this lesson
+        // Enable chat tab and switch to the NEW backend conversation (do not start a client-side chat)
         enableChatTab();
-        // Finalize previous chat and initialize a brand new conversation ID
-        startNewChat();
-        // Open chat UI for the newly created conversation
         showChatTab();
 
-        // Show success message in the NEW chat (persisted under new chatId)
-        addUserMessage(`📚 Uploaded PDF: ${lessonTitle}`);
-
-        setTimeout(() => {
-          addAssistantMessage(`✅ <strong>Successfully uploaded "${fileName}"!</strong><br><br>
-          <strong>PDF Details:</strong><br>
-          • <strong>Title:</strong> ${lessonTitle}<br>
-          • <strong>Subject:</strong> ${lessonSubject}<br>
-          • <strong>Grade:</strong> ${lessonGrade}<br>
-          • <strong>File Size:</strong> ${fileSizeMB} MB<br>
-          • <strong>Estimated Pages:</strong> ${pages}<br><br>
-          
-          <strong>📝 What would you like to do?</strong><br>
-          Type one of these commands:<br>
-          • "create a lesson" - Generate a lesson from this PDF<br>
-          • "summarize" - Get a brief summary<br>
-          • "ask me questions" - Generate quiz questions<br>
-          • Or ask your own questions about the content!`);
-        }, 500);
+        // Prefer the conversation/thread created for THIS upload, fall back to global if needed
+        var metaConvId = (window._createLessonMeta && window._createLessonMeta.conversationId) || null;
+        var newConvId = metaConvId != null ? metaConvId : window.currentRAGConversationId;
+        if (newConvId != null) {
+          loadChatHistoryFromBackend().then(function () {
+            return loadChatPromise(newConvId);
+          }).then(function () {
+            addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
+            setTimeout(function () {
+              addAssistantMessage('✅ <strong>Successfully uploaded "' + fileName + '"!</strong><br><br>' +
+                '<strong>PDF Details:</strong><br>' +
+                '• <strong>Title:</strong> ' + lessonTitle + '<br>' +
+                '• <strong>Subject:</strong> ' + lessonSubject + '<br>' +
+                '• <strong>Grade:</strong> ' + lessonGrade + '<br>' +
+                '• <strong>File Size:</strong> ' + fileSizeMB + ' MB<br>' +
+                '• <strong>Estimated Pages:</strong> ' + pages + '<br><br>' +
+                '<strong>📝 What would you like to do?</strong><br>' +
+                'Type one of these commands:<br>' +
+                '• "create a lesson" - Generate a lesson from this PDF<br>' +
+                '• "summarize" - Get a brief summary<br>' +
+                '• "ask me questions" - Generate quiz questions<br>' +
+                '• Or ask your own questions about the content!');
+            }, 300);
+          }).catch(function (e) { console.error('Error switching to new conversation', e); });
+        } else {
+          startNewChat();
+          addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
+          setTimeout(function () {
+            addAssistantMessage('✅ <strong>Successfully uploaded "' + fileName + '"!</strong><br><br>You can ask questions about this document.');
+          }, 300);
+        }
       }
 
       // Show My Lessons Page (API-integrated: fetches from /api/lessons/my_lessons)
@@ -4913,7 +5210,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             versions: '<span class="version-badge">v' + (lesson.version_number || lesson.version || 1) + '</span>',
             timestamp: timestamp,
             fullDate: date,
-            status: lesson.status || 'draft'
+            status: lesson.status || 'draft',
+            hasChildVersion: lesson.has_child_version === true
           };
         });
 
@@ -4928,19 +5226,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             <p class="text-primary-100 text-sm md:text-base">View and manage all your created lessons</p>
           </div>
           
-          <!-- Action Buttons -->
-          <div id="myLessonsActionBtns" class="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <button onclick="exportAllLessons()" 
-                    class="sm:flex-none bg-white bg-opacity-20 text-white px-3 md:px-5 py-2 rounded-lg hover:bg-opacity-30 transition-colors font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap border border-white border-opacity-30 text-sm md:text-base">
-              <i class="fas fa-download"></i>
-              <span class="inline">Export All</span>
-            </button>
-            <button onclick="deleteAllLessonsConfirm()" 
-                    class="sm:flex-none bg-red-600 text-white px-3 md:px-5 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap shadow-md text-sm md:text-base">
-              <i class="fas fa-trash"></i>
-              <span class="inline">Delete All</span>
-            </button>
-          </div>
+          <!-- Action Buttons (none for now on teacher dashboard) -->
         </div>
       </div>
 
@@ -4998,10 +5284,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                     <button class="action-btn" style="background: #fef3c7; color: #92400e;" title="FAQ" onclick="showLessonFAQ('${lesson.id}')">
                       <i class="fas fa-circle-question"></i>
                     </button>
-                    
+                    ${!lesson.hasChildVersion ? `
                     <button class="action-btn delete-btn" title="Delete" onclick="deleteLesson('${lesson.id}')">
                       <i class="fas fa-trash"></i>
                     </button>
+                    ` : ''}
                   </div>
                 </td>
               </tr>
@@ -5064,7 +5351,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const currentVersion = sortedVersions[0] || lesson;
           window.currentLessonVersions = sortedVersions;
           const forModal = {
-            id: currentVersion.id,
+            id: lesson.id,
             title: lesson.title,
             subject: lesson.focus_area || lesson.focusArea,
             grade: lesson.grade_level || lesson.gradeLevel,
@@ -5077,58 +5364,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           };
           populateViewLessonModal(forModal);
           showViewLessonModal();
-          await loadDraftForViewLesson(currentVersion.id);
         } catch (err) {
           console.error('viewLesson error:', err);
           showToast('Error loading lesson: ' + (err.message || 'Unknown'), 'error');
         }
       }
 
-      // Load draft from server when viewing a lesson (same as chat.html flow)
-      async function loadDraftForViewLesson(lessonId) {
-        if (!lessonId) return;
-        try {
-          const response = await fetch('/api/lessons/lesson/' + lessonId + '/get_draft', { method: 'GET', credentials: 'include' });
-          if (!response.ok) return;
-          const data = await response.json();
-          const draft = (data.draft_content && data.draft_content.trim()) ? data.draft_content : (data.current_content || '');
-          const draftEl = document.getElementById('viewLessonDraft');
-          if (draftEl) draftEl.value = draft;
-        } catch (e) {
-          console.warn('loadDraftForViewLesson:', e);
-        }
-      }
-
-      // Format lesson content for view: markdown → HTML (# ## headings, tables, bullets, formulas)
-      function formatLessonContentForView(content) {
-        if (!content || (typeof content === 'string' && content.trim() === '')) {
-          return '<p class="text-gray-500 italic">No content yet</p>';
-        }
-        let raw = typeof content === 'string' ? content : String(content);
-        if (raw.includes('"response_type"') || raw.includes('"answer"')) {
-          try {
-            const p = JSON.parse(raw);
-            raw = p.answer || p.content || raw;
-          } catch (e) {}
-        }
-        raw = raw
-          .replace(/^Lesson Title:.*$/gm, '').replace(/^Grade Level:.*$/gm, '').replace(/^Focus Area:.*$/gm, '')
-          .replace(/^Subject:.*$/gm, '').replace(/^Topic:.*$/gm, '').replace(/^Duration:.*$/gm, '').replace(/^Materials:.*$/gm, '')
-          .replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
-        try {
-          if (typeof marked !== 'undefined') {
-            marked.setOptions({ breaks: true, gfm: true });
-            const html = marked.parse(raw);
-            return '<div class="prose prose-sm max-w-none text-gray-700 leading-relaxed lesson-content-formatted">' +
-              '<style>.lesson-content-formatted table{border-collapse:collapse;width:100%;}.lesson-content-formatted th,.lesson-content-formatted td{border:1px solid #e5e7eb;padding:0.5rem 0.75rem;text-align:left;}.lesson-content-formatted th{background:#f3f4f6;font-weight:700;}.lesson-content-formatted ul,.lesson-content-formatted ol{margin:0.75rem 0;padding-left:1.5rem;}.lesson-content-formatted li{margin:0.4rem 0;font-weight:500;line-height:1.6;}.lesson-content-formatted li::marker{color:#0ea5e9;font-weight:700;}.lesson-content-formatted strong{font-weight:700;color:#111827;}.lesson-content-formatted h1{font-size:1.6rem;font-weight:700;margin-top:1rem;margin-bottom:0.5rem;color:#111827;letter-spacing:-0.02em;}.lesson-content-formatted h2{font-size:1.35rem;font-weight:700;margin-top:0.9rem;margin-bottom:0.45rem;color:#111827;letter-spacing:-0.01em;}.lesson-content-formatted h3{font-size:1.2rem;font-weight:700;margin-top:0.8rem;margin-bottom:0.4rem;color:#1f2937;}.lesson-content-formatted h4,.lesson-content-formatted h5,.lesson-content-formatted h6{font-size:1.05rem;font-weight:700;margin-top:0.7rem;margin-bottom:0.35rem;color:#1f2937;}.lesson-content-formatted p{margin:0.4rem 0;line-height:1.65;}</style>' +
-              html + '</div>';
-          }
-        } catch (e) { console.warn('formatLessonContentForView', e); }
-        return '<div class="text-gray-700 leading-relaxed whitespace-pre-wrap">' + (typeof escapeHtml === 'function' ? escapeHtml(raw) : raw.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</div>';
-      }
-
       // Populate the view lesson modal with data
-      function populateViewLessonModal(lesson) {
+      async function populateViewLessonModal(lesson) {
         try {
           console.log('📝 populateViewLessonModal called with lesson:', lesson);
 
@@ -5154,20 +5397,37 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const subjectEl = document.getElementById('viewLessonSubject');
           if (subjectEl) subjectEl.textContent = lesson.subject || 'General';
 
-          // Populate current version preview (tables, bullets, formulas — same as teacher chat)
+          // Populate current version preview (support markdown via marked if available)
           const rawContent = lesson.content || lesson.body || 'No content yet';
+          const currentVersionHtml = (typeof marked !== 'undefined' && rawContent) ? marked.parse(rawContent) : escapeHtml(rawContent);
           const currentEl = document.getElementById('viewLessonCurrent');
-          if (currentEl) {
-            currentEl.innerHTML = formatLessonContentForView(rawContent);
-            if (window.MathJax && window.MathJax.typesetPromise) {
-              window.MathJax.typesetPromise([currentEl]).catch(function (err) { console.warn('MathJax in view lesson:', err); });
+          if (currentEl) currentEl.innerHTML = currentVersionHtml;
+
+          // Load draft content from backend so edits persist across sessions
+          const draftTextarea = document.getElementById('viewLessonDraft');
+          if (draftTextarea) {
+            let draftValue = '';
+            try {
+              const draftResponse = await fetch(`/api/lessons/lesson/${lesson.id}/get_draft`, {
+                method: 'GET',
+                credentials: 'include'
+              });
+              if (draftResponse.ok) {
+                const draftData = await draftResponse.json().catch(function () { return {}; });
+                // Only pre-fill if there is an existing draft; otherwise start empty.
+                draftValue = draftData.draft_content || '';
+              }
+            } catch (e) {
+              console.warn('get_draft error:', e);
+            }
+            if (!draftValue) {
+              draftTextarea.innerHTML = '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>';
+            } else if (typeof marked !== 'undefined') {
+              draftTextarea.innerHTML = marked.parse(draftValue);
+            } else {
+              draftTextarea.textContent = draftValue;
             }
           }
-
-          // Load saved draft from localStorage
-          const draftKey = `teacher_lesson_draft_${lesson.id}`;
-          const savedDraft = localStorage.getItem(draftKey) || '';
-          document.getElementById('viewLessonDraft').value = savedDraft;
 
           // Populate version history with dropdown
           let versionsHtml = '';
@@ -5341,89 +5601,106 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
-      // Apply prompt via API (same as chat.html: POST /api/lessons/lesson/:id/apply_prompt)
+      // Apply custom prompt to lesson draft
       async function applyPromptToLessonDraft() {
-        const lessonId = window.currentViewLessonId;
-        if (!lessonId) {
-          showToast('No lesson selected', 'error');
-          return;
-        }
-        const promptInput = document.getElementById('viewLessonApplyPromptInput');
-        const prompt = (promptInput && promptInput.value && promptInput.value.trim()) ? promptInput.value.trim() : (localStorage.getItem('teacher_custom_prompt') || '').trim();
-        if (!prompt) {
-          showToast('Enter an improvement prompt above or set a default prompt in settings.', 'info', 3000);
+        const promptEl = document.getElementById('viewLessonPrompt');
+        const userPrompt = (promptEl?.value || '').trim();
+
+        if (!userPrompt) {
+          showToast('Please enter instructions for AI before applying.', 'info', 3000);
           return;
         }
 
-        const applyBtn = document.getElementById('viewLessonApplyPromptBtn');
-        if (applyBtn) {
-          applyBtn.disabled = true;
-          applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Applying...';
+        const lessonId = window.currentViewLessonId;
+        if (!lessonId) {
+          showToast('No lesson selected for AI enhancement.', 'error', 3000);
+          return;
         }
+
+        const btn = document.querySelector('#viewLessonModal button[onclick="applyPromptToLessonDraft()"]');
+        let originalHtml = null;
+        if (btn) {
+          originalHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Applying...';
+        }
+
         try {
-          const response = await fetch('/api/lessons/lesson/' + lessonId + '/apply_prompt', {
+          const response = await fetch(`/api/lessons/lesson/${lessonId}/apply_prompt`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ prompt: prompt })
+            body: JSON.stringify({ prompt: userPrompt })
           });
-          const result = await response.json().catch(function() { return {}; });
-          if (response.ok && result.draft_content != null) {
-            const draftEl = document.getElementById('viewLessonDraft');
-            if (draftEl) draftEl.value = result.draft_content;
-            if (promptInput) promptInput.value = '';
-            showToast('Prompt applied successfully', 'success', 2000);
-          } else {
-            showToast(result.error || 'Failed to apply prompt', 'error', 3000);
+
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to apply AI enhancement');
+          }
+
+          const improved = data.draft_content || '';
+          const draftEl = document.getElementById('viewLessonDraft');
+          if (draftEl) {
+            // Render improved content as formatted HTML while preserving text content for backend via innerText
+            if (typeof marked !== 'undefined' && improved) {
+              draftEl.innerHTML = marked.parse(improved);
+            } else {
+              draftEl.textContent = improved;
+            }
+          }
+
+          showToast('AI enhancement applied to draft!', 'success', 2500);
+          if (promptEl) {
+            promptEl.value = '';
           }
         } catch (e) {
-          console.error('applyPromptToLessonDraft:', e);
-          showToast('Error applying prompt', 'error');
+          console.error('applyPromptToLessonDraft error:', e);
+          showToast(e.message || 'Failed to apply AI enhancement', 'error', 3000);
         } finally {
-          if (applyBtn) {
-            applyBtn.disabled = false;
-            applyBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i>Apply Prompt';
+          if (btn && originalHtml !== null) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
           }
         }
       }
 
-      // Save the currently visible draft via API (same as chat: POST /api/lessons/lesson/:id/save_draft)
+      // Save the currently visible draft (persists to backend)
       async function saveLessonDraftVisible() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
         const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = draftEl ? draftEl.value : '';
+        const draftContent = draftEl ? (draftEl.innerText || '').trim() : '';
+
         try {
-          const response = await fetch('/api/lessons/lesson/' + lessonId + '/save_draft', {
+          const response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ draft_content: draftContent })
           });
-          const result = await response.json().catch(function() { return {}; });
-          if (response.ok) {
-            const draftKey = `teacher_lesson_draft_${lessonId}`;
-            localStorage.setItem(draftKey, draftContent);
-            showToast('Draft saved!', 'success', 2000);
-          } else {
-            showToast(result.error || 'Failed to save draft', 'error');
+
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save draft');
           }
+
+          showToast('Draft saved!', 'success', 2000);
         } catch (e) {
-          console.error('saveLessonDraftVisible:', e);
-          showToast('Error saving draft', 'error');
+          console.error('saveLessonDraftVisible error:', e);
+          showToast(e.message || 'Failed to save draft', 'error', 3000);
         }
       }
 
-      // Finalize new version via API (same as chat: save_draft then POST /api/lessons/lesson/:id/finalize_version)
+      // Finalize new version (creates new version via backend)
       async function finalizeNewVersionLesson() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
         const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = draftEl ? draftEl.value.trim() : '';
+        const draftContent = (draftEl ? draftEl.innerText : '').trim();
         if (!draftContent) {
-          showToast('Draft is empty. Apply a prompt or edit the content before finalizing.', 'warning', 3000);
+          showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
           return;
         }
 
@@ -5431,40 +5708,46 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
+        const finalizeBtn = document.querySelector('#viewLessonModal button[onclick="finalizeNewVersionLesson()"]');
+        if (typeof setButtonLoading === 'function') {
+          setButtonLoading(finalizeBtn, '<span class="flex items-center gap-2"><span class="loading-dots"><span></span><span></span><span></span></span><span>Finalizing...</span></span>');
+        }
+
         try {
-          // Save current draft to server so finalize_version can use it
-          const saveRes = await fetch('/api/lessons/lesson/' + lessonId + '/save_draft', {
+          // First, persist the current draft to the backend
+          let response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ draft_content: draftContent })
           });
-          if (!saveRes.ok) {
-            const err = await saveRes.json().catch(function() { return {}; });
-            showToast(err.error || 'Failed to save draft before finalizing', 'error');
-            return;
+          let data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save draft before finalizing');
           }
 
-          const finalizeRes = await fetch('/api/lessons/lesson/' + lessonId + '/finalize_version', {
+          // Then ask backend to create a new version from that draft
+          response = await fetch(`/api/lessons/lesson/${lessonId}/finalize_version`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({})
           });
-          const result = await finalizeRes.json().catch(function() { return {}; });
-
-          if (finalizeRes.ok && result.success) {
-            const draftKey = `teacher_lesson_draft_${lessonId}`;
-            localStorage.removeItem(draftKey);
-            showToast('New version created successfully!', 'success', 3000);
-            closeViewLessonModal();
-            showMyLessonsPage();
-          } else {
-            showToast(result.error || 'Failed to create new version', 'error', 3000);
+          data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to finalize lesson version');
           }
+
+          showToast('✅ New version created successfully!', 'success', 3000);
+          closeViewLessonModal();
+          showMyLessonsPage();
         } catch (e) {
-          console.error('finalizeNewVersionLesson:', e);
-          showToast('Error finalizing version', 'error');
+          console.error('finalizeNewVersionLesson error:', e);
+          showToast(e.message || 'Failed to finalize version', 'error', 4000);
+        } finally {
+          if (typeof restoreButton === 'function') {
+            restoreButton(finalizeBtn);
+          }
         }
       }
 
@@ -5486,38 +5769,33 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       function loadVersionIntoDraft(lessonId, versionNumber) {
-        const lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const index = lessons.findIndex(lesson => lesson.id === lessonId);
+        const versions = window.currentLessonVersions || [];
+        if (!versions.length) {
+          showToast('Version history not available for this lesson.', 'error', 2000);
+          return;
+        }
 
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
-          let versionContent = null;
+        const version = versions.find(function (v) {
+          return (v.version_number || v.version || 1) === versionNumber;
+        });
 
-          // Find the version in the versions array
-          if (lesson.versions && Array.isArray(lesson.versions)) {
-            const version = lesson.versions.find(v => v.version === versionNumber);
-            versionContent = version ? version.content : null;
-          }
+        const versionContent = version && version.content ? version.content : null;
 
-          // If version 1 and no versions array exists, use the current content
-          if (!versionContent && versionNumber === 1) {
-            versionContent = lesson.content || lesson.body || '';
-          }
-
-          if (versionContent) {
-            // Load into draft textarea
-            const draftTextarea = document.getElementById('viewLessonDraft');
-            draftTextarea.value = versionContent;
+        if (versionContent) {
+          const draftTextarea = document.getElementById('viewLessonDraft');
+          if (draftTextarea) {
+            if (typeof marked !== 'undefined') {
+              draftTextarea.innerHTML = marked.parse(versionContent);
+            } else {
+              draftTextarea.textContent = versionContent;
+            }
             draftTextarea.focus();
-
-            // Save to localStorage
-            saveLessonDraftVisible();
-
-            // Show success message
-            showToast(`✅ Loaded v${versionNumber} into draft editor. Make your changes and click "Finalize New Version" to create v${lesson.version + 1}.`, 'success', 3500);
-          } else {
-            showToast('Version content not found.', 'error', 2000);
           }
+
+          saveLessonDraftVisible();
+          showToast(`✅ Loaded v${versionNumber} into draft editor. Make your changes and click "Finalize" to create a new version.`, 'success', 3500);
+        } else {
+          showToast('Version content not found.', 'error', 2000);
         }
       }
 
@@ -5641,17 +5919,20 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       function editLesson(lessonId) {
-        const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
+        const lessons = window.availableLessons || [];
+        const lesson = lessons.find(function (l) { return String(l.id) === String(lessonId); });
+
+        if (lesson) {
+          const subject = lesson.focus_area || lesson.focusArea || 'General';
+          const grade = lesson.grade_level || lesson.gradeLevel || 'General';
+
           // Show edit modal
           const modalHtml = `
-          <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div id="editLessonModal-${lessonId}" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold text-gray-900">Edit Lesson</h3>
-                <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                <button onclick="document.getElementById('editLessonModal-${lessonId}').remove()" 
                         class="text-gray-400 hover:text-gray-600">
                   <i class="fas fa-times"></i>
                 </button>
@@ -5660,29 +5941,29 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Lesson Title</label>
                 <input type="text" id="editLessonTitle" 
-                       value="${lesson.title}"
+                       value="${lesson.title || ''}"
                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
               </div>
               
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
                 <select id="editLessonSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${lesson.subject === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Math" ${lesson.subject === 'Math' ? 'selected' : ''}>Mathematics</option>
-                  <option value="Science" ${lesson.subject === 'Science' ? 'selected' : ''}>Science</option>
-                  <option value="English" ${lesson.subject === 'English' ? 'selected' : ''}>English</option>
-                  <option value="History" ${lesson.subject === 'History' ? 'selected' : ''}>History</option>
+                  <option value="General" ${subject === 'General' ? 'selected' : ''}>General</option>
+                  <option value="Math" ${subject === 'Math' ? 'selected' : ''}>Mathematics</option>
+                  <option value="Science" ${subject === 'Science' ? 'selected' : ''}>Science</option>
+                  <option value="English" ${subject === 'English' ? 'selected' : ''}>English</option>
+                  <option value="History" ${subject === 'History' ? 'selected' : ''}>History</option>
                 </select>
               </div>
               
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Grade Level</label>
                 <select id="editLessonGrade" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${lesson.grade === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Elementary" ${lesson.grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
-                  <option value="Middle School" ${lesson.grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
-                  <option value="High School" ${lesson.grade === 'High School' ? 'selected' : ''}>High School</option>
-                  <option value="College" ${lesson.grade === 'College' ? 'selected' : ''}>College</option>
+                  <option value="General" ${grade === 'General' ? 'selected' : ''}>General</option>
+                  <option value="Elementary" ${grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
+                  <option value="Middle School" ${grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
+                  <option value="High School" ${grade === 'High School' ? 'selected' : ''}>High School</option>
+                  <option value="College" ${grade === 'College' ? 'selected' : ''}>College</option>
                 </select>
               </div>
               
@@ -5706,47 +5987,51 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
-      function saveLessonEdit(lessonId) {
-        const title = document.getElementById('editLessonTitle').value;
-        const subject = document.getElementById('editLessonSubject').value;
-        const grade = document.getElementById('editLessonGrade').value;
+      async function saveLessonEdit(lessonId) {
+        const title = (document.getElementById('editLessonTitle')?.value || '').trim();
+        const subject = document.getElementById('editLessonSubject')?.value || 'General';
+        const grade = document.getElementById('editLessonGrade')?.value || 'General';
 
-        const index = findLessonById(lessonId);
-        let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        if (index !== -1 && lessons[index]) {
-          lessons[index].title = title;
-          lessons[index].subject = subject;
-          lessons[index].grade = grade;
-          lessons[index].updatedAt = new Date().toISOString();
-
-          localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
-
-          // Close modal
-          document.querySelector('[onclick="saveLessonEdit(\'' + lessonId + '\')"]').closest('.fixed').remove();
-
-          // Refresh the lessons page
-          showMyLessonsPage();
-
-          // Show success toast notification
-          showToast(`✅ Lesson "${title}" updated successfully!`, 'success', 4000);
+        if (!title) {
+          showToast('Lesson title is required.', 'warning', 3000);
+          return;
         }
-      }
 
-      function deleteLesson(lessonId) {
-        if (confirm('Are you sure you want to delete this lesson? This action cannot be undone.')) {
-          const index = findLessonById(lessonId);
-          let lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-          if (index !== -1) {
-            const lessonTitle = lessons[index]?.title || 'this lesson';
+        const saveBtn = document.querySelector(`#editLessonModal-${lessonId} button[onclick="saveLessonEdit('${lessonId}')"]`);
+        if (typeof setButtonLoading === 'function') {
+          setButtonLoading(saveBtn, '<span class="loading-dots"><span></span><span></span><span></span></span>');
+        }
 
-            lessons.splice(index, 1);
-            localStorage.setItem('teacher_lessons', JSON.stringify(lessons));
+        try {
+          const response = await fetch(`/api/lessons/lesson/${lessonId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: title,
+              focus_area: subject,
+              grade_level: grade
+            })
+          });
 
-            // Show warning toast notification
-            showToast(`🗑️ Lesson "${lessonTitle}" deleted`, 'warning', 4000);
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to update lesson');
+          }
 
-            // Refresh the lessons page
-            showMyLessonsPage();
+          const modalEl = document.getElementById(`editLessonModal-${lessonId}`);
+          if (modalEl) {
+            modalEl.remove();
+          }
+
+          showToast(`✅ Lesson "${title}" updated successfully!`, 'success', 4000);
+          showMyLessonsPage();
+        } catch (e) {
+          console.error('saveLessonEdit error:', e);
+          showToast(e.message || 'Failed to update lesson', 'error', 4000);
+        } finally {
+          if (typeof restoreButton === 'function') {
+            restoreButton(saveBtn);
           }
         }
       }
@@ -6023,11 +6308,20 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Load only that chat's messages, clear previous context
       // ════════════════════════════════════════════════════════════════════════════════
       function loadChat(chatId) {
+        window._loadChatPromise = Promise.resolve();
+        window._loadChatResolve = null;
         // 1. Clear previous context (no carryover from other chats)
         clearChatContext();
 
         // 2. Set this chat as the ONLY active chat
         currentChatId = chatId;
+        // Also align RAG conversation ID so subsequent messages use this conversation
+        try {
+          window.currentRAGConversationId = chatId ? parseInt(chatId, 10) || chatId : null;
+          localStorage.setItem(getLastConversationKey(), String(window.currentRAGConversationId));
+        } catch (e) {
+          console.error('Failed to persist last conversation id', e);
+        }
         chatHistory.forEach(chat => {
           chat.active = chat.id === chatId;
         });
@@ -6045,7 +6339,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // ════════════════════════════════════════════════════════════════════════════════
         // SPECIFICATION #2: MESSAGE ISOLATION
         // Load ONLY messages from this specific conversation ID
-        // Fetch from localStorage['teacher_chat_messages_' + chatId]
+        // Backend /get_messages/<id> expects integer conversation_id; client-only ids (chat_*) use localStorage.
         // NO context from other conversations
         // ════════════════════════════════════════════════════════════════════════════════
 
@@ -6065,13 +6359,16 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           `;
             chatMessages.appendChild(messageDiv);
           } else {
+            // Convert raw markdown to HTML (same as addAssistantMessage flow) so loaded messages render correctly
+            const formattedContent = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
+              ? TeacherChatFormatter.formatChatResponse(content || '') : escapeHtml(content || '');
             const messageDiv = document.createElement('div');
             messageDiv.className = 'chat-message assistant animate-fade-in';
             messageDiv.innerHTML = `
             <div class="chat-message-avatar">
               <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
             </div>
-            <div class="chat-message-content markdown-content">${content}</div>
+            <div class="chat-message-content markdown-content">${formattedContent}</div>
           `;
             chatMessages.appendChild(messageDiv);
             var contentEl = messageDiv.querySelector('.chat-message-content');
@@ -6081,20 +6378,107 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           }
         }
 
-        // Load ONLY this conversation's messages from storage
-        const stored = loadMessagesForChat(chatId);
-        if (stored && stored.length) {
-          // Messages exist - render them in order
-          stored.forEach(msg => {
-            renderMessageDOM(msg.role, msg.content);
+        // Only call backend when chatId is a backend conversation (integer). Client-only ids (chat_*) use localStorage.
+        const isBackendConversationId = (function() {
+          if (typeof chatId === 'number' && Number.isInteger(chatId)) return true;
+          if (typeof chatId === 'string' && chatId.startsWith('chat_')) return false;
+          const n = parseInt(chatId, 10);
+          return !isNaN(n) && String(n) === String(chatId);
+        })();
+
+        function renderRAGPreamble(uploadedFilename) {
+          // Welcome message (same as new RAG chat)
+          chatMessages.innerHTML = `
+        <div class="chat-message assistant animate-fade-in">
+          <div class="chat-message-avatar">
+            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          </div>
+          <div class="chat-message-content">
+            <h4 class="font-display font-semibold text-surface-900 mb-2">🎯 New Teaching Session Started</h4>
+            <p class="text-surface-700 mb-4">I'm ready to assist you with your teaching needs. What would you like to work on today?</p>
+            <div class="grid grid-cols-2 gap-3">
+              <button onclick="showCreateLessonWizard()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
+                <i class="fas fa-file-pdf mb-2"></i>
+                <p class="font-medium">Create Lesson</p>
+                <p class="text-sm opacity-75">From PDF upload</p>
+              </button>
+              <button onclick="quickQuestion('Generate assessment questions for')" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
+                <i class="fas fa-clipboard-check mb-2"></i>
+                <p class="font-medium">Assessments</p>
+                <p class="text-sm opacity-75">Create quizzes and tests</p>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="chat-message assistant animate-fade-in">
+          <div class="chat-message-avatar">
+            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+          </div>
+          <div class="chat-message-content">
+            ✅ <strong>Successfully uploaded \u201C${String(uploadedFilename || 'document').replace(/["<>]/g, '')}\u201D.</strong><br><br>
+            You can ask questions about this document below.
+          </div>
+        </div>`;
+        }
+
+        function applyLoadedMessages(messages, options) {
+          options = options || {};
+          const prependRAG = options.prependRAGPreamble && options.uploadedFilename !== undefined;
+          chatMessages.innerHTML = '';
+          if (prependRAG) {
+            renderRAGPreamble(options.uploaded_filename || options.uploadedFilename || 'document');
+          }
+          if (messages && messages.length > 0) {
+            messages.forEach(function (msg) {
+              const role = msg.role === 'bot' ? 'assistant' : 'user';
+              const content = msg.content || msg.message || '';
+              renderMessageDOM(role, content);
+            });
+          } else if (!prependRAG) {
+            renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
+          }
+        }
+
+        if (isBackendConversationId) {
+          // Load from backend (integer conversation_id)
+          const numericId = typeof chatId === 'number' ? chatId : parseInt(chatId, 10);
+          window._loadChatResolve = null;
+          window._loadChatPromise = new Promise(function (resolve) { window._loadChatResolve = resolve; });
+          fetch(`/get_messages/${numericId}`, {
+            method: 'GET',
+            credentials: 'include'
+          }).then(function (res) {
+            if (!res.ok) throw new Error('Failed to load messages');
+            return res.json();
+          }).then(function (data) {
+            if (data && data.thread_id) {
+              window.currentRAGThreadId = data.thread_id;
+              try { localStorage.setItem('teacher_currentRAGThreadId', data.thread_id); } catch (e) {}
+            }
+            var messages = (data && data.messages) || [];
+            var opts = {};
+            if (data && data.thread_id) {
+              opts.prependRAGPreamble = true;
+              opts.uploaded_filename = data.uploaded_filename || null;
+              opts.uploadedFilename = data.uploaded_filename || null;
+            }
+            applyLoadedMessages(messages, opts);
+            if (window._loadChatResolve) { window._loadChatResolve(); window._loadChatResolve = null; }
+          }).catch(function (err) {
+            console.error('Error loading chat messages', err);
+            applyLoadedMessages([]);
+            renderMessageDOM('assistant', 'Unable to load previous messages for this conversation.');
+            if (window._loadChatResolve) { window._loadChatResolve(); window._loadChatResolve = null; }
           });
-        } else if (chatId === 'chat1') {
-          // Fallback sample for chat1 (demo data if empty)
-          renderMessageDOM('user', 'Can you help me create a lesson plan about photosynthesis?');
-          renderMessageDOM('assistant', `<h4 class="font-display font-semibold text-surface-900 mb-2">Photosynthesis Lesson Plan Assistance</h4>\n              <p class="text-surface-700">I can help you create a comprehensive lesson plan about photosynthesis for 10th grade biology.</p>\n              <div class="mt-3 p-3 bg-primary-50 rounded-lg border border-primary-100">\n                <p class="text-primary-700 text-sm">\n                  <i class="fas fa-lightbulb mr-2"></i>\n                  What specific aspects would you like to focus on?\n                </p>\n              </div>`);
         } else {
-          // No messages for this chat - show welcome
-          renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
+          // Client-only chat (e.g. chat_1771259540797): load from localStorage
+          try {
+            const messages = loadMessagesForChat(chatId);
+            applyLoadedMessages(messages);
+          } catch (e) {
+            console.error('Error loading chat messages from localStorage', e);
+            applyLoadedMessages([]);
+          }
         }
 
         // Show chat input area, floating button, and hide prompt area
@@ -6108,6 +6492,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         scrollToBottom();
         document.getElementById('messageInput').focus();
+        // Resolve promise for client-only path (backend path resolves in fetch .then/.catch)
+        if (!isBackendConversationId && window._loadChatResolve) {
+          window._loadChatResolve();
+          window._loadChatResolve = null;
+        }
+      }
+
+      // Returns a promise that resolves when messages have been applied (for backend chats). Client-only chats resolve immediately after applyLoadedMessages.
+      function loadChatPromise(chatId) {
+        loadChat(chatId);
+        return window._loadChatPromise || Promise.resolve();
       }
 
       // Update chat history UI
@@ -6180,7 +6575,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           // Remove stored messages for this chat
           try {
-            localStorage.removeItem('teacher_chat_messages_' + currentChatMenuId);
+            localStorage.removeItem(getChatMessagesKey(currentChatMenuId));
           } catch (e) {
             console.error('Failed to remove chat messages', e);
           }
@@ -6607,7 +7002,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         document.body.appendChild(modalContainer);
       }
 
-      function processPDFUpload() {
+      async function processPDFUpload() {
         const pdfInput = document.getElementById('pdfUpload');
         const context = document.getElementById('pdfContext').value.trim();
 
@@ -6632,46 +7027,85 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        // Add user message
-        addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
-
-        if (context) {
-          addUserMessage(`📝 Context: ${context}`);
-        }
-
-        // Show processing
+        // Show processing in current chat while we create a NEW backend conversation/thread
         showTypingIndicator();
 
-        setTimeout(() => {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('create_new_thread', 'true'); // always create a fresh thread/conversation
+
+          const response = await fetch('/api/rag/ingest', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include'
+          });
+
           removeTypingIndicator();
 
-          // Store PDF context in localStorage for future chats
-          const pdfData = {
-            name: file.name,
-            size: file.size,
-            context: context,
-            uploadedAt: new Date().toISOString()
-          };
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            addAssistantMessage('Error: ' + (err.error || 'PDF ingest failed'));
+            return;
+          }
 
-          let uploadedPDFs = JSON.parse(localStorage.getItem('teacher_uploaded_pdfs') || '[]');
-          uploadedPDFs.push(pdfData);
-          localStorage.setItem('teacher_uploaded_pdfs', JSON.stringify(uploadedPDFs));
+          const data = await response.json().catch(() => ({}));
+          let threadId = data.thread_id || null;
+          let conversationId = data.conversation_id != null ? data.conversation_id : null;
 
-          // AI response
-          addAssistantMessage(`✅ Successfully uploaded and processed "${file.name}"!<br><br>
-          <strong>PDF Details:</strong><br>
-          • Size: ${fileSizeMB} MB<br>
-          • Pages: Estimated ${Math.ceil(file.size / 50000)} pages<br>
-          • Context saved: ${context || 'No specific context provided'}<br><br>
-          I can now answer questions based on this material. Try asking something like:<br>
-          • "Summarize the key concepts from this PDF"<br>
-          • "Create quiz questions from chapter 3"<br>
-          • "Explain the main topics in simple terms"`);
+          // Persist new thread/conversation ids
+          if (threadId) {
+            window.currentRAGThreadId = threadId;
+            try { localStorage.setItem('teacher_currentRAGThreadId', threadId); } catch (e) {}
+          }
+          if (conversationId != null) {
+            window.currentRAGConversationId = conversationId;
+            try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
+          }
 
-          // Remove modal
+          // Close the upload modal
           const modal = document.querySelector('[onclick="processPDFUpload()"]')?.closest('.fixed');
           if (modal) modal.remove();
-        }, 2000);
+
+          // If we have a backend conversation, switch UI into that conversation and show messages there
+          if (conversationId != null && threadId) {
+            enableChatTab();
+            showChatTab();
+
+            try {
+              await loadChatHistoryFromBackend();
+              await loadChatPromise(conversationId);
+            } catch (e) {
+              console.error('Error switching to new RAG conversation', e);
+            }
+
+            // Now, inside the NEW conversation, show upload + context + success messages
+            addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
+            if (context) {
+              addUserMessage(`📝 Context: ${context}`);
+            }
+            addAssistantMessage(`✅ Successfully uploaded and processed "${file.name}"!<br><br>
+            <strong>PDF Details:</strong><br>
+            • Size: ${fileSizeMB} MB<br>
+            • Pages: Estimated ${Math.ceil(file.size / 50000)} pages<br>
+            • Context: ${context || 'No specific context provided'}<br><br>
+            I can now answer questions based on this material. Try asking something like:<br>
+            • "Summarize the key concepts from this PDF"<br>
+            • "Create quiz questions from chapter 3"<br>
+            • "Explain the main topics in simple terms"`);
+          } else {
+            // Fallback: no conversation id returned – keep behavior local to current chat
+            addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
+            if (context) {
+              addUserMessage(`📝 Context: ${context}`);
+            }
+            addAssistantMessage('✅ PDF uploaded. You can now ask questions about this document.');
+          }
+        } catch (e) {
+          console.error('RAG upload error', e);
+          removeTypingIndicator();
+          addAssistantMessage('Error: Failed to upload PDF. Please try again.');
+        }
       }
 
       // Attach file
@@ -6695,64 +7129,31 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         input.click();
       }
 
-      // Save Lesson from Chat: check lesson_finalized in DB; if true save to DB, else show "First create the lesson please"
+      // Save Lesson from Chat (prefer RAG finalized/in-progress lesson over local template so we save actual AI lesson)
       async function saveLessonFromChat() {
-        await saveFinalizedLessonToDatabaseIfReady();
-      }
+        let pdfData = currentPDFData;
+        let lessonContent = currentLessonMarkdown;
 
-      // Check lesson_finalized for current thread; if true save lesson to database, else show "First create the lesson please"
-      async function saveFinalizedLessonToDatabaseIfReady() {
-        const threadId = window.currentRAGThreadId || (typeof localStorage !== 'undefined' ? localStorage.getItem('teacher_currentRAGThreadId') : null);
-        if (!threadId || !threadId.trim()) {
-          showToast('First create the lesson please. Upload a PDF and create a lesson in chat, then say "finalize" before saving.', 'warning', 4000);
+        // When we have a RAG thread, always try to get the actual AI lesson from backend first (not the upload template)
+        if (window.currentRAGThreadId) {
+          try {
+            const res = await fetch('/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson', { method: 'GET', credentials: 'include' });
+            const data = await res.json().catch(function() { return {}; });
+            if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
+              lessonContent = (data.last_lesson_text || '').trim();
+              pdfData = pdfData || { title: (data.lesson_title || '').trim() || 'Lesson from RAG', subject: 'General', grade: 'General' };
+            }
+          } catch (e) {
+            console.warn('Failed to fetch RAG finalized lesson:', e);
+          }
+        }
+
+        if (!lessonContent) {
+          showToast('No lesson to save. Please upload a PDF, create a lesson, or finalize a lesson in chat first.', 'warning', 3000);
           return;
         }
-        try {
-          const res = await fetch('/api/rag/thread/' + encodeURIComponent(threadId) + '/finalized-lesson', {
-            method: 'GET',
-            credentials: 'include'
-          });
-          const data = await res.json().catch(function() { return {}; });
-          if (!res.ok) {
-            showToast(data.error || 'First create the lesson please.', 'warning', 3500);
-            return;
-          }
-          if (!data.lesson_finalized) {
-            showToast('First create the lesson please. Say "finalize" (or "finalize the lesson") in chat when your lesson is ready, then click Save Lesson.', 'warning', 4000);
-            return;
-          }
-          const lastLessonText = (data.last_lesson_text || '').trim();
-          if (!lastLessonText) {
-            showToast('No lesson content to save. Please finalize the lesson first.', 'warning', 3500);
-            return;
-          }
-          const lessonTitle = (data.lesson_title || '').trim() || ('Lesson from Chat - ' + new Date().toLocaleDateString());
-          const createRes = await fetch('/api/lessons/create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              title: lessonTitle,
-              content: lastLessonText,
-              focus_area: 'General',
-              grade_level: 'General',
-              summary: lessonTitle ? 'Lesson: ' + lessonTitle : '',
-              rag_thread_id: threadId || undefined
-            })
-          });
-          const createData = await createRes.json().catch(function() { return {}; });
-          if (!createRes.ok) {
-            showToast(createData.error || 'Failed to save lesson.', 'error', 3500);
-            return;
-          }
-          showToast('Lesson saved to My Lessons!', 'success', 3000);
-          currentPDFData = null;
-          currentLessonMarkdown = null;
-          if (typeof clearPDFDataFromStorage === 'function') clearPDFDataFromStorage();
-        } catch (e) {
-          console.error('saveFinalizedLessonToDatabaseIfReady:', e);
-          showToast('Error saving lesson. Please try again.', 'error', 3000);
-        }
+
+        saveLessonToMyLessons(pdfData, lessonContent);
       }
 
       // RAG chat: store thread_id and conversation_id from API for PDF context
@@ -6770,6 +7171,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const message = input.value.trim();
 
         if (!message) return;
+        if (window.teacherChatRequestInFlight) {
+          if (typeof showToast === 'function') showToast('Please wait for the current response.', 'warning', 2000);
+          return;
+        }
+
+        window.teacherChatRequestInFlight = true;
+        updateSendButton();
 
         // Auto-generate title from first message if needed
         const chat = chatHistory.find(c => c.id === currentChatId);
@@ -6825,6 +7233,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             window.currentRAGConversationId = data.conversation_id;
             try { localStorage.setItem('teacher_currentRAGConversationId', data.conversation_id); } catch (e) {}
           }
+          // Keep currentLessonMarkdown in sync with the actual AI lesson (so Save stores the real lesson, not the template)
+          if (window.currentRAGThreadId && aiResponse && (aiResponse.length > 200 || (aiResponse.indexOf('#') !== -1 && aiResponse.indexOf('\n\n') !== -1))) {
+            currentLessonMarkdown = aiResponse;
+          }
           var formatted = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
             ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
           addAssistantMessage(formatted);
@@ -6834,6 +7246,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             ? 'Error: Request timed out. Please try again.'
             : 'Error: ' + (e.message || 'Network error. Please try again.'));
         } finally {
+          window.teacherChatRequestInFlight = false;
+          updateSendButton();
           removeTypingIndicator();
         }
       }
@@ -6841,7 +7255,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Message persistence helpers
       function saveMessagesForChat(chatId, messages) {
         try {
-          localStorage.setItem('teacher_chat_messages_' + chatId, JSON.stringify(messages || []));
+          localStorage.setItem(getChatMessagesKey(chatId), JSON.stringify(messages || []));
         } catch (e) {
           console.error('Failed to save chat messages', e);
         }
@@ -6849,7 +7263,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       function loadMessagesForChat(chatId) {
         try {
-          return JSON.parse(localStorage.getItem('teacher_chat_messages_' + chatId) || '[]');
+          return JSON.parse(localStorage.getItem(getChatMessagesKey(chatId)) || '[]');
         } catch (e) {
           console.error('Failed to load chat messages', e);
           return [];
@@ -6862,48 +7276,43 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Messages NEVER shared, merged, or inferred across different conversation IDs
       // ════════════════════════════════════════════════════════════════════════════════
       function appendMessageToChat(chatId, role, content) {
-        // Load messages for THIS SPECIFIC chat only
-        // Storage key: localStorage['teacher_chat_messages_' + chatId]
-        const messages = loadMessagesForChat(chatId);
+        // We no longer store per-message history in localStorage – messages are
+        // persisted by the backend (ConversationModel via /api/rag/chat).
+        // This helper now only updates in-memory sidebar metadata so the UI
+        // stays responsive until the next backend refresh.
 
-        // Create message object
         const messageObj = { role: role, content: content, timestamp: new Date().toISOString() };
 
-        // Append to this chat's message array (isolated by chatId)
-        messages.push(messageObj);
-
-        // Persist back to storage (scoped to chatId, not shared with other chats)
-        saveMessagesForChat(chatId, messages);
-
-        // Update chat thread metadata (move to top and refresh timestamp)
         try {
-          const idx = chatHistory.findIndex(c => c.id === chatId);
+          const idx = chatHistory.findIndex(c => String(c.id) === String(chatId));
+          const plainText = (typeof content === 'string') ? content.replace(/<[^>]*>/g, '') : String(content);
+
           if (idx !== -1) {
-            // Update timestamp and last message snippet
             chatHistory[idx].timestamp = messageObj.timestamp;
-            const plainText = (typeof content === 'string') ? content.replace(/<[^>]*>/g, '') : String(content);
             chatHistory[idx].lastMessageSnippet = plainText.slice(0, 120);
 
-            // If the message is from the assistant and the chat is NOT currently open, increment unreadCount
             if (role === 'assistant' && currentChatId !== chatId) {
               chatHistory[idx].unreadCount = (chatHistory[idx].unreadCount || 0) + 1;
             } else if (currentChatId === chatId) {
-              // If we're in this chat, reset unread
               chatHistory[idx].unreadCount = 0;
             }
 
-            // Move to front
             const [chatObj] = chatHistory.splice(idx, 1);
             chatHistory.unshift(chatObj);
           } else {
-            // Create a new thread if missing (initialize snippet/unread)
-            const plainText = (typeof content === 'string') ? content.replace(/<[^>]*>/g, '') : String(content);
-            const newThread = { id: chatId, title: 'Conversation', timestamp: messageObj.timestamp, active: false, lastMessageSnippet: plainText.slice(0, 120), unreadCount: (role === 'assistant' && currentChatId !== chatId) ? 1 : 0 };
+            const newThread = {
+              id: chatId,
+              title: 'Conversation',
+              timestamp: messageObj.timestamp,
+              active: false,
+              lastMessageSnippet: plainText.slice(0, 120),
+              unreadCount: (role === 'assistant' && currentChatId !== chatId) ? 1 : 0
+            };
             chatHistory.unshift(newThread);
           }
-          saveChatThreads();
+
           updateChatHistoryUI();
-          renderChatSidebar(); // Re-render sidebar to show updated timestamp and position
+          renderChatSidebar();
         } catch (e) {
           console.error('Failed to update chat thread metadata', e);
         }
@@ -7292,9 +7701,93 @@ To continue your learning journey:
              </div>`;
       }
 
-      // Save lesson to My Lessons: same as Save Lesson button — checks lesson_finalized in DB, then saves to database or shows "First create the lesson please"
-      async function saveLessonToMyLessons() {
-        await saveFinalizedLessonToDatabaseIfReady();
+      // Save lesson to My Lessons (saves to database via API)
+      async function saveLessonToMyLessons(pdfDataOverride, lessonContentOverride) {
+        const pdfData = pdfDataOverride || currentPDFData;
+        const lessonContent = lessonContentOverride || currentLessonMarkdown;
+
+        if (!lessonContent) {
+          showToast('No lesson content to save. Please create a lesson first.', 'warning', 3000);
+          return;
+        }
+
+        const title = (pdfData && pdfData.title) ? String(pdfData.title).trim() : '';
+        const finalTitle = title || ('Lesson ' + new Date().toLocaleDateString());
+        const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
+        const gradeLevel = (pdfData && pdfData.grade) ? String(pdfData.grade) : (pdfData && pdfData.gradeLevel) || 'General';
+        const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
+
+        showToast('Saving lesson to My Lessons...', 'info', 2000);
+
+        try {
+          const response = await fetch('/api/lessons/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: finalTitle,
+              content: lessonContent,
+              focus_area: focusArea,
+              grade_level: gradeLevel,
+              summary: summary
+            })
+          });
+
+          const data = await response.json().catch(function() { return {}; });
+
+          if (response.ok && data && data.success) {
+            showToast(`✅ Lesson "${finalTitle}" saved to My Lessons!`, 'success', 3000);
+
+            // Display full lesson with formatting
+            const lessonHTML = `
+        <div style="background: #f9fafb; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb;">
+          <h3 style="color: #10b981; font-size: 1.2rem; margin: 0 0 1rem 0;"><strong>✅ Lesson Created & Saved!</strong></h3>
+          
+          <div style="background: white; padding: 1.25rem; border-radius: 0.5rem; max-height: 600px; overflow-y: auto; border: 1px solid #e5e7eb; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;">
+            ${(lessonContent || '').split('\n').map(line => {
+          if (line.startsWith('# ')) return `<h2 style="color: #0ea5e9; font-size: 1.4rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('# ', '')}</strong></h2>`;
+          if (line.startsWith('## ')) return `<h3 style="color: #0284c7; font-size: 1.15rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('## ', '')}</strong></h3>`;
+          if (line.startsWith('### ')) return `<h4 style="color: #06b6d4; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;"><strong>${line.replace('### ', '')}</strong></h4>`;
+          if (line.startsWith('- ')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.25rem 0;">• ${line.replace('- ', '')}</div>`;
+          if (line.startsWith('  - ')) return `<div style="margin-left: 2.5rem; color: #6b7280; margin: 0.25rem 0;">◦ ${line.replace('  - ', '')}</div>`;
+          if (line.startsWith('    - ')) return `<div style="margin-left: 3.75rem; color: #9ca3af; font-size: 0.9rem; margin: 0.25rem 0;">▪ ${line.replace('    - ', '')}</div>`;
+          if (line.startsWith('- **')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.5rem 0;"><strong>• ${line.replace('- **', '').replace(':**', ':')}</strong></div>`;
+          if (line.startsWith('**') && line.endsWith('**')) return `<div style="color: #1f2937; margin: 0.5rem 0;"><strong>${line}</strong></div>`;
+          if (line.trim() === '') return '<div style="height: 0.5rem;"></div>';
+          return `<div style="color: #374151; margin: 0.3rem 0;">${line}</div>`;
+        }).join('')}
+          </div>
+          
+          <div style="background: #f0fdf4; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #10b981; margin-bottom: 1rem;">
+            <p style="color: #166534; margin: 0;"><strong>✅ Your lesson "${finalTitle}" has been saved to <strong>My Lessons</strong>!</strong></p>
+          </div>
+          
+          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <button onclick="showMyLessonsPage()" 
+                    style="background: #0ea5e9; color: white; padding: 0.75rem 1.25rem; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">
+              <i class="fas fa-book" style="margin-right: 0.5rem;"></i>View My Lessons
+            </button>
+            <button onclick="showCreateLessonWizard()" 
+                    style="background: #f3f4f6; color: #1f2937; padding: 0.75rem 1.25rem; border: 1px solid #d1d5db; border-radius: 0.5rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">
+              <i class="fas fa-plus" style="margin-right: 0.5rem;"></i>Create Another
+            </button>
+          </div>
+        </div>
+      `;
+
+            addAssistantMessage(lessonHTML);
+
+            // Clear the current PDF data (both memory and storage)
+            currentPDFData = null;
+            currentLessonMarkdown = null;
+            clearPDFDataFromStorage();
+          } else {
+            showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
+          }
+        } catch (e) {
+          console.error('Save lesson error:', e);
+          showToast('Failed to save lesson. Please try again.', 'error', 4000);
+        }
       }
 
       // Edit lesson content (placeholder)
@@ -7473,13 +7966,51 @@ To continue your learning journey:
           'For enterprise accounts, additional compliance features are available.');
       }
 
-      // Logout: call logout route then redirect to login page
-      function logout() {
-        if (confirm('Are you sure you want to logout?')) {
+      // Logout
+      async function logout() {
+        if (!confirm('Are you sure you want to logout?')) return;
+
+        try {
+          // Call backend logout API so server session is cleared
+          const response = await fetch('/auth/logout', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'include'
+          });
+
+          // If backend returns a redirect URL, prefer it
+          if (response.ok) {
+            try {
+              const data = await response.json();
+              if (data && data.redirect_url) {
+                window.location.href = data.redirect_url;
+                return;
+              }
+            } catch (e) {
+              // Ignore JSON parse errors and fall through
+            }
+          }
+        } catch (e) {
+          console.error('Logout API error:', e);
+        }
+
+        // Always clear client-side auth/local state and go to login
+        try {
+          if (window.auth && typeof auth.logout === 'function') {
+            // This will clear localStorage and redirect to /auth/login
+            auth.logout();
+            return;
+          }
+        } catch (e) {
+          console.error('Client auth logout error:', e);
+        }
+
+        // Final fallback redirect
+        try {
           localStorage.removeItem('teacher_custom_prompt');
           localStorage.removeItem('teacher_prompt_tone');
-          window.location.href = '/auth/logout';
-        }
+        } catch (e) {}
+        window.location.href = '/auth/login';
       }
 
       // ===== TOAST NOTIFICATION SYSTEM =====
@@ -7536,6 +8067,7 @@ To continue your learning journey:
           const createLessonModal = document.getElementById('createLessonModal');
           const saveTemplateModal = document.getElementById('saveTemplateModal');
           const testPromptModal = document.getElementById('testPromptModal');
+          const ragPromptModal = document.getElementById('ragPromptModal');
 
           if (viewLessonModal) {
             viewLessonModal.classList.add('hidden');
@@ -7545,6 +8077,14 @@ To continue your learning journey:
           if (createLessonModal) createLessonModal.classList.add('hidden');
           if (saveTemplateModal) saveTemplateModal.classList.add('hidden');
           if (testPromptModal) testPromptModal.classList.add('hidden');
+          if (ragPromptModal) {
+            ragPromptModal.classList.add('hidden');
+            ragPromptModal.style.display = '';
+            ragPromptModal.style.visibility = '';
+            ragPromptModal.style.opacity = '';
+            ragPromptModal.style.pointerEvents = '';
+            ragPromptModal.style.zIndex = '';
+          }
 
           window.currentViewLessonId = null;
         } catch (e) {
@@ -7583,51 +8123,63 @@ To continue your learning journey:
         if (chatInputArea) chatInputArea.style.display = 'block';
         if (floatingBtn) floatingBtn.classList.remove('hidden-fab');
         if (chatArea) chatArea.style.display = 'block';
-
         // Hide floating menu
         document.getElementById('floatingMenu').classList.add('hidden-menu');
         // Hide prompt area if visible
         const promptArea = document.getElementById('promptArea');
         if (promptArea) promptArea.style.display = 'none';
 
-        // Clear messages and show welcome
-        const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = `
-        <div class="chat-message assistant animate-fade-in">
-          <div class="chat-message-avatar">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
-          </div>
-          <div class="chat-message-content">
-            <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Teacher Mode!</h4>
-            <p class="text-surface-700">As a teacher, you can:</p>
-            <ul class="mt-2 space-y-1 text-surface-600">
-              <li class="flex items-start gap-2">
-                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                <span>Create and manage lessons</span>
-              </li>
-              <li class="flex items-start gap-2">
-                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                <span>Upload PDF materials for RAG</span>
-              </li>
-              <li class="flex items-start gap-2">
-                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                <span>Generate AI-powered lesson plans</span>
-              </li>
-              <li class="flex items-start gap-2">
-                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                <span>Chat with AI teaching assistant</span>
-              </li>
-            </ul>
-            <div class="mt-4 p-3 bg-primary-50 rounded-lg border border-primary-100">
-              <p class="text-primary-700 text-sm">
-                <i class="fas fa-lightbulb mr-2"></i>
-                <strong>Tip:</strong> Use the floating menu to create lessons, download chat, or reset the conversation.
-              </p>
+        // If we already have chat history, reopen the last/active conversation instead of wiping it
+        if (Array.isArray(chatHistory) && chatHistory.length > 0) {
+          // Prefer currentChatId if set, otherwise use most recent by timestamp
+          let targetChatId = currentChatId;
+          if (!targetChatId) {
+            const mostRecentChat = chatHistory.reduce((latest, chat) => {
+              return new Date(chat.timestamp) > new Date(latest.timestamp) ? chat : latest;
+            });
+            targetChatId = mostRecentChat.id;
+          }
+          loadChat(targetChatId);
+        } else {
+          // No saved chats yet – show the welcome message
+          const chatMessages = document.getElementById('chatMessages');
+          chatMessages.innerHTML = `
+          <div class="chat-message assistant animate-fade-in">
+            <div class="chat-message-avatar">
+              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+            </div>
+            <div class="chat-message-content">
+              <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Teacher Mode!</h4>
+              <p class="text-surface-700">As a teacher, you can:</p>
+              <ul class="mt-2 space-y-1 text-surface-600">
+                <li class="flex items-start gap-2">
+                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                  <span>Create and manage lessons</span>
+                </li>
+                <li class="flex items-start gap-2">
+                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                  <span>Upload PDF materials for RAG</span>
+                </li>
+                <li class="flex items-start gap-2">
+                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                  <span>Generate AI-powered lesson plans</span>
+                </li>
+                <li class="flex items-start gap-2">
+                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                  <span>Chat with AI teaching assistant</span>
+                </li>
+              </ul>
+              <div class="mt-4 p-3 bg-primary-50 rounded-lg border border-primary-100">
+                <p class="text-primary-700 text-sm">
+                  <i class="fas fa-lightbulb mr-2"></i>
+                  <strong>Tip:</strong> Use the floating menu to create lessons, download chat, or reset the conversation.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      `;
-        scrollToBottom();
+        `;
+          scrollToBottom();
+        }
       }
 
       // Enable chat tab after lesson creation
@@ -7670,59 +8222,42 @@ To continue your learning journey:
         }
       });
 
-      // Show Prompt Tab (replaces Set Prompt modal)
-      // Open Set Prompt Modal (converted from tab to popup)
-      function openSetPromptModal() {
-        // Close OTHER modals but NOT setPromptModal itself
+      // Simple RAG prompt modal (same behavior as legacy chat.html)
+      function showRAGPromptModal() {
+        const modal = document.getElementById('ragPromptModal');
+        if (!modal) return;
+        // Close other large modals so prompt is focused
         try {
           const viewLessonModal = document.getElementById('viewLessonModal');
           const createLessonModal = document.getElementById('createLessonModal');
-          const saveTemplateModal = document.getElementById('saveTemplateModal');
-          const testPromptModal = document.getElementById('testPromptModal');
-
           if (viewLessonModal) viewLessonModal.classList.add('hidden');
           if (createLessonModal) createLessonModal.classList.add('hidden');
-          if (saveTemplateModal) saveTemplateModal.classList.add('hidden');
-          if (testPromptModal) testPromptModal.classList.add('hidden');
         } catch (e) {
-          console.error('Error closing other modals:', e);
+          console.error('Error closing other modals before opening RAG prompt', e);
         }
-
-        // Now show THIS modal
-        const modal = document.getElementById('setPromptModal');
-        if (modal) {
-          modal.classList.remove('hidden');
-          // Load current prompt into the modal
-          loadCurrentPrompt();
-        }
+        // Move modal to end of body to avoid stacking-context issues (like viewLessonModal)
+        try {
+          document.body.appendChild(modal);
+        } catch (e) {}
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+        modal.style.visibility = 'visible';
+        modal.style.opacity = '1';
+        modal.style.pointerEvents = 'auto';
+        modal.style.zIndex = '99999';
+        if (typeof loadRAGPrompt === 'function') loadRAGPrompt();
       }
 
-      function showPromptTab() {
-        // Deactivate all tabs, then activate prompt tab
-        deactivateAllTabs();
-        const promptTabBtn = document.getElementById('promptTabBtn');
-        if (promptTabBtn) promptTabBtn.classList.add('active-tab');
-
-        // Hide chat input area and floating button
-        const chatInputArea = document.getElementById('chatInputArea');
-        const floatingBtn = document.getElementById('floatingActionBtn');
-        if (chatInputArea) chatInputArea.style.display = 'none';
-        if (floatingBtn) floatingBtn.classList.add('hidden-fab');
-
-        // Hide floating menu
-        const floatingMenu = document.getElementById('floatingMenu');
-        if (floatingMenu) floatingMenu.classList.add('hidden-menu');
-
-        // Show prompt area and hide chat area content
-        const promptArea = document.getElementById('promptArea');
-        const chatArea = document.getElementById('chatArea');
-        if (chatArea) chatArea.style.display = 'none';
-        if (promptArea) promptArea.style.display = 'block';
-
-        // Scroll to top of prompt area
-        if (promptArea) promptArea.scrollIntoView({ behavior: 'smooth' });
-        // Load prompt from backend so tab shows server state
-        loadCurrentPrompt();
+      function closeRAGPromptModal() {
+        const modal = document.getElementById('ragPromptModal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.style.display = '';
+          modal.style.visibility = '';
+          modal.style.opacity = '';
+          modal.style.pointerEvents = '';
+          modal.style.zIndex = '';
+        }
       }
 
       // Download Chat (from stored messages for current chat)
@@ -7763,7 +8298,9 @@ To continue your learning journey:
 
           // Remove stored messages for this chat
           try {
-            localStorage.removeItem('teacher_chat_messages_' + (currentChatId || 'chat1'));
+            if (currentChatId) {
+              localStorage.removeItem(getChatMessagesKey(currentChatId));
+            }
           } catch (e) {
             console.error('Failed to clear stored chat messages', e);
           }
@@ -7818,24 +8355,80 @@ To continue your learning journey:
         });
       }
 
-      // Clear prompt (UI + backend DELETE /api/rag/prompt + localStorage) — same as chat.html "Delete Prompt"
-      async function clearPrompt() {
-        if (!confirm('Are you sure you want to delete the custom prompt? This will remove it from all your threads. The default prompt will be used.')) return;
-        const textarea = document.getElementById('customPrompt');
-        if (textarea) {
-          textarea.value = '';
-          if (typeof updateCharCount === 'function') updateCharCount(textarea);
+      // === Legacy-style global RAG prompt API bindings (match chat.html) ===
+      async function loadRAGPrompt() {
+        try {
+          const response = await fetch('/api/rag/prompt', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const textarea = document.getElementById('ragPromptTextarea');
+            if (textarea) {
+              textarea.value = (data.success && data.prompt) ? data.prompt : '';
+            }
+          } else {
+            console.error('Failed to load prompt');
+          }
+        } catch (error) {
+          console.error('Error loading prompt:', error);
+          showToast('Failed to load prompt', 'error');
+        }
+      }
+
+      async function saveRAGPrompt() {
+        const textarea = document.getElementById('ragPromptTextarea');
+        if (!textarea) {
+          showToast('Prompt textarea not found', 'error');
+          return;
+        }
+        const prompt = textarea.value.trim();
+        if (!prompt) {
+          showToast('Please enter a prompt', 'warning');
+          return;
         }
         try {
-          const response = await fetch('/api/rag/prompt', { method: 'DELETE', credentials: 'include' });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) showToast(data.error || 'Failed to clear prompt on server', 'error', 4000);
-          else showToast('Prompt cleared', 'info');
-        } catch (e) {
-          console.error('Clear prompt error:', e);
-          showToast('Cleared locally; could not reach server.', 'warning', 4000);
+          const response = await fetch('/api/rag/prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ prompt: prompt })
+          });
+          const data = await response.json();
+          if (response.ok && data.success) {
+            showToast('Prompt saved successfully! It will apply to all your threads.', 'success');
+            closeRAGPromptModal();
+          } else {
+            throw new Error(data.error || 'Failed to save prompt');
+          }
+        } catch (error) {
+          console.error('Error saving prompt:', error);
+          showToast('Failed to save prompt: ' + error.message, 'error');
         }
-        localStorage.removeItem('teacher_custom_prompt');
+      }
+
+      async function deleteRAGPrompt() {
+        if (!confirm('Are you sure you want to delete the custom prompt? This will remove it from all your threads. The default prompt will be used.')) {
+          return;
+        }
+        try {
+          const response = await fetch('/api/rag/prompt', {
+            method: 'DELETE',
+            credentials: 'include'
+          });
+          const data = await response.json();
+          if (response.ok && data.success) {
+            const textarea = document.getElementById('ragPromptTextarea');
+            if (textarea) textarea.value = '';
+            showToast('Prompt deleted successfully.', 'success');
+          } else {
+            throw new Error(data.error || 'Failed to delete prompt');
+          }
+        } catch (error) {
+          console.error('Error deleting prompt:', error);
+          showToast('Failed to delete prompt: ' + error.message, 'error');
+        }
       }
 
       // Generate prompt with AI
@@ -8115,9 +8708,9 @@ To continue your learning journey:
             return;
           }
           localStorage.setItem('teacher_custom_prompt', prompt);
-          if (typeof selectedTone !== 'undefined') localStorage.setItem('teacher_prompt_tone', selectedTone);
-          if (textarea && typeof updateCharCount === 'function') updateCharCount(textarea);
-          showToast('Prompt saved. It will apply to all your threads.', 'success', 3000);
+          localStorage.setItem('teacher_prompt_tone', selectedTone);
+          if (textarea) updateCharCount(textarea);
+          showToast('✅ Custom prompt saved. It will apply to all your RAG chats.', 'success', 3000);
           closeSetPromptModal();
         } catch (e) {
           console.error('Save prompt error:', e);
@@ -8133,17 +8726,19 @@ To continue your learning journey:
           const response = await fetch('/api/rag/prompt', { method: 'GET', credentials: 'include' });
           const data = await response.json().catch(() => ({}));
           const prompt = (response.ok && data.prompt != null) ? (data.prompt || '') : (localStorage.getItem('teacher_custom_prompt') || '');
+          const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
           textarea.value = prompt;
-          if (typeof updateCharCount === 'function') updateCharCount(textarea);
-          if (typeof selectTone === 'function') selectTone(localStorage.getItem('teacher_prompt_tone') || 'professional');
+          selectTone(savedTone);
+          updateCharCount(textarea);
           localStorage.setItem('teacher_custom_prompt', prompt);
           if (response.ok && data.prompt != null) showToast('Prompt loaded from server', 'info');
         } catch (e) {
           console.error('Load prompt error:', e);
           const savedPrompt = localStorage.getItem('teacher_custom_prompt') || '';
+          const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
           textarea.value = savedPrompt;
-          if (typeof updateCharCount === 'function') updateCharCount(textarea);
-          if (typeof selectTone === 'function') selectTone(localStorage.getItem('teacher_prompt_tone') || 'professional');
+          selectTone(savedTone);
+          updateCharCount(textarea);
           showToast('Using locally saved prompt', 'info');
         }
       }
@@ -8178,7 +8773,76 @@ To continue your learning journey:
           skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
         }
       };
+
+      // Simple RAG Prompt modal - duplicate def removed; uses showRAGPromptModal above
+
+      function closeRAGPromptModal() {
+        const modal = document.getElementById('ragPromptModal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.style.display = '';
+          modal.style.visibility = '';
+          modal.style.opacity = '';
+          modal.style.pointerEvents = '';
+          modal.style.zIndex = '';
+        }
+      }
     </script>
+
+  <!-- Simple RAG Prompt Modal (legacy-style Set Prompt) -->
+  <div id="ragPromptModal"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[120] hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 rounded-t-lg">
+        <h3 class="text-xl font-semibold text-white">Set Custom System Prompt</h3>
+        <p class="text-primary-100 text-sm mt-1">
+          Customize how the AI assistant behaves. This prompt will apply to all your threads.
+        </p>
+      </div>
+      <div class="p-6 flex-1 overflow-y-auto">
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-semibold mb-2">
+            Custom Prompt
+          </label>
+          <textarea id="ragPromptTextarea"
+            class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
+            placeholder="Enter your custom system prompt here. This will be combined with the default RAG instructions..."></textarea>
+          <p class="text-xs text-gray-500 mt-2">
+            <i class="fas fa-info-circle mr-1"></i>
+            Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt will
+            apply to all your threads.
+          </p>
+        </div>
+        <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p class="text-xs text-blue-800 font-semibold mb-1">Note:</p>
+          <p class="text-xs text-blue-700">
+            The default RAG instructions (for PDF queries) will always be included along with your custom prompt. This
+            prompt applies to all your threads, not just the current one.
+          </p>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex gap-3">
+        <button onclick="loadRAGPrompt()"
+          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+          Load Current
+        </button>
+        <button onclick="deleteRAGPrompt()"
+          class="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50">
+          Delete Prompt
+        </button>
+        <div class="flex-1"></div>
+        <button onclick="closeRAGPromptModal()"
+          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+          Cancel
+        </button>
+        <button onclick="saveRAGPrompt()"
+          class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+          Save Prompt
+        </button>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>
