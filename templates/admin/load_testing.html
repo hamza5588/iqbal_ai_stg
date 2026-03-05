@@ -543,10 +543,12 @@
     </div>
 
     <script>
+        const defaultTargetUrl = window.location.origin;
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             // Load settings
-            const savedUrl = localStorage.getItem('loadTestTargetUrl') || 'http://localhost:5000';
+            const savedUrl = localStorage.getItem('loadTestTargetUrl') || defaultTargetUrl;
             const savedKey = localStorage.getItem('loadTestApiKey') || '';
 
             document.getElementById('global-target-url').value = savedUrl;
@@ -592,7 +594,7 @@
 
         function getTargetConfig() {
             return {
-                url: localStorage.getItem('loadTestTargetUrl') || 'http://localhost:5000',
+                url: localStorage.getItem('loadTestTargetUrl') || defaultTargetUrl,
                 key: localStorage.getItem('loadTestApiKey') || ''
             };
         }
