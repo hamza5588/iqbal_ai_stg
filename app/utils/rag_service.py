@@ -2211,7 +2211,8 @@ def chat_node(state: ChatState, config=None):
                 if last_user_msg:
                     finalization_keywords = [
                         # direct "final" / "done" intents
-                        'finalize', 'finalise', 'final', 'this is final', 'this is the final',
+                        'finalize', 'finalise', 'finalize the lesson', 'finalise the lesson',
+                        'final', 'this is final', 'this is the final',
                         'lesson final', 'lesson finalized',
                         'i am satisfied', "i'm satisfied", 'i am done', "i'm done",
                         'complete the lesson', 'finish the lesson', 'save the lesson',

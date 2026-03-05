@@ -187,7 +187,7 @@ class LessonModel:
                      focus_area: str, grade_level: str, content: str, file_name: str = None,
                      is_public: bool = True, parent_lesson_id: int = None, draft_content: str = None,
                      lesson_id: str = None, version_number: int = 1, parent_version_id: int = None,
-                     original_content: str = None, status: str = "finalized") -> int:
+                     original_content: str = None, status: str = "finalized", rag_thread_id: str = None) -> int:
         """Create a new lesson in the database"""
         try:
             logger.info(f"Saving lesson to database with title: '{title}'")
@@ -236,7 +236,8 @@ class LessonModel:
                         version_number=version_number,
                         parent_version_id=parent_version_id,
                         original_content=original_content,
-                        status=status
+                        status=status,
+                        rag_thread_id=rag_thread_id,
                     )
                     db.add(lesson)
                     db.commit()
@@ -410,7 +411,7 @@ class LessonModel:
 
     def update_lesson(self, title: str = None, summary: str = None, learning_objectives: str = None,
                      focus_area: str = None, grade_level: str = None, content: str = None,
-                     is_public: bool = None, detailed_answer: str = None) -> bool:
+                     is_public: bool = None, detailed_answer: str = None, rag_thread_id: str = None) -> bool:
         """Update lesson details"""
         try:
             db = get_db()
@@ -434,6 +435,8 @@ class LessonModel:
                 lesson.detailed_answer = detailed_answer
             if is_public is not None:
                 lesson.is_public = is_public
+            if rag_thread_id is not None:
+                lesson.rag_thread_id = rag_thread_id
             
             lesson.updated_at = datetime.utcnow()
             db.commit()
@@ -658,8 +661,8 @@ class LessonModel:
             actual_original_id = original_lesson.get('parent_lesson_id') or original_lesson_id
             actual_original_lesson = LessonModel.get_lesson_by_id(actual_original_id)
             
-            # Create new version with draft content as the main content
-            # The new version should start with empty draft content
+            # Create new version with draft content as the main content; copy RAG thread for "Ask Question"
+            rag_thread_id = original_lesson.get('rag_thread_id') or actual_original_lesson.get('rag_thread_id')
             new_lesson_id = LessonModel.create_lesson(
                 teacher_id=teacher_id,
                 title=title,
@@ -675,7 +678,8 @@ class LessonModel:
                 lesson_id=actual_original_lesson['lesson_id'],  # Use same lesson_id as root
                 parent_version_id=original_lesson_id,  # Set parent version (the one we're creating from)
                 original_content=draft_content,  # Draft content becomes original content for new version
-                status="finalized"
+                status="finalized",
+                rag_thread_id=rag_thread_id,
             )
             # Mark the source version as having a child version
             try:
@@ -1645,6 +1649,62 @@ class ConversationModel:
                 db.commit()
         except Exception as e:
             logger.error(f"Error deleting conversation: {str(e)}")
+            db.rollback()
+            raise
+
+    def duplicate_conversation(self, conversation_id: int) -> Optional[int]:
+        """
+        Duplicate a conversation and all of its messages for the current user.
+
+        Returns the new conversation ID, or None if the source conversation
+        does not belong to this user.
+        """
+        try:
+            db = get_db()
+
+            # Ensure the conversation belongs to this user
+            source = db.query(DBConversation).filter(
+                and_(DBConversation.id == conversation_id, DBConversation.user_id == self.user_id)
+            ).first()
+            if not source:
+                logger.warning(
+                    "User %s attempted to duplicate conversation %s without ownership",
+                    self.user_id,
+                    conversation_id,
+                )
+                return None
+
+            # Create the new conversation with a copied title
+            new_title = f"{source.title} (Copy)"
+            new_conv = DBConversation(
+                user_id=self.user_id,
+                title=new_title,
+                is_active=source.is_active,
+            )
+            db.add(new_conv)
+            db.flush()  # Ensure new_conv.id is available
+
+            # Copy all chat history rows
+            messages = (
+                db.query(DBChatHistory)
+                .filter(DBChatHistory.conversation_id == source.id)
+                .order_by(DBChatHistory.created_at.asc())
+                .all()
+            )
+            for msg in messages:
+                cloned = DBChatHistory(
+                    conversation_id=new_conv.id,
+                    message=msg.message,
+                    role=msg.role,
+                    created_at=msg.created_at,
+                )
+                db.add(cloned)
+
+            db.commit()
+            db.refresh(new_conv)
+            return new_conv.id
+        except Exception as e:
+            logger.error(f"Error duplicating conversation: {str(e)}")
             db.rollback()
             raise
 

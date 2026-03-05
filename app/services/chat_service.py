@@ -451,6 +451,23 @@ class ChatService:
             logger.error(f"Error retrieving conversation details: {str(e)}")
             raise
 
+    def duplicate_conversation(self, conversation_id: int) -> int:
+        """
+        Duplicate a conversation (including all of its messages) for the current user.
+
+        Returns the new conversation ID.
+        """
+        try:
+            new_id = self.conversation_model.duplicate_conversation(conversation_id)
+            if new_id is None:
+                raise ValueError(
+                    f"Conversation {conversation_id} not found or access denied for user {self.user_id}"
+                )
+            return new_id
+        except Exception as e:
+            logger.error(f"Error duplicating conversation: {str(e)}")
+            raise
+
     def clean_old_conversations(self, max_conversations: int = 50) -> None:
         """Clean up old conversations beyond the maximum limit"""
         try:

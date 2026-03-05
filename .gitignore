@@ -43,3 +43,8 @@ __pycache__
 .cursor
 .pytest_cache
 .vscode
+chroma_data
+chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/data_level0.bin
+chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/header.bin
+chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/length.bin
+chroma_data/5a5b0775-c489-47ec-bed4-97e8eaf8977a/link_lists.bin

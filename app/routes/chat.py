@@ -373,6 +373,29 @@ def delete_all_conversations():
         logger.error(f"Error deleting all conversations: {str(e)}")
         return jsonify({'error': 'Failed to delete conversations'}), 500
 
+
+@bp.route('/duplicate_conversation/<int:conversation_id>', methods=['POST'])
+@login_required
+def duplicate_conversation(conversation_id):
+    """
+    Duplicate a conversation and all of its messages for the current user.
+    """
+    try:
+        chat_service = ChatService(session['user_id'], session['groq_api_key'])
+        new_id = chat_service.duplicate_conversation(conversation_id)
+        conversation = chat_service.get_conversation_details(new_id)
+        return jsonify({
+            'conversation_id': new_id,
+            'conversation': conversation,
+        })
+    except ValueError as ve:
+        logger.warning(f"Duplicate conversation failed: {ve}")
+        return jsonify({'error': str(ve)}), 404
+    except Exception as e:
+        logger.error(f"Error duplicating conversation: {str(e)}")
+        return jsonify({'error': 'Failed to duplicate conversation'}), 500
+
+
 @bp.route('/update_conversation_title/<int:conversation_id>', methods=['PUT'])
 @login_required
 def update_conversation_title(conversation_id):

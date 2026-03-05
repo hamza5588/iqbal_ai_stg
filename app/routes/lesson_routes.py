@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session, send_file, after_this_re
 from app.models.models import UserModel, LessonModel
 from app.models.database_models import Lesson as DBLesson
 from app.services.lesson_service import LessonService
+from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 from app.utils.decorators import login_required, teacher_required, student_required
 from app.utils.db import get_db
 from werkzeug.datastructures import FileStorage
@@ -130,6 +131,11 @@ def create_lesson():
                 'image_extraction': image_extraction
             }
             
+            # Keep a copy of file bytes for RAG ingest (PDF only) after lesson is created
+            file.seek(0)
+            file_bytes_for_rag = file.read()
+            file.seek(0)
+            
             # Process the file first to create vector store
             process_result = lesson_service.process_file(file, lesson_details)
             
@@ -156,6 +162,27 @@ def create_lesson():
             
             if not lesson_id:
                 return jsonify({'error': 'Failed to save lesson to database'}), 500
+            
+            # Store RAG thread id when lesson is first saved (PDF only); then ingest for "Ask Question"
+            teacher_id = session['user_id']
+            if file_ext == '.pdf':
+                rag_thread_id = f"user_{teacher_id}_lesson_{lesson_id}"
+                lesson_model = LessonModel(lesson_id)
+                lesson_model.update_lesson(rag_thread_id=rag_thread_id)
+                logger.info("Lesson %s linked to RAG thread %s for student Q&A", lesson_id, rag_thread_id)
+                if file_bytes_for_rag:
+                    try:
+                        from app.utils.rag_service import ingest_pdf
+                        ingest_result = ingest_pdf(
+                            file_bytes_for_rag,
+                            rag_thread_id,
+                            filename=file.filename,
+                            user_id=teacher_id,
+                        )
+                        if ingest_result.get('error'):
+                            logger.warning("Lesson RAG ingest failed (non-fatal): %s", ingest_result.get('error'))
+                    except Exception as rag_e:
+                        logger.warning("Lesson RAG ingest failed (non-fatal): %s", rag_e)
             
             # Get the greeting message from process_result (no LLM call was made)
             greeting_message = process_result.get('lesson', 'Your file has been uploaded successfully.')
@@ -247,6 +274,7 @@ def create_lesson_simple():
         focus_area = data.get('focus_area', 'General')
         grade_level = data.get('grade_level', 'General')
         summary = data.get('summary', '') or data.get('additional_notes', '')
+        rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip() or None
         
         if not title:
             return jsonify({'error': 'Title is required'}), 400
@@ -268,7 +296,8 @@ def create_lesson_simple():
             grade_level=grade_level,
             focus_area=focus_area,
             is_public=True,
-            status='finalized'
+            status='finalized',
+            rag_thread_id=rag_thread_id
         )
         
         if not lesson_id:
@@ -902,62 +931,66 @@ def download_lesson_pdf(lesson_id):
 @bp.route('/ask_question', methods=['POST'])
 @student_required
 def ask_lesson_question():
-    data = request.get_json()
+    """
+    Student Q&A on a lesson (Approach 3: stateless flag).
+
+    Request body: lesson_id, question, allow_rag (optional, default False).
+    When allow_rag=False and lesson doesn't cover the question but has a PDF,
+    returns status=needs_rag_confirmation. Frontend shows Yes/No; on Yes,
+    re-send the same question with allow_rag=true.
+    """
+    data = request.get_json() or {}
     lesson_id = data.get('lesson_id')
-    question = data.get('question')
+    question = (data.get('question') or '').strip()
+    allow_rag = data.get('allow_rag', False)
     if not lesson_id or not question:
         return jsonify({'error': 'lesson_id and question are required'}), 400
-    
-    # vLLM doesn't require an API key, use empty string as placeholder
-    api_key = session.get('groq_api_key', '')
-    
-    service = LessonService(api_key=api_key)
-    
-    # Get conversation history for context
+
     from app.models.models import LessonChatHistory, LessonFAQ
+
     user_id = session['user_id']
-    conversation_history = LessonChatHistory.get_lesson_chat_history(lesson_id, user_id)
-    
-    # Use the new query analysis system for better responses
-    query_analysis = service.analyze_user_query(question)
-    logger.info(f"Lesson question analysis: {query_analysis}")
-    
-    # Try to answer using the specific lesson first with conversation context
-    result = service.answer_lesson_question(lesson_id, question, conversation_history)
-    
-    # If the specific lesson doesn't have good results, try general search with context
-    if 'error' in result or not result.get('answer') or len(result.get('answer', '')) < 50:
-        logger.info("Specific lesson search didn't provide good results, trying general search")
-        
-        # Get available lesson IDs for broader context
-        available_lessons = service._get_available_lesson_ids()
-        if available_lessons:
-            general_result = service.answer_general_question(question, available_lessons, conversation_history)
-            if general_result.get('answer') and len(general_result.get('answer', '')) > 50:
-                result = general_result
-                logger.info("Using general search result for better answer")
-    
-    if 'error' in result:
-        return jsonify({'error': result['error']}), 400
-    
+
+    result = invoke_lesson_qa(
+        lesson_id=int(lesson_id),
+        question=question,
+        user_id=int(user_id),
+        allow_rag=bool(allow_rag),
+    )
+
+    # Frontend shows Yes/No; on Yes, re-send with allow_rag=true
+    if result.get('status') == 'needs_rag_confirmation':
+        return jsonify({
+            'status': 'needs_rag_confirmation',
+            'permission_request': result.get('permission_request'),
+        })
+
+    answer = (result.get('answer') or '').strip()
+    if not answer:
+        return jsonify({'error': 'Failed to generate an answer.'}), 500
+
+    # Canonicalize question for history & FAQ logging using existing service logic
+    api_key = session.get('groq_api_key', '')
+    service = LessonService(api_key=api_key)
+    canonical = service.canonicalize_question(int(lesson_id), question) or question
+
     # Save the Q&A to lesson chat history
-    canonical = result.get('canonical_question', question)
-    LessonChatHistory.save_qa(lesson_id, user_id, question, result['answer'], canonical_question=canonical)
-    
+    LessonChatHistory.save_qa(int(lesson_id), user_id, question, answer, canonical_question=canonical)
+
     # Log the question to FAQ table for teacher visibility
     try:
-        LessonFAQ.log_question(lesson_id, canonical)
+        LessonFAQ.log_question(int(lesson_id), canonical)
         logger.info(f"Question logged to FAQ table for lesson {lesson_id}: {canonical}")
     except Exception as e:
         logger.error(f"Error logging question to FAQ table: {str(e)}")
-    
+
     return jsonify({
-        'answer': result['answer'], 
+        'status': 'completed',
+        'answer': answer,
         'canonical_question': canonical,
-        'source': result.get('source', 'unknown'),
-        'confidence': result.get('confidence', 0.8),
-        'query_analysis': query_analysis
+        'source': 'lesson_or_rag_graph',
+        'confidence': 0.9,
     })
+
 
 @bp.route('/lesson_chat_history/<int:lesson_id>', methods=['GET'])
 @login_required
@@ -1652,6 +1685,10 @@ def finalize_lesson_version(lesson_id):
         # Update the new lesson with the final content in database
         new_lesson_model = LessonModel(new_lesson_id)
         new_lesson_model.update_lesson(content=draft_content)
+        # Copy RAG thread from the lesson being finalized so "Ask Question" can use the uploaded PDF
+        if lesson.get('rag_thread_id'):
+            new_lesson_model.update_lesson(rag_thread_id=lesson['rag_thread_id'])
+            logger.info("Copied rag_thread_id %s to finalized lesson %s", lesson['rag_thread_id'], new_lesson_id)
         
         # Delete FAISS index after storing in database
         try:

@@ -208,7 +208,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
 
   <!-- marked: Markdown → HTML -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
   <!-- DOMPurify: XSS-safe HTML -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <!-- KaTeX: Math formulas -->
@@ -6525,22 +6525,70 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const newTitle = prompt('Enter new chat title:',
           chatHistory.find(chat => chat.id === currentChatMenuId)?.title || 'New Chat');
 
-        if (newTitle && newTitle.trim()) {
+        if (!newTitle || !newTitle.trim()) {
+          closeAllDropdowns();
+          return;
+        }
+
+        const trimmedTitle = newTitle.trim();
+
+        // Decide if this is a backend conversation (numeric id) or a client-only chat_* id
+        const isBackendConversationId = (function () {
+          if (typeof currentChatMenuId === 'number' && Number.isInteger(currentChatMenuId)) return true;
+          if (typeof currentChatMenuId === 'string' && currentChatMenuId.startsWith('chat_')) return false;
+          const n = parseInt(currentChatMenuId, 10);
+          return !isNaN(n) && String(n) === String(currentChatMenuId);
+        })();
+
+        if (isBackendConversationId) {
+          // Call backend to persist the new title
+          fetch('/update_conversation_title/' + currentChatMenuId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ title: trimmedTitle })
+          }).then(function (response) {
+            if (!response.ok) {
+              return response.json().catch(function () { return {}; }).then(function (data) {
+                throw new Error(data.error || 'Failed to update title');
+              });
+            }
+            return response.json();
+          }).then(function () {
+            const chat = chatHistory.find(function (c) { return String(c.id) === String(currentChatMenuId); });
+            if (chat) {
+              chat.title = trimmedTitle;
+              saveChatThreads();
+              renderChatSidebar();
+            }
+            const chatElement = document.querySelector(`[onclick="loadChat('${currentChatMenuId}')"] .text-gray-900`);
+            if (chatElement) {
+              chatElement.textContent = trimmedTitle;
+            }
+          }).catch(function (err) {
+            console.error('Failed to rename conversation', err);
+            if (typeof showToast === 'function') {
+              showToast('Failed to rename chat: ' + err.message, 'error', 3000);
+            }
+          }).finally(function () {
+            closeAllDropdowns();
+          });
+        } else {
+          // Fallback: client-only chat, keep existing local behavior
           const chat = chatHistory.find(chat => chat.id === currentChatMenuId);
           if (chat) {
-            chat.title = newTitle.trim();
+            chat.title = trimmedTitle;
             saveChatThreads();
             renderChatSidebar(); // Update sidebar with renamed chat
 
             // Update UI
             const chatElement = document.querySelector(`[onclick="loadChat('${currentChatMenuId}')"] .text-gray-900`);
             if (chatElement) {
-              chatElement.textContent = newTitle.trim();
+              chatElement.textContent = trimmedTitle;
             }
           }
+          closeAllDropdowns();
         }
-
-        closeAllDropdowns();
       }
 
       // Duplicate chat
@@ -6549,31 +6597,95 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         const originalChat = chatHistory.find(chat => chat.id === currentChatMenuId);
         if (originalChat) {
-          const newChatId = 'chat_' + Date.now();
-          const newChat = {
-            id: newChatId,
-            title: originalChat.title + ' (Copy)',
-            timestamp: new Date().toISOString(),
-            active: false
-          };
+          const isBackendConversationId = (function () {
+            if (typeof originalChat.id === 'number' && Number.isInteger(originalChat.id)) return true;
+            if (typeof originalChat.id === 'string' && originalChat.id.startsWith('chat_')) return false;
+            const n = parseInt(originalChat.id, 10);
+            return !isNaN(n) && String(n) === String(originalChat.id);
+          })();
 
-          chatHistory.unshift(newChat);
-          saveChatThreads();
-          renderChatSidebar(); // Update sidebar with duplicated chat
-          alert('Chat duplicated successfully!');
+          if (isBackendConversationId) {
+            // Ask backend to duplicate the conversation including messages
+            fetch('/duplicate_conversation/' + originalChat.id, {
+              method: 'POST',
+              credentials: 'include'
+            }).then(function (response) {
+              if (!response.ok) {
+                return response.json().catch(function () { return {}; }).then(function (data) {
+                  throw new Error(data.error || 'Failed to duplicate conversation');
+                });
+              }
+              return response.json();
+            }).then(function (data) {
+              const conv = data.conversation || {};
+              const newChat = {
+                id: conv.id,
+                title: conv.title || (originalChat.title + ' (Copy)'),
+                timestamp: conv.updated_at || conv.created_at || new Date().toISOString(),
+                active: false,
+                lastMessageSnippet: originalChat.lastMessageSnippet || '',
+                unreadCount: 0
+              };
+              chatHistory.unshift(newChat);
+              saveChatThreads();
+              renderChatSidebar();
+              if (typeof showToast === 'function') {
+                showToast('Chat duplicated successfully', 'success', 2500);
+              } else {
+                alert('Chat duplicated successfully!');
+              }
+            }).catch(function (err) {
+              console.error('Failed to duplicate conversation', err);
+              if (typeof showToast === 'function') {
+                showToast('Failed to duplicate chat: ' + err.message, 'error', 3000);
+              } else {
+                alert('Failed to duplicate chat: ' + err.message);
+              }
+            }).finally(function () {
+              closeAllDropdowns();
+            });
+          } else {
+            // Fallback: purely client-side duplicate
+            const newChatId = 'chat_' + Date.now();
+            const newChat = {
+              id: newChatId,
+              title: originalChat.title + ' (Copy)',
+              timestamp: new Date().toISOString(),
+              active: false
+            };
+
+            chatHistory.unshift(newChat);
+            saveChatThreads();
+            renderChatSidebar(); // Update sidebar with duplicated chat
+            if (typeof showToast === 'function') {
+              showToast('Chat duplicated successfully', 'success', 2500);
+            } else {
+              alert('Chat duplicated successfully!');
+            }
+            closeAllDropdowns();
+          }
         }
-
-        closeAllDropdowns();
       }
 
       // Delete current chat
       function deleteCurrentChat() {
         if (!currentChatMenuId) return;
 
-        if (confirm('Are you sure you want to delete this chat?')) {
-          chatHistory = chatHistory.filter(chat => chat.id !== currentChatMenuId);
+        if (!confirm('Are you sure you want to delete this chat?')) {
+          return;
+        }
 
-          // Remove stored messages for this chat
+        const isBackendConversationId = (function () {
+          if (typeof currentChatMenuId === 'number' && Number.isInteger(currentChatMenuId)) return true;
+          if (typeof currentChatMenuId === 'string' && currentChatMenuId.startsWith('chat_')) return false;
+          const n = parseInt(currentChatMenuId, 10);
+          return !isNaN(n) && String(n) === String(currentChatMenuId);
+        })();
+
+        function applyLocalDeletion() {
+          chatHistory = chatHistory.filter(function (chat) { return String(chat.id) !== String(currentChatMenuId); });
+
+          // Remove stored messages for this chat (local cache only)
           try {
             localStorage.removeItem(getChatMessagesKey(currentChatMenuId));
           } catch (e) {
@@ -6583,7 +6695,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           saveChatThreads();
           renderChatSidebar(); // Update sidebar after deletion
 
-          if (currentChatId === currentChatMenuId) {
+          if (String(currentChatId) === String(currentChatMenuId)) {
             // If deleting active chat, switch to first available
             if (chatHistory.length > 0) {
               loadChat(chatHistory[0].id);
@@ -6599,7 +6711,37 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           }
         }
 
-        closeAllDropdowns();
+        if (isBackendConversationId) {
+          fetch('/delete_conversation/' + currentChatMenuId, {
+            method: 'DELETE',
+            credentials: 'include'
+          }).then(function (response) {
+            if (!response.ok) {
+              return response.json().catch(function () { return {}; }).then(function (data) {
+                throw new Error(data.error || 'Failed to delete conversation');
+              });
+            }
+            return response.json();
+          }).then(function () {
+            applyLocalDeletion();
+            if (typeof showToast === 'function') {
+              showToast('Chat deleted successfully', 'success', 2500);
+            }
+          }).catch(function (err) {
+            console.error('Failed to delete conversation', err);
+            if (typeof showToast === 'function') {
+              showToast('Failed to delete chat: ' + err.message, 'error', 3000);
+            } else {
+              alert('Failed to delete chat: ' + err.message);
+            }
+          }).finally(function () {
+            closeAllDropdowns();
+          });
+        } else {
+          // Client-only chat
+          applyLocalDeletion();
+          closeAllDropdowns();
+        }
       }
 
       // Toggle voice input: record with MediaRecorder, then send to backend /api/stt (Whisper)

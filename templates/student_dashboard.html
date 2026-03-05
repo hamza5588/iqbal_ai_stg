@@ -207,6 +207,8 @@
   <!-- Font Awesome -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
 
+  <!-- marked (UMD): Markdown → HTML so # ## ### headings, tables, lists render correctly -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
 
   <!-- Markdown Parser -->
   <script src="{{ url_for('static', filename='teacher/js/markdown-parser.js') }}"></script>
@@ -2178,11 +2180,17 @@
 
     /* Enhanced Chat Message Styles */
     .chat-message-content {
-      line-height: 1.6;
+      line-height: 1.4;
       word-wrap: break-word;
       overflow-wrap: break-word;
       word-break: break-word;
       hyphens: auto;
+    }
+
+    /* Tighter spacing between paragraphs inside chat bubbles */
+    .chat-message-content p {
+      margin-top: 0.1rem;
+      margin-bottom: 0.1rem;
     }
 
     .chat-message-content strong {
@@ -3766,19 +3774,35 @@
           const msgDiv = document.createElement('div');
           if (role === 'user') {
             msgDiv.className = 'chat-message user animate-fade-in';
+            const normalized = (content || '')
+              .replace(/&lt;strong&gt;/gi, '**')
+              .replace(/&lt;\/strong&gt;/gi, '**')
+              .replace(/<strong>/gi, '**')
+              .replace(/<\/strong>/gi, '**');
+            const rendered = (typeof MarkdownParser !== 'undefined' && MarkdownParser.parse && MarkdownParser.sanitizeHtml)
+              ? MarkdownParser.sanitizeHtml(MarkdownParser.parse(normalized))
+              : escapeHtml(content || '');
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
                 <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
               </div>
-              <div class="chat-message-content">${escapeHtml(content)}</div>
+              <div class="chat-message-content">${rendered}</div>
             `;
           } else {
             msgDiv.className = 'chat-message assistant animate-fade-in';
+            const normalized = (content || '')
+              .replace(/&lt;strong&gt;/gi, '**')
+              .replace(/&lt;\/strong&gt;/gi, '**')
+              .replace(/<strong>/gi, '**')
+              .replace(/<\/strong>/gi, '**');
+            const rendered = (typeof MarkdownParser !== 'undefined' && MarkdownParser.parse && MarkdownParser.sanitizeHtml)
+              ? MarkdownParser.sanitizeHtml(MarkdownParser.parse(normalized))
+              : (content || '');
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
                 <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
               </div>
-              <div class="chat-message-content">${content}</div>
+              <div class="chat-message-content">${rendered}</div>
             `;
           }
           chatMessages.appendChild(msgDiv);
@@ -3916,7 +3940,8 @@
         });
       }
 
-      function showMyLessonsPage() {
+      async function showMyLessonsPage() {
+        window.currentLessonQAId = null;
         // Deactivate all tabs, then activate lessons tab
         deactivateAllTabs();
         const lessonsTabBtn = document.getElementById('lessonsTabBtn');
@@ -3924,9 +3949,7 @@
 
         // Hide chat input area and floating button
         const chatInputArea = document.getElementById('chatInputArea');
-
         if (chatInputArea) chatInputArea.style.display = 'none';
-        // Ensure chat area is visible to render lessons
         const chatArea = document.getElementById('chatArea');
         if (chatArea) chatArea.style.display = 'block';
 
@@ -3973,7 +3996,7 @@
         const startIdx = (currentPage - 1) * lessonsPerPage;
         const pageLessons = filteredLessons.slice(startIdx, startIdx + lessonsPerPage);
 
-        // Format lessons for display
+        // Format lessons for display (API uses created_at/updated_at)
         const formattedLessons = pageLessons.map((lesson, index) => {
           const date = new Date(lesson.created_at || lesson.createdAt || lesson.updated_at || lesson.updatedAt || Date.now());
           const now = new Date();
@@ -4151,10 +4174,39 @@
             showToast(err.message || 'Failed to load lesson', 'error', 4000);
           });
         } catch (err) {
-          console.error('❌ viewLesson error:', err);
-          console.error('❌ Stack trace:', err.stack);
-          alert('Error: ' + err.message);
+          console.error('viewLesson error:', err);
+          showToast(err.message || 'Failed to load lesson', 'error');
+          if (contentEl) contentEl.innerHTML = '<p class="text-red-500">Failed to load lesson. Please try again.</p>';
         }
+      }
+
+      // Format lesson content for view: markdown → HTML (# ## headings, tables, bullets, formulas)
+      function formatLessonContentForView(content) {
+        if (!content || (typeof content === 'string' && content.trim() === '')) {
+          return '<p class="text-gray-500 italic">No content available</p>';
+        }
+        let raw = typeof content === 'string' ? content : String(content);
+        if (raw.includes('"response_type"') || raw.includes('"answer"')) {
+          try {
+            const p = JSON.parse(raw);
+            raw = p.answer || p.content || raw;
+          } catch (e) {}
+        }
+        // Only remove metadata lines; do not rewrite # or : so the parser can handle headings and lists
+        raw = raw
+          .replace(/^Lesson Title:.*$/gm, '').replace(/^Grade Level:.*$/gm, '').replace(/^Focus Area:.*$/gm, '')
+          .replace(/^Subject:.*$/gm, '').replace(/^Topic:.*$/gm, '').replace(/^Duration:.*$/gm, '').replace(/^Materials:.*$/gm, '')
+          .replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+        try {
+          if (typeof marked !== 'undefined') {
+            marked.setOptions({ breaks: true, gfm: true });
+            const html = marked.parse(raw);
+            return '<div class="prose prose-sm max-w-none text-gray-700 leading-relaxed lesson-content-formatted">' +
+              '<style>.lesson-content-formatted table{border-collapse:collapse;width:100%;}.lesson-content-formatted th,.lesson-content-formatted td{border:1px solid #e5e7eb;padding:0.5rem 0.75rem;text-align:left;}.lesson-content-formatted th{background:#f3f4f6;font-weight:700;}.lesson-content-formatted ul,.lesson-content-formatted ol{margin:0.75rem 0;padding-left:1.5rem;}.lesson-content-formatted li{margin:0.4rem 0;font-weight:500;line-height:1.6;}.lesson-content-formatted li::marker{color:#0ea5e9;font-weight:700;}.lesson-content-formatted strong{font-weight:700;color:#111827;}.lesson-content-formatted h1{font-size:1.6rem;font-weight:700;margin-top:1rem;margin-bottom:0.5rem;color:#111827;letter-spacing:-0.02em;}.lesson-content-formatted h2{font-size:1.35rem;font-weight:700;margin-top:0.9rem;margin-bottom:0.45rem;color:#111827;letter-spacing:-0.01em;}.lesson-content-formatted h3{font-size:1.2rem;font-weight:700;margin-top:0.8rem;margin-bottom:0.4rem;color:#1f2937;}.lesson-content-formatted h4,.lesson-content-formatted h5,.lesson-content-formatted h6{font-size:1.05rem;font-weight:700;margin-top:0.7rem;margin-bottom:0.35rem;color:#1f2937;}.lesson-content-formatted p{margin:0.4rem 0;line-height:1.65;}</style>' +
+              html + '</div>';
+          }
+        } catch (e) { console.warn('formatLessonContentForView', e); }
+        return '<div class="text-gray-700 leading-relaxed whitespace-pre-wrap">' + (raw.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</div>';
       }
 
       // Populate the view lesson modal with data (student read-only version)
@@ -4512,6 +4564,7 @@
         return window.currentLessonContext && window.currentLessonContext.id;
       }
 
+      // Switch to main chatbot interface in this file and integrate ask_question API for this lesson
       function openLessonChat() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) {
@@ -4536,10 +4589,18 @@
         }
 
         const lessonHtml = lesson.content || lesson.body || '<p class="text-gray-500 italic">No content available.</p>';
+        const safeTitle = escapeHtml(lesson.title || 'Lesson');
+        const safeSubject = escapeHtml(lesson.subject || 'Subject');
+        const safeGrade = escapeHtml(lesson.grade || 'N/A');
         const lessonBlock = `
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-          <div class="font-semibold text-blue-800">📚 Lesson: ${escapeHtml(lesson.title || 'Lesson')}</div>
-          <div class="text-xs text-blue-700">${escapeHtml(lesson.subject || 'Subject')} • Grade ${escapeHtml(lesson.grade || 'N/A')}</div>
+        <div id="current-lesson-metadata"
+             data-lesson-id="${lesson.id}"
+             data-lesson-title="${safeTitle}"
+             data-lesson-subject="${safeSubject}"
+             data-lesson-grade="${safeGrade}"
+             class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+          <div class="font-semibold text-blue-800">📚 Lesson: ${safeTitle}</div>
+          <div class="text-xs text-blue-700">${safeSubject} • Grade ${safeGrade}</div>
           <div class="text-xs text-blue-600 mt-2 italic">I'll answer all questions based on this lesson content only.</div>
         </div>
         <div class="prose prose-sm max-w-none text-gray-800">${lessonHtml}</div>`;
@@ -4563,6 +4624,8 @@
         // Pin lesson context at top of chat and invite questions
         addAssistantMessage(lessonBlock);
         addAssistantMessage('Thanks for opening this lesson! 📖 I\'m now familiar with all the content. Feel free to ask questions about <strong>"' + escapeHtml(lesson.title) + '"</strong> and I\'ll explain using only what\'s in this lesson.');
+        // Enable lesson Q&A mode in main chat so sendMessage() routes via /api/lessons/ask_question
+        window.currentLessonQAId = lesson.id;
       }
 
       // Generate teaching recommendations based on lesson
@@ -4636,13 +4699,12 @@
         if (lessonTitleEl) lessonTitleEl.textContent = lesson.title || 'Lesson';
         if (lessonSubjectEl) lessonSubjectEl.textContent = `${lesson.subject || 'Subject'} • ${lesson.grade || 'Grade'}`;
 
-        // Populate lesson content
+        // Populate lesson content (same formatting as view modal: tables, bullets, formulas)
         const contentEl = document.getElementById('lessonQAContent');
         if (contentEl) {
-          const contentHtml = lesson.content || lesson.body || '<p class="text-gray-500 italic text-sm">No content available</p>';
-          contentEl.innerHTML = contentHtml;
+          const raw = lesson.content || lesson.body || '';
+          contentEl.innerHTML = formatLessonContentForView(raw);
 
-          // Trigger MathJax to reprocess
           if (window.MathJax && window.MathJax.typesetPromise) {
             window.MathJax.typesetPromise([contentEl]).then(() => {
               console.log('MathJax rendered in lesson context display');
@@ -4740,6 +4802,35 @@
         window.currentLessonQAId = lesson.id;
       }
 
+      // Load lesson Q&A history from API (same as chat.html)
+      async function loadLessonQAChatHistory(lessonId) {
+        const messagesEl = document.getElementById('lessonQAChatMessages');
+        const welcomeEl = document.getElementById('lessonQAWelcome');
+        if (!messagesEl) return;
+        try {
+          const response = await fetch(`/api/lessons/lesson_chat_history/${lessonId}`, { method: 'GET', credentials: 'include' });
+          if (!response.ok) return;
+          const data = await response.json();
+          const history = data.history || [];
+          if (history.length === 0) return;
+          if (welcomeEl) welcomeEl.style.display = 'none';
+          history.forEach(function (entry) {
+            const userMsg = document.createElement('div');
+            userMsg.className = 'mb-4 flex justify-end';
+            userMsg.innerHTML = '<div class="bg-primary-600 text-white px-4 py-3 rounded-lg max-w-xs md:max-w-sm text-sm rounded-br-none"><p>' + (entry.question || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p><p class="text-xs text-primary-100 mt-1">' + (entry.created_at ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '') + '</p></div>';
+            messagesEl.appendChild(userMsg);
+            const aiMsg = document.createElement('div');
+            aiMsg.className = 'mb-4 flex justify-start';
+            const answerHtml = (entry.answer || '').replace(/\n/g, '<br>');
+            aiMsg.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none"><div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + (entry.created_at ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '') + '</p></div>';
+            messagesEl.appendChild(aiMsg);
+          });
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        } catch (e) {
+          console.warn('loadLessonQAChatHistory', e);
+        }
+      }
+
       // Close the Lesson Q&A Modal
       function closeLessonQAModal() {
         const modal = document.getElementById('lessonQAModal');
@@ -4750,8 +4841,8 @@
         window.currentLessonQAId = null;
       }
 
-      // Send message in Lesson Q&A chat
-      function sendLessonQAMessage() {
+      // Send message in Lesson Q&A chat (POST /api/lessons/ask_question, same as chat.html)
+      async function sendLessonQAMessage() {
         const inputEl = document.getElementById('lessonQAChatInput');
         const messagesEl = document.getElementById('lessonQAChatMessages');
         const welcomeEl = document.getElementById('lessonQAWelcome');
@@ -4761,44 +4852,83 @@
         const message = inputEl.value.trim();
         if (!message) return;
 
-        // Hide welcome message on first message
+        const lessonId = window.currentLessonQAId;
+        if (!lessonId) {
+          showToast('No lesson context', 'error');
+          return;
+        }
+
         if (welcomeEl && messagesEl.children.length === 0) {
           welcomeEl.style.display = 'none';
         }
 
-        // Add user message
         const userMsgEl = document.createElement('div');
         userMsgEl.className = 'mb-4 flex justify-end';
-        userMsgEl.innerHTML = `
-          <div class="bg-primary-600 text-white px-4 py-3 rounded-lg max-w-xs md:max-w-sm text-sm rounded-br-none">
-            <p>${message}</p>
-            <p class="text-xs text-primary-100 mt-1">${new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
-          </div>
-        `;
+        userMsgEl.innerHTML = '<div class="bg-primary-600 text-white px-4 py-3 rounded-lg max-w-xs md:max-w-sm text-sm rounded-br-none"><p>' + (message.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</p><p class="text-xs text-primary-100 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p></div>';
         messagesEl.appendChild(userMsgEl);
+        inputEl.value = '';
+        inputEl.disabled = true;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
 
-        // Simulate AI response (in real implementation, send to backend)
-        setTimeout(() => {
+        try {
+          const response = await fetch('/api/lessons/ask_question', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lesson_id: lessonId, question: message })
+          });
+          const data = await response.json().catch(() => ({}));
+          // Approach 3: needs_rag_confirmation - show in-chat message with Yes/No buttons
+          if (response.ok && data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+            const promptMsg = data.permission_request.message ||
+              'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+            const aiMsgEl = document.createElement('div');
+            aiMsgEl.className = 'mb-4 flex justify-start';
+            const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            aiMsgEl.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none">' +
+              '<p class="mb-3">' + promptEscaped + '</p>' +
+              '<div class="flex gap-2 mt-2"><button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button>' +
+              '<button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button></div></div>';
+            messagesEl.appendChild(aiMsgEl);
+            const yesBtn = aiMsgEl.querySelector('.rag-confirm-yes');
+            const noBtn = aiMsgEl.querySelector('.rag-confirm-no');
+            const innerDiv = aiMsgEl.querySelector('div > div');
+            yesBtn.onclick = function() {
+              yesBtn.disabled = true; noBtn.disabled = true;
+              innerDiv.innerHTML = '<p class="text-gray-500 italic">Searching PDF...</p>';
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+              fetch('/api/lessons/ask_question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                body: JSON.stringify({ lesson_id: lessonId, question: message, allow_rag: true })
+              }).then(function(r) { return r.json(); }).then(function(d) {
+                const ans = (d && d.answer) ? d.answer : (d.error || 'Sorry, could not get an answer.');
+                const answerHtml = String(ans).replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;br&gt;/g, '<br>');
+                innerDiv.innerHTML = '<div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p>';
+              }).catch(function() {
+                innerDiv.innerHTML = '<p class="text-red-600">Sorry, could not get an answer.</p>';
+              });
+            };
+            noBtn.onclick = function() {
+              yesBtn.disabled = true; noBtn.disabled = true;
+              innerDiv.innerHTML = '<p>Your question is not covered in the lesson content.</p>';
+            };
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          } else {
+            const answer = response.ok && data.answer ? data.answer : (data.error || 'Sorry, could not get an answer.');
+            const aiMsgEl = document.createElement('div');
+            aiMsgEl.className = 'mb-4 flex justify-start';
+            const answerHtml = String(answer).replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;br&gt;/g, '<br>');
+            aiMsgEl.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none"><div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p></div>';
+            messagesEl.appendChild(aiMsgEl);
+          }
+        } catch (e) {
+          console.error('ask_question', e);
           const aiMsgEl = document.createElement('div');
           aiMsgEl.className = 'mb-4 flex justify-start';
-          aiMsgEl.innerHTML = `
-            <div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-sm text-sm rounded-bl-none">
-              <p>That's a great question! Based on the lesson content, I can help you understand this better...</p>
-              <p class="text-xs text-gray-600 mt-1">${new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
-            </div>
-          `;
+          aiMsgEl.innerHTML = '<div class="bg-red-100 text-red-800 px-4 py-3 rounded-lg max-w-xs md:max-w-sm text-sm rounded-bl-none"><p>Failed to send question. Please try again.</p></div>';
           messagesEl.appendChild(aiMsgEl);
-          // Auto-scroll to latest message
-          setTimeout(() => {
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-          }, 10);
-        }, 500);
-
-        // Clear input and scroll
-        inputEl.value = '';
-        setTimeout(() => {
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-        }, 10);
+        }
+        inputEl.disabled = false;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
         inputEl.focus();
       }
 
@@ -5117,6 +5247,7 @@
         if (window.currentLessonContext && window.currentLessonContext.chatId !== chatId) {
           window.currentLessonContext = null;
         }
+        window.currentLessonQAId = null;
 
         // Rebuild chat UI and render messages for this chat
         renderChatLayoutForChat(chatId);
@@ -5154,22 +5285,69 @@
         const newTitle = prompt('Enter new chat title:',
           chatHistory.find(chat => chat.id === currentChatMenuId)?.title || 'New Chat');
 
-        if (newTitle && newTitle.trim()) {
+        if (!newTitle || !newTitle.trim()) {
+          closeAllDropdowns();
+          return;
+        }
+
+        const trimmedTitle = newTitle.trim();
+
+        // Decide if this is a backend conversation (numeric id) or a client-only chat_* id
+        const isBackendConversationId = (function () {
+          if (typeof currentChatMenuId === 'number' && Number.isInteger(currentChatMenuId)) return true;
+          if (typeof currentChatMenuId === 'string' && currentChatMenuId.startsWith('chat_')) return false;
+          const n = parseInt(currentChatMenuId, 10);
+          return !isNaN(n) && String(n) === String(currentChatMenuId);
+        })();
+
+        if (isBackendConversationId) {
+          fetch('/update_conversation_title/' + currentChatMenuId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ title: trimmedTitle })
+          }).then(function (response) {
+            if (!response.ok) {
+              return response.json().catch(function () { return {}; }).then(function (data) {
+                throw new Error(data.error || 'Failed to update title');
+              });
+            }
+            return response.json();
+          }).then(function () {
+            const chat = chatHistory.find(function (c) { return String(c.id) === String(currentChatMenuId); });
+            if (chat) {
+              chat.title = trimmedTitle;
+              saveChatThreads();
+              renderChatSidebar();
+            }
+            const chatElement = document.querySelector(`[onclick="loadChat('${currentChatMenuId}')"] .text-gray-900`);
+            if (chatElement) {
+              chatElement.textContent = trimmedTitle;
+            }
+          }).catch(function (err) {
+            console.error('Failed to rename conversation', err);
+            if (typeof showToast === 'function') {
+              showToast('Failed to rename chat: ' + err.message, 'error', 3000);
+            }
+          }).finally(function () {
+            closeAllDropdowns();
+          });
+        } else {
           const chat = chatHistory.find(chat => chat.id === currentChatMenuId);
           if (chat) {
-            chat.title = newTitle.trim();
+            chat.title = trimmedTitle;
             saveChatThreads();
             renderChatSidebar(); // Update sidebar with renamed chat
 
             // Update UI
             const chatElement = document.querySelector(`[onclick="loadChat('${currentChatMenuId}')"] .text-gray-900`);
             if (chatElement) {
-              chatElement.textContent = newTitle.trim();
+              chatElement.textContent = trimmedTitle;
             }
           }
-        }
 
-        closeAllDropdowns();
+          closeAllDropdowns();
+        }
       }
 
       // Duplicate chat
@@ -5178,29 +5356,91 @@
 
         const originalChat = chatHistory.find(chat => chat.id === currentChatMenuId);
         if (originalChat) {
-          const newChatId = 'chat_' + Date.now();
-          const newChat = {
-            id: newChatId,
-            title: originalChat.title + ' (Copy)',
-            timestamp: new Date().toISOString(),
-            active: false
-          };
+          const isBackendConversationId = (function () {
+            if (typeof originalChat.id === 'number' && Number.isInteger(originalChat.id)) return true;
+            if (typeof originalChat.id === 'string' && originalChat.id.startsWith('chat_')) return false;
+            const n = parseInt(originalChat.id, 10);
+            return !isNaN(n) && String(n) === String(originalChat.id);
+          })();
 
-          chatHistory.unshift(newChat);
-          saveChatThreads();
-          renderChatSidebar(); // Update sidebar with duplicated chat
-          alert('Chat duplicated successfully!');
+          if (isBackendConversationId) {
+            fetch('/duplicate_conversation/' + originalChat.id, {
+              method: 'POST',
+              credentials: 'include'
+            }).then(function (response) {
+              if (!response.ok) {
+                return response.json().catch(function () { return {}; }).then(function (data) {
+                  throw new Error(data.error || 'Failed to duplicate conversation');
+                });
+              }
+              return response.json();
+            }).then(function (data) {
+              const conv = data.conversation || {};
+              const newChat = {
+                id: conv.id,
+                title: conv.title || (originalChat.title + ' (Copy)'),
+                timestamp: conv.updated_at || conv.created_at || new Date().toISOString(),
+                active: false,
+                lastMessageSnippet: originalChat.lastMessageSnippet || '',
+                unreadCount: 0
+              };
+              chatHistory.unshift(newChat);
+              saveChatThreads();
+              renderChatSidebar();
+              if (typeof showToast === 'function') {
+                showToast('Chat duplicated successfully', 'success', 2500);
+              } else {
+                alert('Chat duplicated successfully!');
+              }
+            }).catch(function (err) {
+              console.error('Failed to duplicate conversation', err);
+              if (typeof showToast === 'function') {
+                showToast('Failed to duplicate chat: ' + err.message, 'error', 3000);
+              } else {
+                alert('Failed to duplicate chat: ' + err.message);
+              }
+            }).finally(function () {
+              closeAllDropdowns();
+            });
+          } else {
+            const newChatId = 'chat_' + Date.now();
+            const newChat = {
+              id: newChatId,
+              title: originalChat.title + ' (Copy)',
+              timestamp: new Date().toISOString(),
+              active: false
+            };
+
+            chatHistory.unshift(newChat);
+            saveChatThreads();
+            renderChatSidebar(); // Update sidebar with duplicated chat
+            if (typeof showToast === 'function') {
+              showToast('Chat duplicated successfully', 'success', 2500);
+            } else {
+              alert('Chat duplicated successfully!');
+            }
+            closeAllDropdowns();
+          }
         }
-
-        closeAllDropdowns();
       }
 
       // Delete current chat
       function deleteCurrentChat() {
         if (!currentChatMenuId) return;
 
-        if (confirm('Are you sure you want to delete this chat?')) {
-          chatHistory = chatHistory.filter(chat => chat.id !== currentChatMenuId);
+        if (!confirm('Are you sure you want to delete this chat?')) {
+          return;
+        }
+
+        const isBackendConversationId = (function () {
+          if (typeof currentChatMenuId === 'number' && Number.isInteger(currentChatMenuId)) return true;
+          if (typeof currentChatMenuId === 'string' && currentChatMenuId.startsWith('chat_')) return false;
+          const n = parseInt(currentChatMenuId, 10);
+          return !isNaN(n) && String(n) === String(currentChatMenuId);
+        })();
+
+        function applyLocalDeletion() {
+          chatHistory = chatHistory.filter(function (chat) { return String(chat.id) !== String(currentChatMenuId); });
 
           // Remove stored messages for this chat
           try {
@@ -5212,7 +5452,7 @@
           saveChatThreads();
           renderChatSidebar(); // Update sidebar after deletion
 
-          if (currentChatId === currentChatMenuId) {
+          if (String(currentChatId) === String(currentChatMenuId)) {
             // If deleting active chat, switch to first available
             if (chatHistory.length > 0) {
               loadChat(chatHistory[0].id);
@@ -5228,7 +5468,36 @@
           }
         }
 
-        closeAllDropdowns();
+        if (isBackendConversationId) {
+          fetch('/delete_conversation/' + currentChatMenuId, {
+            method: 'DELETE',
+            credentials: 'include'
+          }).then(function (response) {
+            if (!response.ok) {
+              return response.json().catch(function () { return {}; }).then(function (data) {
+                throw new Error(data.error || 'Failed to delete conversation');
+              });
+            }
+            return response.json();
+          }).then(function () {
+            applyLocalDeletion();
+            if (typeof showToast === 'function') {
+              showToast('Chat deleted successfully', 'success', 2500);
+            }
+          }).catch(function (err) {
+            console.error('Failed to delete conversation', err);
+            if (typeof showToast === 'function') {
+              showToast('Failed to delete chat: ' + err.message, 'error', 3000);
+            } else {
+              alert('Failed to delete chat: ' + err.message);
+            }
+          }).finally(function () {
+            closeAllDropdowns();
+          });
+        } else {
+          applyLocalDeletion();
+          closeAllDropdowns();
+        }
       }
 
       // Toggle voice input
@@ -5297,6 +5566,110 @@
           }
         }
       }
+      // Send Lesson Q&A message in main chat area (same ask_question API as modal, but using main chat bubbles)
+      async function sendLessonQAMessageInMain(message) {
+        // Prefer explicit lesson QA id, but fall back to bound lesson context,
+        // and finally to the pinned lesson metadata block in the chat DOM.
+        let lessonId = window.currentLessonQAId ||
+          (window.currentLessonContext && window.currentLessonContext.id);
+
+        if (!lessonId) {
+          const metaEl = document.getElementById('current-lesson-metadata');
+          if (metaEl && metaEl.dataset.lessonId) {
+            lessonId = metaEl.dataset.lessonId;
+          }
+        }
+
+        if (!lessonId) {
+          showToast('No lesson context', 'error');
+          console.warn('[StudentDash] sendLessonQAMessageInMain called without lessonId', {
+            currentLessonQAId: window.currentLessonQAId,
+            currentLessonContext: window.currentLessonContext
+          });
+          return;
+        }
+
+        console.log('[StudentDash] Calling /api/lessons/ask_question from main chat', {
+          lessonId,
+          message
+        });
+
+        // Add user message to main chat (left side)
+        addUserMessage(message);
+        showTypingIndicator();
+
+        try {
+          const response = await fetch('/api/lessons/ask_question', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ lesson_id: lessonId, question: message })
+          });
+          const data = await response.json().catch(() => ({}));
+
+          // Handle RAG confirmation flow (mirror chat.html behavior)
+          if (response.ok && data && data.status === 'needs_rag_confirmation' && data.permission_request) {
+            removeTypingIndicator();
+            const promptMsg = data.permission_request.message ||
+              'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+            const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            const chatMessages = document.getElementById('chatMessages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-message assistant';
+            msgDiv.innerHTML =
+              '<div class="chat-message-avatar bg-white border-2 border-primary-500 text-primary-600 font-bold">AI</div>' +
+              '<div class="chat-message-content bg-gray-100 rounded-2xl">' +
+              '<p class="text-gray-700 leading-relaxed mb-3">' + promptEscaped + '</p>' +
+              '<div class="flex gap-2 mt-2">' +
+              '<button type="button" class="rag-confirm-yes px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700">Yes, search PDF</button>' +
+              '<button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button>' +
+              '</div>' +
+              '</div>';
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            const bubble = msgDiv.querySelector('.chat-message-content');
+            const yesBtn = msgDiv.querySelector('.rag-confirm-yes');
+            const noBtn = msgDiv.querySelector('.rag-confirm-no');
+
+            yesBtn.onclick = function () {
+              yesBtn.disabled = true;
+              noBtn.disabled = true;
+              bubble.innerHTML = '<p class="text-gray-500 italic">Searching PDF...</p>';
+              fetch('/api/lessons/ask_question', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ lesson_id: lessonId, question: message, allow_rag: true })
+              }).then(function (r) { return r.json(); }).then(function (d) {
+                const ans = (d && d.answer != null) ? d.answer : (d.error || 'Sorry, I couldn\'t process that question. Please try again.');
+                bubble.innerHTML = '<div class="prose prose-sm max-w-none text-gray-800">' + ans.replace(/\n/g, '<br>') + '</div>';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              }).catch(function () {
+                bubble.innerHTML = '<p class="text-red-600">Sorry, I couldn\'t process that question. Please try again.</p>';
+              });
+            };
+
+            noBtn.onclick = function () {
+              yesBtn.disabled = true;
+              noBtn.disabled = true;
+              bubble.innerHTML = '<p class="text-gray-700 leading-relaxed">Your question is not covered in the lesson content.</p>';
+            };
+          } else if (response.ok && data && data.answer != null) {
+            removeTypingIndicator();
+            addAssistantMessage(data.answer);
+          } else {
+            removeTypingIndicator();
+            addAssistantMessage(data.error || 'Sorry, I couldn\'t process that question. Please try again.');
+          }
+        } catch (e) {
+          console.error('ask_question (main)', e);
+          removeTypingIndicator();
+          addAssistantMessage('Sorry, something went wrong while asking about this lesson. Please try again.');
+        }
+      }
+
       // Send message
       function sendMessage() {
         const input = document.getElementById('messageInput');
@@ -5304,31 +5677,20 @@
 
         if (!message) return;
 
-        // Auto-generate title from first message if needed
-        const chat = chatHistory.find(c => c.id === currentChatId);
-        if (chat && chat.title === 'New Conversation') {
-          const autoTitle = generateChatTitle(message);
-          updateChatTitle(currentChatId, autoTitle);
-        }
+        console.log('[StudentDash] sendMessage()', {
+          message,
+          currentLessonQAId: window.currentLessonQAId,
+          hasLessonContext: !!(window.currentLessonContext && window.currentLessonContext.id)
+        });
 
-        // Add user message on LEFT side
-        addUserMessage(message);
+        // Always use backend Lesson Q&A API path in student dashboard
+        // so questions go to /api/lessons/ask_question instead of local template.
+        sendLessonQAMessageInMain(message);
 
         // Clear input and reset height
         input.value = '';
         autoResizeTextarea(input);
         updateSendButton();
-
-        // Show typing indicator on RIGHT side
-        showTypingIndicator();
-
-        // Simulate AI response
-        setTimeout(() => {
-          removeTypingIndicator();
-          const response = generateAIResponse(message);
-          // AI response on RIGHT side
-          addAssistantMessage(response);
-        }, 1000 + Math.random() * 500);
       }
 
       // Message persistence helpers
@@ -5411,7 +5773,13 @@
         <div class="chat-message-avatar">
           <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
         </div>
-        <div class="chat-message-content">${MarkdownParser.sanitizeHtml(MarkdownParser.parse(message))}</div>
+        <div class="chat-message-content">${MarkdownParser.sanitizeHtml(MarkdownParser.parse(
+          (message || '')
+            .replace(/&lt;strong&gt;/gi, '**')
+            .replace(/&lt;\/strong&gt;/gi, '**')
+            .replace(/<strong>/gi, '**')
+            .replace(/<\/strong>/gi, '**')
+        ))}</div>
       `;
         chatMessages.appendChild(messageDiv);
         
@@ -5435,7 +5803,13 @@
         messageDiv.className = 'chat-message assistant animate-fade-in';
         const contentDiv = document.createElement('div');
         contentDiv.className = 'chat-message-content';
-        const safeHtml = MarkdownParser.sanitizeHtml(MarkdownParser.parse(message));
+        // Normalize legacy <strong> tags that may come through as plain text
+        const normalizedMessage = (message || '')
+          .replace(/&lt;strong&gt;/gi, '**')
+          .replace(/&lt;\/strong&gt;/gi, '**')
+          .replace(/<strong>/gi, '**')
+          .replace(/<\/strong>/gi, '**');
+        const safeHtml = MarkdownParser.sanitizeHtml(MarkdownParser.parse(normalizedMessage));
         contentDiv.innerHTML = safeHtml;
         
         messageDiv.innerHTML = `
@@ -5931,5 +6305,3 @@
 </body>
 
 </html>
-
-
