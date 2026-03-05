@@ -1690,9 +1690,12 @@ def chat_node(state: ChatState, config=None):
                 )
             )
             return {"messages": [error_response]}
-        user_llm_with_tools = llm.bind_tools(tools)
-        user_llm_structured_output = llm.with_structured_output(LessonState)
-        _mark_step("init_llm")
+        
+        # Fallback to generic LLM
+        user_llm = get_rag_llm(user_id=None, provider=provider, timeout=120, temperature=0.7)
+        user_llm_with_tools = user_llm.bind_tools(tools)
+        user_llm_structured_output = user_llm.with_structured_output(LessonState)
+        _mark_step("init_llm_fallback")
 
     # Get custom prompt from database (user-level, applies to all threads)
     custom_prompt = _get_rag_prompt(user_id, thread_id_str)
@@ -1912,6 +1915,12 @@ def chat_node(state: ChatState, config=None):
     f"  * DO NOT ask a clarification question\n"
     f"  * IMMEDIATELY call the PDF word count tool\n"
     f"  * NEVER guess or estimate the word count\n\n"
+
+    f"IRRELEVANT QUESTIONS:\n"
+    f"- If the user's question is NOT relevant to the uploaded PDF (e.g. unrelated topic, general knowledge, or not answerable from the document),\n"
+    f"  you MUST respond with exactly this phrase and nothing else for the main message:\n"
+    f"  \"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
+    f"- Do not mention any tool names (rag_tool, get_page_tool, etc.) in your response to the user.\n\n"
 
 )
 

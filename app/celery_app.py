@@ -13,6 +13,7 @@ celery = Celery(
     backend=Config.CELERY_RESULT_BACKEND,
     include=[
         'app.tasks.ingest_tasks',
+        'app.tasks.load_test_tasks',
     ],
 )
 

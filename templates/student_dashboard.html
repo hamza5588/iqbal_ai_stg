@@ -2905,10 +2905,6 @@
         <i class="fas fa-edit text-gray-500"></i>
         <span>Rename Chat</span>
       </div>
-      <div class="dropdown-item" onclick="duplicateChat()">
-        <i class="fas fa-copy text-gray-500"></i>
-        <span>Duplicate Chat</span>
-      </div>
       <div class="dropdown-item danger" onclick="deleteCurrentChat()">
         <i class="fas fa-trash text-red-500"></i>
         <span>Delete Chat</span>
@@ -4513,7 +4509,6 @@
       // Bind lesson to current chat session
       function bindLessonToChatSession(lesson) {
         if (!lesson) return false;
-        
         window.currentLessonContext = {
           chatId: currentChatId,
           id: lesson.id,
@@ -4522,6 +4517,26 @@
           grade: lesson.grade,
           content: lesson.content || lesson.body
         };
+        // Persist the binding between this chat and lesson so that
+        // when the user switches away and comes back later we can
+        // reload the lesson context from the backend instead of
+        // relying on in‑memory state or localStorage chat bubbles.
+        try {
+          var raw = localStorage.getItem('Student_chat_lesson_bindings') || '{}';
+          var map = {};
+          try {
+            map = JSON.parse(raw) || {};
+          } catch (e) {
+            console.warn('Failed to parse Student_chat_lesson_bindings; resetting.', e);
+            map = {};
+          }
+          if (currentChatId) {
+            map[currentChatId] = lesson.id;
+          }
+          localStorage.setItem('Student_chat_lesson_bindings', JSON.stringify(map));
+        } catch (e) {
+          console.warn('Unable to persist lesson binding for chat', e);
+        }
         return true;
       }
 
@@ -5239,18 +5254,29 @@
         // ════════════════════════════════════════════════════════════════════════════════
         // SPECIFICATION #2: MESSAGE ISOLATION
         // Load ONLY messages from this specific conversation ID
-        // Fetch from localStorage['Student_chat_messages_' + chatId]
-        // NO context from other conversations
+        // Messages themselves are persisted in localStorage per‑chat, but the
+        // lesson context for a chat is restored from the backend using the
+        // stored chat→lesson binding (Student_chat_lesson_bindings) so that
+        // switching between chats never loses the lesson context.
         // ════════════════════════════════════════════════════════════════════════════════
 
-        // Clear lesson side panel if switching to a chat without lesson context
+        // Clear any lesson context that belonged to a different chat
         if (window.currentLessonContext && window.currentLessonContext.chatId !== chatId) {
           window.currentLessonContext = null;
         }
         window.currentLessonQAId = null;
 
-        // Rebuild chat UI and render messages for this chat
+        // Rebuild chat UI and render messages for this chat (messages from localStorage)
         renderChatLayoutForChat(chatId);
+
+        // After the UI is built, asynchronously restore the bound lesson (if any)
+        // from the database so that this chat continues to use the same lesson
+        // context when asking questions.
+        try {
+          restoreLessonContextForChat(chatId);
+        } catch (e) {
+          console.warn('restoreLessonContextForChat error', e);
+        }
 
         // Show chat input area
         const chatInputArea = document.getElementById('chatInputArea');
@@ -5691,6 +5717,63 @@
         input.value = '';
         autoResizeTextarea(input);
         updateSendButton();
+      }
+
+      // Restore lesson context for a given chat from the backend.
+      // This uses Student_chat_lesson_bindings (chatId -> lessonId) stored
+      // in localStorage, but lesson data itself always comes from the API.
+      async function restoreLessonContextForChat(chatId) {
+        if (!chatId) return;
+        let lessonId = null;
+        try {
+          const raw = localStorage.getItem('Student_chat_lesson_bindings') || '{}';
+          const map = JSON.parse(raw || '{}') || {};
+          lessonId = map[chatId];
+        } catch (e) {
+          console.warn('Failed to read Student_chat_lesson_bindings', e);
+          lessonId = null;
+        }
+
+        if (!lessonId) {
+          // No bound lesson for this chat; ensure context is cleared.
+          if (window.currentLessonContext && window.currentLessonContext.chatId === chatId) {
+            window.currentLessonContext = null;
+          }
+          if (window.currentLessonQAId && window.currentLessonQAId === lessonId) {
+            window.currentLessonQAId = null;
+          }
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/lessons/lesson/${lessonId}`, {
+            method: 'GET',
+            credentials: 'include'
+          });
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data || data.success !== true || !data.lesson) {
+            console.warn('Failed to restore lesson context from API', data);
+            return;
+          }
+
+          const lesson = data.lesson;
+          // Normalize lesson fields expected by bindLessonToChatSession / UI
+          const normalizedLesson = {
+            id: lesson.id,
+            title: lesson.title || 'Lesson',
+            subject: lesson.focus_area || lesson.subject || 'Subject',
+            grade: lesson.grade_level || lesson.grade || 'N/A',
+            content: lesson.content || lesson.body || lesson.original_content || ''
+          };
+
+          // Ensure the current chat id is this chat before binding
+          currentChatId = chatId;
+          bindLessonToChatSession(normalizedLesson);
+          // Ensure lesson Q&A API uses this lesson id for subsequent questions
+          window.currentLessonQAId = normalizedLesson.id;
+        } catch (e) {
+          console.warn('Error restoring lesson context for chat', chatId, e);
+        }
       }
 
       // Message persistence helpers

@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, redirect
 from app.utils.auth import login_required
+from app.utils.routes import get_default_route_by_role
 from app.utils.rag_service import (
     ingest_pdf,
     chatbot,
@@ -28,6 +29,16 @@ import base64
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 
+# Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
+_user_chat_locks = {}
+_locks_lock = threading.Lock()
+
+def _get_user_chat_lock(user_id):
+    with _locks_lock:
+        if user_id not in _user_chat_locks:
+            _user_chat_locks[user_id] = threading.Lock()
+        return _user_chat_locks[user_id]
+
 
 def _strip_lesson_finalization_from_response(text):
     """
@@ -47,6 +58,26 @@ def _strip_lesson_finalization_from_response(text):
     return cleaned
 
 
+def _strip_tool_names_from_response(text):
+    """Remove tool names from AI response so they are never shown in chat."""
+    if not text or not isinstance(text, str):
+        return text
+    import re
+    # Tool names used by RAG (do not expose to user)
+    tool_names = [
+        r"rag_tool", r"get_page_tool", r"list_topics_whole_doc_tool",
+        r"count_pdf_words_tool", r"count_words_in_text_tool", r"calculator",
+        r"duckduckgo_search", r"stock_price",
+    ]
+    cleaned = text
+    for name in tool_names:
+        # Remove phrases like "I'll use rag_tool", "Calling get_page_tool", "using rag_tool"
+        cleaned = re.sub(rf"\b(?:using|use|call(?:ing)?|invok(?:e|ing)|via)\s+{name}\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(rf"\b{name}\s*(?:to|for)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def _get_openai_client():
     """
     Lazily create an OpenAI client for Whisper STT.
@@ -61,13 +92,18 @@ def _get_openai_client():
 def _get_thread_id(user_id: int, conversation_id: int = None) -> str:
     """
     Generate a unique thread_id for the RAG service.
-    Creates a new unique thread ID for each upload.
+    Always creates a new unique thread ID for each upload,
+    while still encoding the conversation_id when available.
+    This allows multiple PDFs per conversation.
     """
-    if conversation_id:
-        return f"user_{user_id}_conv_{conversation_id}"
-    # Generate unique thread ID with timestamp and UUID
+    # Generate unique suffix with timestamp and UUID
     unique_id = str(uuid.uuid4())[:8]
     timestamp = int(datetime.utcnow().timestamp())
+    if conversation_id:
+        # Keep conversation_id in the pattern so existing regex-based
+        # logic (e.g. extracting conv_id from thread_id) continues to work,
+        # but allow multiple threads per conversation by adding a unique suffix.
+        return f"user_{user_id}_conv_{conversation_id}_{timestamp}_{unique_id}"
     return f"user_{user_id}_thread_{timestamp}_{unique_id}"
 
 
@@ -78,8 +114,9 @@ def chatbot_page():
     Render the PDF chat interface.
     """
     try:
-        # Redirect to main chat interface instead of separate chatbot page
-        return render_template('chat.html')
+        # Legacy behavior previously rendered `chat.html`. Keep backwards
+        # compatibility but ensure legacy UI is only reachable explicitly.
+        return redirect('/legacy/chat')
     except Exception as e:
         logger.error(f"Error rendering chatbot page: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to render page: {str(e)}'}), 500
@@ -96,6 +133,26 @@ def _validate_thread_id(thread_id: str, user_id: int) -> bool:
     # Thread ID must start with the user's ID
     expected_prefix = f"user_{user_id}_"
     return thread_id.startswith(expected_prefix)
+
+
+def _get_thread_id_for_conversation(user_id: int, conversation_id: int):
+    """
+    Resolve the RAG thread_id for a given conversation (one thread per conversation).
+    Returns the most recent thread whose thread_id matches user_X_conv_Y_*.
+    """
+    db = get_db()
+    prefix = f"user_{user_id}_conv_{conversation_id}_"
+    row = (
+        db.query(RAGThread.thread_id)
+        .filter(
+            RAGThread.user_id == user_id,
+            RAGThread.thread_id.like(prefix + "%"),
+            RAGThread.has_document == True,
+        )
+        .order_by(RAGThread.created_at.desc())
+        .first()
+    )
+    return row.thread_id if row else None
 
 
 @bp.route('/ingest', methods=['POST'])
@@ -129,13 +186,15 @@ def ingest():
             return jsonify({'error': 'Only PDF files are supported'}), 400
 
         # Get thread_id from request or create new thread
-        # IMPORTANT: By default, each PDF upload creates a NEW thread.
-        # This ensures that each uploaded document has its own separate thread/context.
-        conversation_id = request.form.get('conversation_id', type=int)
+        # IMPORTANT: Each new PDF upload must get its own conversation and thread.
+        # When create_new_thread is True, we never reuse the current conversation so we
+        # never override the existing thread the user is viewing.
         provided_thread_id = request.form.get('thread_id')
         create_new_thread = request.form.get('create_new_thread', 'true').lower() == 'true'
+        # For a new PDF we ignore conversation_id from the client so we always create a fresh thread
+        conversation_id = None if create_new_thread else request.form.get('conversation_id', type=int)
         
-        # If no conversation_id is provided, automatically create a new conversation
+        # If no conversation_id (new upload or not provided), create a new conversation
         if not conversation_id:
             try:
                 api_key = session.get('groq_api_key', '')
@@ -150,16 +209,17 @@ def ingest():
                 # Continue without conversation_id if creation fails
                 conversation_id = None
         
-        # ENFORCE: Check if conversation already has a PDF
+        # Verify conversation ownership (but allow multiple PDFs per conversation)
         if conversation_id:
-            # First verify conversation ownership
             try:
                 from app.models.models import ConversationModel
                 conversation_model = ConversationModel(user_id)
                 conv = conversation_model.get_conversation_by_id(conversation_id)
                 if not conv:
                     # Conversation doesn't exist or doesn't belong to user - create a new one
-                    logger.warning(f"Conversation {conversation_id} not found or doesn't belong to user {user_id}, creating new conversation")
+                    logger.warning(
+                        f"Conversation {conversation_id} not found or doesn't belong to user {user_id}, creating new conversation"
+                    )
                     filename = file.filename
                     conversation_title = f"Chat: {filename}" if filename else "New Chat"
                     conversation_id = conversation_model.create_conversation(conversation_title)
@@ -179,19 +239,6 @@ def ingest():
                     return jsonify({
                         'error': 'Error verifying conversation ownership. Please try again.'
                     }), 500
-            
-            # Check if this conversation already has a PDF uploaded (DB-based)
-            expected_thread_id = f"user_{user_id}_conv_{conversation_id}"
-            db = get_db()
-            existing_thread = db.query(RAGThread).filter_by(
-                user_id=user_id,
-                thread_id=expected_thread_id
-            ).first()
-            if existing_thread and existing_thread.has_document:
-                return jsonify({
-                    'error': 'This conversation already has a PDF uploaded. Each conversation can only have one PDF. Please create a new conversation to upload another PDF.',
-                    'existing_filename': existing_thread.filename
-                }), 400
         
         # If create_new_thread is False AND a thread_id is provided, use existing thread
         # (This is rare - normally each upload creates a new thread)
@@ -536,6 +583,7 @@ def chat():
                     'thread_id': request.args.get('thread_id') if request.args else None,
                     'conversation_id': request.args.get('conversation_id', type=int) if request.args else None
                 }
+                
         # FormData with audio file: form may have thread_id/conversation_id but no message; use transcription
         if data and not (data.get('message') or '').strip() and audio_text:
             data['message'] = audio_text
@@ -573,7 +621,14 @@ def chat():
         if provided_thread_id:
             thread_id = str(provided_thread_id).strip()
         elif conversation_id is not None:
-            thread_id = _get_thread_id(user_id, conversation_id)
+            # Resolve thread from conversation so each chat uses its own document (no cross-talk)
+            thread_id = _get_thread_id_for_conversation(user_id, conversation_id)
+            if not thread_id:
+                logger.warning("RAG chat 400: No thread with document for conversation_id=%s user_id=%s", conversation_id, user_id)
+                return jsonify({
+                    "error": "No PDF has been uploaded for this conversation yet. Please upload a PDF document first to chat with your document.",
+                    "code": "NO_DOCUMENT_UPLOADED",
+                }), 400
         else:
             logger.warning("RAG chat 400: Missing thread_id and conversation_id (user_id=%s)", user_id)
             return jsonify({
@@ -618,130 +673,142 @@ def chat():
                     'thread_id': thread_id
                 }), 400
 
-        # Prepare config for LangGraph
-        config = {
-            "configurable": {
-                "thread_id": thread_id
+        # One message at a time per user: queue by rejecting concurrent requests
+        user_lock = _get_user_chat_lock(user_id)
+        if not user_lock.acquire(blocking=False):
+            return jsonify({
+                'error': 'Please wait for your current message to be answered before sending another.',
+                'code': 'CONCURRENT_REQUEST'
+            }), 429
+
+        try:
+            # Prepare config for LangGraph
+            config = {
+                "configurable": {
+                    "thread_id": thread_id
+                }
             }
-        }
-        # #region agent log
-        try:
-            os.makedirs(_log_dir, exist_ok=True)
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        # Create HumanMessage
-        human_message = HumanMessage(content=message)
+            # #region agent log
+            try:
+                os.makedirs(_log_dir, exist_ok=True)
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            # Create HumanMessage
+            human_message = HumanMessage(content=message)
 
-        # Invoke the chatbot - LangGraph returns the final state
-        # #region agent log
-        try:
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        state = chatbot.invoke(
-            {"messages": [human_message]},
-            config=config
-        )
-        # #region agent log
-        _msgs = state.get("messages", [])
-        try:
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
+            # Invoke the chatbot - LangGraph returns the final state
+            # #region agent log
+            try:
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            state = chatbot.invoke(
+                {"messages": [human_message]},
+                config=config
+            )
+            # #region agent log
+            _msgs = state.get("messages", [])
+            try:
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
 
-        # Extract the last message from the state
-        messages = state.get("messages", [])
-        if not messages:
-            response_content = "I'm sorry, I couldn't generate a response."
-        else:
-            # Get the last message (should be the AI response)
-            last_msg = messages[-1]
-            if hasattr(last_msg, 'content'):
-                response_content = last_msg.content
-            elif isinstance(last_msg, dict):
-                response_content = last_msg.get('content', str(last_msg))
+            # Extract the last message from the state
+            messages = state.get("messages", [])
+            if not messages:
+                response_content = "I'm sorry, I couldn't generate a response."
             else:
-                response_content = str(last_msg)
-
-        # Remove internal lesson-finalization fields so they never appear on frontend or in history
-        response_content = _strip_lesson_finalization_from_response(response_content)
-
-        # Save messages to database for chat history
-        db_conversation_id = None
-        try:
-            from app.models.models import ConversationModel
-            conversation_model = ConversationModel(user_id)
-            
-            # Priority 1: Use conversation_id from request if provided (most reliable)
-            if conversation_id:
-                conv = conversation_model.get_conversation_by_id(conversation_id)
-                if conv:
-                    db_conversation_id = conversation_id
-                    logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
+                # Get the last message (should be the AI response)
+                last_msg = messages[-1]
+                if hasattr(last_msg, 'content'):
+                    response_content = last_msg.content
+                elif isinstance(last_msg, dict):
+                    response_content = last_msg.get('content', str(last_msg))
                 else:
-                    # Conversation doesn't exist or doesn't belong to user, create new one
-                    db_conversation_id = conversation_model.create_conversation(
-                        title=message[:50] if len(message) > 50 else message
-                    )
-                    logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
-            else:
-                # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
-                import re
-                thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
-                if thread_conv_match:
-                    db_conversation_id = int(thread_conv_match.group(1))
-                    conv = conversation_model.get_conversation_by_id(db_conversation_id)
-                    if not conv:
+                    response_content = str(last_msg)
+
+            # Remove internal lesson-finalization fields and tool names so they never appear on frontend
+            response_content = _strip_lesson_finalization_from_response(response_content)
+            response_content = _strip_tool_names_from_response(response_content)
+
+            # Save messages to database for chat history
+            db_conversation_id = None
+            try:
+                from app.models.models import ConversationModel
+                conversation_model = ConversationModel(user_id)
+                
+                # Priority 1: Use conversation_id from request if provided (most reliable)
+                if conversation_id:
+                    conv = conversation_model.get_conversation_by_id(conversation_id)
+                    if conv:
+                        db_conversation_id = conversation_id
+                        logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
+                    else:
+                        # Conversation doesn't exist or doesn't belong to user, create new one
                         db_conversation_id = conversation_model.create_conversation(
                             title=message[:50] if len(message) > 50 else message
                         )
-                    logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                        logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
                 else:
-                    db_conversation_id = conversation_model.create_conversation(
-                        title=message[:50] if len(message) > 50 else message
-                    )
-                    logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
-            
-            # Save user message
-            conversation_model.save_message(
-                conversation_id=db_conversation_id,
-                message=message,
-                role='user'
-            )
-            
-            # Save AI response
-            conversation_model.save_message(
-                conversation_id=db_conversation_id,
-                message=response_content,
-                role='bot'  # Database constraint requires 'bot' not 'assistant'
-            )
-            
-            logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
-        except Exception as save_error:
-            # Don't fail the request if saving to database fails
-            logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
+                    # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
+                    import re
+                    thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
+                    if thread_conv_match:
+                        db_conversation_id = int(thread_conv_match.group(1))
+                        conv = conversation_model.get_conversation_by_id(db_conversation_id)
+                        if not conv:
+                            db_conversation_id = conversation_model.create_conversation(
+                                title=message[:50] if len(message) > 50 else message
+                            )
+                        logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                    else:
+                        db_conversation_id = conversation_model.create_conversation(
+                            title=message[:50] if len(message) > 50 else message
+                        )
+                        logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
+                
+                # Save user message
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=message,
+                    role='user'
+                )
+                
+                # Save AI response
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=response_content,
+                    role='bot'  # Database constraint requires 'bot' not 'assistant'
+                )
+                
+                logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
+            except Exception as save_error:
+                # Don't fail the request if saving to database fails
+                logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
 
-        # #region agent log
-        try:
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        return jsonify({
-            'success': True,
-            'message': response_content,
-            'thread_id': thread_id,
-            'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-            'has_document': thread_has_document(thread_id)
-        })
+            # #region agent log
+            try:
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            return jsonify({
+                'success': True,
+                'message': response_content,
+                'thread_id': thread_id,
+                'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
+                'has_document': thread_has_document(thread_id)
+            })
+        finally:
+            user_lock.release()
 
     except Exception as e:
         # #region agent log
@@ -754,6 +821,31 @@ def chat():
         # #endregion
         logger.error(f"Error in RAG chat: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+
+
+@bp.route('/ingest/cancel/<task_id>', methods=['POST'])
+@login_required
+def cancel_ingest(task_id):
+    """
+    Gracefully cancel a PDF ingestion task (Celery revoke).
+    When USE_CELERY_FOR_INGESTION is False, returns 400.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+        if not current_app.config.get('USE_CELERY_FOR_INGESTION', False):
+            return jsonify({
+                'error': 'Cancel is not available. PDF ingestion is running in-process (Celery is disabled).'
+            }), 400
+        task = ingest_pdf_task.AsyncResult(task_id)
+        if task.state not in ('PENDING', 'PROCESSING', 'RETRY'):
+            return jsonify({'message': 'Task already finished or not found', 'task_id': task_id}), 200
+        task.revoke(terminate=True)
+        logger.info(f"User {session['user_id']} cancelled ingest task {task_id}")
+        return jsonify({'message': 'Upload cancelled', 'task_id': task_id, 'status': 'revoked'}), 200
+    except Exception as e:
+        logger.error(f"Error cancelling ingest task: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/ingest/status/<task_id>', methods=['GET'])

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from flask_mail import Message
 from app import mail
 from app.config import Config
+from app.utils.routes import get_default_route_by_role
 import os
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,8 @@ bp = Blueprint('auth', __name__)
 
 @bp.route('/register_email', methods=['GET', 'POST'])
 def register_email():
+    if request.method == 'GET' and 'user_id' in session:
+        return redirect(get_default_route_by_role(session.get('role')))
     if request.method == 'POST':
         try:
             email = request.form['useremail']
@@ -154,6 +157,8 @@ def verify_email(token):
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
+    if request.method == 'GET' and 'user_id' in session:
+        return redirect(get_default_route_by_role(session.get('role')))
     if request.method == 'POST':
         try:
             # Log request details for debugging
@@ -231,9 +236,9 @@ def register():
             session['role'] = role or 'student'
             session['groq_api_key'] = groq_api_key or ''
             session.permanent = True
-            if role == 'admin':
-                return redirect('/admin/')
-            return redirect(url_for('chat.index'))
+
+            # Use central helper so role-based landings stay consistent
+            return redirect(get_default_route_by_role(role))
         except ValueError as e:
             logger.error(f"Registration validation error: {str(e)}")
             return render_template('register.html', error=str(e))
@@ -248,6 +253,12 @@ def register():
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
+    # Public-only guard: if already authenticated and this is a GET request,
+    # do not show the login screen again – redirect to the role landing page.
+    if request.method == 'GET' and 'user_id' in session:
+        redirect_path = get_default_route_by_role(session.get('role'))
+        return redirect(redirect_path)
+
     if request.method == 'POST':
         try:
             user = UserModel.get_user_by_email(request.form['useremail'])
@@ -258,24 +269,15 @@ def login():
                 session['role'] = user.get('role', 'student')  # Store role in session
                 session['groq_api_key'] = user.get('groq_api_key', '')  # Default to empty string if not present
                 session.permanent = True  # Make session permanent for 24 hours
+
+                # Compute canonical role-based landing route once
+                redirect_path = get_default_route_by_role(user.get('role'))
                 
                 # JSON response for fetch/AJAX so frontend can redirect without relying on 302
                 if _wants_json():
-                    if user.get('role') == 'admin':
-                        return jsonify({'success': True, 'redirect_url': '/admin/'})
-                    if user.get('role') == 'teacher':
-                        return jsonify({'success': True, 'redirect_url': url_for('chat.teacher_dashboard')})
-                    if user.get('role') == 'student':
-                        return jsonify({'success': True, 'redirect_url': url_for('chat.student_dashboard')})
-                    return jsonify({'success': True, 'redirect_url': url_for('chat.index')})
-                
-                if user.get('role') == 'admin':
-                    return redirect('/admin/')
-                if user.get('role') == 'teacher':
-                    return redirect(url_for('chat.teacher_dashboard'))
-                if user.get('role') == 'student':
-                    return redirect(url_for('chat.student_dashboard'))
-                return redirect(url_for('chat.index'))
+                    return jsonify({'success': True, 'redirect_url': redirect_path})
+
+                return redirect(redirect_path)
             err_msg = "Invalid credentials"
             if _wants_json():
                 return jsonify({'success': False, 'error': err_msg}), 401
@@ -507,6 +509,8 @@ def _wants_json():
 
 @bp.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
+    if request.method == 'GET' and 'user_id' in session:
+        return redirect(get_default_route_by_role(session.get('role')))
     if request.method == 'POST':
         try:
             email = request.form['useremail']

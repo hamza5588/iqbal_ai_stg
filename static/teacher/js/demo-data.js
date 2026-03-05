@@ -9,9 +9,9 @@
 // ============================================================================
 
 const DEMO_CONFIG = {
-  DEMO_MODE_ENABLED: true, // Toggle demo mode on/off
-  AUTO_LOAD_DEMO_DATA: true, // Auto-load demo data on page init
-  USE_MOCK_API: true, // Use mock responses instead of real API calls
+  DEMO_MODE_ENABLED: false, // Toggle demo mode on/off (disabled for real users)
+  AUTO_LOAD_DEMO_DATA: false, // Do NOT auto-load demo data in production/staging
+  USE_MOCK_API: false, // Use real API calls instead of mock responses
   DEBUG_MODE: false // Log demo data operations
 };
 

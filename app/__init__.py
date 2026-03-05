@@ -162,7 +162,7 @@
 
 
 # app/__init__.py
-from flask import Flask
+from flask import Flask, request, redirect
 from flask_cors import CORS  
 from datetime import timedelta
 import os
@@ -220,7 +220,10 @@ def create_app():
     
     # Configure session - UPDATED for CORS
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
-    app.config['SESSION_COOKIE_SECURE'] = False  # Set to True only in production with HTTPS
+    # Use secure cookies in non-local environments so sessions are never sent
+    # over plain HTTP in staging/production. Local dev continues to work on http.
+    is_local_env = str(app.config.get('ENV', 'local')).lower() == 'local'
+    app.config['SESSION_COOKIE_SECURE'] = not is_local_env
     app.config['SESSION_COOKIE_HTTPONLY'] = True 
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     
@@ -268,6 +271,7 @@ def create_app():
     from app.routes.rag_routes import bp as rag_bp
     from app.routes.subscription import bp as subscription_bp
     from app.routes.admin_routes import bp as admin_bp
+    from app.routes.load_test_routes import bp as load_test_bp
 
     # Register blueprints with appropriate prefixes
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -280,6 +284,7 @@ def create_app():
     app.register_blueprint(rag_bp, url_prefix='/api/rag')
     app.register_blueprint(subscription_bp, url_prefix='/subscription')
     app.register_blueprint(admin_bp)
+    app.register_blueprint(load_test_bp, url_prefix='/api/load-test')
     
     # Serve teacher dashboard static assets (css, js, assets from teacherfrontend)
     from flask import send_from_directory
@@ -292,7 +297,31 @@ def create_app():
     from app.rbac.template_helpers import TEMPLATE_HELPERS
     for name, func in TEMPLATE_HELPERS.items():
         app.jinja_env.globals[name] = func
-    
+
+    # ------------------------------------------------------------------
+    # Canonical HTTPS enforcement
+    # ------------------------------------------------------------------
+    @app.before_request
+    def _enforce_https_in_proxy_setups():
+        """
+        Enforce HTTPS for staging/production when requests accidentally arrive
+        over HTTP.
+
+        We rely on X-Forwarded-Proto when running behind nginx or another
+        reverse proxy. For local development (ENV=local) this guard is a no-op.
+        """
+        env = str(app.config.get('ENV', 'local')).lower()
+        if env == 'local':
+            return None
+
+        # Prefer proxy header when present, otherwise fall back to Flask scheme
+        proto = request.headers.get('X-Forwarded-Proto', request.scheme or 'http').lower()
+        if proto == 'http':
+            # Upgrade to HTTPS while preserving host + path + query.
+            url = request.url.replace('http://', 'https://', 1)
+            # 308 keeps method/body for non-GET/HEAD.
+            return redirect(url, code=308)
+
     print(f"Flask app template folder: {app.template_folder}")
     
     # Initialize Celery only when PDF ingestion uses Celery (production).
