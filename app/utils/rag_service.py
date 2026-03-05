@@ -1690,9 +1690,12 @@ def chat_node(state: ChatState, config=None):
                 )
             )
             return {"messages": [error_response]}
-        user_llm_with_tools = llm.bind_tools(tools)
-        user_llm_structured_output = llm.with_structured_output(LessonState)
-        _mark_step("init_llm")
+        
+        # Fallback to generic LLM
+        user_llm = get_rag_llm(user_id=None, provider=provider, timeout=120, temperature=0.7)
+        user_llm_with_tools = user_llm.bind_tools(tools)
+        user_llm_structured_output = user_llm.with_structured_output(LessonState)
+        _mark_step("init_llm_fallback")
 
     # Get custom prompt from database (user-level, applies to all threads)
     custom_prompt = _get_rag_prompt(user_id, thread_id_str)
@@ -2211,7 +2214,8 @@ def chat_node(state: ChatState, config=None):
                 if last_user_msg:
                     finalization_keywords = [
                         # direct "final" / "done" intents
-                        'finalize', 'finalise', 'final', 'this is final', 'this is the final',
+                        'finalize', 'finalise', 'finalize the lesson', 'finalise the lesson',
+                        'final', 'this is final', 'this is the final',
                         'lesson final', 'lesson finalized',
                         'i am satisfied', "i'm satisfied", 'i am done', "i'm done",
                         'complete the lesson', 'finish the lesson', 'save the lesson',

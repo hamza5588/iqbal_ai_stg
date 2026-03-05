@@ -202,6 +202,9 @@ def init_db(app):
         RAGChunk, RAGThread, RAGPrompt, Coupon, CouponRedemption, GlobalPrompt,
         SystemSettings, UserSettings
     )
+    from app.load_testing.models import (
+        TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog
+    )
     from sqlalchemy import inspect
     import time
     

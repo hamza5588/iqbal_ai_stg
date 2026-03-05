@@ -1076,3 +1076,11 @@ def set_user_model():
         db.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@bp.route('/load-testing', methods=['GET'])
+@login_required
+@admin_only
+def load_testing_dashboard():
+    """Load testing dashboard"""
+    return render_template('admin/load_testing.html')
+

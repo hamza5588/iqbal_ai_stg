@@ -240,12 +240,25 @@ def create_app():
     # Register database cleanup function
     app.teardown_appcontext(close_db)
     
-    # Initialize database
+    # Initialize database and LangGraph Postgres checkpointer
     with app.app_context():
         init_db(app)
         # Create default admin account if it doesn't exist
         from app.utils.admin_init import create_default_admin
         create_default_admin()
+
+        # Initialize Lesson Q&A LangGraph (Postgres checkpointer setup + compile).
+        # This MUST run once on startup so that:
+        #   - PostgresSaver.setup() creates checkpoint tables, and
+        #   - the compiled graph is ready for use in request handlers.
+        try:
+            from app.services.lesson.lesson_qa_graph import init_lesson_qa_graph
+            init_lesson_qa_graph()
+        except Exception as e:
+            # Fail loudly in logs; app startup should surface this in staging.
+            import traceback
+            print("Failed to initialize Lesson Q&A LangGraph:", e)
+            traceback.print_exc()
     
     # Register blueprints (import here to avoid circular imports)
     from app.routes.auth import bp as auth_bp
@@ -258,6 +271,7 @@ def create_app():
     from app.routes.rag_routes import bp as rag_bp
     from app.routes.subscription import bp as subscription_bp
     from app.routes.admin_routes import bp as admin_bp
+    from app.routes.load_test_routes import bp as load_test_bp
 
     # Register blueprints with appropriate prefixes
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -270,6 +284,7 @@ def create_app():
     app.register_blueprint(rag_bp, url_prefix='/api/rag')
     app.register_blueprint(subscription_bp, url_prefix='/subscription')
     app.register_blueprint(admin_bp)
+    app.register_blueprint(load_test_bp, url_prefix='/api/load-test')
     
     # Serve teacher dashboard static assets (css, js, assets from teacherfrontend)
     from flask import send_from_directory

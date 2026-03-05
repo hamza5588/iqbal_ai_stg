@@ -60,6 +60,7 @@ class Lesson(Base):
     grade_level = Column(String(100), nullable=True)
     content = Column(Text, nullable=False)
     file_name = Column(String(255), nullable=True)
+    rag_thread_id = Column(String(255), nullable=True)  # RAG thread for PDF retrieval (student ask question)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, 
                        server_default=func.now(), server_onupdate=func.now())
