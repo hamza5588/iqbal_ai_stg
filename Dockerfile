@@ -1,231 +1,34 @@
 
-version: "3.9"
 
-services:
-  nginx:
-    build:
-      context: .
-      dockerfile: Dockerfile.nginx
-    ports:
-      - "127.0.0.1:9080:80"
-      - "127.0.0.1:9444:443"
-    volumes:
-      - ./static:/app/static
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      flask_app1:
-        condition: service_healthy
-    networks:
-      - app_network
-      - web
-    restart: unless-stopped
+FROM python:3.13-slim
 
-  # ----------------------------
-  # POSTGRES DATABASE (prod)
-  # No host ports exposed (avoids conflicts)
-  # ----------------------------
-  postgres:
-    image: postgres:17
-    restart: always
-    environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydatabase
-    volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app_network
+WORKDIR /app
 
-  # ----------------------------
-  # MILVUS (prod)
-  # No host ports exposed (avoids conflicts)
-  # ----------------------------
-  milvus:
-    image: milvusdb/milvus:v2.4.0
-    command: ["milvus", "run", "standalone"]
-    restart: always
-    volumes:
-      - milvus_data_prod:/var/lib/milvus
-    environment:
-      ETCD_USE_EMBED: "true"
-      COMMON_STORAGETYPE: local
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9091/healthz || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - app_network
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    libreoffice \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
-  # ----------------------------
-  # REDIS (prod)
-  # No host ports exposed (avoids conflicts)
-  # ----------------------------
-  redis:
-    image: redis:7-alpine
-    restart: always
-    volumes:
-      - redis_data_prod:/data
-    command: redis-server --appendonly yes
-    networks:
-      - app_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+ENV HF_HUB_DISABLE_XET=1
+ENV TQDM_DISABLE=1
+ENV TOKENIZERS_PARALLELISM=false
 
-  # ----------------------------
-  # PRIMARY FLASK INSTANCE (prod)
-  # ----------------------------
-  flask_app1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    expose:
-      - "5000"
-    environment:
-      - FLASK_APP=run.py
-      - FLASK_ENV=production
-      - FLASK_DEBUG=0
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
-      - OPENBLAS_NUM_THREADS=2
-      - OMP_NUM_THREADS=2
-      - MKL_NUM_THREADS=2
-      - RAYON_NUM_THREADS=2
-      - TOKENIZERS_PARALLELISM=false
-      - TQDM_DISABLE=1
-      - DB_MODE=primary
-      - INSTANCE_ROLE=primary
-      - SERVER_URL=https://staging.iqbalai.com   # <-- add this line
-      - ENV=production
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir tiktoken flask_wtf sentence-transformers langchain-huggingface
 
-      # PostgreSQL URL (internal docker network)
-      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+COPY . .
 
-      # APIs
-      - GOOGLE_CLIENT_ID=507995986306-qcdrhrrt3d71la4pkrf7lt1b2tvuusqm.apps.googleusercontent.com
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - NOMIC_APIC_KEY=${NOMIC_API_KEY}
+ENV FLASK_APP=run.py
+ENV FLASK_ENV=production
+ENV FLASK_DEBUG=0
+ENV PYTHONPATH=/app
 
-      # vLLM API
-      - VLLM_API_BASE=http://69.28.92.113:8000/v1
-      - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
-      - VLLM_TIMEOUT=600
+EXPOSE 5000
 
-      # Celery Configuration
-      - USE_CELERY_FOR_INGESTION=true
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-
-      # Milvus (internal docker network)
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
-      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-      - EMBEDDING_DIM=384
-
-    volumes:
-      - .:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      milvus:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: "4"
-          memory: 20G
-        reservations:
-          cpus: "2"
-          memory: 12G
-    networks:
-      - app_network
-      - web
-
-  # ----------------------------
-  # CELERY WORKER (prod)
-  # ----------------------------
-  celery_worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      - FLASK_APP=run.py
-      - FLASK_ENV=production
-      - FLASK_DEBUG=0
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
-      - TOKENIZERS_PARALLELISM=false
-      - TQDM_DISABLE=1
-      - ENV=production
-
-      # Database
-      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
-
-      # Celery
-      - USE_CELERY_FOR_INGESTION=true
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-
-      # APIs
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - NOMIC_APIC_KEY=${NOMIC_API_KEY}
-      - VLLM_API_BASE=http://69.28.92.113:8000/v1
-      - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
-      - VLLM_TIMEOUT=600
-
-      # Milvus
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
-      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-      - EMBEDDING_DIM=384
-
-    volumes:
-      - .:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      milvus:
-        condition: service_healthy
-    command: celery -A app.celery_worker_entry.celery worker --loglevel=info --concurrency=2
-    deploy:
-      resources:
-        limits:
-          cpus: "4"
-          memory: 16G
-        reservations:
-          cpus: "2"
-          memory: 8G
-    networks:
-      - app_network
-    restart: unless-stopped
-
-volumes:
-  postgres_data_prod:
-  redis_data_prod:
-  milvus_data_prod:
-
-networks:
-  app_network:
-    driver: bridge
-  web:
-    external: true
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--threads", "2", "--timeout", "1800", "--graceful-timeout", "30", "--keep-alive", "5", "--preload", "run:app"]
