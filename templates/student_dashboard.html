@@ -4522,6 +4522,25 @@
           grade: lesson.grade,
           content: lesson.content || lesson.body
         };
+
+        // Persist lightweight lesson metadata on the current chat so it can be
+        // restored when the user reopens this thread from the sidebar or after
+        // a page reload.
+        try {
+          const chat = chatHistory.find(c => c.id === currentChatId);
+          if (chat) {
+            chat.lessonContext = {
+              id: lesson.id,
+              title: lesson.title,
+              subject: lesson.subject,
+              grade: lesson.grade
+            };
+            saveChatThreads();
+          }
+        } catch (e) {
+          console.warn('Failed to persist lesson context on chat thread', e);
+        }
+
         return true;
       }
 
@@ -5243,11 +5262,33 @@
         // NO context from other conversations
         // ════════════════════════════════════════════════════════════════════════════════
 
-        // Clear lesson side panel if switching to a chat without lesson context
-        if (window.currentLessonContext && window.currentLessonContext.chatId !== chatId) {
-          window.currentLessonContext = null;
+        // Restore or clear lesson context for this chat.
+        // If this thread was previously bound to a lesson, rehydrate that link so
+        // /api/lessons/ask_question continues to receive a valid lesson_id.
+        try {
+          const chat = chatHistory.find(c => c.id === chatId);
+          if (chat && chat.lessonContext) {
+            window.currentLessonContext = {
+              chatId: chatId,
+              id: chat.lessonContext.id,
+              title: chat.lessonContext.title,
+              subject: chat.lessonContext.subject,
+              grade: chat.lessonContext.grade
+            };
+            window.currentLessonQAId = chat.lessonContext.id;
+          } else {
+            if (window.currentLessonContext && window.currentLessonContext.chatId !== chatId) {
+              window.currentLessonContext = null;
+            }
+            window.currentLessonQAId = null;
+          }
+        } catch (e) {
+          console.warn('Failed to restore lesson context when loading chat', e);
+          if (window.currentLessonContext && window.currentLessonContext.chatId !== chatId) {
+            window.currentLessonContext = null;
+          }
+          window.currentLessonQAId = null;
         }
-        window.currentLessonQAId = null;
 
         // Rebuild chat UI and render messages for this chat
         renderChatLayoutForChat(chatId);
