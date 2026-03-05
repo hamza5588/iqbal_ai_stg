@@ -1,0 +1,2445 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load Testing - Iqbal AI Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.TEST_TYPE_MAP = {
+            'multi_user_sign_in': 'Test 1: System Access',
+            'teacher_flow_concurrent': 'Test 2/3: Teacher Critical Path',
+            'student_chat_concurrent': 'Test 4: Student Concurrent Chat',
+            'teacher_rag_sequential': 'Test 5: Teacher Long Chat',
+            'student_lesson_sequential': 'Test 6: Student Q&A',
+            'doc_upload_repeat': 'Test 7: Ingest Stress',
+            'rag_quality_benchmark': 'Test 8: RAG Quality Benchmark'
+        };
+
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'iqbal-primary': '#05B0FC',
+                        'iqbal-bg': '#F0F9FF'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .sidebar-item:hover {
+            background: linear-gradient(90deg, rgba(5, 176, 252, 0.1) 0%, transparent 100%);
+        }
+
+        .sidebar-item.active {
+            background: linear-gradient(90deg, rgba(5, 176, 252, 0.2) 0%, transparent 100%);
+            border-left: 3px solid #05B0FC;
+        }
+
+        .tab-btn.active {
+            border-bottom: 2px solid #05B0FC;
+            color: #05B0FC;
+        }
+
+        .test-running-blur {
+            filter: blur(4px);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        #running-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.3);
+            z-index: 40;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 1024px) {
+            #main-container {
+                flex-direction: column;
+            }
+
+            aside {
+                width: 100%;
+                min-height: auto;
+                border-bottom: 1px solid #e5e7eb;
+                box-shadow: none;
+            }
+
+            aside>div {
+                padding: 1rem;
+            }
+
+            aside nav {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            aside nav a {
+                flex: 1;
+                min-width: 120px;
+                justify-content: center;
+                padding: 0.5rem;
+                text-align: center;
+            }
+
+            main {
+                padding: 1.5rem;
+            }
+        }
+
+        .overflow-x-auto {
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-[#05B0FC]">Load Testing Console</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/admin" class="text-gray-600 hover:text-[#05B0FC] transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="running-overlay"></div>
+
+    <div id="main-container" class="flex transition-all duration-300">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-white shadow-lg min-h-screen">
+            <div class="p-4">
+                <nav class="space-y-2">
+                    <a href="#" onclick="showTab('tests'); return false;"
+                        class="sidebar-item active flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-play-circle w-5 mr-3"></i>
+                        <span>Run Tests</span>
+                    </a>
+                    <a href="#" onclick="showTab('assets'); return false;"
+                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-database w-5 mr-3"></i>
+                        <span>Test Assets</span>
+                    </a>
+                    <a href="#" onclick="showTab('results'); return false;"
+                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-chart-bar w-5 mr-3"></i>
+                        <span>Results & Reports</span>
+                    </a>
+                    <a href="#" onclick="showTab('settings'); return false;"
+                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
+                        <i class="fas fa-cog w-5 mr-3"></i>
+                        <span>Settings</span>
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-8">
+
+            <!-- SETTINGS TAB -->
+            <div id="settings-tab" class="tab-content hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Global Settings</h2>
+                    <div id="current-env-badge"
+                        class="px-3 py-1 rounded-full text-sm font-semibold bg-gray-200 text-gray-700">
+                        Current: Localhost
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">Target Environment</h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Configure where tests will run and where assets (User Sets, Document Sets) will be managed.
+                    </p>
+
+                    <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Target Base URL</label>
+                            <input type="text" id="global-target-url" class="w-full border rounded px-3 py-2"
+                                placeholder="http://localhost:5000" value="http://localhost:5000">
+                            <p class="text-xs text-gray-500 mt-1">
+                                e.g. <code>http://localhost:5000</code> or <code>https://staging.iqbalai.com</code>
+                            </p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Admin API Key (for Remote
+                                Env)</label>
+                            <input type="password" id="global-api-key" class="w-full border rounded px-3 py-2"
+                                placeholder="Leave empty for localhost">
+                            <p class="text-xs text-gray-500 mt-1">
+                                Required if managing assets on a remote server.
+                            </p>
+                        </div>
+
+                        <div class="pt-4">
+                            <button type="submit"
+                                class="bg-[#05B0FC] text-white px-6 py-2 rounded hover:bg-[#0490cf] transition-colors">
+                                Save Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- TESTS TAB -->
+            <div id="tests-tab" class="tab-content block">
+                <h2 class="text-2xl font-bold mb-6">Execute Load Tests</h2>
+
+                <div class="flex flex-col gap-6">
+                    <!-- Config Form -->
+                    <div id="test-config-container" class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold mb-4">Start New Test</h3>
+                        <form id="start-test-form" onsubmit="startTest(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Test Scenario <span
+                                            class="text-red-500">*</span></label>
+                                    <select id="test-type" class="w-full border rounded px-3 py-2"
+                                        onchange="updateFormFields()">
+                                        <option value="multi_user_sign_in">Test 1: System Access (Auth & Dashboard)
+                                        </option>
+                                        <option value="teacher_flow_concurrent">Test 2 & 3: The "Teacher's Heart" -
+                                            Critical Path</option>
+                                        <option value="student_chat_concurrent">Test 4: The "Virtual Classroom"
+                                            (Concurrent Student Chat)</option>
+                                        <option value="teacher_rag_sequential">Test 5: Deep Research (Teacher Long Chat)
+                                        </option>
+                                        <option value="student_lesson_sequential">Test 6: Intense Study Session (Student
+                                            Deep Q&A)</option>
+                                        <option value="doc_upload_repeat">Test 7: Ingest System Reliability (Repeated
+                                            Processing)</option>
+                                        <option value="rag_quality_benchmark">Test 8: IQ (RAG Quality) Benchmark
+                                        </option>
+                                    </select>
+                                </div>
+                                <div id="concurrent-users-field">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Concurrent Users <span
+                                            class="text-red-500">*</span></label>
+                                    <input type="number" id="concurrent-users" value="1" min="1" max="1000"
+                                        class="w-full border rounded px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">User Set <span
+                                            class="text-red-500">*</span></label>
+                                    <select id="test-user-set" class="w-full border rounded px-3 py-2"
+                                        onchange="updateFieldConstraints()">
+                                        <option value="">Loading...</option>
+                                    </select>
+                                </div>
+                                <div id="doc-set-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Document Set <span
+                                            class="text-red-500">*</span></label>
+                                    <select id="test-doc-set" class="w-full border rounded px-3 py-2">
+                                        <option value="">Loading...</option>
+                                    </select>
+                                </div>
+                                <div id="lesson-id-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Lesson <span
+                                            class="text-red-500">*</span></label>
+                                    <select id="lesson-id" class="w-full border rounded px-3 py-2">
+                                        <option value="">Loading lessons...</option>
+                                    </select>
+                                </div>
+                                <div id="req-per-user-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Messages to Send <span
+                                            class="text-red-500">*</span></label>
+                                    <input type="number" id="requests-per-user" value="10" min="1"
+                                        class="w-full border rounded px-3 py-2">
+                                </div>
+                                <div id="csv-file-field" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Message CSV
+                                        (Optional)</label>
+                                    <select id="test-message-csv" class="w-full border rounded px-3 py-2"
+                                        onchange="updateFieldConstraints()">
+                                        <option value="" data-count="10">Default Messages</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mt-6 flex justify-end">
+                                <button type="submit"
+                                    class="bg-iqbal-primary text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors shadow-sm font-medium">
+                                    <i class="fas fa-play mr-2"></i>Start Test
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Active Tests & Live Logs -->
+                    <div class="bg-white rounded-lg shadow p-6 border-t-2 border-iqbal-primary">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold flex items-center">
+                                <i class="fas fa-terminal mr-2 text-gray-600"></i>Active Tests & Live Logs
+                            </h3>
+                            <div id="test-status-badge"
+                                class="hidden px-3 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-800">
+                                Test Running
+                            </div>
+                        </div>
+                        <div id="active-tests-list"
+                            class="space-y-2 overflow-y-auto font-mono text-sm bg-gray-900 text-green-400 p-4 rounded-lg shadow-inner"
+                            style="max-height: 500px; min-height: 200px;">
+                            <p class="text-gray-500 italic opacity-50">Waiting for test to start...</p>
+                        </div>
+                        <div id="test-actions-footer" class="mt-4 hidden flex justify-end">
+                            <button onclick="stopActiveTest()"
+                                class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors shadow-sm flex items-center text-sm font-medium">
+                                <i class="fas fa-stop-circle mr-2"></i>Stop Test
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ASSETS TAB -->
+            <div id="assets-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6">Test Assets</h2>
+
+                <!-- User Sets -->
+                <!-- User Sets -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                        <h3 class="text-lg font-semibold">User Sets</h3>
+                        <button onclick="document.getElementById('create-user-set-modal').classList.remove('hidden')"
+                            class="w-full sm:w-auto bg-green-500 text-white px-4 py-2 rounded">
+                            + Create Users
+                        </button>
+                    </div>
+                    <div id="user-sets-list" class="space-y-2">
+                        <!-- Populated via JS -->
+                        <p class="text-gray-500 text-sm">Loading user sets...</p>
+                    </div>
+                </div>
+
+
+                <!-- Doc Sets -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                        <h3 class="text-lg font-semibold">Document Sets</h3>
+                        <button onclick="document.getElementById('create-doc-set-modal').classList.remove('hidden')"
+                            class="w-full sm:w-auto bg-green-500 text-white px-4 py-2 rounded">
+                            + Create Doc Set
+                        </button>
+                    </div>
+
+                    <div id="doc-sets-list" class="space-y-4">
+                        <!-- Populated via JS -->
+                        <p class="text-gray-500">Loading document sets...</p>
+                    </div>
+                </div>
+
+                <!-- Message CSVs -->
+                <div class="bg-white rounded-lg shadow p-6 mt-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">Message CSVs</h3>
+                        <button onclick="document.getElementById('upload-message-csv-modal').classList.remove('hidden')"
+                            class="bg-blue-600 text-white px-4 py-2 rounded">
+                            + Upload Message CSV
+                        </button>
+                    </div>
+
+                    <div id="message-csv-list" class="space-y-4 overflow-x-auto">
+                        <!-- Populated via JS -->
+                        <p class="text-gray-500">Loading message CSVs...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RESULTS TAB -->
+            <div id="results-tab" class="tab-content hidden">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-bold">Test Results</h2>
+                    <button onclick="deleteAllResults()"
+                        class="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded flex items-center justify-center">
+                        <i class="fas fa-trash-alt mr-2"></i> Delete All Results
+                    </button>
+                </div>
+                <div class="bg-white rounded-lg shadow overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-24 text-right">
+                                    Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-tbody" class="bg-white divide-y divide-gray-200">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Create Users Modal -->
+    <div id="create-user-set-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Create Test User Set</h3>
+            <form onsubmit="createUserSet(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Set Name</label>
+                    <input type="text" id="user-prefix" required class="w-full border rounded px-3 py-2"
+                        placeholder="e.g. StagingUsers">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Role</label>
+                    <select id="user-role" class="w-full border rounded px-3 py-2">
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Count</label>
+                    <input type="number" id="user-count" value="10" min="1" max="1000"
+                        class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Password</label>
+                    <input type="text" id="user-password" value="TestPass123!" class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button"
+                        onclick="document.getElementById('create-user-set-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Doc Set Modal -->
+    <div id="create-doc-set-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Create Document Set</h3>
+            <form onsubmit="createDocSet(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Set Name</label>
+                    <input type="text" id="doc-set-name" required class="w-full border rounded px-3 py-2"
+                        placeholder="e.g. Physics PDFs">
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button"
+                        onclick="document.getElementById('create-doc-set-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Doc Modal -->
+    <div id="upload-doc-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Upload Document (PDF)</h3>
+            <input type="hidden" id="upload-set-id">
+            <form onsubmit="uploadDocument(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Select PDF</label>
+                    <input type="file" id="doc-file" accept=".pdf" required class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="document.getElementById('upload-doc-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Message CSV Modal -->
+    <div id="upload-message-csv-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-bold mb-4">Upload Message CSV</h3>
+            <form onsubmit="uploadMessageCSV(event)">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Display Name</label>
+                    <input type="text" id="csv-display-name" required class="w-full border rounded px-3 py-2"
+                        placeholder="e.g. Science Questions">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm mb-1">Select CSV</label>
+                    <input type="file" id="message-csv-file" accept=".csv" required
+                        class="w-full border rounded px-3 py-2">
+                    <p class="text-xs text-gray-400 mt-1">One message per line (first column).</p>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button"
+                        onclick="document.getElementById('upload-message-csv-modal').classList.add('hidden')"
+                        class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Result Details Modal -->
+    <div id="result-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-10 mx-auto p-5 border w-3/4 shadow-lg rounded-md bg-white h-5/6 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="report-title" class="text-xl font-bold">Result Details</h3>
+                <div class="flex gap-2">
+                    <button id="raw-json-btn" onclick="toggleRawJson()"
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm flex items-center border">
+                        <i class="fas fa-code mr-2"></i> Raw JSON
+                    </button>
+                    <button onclick="document.getElementById('result-modal').classList.add('hidden')"
+                        class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                </div>
+            </div>
+            <div class="flex border-b mb-4">
+                <button onclick="showResultSubTab('summary')" id="tab-summary"
+                    class="tab-btn px-4 py-2 text-sm font-medium active">Summary</button>
+                <button onclick="showResultSubTab('artifacts')" id="tab-artifacts"
+                    class="tab-btn px-4 py-2 text-sm font-medium">Artifacts</button>
+            </div>
+
+            <div class="flex-1 overflow-auto border p-4 bg-gray-50" id="result-content-container">
+                <div id="result-content" class="font-mono text-sm h-full"></div>
+                <div id="artifact-content" class="hidden h-full">
+                    <div id="artifact-list" class="space-y-6">
+                        <!-- Grouped by user -->
+                        <p class="text-gray-500 italic">No artifacts available for this test.</p>
+                    </div>
+                </div>
+            </div>
+            <div id="raw-json-content"
+                class="hidden flex-1 overflow-auto border p-4 bg-black text-green-400 font-mono text-xs"></div>
+            <div class="mt-4 flex gap-2">
+                <button onclick="generateReport('technical')" class="bg-gray-600 text-white px-4 py-2 rounded">Technical
+                    Report</button>
+                <button onclick="generateReport('executive')" class="bg-purple-600 text-white px-4 py-2 rounded">AI
+                    Executive Summary</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const defaultTargetUrl = window.location.origin;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load settings
+            const savedUrl = localStorage.getItem('loadTestTargetUrl') || defaultTargetUrl;
+            const savedKey = localStorage.getItem('loadTestApiKey') || '';
+
+            document.getElementById('global-target-url').value = savedUrl;
+            document.getElementById('global-api-key').value = savedKey;
+
+            updateEnvBadge(savedUrl);
+
+            loadUserSets();
+            loadDocSets();
+            loadMessageCSVs();
+            loadLessons();
+            loadResults();
+        });
+
+        function updateEnvBadge(url) {
+            const badge = document.getElementById('current-env-badge');
+            if (badge) { // Added check for badge existence
+                if (url.includes('localhost') || url.includes('127.0.0.1')) {
+                    badge.className = 'px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800';
+                    badge.textContent = 'Current: Localhost';
+                } else {
+                    badge.className = 'px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800';
+                    badge.textContent = `Current: ${url}`;
+                }
+            }
+        }
+
+        function saveSettings(e) {
+            e.preventDefault();
+            const url = document.getElementById('global-target-url').value.replace(/\/$/, ''); // Remove trailing slash
+            const key = document.getElementById('global-api-key').value;
+
+            localStorage.setItem('loadTestTargetUrl', url);
+            localStorage.setItem('loadTestApiKey', key);
+
+            updateEnvBadge(url);
+            alert('Settings saved! Asset lists will refresh from the new target.');
+
+            // Refresh assets from new target
+            loadUserSets();
+            loadDocSets();
+        }
+
+        function getTargetConfig() {
+            return {
+                url: localStorage.getItem('loadTestTargetUrl') || defaultTargetUrl,
+                key: localStorage.getItem('loadTestApiKey') || ''
+            };
+        }
+
+        // Helper to determine if we need proxy
+        function isRemote() {
+            const config = getTargetConfig();
+            return !config.url.includes(window.location.hostname);
+        }
+
+        async function fetchWithProxy(endpoint, options = {}) {
+            const config = getTargetConfig();
+
+            let url = endpoint;
+
+            try {
+                // Ensure protocol
+                let targetStr = config.url;
+                if (!targetStr.startsWith('http')) targetStr = 'http://' + targetStr;
+                const target = new URL(targetStr);
+
+                const currentHostname = window.location.hostname;
+                const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+                const targetPort = target.port || (target.protocol === 'https:' ? '443' : '80');
+
+                const isLocal = (h) => h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0';
+
+                // Check if effective origin is the same
+                // Case 1: Exact match of host and port
+                let sameOrigin = (target.hostname === currentHostname && targetPort === currentPort);
+
+                // Case 2: Localhost aliases (127.0.0.1 vs localhost)
+                if (!sameOrigin && isLocal(currentHostname) && isLocal(target.hostname)) {
+                    if (targetPort === currentPort) {
+                        sameOrigin = true;
+                    }
+                }
+
+                if (!endpoint.startsWith('http') && !sameOrigin) {
+                    url = `${config.url}${endpoint}`;
+                } else {
+                    // Force relative path if same origin to avoid ANY CORS issues
+                    if (!endpoint.startsWith('http')) {
+                        // Ensure we don't double slash if config.url had path
+                        url = endpoint;
+                    }
+                }
+
+                console.log(`[Proxy] Fetching ${endpoint} -> ${url} (SameOrigin: ${sameOrigin})`);
+
+            } catch (e) {
+                console.warn("URL Parse Error:", e);
+                // Fallback: prepend if not http
+                if (!endpoint.startsWith('http')) {
+                    url = `${config.url}${endpoint}`;
+                }
+            }
+
+            const headers = options.headers || {};
+            // Add API Key if present
+            if (config.key) {
+                headers['X-Admin-API-Key'] = config.key;
+            }
+
+            // Merge headers
+            // Determine content-type: default to JSON unless body is FormData
+            if (!options.body || !(options.body instanceof FormData)) {
+                if (!headers['Content-Type']) {
+                    headers['Content-Type'] = 'application/json';
+                }
+            }
+
+            options.headers = headers;
+
+            try {
+                const res = await fetch(url, options);
+                return res;
+            } catch (err) {
+                console.error("Fetch error details:", err);
+                // Throwing allows caller to catch and show UI error
+                throw new Error(`Connection failed to ${url}. ${err.message}`);
+            }
+        }
+
+        // --- TABS ---
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+
+            // Fix: remove active class from all sidebar items first
+            document.querySelectorAll('.sidebar-item').forEach(el => {
+                el.classList.remove('active');
+                // Restore default style logic if needed, but CSS handles hover
+                el.style.background = '';
+                el.style.borderLeft = '';
+            });
+
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+
+            // Highlight active link
+            const activeLink = document.querySelector(`a[onclick="showTab('${tabName}'); return false;"]`);
+            if (activeLink) {
+                activeLink.classList.add('active');
+            }
+
+            if (tabName === 'assets') {
+                loadUserSets();
+                loadDocSets();
+                loadMessageCSVs();
+            }
+            if (tabName === 'results') loadResults();
+        }
+
+        function updateUserSetFiltering() {
+            const type = document.getElementById('test-type').value;
+            const select = document.getElementById('test-user-set');
+            const options = select.options;
+
+            let targetRole = '';
+            if (type.includes('teacher') || type === 'rag_quality_benchmark' || type.includes('sequential') && !type.includes('student')) targetRole = 'teacher';
+            if (type.includes('student')) targetRole = 'student';
+
+            let currentValid = false;
+            for (let i = 1; i < options.length; i++) {
+                const opt = options[i];
+                const matches = !targetRole || opt.dataset.role === targetRole;
+                if (matches) {
+                    opt.classList.remove('hidden');
+                    opt.disabled = false;
+                    if (opt.selected) currentValid = true;
+                } else {
+                    opt.classList.add('hidden');
+                    opt.disabled = true;
+                    if (opt.selected) opt.selected = false;
+                }
+            }
+
+            // If current selection was cleared, reset to first valid option or empty
+            if (!currentValid && select.value !== '') {
+                select.value = '';
+            }
+        }
+
+        function updateFormFields() {
+            const type = document.getElementById('test-type').value;
+            updateUserSetFiltering();
+            const docField = document.getElementById('doc-set-field');
+            const lessonField = document.getElementById('lesson-id-field');
+            const reqField = document.getElementById('req-per-user-field');
+            const concurrentField = document.getElementById('concurrent-users-field');
+            const concurrentInput = document.getElementById('concurrent-users');
+
+            docField.classList.add('hidden');
+            lessonField.classList.add('hidden');
+            reqField.classList.add('hidden');
+            document.getElementById('csv-file-field').classList.add('hidden');
+
+            // Sequential tests (4,5,6): hide concurrent users, lock to 1
+            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(type);
+            if (isSequential) {
+                concurrentField.classList.add('hidden');
+                concurrentInput.value = 1;
+            } else {
+                concurrentField.classList.remove('hidden');
+            }
+
+            if (['teacher_flow_concurrent', 'teacher_rag_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(type)) {
+                docField.classList.remove('hidden');
+            }
+
+            if (['student_chat_concurrent', 'student_lesson_sequential'].includes(type)) {
+                lessonField.classList.remove('hidden');
+            }
+
+            if (['teacher_rag_sequential', 'doc_upload_repeat', 'student_lesson_sequential'].includes(type)) {
+                reqField.classList.remove('hidden');
+                // Dynamic label for Test 6
+                const label = reqField.querySelector('label');
+                if (type === 'doc_upload_repeat') {
+                    label.innerHTML = 'Upload Iterations <span class="text-red-500">*</span>';
+                } else {
+                    label.innerHTML = 'Messages to Send <span class="text-red-500">*</span>';
+                }
+            }
+
+            if (['teacher_flow_concurrent', 'student_chat_concurrent', 'teacher_rag_sequential', 'student_lesson_sequential', 'rag_quality_benchmark'].includes(type)) {
+                document.getElementById('csv-file-field').classList.remove('hidden');
+            }
+
+            // Update max constraints after visibility changes
+            updateFieldConstraints();
+        }
+
+        function updateFieldConstraints() {
+            // --- Concurrent Users max = selected user set's user count ---
+            const userSetSelect = document.getElementById('test-user-set');
+            const selectedUser = userSetSelect.selectedOptions[0];
+            const userCount = selectedUser?.dataset.count ? parseInt(selectedUser.dataset.count) : 1000;
+            const concurrentInput = document.getElementById('concurrent-users');
+            concurrentInput.max = userCount;
+            // Only update value if it's currently invalid (over max) or empty
+            if (parseInt(concurrentInput.value) > userCount || !concurrentInput.value) {
+                concurrentInput.value = userCount;
+            }
+
+            // --- Messages to Send max = selected CSV's message count ---
+            // Only applies if CSV field is visible
+            const csvField = document.getElementById('csv-file-field');
+            const reqInput = document.getElementById('requests-per-user');
+
+            if (!csvField.classList.contains('hidden')) {
+                const csvSelect = document.getElementById('test-message-csv');
+                const selectedCsv = csvSelect.selectedOptions[0];
+                const msgCount = selectedCsv?.dataset.count ? parseInt(selectedCsv.dataset.count) : 10;
+                reqInput.max = msgCount;
+                reqInput.value = msgCount;
+                reqInput.title = `Max: ${msgCount} messages available`;
+            } else {
+                // For test 6 (iterations), remove max constraint or set a reasonable default
+                reqInput.removeAttribute('max');
+                reqInput.value = 5;
+                reqInput.title = "Number of repeated uploads";
+            }
+        }
+
+        // --- ASSETS: USER SETS ---
+        async function loadUserSets() {
+            try {
+                // Use fetchWithProxy instead of direct relative path
+                const res = await fetchWithProxy('/api/load-test/users');
+                const data = await res.json();
+                const container = document.getElementById('user-sets-list');
+                container.innerHTML = '';
+
+                // Update Select in Run Test tab
+                const select = document.getElementById('test-user-set');
+                select.innerHTML = '<option value="">Select User Set</option>';
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No user sets found. Create one above.</div>';
+                }
+
+                console.log("User Sets API Response:", data);
+                data.forEach(set => {
+                    // Fallback to name_prefix/count if name/user_count missing
+                    const setName = set.name || set.name_prefix || 'Unnamed Set';
+                    const setCount = set.user_count !== undefined ? set.user_count : (set.count || 0);
+
+                    // Start Button Select
+                    const option = document.createElement('option');
+                    option.value = set.id;
+                    option.dataset.count = setCount;
+                    option.dataset.role = set.role || (set.is_teacher ? 'teacher' : 'student');
+                    option.textContent = `${setName} (${setCount} users) - ${option.dataset.role}`;
+                    select.appendChild(option);
+
+                    // List Item
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200';
+                    div.innerHTML = `
+                        <div>
+                            <div class="font-medium text-gray-800">${setName}</div>
+                            <div class="text-xs text-gray-500">${setCount} users • Created ${new Date(set.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <button onclick="deleteUserSet(${set.id})" class="text-red-500 hover:text-red-700 text-sm">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to load user sets", e);
+                document.getElementById('user-sets-list').innerHTML =
+                    `<div class="text-red-600 text-sm p-2 bg-red-50 rounded border border-red-200">
+                        Failed to load user sets: ${e.message}
+                    </div>`;
+            }
+        }
+
+        async function createUserSet(e) {
+            e.preventDefault();
+            const name = document.getElementById('user-prefix').value;
+            const count = parseInt(document.getElementById('user-count').value);
+            const role = document.getElementById('user-role').value;
+            const password = document.getElementById('user-password').value;
+
+            try {
+                const res = await fetchWithProxy('/api/load-test/users/create', {
+                    method: 'POST',
+                    body: JSON.stringify({ name, count, role, password })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    document.getElementById('create-user-set-modal').classList.add('hidden');
+                    document.getElementById('user-prefix').value = '';
+                    loadUserSets();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+            }
+        }
+
+        async function deleteUserSet(setId) {
+            if (!confirm("Delete this user set? This will also permanently remove all associated test users, their account history, and RAG session data. Proceed?")) return;
+            try {
+                const res = await fetchWithProxy(`/api/load-test/users/${setId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadUserSets();
+                else alert(data.error);
+            } catch (e) {
+                alert("Delete failed");
+            }
+        }
+
+        async function loadLessons() {
+            try {
+                const res = await fetchWithProxy('/api/load-test/lessons');
+                const data = await res.json();
+                const select = document.getElementById('lesson-id');
+                select.innerHTML = '<option value="">Select a finalized lesson</option>';
+
+                data.forEach(l => {
+                    const option = document.createElement('option');
+                    option.value = l.id;
+                    option.textContent = `${l.title} (ID: ${l.id})`;
+                    select.appendChild(option);
+                });
+            } catch (e) {
+                console.error("Failed to load lessons", e);
+                document.getElementById('lesson-id').innerHTML = '<option value="">Error loading lessons</option>';
+            }
+        }
+
+
+        // --- ASSETS: DOC SETS ---
+        async function loadDocSets() {
+            try {
+                const res = await fetchWithProxy('/api/load-test/doc-sets');
+                const data = await res.json();
+                const container = document.getElementById('doc-sets-list');
+                container.innerHTML = '';
+
+                const select = document.getElementById('test-doc-set');
+                select.innerHTML = '<option value="">Select Document Set</option>';
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No document sets found. Create one above.</div>';
+                }
+
+                console.log("Doc Sets API Response:", data);
+                data.forEach(set => {
+                    const docName = set.name || 'Unnamed Doc Set';
+                    const docCount = set.doc_count !== undefined ? set.doc_count : 0;
+                    const documents = set.documents || [];
+
+                    // Select Option
+                    const option = document.createElement('option');
+                    option.value = set.id;
+                    option.textContent = `${docName} (${docCount} docs)`;
+                    select.appendChild(option);
+
+                    // List Item
+                    const div = document.createElement('div');
+                    div.className = 'border border-gray-200 rounded p-3 bg-gray-50 mb-2';
+                    div.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 class="font-medium text-gray-800">${docName}</h4>
+                                <span class="text-xs text-gray-500">${docCount} documents</span>
+                            </div>
+                            <div class="space-x-2">
+                                <button onclick="openUploadModal(${set.id})" class="text-blue-500 text-xs hover:underline">
+                                    <i class="fas fa-upload"></i> Upload
+                                </button>
+                                <button onclick="deleteDocSet(${set.id})" class="text-red-500 text-xs hover:underline">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-1 pl-2 border-l-2 border-gray-200">
+                            ${documents.map(d => `
+                                <div class="text-xs text-gray-600 flex justify-between">
+                                    <span><i class="fas fa-file-pdf mr-1"></i> ${d.filename}</span>
+                                    <span class="text-gray-400">${((d.file_size || 0) / 1024).toFixed(1)}KB</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to load doc sets", e);
+                document.getElementById('doc-sets-list').innerHTML =
+                    `<div class="text-red-600 text-sm p-2 bg-red-50 rounded border border-red-200">
+                        Failed to load doc sets: ${e.message}
+                    </div>`;
+            }
+        }
+
+        async function createDocSet(e) {
+            e.preventDefault();
+            const name = document.getElementById('doc-set-name').value;
+
+            try {
+                const res = await fetchWithProxy('/api/load-test/doc-sets/create', {
+                    method: 'POST',
+                    body: JSON.stringify({ name })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('create-doc-set-modal').classList.add('hidden');
+                    document.getElementById('doc-set-name').value = '';
+                    loadDocSets();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert("Create failed");
+            }
+        }
+
+        async function deleteDocSet(id) {
+            if (!confirm('Delete this document set? This will permanently remove all associated PDF files from the storage directory. Continue?')) return;
+            try {
+                await fetchWithProxy(`/api/load-test/doc-sets/${id}`, { method: 'DELETE' });
+                loadDocSets();
+            } catch (e) {
+                alert("Delete failed");
+            }
+        }
+
+        function openUploadModal(setId) {
+            document.getElementById('upload-set-id').value = setId;
+            document.getElementById('upload-doc-modal').classList.remove('hidden');
+        }
+
+        async function uploadDocument(e) {
+            e.preventDefault();
+            const setId = document.getElementById('upload-set-id').value;
+            const fileInput = document.getElementById('doc-file');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.textContent = 'Uploading...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetchWithProxy(`/api/load-test/doc-sets/${setId}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Uploaded: ' + data.filename);
+                    document.getElementById('upload-doc-modal').classList.add('hidden');
+                    fileInput.value = '';
+                    loadDocSets();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Upload failed: ' + e);
+            } finally {
+                btn.textContent = 'Upload';
+                btn.disabled = false;
+            }
+        }
+        // --- BLUR / DISABLE WHILE TEST RUNS ---
+        function setTestRunning(running) {
+            const startBtn = document.querySelector('#start-test-form button[type="submit"]');
+            const configArea = document.getElementById('test-config-container');
+            const actionFooter = document.getElementById('test-actions-footer');
+            const statusBadge = document.getElementById('test-status-badge');
+
+            if (running) {
+                startBtn.disabled = true;
+                startBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Running...';
+                configArea.classList.add('opacity-40', 'pointer-events-none');
+                actionFooter.classList.remove('hidden');
+                statusBadge.classList.remove('hidden');
+                statusBadge.textContent = 'Test Running';
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-800 animate-pulse';
+            } else {
+                startBtn.disabled = false;
+                startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Start Test';
+                configArea.classList.remove('opacity-40', 'pointer-events-none');
+                actionFooter.classList.add('hidden');
+                statusBadge.classList.remove('animate-pulse');
+                statusBadge.classList.add('bg-green-100', 'text-green-800');
+                statusBadge.textContent = 'Test Finished';
+            }
+        }
+
+        async function startTest(e) {
+            e.preventDefault();
+
+            // Clear previous logs
+            const logList = document.getElementById('active-tests-list');
+            logList.innerHTML = '<div class="text-blue-400">Initializing test scenario...</div>';
+
+            // --- Validation ---
+            const testType = document.getElementById('test-type').value;
+            const userSetSelect = document.getElementById('test-user-set');
+            const userSetId = userSetSelect.value;
+            if (!userSetId) { alert('Please select a User Set.'); return; }
+
+            // Validate Role
+            const selectedRole = userSetSelect.selectedOptions[0].dataset.role;
+            let targetRole = '';
+            if (testType.includes('teacher') || testType === 'rag_quality_benchmark' || testType.includes('sequential') && !testType.includes('student')) targetRole = 'teacher';
+            if (testType.includes('student')) targetRole = 'student';
+
+            if (targetRole && selectedRole !== targetRole) {
+                alert(`Role Mismatch! This test requires a ${targetRole} user set, but you selected a ${selectedRole} set.`);
+                return;
+            }
+
+            const needsDoc = ['teacher_flow_concurrent', 'teacher_rag_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(testType);
+            const needsLesson = ['student_chat_concurrent', 'student_lesson_sequential'].includes(testType);
+
+            if (needsDoc && !document.getElementById('test-doc-set').value) {
+                alert('Please select a Document Set for this test type.'); return;
+            }
+            if (needsLesson && !document.getElementById('lesson-id').value) {
+                alert('Please select a Lesson for this test type.'); return;
+            }
+
+            // Get Global Config
+            const config = getTargetConfig();
+
+            // Force concurrent_users=1 for sequential tests
+            const isSequential = ['teacher_rag_sequential', 'student_lesson_sequential', 'doc_upload_repeat', 'rag_quality_benchmark'].includes(testType);
+
+            // Clamp values to max constraints
+            const concurrentInput = document.getElementById('concurrent-users');
+            const reqInput = document.getElementById('requests-per-user');
+            let concurrentVal = isSequential ? 1 : parseInt(concurrentInput.value);
+            let reqVal = parseInt(reqInput.value || 1);
+            const concurrentMax = parseInt(concurrentInput.max) || 1000;
+            const reqMax = parseInt(reqInput.max) || 10;
+            if (concurrentVal > concurrentMax) concurrentVal = concurrentMax;
+            if (reqVal > reqMax) reqVal = reqVal; // Keep original if no max or valid
+
+            const configData = {
+                test_type: testType,
+                target_env: 'custom',
+                custom_url: config.url,
+                concurrent_users: concurrentVal,
+                requests_per_user: reqVal,
+                test_user_set_id: userSetId || null,
+                test_doc_set_id: document.getElementById('test-doc-set').value || null,
+                csv_file_id: document.getElementById('test-message-csv').value || null,
+                lesson_id: document.getElementById('lesson-id').value || null
+            };
+
+            try {
+                setTestRunning(true);
+                const res = await fetchWithProxy('/api/load-test/start', {
+                    method: 'POST',
+                    body: JSON.stringify({ config: configData })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    logList.dataset.testId = data.test_id;
+                    pollStatus(data.test_id);
+                } else {
+                    setTestRunning(false);
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                setTestRunning(false);
+                alert('Failed to start: ' + e);
+            }
+        }
+
+        async function loadResults() {
+            try {
+                const res = await fetchWithProxy('/api/load-test/results');
+                const data = await res.json();
+                const tbody = document.getElementById('results-tbody');
+                tbody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">No test results yet.</td></tr>';
+                    return;
+                }
+
+                data.forEach(r => {
+                    const typeName = window.TEST_TYPE_MAP[r.test_type] || r.test_type;
+                    tbody.innerHTML += `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-6 py-4 cursor-pointer text-sm text-gray-900" onclick="viewResult(${r.id})">${r.id}</td>
+                            <td class="px-6 py-4 cursor-pointer font-medium text-iqbal-primary" onclick="viewResult(${r.id})">${typeName}</td>
+                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">
+                                <span class="px-2 py-1 rounded text-xs ${r.status === 'completed' ? 'bg-green-100 text-green-800' : r.status === 'running' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
+                                    ${r.status}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 cursor-pointer" onclick="viewResult(${r.id})">${r.started_at}</td>
+                            <td class="px-6 py-4 text-right">
+                                <button onclick="event.stopPropagation(); viewResult(${r.id})" class="text-blue-500 hover:text-blue-700 mr-3" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button onclick="event.stopPropagation(); deleteResult(${r.id})" class="text-red-500 hover:text-red-700" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (e) {
+                console.error("Failed to load results", e);
+                document.getElementById('results-tbody').innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Failed to load results: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function deleteResult(id) {
+            if (!confirm('Delete this test result? This will also purge its associated extracted text files and RAG history traces. Continue?')) return;
+            try {
+                const res = await fetchWithProxy(`/api/load-test/results/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadResults();
+                else alert('Error: ' + (data.error || 'Unknown error'));
+            } catch (e) {
+                alert('Delete failed: ' + e);
+            }
+        }
+
+        async function deleteAllResults() {
+            if (!confirm('Delete ALL test results? This will permanently remove all logs, metrics, extracted text files, and RAG history associated with these tests. PROCEED?')) return;
+            try {
+                const res = await fetchWithProxy('/api/load-test/results/all', { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadResults();
+                else alert('Error: ' + (data.error || 'Unknown error'));
+            } catch (e) {
+                alert('Delete failed: ' + e);
+            }
+        }
+
+        let currentResultId = null;
+        let currentReportRawJson = null;
+
+        async function viewResult(id) {
+            currentResultId = id;
+            currentReportRawJson = null;
+            document.getElementById('raw-json-content').classList.add('hidden');
+            document.getElementById('result-content').classList.remove('hidden');
+            document.getElementById('result-modal').classList.remove('hidden');
+
+            // Reset tabs
+            showResultSubTab('summary');
+            generateReport('technical'); // Default load
+        }
+
+        function showResultSubTab(tab) {
+            const sumTab = document.getElementById('tab-summary');
+            const artTab = document.getElementById('tab-artifacts');
+            const sumCont = document.getElementById('result-content');
+            const artCont = document.getElementById('artifact-content');
+
+            if (tab === 'summary') {
+                sumTab.classList.add('active');
+                artTab.classList.remove('active');
+                sumCont.classList.remove('hidden');
+                artCont.classList.add('hidden');
+            } else {
+                artTab.classList.add('active');
+                sumTab.classList.remove('active');
+                artCont.classList.remove('hidden');
+                sumCont.classList.add('hidden');
+                loadArtifacts();
+            }
+        }
+
+        async function loadArtifacts() {
+            const list = document.getElementById('artifact-list');
+            list.innerHTML = '<p class="text-gray-500 italic">Loading artifacts...</p>';
+
+            try {
+                const res = await fetchWithProxy(`/api/load-test/report/${currentResultId}/artifacts`);
+                const data = await res.json();
+                const artifacts = data.artifacts || [];
+
+                if (artifacts.length === 0) {
+                    list.innerHTML = '<p class="text-gray-500 italic">No artifacts available for this test.</p>';
+                    return;
+                }
+
+                // Group by user email
+                const grouped = {};
+                artifacts.forEach(art => {
+                    if (!grouped[art.user_email]) grouped[art.user_email] = [];
+                    grouped[art.user_email].push(art);
+                });
+
+                let html = '';
+                for (const [email, userArts] of Object.entries(grouped)) {
+                    html += `
+                        <div class="bg-white p-4 rounded border shadow-sm">
+                            <h4 class="font-bold text-gray-700 mb-3 flex items-center">
+                                <i class="fas fa-user-circle mr-2 text-iqbal-primary"></i> ${email}
+                            </h4>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                ${userArts.map((art, idx) => {
+                        let label = art.type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                        if (art.iteration) label += ` (Iteration ${art.iteration})`;
+                        let color = 'bg-blue-50 text-blue-700 border-blue-200';
+
+                        if (art.type === 'extracted_text') {
+                            icon = 'fa-file-pdf';
+                            color = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                        } else if (art.type === 'lesson_content') {
+                            icon = 'fa-chalkboard-teacher';
+                            color = 'bg-purple-50 text-purple-700 border-purple-200';
+                        } else if (art.type === 'chat_transcript') {
+                            icon = 'fa-comments';
+                            color = 'bg-green-50 text-green-700 border-green-200';
+                        }
+
+                        const query = new URLSearchParams({
+                            test_id: currentResultId,
+                            user_email: email,
+                            type: art.type,
+                            doc_name: art.doc_name || '',
+                            thread_id: art.thread_id || '',
+                            conversation_id: art.conversation_id || '',
+                            lesson_id: art.lesson_id || '',
+                            idx: idx
+                        }).toString();
+
+                        return `
+                                        <a href="/api/load-test/artifact/download?${query}" target="_blank"
+                                           class="flex items-center p-3 rounded border ${color} hover:shadow-md transition-all text-sm font-medium">
+                                            <i class="fas ${icon} mr-3 text-lg opacity-75"></i>
+                                            <div class="truncate">
+                                                <div class="font-bold">${label}</div>
+                                                <div class="text-xs opacity-75 truncate">${art.doc_name || 'Document'}</div>
+                                            </div>
+                                            <i class="fas fa-download ml-auto opacity-50"></i>
+                                        </a>
+                                    `;
+                    }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                list.innerHTML = html;
+            } catch (e) {
+                list.innerHTML = `<p class="text-red-500">Error loading artifacts: ${e}</p>`;
+            }
+        }
+
+        function toggleRawJson() {
+            const rawEl = document.getElementById('raw-json-content');
+            const mainEl = document.getElementById('result-content');
+            if (rawEl.classList.contains('hidden')) {
+                rawEl.classList.remove('hidden');
+                mainEl.classList.add('hidden');
+                if (currentReportRawJson) {
+                    rawEl.textContent = currentReportRawJson;
+                } else {
+                    rawEl.textContent = 'Load a Technical Report first.';
+                }
+            } else {
+                rawEl.classList.add('hidden');
+                mainEl.classList.remove('hidden');
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Helper: create a chart card inside a grid container
+        // ─────────────────────────────────────────────────────────────────────
+        function makeChartCard(gridEl, title, icon) {
+            const card = document.createElement('div');
+            card.className = 'p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-inner';
+            card.innerHTML = `<h3 class="text-sm font-bold text-gray-700 mb-3 px-1"><i class="fas fa-${icon} mr-2"></i>${title}</h3>`;
+            const canvas = document.createElement('canvas');
+            canvas.style.maxHeight = '280px';
+            card.appendChild(canvas);
+            gridEl.appendChild(card);
+            return canvas;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Per-test chart builders
+        // ─────────────────────────────────────────────────────────────────────
+        function renderChartsForTest(testType, data, gridEl) {
+            const logs = data.detailed_logs || [];
+            const summary = data.summary || {};
+            const latencyTrend = summary.latency_trend || [];
+
+            // ── Shared colours ──────────────────────────────────────────────
+            const BLUE = '#3b82f6', BLUE_BG = 'rgba(59,130,246,0.15)';
+            const GREEN = '#10b981', GREEN_BG = 'rgba(16,185,129,0.15)';
+            const ORANGE = '#f59e0b', ORANGE_BG = 'rgba(245,158,11,0.15)';
+            const RED = '#ef4444', RED_BG = 'rgba(239,68,68,0.15)';
+            const PURPLE = '#8b5cf6', PURPLE_BG = 'rgba(139,92,246,0.15)';
+            const lineDefaults = { fill: true, tension: 0.35, pointRadius: 4, borderWidth: 2 };
+
+            // ── Helper: extract ingestion times from logs ────────────────────
+            function extractIngestTimes() {
+                // Matches: "Total File Processing Time: X.Xs (Complete)"
+                const times = [];
+                logs.forEach(l => {
+                    const m = l.message.match(/Total File Processing Time:\s*([\d.]+)s/i);
+                    if (m) times.push(parseFloat(m[1]));
+                });
+                return times;
+            }
+
+            // ── Helper: per-user latency breakdown ──────────────────────────
+            function extractLatencyByUser() {
+                const byUser = {};
+                logs.forEach(l => {
+                    const emailMatch = l.message.match(/\[([^\]]+@[^\]]+)\]/);
+                    const latMatch = l.message.match(/Response \d+ received in ([\d.]+)s/);
+                    if (emailMatch && latMatch) {
+                        const user = emailMatch[1].split('@')[0]; // just local part
+                        if (!byUser[user]) byUser[user] = [];
+                        byUser[user].push(parseFloat(latMatch[1]));
+                    }
+                });
+                return byUser;
+            }
+
+            // ── Helper: per-iteration ingestion times (Test 6) ──────────────
+            function extractIterationIngest() {
+                const iters = {};
+                logs.forEach(l => {
+                    // "Iter X: Success in Y.Ys"
+                    const m = l.message.match(/Iter (\d+).*?in ([\d.]+)s/i);
+                    if (m) iters[parseInt(m[1])] = parseFloat(m[2]);
+                });
+                const sorted = Object.keys(iters).sort((a, b) => a - b);
+                return { labels: sorted.map(k => `Iter ${k}`), data: sorted.map(k => iters[k]) };
+            }
+
+            // ── Helper: per-doc ingestion times (Test 8) ────────────────────
+            function extractPerDocIngest() {
+                const docs = {};
+                logs.forEach(l => {
+                    // Matches both Sync and Async T8 logs to get doc name and time
+                    const m = l.message.match(/for (.+?) in.+?-\s*Total Ingest Time:\s*([\d.]+)s/i);
+                    if (m) docs[m[1].trim()] = parseFloat(m[2]);
+                });
+                return docs;
+            }
+
+            // ── Helper: Unified Per-File Ingest Latency Trend ───────────────
+            function renderIngestLatencyTrend(logs, gridEl) {
+                const orderTimes = [];
+                logs.forEach(l => {
+                    // Unique marker generated exactly once per successfully fully ingested item
+                    // across all tests (T2, T7, T8) in both Sync and Async modes.
+                    const m = l.message.match(/-\s*Total Ingest Time:\s*([\d.]+)s/i);
+                    if (m) orderTimes.push(parseFloat(m[1]));
+                });
+
+                if (orderTimes.length > 0) {
+                    const c = makeChartCard(gridEl, 'Per-File Ingest Latency (All Docs)', 'chart-line');
+                    new Chart(c, {
+                        type: 'line',
+                        data: {
+                            labels: orderTimes.map((_, i) => `Item ${i + 1}`),
+                            datasets: [{
+                                label: 'Ingest Latency (s)', data: orderTimes,
+                                borderColor: PURPLE, backgroundColor: PURPLE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T1: Multi-User Sign-In
+            // ════════════════════════════════════════════════════════════════
+            if (testType === 'multi_user_sign_in') {
+                // Chart 1: Success vs Failed bar
+                const c1 = makeChartCard(gridEl, 'Request Outcome Breakdown', 'check-circle');
+                new Chart(c1, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Successful Requests', 'Failed Requests'],
+                        datasets: [{
+                            label: 'Count',
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true, plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, title: { display: true, text: 'Count' } } }
+                    }
+                });
+
+                // Chart 2: Successful logouts vs total
+                const logouts = summary.successful_logouts || 0;
+                const loFailed = (summary.concurrent_users || 1) - logouts;
+                const c2 = makeChartCard(gridEl, 'Logout Completion Rate', 'sign-out-alt');
+                new Chart(c2, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Successful Logouts', 'Failed / Missing'],
+                        datasets: [{
+                            data: [logouts, loFailed],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true, cutout: '68%',
+                        plugins: { legend: { position: 'bottom' } }
+                    }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T2: Teacher Flow (Concurrent)
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'teacher_flow_concurrent') {
+                // Chart 1: Ingestion time per user (one bar per teacher)
+                const ingestByUser = {};
+                logs.forEach(l => {
+                    const emailM = l.message.match(/\[([^\]]+@[^\]]+)\]/);
+                    const procM = l.message.match(/Total File Processing Time:\s*([\d.]+)s/i);
+                    if (emailM && procM) {
+                        ingestByUser[emailM[1].split('@')[0]] = parseFloat(procM[1]);
+                    }
+                });
+                const uLabels = Object.keys(ingestByUser);
+                const uData = uLabels.map(k => ingestByUser[k]);
+                const avgIngest = uData.length ? (uData.reduce((a, b) => a + b, 0) / uData.length).toFixed(1) : 0;
+
+                const c1 = makeChartCard(gridEl, `Ingestion Time per Teacher (avg ${avgIngest}s)`, 'file-upload');
+                new Chart(c1, {
+                    type: 'bar',
+                    data: {
+                        labels: uLabels.length ? uLabels : ['No data'],
+                        datasets: [{
+                            label: 'Ingest Time (s)',
+                            data: uData.length ? uData : [0],
+                            backgroundColor: ORANGE_BG, borderColor: ORANGE,
+                            borderWidth: 2, borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                    }
+                });
+
+                // Chart 2: Chat turn latency trend
+                if (latencyTrend.length) {
+                    const c2 = makeChartCard(gridEl, 'Chat Turn Latency Trend', 'comments');
+                    new Chart(c2, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Msg ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: BLUE, backgroundColor: BLUE_BG,
+                                ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart: Ingest Latency Trend
+                renderIngestLatencyTrend(logs, gridEl);
+
+                // Chart 3: Lesson saved success
+                const lessonOk = summary.lesson_saved ? 1 : 0;
+                const lessonFail = (summary.concurrent_users || 1) - (summary.successful_requests > 0 ? lessonOk : 0);
+                const c3 = makeChartCard(gridEl, 'Pipeline Stage Success Rates', 'tasks');
+                new Chart(c3, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Requests', 'Messages Sent', 'Rate Limit Hits'],
+                        datasets: [
+                            { label: 'Success', data: [summary.successful_requests || 0, summary.messages_sent || 0, 0], backgroundColor: GREEN, borderRadius: 4 },
+                            { label: 'Failed / Hits', data: [summary.failed_requests || 0, 0, summary.rate_limit_hits || 0], backgroundColor: RED, borderRadius: 4 }
+                        ]
+                    },
+                    options: { responsive: true, scales: { x: { stacked: false }, y: { beginAtZero: true } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T3: Student Chat (Concurrent)
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'student_chat_concurrent') {
+                // Chart 1: Per-user avg latency comparison
+                const byUser = extractLatencyByUser();
+                const userNames = Object.keys(byUser);
+                const avgLats = userNames.map(u => {
+                    const arr = byUser[u];
+                    return +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2);
+                });
+                if (userNames.length) {
+                    const c1 = makeChartCard(gridEl, 'Avg. Chat Latency per Student', 'users');
+                    new Chart(c1, {
+                        type: 'bar',
+                        data: {
+                            labels: userNames,
+                            datasets: [{
+                                label: 'Avg Latency (s)', data: avgLats,
+                                backgroundColor: BLUE_BG, borderColor: BLUE,
+                                borderWidth: 2, borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 2: Global latency trend across all messages
+                if (latencyTrend.length) {
+                    const c2 = makeChartCard(gridEl, 'Global Chat Latency Trend (All Students)', 'chart-line');
+                    new Chart(c2, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Msg ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: BLUE, backgroundColor: BLUE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 3: Success vs Empty responses
+                const c3 = makeChartCard(gridEl, 'Response Quality Breakdown', 'check-double');
+                new Chart(c3, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Successful', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T4: Teacher RAG Sequential
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'teacher_rag_sequential') {
+                // Chart 1: Chat turn latency over the full sequence
+                if (latencyTrend.length) {
+                    const c1 = makeChartCard(gridEl, 'Sequential RAG Turn Latency', 'stopwatch');
+                    // Add linear regression overlay
+                    const n = latencyTrend.length;
+                    const xMean = (n - 1) / 2;
+                    const yMean = latencyTrend.reduce((a, b) => a + b, 0) / n;
+                    let num = 0, den = 0;
+                    latencyTrend.forEach((y, x) => { num += (x - xMean) * (y - yMean); den += (x - xMean) ** 2; });
+                    const slope = den ? num / den : 0;
+                    const intercept = yMean - slope * xMean;
+                    const trendLine = latencyTrend.map((_, x) => +(slope * x + intercept).toFixed(2));
+                    new Chart(c1, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Turn ${i + 1}`),
+                            datasets: [
+                                {
+                                    label: 'Latency (s)', data: latencyTrend,
+                                    borderColor: BLUE, backgroundColor: BLUE_BG, ...lineDefaults
+                                },
+                                {
+                                    label: 'Trend', data: trendLine,
+                                    borderColor: RED, borderDash: [6, 4], borderWidth: 2,
+                                    fill: false, pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 2: Requests breakdown
+                const c2 = makeChartCard(gridEl, 'Request Outcome', 'clipboard-check');
+                new Chart(c2, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Success', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T5: Student Lesson Sequential
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'student_lesson_sequential') {
+                // Chart 1: Turn latency with trend line
+                if (latencyTrend.length) {
+                    const n = latencyTrend.length;
+                    const xMean = (n - 1) / 2;
+                    const yMean = latencyTrend.reduce((a, b) => a + b, 0) / n;
+                    let num = 0, den = 0;
+                    latencyTrend.forEach((y, x) => { num += (x - xMean) * (y - yMean); den += (x - xMean) ** 2; });
+                    const slope = den ? num / den : 0;
+                    const intercept = yMean - slope * xMean;
+                    const trendLine = latencyTrend.map((_, x) => +(slope * x + intercept).toFixed(2));
+
+                    const c1 = makeChartCard(gridEl, 'Sequential Question Latency + Trend', 'stopwatch');
+                    new Chart(c1, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Q${i + 1}`),
+                            datasets: [
+                                {
+                                    label: 'Latency (s)', data: latencyTrend,
+                                    borderColor: PURPLE, backgroundColor: PURPLE_BG, ...lineDefaults
+                                },
+                                {
+                                    label: 'Trend', data: trendLine,
+                                    borderColor: ORANGE, borderDash: [5, 4], borderWidth: 2,
+                                    fill: false, pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+
+                    // Chart 2: Latency distribution histogram (buckets)
+                    const buckets = {};
+                    latencyTrend.forEach(v => {
+                        const b = Math.floor(v);
+                        buckets[b] = (buckets[b] || 0) + 1;
+                    });
+                    const bKeys = Object.keys(buckets).sort((a, b) => +a - +b);
+                    const c2 = makeChartCard(gridEl, 'Latency Distribution (1s buckets)', 'chart-bar');
+                    new Chart(c2, {
+                        type: 'bar',
+                        data: {
+                            labels: bKeys.map(k => `${k}–${+k + 1}s`),
+                            datasets: [{
+                                label: 'Messages', data: bKeys.map(k => buckets[k]),
+                                backgroundColor: PURPLE_BG, borderColor: PURPLE,
+                                borderWidth: 2, borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Count' } } }
+                        }
+                    });
+                }
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T6: Repeated Ingestion
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'doc_upload_repeat') {
+                const iterData = extractIterationIngest();
+
+                // Chart 1: Ingest Latency Trend (Unified)
+                renderIngestLatencyTrend(logs, gridEl);
+
+                // Chart 2: Variance box — min/mean/max bar
+                if (iterData.data.length) {
+                    const vals = iterData.data;
+                    const mn = +Math.min(...vals).toFixed(2);
+                    const mx = +Math.max(...vals).toFixed(2);
+                    const avg = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+                    const std = +(Math.sqrt(vals.map(v => (v - avg) ** 2).reduce((a, b) => a + b, 0) / vals.length)).toFixed(2);
+                    const c2 = makeChartCard(gridEl, 'Ingestion Consistency (Min / Avg / Max / Stdev)', 'balance-scale');
+                    new Chart(c2, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Min', 'Average', 'Max', 'Stdev'],
+                            datasets: [{
+                                label: 'Seconds',
+                                data: [mn, avg, mx, std],
+                                backgroundColor: [GREEN_BG, BLUE_BG, RED_BG, ORANGE_BG],
+                                borderColor: [GREEN, BLUE, RED, ORANGE],
+                                borderWidth: 2, borderRadius: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 3: Chat outcome
+                const c3 = makeChartCard(gridEl, 'Per-Iteration Chat Outcome', 'comments');
+                new Chart(c3, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Successful', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // T8: RAG Quality Benchmark
+            // ════════════════════════════════════════════════════════════════
+            else if (testType === 'rag_quality_benchmark') {
+                const docIngest = extractPerDocIngest();
+                const docNames = Object.keys(docIngest);
+                const docTimes = docNames.map(k => docIngest[k]);
+
+                // Chart 1: Per-document ingestion time
+                if (docNames.length) {
+                    const c1 = makeChartCard(gridEl, 'Per-Document Ingestion Time', 'file-pdf');
+                    new Chart(c1, {
+                        type: 'bar',
+                        data: {
+                            labels: docNames.map(n => n.length > 18 ? n.slice(0, 16) + '…' : n),
+                            datasets: [{
+                                label: 'Ingest (s)', data: docTimes,
+                                backgroundColor: ORANGE_BG, borderColor: ORANGE,
+                                borderWidth: 2, borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true, indexAxis: 'y',
+                            plugins: { legend: { display: false } },
+                            scales: { x: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 2: Per-document keyword hits (from artifacts)
+                const artifacts = summary.artifacts || [];
+                const hitMap = {};
+                artifacts.forEach(a => {
+                    if (a.type === 'chat_transcript' && a.doc_name && typeof a.keyword_hits === 'number') {
+                        hitMap[a.doc_name] = (hitMap[a.doc_name] || 0) + a.keyword_hits;
+                    }
+                });
+                const hitDocs = Object.keys(hitMap);
+                if (hitDocs.length) {
+                    const c2 = makeChartCard(gridEl, 'Per-Document Keyword Hit Score', 'star');
+                    new Chart(c2, {
+                        type: 'bar',
+                        data: {
+                            labels: hitDocs.map(n => n.length > 18 ? n.slice(0, 16) + '…' : n),
+                            datasets: [{
+                                label: 'Keyword Hits', data: hitDocs.map(k => hitMap[k]),
+                                backgroundColor: hitDocs.map(k => hitMap[k] > 0 ? GREEN_BG : RED_BG),
+                                borderColor: hitDocs.map(k => hitMap[k] > 0 ? GREEN : RED),
+                                borderWidth: 2, borderRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true, indexAxis: 'y',
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: {
+                                    beginAtZero: true, ticks: { stepSize: 1 },
+                                    title: { display: true, text: 'Hits' }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Chart 3: Chat latency trend across all docs
+                if (latencyTrend.length) {
+                    const c3 = makeChartCard(gridEl, 'Per-Message Chat Latency (All Docs)', 'chart-line');
+                    new Chart(c3, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Msg ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: PURPLE, backgroundColor: PURPLE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Seconds' } } }
+                        }
+                    });
+                }
+
+                // Chart 4: Ingest Latency Trend
+                renderIngestLatencyTrend(logs, gridEl);
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // Fallback: generic success/fail + latency (for unknown test types)
+            // ════════════════════════════════════════════════════════════════
+            else {
+                const c1 = makeChartCard(gridEl, 'Request Outcomes', 'check-circle');
+                new Chart(c1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Success', 'Failed'],
+                        datasets: [{
+                            data: [summary.successful_requests || 0, summary.failed_requests || 0],
+                            backgroundColor: [GREEN, RED], borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+                });
+                if (latencyTrend.length) {
+                    const c2 = makeChartCard(gridEl, 'Response Latency Trend', 'chart-line');
+                    new Chart(c2, {
+                        type: 'line',
+                        data: {
+                            labels: latencyTrend.map((_, i) => `Req ${i + 1}`),
+                            datasets: [{
+                                label: 'Latency (s)', data: latencyTrend,
+                                borderColor: BLUE, backgroundColor: BLUE_BG, ...lineDefaults
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } }
+                        }
+                    });
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // renderExecutiveView — renders AI analysis + per-test charts
+        // ─────────────────────────────────────────────────────────────────────
+        async function renderExecutiveView(data) {
+            const content = document.getElementById('result-content');
+            if (!data.analysis) return;
+
+            const testType = data.test_type || '';
+
+            // Strip model thinking/preamble — only show from the first # heading that
+            // starts with 'Executive Summary' (the model sometimes "thinks aloud" first).
+            let analysisText = data.analysis;
+            const execIdx = analysisText.search(/^#{1,3}\s*Executive Summary/mi);
+            if (execIdx > 0) analysisText = analysisText.slice(execIdx);
+
+            content.innerHTML = `
+                <div class="prose max-w-none p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6" id="executive-summary-content">
+                    ${marked.parse(analysisText)}
+                </div>
+                <div id="executive-charts" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"></div>
+            `;
+
+            const chartGrid = document.getElementById('executive-charts');
+            renderChartsForTest(testType, data, chartGrid);
+        }
+
+        async function pollForAnalysis(testId) {
+            const content = document.getElementById('result-content');
+
+            // Re-show loading state if not already there
+            if (!content.querySelector('.animate-spin')) {
+                content.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 text-gray-500">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                        <p class="animate-pulse">AI is still analyzing metrics... almost there.</p>
+                    </div>
+                `;
+            }
+
+            try {
+                const res = await fetchWithProxy(`/api/load-test/report/${testId}/technical`);
+                const data = await res.json();
+
+                if (data.summary && data.summary.llm_analysis) {
+                    data.analysis = data.summary.llm_analysis;
+                    renderExecutiveView(data);
+                } else {
+                    // Poll again in 2 seconds
+                    setTimeout(() => pollForAnalysis(testId), 2000);
+                }
+            } catch (err) {
+                console.error("Polling error:", err);
+                setTimeout(() => pollForAnalysis(testId), 2000);
+            }
+        }
+
+        async function generateReport(type) {
+            const content = document.getElementById('result-content');
+
+            // Premium Loading State
+            content.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-20 text-gray-500">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                    <p class="animate-pulse">${type === 'executive' ? 'AI is analyzing metrics and logs...' : 'Generating technical report...'}</p>
+                </div>
+            `;
+
+            try {
+                let res;
+                if (type === 'technical') {
+                    res = await fetchWithProxy(`/api/load-test/report/${currentResultId}/technical`);
+                } else {
+                    res = await fetchWithProxy(`/api/load-test/report/${currentResultId}/executive`, { method: 'POST' });
+                }
+                const data = await res.json();
+
+                if (data.error) {
+                    content.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded border border-red-200">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const typeName = window.TEST_TYPE_MAP[data.test_type] || data.test_type;
+                const titleEl = document.getElementById('report-title');
+                if (titleEl) titleEl.textContent = `${typeName} - Report #${currentResultId}`;
+
+                if (type === 'executive') {
+                    if (data.status === 'generating' || !data.analysis) {
+                        pollForAnalysis(currentResultId);
+                        return;
+                    }
+                    renderExecutiveView(data);
+                } else {
+                    // Store raw JSON for toggle
+                    currentReportRawJson = JSON.stringify(data, null, 2);
+
+                    // Calculate total time from logs
+                    let totalTimeSec = 0;
+                    if (data.detailed_logs && data.detailed_logs.length > 1) {
+                        const first = new Date(data.detailed_logs[0].timestamp);
+                        const last = new Date(data.detailed_logs[data.detailed_logs.length - 1].timestamp);
+                        totalTimeSec = ((last - first) / 1000).toFixed(1);
+                    }
+                    const msgsSent = data.summary.messages_sent || 0;
+                    const fileSizeMB = data.summary.total_file_size_mb || 0;
+                    const ingestionTime = data.summary.total_ingestion_time || 0;
+                    const ingestIters = data.summary.ingestion_iterations || (ingestionTime > 0 ? 1 : 0);
+
+                    // Render Technical Report HTML
+                    // Unified Metric Cards Grid (Balanced & Responsive)
+                    let metricCards = [];
+
+                    // Row 1: Core Metrics (First 4 cards)
+                    metricCards.push(`
+                        <div class="p-4 bg-blue-50 rounded border border-blue-100 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-blue-600 uppercase font-bold mb-1">Success Rate</div>
+                            <div class="text-2xl font-black ${data.summary.success_rate < 90 ? 'text-red-600' : 'text-green-600'}">
+                                ${data.summary.success_rate}%
+                            </div>
+                        </div>
+                    `);
+                    metricCards.push(`
+                        <div class="p-4 bg-gray-50 rounded border border-gray-200 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-gray-500 uppercase font-bold mb-1">Total Requests</div>
+                            <div class="text-2xl font-black text-gray-800">${data.summary.total_requests}</div>
+                        </div>
+                    `);
+                    metricCards.push(`
+                        <div class="p-4 bg-indigo-50 rounded border border-indigo-100 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-indigo-600 uppercase font-bold mb-1">Time Taken</div>
+                            <div class="text-2xl font-black text-indigo-800">${totalTimeSec}s</div>
+                        </div>
+                    `);
+
+                    // Avg. File Processing (Fixed Logic)
+                    if (ingestIters > 0) {
+                        const avgIngest = (ingestionTime / ingestIters).toFixed(2);
+                        metricCards.push(`
+                            <div class="p-4 bg-orange-50 rounded border border-orange-100 min-h-[90px] flex flex-col justify-center">
+                                <div class="text-xs text-orange-600 uppercase font-bold mb-1">Avg. File Processing</div>
+                                <div class="text-2xl font-black text-orange-700">
+                                    ${avgIngest}s
+                                </div>
+                            </div>
+                        `);
+                    }
+                    metricCards.push(`
+                        <div class="p-4 bg-green-50 rounded border border-green-100 min-h-[90px] flex flex-col justify-center">
+                            <div class="text-xs text-green-600 uppercase font-bold mb-1">Msgs Sent</div>
+                            <div class="text-2xl font-black text-green-800">${msgsSent}</div>
+                        </div>
+                    `);
+
+                    // Row 2: Scenario Specific Metrics
+                    if (data.test_type === 'rag_quality_benchmark' || data.summary.keyword_hits > 0) {
+                        metricCards.push(`
+                            <div class="p-4 bg-purple-50 rounded border border-purple-100">
+                                <div class="text-xs text-purple-600 uppercase font-bold mb-1">Keyword Hits</div>
+                                <div class="text-2xl font-black text-purple-700">${data.summary.keyword_hits || 0}</div>
+                            </div>
+                        `);
+                    }
+                    if (data.summary.total_ingestion_time > 0 || data.test_type === 'doc_upload_repeat' || data.test_type === 'rag_quality_benchmark') {
+                        metricCards.push(`
+                            <div class="p-4 bg-orange-50 rounded border border-orange-100">
+                                <div class="text-xs text-orange-600 uppercase font-bold mb-1">Ingest Consistency (SD)</div>
+                                <div class="text-2xl font-black text-orange-700">${data.summary.consistency_stdev !== null && data.summary.consistency_stdev !== undefined ? data.summary.consistency_stdev.toFixed(2) + 's' : '0.00s'}</div>
+                            </div>
+                        `);
+                    }
+                    if (msgsSent > 0 && data.test_type !== 'doc_upload_repeat') {
+                        metricCards.push(`
+                            <div class="p-4 bg-pink-50 rounded border border-pink-100">
+                                <div class="text-xs text-pink-600 uppercase font-bold mb-1">Avg. Turn Latency</div>
+                                <div class="text-2xl font-black text-pink-700">
+                                    ${data.summary.latency_trend && data.summary.latency_trend.length > 0
+                                ? (data.summary.latency_trend.reduce((a, b) => a + b, 0) / data.summary.latency_trend.length).toFixed(2) + 's'
+                                : 'N/A'}
+                                </div>
+                            </div>
+                        `);
+                    }
+                    if (data.summary.rate_limit_hits > 0) {
+                        metricCards.push(`
+                            <div class="p-4 bg-red-50 rounded border border-red-100">
+                                <div class="text-xs text-red-600 uppercase font-bold mb-1">Rate Limit Hits</div>
+                                <div class="text-2xl font-black text-red-700">${data.summary.rate_limit_hits}</div>
+                            </div>
+                        `);
+                    }
+                    if (data.summary.ingestion_iterations > 0) {
+                        metricCards.push(`
+                            <div class="p-4 bg-cyan-50 rounded border border-cyan-100">
+                                <div class="text-xs text-cyan-600 uppercase font-bold mb-1">Ingest Iterations</div>
+                                <div class="text-2xl font-black text-cyan-700">${data.summary.ingestion_iterations}</div>
+                            </div>
+                        `);
+                    }
+
+                    // Standardize Grid Columns for Balance
+                    let gridCols = "lg:grid-cols-4";
+                    if (metricCards.length === 6) gridCols = "lg:grid-cols-3";
+                    else if (metricCards.length <= 3) gridCols = "lg:grid-cols-" + metricCards.length;
+
+                    let html = `
+                        <div class="grid grid-cols-2 ${gridCols} gap-4 mb-6">
+                            ${metricCards.join('')}
+                        </div>
+
+                        <!-- Primary Checks Verification -->
+                        <div class="mb-6 p-5 bg-white rounded-xl border border-gray-100 shadow-sm">
+                            <h4 class="text-sm font-bold mb-4 text-gray-800 flex items-center">
+                                <i class="fas fa-tasks mr-2 text-iqbal-primary"></i> Primary Scenario Verifications
+                            </h4>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-6">
+                                <div class="flex items-center text-sm font-medium text-gray-700">
+                                    <i class="fas ${data.summary.successful_requests > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                    Auth & Profile Accessible
+                                </div>
+                                
+                                ${data.test_type === 'multi_user_sign_in' ? `
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.successful_logouts > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        Graceful Logout Verified
+                                    </div>
+                                ` : ''}
+
+                                ${(data.test_type === 'teacher_flow_concurrent' || data.test_type === 'doc_upload_repeat' || data.test_type === 'rag_quality_benchmark') ? `
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.total_ingestion_time > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        RAG Ingestion Polling
+                                    </div>
+                                ` : ''}
+
+                                ${(data.test_type === 'teacher_flow_concurrent') ? `
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.lesson_saved ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        Lesson Draft Finalized
+                                    </div>
+                                ` : ''}
+
+                                ${(data.test_type.includes('sequential') || data.test_type === 'rag_quality_benchmark' || data.test_type === 'student_chat_concurrent') ? `
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.messages_sent > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        RAG Context Retrieval
+                                    </div>
+                                    <div class="flex items-center text-sm font-medium text-gray-700">
+                                        <i class="fas ${data.summary.messages_sent > 0 ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-2 text-lg"></i>
+                                        LLM Response Streams
+                                    </div>
+                                ` : ''}
+
+                                ${data.summary.stop_requested ? `
+                                    <div class="flex items-center text-sm font-medium text-orange-600">
+                                        <i class="fas fa-hand-paper mr-2 text-lg"></i> Premature Stop Handled
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+
+                    if (Object.keys(data.errors).length > 0) {
+                        html += `<h4 class="font-bold mb-2 text-red-600">Error Summary</h4>
+                        <table class="min-w-full text-sm mb-6 border">
+                            <thead class="bg-gray-50"><tr><th class="p-2 border">Count</th><th class="p-2 border">Error Message</th></tr></thead>
+                            <tbody>${Object.entries(data.errors).map(([msg, count]) => `
+                                <tr><td class="p-2 border text-center font-bold">${count}</td><td class="p-2 border">${msg}</td></tr>
+                            `).join('')}</tbody>
+                        </table>`;
+                    }
+
+                    if (data.detailed_logs && data.detailed_logs.length > 0) {
+                        html += `<h4 class="font-bold mb-2">Test Timeline</h4>
+                        <div class="bg-black text-white p-4 rounded text-xs font-mono h-96 overflow-y-auto mb-4">
+                            ${data.detailed_logs.map(l => {
+                            const ts = l.timestamp.split('T')[1].split('.')[0];
+                            let colorClass = 'text-gray-300';
+                            if (l.level === 'ERROR') colorClass = 'text-red-400';
+                            else if (l.level === 'WARNING') colorClass = 'text-yellow-400';
+                            else if (l.message.includes('success') || l.message.includes('complete')) colorClass = 'text-green-400';
+                            return `
+                                    <div class="mb-1 ${colorClass}">
+                                        <span class="text-gray-500">[${ts}]</span> ${l.message}
+                                    </div>`;
+                        }).join('')}
+                        </div>`;
+                    }
+
+                    content.innerHTML = html;
+                }
+            } catch (e) {
+                content.textContent = 'Error: ' + e;
+            }
+        }
+
+        async function pollStatus(testId) {
+            const list = document.getElementById('active-tests-list');
+
+            // Log Management: Clear if it's the first pull and contains placeholder
+            if (list.innerHTML.includes('Waiting for test') || list.innerHTML.includes('Initializing')) {
+                list.innerHTML = '';
+                list.setAttribute('data-last-timestamp', '');
+            }
+
+            const lastTimestamp = list.getAttribute('data-last-timestamp') || '';
+            try {
+                const logRes = await fetchWithProxy(`/api/load-test/status/${testId}/logs?since=${lastTimestamp}`);
+                if (logRes.ok) {
+                    const logs = await logRes.json();
+
+                    logs.forEach(l => {
+                        const line = document.createElement('div');
+                        const ts = l.timestamp.split('T')[1].split('.')[0];
+
+                        // Color coding
+                        let colorClass = 'text-gray-300';
+                        if (l.level === 'ERROR') colorClass = 'text-red-400';
+                        else if (l.level === 'WARNING') colorClass = 'text-yellow-400';
+                        else if (l.message.includes('success') || l.message.includes('complete')) colorClass = 'text-green-400';
+                        else if (l.message.includes('[') && l.message.includes(']')) colorClass = 'text-blue-300';
+
+                        line.className = `text-xs font-mono mb-1 ${colorClass}`;
+                        line.innerHTML = `<span class="text-gray-500">[${ts}]</span> ${l.message}`;
+                        list.appendChild(line);
+                        list.setAttribute('data-last-timestamp', l.timestamp);
+                    });
+
+                    if (logs.length > 0) {
+                        list.scrollTop = list.scrollHeight;
+                    }
+                }
+            } catch (err) {
+                console.warn("Log polling failed:", err);
+            }
+
+            // 2. Poll status SECOND
+            try {
+                const res = await fetchWithProxy(`/api/load-test/status/${testId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'completed' || data.status === 'failed' || data.status === 'stopped') {
+                        // Re-enable the form & update labels
+                        setTestRunning(false);
+
+                        // Auto-open Result after 500ms
+                        setTimeout(() => {
+                            viewResult(testId);
+                            loadResults(); // Refresh table
+                        }, 500);
+
+                        return; // Stop polling
+                    }
+                }
+            } catch (err) {
+                console.warn("Status polling failed:", err);
+            }
+
+            setTimeout(() => pollStatus(testId), 1500);
+        }
+
+        async function stopActiveTest() {
+            const list = document.getElementById('active-tests-list');
+            const testId = list.dataset.testId;
+            if (!testId) return;
+
+            if (!confirm("Stop the currently running test?")) return;
+
+            try {
+                const btn = document.querySelector('#test-actions-footer button');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Stopping...';
+
+                const res = await fetchWithProxy(`/api/load-test/stop/${testId}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.message) {
+                    const logContainer = document.getElementById('active-tests-list');
+                    const stopMsg = document.createElement('div');
+                    stopMsg.className = 'text-orange-400 font-bold mt-2';
+                    stopMsg.innerHTML = '>>> Stop signal sent. Graceful termination in progress...';
+                    logContainer.appendChild(stopMsg);
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                } else {
+                    alert("Stop failed: " + data.error);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-stop-circle mr-2"></i>Stop Test';
+                }
+            } catch (e) {
+                alert("Request error: " + e.message);
+            }
+        }
+
+        // --- ASSETS: MESSAGE CSVS ---
+        async function loadMessageCSVs() {
+            try {
+                const res = await fetchWithProxy('/api/load-test/message-csvs');
+                const data = await res.json();
+                const container = document.getElementById('message-csv-list');
+                container.innerHTML = '';
+
+                const select = document.getElementById('test-message-csv');
+                select.innerHTML = '<option value="" data-count="10">Default Messages (Built-in pool)</option>';
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-gray-500 p-4 text-center">No message CSVs found. Upload one above.</div>';
+                }
+
+                data.forEach(csv => {
+                    // Select Option
+                    const option = document.createElement('option');
+                    option.value = csv.id;
+                    option.dataset.count = csv.message_count;
+                    option.textContent = `${csv.name} (${csv.message_count} messages)`;
+                    select.appendChild(option);
+
+                    // List Item
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200';
+                    div.innerHTML = `
+                        <div>
+                            <div class="font-medium text-gray-800">${csv.name}</div>
+                            <div class="text-xs text-gray-500">${csv.message_count} messages • Uploaded ${new Date(csv.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <button onclick="deleteMessageCSV(${csv.id})" class="text-red-500 hover:text-red-700 text-sm">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to load message CSVs", e);
+                document.getElementById('message-csv-list').innerHTML =
+                    `<div class="text-red-600 text-sm p-2 bg-red-50 rounded border border-red-200">
+                        Failed to load message CSVs: ${e.message}
+                    </div>`;
+            }
+        }
+
+        async function uploadMessageCSV(e) {
+            e.preventDefault();
+            const name = document.getElementById('csv-display-name').value;
+            const fileInput = document.getElementById('message-csv-file');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('name', name);
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.textContent = 'Uploading...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetchWithProxy('/api/load-test/message-csvs/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('upload-message-csv-modal').classList.add('hidden');
+                    document.getElementById('csv-display-name').value = '';
+                    fileInput.value = '';
+                    loadMessageCSVs();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Upload failed: ' + e);
+            } finally {
+                btn.textContent = 'Upload';
+                btn.disabled = false;
+            }
+        }
+
+        async function deleteMessageCSV(id) {
+            if (!confirm('Delete this message CSV? This will remove the source file used for sequential and concurrent chat tests. Continue?')) return;
+            try {
+                const res = await fetchWithProxy(`/api/load-test/message-csvs/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) loadMessageCSVs();
+                else alert(data.error);
+            } catch (e) {
+                alert("Delete failed");
+            }
+        }
+
+        // Init
+        loadUserSets();
+        loadDocSets();
+        loadMessageCSVs();
+        updateFormFields();
+    </script>
+</body>
+
+</html>

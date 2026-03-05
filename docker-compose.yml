@@ -105,7 +105,7 @@ services:
       - TQDM_DISABLE=1
       - DB_MODE=primary
       - INSTANCE_ROLE=primary
-      - SERVER_URL=https://staging.iqbalai.com   # <-- add this line
+      - SERVER_URL=${SERVER_URL:-http://localhost:9080}
       - ENV=production
 
       # PostgreSQL URL (internal docker network)
