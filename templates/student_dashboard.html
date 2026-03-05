@@ -4231,13 +4231,19 @@
           // Populate subtitle (subject + grade)
           const subtitleEl = document.getElementById('viewLessonSubtitle');
           if (subtitleEl) {
-            subtitleEl.textContent = `📚 ${lesson.subject || 'General'} • Grade ${lesson.grade || 'N/A'}`;
+            const subject = lesson.focus_area || lesson.subject || 'General';
+            const grade = lesson.grade_level || lesson.grade || 'N/A';
+            subtitleEl.textContent = `📚 ${subject} • Grade ${grade}`;
           }
 
           // Populate lesson content: parse markdown to HTML and sanitize for proper formatting
           const contentEl = document.getElementById('viewLessonCurrent');
           if (contentEl) {
-            const rawContent = (lesson.content || lesson.body || '').trim();
+            let rawContent = (lesson.content ?? lesson.body ?? '').toString().trim();
+            // Treat literal "undefined" or "null" strings as empty content
+            if (rawContent.toLowerCase() === 'undefined' || rawContent.toLowerCase() === 'null') {
+              rawContent = '';
+            }
             let contentHtml;
             if (!rawContent) {
               contentHtml = '<p class="text-gray-500 italic">No content available</p>';
