@@ -1652,6 +1652,62 @@ class ConversationModel:
             db.rollback()
             raise
 
+    def duplicate_conversation(self, conversation_id: int) -> Optional[int]:
+        """
+        Duplicate a conversation and all of its messages for the current user.
+
+        Returns the new conversation ID, or None if the source conversation
+        does not belong to this user.
+        """
+        try:
+            db = get_db()
+
+            # Ensure the conversation belongs to this user
+            source = db.query(DBConversation).filter(
+                and_(DBConversation.id == conversation_id, DBConversation.user_id == self.user_id)
+            ).first()
+            if not source:
+                logger.warning(
+                    "User %s attempted to duplicate conversation %s without ownership",
+                    self.user_id,
+                    conversation_id,
+                )
+                return None
+
+            # Create the new conversation with a copied title
+            new_title = f"{source.title} (Copy)"
+            new_conv = DBConversation(
+                user_id=self.user_id,
+                title=new_title,
+                is_active=source.is_active,
+            )
+            db.add(new_conv)
+            db.flush()  # Ensure new_conv.id is available
+
+            # Copy all chat history rows
+            messages = (
+                db.query(DBChatHistory)
+                .filter(DBChatHistory.conversation_id == source.id)
+                .order_by(DBChatHistory.created_at.asc())
+                .all()
+            )
+            for msg in messages:
+                cloned = DBChatHistory(
+                    conversation_id=new_conv.id,
+                    message=msg.message,
+                    role=msg.role,
+                    created_at=msg.created_at,
+                )
+                db.add(cloned)
+
+            db.commit()
+            db.refresh(new_conv)
+            return new_conv.id
+        except Exception as e:
+            logger.error(f"Error duplicating conversation: {str(e)}")
+            db.rollback()
+            raise
+
     def reset_all_chats(self) -> None:
         """Delete all conversations and chat history for the user"""
         try:
