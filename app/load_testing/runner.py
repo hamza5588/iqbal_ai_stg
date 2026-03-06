@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.load_testing.config import LoadTestConfig, TestType, TestResultSummary
-from app.load_testing.models import TestUser, LoadTestResult, LoadTestLog, LoadTestStatus
+from app.load_testing.models import TestUser, TestUserSet, LoadTestResult, LoadTestLog, LoadTestStatus
 from app.utils.db import get_db, close_db
 
 # Configure logging
@@ -25,6 +25,7 @@ class LoadTestRunner:
         self.summary = TestResultSummary()
         self.is_running = False
         self.stop_requested = False
+        self._set_prompt = None  # Custom RAG prompt for teacher sets
 
     def stop(self):
         """Signal the runner to stop"""
@@ -163,7 +164,11 @@ class LoadTestRunner:
                     self.summary.errors.append({"user": user_email, "error": "Login failed"})
                     return
 
-                # 2. Execute Scenario based on test type
+                # 2. Set custom RAG prompt if configured (teacher sets only)
+                if self._set_prompt:
+                    await self._set_rag_prompt(session, user)
+
+                # 3. Execute Scenario based on test type
                 await self._dispatch_scenario(session, user, self.config)
                 
         except asyncio.CancelledError:
@@ -292,9 +297,28 @@ class LoadTestRunner:
                 db.expunge(test_user)
                 users.append(test_user)
             
+            # Fetch set_prompt for teacher sets
+            user_set = db.query(TestUserSet).get(self.config.test_user_set_id)
+            if user_set and user_set.set_prompt:
+                self._set_prompt = user_set.set_prompt
+                self._log(f"Loaded custom RAG prompt from User Set '{user_set.name}': \"{self._set_prompt[:60]}...\"")
+
             self._log(f"Successfully loaded {len(users)} users from Set ID {self.config.test_user_set_id} with live passwords")
             return users
         return []
+
+    async def _set_rag_prompt(self, session: aiohttp.ClientSession, user: TestUser):
+        """Set the custom RAG prompt for this user on the target environment via API"""
+        url = f"{self.config.base_url}/api/rag/prompt"
+        payload = {"prompt": self._set_prompt}
+        try:
+            async with session.post(url, json=payload, headers={"Content-Type": "application/json"}) as resp:
+                if resp.status == 200:
+                    self._log(f"[{user.email}] RAG prompt set successfully")
+                else:
+                    self._log(f"[{user.email}] Failed to set RAG prompt: HTTP {resp.status}", level="WARNING")
+        except Exception as e:
+            self._log(f"[{user.email}] Error setting RAG prompt: {str(e)}", level="WARNING")
 
     def _update_status(self, status: LoadTestStatus):
         """Update test status in DB"""

@@ -89,6 +89,8 @@ async def run(
                     continue
 
             # 2. Upload PDF
+            file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
+            summary.total_file_size_mb += file_size_mb
             ingest_url = f"{config.base_url}/api/rag/ingest"
             form_data = aiohttp.FormData()
             form_data.add_field('file', open(file_path, 'rb'), filename=doc.filename, content_type='application/pdf')
@@ -116,7 +118,7 @@ async def run(
                             summary.ingestion_iterations += 1
                             summary.total_ingestion_time += upload_duration / 1000
                             processing_time = upload_duration / 1000
-                            log_func(f"[{user.email}] Upload & Processing (Sync) for {doc.filename} in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s")
+                            log_func(f"[{user.email}] Upload & Processing (Sync) for {doc.filename} in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s ({file_size_mb}MB)")
                         else:
                             log_func(f"[{user.email}] Upload success for {doc.filename} in {upload_duration:.0f}ms")
                     else:
@@ -155,14 +157,15 @@ async def run(
                                 total_ingest_time = time.time() - poll_start
                                 summary.total_ingestion_time += total_ingest_time
                                 summary.successful_requests += 1
-                                log_func(f"[{user.email}] Ingest complete for {doc.filename} in {total_ingest_time:.1f}s - Total Ingest Time: {total_ingest_time:.1f}s")
+                                log_func(f"[{user.email}] Ingest complete for {doc.filename} in {total_ingest_time:.1f}s - Total Ingest Time: {total_ingest_time:.1f}s ({file_size_mb}MB)")
                                 
                                 # Add extracted text artifact metadata
                                 summary.artifacts.append({
                                     "user_email": user.email,
                                     "type": "extracted_text",
                                     "thread_id": thread_id,
-                                    "doc_name": doc.filename
+                                    "doc_name": doc.filename,
+                                    "size_mb": file_size_mb
                                 })
                                 break
                             elif status in ['failure', 'revoked']:
@@ -182,7 +185,8 @@ async def run(
                     "user_email": user.email,
                     "type": "extracted_text",
                     "thread_id": thread_id,
-                    "doc_name": doc.filename
+                    "doc_name": doc.filename,
+                    "size_mb": file_size_mb
                 })
 
             # 4. Standard Question (Iterative if messages provided)
