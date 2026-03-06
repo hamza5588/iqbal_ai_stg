@@ -18,7 +18,8 @@ class UserSetManager:
         name: str, 
         role: str, 
         count: int, 
-        password: str = "TestPass123!"
+        password: str = "TestPass123!",
+        set_prompt: str = None
     ) -> Tuple[Optional[TestUserSet], List[str]]:
         """
         Create a new set of test users.
@@ -32,7 +33,8 @@ class UserSetManager:
             user_set = TestUserSet(
                 name=name,
                 role=role,
-                user_count=count
+                user_count=count,
+                set_prompt=set_prompt if role == 'teacher' else None
             )
             db.add(user_set)
             db.commit()
