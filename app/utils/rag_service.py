@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from app.utils.db import get_db
 from app.utils.encryption import decrypt_api_key
-from app.models.database_models import RAGPrompt, RAGThread, RAGChunk, SystemSettings
+from app.models.database_models import RAGPrompt, RAGThread, RAGChunk, RAGHeading, SystemSettings
 from app.config import Config
 logger = logging.getLogger(__name__)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -1176,6 +1176,177 @@ Important:
         raise
 
 
+def _persist_headings_for_thread(thread_id: str, user_id: int, topics: List[dict]) -> int:
+    """
+    Store extracted headings for a thread in the database and update thread metadata.
+    Replaces any previously stored headings for this (thread_id, user_id) pair.
+    """
+    from datetime import datetime as dt
+
+    db = get_db()
+    stored_count = 0
+    try:
+        # Remove any stale headings for this thread/user
+        db.query(RAGHeading).filter(
+            RAGHeading.thread_id == thread_id,
+            RAGHeading.user_id == user_id,
+        ).delete()
+
+        for item in topics or []:
+            heading_text = (item.get("topic") or item.get("heading") or "").strip()
+            if not heading_text:
+                continue
+            page = item.get("page")
+            normalized = heading_text.lower()
+            db.add(
+                RAGHeading(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    page=page,
+                    heading=heading_text,
+                    normalized_heading=normalized,
+                )
+            )
+            stored_count += 1
+
+        thread_row = (
+            db.query(RAGThread)
+            .filter(RAGThread.thread_id == thread_id, RAGThread.user_id == user_id)
+            .first()
+        )
+        if thread_row:
+            thread_row.headings_ready = True
+            thread_row.headings_count = stored_count
+            thread_row.headings_last_scanned_at = dt.utcnow()
+
+        db.commit()
+        logger.info(
+            "Stored %s headings for thread_id=%s user_id=%s",
+            stored_count,
+            thread_id,
+            user_id,
+        )
+    except Exception as e:
+        logger.error(
+            "Error saving headings for thread_id=%s user_id=%s: %s",
+            thread_id,
+            user_id,
+            e,
+            exc_info=True,
+        )
+        db.rollback()
+        raise
+
+    return stored_count
+
+
+def extract_and_store_headings_for_thread(
+    thread_id: str,
+    user_id: Optional[int] = None,
+    max_wait_seconds: int = 300,
+    poll_interval_seconds: float = 5.0,
+) -> dict:
+    """
+    Extract headings/topics for a thread using AI and persist them to the database.
+
+    This function is intended to be run in a background worker (Celery task or
+    local background thread). It:
+    1. Waits for chunks for this thread to be available in the database/vector store
+    2. Builds per-page documents
+    3. Uses AI to extract headings/topics
+    4. Persists the headings to the RAGHeading table and updates RAGThread metadata
+    """
+    thread_id_str = str(thread_id)
+    if user_id is None:
+        user_id = _get_user_id_for_thread(thread_id_str)
+    if user_id is None:
+        raise ValueError(f"Could not determine user_id for thread_id={thread_id_str}")
+
+    from app.utils.rag_vectorstore import query_all_chunks
+
+    deadline = time.time() + max_wait_seconds
+    all_chunks = query_all_chunks(thread_id=thread_id_str, user_id=user_id)
+
+    # Wait for chunks to become available (ingestion may still be writing them)
+    while not all_chunks and time.time() < deadline:
+        logger.info(
+            "No RAG chunks found yet for headings extraction (thread_id=%s). "
+            "Waiting %ss before retry.",
+            thread_id_str,
+            poll_interval_seconds,
+        )
+        time.sleep(poll_interval_seconds)
+        all_chunks = query_all_chunks(thread_id=thread_id_str, user_id=user_id)
+
+    if not all_chunks:
+        logger.warning(
+            "No document pages found for headings extraction (thread_id=%s). "
+            "Marking headings as ready with zero topics.",
+            thread_id_str,
+        )
+        _persist_headings_for_thread(thread_id_str, user_id, [])
+        return {
+            "thread_id": thread_id_str,
+            "topics": [],
+            "topics_count": 0,
+            "method": "ai_heading_extraction",
+            "chunks_scanned": 0,
+        }
+
+    # Group chunks by page and build Document per page for AI extraction
+    from collections import defaultdict
+
+    by_page = defaultdict(list)
+    for c in all_chunks:
+        p = c.get("page") or 0
+        try:
+            p = int(p)
+        except (ValueError, TypeError):
+            p = 0
+        by_page[p].append(c)
+    for k in by_page:
+        by_page[k].sort(key=lambda x: x.get("chunk_index", 0))
+
+    page_docs: List[Document] = []
+    for p in sorted(by_page.keys()):
+        chunks = by_page[p]
+        text = "\n\n".join(c.get("text", "") for c in chunks)
+        doc = Document(
+            page_content=text,
+            metadata={
+                "page": p,
+                "page_number": p,
+                "source": chunks[0].get("source", "") if chunks else "",
+            },
+        )
+        page_docs.append(doc)
+
+    if not page_docs:
+        logger.warning(
+            "No document pages constructed for headings extraction (thread_id=%s).",
+            thread_id_str,
+        )
+        _persist_headings_for_thread(thread_id_str, user_id, [])
+        return {
+            "thread_id": thread_id_str,
+            "topics": [],
+            "topics_count": 0,
+            "method": "ai_heading_extraction",
+            "chunks_scanned": 0,
+        }
+
+    # Use AI to extract topics/headings
+    result = _extract_topics_with_ai(page_docs, user_id, thread_id_str)
+    topics = result.get("topics") or []
+    stored_count = _persist_headings_for_thread(thread_id_str, user_id, topics)
+
+    result["thread_id"] = thread_id_str
+    result["topics_count"] = stored_count
+    result["chunks_scanned"] = len(page_docs)
+    result["method"] = result.get("method") or "ai_heading_extraction"
+    return result
+
+
 @tool
 def list_topics_whole_doc_tool(thread_id: str) -> dict:
     """
@@ -1211,53 +1382,96 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
     if user_id is None:
         return {"error": f"Could not extract user_id from thread_id: {thread_id}"}
 
-    from app.utils.rag_vectorstore import query_all_chunks
+    db = get_db()
+    max_attempts = 10
+    sleep_seconds = 2.0
 
-    all_chunks = query_all_chunks(thread_id=str(thread_id), user_id=user_id)
-    if not all_chunks:
-        return {"error": "No document pages found for this thread. Upload a PDF first."}
+    thread_row = None
 
-    # Group chunks by page and build Document per page for AI extraction
-    from collections import defaultdict
-    by_page = defaultdict(list)
-    for c in all_chunks:
-        p = c.get("page") or 0
+    for attempt in range(max_attempts):
         try:
-            p = int(p)
-        except (ValueError, TypeError):
-            p = 0
-        by_page[p].append(c)
-    for k in by_page:
-        by_page[k].sort(key=lambda x: x.get("chunk_index", 0))
+            # Refresh thread metadata each attempt
+            thread_row = (
+                db.query(RAGThread)
+                .filter(RAGThread.thread_id == thread_id, RAGThread.user_id == user_id)
+                .first()
+            )
 
-    page_docs = []
-    for p in sorted(by_page.keys()):
-        chunks = by_page[p]
-        text = "\n\n".join(c.get("text", "") for c in chunks)
-        doc = Document(
-            page_content=text,
-            metadata={"page": p, "page_number": p, "source": chunks[0].get("source", "") if chunks else ""},
-        )
-        page_docs.append(doc)
+            # Fetch any stored headings for this thread
+            headings = db.query(RAGHeading).filter(
+                RAGHeading.thread_id == thread_id,
+                RAGHeading.user_id == user_id,
+            ).order_by(
+                RAGHeading.page.asc(),
+                RAGHeading.id.asc(),
+            ).all()
 
-    if not page_docs:
-        return {"error": "No document pages found for this thread."}
+            if headings:
+                topics = [
+                    {"topic": h.heading, "page": h.page}
+                    for h in headings
+                ]
+                return {
+                    "thread_id": thread_id,
+                    "topics": topics,
+                    "topics_count": len(topics),
+                    "method": "db_heading_cache",
+                    "chunks_scanned": getattr(thread_row, "num_pages", None)
+                    if thread_row
+                    else None,
+                }
 
-    # Use AI to extract topics
-    try:
-        result = _extract_topics_with_ai(page_docs, user_id, thread_id)
-        result["thread_id"] = thread_id
-        result["chunks_scanned"] = len(page_docs)
-        return result
-    except Exception as e:
-        logger.error(f"Error in AI topic extraction: {e}")
-        return {
-            "error": f"Failed to extract topics using AI: {str(e)}",
-            "thread_id": thread_id,
-            "topics": [],
-            "topics_count": 0,
-            "chunks_scanned": len(page_docs)
-        }
+            # If thread says headings are ready but none exist, treat as "no headings"
+            if thread_row and getattr(thread_row, "headings_ready", False):
+                logger.info(
+                    "Headings marked ready but none found for thread_id=%s user_id=%s",
+                    thread_id,
+                    user_id,
+                )
+                return {
+                    "thread_id": thread_id,
+                    "topics": [],
+                    "topics_count": 0,
+                    "method": "db_heading_cache",
+                    "chunks_scanned": getattr(thread_row, "num_pages", None),
+                }
+        except Exception as e:
+            logger.error(
+                "Error querying headings for thread_id=%s user_id=%s: %s",
+                thread_id,
+                user_id,
+                e,
+                exc_info=True,
+            )
+            break
+
+        # No headings yet and processing may still be running – wait and retry
+        if attempt < max_attempts - 1:
+            logger.info(
+                "No headings available yet for thread_id=%s (attempt %d/%d). "
+                "Waiting %ss before retry.",
+                thread_id,
+                attempt + 1,
+                max_attempts,
+                sleep_seconds,
+            )
+            time.sleep(sleep_seconds)
+
+    # After retries, return a best-effort response (no headings yet)
+    logger.warning(
+        "Headings not available for thread_id=%s after %d attempts. "
+        "Returning empty topics list.",
+        thread_id,
+        max_attempts,
+    )
+    return {
+        "thread_id": thread_id,
+        "topics": [],
+        "topics_count": 0,
+        "method": "db_heading_cache_timeout",
+        "chunks_scanned": getattr(thread_row, "num_pages", None) if thread_row else None,
+        "error": "Headings are still being processed. Please try again shortly.",
+    }
 
 _WORD_RE = re.compile(r"\b[\w']+\b", re.UNICODE)
 

@@ -4,7 +4,7 @@ Celery tasks for PDF ingestion.
 import base64
 import logging
 from app.celery_app import celery
-from app.utils.rag_service import ingest_pdf
+from app.utils.rag_service import ingest_pdf, extract_and_store_headings_for_thread
 from app.models.database_models import RAGThread
 from datetime import datetime
 from sqlalchemy.pool import StaticPool
@@ -152,3 +152,63 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
     finally:
         db.close()  # Always close the session
         engine.dispose()  # Dispose of the engine to close all connections
+
+
+@celery.task(bind=True, name='app.tasks.ingest_tasks.extract_headings_task')
+def extract_headings_task(self, thread_id: str, user_id: int):
+    """
+    Celery task to extract headings/topics for a thread and store them in the database.
+    Runs inside a Flask application context so get_db() and other app utilities work.
+    """
+    from app import create_app
+
+    app = create_app()
+    with app.app_context():
+        try:
+            self.update_state(
+                state='PROCESSING',
+                meta={
+                    'step': 'init',
+                    'progress': 0,
+                    'message': 'Starting heading extraction...'
+                },
+            )
+            result = extract_and_store_headings_for_thread(
+                thread_id=thread_id,
+                user_id=user_id,
+            )
+            headings_count = result.get('topics_count', 0)
+            self.update_state(
+                state='SUCCESS',
+                meta={
+                    'step': 'complete',
+                    'progress': 100,
+                    'message': f'Extracted {headings_count} headings',
+                },
+            )
+            return {
+                'success': True,
+                'thread_id': thread_id,
+                'user_id': user_id,
+                'headings_count': headings_count,
+            }
+        except Exception as e:
+            error_msg = f'Failed to extract headings: {str(e)}'
+            exc_type = type(e).__name__
+            logger.error(error_msg, exc_info=True)
+            self.update_state(
+                state='FAILURE',
+                meta={
+                    'error': error_msg,
+                    'message': error_msg,
+                    'exc_type': exc_type,
+                    'exc_message': str(e),
+                },
+            )
+            return {
+                'success': False,
+                'error': error_msg,
+                'thread_id': thread_id,
+                'user_id': user_id,
+                'exc_type': exc_type,
+            }
