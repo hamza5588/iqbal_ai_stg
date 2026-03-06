@@ -831,6 +831,11 @@
             try {
                 // Use fetchWithProxy instead of direct relative path
                 const res = await fetchWithProxy('/api/load-test/users');
+                const contentType = res.headers.get('content-type') || '';
+                if (!res.ok || !contentType.includes('application/json')) {
+                    const text = await res.text();
+                    throw new Error(`Unexpected response from server (status ${res.status}): ${text.slice(0, 200)}`);
+                }
                 const data = await res.json();
                 const container = document.getElementById('user-sets-list');
                 container.innerHTML = '';
@@ -2258,7 +2263,15 @@
             }
         }
 
+        // Global flag to avoid overlapping poll requests under heavy load
+        let _pollStatusInFlight = false;
+
         async function pollStatus(testId) {
+            if (_pollStatusInFlight) {
+                // Skip if a previous poll cycle is still running
+                return;
+            }
+            _pollStatusInFlight = true;
             const list = document.getElementById('active-tests-list');
 
             // Log Management: Clear if it's the first pull and contains placeholder
@@ -2313,6 +2326,7 @@
                             loadResults(); // Refresh table
                         }, 500);
 
+                        _pollStatusInFlight = false;
                         return; // Stop polling
                     }
                 }
@@ -2320,7 +2334,9 @@
                 console.warn("Status polling failed:", err);
             }
 
-            setTimeout(() => pollStatus(testId), 1500);
+            _pollStatusInFlight = false;
+            // Use a slightly longer interval under heavy load to avoid saturating the gateway
+            setTimeout(() => pollStatus(testId), 5000);
         }
 
         async function stopActiveTest() {
