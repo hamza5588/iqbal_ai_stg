@@ -249,6 +249,22 @@ def init_db(app):
                 logger.warning(f"Migration warning: {str(e)}")
                 db.rollback()
             
+            # Migration: Ensure load_test_user_sets has set_prompt column
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if 'load_test_user_sets' in inspector.get_table_names():
+                    columns = [col['name'] for col in inspector.get_columns('load_test_user_sets')]
+                    if 'set_prompt' not in columns:
+                        logger.info("Adding set_prompt column to load_test_user_sets table...")
+                        # Works for SQLite and Postgres/MySQL; TEXT is portable here
+                        db.execute(text("ALTER TABLE load_test_user_sets ADD COLUMN set_prompt TEXT"))
+                        db.commit()
+                        logger.info("set_prompt column added successfully")
+            except Exception as e:
+                logger.warning(f"Load testing migration warning: {str(e)}")
+                db.rollback()
+            
             # Migration: Add subscription fields to existing users
             try:
                 db = get_db()

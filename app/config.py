@@ -66,6 +66,9 @@ class Config:
         'pool_recycle': 300,    # Recycle connections after 5 minutes
         'echo': False           # Set to True for SQL query logging
     }
+    if not DATABASE_URL.startswith('sqlite'):
+        SQLALCHEMY_ENGINE_OPTIONS['pool_size'] = 5
+        SQLALCHEMY_ENGINE_OPTIONS['max_overflow'] = 5
     
     # Legacy DATABASE path for backward compatibility (used only if needed)
     if DATABASE_URL.startswith('sqlite'):

@@ -62,3 +62,4 @@ filee.txt
 .DS_Store
 .idea/
 tests/
+chatbot.db
