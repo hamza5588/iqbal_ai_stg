@@ -18,6 +18,7 @@ celery = Celery(
 )
 
 # Update Celery configuration from Config
+# Route PDF ingestion to dedicated "ingest" queue so a dedicated worker can run with higher concurrency.
 celery.conf.update(
     accept_content=Config.CELERY_ACCEPT_CONTENT,
     task_serializer=Config.CELERY_TASK_SERIALIZER,
@@ -26,6 +27,9 @@ celery.conf.update(
     task_track_started=Config.CELERY_TASK_TRACK_STARTED,
     task_time_limit=Config.CELERY_TASK_TIME_LIMIT,
     task_soft_time_limit=Config.CELERY_TASK_SOFT_TIME_LIMIT,
+    task_routes={
+        'app.tasks.ingest_tasks.ingest_pdf_task': {'queue': 'ingest'},
+    },
 )
 
 def init_celery(app):

@@ -133,6 +133,7 @@ class ReportGenerator:
             ],
             "pass_threshold": "≥ 95% success across all 6 steps per user; no ingestion timeouts.",
             "failure_signals": [
+                # Threshold: if Celery ingest worker is busy or slow, polling may exceed 60s. Tune threshold or add more ingest workers if needed.
                 "Ingestion timeout (> 60 s polling without 'success' status)",
                 "Chat failures or empty responses after successful ingest",
                 "Lesson save failures",

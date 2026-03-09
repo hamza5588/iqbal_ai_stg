@@ -104,6 +104,9 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
     else:
         from sqlalchemy.pool import QueuePool
         engine_options.setdefault('poolclass', QueuePool)
+        # Per-task engine: use a small pool so each Celery worker doesn't open too many DB connections.
+        engine_options['pool_size'] = 2
+        engine_options['max_overflow'] = 2
     
     # Create engine and session for this operation
     engine = create_engine(db_url, **engine_options)
