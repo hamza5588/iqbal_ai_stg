@@ -139,12 +139,17 @@ class UserModel:
 
     def get_role(self) -> str:
         """Get the user's role"""
+        db = get_db()
         try:
-            db = get_db()
             user = db.query(DBUser).filter(DBUser.id == self.user_id).first()
             return user.role if user else 'student'
         except Exception as e:
             logger.error(f"Error getting user role: {str(e)}")
+            # Ensure the session is not left in an invalid transaction state
+            try:
+                db.rollback()
+            except Exception as rollback_ex:
+                logger.error(f"Error rolling back after role lookup failure: {rollback_ex}")
             return 'student'
 
     def is_teacher(self) -> bool:
