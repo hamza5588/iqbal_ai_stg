@@ -35,4 +35,4 @@ EXPOSE 5000
 # master process and then forking workers can cause PostgreSQL connections
 # created during app initialization to be shared across processes, which leads
 # to "lost synchronization with server" and similar psycopg2 errors under load.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--threads", "2", "--timeout", "1800", "--graceful-timeout", "30", "--keep-alive", "5", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "20", "--threads", "3", "--timeout", "1800", "--graceful-timeout", "10", "--keep-alive", "5", "run:app"]
