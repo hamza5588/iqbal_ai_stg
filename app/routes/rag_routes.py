@@ -16,7 +16,7 @@ from app.utils.rag_service import (
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk
 from app.services.chat_service import ChatService
-from app.tasks.ingest_tasks import ingest_pdf_task
+from app.tasks.ingest_tasks import ingest_pdf_task, extract_headings_task
 from langchain_core.messages import HumanMessage
 import logging
 import threading
@@ -286,6 +286,16 @@ def ingest():
                     user_id=user_id,
                 )
                 _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
+                # Kick off background heading extraction in-process when Celery is disabled
+                try:
+                    _start_heading_extraction_background(thread_id, user_id)
+                except Exception as bg_err:
+                    logger.error(
+                        "Failed to start background heading extraction for thread %s (sync mode): %s",
+                        thread_id,
+                        bg_err,
+                        exc_info=True,
+                    )
                 logger.info(f"PDF ingested synchronously: {filename} (thread_id: {thread_id})")
                 return jsonify({
                     'success': True,
@@ -318,6 +328,21 @@ def ingest():
             conversation_id=conversation_id
         )
         logger.info(f"Started Celery task {task.id} for PDF ingestion: {filename} (thread_id: {thread_id})")
+        # Start a separate Celery task to extract and store headings for this thread
+        try:
+            extract_headings_task.delay(thread_id=thread_id, user_id=user_id)
+            logger.info(
+                "Started Celery task for heading extraction (thread_id=%s, user_id=%s)",
+                thread_id,
+                user_id,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to start heading extraction Celery task for thread %s: %s",
+                thread_id,
+                e,
+                exc_info=True,
+            )
         return jsonify({
             'success': True,
             'message': 'PDF ingestion started in background',
@@ -510,6 +535,32 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
             'Connection': 'keep-alive'
         }
     )
+
+
+def _start_heading_extraction_background(thread_id: str, user_id: int):
+    """
+    Start background heading extraction when Celery is disabled.
+    Extracts headings/topics for the given thread and stores them in the database.
+    """
+    from flask import current_app
+    from app.utils.rag_service import extract_and_store_headings_for_thread
+
+    app = current_app._get_current_object()
+
+    def run():
+        with app.app_context():
+            try:
+                extract_and_store_headings_for_thread(thread_id=thread_id, user_id=user_id)
+            except Exception as e:
+                logger.error(
+                    "Error in background heading extraction for thread %s: %s",
+                    thread_id,
+                    e,
+                    exc_info=True,
+                )
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
 
 
 @bp.route('/chat', methods=['POST'])
