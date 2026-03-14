@@ -67,56 +67,69 @@ import requests
 load_dotenv()
 
 # -------------------
-# Global rate limiter for Groq API calls
+# Bounded concurrency for Groq API calls (replaces global 3s serialization)
 # -------------------
 import time
-from threading import Lock
+from threading import Lock, Semaphore
+
+def _groq_max_concurrent():
+    """Max concurrent Groq requests. Env GROQ_MAX_CONCURRENT_REQUESTS (default 4)."""
+    try:
+        n = int(os.getenv("GROQ_MAX_CONCURRENT_REQUESTS", "4"))
+        return max(1, min(n, 16))
+    except (ValueError, TypeError):
+        return 4
+
 
 class GroqRateLimiter:
-    """Global rate limiter for Groq API to prevent 429 errors"""
+    """
+    Bounded-concurrency limiter for Groq API to avoid 429s without serializing all users.
+    Allows N concurrent requests (default 4); after 429s we apply short backoff before acquire.
+    """
     _instance = None
     _lock = Lock()
-    
+
     def __new__(cls):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super(GroqRateLimiter, cls).__new__(cls)
-                    cls._instance.last_request_time = 0
-                    cls._instance.min_interval = 3.0  # Increased to 3 seconds between requests
-                    cls._instance.consecutive_429_count = 0  # Track consecutive 429 errors
+                    cls._instance._semaphore = Semaphore(_groq_max_concurrent())
+                    cls._instance.consecutive_429_count = 0
         return cls._instance
-    
+
     def wait_if_needed(self):
-        """Wait if needed to respect rate limits"""
-        with self._lock:
-            now = time.time()
-            time_since_last = now - self.last_request_time
-            
-            # Increase delay if we've had recent 429 errors
-            adjusted_interval = self.min_interval
-            if self.consecutive_429_count > 0:
-                adjusted_interval = self.min_interval * (1 + self.consecutive_429_count * 0.5)
-                logger.warning(f"Rate limiter: increased interval to {adjusted_interval:.1f}s due to {self.consecutive_429_count} recent 429 errors")
-            
-            if time_since_last < adjusted_interval:
-                wait_time = adjusted_interval - time_since_last
-                logger.info(f"Rate limiting: waiting {wait_time:.2f} seconds before next Groq request")
-                time.sleep(wait_time)
-            self.last_request_time = time.time()
-    
+        """Acquire a slot for a Groq request; back off briefly if we've seen recent 429s."""
+        if self.consecutive_429_count > 0:
+            backoff = min(2.0 * self.consecutive_429_count, 10.0)
+            logger.warning(
+                "Rate limiter: backoff %.1fs before next Groq request (recent 429s: %s)",
+                backoff,
+                self.consecutive_429_count,
+            )
+            time.sleep(backoff)
+        self._semaphore.acquire()
+
     def record_429_error(self):
-        """Record a 429 error to adjust rate limiting"""
+        """Record a 429 error so next callers back off briefly."""
         with self._lock:
             self.consecutive_429_count += 1
             logger.warning(f"Recorded 429 error. Consecutive count: {self.consecutive_429_count}")
-    
+
     def record_success(self):
-        """Record a successful request to reset error count"""
+        """Release the slot and reset 429 count on success."""
+        self._semaphore.release()
         with self._lock:
             if self.consecutive_429_count > 0:
-                logger.info(f"Resetting 429 error count after successful request")
+                logger.info("Resetting 429 error count after successful request")
             self.consecutive_429_count = 0
+
+    def release_slot(self):
+        """Release the semaphore slot without recording success (use in finally after wait_if_needed)."""
+        try:
+            self._semaphore.release()
+        except ValueError:
+            pass  # already released or never acquired
 
 groq_rate_limiter = GroqRateLimiter()
 
@@ -2509,6 +2522,8 @@ def chat_node(state: ChatState, config=None):
             return {"messages": [response]}
             
         except Exception as e:
+            if provider == 'groq':
+                groq_rate_limiter.release_slot()
             error_msg = str(e)
             error_type = type(e).__name__
             logger.warning(f"LLM API error in chat_node (attempt {attempt + 1} with {current_max} messages): {error_type}: {error_msg}")

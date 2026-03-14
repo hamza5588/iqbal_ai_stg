@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, redirect
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, redirect, g
 from app.utils.auth import login_required
 from app.utils.routes import get_default_route_by_role
 from app.utils.rag_service import (
@@ -749,6 +749,16 @@ def chat():
             # #endregion
             # Create HumanMessage
             human_message = HumanMessage(content=message)
+
+            # Release DB session before long-running invoke so other requests aren't blocked (avoids connection pool exhaustion and long lock waits)
+            if 'db' in g:
+                _db = g.pop('db')
+                try:
+                    _db.commit()
+                except Exception:
+                    _db.rollback()
+                finally:
+                    _db.close()
 
             # Invoke the chatbot - LangGraph returns the final state
             # #region agent log
