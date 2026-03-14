@@ -260,16 +260,9 @@ def login():
         return redirect(redirect_path)
 
     if request.method == 'POST':
-        useremail = request.form.get('useremail') or (request.get_json(silent=True) or {}).get('useremail')
-        password = request.form.get('password') or (request.get_json(silent=True) or {}).get('password')
-        if not useremail or not password:
-            err_msg = "Email and password are required"
-            if _wants_json():
-                return jsonify({'success': False, 'error': err_msg}), 400
-            return render_template('login.html', error=err_msg)
         try:
-            user = UserModel.get_user_by_email(useremail)
-            if user and user['password'] == password:
+            user = UserModel.get_user_by_email(request.form['useremail'])
+            if user and user['password'] == request.form['password']:
                 session.clear()
                 session['user_id'] = user['id']
                 session['username'] = user['username']
@@ -290,12 +283,10 @@ def login():
                 return jsonify({'success': False, 'error': err_msg}), 401
             return render_template('login.html', error=err_msg)
         except Exception as e:
-            logger.error(f"Login error: {str(e)}", exc_info=True)
+            logger.error(f"Login error: {str(e)}")
             err_msg = "Login failed"
-            # Use 503 for likely transient/overload so clients can retry
-            status = 503 if "connection" in str(e).lower() or "timeout" in str(e).lower() or "pool" in str(e).lower() else 500
             if _wants_json():
-                return jsonify({'success': False, 'error': err_msg}), status
+                return jsonify({'success': False, 'error': err_msg}), 500
             return render_template('login.html', error=err_msg)
     return render_template('login.html')
 

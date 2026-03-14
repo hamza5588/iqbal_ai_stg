@@ -179,66 +179,67 @@ class LoadTestRunner:
             self._log(f"Worker {worker_id} error: {str(e)}", level="ERROR")
 
     async def _login(self, session: aiohttp.ClientSession, user: TestUser) -> bool:
-        """Perform login flow with retries for transient failures (e.g. connection pool / 503)."""
+        """Perform login flow"""
         url = f"{self.config.base_url}/auth/login"
         payload = {
             "useremail": user.email,
             "password": user.password
         }
-        max_attempts = 3
-        for attempt in range(1, max_attempts + 1):
-            start = time.time()
-            try:
-                self.summary.total_requests += 1
-                async with session.post(url, data=payload, allow_redirects=False) as response:
-                    duration = time.time() - start
-
-                    # Flask login typically redirects on success (302)
-                    if response.status == 302:
-                        cookies = session.cookie_jar.filter_cookies(self.config.base_url)
-                        if 'session' in cookies:
-                            logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
-                            self.summary.successful_requests += 1
-                            return True
+        
+        start = time.time()
+        try:
+            self.summary.total_requests += 1
+            async with session.post(url, data=payload, allow_redirects=False) as response:
+                duration = time.time() - start
+                
+                # Flask login typically redirects on success (302)
+                if response.status == 302:
+                    # Verify we got a session cookie
+                    cookies = session.cookie_jar.filter_cookies(self.config.base_url)
+                    if 'session' in cookies:
+                        logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
+                        self.summary.successful_requests += 1
+                        return True
+                    else:
+                        logger.warning(f"User {user.email} login redirect but no session cookie found for {self.config.base_url}")
                         self._log(f"User {user.email} no session cookie", level="WARNING")
                         return False
-                    if response.status == 200:
-                        text = await response.text()
-                        try:
-                            data = json.loads(text)
-                            if data.get("success") is True:
-                                cookies = session.cookie_jar.filter_cookies(self.config.base_url)
-                                if 'session' in cookies:
-                                    logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
-                                    self.summary.successful_requests += 1
-                                    return True
+                elif response.status == 200:
+                    text = await response.text()
+                    try:
+                        data = json.loads(text)
+                        if data.get("success") is True:
+                            # Verify we got a session cookie
+                            cookies = session.cookie_jar.filter_cookies(self.config.base_url)
+                            if 'session' in cookies:
+                                logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
+                                self.summary.successful_requests += 1
+                                return True
+                            else:
+                                logger.warning(f"User {user.email} login success JSON but no session cookie")
                                 self._log(f"User {user.email} no session cookie", level="WARNING")
                                 return False
+                        else:
+                            logger.warning(f"User {user.email} login failed via JSON: {data.get('error')}")
                             self._log(f"User {user.email} login failed: {data.get('error')}", level="ERROR")
                             return False
-                        except json.JSONDecodeError:
-                            if "Invalid credentials" in text:
-                                self._log(f"User {user.email} invalid credentials", level="ERROR")
-                            return False
-                    # Retry on 500/503 (backend overload)
-                    if response.status in (500, 503) and attempt < max_attempts:
-                        delay = 2 ** attempt
-                        self._log(f"User {user.email} login {response.status}, retry in {delay}s (attempt {attempt}/{max_attempts})", level="WARNING")
-                        await asyncio.sleep(delay)
-                        continue
+                    except json.JSONDecodeError:
+                        if "Invalid credentials" in text:
+                            logger.warning(f"User {user.email} invalid credentials")
+                            self._log(f"User {user.email} invalid credentials", level="ERROR")
+                        else:
+                            logger.warning(f"User {user.email} login returned 200 but not redirected and not JSON success. Text: {text[:100]}...")
+                            self._log(f"User {user.email} login returned 200 (unexpected)", level="WARNING")
+                        return False
+                else:
                     text = await response.text()
+                    logger.warning(f"User {user.email} login failed with status {response.status}. Text: {text[:200]}...")
                     self._log(f"User {user.email} login failed with status {response.status}", level="ERROR")
                     return False
-            except Exception as e:
-                logger.warning(f"User {user.email} login attempt {attempt} exception: {str(e)}")
-                if attempt < max_attempts:
-                    delay = 2 ** attempt
-                    self._log(f"User {user.email} login exception, retry in {delay}s (attempt {attempt}/{max_attempts})", level="WARNING")
-                    await asyncio.sleep(delay)
-                else:
-                    self._log(f"User {user.email} login exception after {max_attempts} attempts: {str(e)}", level="ERROR")
-                    return False
-        return False
+        except Exception as e:
+            logger.error(f"User {user.email} login exception: {str(e)}")
+            self._log(f"User {user.email} login exception: {str(e)}", level="ERROR")
+            return False
 
     async def _dispatch_scenario(self, session: aiohttp.ClientSession, user: TestUser, config: LoadTestConfig):
         """Dispatch execution to the appropriate scenario function"""

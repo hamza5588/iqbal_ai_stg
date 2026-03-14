@@ -66,10 +66,6 @@ class Config:
         'pool_recycle': 300,    # Recycle connections after 5 minutes
         'echo': False           # Set to True for SQL query logging
     }
-    # Larger pool for concurrent load (login surge + ask_question workers)
-    if not DATABASE_URL.startswith('sqlite'):
-        SQLALCHEMY_ENGINE_OPTIONS['pool_size'] = int(os.getenv('DB_POOL_SIZE', '20'))
-        SQLALCHEMY_ENGINE_OPTIONS['max_overflow'] = int(os.getenv('DB_POOL_MAX_OVERFLOW', '10'))
     
     # Legacy DATABASE path for backward compatibility (used only if needed)
     if DATABASE_URL.startswith('sqlite'):
