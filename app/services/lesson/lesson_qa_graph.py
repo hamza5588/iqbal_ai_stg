@@ -116,8 +116,9 @@ Can this question be answered using ONLY the lesson content above? Reply with ex
         reply = _strip_reasoning(reply or "").strip().upper()
         return reply.startswith("YES")
     except Exception as e:
-        logger.warning("can_answer_from_lesson_only LLM check failed: %s; defaulting to needs_rag=True", e)
-        return False
+        logger.warning("can_answer_from_lesson_only LLM check failed: %s; defaulting to try lesson answer", e)
+        # Prefer attempting lesson answer over generic "not covered" on transient/load failure
+        return True
 
 
 def decide_route(state: LessonQAState) -> LessonQAState:
@@ -221,6 +222,14 @@ def _answer_from_rag_impl(
             for d in (docs or [])[:8]
         ]
         page_contents = [c for c in page_contents if c]
+        # Retry once on empty retrieval (e.g. transient under load)
+        if not page_contents:
+            docs = retriever.invoke(question)
+            page_contents = [
+                (getattr(d, "page_content", "") or "").strip()
+                for d in (docs or [])[:8]
+            ]
+            page_contents = [c for c in page_contents if c]
         if not page_contents:
             return "Your question is not covered in the lesson content."
 

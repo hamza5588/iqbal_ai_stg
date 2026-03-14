@@ -17,8 +17,14 @@ def get_engine():
     """Get or create SQLAlchemy engine.
 
     IMPORTANT: the engine is kept per-process so that forking servers
-    (e.g. gunicorn with multiple workers) do not share the same DBAPI
+    (e.g. gunicorn or Celery workers) do not share the same DBAPI
     connections across processes, which can corrupt PostgreSQL sessions.
+
+    Because each worker process now has its own independent engine and
+    connection pool, DB usage is naturally isolated per worker. This made
+    our earlier experiment of separating Celery ingestion into its own
+    queue/worker (to reduce DB pressure) unnecessary, so that queue split
+    was rolled back.
     """
     global _engine, _engine_pid
 
