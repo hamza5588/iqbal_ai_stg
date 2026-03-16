@@ -41,6 +41,11 @@ services:
       retries: 5
     networks:
       - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
 
   # ----------------------------
   # MILVUS (prod)
@@ -63,6 +68,11 @@ services:
       start_period: 30s
     networks:
       - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 6G
 
   # ----------------------------
   # REDIS (prod)
@@ -73,7 +83,7 @@ services:
     restart: always
     volumes:
       - redis_data_prod:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
     networks:
       - app_network
     healthcheck:
@@ -206,11 +216,71 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
-    command: celery -A app.celery_worker_entry.celery worker --loglevel=info --concurrency=2
+    command: celery -A app.celery_worker_entry.celery worker -Q default --loglevel=info --concurrency=4
     deploy:
       resources:
         limits:
           cpus: "4"
+          memory: 16G
+        reservations:
+          cpus: "2"
+          memory: 8G
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  # ----------------------------
+  # CELERY INGEST WORKER (prod)
+  # ----------------------------
+  celery_worker_ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - TOKENIZERS_PARALLELISM=false
+      - TQDM_DISABLE=1
+      - ENV=production
+
+      # Database
+      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydatabase
+
+      # Celery
+      - USE_CELERY_FOR_INGESTION=true
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+      # APIs
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NOMIC_APIC_KEY=${NOMIC_API_KEY}
+      - VLLM_API_BASE=http://69.28.92.113:8000/v1
+      - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+      - VLLM_TIMEOUT=600
+
+      # Milvus
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - EMBEDDING_DIM=384
+
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    command: celery -A app.celery_worker_entry.celery worker -Q ingest --loglevel=info --concurrency=8
+    deploy:
+      resources:
+        limits:
+          cpus: "6"
           memory: 16G
         reservations:
           cpus: "2"

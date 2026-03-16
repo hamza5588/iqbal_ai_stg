@@ -3,23 +3,36 @@ Celery tasks for PDF ingestion.
 """
 import base64
 import logging
+import os
 from app.celery_app import celery
 from app.utils.rag_service import ingest_pdf, extract_and_store_headings_for_thread
 from app.models.database_models import RAGThread
 from datetime import datetime
-from sqlalchemy.pool import StaticPool
 
 logger = logging.getLogger(__name__)
 
 
-def _run_ingest_in_context(self, file_bytes_b64: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
-    """Run ingestion logic inside a Flask application context (for get_db(), current_app, etc.)."""
+def _run_ingest_in_context(self, file_path: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
+    """Run ingestion logic inside a Flask application context (for get_db(), current_app, etc.).
+
+    The caller passes a temporary file path; this function is responsible for
+    reading the bytes and unlinking the file immediately afterwards.
+    """
     # Update task state to processing
     self.update_state(
         state='PROCESSING',
         meta={'step': 'init', 'progress': 5, 'message': 'Starting PDF ingestion...'}
     )
-    file_bytes = base64.b64decode(file_bytes_b64)
+
+    # Read file bytes from the temporary path and unlink as soon as possible
+    try:
+        with open(file_path, 'rb') as f:
+            file_bytes = f.read()
+    finally:
+        try:
+            os.unlink(file_path)
+        except OSError:
+            pass
 
     def progress_callback(step: str, progress: int, message: str):
         try:
@@ -51,65 +64,42 @@ def _run_ingest_in_context(self, file_bytes_b64: str, thread_id: str, filename: 
 
 
 @celery.task(bind=True, name='app.tasks.ingest_tasks.ingest_pdf_task')
-def ingest_pdf_task(self, file_bytes_b64: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
+def ingest_pdf_task(self, file_path: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
     """
     Celery task to ingest a PDF document in the background.
-    Runs inside a Flask application context so get_db() and current_app work.
+    Runs inside a Flask application context via Celery's ContextTask wrapper.
     """
-    from app import create_app
-    app = create_app()
-    with app.app_context():
-        try:
-            return _run_ingest_in_context(self, file_bytes_b64, thread_id, filename, user_id, conversation_id)
-        except ValueError as e:
-            error_msg = str(e)
-            logger.error(f"Value error in ingest_pdf_task: {error_msg}")
-            self.update_state(
-                state='FAILURE',
-                meta={'error': error_msg, 'message': f'Validation error: {error_msg}', 'exc_type': 'ValueError', 'exc_message': error_msg}
-            )
-            return {'success': False, 'error': error_msg, 'message': f'Validation error: {error_msg}'}
-        except Exception as e:
-            error_msg = f'Failed to ingest PDF: {str(e)}'
-            exc_type = type(e).__name__
-            logger.error(f"Error in ingest_pdf_task: {error_msg}", exc_info=True)
-            self.update_state(
-                state='FAILURE',
-                meta={'error': error_msg, 'message': error_msg, 'exc_type': exc_type, 'exc_message': str(e)}
-            )
-            return {'success': False, 'error': error_msg, 'message': error_msg, 'exc_type': exc_type}
+    try:
+        return _run_ingest_in_context(self, file_path, thread_id, filename, user_id, conversation_id)
+    except ValueError as e:
+        error_msg = str(e)
+        logger.error(f"Value error in ingest_pdf_task: {error_msg}")
+        self.update_state(
+            state='FAILURE',
+            meta={'error': error_msg, 'message': f'Validation error: {error_msg}', 'exc_type': 'ValueError', 'exc_message': error_msg}
+        )
+        return {'success': False, 'error': error_msg, 'message': f'Validation error: {error_msg}'}
+    except Exception as e:
+        error_msg = f'Failed to ingest PDF: {str(e)}'
+        exc_type = type(e).__name__
+        logger.error(f"Error in ingest_pdf_task: {error_msg}", exc_info=True)
+        self.update_state(
+            state='FAILURE',
+            meta={'error': error_msg, 'message': error_msg, 'exc_type': exc_type, 'exc_message': str(e)}
+        )
+        return {'success': False, 'error': error_msg, 'message': error_msg, 'exc_type': exc_type}
 
 
 def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
     """
     Helper function to save thread to database.
-    Uses session factory directly since Flask's 'g' is not available in Celery tasks.
-    Creates engine directly from Config to avoid needing current_app.
+    Uses the shared SQLAlchemy session factory via get_db(), which is already
+    configured per-process in Celery through init_celery's ContextTask.
     """
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from app.config import Config
-    
-    # Create engine directly from Config (works in Celery context)
-    db_url = Config.SQLALCHEMY_DATABASE_URI
-    engine_options = Config.SQLALCHEMY_ENGINE_OPTIONS.copy()
-    
-    # SQLite-specific optimizations
-    if db_url.startswith('sqlite'):
-        engine_options['poolclass'] = StaticPool
-        engine_options['connect_args'] = {
-            'check_same_thread': False,
-            'timeout': 20.0
-        }
-    else:
-        from sqlalchemy.pool import QueuePool
-        engine_options.setdefault('poolclass', QueuePool)
-    
-    # Create engine and session for this operation
-    engine = create_engine(db_url, **engine_options)
-    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-    db = Session()
-    
+    from app.utils.db import get_db
+
+    db = get_db()
+
     try:
         existing_thread = db.query(RAGThread).filter_by(thread_id=thread_id).first()
         now = datetime.utcnow()
@@ -149,9 +139,6 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
         logger.error(f"Error saving thread to database: {str(e)}")
         db.rollback()
         # Continue even if database save fails
-    finally:
-        db.close()  # Always close the session
-        engine.dispose()  # Dispose of the engine to close all connections
 
 
 @celery.task(bind=True, name='app.tasks.ingest_tasks.extract_headings_task')

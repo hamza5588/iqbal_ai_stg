@@ -26,6 +26,11 @@ celery.conf.update(
     task_track_started=Config.CELERY_TASK_TRACK_STARTED,
     task_time_limit=Config.CELERY_TASK_TIME_LIMIT,
     task_soft_time_limit=Config.CELERY_TASK_SOFT_TIME_LIMIT,
+    # Reliability settings (see technical audit Issue 9)
+    task_acks_late=True,
+    worker_prefetch_multiplier=1,
+    worker_max_tasks_per_child=50,
+    result_expires=3600,
 )
 
 def init_celery(app):
