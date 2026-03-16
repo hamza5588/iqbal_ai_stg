@@ -59,6 +59,7 @@ except ImportError:
         logger.warning("HuggingFace embeddings not available. Install langchain-huggingface or langchain-community.")
 from app.utils.llm_factory import create_llm, get_chat_model
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -2774,17 +2775,24 @@ def chat_node(state: ChatState, config=None):
 
 tool_node = ToolNode(tools)
 
-from langgraph.checkpoint.postgres import PostgresSaver
-
 # -------------------
 # 7. Checkpointer
 # -------------------
 _database_url = os.getenv("DATABASE_URL", "")
 if _database_url.startswith("postgres"):
-    # Use PostgreSQL-backed LangGraph checkpointer in production (see Issue 10).
-    # This reuses the existing PostgreSQL instance instead of a single SQLite file.
-    PostgresSaver.setup(_database_url)
-    checkpointer = PostgresSaver.from_conn_string(_database_url)
+    # Use PostgreSQL-backed LangGraph checkpointer in production.
+    # from_conn_string returns a context manager; enter it once at startup
+    # to obtain a concrete PostgresSaver instance and call setup() so the
+    # required tables are created.
+    _pg_cm = PostgresSaver.from_conn_string(_database_url)
+    try:
+        checkpointer = _pg_cm.__enter__()
+        checkpointer.setup()
+    except Exception:
+        # If Postgres-based checkpointer fails for any reason, fall back
+        # to the existing SQLite-based saver so the app can still run.
+        conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
+        checkpointer = SqliteSaver(conn=conn)
 else:
     # Fallback to SQLite saver for local/development environments.
     conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
