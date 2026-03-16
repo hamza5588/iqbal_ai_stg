@@ -62,9 +62,11 @@ class Config:
         SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_pre_ping': True,  # Verify connections before using
-        'pool_recycle': 300,    # Recycle connections after 5 minutes
-        'echo': False           # Set to True for SQL query logging
+        'pool_pre_ping': True,   # Verify connections before using
+        'pool_recycle': 300,     # Recycle connections after 5 minutes
+        'echo': False,           # Set to True for SQL query logging
+        'pool_size': 3,          # Bounded core pool size (see technical audit Issue 4)
+        'max_overflow': 3,       # Bounded overflow connections per process
     }
     
     # Legacy DATABASE path for backward compatibility (used only if needed)

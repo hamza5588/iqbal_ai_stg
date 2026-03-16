@@ -26,6 +26,7 @@ import os
 import json
 import time
 import base64
+import tempfile
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 
@@ -263,7 +264,7 @@ def ingest():
         
         filename = file.filename
 
-        # Read file bytes
+        # Read file bytes once so we can reuse them for sync/SSE paths
         file_bytes = file.read()
         if not file_bytes:
             return jsonify({'error': 'File is empty'}), 400
@@ -318,10 +319,20 @@ def ingest():
                 logger.error(f"Error in sync PDF ingestion: {str(e)}", exc_info=True)
                 return jsonify({'error': f'Failed to ingest PDF: {str(e)}'}), 500
 
-        # Use Celery for background processing (production)
-        file_bytes_b64 = base64.b64encode(file_bytes).decode('utf-8')
+        # Use Celery for background processing (production).
+        # To keep Redis payloads small and avoid broker memory pressure under load,
+        # we write the upload to a temporary file and pass only the file path.
+        tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR", None)
+        tmp_kwargs = {"delete": False, "suffix": ".pdf"}
+        if tmp_dir:
+            tmp_kwargs["dir"] = tmp_dir
+        with tempfile.NamedTemporaryFile(**tmp_kwargs) as tmp:
+            tmp.write(file_bytes)
+            tmp.flush()
+            tmp_path = tmp.name
+
         task = ingest_pdf_task.delay(
-            file_bytes_b64=file_bytes_b64,
+            file_path=tmp_path,
             thread_id=thread_id,
             filename=filename,
             user_id=user_id,
@@ -724,12 +735,15 @@ def chat():
                     'thread_id': thread_id
                 }), 400
 
-        # One message at a time per user: queue by rejecting concurrent requests
+        # One message at a time per user: enforce a per-user lock with a bounded wait.
+        # This prevents "zombie" locks from immediately causing 429s after upstream timeouts,
+        # while still guaranteeing only a single in-flight chat per user.
         user_lock = _get_user_chat_lock(user_id)
-        if not user_lock.acquire(blocking=False):
+        acquired = user_lock.acquire(blocking=True, timeout=120)
+        if not acquired:
             return jsonify({
-                'error': 'Please wait for your current message to be answered before sending another.',
-                'code': 'CONCURRENT_REQUEST'
+                'error': 'Your previous message is still being processed. Please try again in a moment.',
+                'code': 'CONCURRENT_REQUEST_TIMEOUT'
             }), 429
 
         try:
