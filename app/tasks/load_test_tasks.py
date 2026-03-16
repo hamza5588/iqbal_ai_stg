@@ -2,6 +2,7 @@
 Celery tasks for load testing.
 """
 import logging
+from flask import current_app
 from app.celery_app import celery
 from app.load_testing.runner import LoadTestRunner
 from app.load_testing.config import LoadTestConfig, TestType, TargetEnvironment
@@ -32,9 +33,9 @@ def run_load_test_task(self, config_data: dict, result_id: int):
             stop_on_error=config_data.get('stop_on_error', False)
         )
         
-        # Initialize Runner
-        # Celery's ContextTask ensures 'current_app' is available for LoadTestRunner.
-        runner = LoadTestRunner(None, config, result_id)
+        # Initialize Runner with the Flask app (ContextTask provides app context).
+        app = current_app._get_current_object()
+        runner = LoadTestRunner(app, config, result_id)
         
         # Run the test
         # Since this is a Celery task, it will block until done, which is intended.
