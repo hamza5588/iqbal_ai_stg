@@ -97,7 +97,6 @@ def insert_chunks(
         created_ats,
     ]
     coll.insert(data)
-    coll.flush()
     logger.info("insert_chunks: inserted %d vectors thread_id=%s user_id=%s", len(vectors), thread_id, user_id)
     return len(vectors)
 
@@ -115,7 +114,6 @@ def similarity_search(
     from pymilvus import Collection
     coll_name = _collection_name()
     coll = Collection(coll_name)
-    coll.load()
     safe_tid = str(thread_id).replace('"', '\\"')
     expr = f'thread_id == "{safe_tid}" && user_id == {user_id}'
     results = coll.search(
@@ -145,9 +143,7 @@ def delete_by_thread(thread_id: str, user_id: int) -> None:
     from pymilvus import Collection
     coll_name = _collection_name()
     coll = Collection(coll_name)
-    coll.load()
     safe_tid = str(thread_id).replace('"', '\\"')
     expr = f'thread_id == "{safe_tid}" && user_id == {user_id}'
     coll.delete(expr)
-    coll.flush()
     logger.info("delete_by_thread: deleted vectors for thread_id=%s", thread_id)

@@ -139,6 +139,38 @@ groq_rate_limiter = GroqRateLimiter()
 _llm_cache = {}
 _llm_cache_lock = Lock()
 
+
+def _prune_messages(messages, max_turns: int = 15):
+    """
+    Keep only the system prompt (handled separately) and the last `max_turns`
+    user/AI exchanges from the history to avoid unbounded growth and token-limit
+    errors on long-running chats.
+    """
+    try:
+        from langchain_core.messages import HumanMessage, AIMessage
+    except Exception:
+        return messages
+
+    turns = []
+    current_pair = []
+
+    for msg in messages:
+        if isinstance(msg, (HumanMessage, AIMessage)):
+            current_pair.append(msg)
+            if len(current_pair) == 2:
+                turns.append(tuple(current_pair))
+                current_pair = []
+
+    if not turns:
+        return messages
+
+    pruned_turns = turns[-max_turns:]
+    pruned = []
+    for human, ai in pruned_turns:
+        pruned.append(human)
+        pruned.append(ai)
+    return pruned
+
 def get_cached_llm(user_id: int, api_key: str, provider: str):
     """Get or create a cached LLM instance for a user"""
     cache_key = f"{user_id}_{provider}_{api_key[:10] if api_key else 'none'}"
@@ -2184,7 +2216,7 @@ def chat_node(state: ChatState, config=None):
             )
 
     # Progressive message reduction on token errors
-    conversation_messages = state["messages"]
+    conversation_messages = _prune_messages(state["messages"], max_turns=15)
     initial_max_messages = 7  # Start with 7 messages
     max_attempts = 4  # Try with 7, 5, 3, 1 messages
     
@@ -2742,11 +2774,21 @@ def chat_node(state: ChatState, config=None):
 
 tool_node = ToolNode(tools)
 
+from langgraph.checkpoint.postgres import PostgresSaver
+
 # -------------------
 # 7. Checkpointer
 # -------------------
-conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
-checkpointer = SqliteSaver(conn=conn)
+_database_url = os.getenv("DATABASE_URL", "")
+if _database_url.startswith("postgres"):
+    # Use PostgreSQL-backed LangGraph checkpointer in production (see Issue 10).
+    # This reuses the existing PostgreSQL instance instead of a single SQLite file.
+    PostgresSaver.setup(_database_url)
+    checkpointer = PostgresSaver.from_conn_string(_database_url)
+else:
+    # Fallback to SQLite saver for local/development environments.
+    conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
+    checkpointer = SqliteSaver(conn=conn)
 
 # -------------------
 # 8. Graph
