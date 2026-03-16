@@ -41,6 +41,11 @@ services:
       retries: 5
     networks:
       - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
 
   # ----------------------------
   # MILVUS (prod)
@@ -63,6 +68,11 @@ services:
       start_period: 30s
     networks:
       - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 6G
 
   # ----------------------------
   # REDIS (prod)
@@ -73,7 +83,7 @@ services:
     restart: always
     volumes:
       - redis_data_prod:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
     networks:
       - app_network
     healthcheck:
@@ -206,7 +216,7 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
-    command: celery -A app.celery_worker_entry.celery worker -Q default --loglevel=info --concurrency=2
+    command: celery -A app.celery_worker_entry.celery worker -Q default --loglevel=info --concurrency=4
     deploy:
       resources:
         limits:
@@ -220,8 +230,7 @@ services:
     restart: unless-stopped
 
   # ----------------------------
-  # CELERY WORKER – ingest queue (PDF ingestion only)
-  # Dedicated worker so ingestion is not blocked by load-test tasks.
+  # CELERY INGEST WORKER (prod)
   # ----------------------------
   celery_worker_ingest:
     build:
@@ -267,11 +276,11 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
-    command: celery -A app.celery_worker_entry.celery worker -Q ingest --loglevel=info --concurrency=4
+    command: celery -A app.celery_worker_entry.celery worker -Q ingest --loglevel=info --concurrency=8
     deploy:
       resources:
         limits:
-          cpus: "4"
+          cpus: "6"
           memory: 16G
         reservations:
           cpus: "2"

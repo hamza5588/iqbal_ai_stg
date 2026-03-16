@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from app.utils.db import get_db
 from app.utils.encryption import decrypt_api_key
-from app.models.database_models import RAGPrompt, RAGThread, RAGChunk, SystemSettings
+from app.models.database_models import RAGPrompt, RAGThread, RAGChunk, RAGHeading, SystemSettings
 from app.config import Config
 logger = logging.getLogger(__name__)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -67,56 +67,69 @@ import requests
 load_dotenv()
 
 # -------------------
-# Global rate limiter for Groq API calls
+# Bounded concurrency for Groq API calls (replaces global 3s serialization)
 # -------------------
 import time
-from threading import Lock
+from threading import Lock, Semaphore
+
+def _groq_max_concurrent():
+    """Max concurrent Groq requests. Env GROQ_MAX_CONCURRENT_REQUESTS (default 4)."""
+    try:
+        n = int(os.getenv("GROQ_MAX_CONCURRENT_REQUESTS", "4"))
+        return max(1, min(n, 16))
+    except (ValueError, TypeError):
+        return 4
+
 
 class GroqRateLimiter:
-    """Global rate limiter for Groq API to prevent 429 errors"""
+    """
+    Bounded-concurrency limiter for Groq API to avoid 429s without serializing all users.
+    Allows N concurrent requests (default 4); after 429s we apply short backoff before acquire.
+    """
     _instance = None
     _lock = Lock()
-    
+
     def __new__(cls):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super(GroqRateLimiter, cls).__new__(cls)
-                    cls._instance.last_request_time = 0
-                    cls._instance.min_interval = 3.0  # Increased to 3 seconds between requests
-                    cls._instance.consecutive_429_count = 0  # Track consecutive 429 errors
+                    cls._instance._semaphore = Semaphore(_groq_max_concurrent())
+                    cls._instance.consecutive_429_count = 0
         return cls._instance
-    
+
     def wait_if_needed(self):
-        """Wait if needed to respect rate limits"""
-        with self._lock:
-            now = time.time()
-            time_since_last = now - self.last_request_time
-            
-            # Increase delay if we've had recent 429 errors
-            adjusted_interval = self.min_interval
-            if self.consecutive_429_count > 0:
-                adjusted_interval = self.min_interval * (1 + self.consecutive_429_count * 0.5)
-                logger.warning(f"Rate limiter: increased interval to {adjusted_interval:.1f}s due to {self.consecutive_429_count} recent 429 errors")
-            
-            if time_since_last < adjusted_interval:
-                wait_time = adjusted_interval - time_since_last
-                logger.info(f"Rate limiting: waiting {wait_time:.2f} seconds before next Groq request")
-                time.sleep(wait_time)
-            self.last_request_time = time.time()
-    
+        """Acquire a slot for a Groq request; back off briefly if we've seen recent 429s."""
+        if self.consecutive_429_count > 0:
+            backoff = min(2.0 * self.consecutive_429_count, 10.0)
+            logger.warning(
+                "Rate limiter: backoff %.1fs before next Groq request (recent 429s: %s)",
+                backoff,
+                self.consecutive_429_count,
+            )
+            time.sleep(backoff)
+        self._semaphore.acquire()
+
     def record_429_error(self):
-        """Record a 429 error to adjust rate limiting"""
+        """Record a 429 error so next callers back off briefly."""
         with self._lock:
             self.consecutive_429_count += 1
             logger.warning(f"Recorded 429 error. Consecutive count: {self.consecutive_429_count}")
-    
+
     def record_success(self):
-        """Record a successful request to reset error count"""
+        """Release the slot and reset 429 count on success."""
+        self._semaphore.release()
         with self._lock:
             if self.consecutive_429_count > 0:
-                logger.info(f"Resetting 429 error count after successful request")
+                logger.info("Resetting 429 error count after successful request")
             self.consecutive_429_count = 0
+
+    def release_slot(self):
+        """Release the semaphore slot without recording success (use in finally after wait_if_needed)."""
+        try:
+            self._semaphore.release()
+        except ValueError:
+            pass  # already released or never acquired
 
 groq_rate_limiter = GroqRateLimiter()
 
@@ -125,6 +138,38 @@ groq_rate_limiter = GroqRateLimiter()
 # -------------------
 _llm_cache = {}
 _llm_cache_lock = Lock()
+
+
+def _prune_messages(messages, max_turns: int = 15):
+    """
+    Keep only the system prompt (handled separately) and the last `max_turns`
+    user/AI exchanges from the history to avoid unbounded growth and token-limit
+    errors on long-running chats.
+    """
+    try:
+        from langchain_core.messages import HumanMessage, AIMessage
+    except Exception:
+        return messages
+
+    turns = []
+    current_pair = []
+
+    for msg in messages:
+        if isinstance(msg, (HumanMessage, AIMessage)):
+            current_pair.append(msg)
+            if len(current_pair) == 2:
+                turns.append(tuple(current_pair))
+                current_pair = []
+
+    if not turns:
+        return messages
+
+    pruned_turns = turns[-max_turns:]
+    pruned = []
+    for human, ai in pruned_turns:
+        pruned.append(human)
+        pruned.append(ai)
+    return pruned
 
 def get_cached_llm(user_id: int, api_key: str, provider: str):
     """Get or create a cached LLM instance for a user"""
@@ -1176,6 +1221,177 @@ Important:
         raise
 
 
+def _persist_headings_for_thread(thread_id: str, user_id: int, topics: List[dict]) -> int:
+    """
+    Store extracted headings for a thread in the database and update thread metadata.
+    Replaces any previously stored headings for this (thread_id, user_id) pair.
+    """
+    from datetime import datetime as dt
+
+    db = get_db()
+    stored_count = 0
+    try:
+        # Remove any stale headings for this thread/user
+        db.query(RAGHeading).filter(
+            RAGHeading.thread_id == thread_id,
+            RAGHeading.user_id == user_id,
+        ).delete()
+
+        for item in topics or []:
+            heading_text = (item.get("topic") or item.get("heading") or "").strip()
+            if not heading_text:
+                continue
+            page = item.get("page")
+            normalized = heading_text.lower()
+            db.add(
+                RAGHeading(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    page=page,
+                    heading=heading_text,
+                    normalized_heading=normalized,
+                )
+            )
+            stored_count += 1
+
+        thread_row = (
+            db.query(RAGThread)
+            .filter(RAGThread.thread_id == thread_id, RAGThread.user_id == user_id)
+            .first()
+        )
+        if thread_row:
+            thread_row.headings_ready = True
+            thread_row.headings_count = stored_count
+            thread_row.headings_last_scanned_at = dt.utcnow()
+
+        db.commit()
+        logger.info(
+            "Stored %s headings for thread_id=%s user_id=%s",
+            stored_count,
+            thread_id,
+            user_id,
+        )
+    except Exception as e:
+        logger.error(
+            "Error saving headings for thread_id=%s user_id=%s: %s",
+            thread_id,
+            user_id,
+            e,
+            exc_info=True,
+        )
+        db.rollback()
+        raise
+
+    return stored_count
+
+
+def extract_and_store_headings_for_thread(
+    thread_id: str,
+    user_id: Optional[int] = None,
+    max_wait_seconds: int = 300,
+    poll_interval_seconds: float = 5.0,
+) -> dict:
+    """
+    Extract headings/topics for a thread using AI and persist them to the database.
+
+    This function is intended to be run in a background worker (Celery task or
+    local background thread). It:
+    1. Waits for chunks for this thread to be available in the database/vector store
+    2. Builds per-page documents
+    3. Uses AI to extract headings/topics
+    4. Persists the headings to the RAGHeading table and updates RAGThread metadata
+    """
+    thread_id_str = str(thread_id)
+    if user_id is None:
+        user_id = _get_user_id_for_thread(thread_id_str)
+    if user_id is None:
+        raise ValueError(f"Could not determine user_id for thread_id={thread_id_str}")
+
+    from app.utils.rag_vectorstore import query_all_chunks
+
+    deadline = time.time() + max_wait_seconds
+    all_chunks = query_all_chunks(thread_id=thread_id_str, user_id=user_id)
+
+    # Wait for chunks to become available (ingestion may still be writing them)
+    while not all_chunks and time.time() < deadline:
+        logger.info(
+            "No RAG chunks found yet for headings extraction (thread_id=%s). "
+            "Waiting %ss before retry.",
+            thread_id_str,
+            poll_interval_seconds,
+        )
+        time.sleep(poll_interval_seconds)
+        all_chunks = query_all_chunks(thread_id=thread_id_str, user_id=user_id)
+
+    if not all_chunks:
+        logger.warning(
+            "No document pages found for headings extraction (thread_id=%s). "
+            "Marking headings as ready with zero topics.",
+            thread_id_str,
+        )
+        _persist_headings_for_thread(thread_id_str, user_id, [])
+        return {
+            "thread_id": thread_id_str,
+            "topics": [],
+            "topics_count": 0,
+            "method": "ai_heading_extraction",
+            "chunks_scanned": 0,
+        }
+
+    # Group chunks by page and build Document per page for AI extraction
+    from collections import defaultdict
+
+    by_page = defaultdict(list)
+    for c in all_chunks:
+        p = c.get("page") or 0
+        try:
+            p = int(p)
+        except (ValueError, TypeError):
+            p = 0
+        by_page[p].append(c)
+    for k in by_page:
+        by_page[k].sort(key=lambda x: x.get("chunk_index", 0))
+
+    page_docs: List[Document] = []
+    for p in sorted(by_page.keys()):
+        chunks = by_page[p]
+        text = "\n\n".join(c.get("text", "") for c in chunks)
+        doc = Document(
+            page_content=text,
+            metadata={
+                "page": p,
+                "page_number": p,
+                "source": chunks[0].get("source", "") if chunks else "",
+            },
+        )
+        page_docs.append(doc)
+
+    if not page_docs:
+        logger.warning(
+            "No document pages constructed for headings extraction (thread_id=%s).",
+            thread_id_str,
+        )
+        _persist_headings_for_thread(thread_id_str, user_id, [])
+        return {
+            "thread_id": thread_id_str,
+            "topics": [],
+            "topics_count": 0,
+            "method": "ai_heading_extraction",
+            "chunks_scanned": 0,
+        }
+
+    # Use AI to extract topics/headings
+    result = _extract_topics_with_ai(page_docs, user_id, thread_id_str)
+    topics = result.get("topics") or []
+    stored_count = _persist_headings_for_thread(thread_id_str, user_id, topics)
+
+    result["thread_id"] = thread_id_str
+    result["topics_count"] = stored_count
+    result["chunks_scanned"] = len(page_docs)
+    result["method"] = result.get("method") or "ai_heading_extraction"
+    return result
+
+
 @tool
 def list_topics_whole_doc_tool(thread_id: str) -> dict:
     """
@@ -1211,53 +1427,96 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
     if user_id is None:
         return {"error": f"Could not extract user_id from thread_id: {thread_id}"}
 
-    from app.utils.rag_vectorstore import query_all_chunks
+    db = get_db()
+    max_attempts = 10
+    sleep_seconds = 2.0
 
-    all_chunks = query_all_chunks(thread_id=str(thread_id), user_id=user_id)
-    if not all_chunks:
-        return {"error": "No document pages found for this thread. Upload a PDF first."}
+    thread_row = None
 
-    # Group chunks by page and build Document per page for AI extraction
-    from collections import defaultdict
-    by_page = defaultdict(list)
-    for c in all_chunks:
-        p = c.get("page") or 0
+    for attempt in range(max_attempts):
         try:
-            p = int(p)
-        except (ValueError, TypeError):
-            p = 0
-        by_page[p].append(c)
-    for k in by_page:
-        by_page[k].sort(key=lambda x: x.get("chunk_index", 0))
+            # Refresh thread metadata each attempt
+            thread_row = (
+                db.query(RAGThread)
+                .filter(RAGThread.thread_id == thread_id, RAGThread.user_id == user_id)
+                .first()
+            )
 
-    page_docs = []
-    for p in sorted(by_page.keys()):
-        chunks = by_page[p]
-        text = "\n\n".join(c.get("text", "") for c in chunks)
-        doc = Document(
-            page_content=text,
-            metadata={"page": p, "page_number": p, "source": chunks[0].get("source", "") if chunks else ""},
-        )
-        page_docs.append(doc)
+            # Fetch any stored headings for this thread
+            headings = db.query(RAGHeading).filter(
+                RAGHeading.thread_id == thread_id,
+                RAGHeading.user_id == user_id,
+            ).order_by(
+                RAGHeading.page.asc(),
+                RAGHeading.id.asc(),
+            ).all()
 
-    if not page_docs:
-        return {"error": "No document pages found for this thread."}
+            if headings:
+                topics = [
+                    {"topic": h.heading, "page": h.page}
+                    for h in headings
+                ]
+                return {
+                    "thread_id": thread_id,
+                    "topics": topics,
+                    "topics_count": len(topics),
+                    "method": "db_heading_cache",
+                    "chunks_scanned": getattr(thread_row, "num_pages", None)
+                    if thread_row
+                    else None,
+                }
 
-    # Use AI to extract topics
-    try:
-        result = _extract_topics_with_ai(page_docs, user_id, thread_id)
-        result["thread_id"] = thread_id
-        result["chunks_scanned"] = len(page_docs)
-        return result
-    except Exception as e:
-        logger.error(f"Error in AI topic extraction: {e}")
-        return {
-            "error": f"Failed to extract topics using AI: {str(e)}",
-            "thread_id": thread_id,
-            "topics": [],
-            "topics_count": 0,
-            "chunks_scanned": len(page_docs)
-        }
+            # If thread says headings are ready but none exist, treat as "no headings"
+            if thread_row and getattr(thread_row, "headings_ready", False):
+                logger.info(
+                    "Headings marked ready but none found for thread_id=%s user_id=%s",
+                    thread_id,
+                    user_id,
+                )
+                return {
+                    "thread_id": thread_id,
+                    "topics": [],
+                    "topics_count": 0,
+                    "method": "db_heading_cache",
+                    "chunks_scanned": getattr(thread_row, "num_pages", None),
+                }
+        except Exception as e:
+            logger.error(
+                "Error querying headings for thread_id=%s user_id=%s: %s",
+                thread_id,
+                user_id,
+                e,
+                exc_info=True,
+            )
+            break
+
+        # No headings yet and processing may still be running – wait and retry
+        if attempt < max_attempts - 1:
+            logger.info(
+                "No headings available yet for thread_id=%s (attempt %d/%d). "
+                "Waiting %ss before retry.",
+                thread_id,
+                attempt + 1,
+                max_attempts,
+                sleep_seconds,
+            )
+            time.sleep(sleep_seconds)
+
+    # After retries, return a best-effort response (no headings yet)
+    logger.warning(
+        "Headings not available for thread_id=%s after %d attempts. "
+        "Returning empty topics list.",
+        thread_id,
+        max_attempts,
+    )
+    return {
+        "thread_id": thread_id,
+        "topics": [],
+        "topics_count": 0,
+        "method": "db_heading_cache_timeout",
+        "chunks_scanned": getattr(thread_row, "num_pages", None) if thread_row else None,
+        "error": "Headings are still being processed. Please try again shortly.",
+    }
 
 _WORD_RE = re.compile(r"\b[\w']+\b", re.UNICODE)
 
@@ -1957,7 +2216,7 @@ def chat_node(state: ChatState, config=None):
             )
 
     # Progressive message reduction on token errors
-    conversation_messages = state["messages"]
+    conversation_messages = _prune_messages(state["messages"], max_turns=15)
     initial_max_messages = 7  # Start with 7 messages
     max_attempts = 4  # Try with 7, 5, 3, 1 messages
     
@@ -2295,6 +2554,8 @@ def chat_node(state: ChatState, config=None):
             return {"messages": [response]}
             
         except Exception as e:
+            if provider == 'groq':
+                groq_rate_limiter.release_slot()
             error_msg = str(e)
             error_type = type(e).__name__
             logger.warning(f"LLM API error in chat_node (attempt {attempt + 1} with {current_max} messages): {error_type}: {error_msg}")
@@ -2513,11 +2774,21 @@ def chat_node(state: ChatState, config=None):
 
 tool_node = ToolNode(tools)
 
+from langgraph.checkpoint.postgres import PostgresSaver
+
 # -------------------
 # 7. Checkpointer
 # -------------------
-conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
-checkpointer = SqliteSaver(conn=conn)
+_database_url = os.getenv("DATABASE_URL", "")
+if _database_url.startswith("postgres"):
+    # Use PostgreSQL-backed LangGraph checkpointer in production (see Issue 10).
+    # This reuses the existing PostgreSQL instance instead of a single SQLite file.
+    PostgresSaver.setup(_database_url)
+    checkpointer = PostgresSaver.from_conn_string(_database_url)
+else:
+    # Fallback to SQLite saver for local/development environments.
+    conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
+    checkpointer = SqliteSaver(conn=conn)
 
 # -------------------
 # 8. Graph

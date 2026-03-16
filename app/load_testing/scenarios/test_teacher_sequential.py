@@ -129,7 +129,8 @@ async def run(
         if task_id:
             log_func(f"[{user.email}] Step 3: Ingestion processing (Async)...")
             poll_url = f"{config.base_url}/api/rag/ingest/status/{task_id}"
-            max_retries = 30
+            # Allow up to ~5 minutes for ingestion (150 * 2s)
+            max_retries = 150
             retry_count = 0
             poll_start = time.time()
             while retry_count < max_retries:

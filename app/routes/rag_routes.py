@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, redirect
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, redirect, g
 from app.utils.auth import login_required
 from app.utils.routes import get_default_route_by_role
 from app.utils.rag_service import (
@@ -16,7 +16,7 @@ from app.utils.rag_service import (
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk
 from app.services.chat_service import ChatService
-from app.tasks.ingest_tasks import ingest_pdf_task
+from app.tasks.ingest_tasks import ingest_pdf_task, extract_headings_task
 from langchain_core.messages import HumanMessage
 import logging
 import threading
@@ -26,6 +26,7 @@ import os
 import json
 import time
 import base64
+import tempfile
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 
@@ -263,7 +264,7 @@ def ingest():
         
         filename = file.filename
 
-        # Read file bytes
+        # Read file bytes once so we can reuse them for sync/SSE paths
         file_bytes = file.read()
         if not file_bytes:
             return jsonify({'error': 'File is empty'}), 400
@@ -286,6 +287,16 @@ def ingest():
                     user_id=user_id,
                 )
                 _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
+                # Kick off background heading extraction in-process when Celery is disabled
+                try:
+                    _start_heading_extraction_background(thread_id, user_id)
+                except Exception as bg_err:
+                    logger.error(
+                        "Failed to start background heading extraction for thread %s (sync mode): %s",
+                        thread_id,
+                        bg_err,
+                        exc_info=True,
+                    )
                 logger.info(f"PDF ingested synchronously: {filename} (thread_id: {thread_id})")
                 return jsonify({
                     'success': True,
@@ -308,16 +319,41 @@ def ingest():
                 logger.error(f"Error in sync PDF ingestion: {str(e)}", exc_info=True)
                 return jsonify({'error': f'Failed to ingest PDF: {str(e)}'}), 500
 
-        # Use Celery for background processing (production)
-        file_bytes_b64 = base64.b64encode(file_bytes).decode('utf-8')
+        # Use Celery for background processing (production).
+        # To keep Redis payloads small and avoid broker memory pressure under load,
+        # we write the upload to a temporary file and pass only the file path.
+        tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR", None)
+        tmp_kwargs = {"delete": False, "suffix": ".pdf"}
+        if tmp_dir:
+            tmp_kwargs["dir"] = tmp_dir
+        with tempfile.NamedTemporaryFile(**tmp_kwargs) as tmp:
+            tmp.write(file_bytes)
+            tmp.flush()
+            tmp_path = tmp.name
+
         task = ingest_pdf_task.delay(
-            file_bytes_b64=file_bytes_b64,
+            file_path=tmp_path,
             thread_id=thread_id,
             filename=filename,
             user_id=user_id,
             conversation_id=conversation_id
         )
         logger.info(f"Started Celery task {task.id} for PDF ingestion: {filename} (thread_id: {thread_id})")
+        # Start a separate Celery task to extract and store headings for this thread
+        try:
+            extract_headings_task.delay(thread_id=thread_id, user_id=user_id)
+            logger.info(
+                "Started Celery task for heading extraction (thread_id=%s, user_id=%s)",
+                thread_id,
+                user_id,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to start heading extraction Celery task for thread %s: %s",
+                thread_id,
+                e,
+                exc_info=True,
+            )
         return jsonify({
             'success': True,
             'message': 'PDF ingestion started in background',
@@ -512,6 +548,32 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
     )
 
 
+def _start_heading_extraction_background(thread_id: str, user_id: int):
+    """
+    Start background heading extraction when Celery is disabled.
+    Extracts headings/topics for the given thread and stores them in the database.
+    """
+    from flask import current_app
+    from app.utils.rag_service import extract_and_store_headings_for_thread
+
+    app = current_app._get_current_object()
+
+    def run():
+        with app.app_context():
+            try:
+                extract_and_store_headings_for_thread(thread_id=thread_id, user_id=user_id)
+            except Exception as e:
+                logger.error(
+                    "Error in background heading extraction for thread %s: %s",
+                    thread_id,
+                    e,
+                    exc_info=True,
+                )
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+
+
 @bp.route('/chat', methods=['POST'])
 @login_required
 def chat():
@@ -673,12 +735,15 @@ def chat():
                     'thread_id': thread_id
                 }), 400
 
-        # One message at a time per user: queue by rejecting concurrent requests
+        # One message at a time per user: enforce a per-user lock with a bounded wait.
+        # This prevents "zombie" locks from immediately causing 429s after upstream timeouts,
+        # while still guaranteeing only a single in-flight chat per user.
         user_lock = _get_user_chat_lock(user_id)
-        if not user_lock.acquire(blocking=False):
+        acquired = user_lock.acquire(blocking=True, timeout=120)
+        if not acquired:
             return jsonify({
-                'error': 'Please wait for your current message to be answered before sending another.',
-                'code': 'CONCURRENT_REQUEST'
+                'error': 'Your previous message is still being processed. Please try again in a moment.',
+                'code': 'CONCURRENT_REQUEST_TIMEOUT'
             }), 429
 
         try:
@@ -698,6 +763,16 @@ def chat():
             # #endregion
             # Create HumanMessage
             human_message = HumanMessage(content=message)
+
+            # Release DB session before long-running invoke so other requests aren't blocked (avoids connection pool exhaustion and long lock waits)
+            if 'db' in g:
+                _db = g.pop('db')
+                try:
+                    _db.commit()
+                except Exception:
+                    _db.rollback()
+                finally:
+                    _db.close()
 
             # Invoke the chatbot - LangGraph returns the final state
             # #region agent log

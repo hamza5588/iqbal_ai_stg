@@ -314,6 +314,26 @@ class RAGChunk(Base):
     )
 
 
+class RAGHeading(Base):
+    """RAG heading model - stores extracted headings/topics for a thread."""
+    __tablename__ = 'rag_headings'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    thread_id = Column(String(255), ForeignKey('rag_threads.thread_id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    page = Column(Integer, nullable=True)
+    heading = Column(String(512), nullable=False)
+    normalized_heading = Column(String(512), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    thread = relationship("RAGThread", back_populates="rag_headings")
+
+    __table_args__ = (
+        Index('idx_rag_headings_thread_user', 'thread_id', 'user_id'),
+        Index('idx_rag_headings_normalized', 'normalized_heading'),
+    )
+
+
 class RAGThread(Base):
     """RAG Thread model for storing PDF chat threads"""
     __tablename__ = 'rag_threads'
@@ -332,6 +352,9 @@ class RAGThread(Base):
     lesson_finalized = Column(Boolean, default=False, server_default='0')
     last_lesson_text = Column(Text, nullable=True)
     lesson_title = Column(String(512), nullable=True)
+    headings_ready = Column(Boolean, default=False, server_default='0')
+    headings_count = Column(Integer, default=0, server_default='0')
+    headings_last_scanned_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
     
@@ -340,6 +363,7 @@ class RAGThread(Base):
     rag_prompts = relationship("RAGPrompt", back_populates="thread", cascade="all, delete-orphan")
     user_documents = relationship("UserDocument", back_populates="rag_thread")
     rag_chunks = relationship("RAGChunk", back_populates="thread", cascade="all, delete-orphan")
+    rag_headings = relationship("RAGHeading", back_populates="thread", cascade="all, delete-orphan")
     
     __table_args__ = (
         Index('idx_rag_thread_user_id', 'user_id'),

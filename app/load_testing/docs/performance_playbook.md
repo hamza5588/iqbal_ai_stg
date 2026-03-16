@@ -42,3 +42,16 @@ A visual breakdown of successful vs. failed requests.
 
 ## 5. Configuring AI Analysis
 To generate these reports, ensure the **Groq API Key** is configured in the Admin Settings. Without this key, only the "Technical Report" will be available.
+
+## 6. Staging / Load Test Tuning
+
+When load tests show 504s on login or upload, or chat latency climbing with concurrency, apply these settings:
+
+| Setting | Purpose | Recommended (staging) |
+|--------|---------|------------------------|
+| **USE_CELERY_FOR_INGESTION** | Run PDF ingestion in background workers; upload returns quickly so nginx doesn’t timeout. | `true` |
+| **GROQ_MAX_CONCURRENT_REQUESTS** | Max concurrent Groq API calls (env, default 4). Higher = more parallel chat; lower = fewer 429s. | `4` (tune if you see 429s or want lower latency) |
+| **Web workers** | More gunicorn (or app) workers so login and short requests get a worker quickly under load. | Increase workers for concurrent users (e.g. 2× concurrency) |
+| **Nginx proxy_read_timeout** | Must be long enough for slow RAG chat and any sync ingestion fallback. | 600s (see `ngnix.stag.conf`) |
+
+See `app/config.py` and `app/utils/rag_service.py` (GroqRateLimiter) for implementation details.
