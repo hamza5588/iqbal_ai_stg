@@ -322,10 +322,9 @@ def ingest():
         # Use Celery for background processing (production).
         # To keep Redis payloads small and avoid broker memory pressure under load,
         # we write the upload to a temporary file and pass only the file path.
-        tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR", None)
-        tmp_kwargs = {"delete": False, "suffix": ".pdf"}
-        if tmp_dir:
-            tmp_kwargs["dir"] = tmp_dir
+        tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR") or "/app/tmp"
+        os.makedirs(tmp_dir, exist_ok=True)
+        tmp_kwargs = {"delete": False, "suffix": ".pdf", "dir": tmp_dir}
         with tempfile.NamedTemporaryFile(**tmp_kwargs) as tmp:
             tmp.write(file_bytes)
             tmp.flush()
