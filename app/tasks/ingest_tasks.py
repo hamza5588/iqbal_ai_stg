@@ -63,7 +63,7 @@ def _run_ingest_in_context(self, file_path: str, thread_id: str, filename: str, 
     }
 
 
-@celery.task(bind=True, name='app.tasks.ingest_tasks.ingest_pdf_task')
+@celery.task(bind=True, name='app.tasks.ingest_tasks.ingest_pdf_task', queue='ingest')
 def ingest_pdf_task(self, file_path: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
     """
     Celery task to ingest a PDF document in the background.
@@ -141,7 +141,7 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
         # Continue even if database save fails
 
 
-@celery.task(bind=True, name='app.tasks.ingest_tasks.extract_headings_task')
+@celery.task(bind=True, name='app.tasks.ingest_tasks.extract_headings_task', queue='ingest')
 def extract_headings_task(self, thread_id: str, user_id: int):
     """
     Celery task to extract headings/topics for a thread and store them in the database.
