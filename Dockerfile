@@ -1,5 +1,3 @@
-
-
 FROM python:3.13-slim
 
 WORKDIR /app
@@ -16,11 +14,15 @@ RUN apt-get update && apt-get install -y \
 ENV HF_HUB_DISABLE_XET=1
 ENV TQDM_DISABLE=1
 ENV TOKENIZERS_PARALLELISM=false
+ENV PIP_DEFAULT_TIMEOUT=120
 
 COPY requirements.txt .
+
+# Install CPU-only torch first so sentence-transformers does not pull CUDA wheels
 RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir tiktoken flask_wtf sentence-transformers langchain-huggingface
+    pip install --no-cache-dir tiktoken flask-wtf sentence-transformers langchain-huggingface
 
 COPY . .
 
@@ -31,9 +33,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
-# NOTE: we intentionally do NOT use --preload here. Preloading the app in the
-# master process and then forking workers can cause PostgreSQL connections
-# created during app initialization to be shared across processes, which leads
-# to "lost synchronization with server" and similar psycopg2 errors under load.
-# Worker/process tuning per technical audit (Issue: infrastructure updates).
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "9", "--threads", "4", "--worker-class", "gthread", "--timeout", "1800", "--graceful-timeout", "30", "--keep-alive", "5", "run:app"]

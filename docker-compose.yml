@@ -144,6 +144,7 @@ services:
 
     volumes:
       - .:/app
+      - ./tmp:/app/tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -209,6 +210,7 @@ services:
 
     volumes:
       - .:/app
+      - ./tmp:/app/tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -269,6 +271,7 @@ services:
 
     volumes:
       - .:/app
+      - ./tmp:/app/tmp
     depends_on:
       postgres:
         condition: service_healthy

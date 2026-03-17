@@ -150,3 +150,7 @@ class Config:
     CELERY_TASK_TRACK_STARTED = True
     CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
     CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes
+
+    # Temporary upload directory for PDF ingestion when using Celery.
+    # This path is shared between the web app and Celery workers via Docker volumes.
+    UPLOAD_TEMP_DIR = os.getenv('UPLOAD_TEMP_DIR', '/app/tmp')
