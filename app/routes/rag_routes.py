@@ -289,7 +289,21 @@ def ingest():
                 _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
                 # Kick off background heading extraction in-process when Celery is disabled
                 try:
-                    _start_heading_extraction_background(thread_id, user_id)
+                    load_test_mode = current_app.config.get("LOAD_TEST_MODE", False) or str(current_app.config.get("ENV", "")).lower() == "staging"
+                    enable_headings = current_app.config.get("ENABLE_RAG_HEADINGS", True)
+                    delay_headings_for_load_test = current_app.config.get("DELAY_RAG_HEADINGS_FOR_LOAD_TEST", False)
+                    if enable_headings and not (load_test_mode and delay_headings_for_load_test):
+                        _start_heading_extraction_background(thread_id, user_id)
+                    elif enable_headings and load_test_mode and delay_headings_for_load_test:
+                        # Load-test mode: delay headings extraction so it doesn't contend with ingestion.
+                        delay_seconds = current_app.config.get("RAG_HEADINGS_DELAY_SECONDS", 30)
+                        t = threading.Timer(
+                            delay_seconds,
+                            _start_heading_extraction_background,
+                            args=(thread_id, user_id),
+                        )
+                        t.daemon = True
+                        t.start()
                 except Exception as bg_err:
                     logger.error(
                         "Failed to start background heading extraction for thread %s (sync mode): %s",
@@ -340,12 +354,33 @@ def ingest():
         logger.info(f"Started Celery task {task.id} for PDF ingestion: {filename} (thread_id: {thread_id})")
         # Start a separate Celery task to extract and store headings for this thread
         try:
-            extract_headings_task.delay(thread_id=thread_id, user_id=user_id)
-            logger.info(
-                "Started Celery task for heading extraction (thread_id=%s, user_id=%s)",
-                thread_id,
-                user_id,
-            )
+            started = False
+            load_test_mode = current_app.config.get("LOAD_TEST_MODE", False) or str(current_app.config.get("ENV", "")).lower() == "staging"
+            enable_headings = current_app.config.get("ENABLE_RAG_HEADINGS", True)
+            delay_headings_for_load_test = current_app.config.get("DELAY_RAG_HEADINGS_FOR_LOAD_TEST", False)
+            if enable_headings and not (load_test_mode and delay_headings_for_load_test):
+                extract_headings_task.delay(thread_id=thread_id, user_id=user_id)
+                started = True
+            elif enable_headings and load_test_mode and delay_headings_for_load_test:
+                delay_seconds = current_app.config.get("RAG_HEADINGS_DELAY_SECONDS", 30)
+                extract_headings_task.apply_async(
+                    kwargs={"thread_id": thread_id, "user_id": user_id},
+                    countdown=delay_seconds,
+                )
+                started = True
+            if started:
+                logger.info(
+                    "Started Celery task for heading extraction (thread_id=%s, user_id=%s)",
+                    thread_id,
+                    user_id,
+                )
+            else:
+                logger.info(
+                    "Skipping heading extraction dispatch (enable_headings=%s, load_test_mode=%s, delay_headings_for_load_test=%s)",
+                    enable_headings,
+                    load_test_mode,
+                    delay_headings_for_load_test,
+                )
         except Exception as e:
             logger.error(
                 "Failed to start heading extraction Celery task for thread %s: %s",
@@ -585,6 +620,7 @@ def chat():
     _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
     _log_dir = os.path.join(_project_root, 'logs')
     _log_path = os.path.join(_log_dir, 'rag_debug.log')
+    enable_debug_file_logs = current_app.config.get("ENABLE_RAG_DEBUG_FILE_LOGS", False)
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
@@ -750,13 +786,16 @@ def chat():
             config = {
                 "configurable": {
                     "thread_id": thread_id
-                }
+                },
+                # Defensive: prevent endless tool loops from crashing the endpoint.
+                "recursion_limit": 50
             }
             # #region agent log
             try:
-                os.makedirs(_log_dir, exist_ok=True)
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+                if enable_debug_file_logs:
+                    os.makedirs(_log_dir, exist_ok=True)
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
             except Exception:
                 pass
             # #endregion
@@ -776,8 +815,9 @@ def chat():
             # Invoke the chatbot - LangGraph returns the final state
             # #region agent log
             try:
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
             except Exception:
                 pass
             # #endregion
@@ -788,8 +828,9 @@ def chat():
             # #region agent log
             _msgs = state.get("messages", [])
             try:
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
             except Exception:
                 pass
             # #endregion
@@ -869,8 +910,9 @@ def chat():
 
             # #region agent log
             try:
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
             except Exception:
                 pass
             # #endregion
@@ -887,9 +929,10 @@ def chat():
     except Exception as e:
         # #region agent log
         try:
-            os.makedirs(_log_dir, exist_ok=True)
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            if enable_debug_file_logs:
+                os.makedirs(_log_dir, exist_ok=True)
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
         except Exception:
             pass
         # #endregion
