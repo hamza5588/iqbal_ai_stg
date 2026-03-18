@@ -1447,15 +1447,37 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
     if user_id is None:
         return {"error": f"Could not extract user_id from thread_id: {thread_id}"}
 
-    db = get_db()
     try:
+        db = get_db()
         thread_row = (
             db.query(RAGThread)
             .filter(RAGThread.thread_id == thread_id, RAGThread.user_id == user_id)
             .first()
         )
 
-        # Fetch any stored headings for this thread
+        if not thread_row:
+            return {
+                "thread_id": thread_id,
+                "topics": [],
+                "topics_count": 0,
+                "method": "db_heading_pending",
+                "chunks_scanned": None,
+                "message": "Thread not found for headings lookup.",
+            }
+
+        # Important for load-test: do NOT query the headings table unless
+        # headings are actually marked ready. This avoids DB contention/timeouts.
+        if not getattr(thread_row, "headings_ready", False):
+            return {
+                "thread_id": thread_id,
+                "topics": [],
+                "topics_count": 0,
+                "method": "db_heading_pending",
+                "chunks_scanned": getattr(thread_row, "num_pages", None),
+                "message": "Headings are still being processed. Please try again shortly.",
+            }
+
+        # Headings marked ready: fetch stored headings (may still be empty).
         headings = (
             db.query(RAGHeading)
             .filter(
@@ -1466,39 +1488,20 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
             .all()
         )
 
-        if headings:
-            topics = [{"topic": h.heading, "page": h.page} for h in headings]
-            return {
-                "thread_id": thread_id,
-                "topics": topics,
-                "topics_count": len(topics),
-                "method": "db_heading_cache",
-                "chunks_scanned": getattr(thread_row, "num_pages", None) if thread_row else None,
-            }
-
-        # If thread says headings are ready but none exist, treat as "no headings"
-        if thread_row and getattr(thread_row, "headings_ready", False):
+        topics = [{"topic": h.heading, "page": h.page} for h in headings] if headings else []
+        if not topics:
             logger.info(
                 "Headings marked ready but none found for thread_id=%s user_id=%s",
                 thread_id,
                 user_id,
             )
-            return {
-                "thread_id": thread_id,
-                "topics": [],
-                "topics_count": 0,
-                "method": "db_heading_cache",
-                "chunks_scanned": getattr(thread_row, "num_pages", None),
-            }
 
-        # Non-blocking: headings are not ready yet.
         return {
             "thread_id": thread_id,
-            "topics": [],
-            "topics_count": 0,
-            "method": "db_heading_pending",
-            "chunks_scanned": getattr(thread_row, "num_pages", None) if thread_row else None,
-            "error": "Headings are still being processed. Please try again shortly.",
+            "topics": topics,
+            "topics_count": len(topics),
+            "method": "db_heading_cache",
+            "chunks_scanned": getattr(thread_row, "num_pages", None),
         }
     except Exception as e:
         logger.error(
