@@ -211,10 +211,27 @@ async def run(
                         chat_transcript.append({"role": "bot", "content": ans_text, "latency": chat_duration})
                     else:
                         summary.failed_requests += 1
-                        log_func(f"[{user.email}] Chat {idx+1} fail in {chat_duration:.1f}s: {data.get('error')}", level="ERROR")
+                        err = data.get('error') or data.get('message') or data.get('code') or "Unknown error"
+                        log_func(
+                            f"[{user.email}] Chat {idx+1} fail in {chat_duration:.1f}s: {err} (full_response={str(data)[:300]})",
+                            level="ERROR",
+                        )
                 else:
                     summary.failed_requests += 1
-                    log_func(f"[{user.email}] Chat {idx+1} HTTP error in {chat_duration:.1f}s: {resp.status}", level="ERROR")
+                    # Read response body so we know why the 400/500 happened
+                    body_text = ""
+                    try:
+                        body_text = await resp.text()
+                    except Exception:
+                        body_text = ""
+                    # Keep logs short to avoid huge output
+                    body_snippet = (body_text or "").strip().replace("\n", " ")
+                    if len(body_snippet) > 400:
+                        body_snippet = body_snippet[:400] + "..."
+                    log_func(
+                        f"[{user.email}] Chat {idx+1} HTTP error in {chat_duration:.1f}s: {resp.status} (body={body_snippet})",
+                        level="ERROR",
+                    )
 
         # 5. Get Finalized Lesson Status
         log_func(f"[{user.email}] Step 5: Finalizing lesson...")
