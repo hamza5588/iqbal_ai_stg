@@ -6517,6 +6517,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           } else if (!prependRAG) {
             renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
           }
+          // Ensure reopened chats land at the latest message.
+          requestAnimationFrame(function () { scrollToBottom('auto'); });
         }
 
         if (isBackendConversationId) {
@@ -8112,18 +8114,26 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
 
       // Scroll to bottom of chat
-      function scrollToBottom() {
-        // Use scrollIntoView on the input element - more reliable than managing container scroll
-        const messageInput = document.getElementById('messageInput');
-        if (messageInput) {
-          // Scroll the input into view with smooth behavior
-          messageInput.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      function scrollToBottom(behavior) {
+        const mode = behavior || 'smooth';
+        const chatArea = document.getElementById('chatArea');
+        const chatMessages = document.getElementById('chatMessages');
+
+        if (chatArea) {
+          try {
+            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: mode });
+          } catch (e) {
+            chatArea.scrollTop = chatArea.scrollHeight;
+          }
         }
 
-        // Also try scrolling the chatArea as fallback
-        const chatArea = document.getElementById('chatArea');
-        if (chatArea) {
-          chatArea.scrollTop = chatArea.scrollHeight;
+        if (chatMessages && chatMessages.parentElement) {
+          const container = chatMessages.parentElement;
+          try {
+            container.scrollTo({ top: container.scrollHeight, behavior: mode });
+          } catch (e) {
+            container.scrollTop = container.scrollHeight;
+          }
         }
       }
 
