@@ -11,6 +11,12 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+_LOAD_TEST_MODE = os.getenv("LOAD_TEST_MODE", "true").lower() in ("true", "1", "yes")
+_ENV = os.getenv("ENV", "local").lower()
+# For load testing/staging we isolate headings extraction onto a dedicated queue.
+# For normal operation we keep compatibility by defaulting to the existing ingest queue.
+RAG_HEADINGS_QUEUE = "headings" if (_LOAD_TEST_MODE or _ENV == "staging") else "ingest"
+
 
 def _run_ingest_in_context(self, file_path: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
     """Run ingestion logic inside a Flask application context (for get_db(), current_app, etc.).
@@ -141,7 +147,7 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
         # Continue even if database save fails
 
 
-@celery.task(bind=True, name='app.tasks.ingest_tasks.extract_headings_task', queue='ingest')
+@celery.task(bind=True, name='app.tasks.ingest_tasks.extract_headings_task', queue=RAG_HEADINGS_QUEUE)
 def extract_headings_task(self, thread_id: str, user_id: int):
     """
     Celery task to extract headings/topics for a thread and store them in the database.

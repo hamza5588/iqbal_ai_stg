@@ -162,7 +162,9 @@ def chat():
         config = {
             "configurable": {
                 "thread_id": thread_id
-            }
+            },
+            # LangGraph recursion limit must be supplied at invoke-time config.
+            "recursion_limit": 16,
         }
 
         # Create HumanMessage

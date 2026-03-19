@@ -63,3 +63,10 @@ filee.txt
 .idea/
 tests/
 chatbot.db
+tmp/
+Deep Research Module.pdf
+nginx_error_copy.log
+nginx_error.log
+pdf_ingestion_logs.log
+verify_ingestion_flow.py
+verify_ingestion_pipeline_status.py

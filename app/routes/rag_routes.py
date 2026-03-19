@@ -33,12 +33,60 @@ bp = Blueprint('rag', __name__)
 # Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
 _user_chat_locks = {}
 _locks_lock = threading.Lock()
+_user_chat_rate = {}
+_rate_lock = threading.Lock()
 
 def _get_user_chat_lock(user_id):
     with _locks_lock:
         if user_id not in _user_chat_locks:
             _user_chat_locks[user_id] = threading.Lock()
         return _user_chat_locks[user_id]
+
+
+def _check_and_record_user_chat_rate(user_id):
+    """
+    Per-user burst throttling. Returns (allowed: bool, retry_after_sec: int).
+    Uses a sliding window with conservative defaults to protect backend stability.
+    """
+    max_requests = int(os.getenv("RAG_USER_RATE_LIMIT_COUNT", "6"))
+    window_seconds = int(os.getenv("RAG_USER_RATE_LIMIT_WINDOW_SECONDS", "10"))
+    now = time.time()
+    with _rate_lock:
+        history = _user_chat_rate.get(user_id, [])
+        cutoff = now - window_seconds
+        history = [ts for ts in history if ts >= cutoff]
+        if len(history) >= max_requests:
+            oldest = history[0]
+            retry_after = max(1, int(window_seconds - (now - oldest)))
+            _user_chat_rate[user_id] = history
+            return False, retry_after
+        history.append(now)
+        _user_chat_rate[user_id] = history
+    return True, 0
+
+
+def _get_ingest_tier(file_size_mb: float) -> dict:
+    """
+    Resolve ingest execution strategy by file size.
+    Large docs get longer task limits and a dedicated queue.
+    """
+    threshold_mb = float(os.getenv("RAG_LARGE_DOC_THRESHOLD_MB", "40"))
+    is_large = float(file_size_mb) > threshold_mb
+    if is_large:
+        return {
+            "name": "large",
+            "queue": os.getenv("RAG_INGEST_LARGE_QUEUE", "ingest_large"),
+            "soft_time_limit": int(os.getenv("RAG_INGEST_LARGE_SOFT_TIME_LIMIT", "3300")),
+            "time_limit": int(os.getenv("RAG_INGEST_LARGE_TIME_LIMIT", "3600")),
+            "stream_join_timeout": int(os.getenv("RAG_INGEST_LARGE_STREAM_TIMEOUT", "900")),
+        }
+    return {
+        "name": "standard",
+        "queue": os.getenv("RAG_INGEST_STANDARD_QUEUE", "ingest"),
+        "soft_time_limit": int(os.getenv("RAG_INGEST_STANDARD_SOFT_TIME_LIMIT", "1500")),
+        "time_limit": int(os.getenv("RAG_INGEST_STANDARD_TIME_LIMIT", "1800")),
+        "stream_join_timeout": int(os.getenv("RAG_INGEST_STANDARD_STREAM_TIMEOUT", "300")),
+    }
 
 
 def _strip_lesson_finalization_from_response(text):
@@ -77,6 +125,73 @@ def _strip_tool_names_from_response(text):
         cleaned = re.sub(rf"\b{name}\s*(?:to|for)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def _strip_internal_reasoning_from_response(text):
+    """
+    Remove leaked internal planning/rules blocks from model output.
+    This is a defensive filter for prompt-leak style responses.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    import re
+
+    cleaned = text
+
+    # Common leaked headings/sections that should never be shown to end users.
+    leak_markers = [
+        "Assistant's Rules Summary for This Conversation",
+        "Document Access Tools",
+        "Word Count Rules",
+        "Page-specific queries:",
+        "General queries:",
+        "I need to figure out how to handle their queries",
+        "Just the final answer based on the tool outputs provided.",
+    ]
+
+    # If a leak marker appears, drop everything from the marker onward.
+    marker_positions = [cleaned.find(marker) for marker in leak_markers if marker in cleaned]
+    if marker_positions:
+        cut_at = min(marker_positions)
+        cleaned = cleaned[:cut_at]
+
+    # Remove obvious preamble labels often produced in leaked meta output.
+    cleaned = re.sub(r"^\s*AI Assistant\s*\n", "", cleaned, flags=re.IGNORECASE)
+
+    # Remove known chain-of-thought style opener when it appears as standalone prose.
+    cleaned = re.sub(
+        r"^\s*Okay,\s*let'?s\s+see\.[\s\S]{0,280}?(?=\n\n|\n[A-Z][^\n]*:|$)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove common meta/reasoning paragraphs if they leak.
+    meta_phrases = [
+        "the user uploaded a pdf called",
+        "i need to figure out how to handle",
+        "if they ask",
+        "for generating lessons",
+        "when finalizing",
+        "if the user's question isn't related to the pdf",
+        "do not mention internal tools or processes",
+        "based on the tool outputs",
+    ]
+    parts = [p.strip() for p in re.split(r"\n\s*\n", cleaned) if p.strip()]
+    if parts:
+        filtered_parts = [
+            p for p in parts
+            if not any(phrase in p.lower() for phrase in meta_phrases)
+        ]
+        if filtered_parts:
+            cleaned = "\n\n".join(filtered_parts)
+
+    cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned).strip()
+
+    # Ensure we do not return an empty message after sanitization.
+    if not cleaned:
+        return "I can help with your uploaded PDF. Please ask your question again and I will answer directly from the document."
+    return cleaned
 
 
 def _get_openai_client():
@@ -186,6 +301,24 @@ def ingest():
         if not file.filename.lower().endswith('.pdf'):
             return jsonify({'error': 'Only PDF files are supported'}), 400
 
+        # Enforce a hard maximum upload size to avoid extremely large PDFs
+        # causing ingest timeouts under load (e.g. 90MB+ scanned documents).
+        # Default: 100 MB, configurable via MAX_RAG_PDF_MB.
+        import os
+        max_mb = int(os.getenv("MAX_RAG_PDF_MB", "100"))
+        file.seek(0, os.SEEK_END)
+        size_bytes = file.tell()
+        file.seek(0)
+        size_mb = size_bytes / (1024 * 1024)
+        ingest_tier = _get_ingest_tier(size_mb)
+        if size_mb > max_mb:
+            return jsonify({
+                'error': f'PDF is too large for ingestion ({size_mb:.1f} MB). '
+                         f'Maximum allowed size is {max_mb} MB. '
+                         'Please upload a smaller or split document.',
+                'code': 'PDF_TOO_LARGE'
+            }), 400
+
         # Get thread_id from request or create new thread
         # IMPORTANT: Each new PDF upload must get its own conversation and thread.
         # When create_new_thread is True, we never reuse the current conversation so we
@@ -271,7 +404,13 @@ def ingest():
 
         # If streaming is requested, use SSE for backend processing progress (legacy support)
         if stream_progress:
-            return _ingest_with_progress(file_bytes, thread_id, filename, user_id)
+            return _ingest_with_progress(
+                file_bytes,
+                thread_id,
+                filename,
+                user_id,
+                join_timeout_seconds=ingest_tier["stream_join_timeout"],
+            )
 
         # When Celery is disabled (e.g. local dev), run ingestion synchronously in-process
         use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
@@ -289,7 +428,22 @@ def ingest():
                 _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
                 # Kick off background heading extraction in-process when Celery is disabled
                 try:
-                    _start_heading_extraction_background(thread_id, user_id)
+                    app_obj = current_app._get_current_object()
+                    load_test_mode = current_app.config.get("LOAD_TEST_MODE", False) or str(current_app.config.get("ENV", "")).lower() == "staging"
+                    enable_headings = current_app.config.get("ENABLE_RAG_HEADINGS", True)
+                    delay_headings_for_load_test = current_app.config.get("DELAY_RAG_HEADINGS_FOR_LOAD_TEST", False)
+                    if enable_headings and not (load_test_mode and delay_headings_for_load_test):
+                        _start_heading_extraction_background(thread_id, user_id, app_obj)
+                    elif enable_headings and load_test_mode and delay_headings_for_load_test:
+                        # Load-test mode: delay headings extraction so it doesn't contend with ingestion.
+                        delay_seconds = current_app.config.get("RAG_HEADINGS_DELAY_SECONDS", 30)
+                        t = threading.Timer(
+                            delay_seconds,
+                            _start_heading_extraction_background,
+                            args=(thread_id, user_id, app_obj),
+                        )
+                        t.daemon = True
+                        t.start()
                 except Exception as bg_err:
                     logger.error(
                         "Failed to start background heading extraction for thread %s (sync mode): %s",
@@ -304,6 +458,7 @@ def ingest():
                     'message': 'PDF ingested successfully',
                     'thread_id': thread_id,
                     'conversation_id': conversation_id,
+                    'ingest_tier': ingest_tier["name"],
                     'filename': result.get('filename', filename),
                     'documents': result.get('documents', result.get('num_pages', 0)),
                     'num_pages': result.get('num_pages', result.get('documents', 0)),
@@ -330,22 +485,57 @@ def ingest():
             tmp.flush()
             tmp_path = tmp.name
 
-        task = ingest_pdf_task.delay(
-            file_path=tmp_path,
-            thread_id=thread_id,
-            filename=filename,
-            user_id=user_id,
-            conversation_id=conversation_id
+        task = ingest_pdf_task.apply_async(
+            kwargs={
+                "file_path": tmp_path,
+                "thread_id": thread_id,
+                "filename": filename,
+                "user_id": user_id,
+                "conversation_id": conversation_id,
+            },
+            queue=ingest_tier["queue"],
+            soft_time_limit=ingest_tier["soft_time_limit"],
+            time_limit=ingest_tier["time_limit"],
         )
-        logger.info(f"Started Celery task {task.id} for PDF ingestion: {filename} (thread_id: {thread_id})")
+        logger.info(
+            "Started Celery task %s for PDF ingestion: %s (thread_id: %s, tier=%s, queue=%s, limits=%ss/%ss)",
+            task.id,
+            filename,
+            thread_id,
+            ingest_tier["name"],
+            ingest_tier["queue"],
+            ingest_tier["soft_time_limit"],
+            ingest_tier["time_limit"],
+        )
         # Start a separate Celery task to extract and store headings for this thread
         try:
-            extract_headings_task.delay(thread_id=thread_id, user_id=user_id)
-            logger.info(
-                "Started Celery task for heading extraction (thread_id=%s, user_id=%s)",
-                thread_id,
-                user_id,
-            )
+            started = False
+            load_test_mode = current_app.config.get("LOAD_TEST_MODE", False) or str(current_app.config.get("ENV", "")).lower() == "staging"
+            enable_headings = current_app.config.get("ENABLE_RAG_HEADINGS", True)
+            delay_headings_for_load_test = current_app.config.get("DELAY_RAG_HEADINGS_FOR_LOAD_TEST", False)
+            if enable_headings and not (load_test_mode and delay_headings_for_load_test):
+                extract_headings_task.delay(thread_id=thread_id, user_id=user_id)
+                started = True
+            elif enable_headings and load_test_mode and delay_headings_for_load_test:
+                delay_seconds = current_app.config.get("RAG_HEADINGS_DELAY_SECONDS", 30)
+                extract_headings_task.apply_async(
+                    kwargs={"thread_id": thread_id, "user_id": user_id},
+                    countdown=delay_seconds,
+                )
+                started = True
+            if started:
+                logger.info(
+                    "Started Celery task for heading extraction (thread_id=%s, user_id=%s)",
+                    thread_id,
+                    user_id,
+                )
+            else:
+                logger.info(
+                    "Skipping heading extraction dispatch (enable_headings=%s, load_test_mode=%s, delay_headings_for_load_test=%s)",
+                    enable_headings,
+                    load_test_mode,
+                    delay_headings_for_load_test,
+                )
         except Exception as e:
             logger.error(
                 "Failed to start heading extraction Celery task for thread %s: %s",
@@ -360,7 +550,8 @@ def ingest():
             'status': 'processing',
             'thread_id': thread_id,
             'conversation_id': conversation_id,
-            'filename': filename
+            'filename': filename,
+            'ingest_tier': ingest_tier["name"],
         })
 
     except ValueError as e:
@@ -440,7 +631,13 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
         db.rollback()
 
 
-def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user_id: int):
+def _ingest_with_progress(
+    file_bytes: bytes,
+    thread_id: str,
+    filename: str,
+    user_id: int,
+    join_timeout_seconds: int = 300,
+):
     """
     Ingest PDF with Server-Sent Events (SSE) for real-time progress updates.
     """
@@ -520,7 +717,7 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
                     break
             
             # Wait for ingestion to complete
-            ingestion_thread.join(timeout=300)  # 5 minute timeout
+            ingestion_thread.join(timeout=max(30, int(join_timeout_seconds)))
             
             if result_container['error']:
                 error_msg = f"Error: {result_container['error']}"
@@ -547,15 +744,24 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
     )
 
 
-def _start_heading_extraction_background(thread_id: str, user_id: int):
+def _start_heading_extraction_background(thread_id: str, user_id: int, app=None):
     """
     Start background heading extraction when Celery is disabled.
     Extracts headings/topics for the given thread and stores them in the database.
     """
-    from flask import current_app
     from app.utils.rag_service import extract_and_store_headings_for_thread
 
-    app = current_app._get_current_object()
+    if app is None:
+        try:
+            app = current_app._get_current_object()
+        except RuntimeError:
+            logger.error(
+                "Cannot start heading extraction without Flask app context "
+                "(thread_id=%s, user_id=%s)",
+                thread_id,
+                user_id,
+            )
+            return
 
     def run():
         with app.app_context():
@@ -585,6 +791,7 @@ def chat():
     _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
     _log_dir = os.path.join(_project_root, 'logs')
     _log_path = os.path.join(_log_dir, 'rag_debug.log')
+    enable_debug_file_logs = current_app.config.get("ENABLE_RAG_DEBUG_FILE_LOGS", False)
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
@@ -734,6 +941,14 @@ def chat():
                     'thread_id': thread_id
                 }), 400
 
+        allowed, retry_after = _check_and_record_user_chat_rate(user_id)
+        if not allowed:
+            return jsonify({
+                'error': f'Too many requests in a short time. Please wait {retry_after} seconds and try again.',
+                'code': 'USER_RATE_LIMITED',
+                'retry_after': retry_after,
+            }), 429
+
         # One message at a time per user: enforce a per-user lock with a bounded wait.
         # This prevents "zombie" locks from immediately causing 429s after upstream timeouts,
         # while still guaranteeing only a single in-flight chat per user.
@@ -750,13 +965,16 @@ def chat():
             config = {
                 "configurable": {
                     "thread_id": thread_id
-                }
+                },
+                # Defensive: keep recursion bounded under load.
+                "recursion_limit": 16
             }
             # #region agent log
             try:
-                os.makedirs(_log_dir, exist_ok=True)
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+                if enable_debug_file_logs:
+                    os.makedirs(_log_dir, exist_ok=True)
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
             except Exception:
                 pass
             # #endregion
@@ -776,8 +994,9 @@ def chat():
             # Invoke the chatbot - LangGraph returns the final state
             # #region agent log
             try:
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
             except Exception:
                 pass
             # #endregion
@@ -788,29 +1007,59 @@ def chat():
             # #region agent log
             _msgs = state.get("messages", [])
             try:
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
             except Exception:
                 pass
             # #endregion
 
-            # Extract the last message from the state
-            messages = state.get("messages", [])
-            if not messages:
-                response_content = "I'm sorry, I couldn't generate a response."
-            else:
-                # Get the last message (should be the AI response)
-                last_msg = messages[-1]
-                if hasattr(last_msg, 'content'):
-                    response_content = last_msg.content
-                elif isinstance(last_msg, dict):
-                    response_content = last_msg.get('content', str(last_msg))
+            def _extract_and_sanitize_response(state_obj):
+                messages_local = state_obj.get("messages", []) if isinstance(state_obj, dict) else []
+                if not messages_local:
+                    content_local = ""
                 else:
-                    response_content = str(last_msg)
+                    last_msg_local = messages_local[-1]
+                    if hasattr(last_msg_local, 'content'):
+                        content_local = last_msg_local.content
+                    elif isinstance(last_msg_local, dict):
+                        content_local = last_msg_local.get('content', str(last_msg_local))
+                    else:
+                        content_local = str(last_msg_local)
 
-            # Remove internal lesson-finalization fields and tool names so they never appear on frontend
-            response_content = _strip_lesson_finalization_from_response(response_content)
-            response_content = _strip_tool_names_from_response(response_content)
+                content_local = _strip_lesson_finalization_from_response(content_local)
+                content_local = _strip_tool_names_from_response(content_local)
+                content_local = _strip_internal_reasoning_from_response(content_local)
+                return content_local
+
+            response_content = _extract_and_sanitize_response(state)
+
+            # If model returned an empty/stripped response, do one recovery turn that
+            # explicitly asks the agent to run needed tools and provide the final answer.
+            if not isinstance(response_content, str) or not response_content.strip():
+                logger.warning(
+                    "RAG chat produced empty response after first invoke. Running one recovery invoke. "
+                    "thread_id=%s user_id=%s",
+                    thread_id,
+                    user_id,
+                )
+                recovery_prompt = (
+                    "Your previous response was empty. Re-run the needed tools for the user's last question "
+                    "and provide a final direct answer from the uploaded document. "
+                    "If document evidence is not found, say that clearly."
+                )
+                recovery_state = chatbot.invoke(
+                    {"messages": [HumanMessage(content=recovery_prompt)]},
+                    config=config
+                )
+                response_content = _extract_and_sanitize_response(recovery_state)
+
+            # Last-resort fallback to avoid blank frontend messages.
+            if not isinstance(response_content, str) or not response_content.strip():
+                response_content = (
+                    "I could not generate a complete response this time. "
+                    "Please ask again and I will answer directly from your document."
+                )
 
             # Save messages to database for chat history
             db_conversation_id = None
@@ -869,8 +1118,9 @@ def chat():
 
             # #region agent log
             try:
-                with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
             except Exception:
                 pass
             # #endregion
@@ -887,9 +1137,10 @@ def chat():
     except Exception as e:
         # #region agent log
         try:
-            os.makedirs(_log_dir, exist_ok=True)
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            if enable_debug_file_logs:
+                os.makedirs(_log_dir, exist_ok=True)
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
         except Exception:
             pass
         # #endregion

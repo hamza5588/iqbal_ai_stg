@@ -251,6 +251,11 @@ def create_llm(
 
     # Final fallback to config default if still not resolved
     provider = (resolved_provider or Config.LLM_PROVIDER).lower()
+
+    # Apply output token cap only in load-test mode.
+    # Outside load-test, we intentionally do not send max_tokens so provider defaults apply.
+    load_test_mode = os.getenv('LOAD_TEST_MODE', 'false').lower() in ('true', '1', 'yes')
+    apply_max_tokens = bool(load_test_mode)
     
     # Use provided values or fall back to config defaults
     if provider == 'openai':
@@ -267,14 +272,24 @@ def create_llm(
         max_toks = max_tokens if max_tokens is not None else Config.OPENAI_MAX_TOKENS
         time_out = timeout if timeout is not None else Config.OPENAI_TIMEOUT
         
-        llm = ChatOpenAI(
-            openai_api_key=api_key_to_use,
-            model_name=model,
-            temperature=temp,
-            timeout=time_out,
-        )
+        openai_kwargs = {
+            "openai_api_key": api_key_to_use,
+            "model_name": model,
+            "temperature": temp,
+            "timeout": time_out,
+        }
+        if apply_max_tokens:
+            openai_kwargs["max_tokens"] = max_toks
+
+        llm = ChatOpenAI(**openai_kwargs)
         
-        logger.info(f"Initialized OpenAI LLM: model={model}, temperature={temp}, max_tokens={max_toks}")
+        logger.info(
+            "Initialized OpenAI LLM: model=%s, temperature=%s, max_tokens=%s (applied=%s)",
+            model,
+            temp,
+            max_toks if apply_max_tokens else "provider-default",
+            apply_max_tokens,
+        )
         
     elif provider == 'groq':
         # Groq configuration
@@ -296,14 +311,24 @@ def create_llm(
         max_toks = max_tokens if max_tokens is not None else int(os.getenv('GROQ_MAX_TOKENS', '1024'))
         time_out = timeout if timeout is not None else int(os.getenv('GROQ_TIMEOUT', '60'))
         
-        llm = ChatGroq(
-            groq_api_key=api_key_to_use,
-            model_name=model,
-            temperature=temp,
-            timeout=time_out,
-        )
+        groq_kwargs = {
+            "groq_api_key": api_key_to_use,
+            "model_name": model,
+            "temperature": temp,
+            "timeout": time_out,
+        }
+        if apply_max_tokens:
+            groq_kwargs["max_tokens"] = max_toks
+
+        llm = ChatGroq(**groq_kwargs)
         
-        logger.info(f"Initialized Groq LLM: model={model}, temperature={temp}, max_tokens={max_toks}")
+        logger.info(
+            "Initialized Groq LLM: model=%s, temperature=%s, max_tokens=%s (applied=%s)",
+            model,
+            temp,
+            max_toks if apply_max_tokens else "provider-default",
+            apply_max_tokens,
+        )
         
     elif provider == 'vllm':
         # vLLM configuration (OpenAI-compatible API)
@@ -313,15 +338,26 @@ def create_llm(
         max_toks = max_tokens if max_tokens is not None else Config.VLLM_MAX_TOKENS
         time_out = timeout if timeout is not None else Config.VLLM_TIMEOUT
         
-        llm = ChatOpenAI(
-            openai_api_key="EMPTY",  # vLLM doesn't require a real API key
-            openai_api_base=api_base,
-            model_name=model,
-            temperature=temp,
-            timeout=time_out,
-        )
+        vllm_kwargs = {
+            "openai_api_key": "EMPTY",  # vLLM doesn't require a real API key
+            "openai_api_base": api_base,
+            "model_name": model,
+            "temperature": temp,
+            "timeout": time_out,
+        }
+        if apply_max_tokens:
+            vllm_kwargs["max_tokens"] = max_toks
+
+        llm = ChatOpenAI(**vllm_kwargs)
         
-        logger.info(f"Initialized vLLM LLM: base={api_base}, model={model}, temperature={temp}, max_tokens={max_toks}")
+        logger.info(
+            "Initialized vLLM LLM: base=%s, model=%s, temperature=%s, max_tokens=%s (applied=%s)",
+            api_base,
+            model,
+            temp,
+            max_toks if apply_max_tokens else "provider-default",
+            apply_max_tokens,
+        )
         
     else:
         raise ValueError(

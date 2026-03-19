@@ -44,8 +44,7 @@ class Config:
     # SQLite: sqlite:///instance/chatbot.db or sqlite:////absolute/path/to/chatbot.db
     # MySQL: mysql+pymysql://user:password@localhost/dbname
     # PostgreSQL: postgresql://user:password@localhost/dbname or postgresql+psycopg2://user:password@localhost/dbname
-    DATABASE_URL = os.getenv('DATABASE_URL','postgresql://myuser:mypassword@localhost:5432/mydatabase')
-    
+    DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://myuser:mypassword@localhost:5432/mydatabase')    
     # SQLAlchemy configuration
     if DATABASE_URL.startswith('sqlite'):
         # Resolve to absolute path and create parent dir so SQLite can open the file
@@ -154,3 +153,42 @@ class Config:
     # Temporary upload directory for PDF ingestion when using Celery.
     # This path is shared between the web app and Celery workers via Docker volumes.
     UPLOAD_TEMP_DIR = os.getenv('UPLOAD_TEMP_DIR', '/app/tmp')
+    RAG_LARGE_DOC_THRESHOLD_MB = int(os.getenv('RAG_LARGE_DOC_THRESHOLD_MB', '40'))
+    RAG_INGEST_STANDARD_QUEUE = os.getenv('RAG_INGEST_STANDARD_QUEUE', 'ingest')
+    RAG_INGEST_LARGE_QUEUE = os.getenv('RAG_INGEST_LARGE_QUEUE', 'ingest_large')
+    RAG_INGEST_STANDARD_SOFT_TIME_LIMIT = int(os.getenv('RAG_INGEST_STANDARD_SOFT_TIME_LIMIT', '1500'))
+    RAG_INGEST_STANDARD_TIME_LIMIT = int(os.getenv('RAG_INGEST_STANDARD_TIME_LIMIT', '1800'))
+    RAG_INGEST_LARGE_SOFT_TIME_LIMIT = int(os.getenv('RAG_INGEST_LARGE_SOFT_TIME_LIMIT', '3300'))
+    RAG_INGEST_LARGE_TIME_LIMIT = int(os.getenv('RAG_INGEST_LARGE_TIME_LIMIT', '3600'))
+    RAG_INGEST_STANDARD_STREAM_TIMEOUT = int(os.getenv('RAG_INGEST_STANDARD_STREAM_TIMEOUT', '300'))
+    RAG_INGEST_LARGE_STREAM_TIMEOUT = int(os.getenv('RAG_INGEST_LARGE_STREAM_TIMEOUT', '900'))
+
+    # -------------------
+    # RAG load-test flags
+    # -------------------
+    # Use `LOAD_TEST_MODE=true` in staging/load testing to reduce concurrency pressure.
+    LOAD_TEST_MODE = os.getenv('LOAD_TEST_MODE', 'false').lower() in ('true', '1', 'yes')
+
+    # Enable/disable headings extraction completely.
+    # Normal users should keep headings enabled by default.
+    ENABLE_RAG_HEADINGS = os.getenv('ENABLE_RAG_HEADINGS', 'true').lower() in ('true', '1', 'yes')
+
+    # When load testing, delay headings extraction so it doesn't contend with ingestion.
+    DELAY_RAG_HEADINGS_FOR_LOAD_TEST = os.getenv(
+        'DELAY_RAG_HEADINGS_FOR_LOAD_TEST',
+        'false' if (LOAD_TEST_MODE or ENV == 'staging') else 'false'
+    ).lower() in ('true', '1', 'yes')
+
+    # Optional delay seconds before starting headings extraction in load-test mode.
+    RAG_HEADINGS_DELAY_SECONDS = int(os.getenv('RAG_HEADINGS_DELAY_SECONDS', '30'))
+
+    # Disable file-based debug logging in staging/load-test mode because it can be costly under concurrency.
+    _ENV = os.getenv('ENV', 'local').lower()
+    ENABLE_RAG_DEBUG_FILE_LOGS = os.getenv(
+        'ENABLE_RAG_DEBUG_FILE_LOGS',
+        'false' if (LOAD_TEST_MODE or _ENV == 'staging') else 'true'
+    ).lower() in ('true', '1', 'yes')
+
+    # Control embedding batch parallelism defaults.
+    # NOTE: Actual effective default is also enforced in `app/utils/rag_service.py`.
+    RAG_EMBED_PARALLEL_BATCHES_LOAD_TEST_DEFAULT = int(os.getenv('RAG_EMBED_PARALLEL_BATCHES_LOAD_TEST_DEFAULT', '1'))

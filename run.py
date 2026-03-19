@@ -6,7 +6,7 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 from app import create_app
 import logging
-import sys
+import argparse
 
 # Configure logging
 logging.basicConfig(
@@ -17,8 +17,15 @@ logging.basicConfig(
 app = create_app()
 
 if __name__ == '__main__':
-    # Get port from command line argument or default to 5000
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
+    # Accept either:
+    #   python run.py 5000
+    # or:
+    #   python run.py --port 5000
+    parser = argparse.ArgumentParser()
+    parser.add_argument('port', nargs='?', default=5000, type=int)
+    parser.add_argument('--port', dest='port_opt', type=int, default=None)
+    args = parser.parse_args()
+    port = args.port_opt if args.port_opt is not None else args.port
     
     # Enable debug mode
     debug = os.environ.get('FLASK_DEBUG', '0') == '1'

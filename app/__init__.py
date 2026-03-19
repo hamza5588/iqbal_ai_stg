@@ -240,25 +240,30 @@ def create_app():
     # Register database cleanup function
     app.teardown_appcontext(close_db)
     
-    # Initialize database and LangGraph Postgres checkpointer
+    # Initialize database and (optionally) heavy startup components.
+    # For local verification scripts we can skip expensive startup work.
+    skip_extra_startup = str(os.getenv("SKIP_EXTRA_STARTUP", "false")).lower() in ("1", "true", "yes")
+    skip_db_init = str(os.getenv("SKIP_DB_INIT", "false")).lower() in ("1", "true", "yes")
     with app.app_context():
-        init_db(app)
-        # Create default admin account if it doesn't exist
-        from app.utils.admin_init import create_default_admin
-        create_default_admin()
+        if not skip_db_init:
+            init_db(app)
+        if not skip_extra_startup:
+            # Create default admin account if it doesn't exist
+            from app.utils.admin_init import create_default_admin
+            create_default_admin()
 
-        # Initialize Lesson Q&A LangGraph (Postgres checkpointer setup + compile).
-        # This MUST run once on startup so that:
-        #   - PostgresSaver.setup() creates checkpoint tables, and
-        #   - the compiled graph is ready for use in request handlers.
-        try:
-            from app.services.lesson.lesson_qa_graph import init_lesson_qa_graph
-            init_lesson_qa_graph()
-        except Exception as e:
-            # Fail loudly in logs; app startup should surface this in staging.
-            import traceback
-            print("Failed to initialize Lesson Q&A LangGraph:", e)
-            traceback.print_exc()
+            # Initialize Lesson Q&A LangGraph (Postgres checkpointer setup + compile).
+            # This MUST run once on startup so that:
+            #   - PostgresSaver.setup() creates checkpoint tables, and
+            #   - the compiled graph is ready for use in request handlers.
+            try:
+                from app.services.lesson.lesson_qa_graph import init_lesson_qa_graph
+                init_lesson_qa_graph()
+            except Exception as e:
+                # Fail loudly in logs; app startup should surface this in staging.
+                import traceback
+                print("Failed to initialize Lesson Q&A LangGraph:", e)
+                traceback.print_exc()
     
     # Register blueprints (import here to avoid circular imports)
     from app.routes.auth import bp as auth_bp
