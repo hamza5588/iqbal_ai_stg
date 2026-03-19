@@ -1420,6 +1420,20 @@
       background: #a1a1a1;
     }
 
+    /* Sidebar: keep scroll behavior but hide visible scrollbar (ChatGPT-like) */
+    #chatHistoryContainer,
+    #chatHistoryContainer-mobile {
+      scrollbar-width: none;      /* Firefox */
+      -ms-overflow-style: none;   /* IE/Edge legacy */
+    }
+
+    #chatHistoryContainer::-webkit-scrollbar,
+    #chatHistoryContainer-mobile::-webkit-scrollbar {
+      display: none;              /* Chrome/Safari/Opera */
+      width: 0;
+      height: 0;
+    }
+
     /* Lessons Table Styles */
     .lessons-table-container {
       background: white;

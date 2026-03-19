@@ -293,8 +293,13 @@ def create_conversation():
 def get_conversations():
     """Get user's recent conversations"""
     try:
+        limit = request.args.get('limit', type=int)
+        if limit is None:
+            limit = 200
+        # Guardrails: prevent pathological values but keep room for long histories
+        limit = max(1, min(limit, 1000))
         chat_service = ChatService(session['user_id'], session['groq_api_key'])
-        conversations = chat_service.get_recent_conversations()
+        conversations = chat_service.get_recent_conversations(limit=limit)
         return jsonify({'conversations': conversations})  # <-- wrap in dict for frontend
     except Exception as e:
         logger.error(f"Error retrieving conversations: {str(e)}")

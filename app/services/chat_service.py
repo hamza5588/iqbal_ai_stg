@@ -387,8 +387,12 @@ class ChatService:
             logger.error(f"Error processing message: {str(e)}")
             raise
 
-    def get_recent_conversations(self, limit: int = 4) -> List[Dict[str, Any]]:
-        """Get user's recent conversations"""
+    def get_recent_conversations(self, limit: int = 200) -> List[Dict[str, Any]]:
+        """Get user's recent conversations.
+
+        Default is intentionally high so the sidebar can show full history
+        (ChatGPT-style scrolling) instead of truncating to only a few items.
+        """
         try:
             return self.conversation_model.get_conversations(limit=limit)
         except Exception as e:
