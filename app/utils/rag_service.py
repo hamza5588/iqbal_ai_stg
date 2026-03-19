@@ -60,7 +60,7 @@ except ImportError:
 from app.utils.llm_factory import create_llm, get_chat_model
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.graph import START, StateGraph
+from langgraph.graph import START, END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 import requests
@@ -2842,7 +2842,7 @@ def _tool_router(state: ChatState):
     """
     msgs = state.get("messages", []) or []
     if not msgs:
-        return "__end__"
+        return "end"
 
     from langchain_core.messages import AIMessage, ToolMessage
 
@@ -2852,21 +2852,20 @@ def _tool_router(state: ChatState):
 
     recent = msgs[-6:]
     if any(isinstance(m, ToolMessage) for m in recent):
-        return "__end__"
+        return "end"
 
-    return "__end__"
+    return "end"
 
 
 graph = StateGraph(ChatState)
 graph.add_node("chat_node", chat_node)
 graph.add_node("tools", tool_node)
-graph.add_node("__end__", lambda s: s)
 
 graph.add_edge(START, "chat_node")
 graph.add_conditional_edges(
     "chat_node",
     _tool_router,
-    {"tools": "tools", "__end__": "__end__"},
+    {"tools": "tools", "end": END},
 )
 graph.add_edge("tools", "chat_node")
 
