@@ -3,6 +3,7 @@ import aiohttp
 import logging
 import time
 import json
+import random
 import traceback
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -185,61 +186,93 @@ class LoadTestRunner:
             "useremail": user.email,
             "password": user.password
         }
-        
-        start = time.time()
-        try:
-            self.summary.total_requests += 1
-            async with session.post(url, data=payload, allow_redirects=False) as response:
-                duration = time.time() - start
-                
-                # Flask login typically redirects on success (302)
-                if response.status == 302:
-                    # Verify we got a session cookie
-                    cookies = session.cookie_jar.filter_cookies(self.config.base_url)
-                    if 'session' in cookies:
-                        logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
-                        self.summary.successful_requests += 1
-                        return True
-                    else:
+        max_attempts = 4
+        base_backoff_seconds = 0.25
+        max_backoff_seconds = 3.0
+
+        for attempt in range(1, max_attempts + 1):
+            start = time.time()
+            try:
+                self.summary.total_requests += 1
+                async with session.post(url, data=payload, allow_redirects=False) as response:
+                    duration = time.time() - start
+
+                    # Flask login typically redirects on success (302)
+                    if response.status == 302:
+                        # Verify we got a session cookie
+                        cookies = session.cookie_jar.filter_cookies(self.config.base_url)
+                        if 'session' in cookies:
+                            logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
+                            self.summary.successful_requests += 1
+                            return True
                         logger.warning(f"User {user.email} login redirect but no session cookie found for {self.config.base_url}")
                         self._log(f"User {user.email} no session cookie", level="WARNING")
                         return False
-                elif response.status == 200:
-                    text = await response.text()
-                    try:
-                        data = json.loads(text)
-                        if data.get("success") is True:
-                            # Verify we got a session cookie
-                            cookies = session.cookie_jar.filter_cookies(self.config.base_url)
-                            if 'session' in cookies:
-                                logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
-                                self.summary.successful_requests += 1
-                                return True
-                            else:
+
+                    if response.status == 200:
+                        text = await response.text()
+                        try:
+                            data = json.loads(text)
+                            if data.get("success") is True:
+                                # Verify we got a session cookie
+                                cookies = session.cookie_jar.filter_cookies(self.config.base_url)
+                                if 'session' in cookies:
+                                    logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
+                                    self.summary.successful_requests += 1
+                                    return True
                                 logger.warning(f"User {user.email} login success JSON but no session cookie")
                                 self._log(f"User {user.email} no session cookie", level="WARNING")
                                 return False
-                        else:
                             logger.warning(f"User {user.email} login failed via JSON: {data.get('error')}")
                             self._log(f"User {user.email} login failed: {data.get('error')}", level="ERROR")
                             return False
-                    except json.JSONDecodeError:
-                        if "Invalid credentials" in text:
-                            logger.warning(f"User {user.email} invalid credentials")
-                            self._log(f"User {user.email} invalid credentials", level="ERROR")
-                        else:
-                            logger.warning(f"User {user.email} login returned 200 but not redirected and not JSON success. Text: {text[:100]}...")
-                            self._log(f"User {user.email} login returned 200 (unexpected)", level="WARNING")
+                        except json.JSONDecodeError:
+                            if "Invalid credentials" in text:
+                                logger.warning(f"User {user.email} invalid credentials")
+                                self._log(f"User {user.email} invalid credentials", level="ERROR")
+                            else:
+                                logger.warning(f"User {user.email} login returned 200 but not redirected and not JSON success. Text: {text[:100]}...")
+                                self._log(f"User {user.email} login returned 200 (unexpected)", level="WARNING")
+                            return False
+
+                    if response.status == 429:
+                        self.summary.rate_limit_hits += 1
+                        if attempt < max_attempts:
+                            backoff = min(base_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds)
+                            jitter = random.uniform(0.0, backoff * 0.3)
+                            delay = backoff + jitter
+                            self._log(
+                                f"User {user.email} login rate-limited (429). Retrying attempt {attempt + 1}/{max_attempts} after {delay:.2f}s",
+                                level="WARNING",
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        text = await response.text()
+                        logger.warning(f"User {user.email} login failed with status {response.status} after retries. Text: {text[:200]}...")
+                        self._log(f"User {user.email} login failed with status {response.status}", level="ERROR")
                         return False
-                else:
+
                     text = await response.text()
                     logger.warning(f"User {user.email} login failed with status {response.status}. Text: {text[:200]}...")
                     self._log(f"User {user.email} login failed with status {response.status}", level="ERROR")
                     return False
-        except Exception as e:
-            logger.error(f"User {user.email} login exception: {str(e)}")
-            self._log(f"User {user.email} login exception: {str(e)}", level="ERROR")
-            return False
+            except Exception as e:
+                logger.error(f"User {user.email} login exception: {str(e)}")
+                # Retry transient exceptions for first attempts, then fail hard.
+                if attempt < max_attempts:
+                    backoff = min(base_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds)
+                    jitter = random.uniform(0.0, backoff * 0.3)
+                    delay = backoff + jitter
+                    self._log(
+                        f"User {user.email} login exception on attempt {attempt}/{max_attempts}: {str(e)}. Retrying in {delay:.2f}s",
+                        level="WARNING",
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                self._log(f"User {user.email} login exception: {str(e)}", level="ERROR")
+                return False
+
+        return False
 
     async def _dispatch_scenario(self, session: aiohttp.ClientSession, user: TestUser, config: LoadTestConfig):
         """Dispatch execution to the appropriate scenario function"""
