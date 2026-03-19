@@ -2869,8 +2869,7 @@ graph.add_conditional_edges(
 )
 graph.add_edge("tools", "chat_node")
 
-_default_recursion_limit = int(os.getenv("RAG_RECURSION_LIMIT", "16"))
-chatbot = graph.compile(checkpointer=checkpointer, recursion_limit=_default_recursion_limit)
+chatbot = graph.compile(checkpointer=checkpointer)
 
 # -------------------
 # 9. Helpers
