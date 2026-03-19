@@ -6433,15 +6433,6 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           } else if (!prependRAG) {
             renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
           }
-
-          // Always scroll to the latest message after (re)loading a chat,
-          // including async backend loads that finish after initial page render.
-          if (typeof scrollToBottom === 'function') {
-            // Use rAF so layout has updated before scrolling.
-            requestAnimationFrame(function () {
-              scrollToBottom();
-            });
-          }
         }
 
         if (isBackendConversationId) {
