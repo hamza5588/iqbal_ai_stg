@@ -279,7 +279,7 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
-    command: celery -A app.celery_worker_entry.celery worker -Q ingest --loglevel=info --concurrency=8
+    command: celery -A app.celery_worker_entry.celery worker -Q ingest,ingest_large --loglevel=info --concurrency=8
     deploy:
       resources:
         limits:

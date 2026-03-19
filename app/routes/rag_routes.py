@@ -65,6 +65,30 @@ def _check_and_record_user_chat_rate(user_id):
     return True, 0
 
 
+def _get_ingest_tier(file_size_mb: float) -> dict:
+    """
+    Resolve ingest execution strategy by file size.
+    Large docs get longer task limits and a dedicated queue.
+    """
+    threshold_mb = float(os.getenv("RAG_LARGE_DOC_THRESHOLD_MB", "40"))
+    is_large = float(file_size_mb) > threshold_mb
+    if is_large:
+        return {
+            "name": "large",
+            "queue": os.getenv("RAG_INGEST_LARGE_QUEUE", "ingest_large"),
+            "soft_time_limit": int(os.getenv("RAG_INGEST_LARGE_SOFT_TIME_LIMIT", "3300")),
+            "time_limit": int(os.getenv("RAG_INGEST_LARGE_TIME_LIMIT", "3600")),
+            "stream_join_timeout": int(os.getenv("RAG_INGEST_LARGE_STREAM_TIMEOUT", "900")),
+        }
+    return {
+        "name": "standard",
+        "queue": os.getenv("RAG_INGEST_STANDARD_QUEUE", "ingest"),
+        "soft_time_limit": int(os.getenv("RAG_INGEST_STANDARD_SOFT_TIME_LIMIT", "1500")),
+        "time_limit": int(os.getenv("RAG_INGEST_STANDARD_TIME_LIMIT", "1800")),
+        "stream_join_timeout": int(os.getenv("RAG_INGEST_STANDARD_STREAM_TIMEOUT", "300")),
+    }
+
+
 def _strip_lesson_finalization_from_response(text):
     """
     Remove internal lesson-finalization lines from AI response so they are never
@@ -219,6 +243,7 @@ def ingest():
         size_bytes = file.tell()
         file.seek(0)
         size_mb = size_bytes / (1024 * 1024)
+        ingest_tier = _get_ingest_tier(size_mb)
         if size_mb > max_mb:
             return jsonify({
                 'error': f'PDF is too large for ingestion ({size_mb:.1f} MB). '
@@ -312,7 +337,13 @@ def ingest():
 
         # If streaming is requested, use SSE for backend processing progress (legacy support)
         if stream_progress:
-            return _ingest_with_progress(file_bytes, thread_id, filename, user_id)
+            return _ingest_with_progress(
+                file_bytes,
+                thread_id,
+                filename,
+                user_id,
+                join_timeout_seconds=ingest_tier["stream_join_timeout"],
+            )
 
         # When Celery is disabled (e.g. local dev), run ingestion synchronously in-process
         use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
@@ -359,6 +390,7 @@ def ingest():
                     'message': 'PDF ingested successfully',
                     'thread_id': thread_id,
                     'conversation_id': conversation_id,
+                    'ingest_tier': ingest_tier["name"],
                     'filename': result.get('filename', filename),
                     'documents': result.get('documents', result.get('num_pages', 0)),
                     'num_pages': result.get('num_pages', result.get('documents', 0)),
@@ -385,14 +417,28 @@ def ingest():
             tmp.flush()
             tmp_path = tmp.name
 
-        task = ingest_pdf_task.delay(
-            file_path=tmp_path,
-            thread_id=thread_id,
-            filename=filename,
-            user_id=user_id,
-            conversation_id=conversation_id
+        task = ingest_pdf_task.apply_async(
+            kwargs={
+                "file_path": tmp_path,
+                "thread_id": thread_id,
+                "filename": filename,
+                "user_id": user_id,
+                "conversation_id": conversation_id,
+            },
+            queue=ingest_tier["queue"],
+            soft_time_limit=ingest_tier["soft_time_limit"],
+            time_limit=ingest_tier["time_limit"],
         )
-        logger.info(f"Started Celery task {task.id} for PDF ingestion: {filename} (thread_id: {thread_id})")
+        logger.info(
+            "Started Celery task %s for PDF ingestion: %s (thread_id: %s, tier=%s, queue=%s, limits=%ss/%ss)",
+            task.id,
+            filename,
+            thread_id,
+            ingest_tier["name"],
+            ingest_tier["queue"],
+            ingest_tier["soft_time_limit"],
+            ingest_tier["time_limit"],
+        )
         # Start a separate Celery task to extract and store headings for this thread
         try:
             started = False
@@ -436,7 +482,8 @@ def ingest():
             'status': 'processing',
             'thread_id': thread_id,
             'conversation_id': conversation_id,
-            'filename': filename
+            'filename': filename,
+            'ingest_tier': ingest_tier["name"],
         })
 
     except ValueError as e:
@@ -516,7 +563,13 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
         db.rollback()
 
 
-def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user_id: int):
+def _ingest_with_progress(
+    file_bytes: bytes,
+    thread_id: str,
+    filename: str,
+    user_id: int,
+    join_timeout_seconds: int = 300,
+):
     """
     Ingest PDF with Server-Sent Events (SSE) for real-time progress updates.
     """
@@ -596,7 +649,7 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
                     break
             
             # Wait for ingestion to complete
-            ingestion_thread.join(timeout=300)  # 5 minute timeout
+            ingestion_thread.join(timeout=max(30, int(join_timeout_seconds)))
             
             if result_container['error']:
                 error_msg = f"Error: {result_container['error']}"

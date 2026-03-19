@@ -141,6 +141,10 @@ _llm_cache = {}
 _llm_cache_lock = Lock()
 _thread_short_mode = {}
 _thread_short_mode_lock = Lock()
+_thread_token_pressure_mode = {}
+_thread_token_pressure_mode_lock = Lock()
+_thread_ingest_profiles = {}
+_thread_ingest_profiles_lock = Lock()
 
 
 def _activate_short_mode(thread_id: Optional[str], reason: str = "token_limit"):
@@ -173,6 +177,139 @@ def _consume_short_mode_turn(thread_id: Optional[str]) -> bool:
         if entry["remaining_turns"] <= 0:
             _thread_short_mode.pop(str(thread_id), None)
         return True
+
+
+def _activate_token_pressure_mode(thread_id: Optional[str], reason: str = "token_pressure"):
+    """Enable temporary tool-safe mode for token-pressure recovery."""
+    if not thread_id:
+        return
+    turns = int(os.getenv("RAG_TOKEN_PRESSURE_MODE_TURNS", "6"))
+    with _thread_token_pressure_mode_lock:
+        _thread_token_pressure_mode[str(thread_id)] = {
+            "remaining_turns": max(1, turns),
+            "reason": reason,
+            "updated_at": time.time(),
+        }
+
+
+def _consume_token_pressure_turn(thread_id: Optional[str]) -> bool:
+    """Consume one token-pressure turn if enabled."""
+    if not thread_id:
+        return False
+    with _thread_token_pressure_mode_lock:
+        entry = _thread_token_pressure_mode.get(str(thread_id))
+        if not entry:
+            return False
+        remaining = int(entry.get("remaining_turns", 0))
+        if remaining <= 0:
+            _thread_token_pressure_mode.pop(str(thread_id), None)
+            return False
+        entry["remaining_turns"] = remaining - 1
+        entry["updated_at"] = time.time()
+        if entry["remaining_turns"] <= 0:
+            _thread_token_pressure_mode.pop(str(thread_id), None)
+        return True
+
+
+def _cache_thread_ingest_profile(thread_id: str, profile_name: str, file_size_mb: float):
+    """Cache per-thread ingest profile so retrieval can tune k for large docs."""
+    if not thread_id:
+        return
+    with _thread_ingest_profiles_lock:
+        _thread_ingest_profiles[str(thread_id)] = {
+            "profile": profile_name,
+            "file_size_mb": float(file_size_mb),
+            "updated_at": time.time(),
+        }
+
+
+def _resolve_ingest_profile(file_size_mb: float) -> dict:
+    """
+    Choose ingest strategy by file size.
+    Small files keep higher-recall chunking, large files prioritize stability.
+    """
+    threshold_mb = float(os.getenv("RAG_LARGE_DOC_THRESHOLD_MB", "40"))
+    is_large = float(file_size_mb) > threshold_mb
+    if is_large:
+        return {
+            "name": "large",
+            "chunk_size": int(os.getenv("RAG_LARGE_CHUNK_SIZE", "3000")),
+            "chunk_overlap": int(os.getenv("RAG_LARGE_CHUNK_OVERLAP", "120")),
+            "max_chunks": int(os.getenv("RAG_LARGE_MAX_CHUNKS", "1800")),
+            "retrieval_k": int(os.getenv("RAG_LARGE_RETRIEVAL_K", "4")),
+            "threshold_mb": threshold_mb,
+        }
+    return {
+        "name": "standard",
+        "chunk_size": int(os.getenv("RAG_STANDARD_CHUNK_SIZE", "2200")),
+        "chunk_overlap": int(os.getenv("RAG_STANDARD_CHUNK_OVERLAP", "300")),
+        "max_chunks": int(os.getenv("RAG_STANDARD_MAX_CHUNKS", "0")),
+        "retrieval_k": int(os.getenv("RAG_STANDARD_RETRIEVAL_K", "6")),
+        "threshold_mb": threshold_mb,
+    }
+
+
+def _resolve_thread_retrieval_k(thread_id: str, user_id: int) -> int:
+    """
+    Resolve retrieval breadth (k) for a thread.
+    Priority: cached ingest profile -> page-count heuristic -> default.
+    """
+    default_k = int(os.getenv("RAG_STANDARD_RETRIEVAL_K", "6"))
+    try:
+        with _thread_ingest_profiles_lock:
+            entry = _thread_ingest_profiles.get(str(thread_id))
+        if entry and entry.get("profile") == "large":
+            return int(os.getenv("RAG_LARGE_RETRIEVAL_K", str(entry.get("retrieval_k", 4))))
+    except Exception:
+        pass
+
+    try:
+        db = get_db()
+        thread_row = db.query(RAGThread).filter_by(thread_id=str(thread_id), user_id=int(user_id)).first()
+        if thread_row:
+            num_pages = int(getattr(thread_row, "num_pages", 0) or 0)
+            large_page_threshold = int(os.getenv("RAG_LARGE_DOC_PAGE_THRESHOLD", "220"))
+            if num_pages >= large_page_threshold:
+                return int(os.getenv("RAG_LARGE_RETRIEVAL_K", "4"))
+    except Exception as e:
+        logger.debug("Could not resolve page-based retrieval k for thread %s: %s", thread_id, e)
+
+    return default_k
+
+
+def _apply_strict_response_cap(text: Any, short_mode: bool = False, token_pressure: bool = False) -> str:
+    """
+    Enforce a hard output cap under token pressure.
+    Keeps responses compact and reduces follow-up token pressure.
+    """
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    if not text.strip():
+        return text
+
+    max_chars = int(os.getenv("RAG_STRICT_RESPONSE_MAX_CHARS", "900"))
+    max_sentences = int(os.getenv("RAG_STRICT_RESPONSE_MAX_SENTENCES", "6"))
+
+    if short_mode:
+        max_chars = min(max_chars, int(os.getenv("RAG_SHORT_MODE_RESPONSE_MAX_CHARS", "520")))
+        max_sentences = min(max_sentences, int(os.getenv("RAG_SHORT_MODE_RESPONSE_MAX_SENTENCES", "4")))
+    if token_pressure:
+        max_chars = min(max_chars, int(os.getenv("RAG_TOKEN_PRESSURE_RESPONSE_MAX_CHARS", "420")))
+        max_sentences = min(max_sentences, int(os.getenv("RAG_TOKEN_PRESSURE_RESPONSE_MAX_SENTENCES", "3")))
+
+    compact = re.sub(r"\s+", " ", text).strip()
+    if len(compact) > max_chars:
+        compact = compact[:max_chars].rstrip(" ,.;:-")
+        compact += "..."
+
+    sentences = re.split(r"(?<=[.!?])\s+", compact)
+    if len(sentences) > max_sentences:
+        compact = " ".join(sentences[:max_sentences]).strip()
+        if not compact.endswith((".", "!", "?")):
+            compact += "..."
+    return compact
 
 
 def _prune_messages(messages, max_turns: int = 15):
@@ -630,6 +767,7 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
             self.steps_list = steps_list
             # Feature flag so we can safely switch between pure semantic and hybrid.
             self.use_hybrid = os.getenv("USE_HYBRID_RAG", "false").lower() in ("true", "1", "yes")
+            self.retrieval_k = _resolve_thread_retrieval_k(self.thread_id, self.user_id)
 
         def invoke(self, query: str) -> List[Document]:
             def _step(label: str) -> None:
@@ -650,7 +788,7 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
                     query_vector=query_vector,
                     thread_id=self.thread_id,
                     user_id=self.user_id,
-                    k=6,
+                    k=self.retrieval_k,
                 )
                 print("[RAG] hybrid_search returned %d chunks" % len(results))
                 logger.info(
@@ -667,7 +805,7 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
                     query_vector=query_vector,
                     thread_id=self.thread_id,
                     user_id=self.user_id,
-                    k=6,
+                    k=self.retrieval_k,
                 )
                 logger.info(
                     "RAG retrieval: similarity_search returned %d chunks for thread_id=%s",
@@ -722,12 +860,15 @@ def ingest_pdf(
 
     _start_time = time.time()
     _send_progress("init", 5, "Initializing PDF processing...")
+    file_size_mb = round(len(file_bytes) / (1024 * 1024), 2)
+    ingest_profile = _resolve_ingest_profile(file_size_mb)
 
     thread_id_str = str(thread_id)
     if user_id is None:
         user_id = _get_user_id_for_thread(thread_id_str)
     if user_id is None:
         raise ValueError("user_id is required; pass explicitly or ensure thread exists in DB")
+    _cache_thread_ingest_profile(thread_id_str, ingest_profile["name"], file_size_mb)
 
     safe_filename = filename or f"document_{thread_id_str}.pdf"
     safe_filename = "".join(c for c in safe_filename if c.isalnum() or c in "._- ")
@@ -866,15 +1007,27 @@ def ingest_pdf(
         except Exception as e:
             logger.warning("Could not save markdown export: %s", e)
 
-        _send_progress("splitting", 40, "Splitting document into chunks...")
-        # Reduce total chunk count by using larger chunks with lower overlap.
-        # This lowers ingestion load and context pressure during retrieval.
+        _send_progress(
+            "splitting",
+            40,
+            f"Splitting document into chunks using {ingest_profile['name']} profile...",
+        )
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=2200,
-            chunk_overlap=300,
+            chunk_size=ingest_profile["chunk_size"],
+            chunk_overlap=ingest_profile["chunk_overlap"],
             separators=["\n\n", "\n", " ", ""],
         )
         chunks = splitter.split_documents(docs)
+        max_chunks = int(ingest_profile.get("max_chunks", 0) or 0)
+        if max_chunks > 0 and len(chunks) > max_chunks:
+            logger.warning(
+                "Chunk cap applied for thread %s (%s MB): %s -> %s",
+                thread_id_str,
+                file_size_mb,
+                len(chunks),
+                max_chunks,
+            )
+            chunks = chunks[:max_chunks]
         _send_progress("splitting", 50, f"Created {len(chunks)} text chunks from {num_pages} pages")
 
         _send_progress("chunk_metadata", 55, "Enriching chunk metadata...")
@@ -1013,6 +1166,8 @@ def ingest_pdf(
             "embedding_model": EMBEDDING_MODEL_NAME,
             "embedding_dim": EMBEDDING_DIM,
             "markdown_filename": md_filename,
+            "ingest_profile": ingest_profile["name"],
+            "file_size_mb": file_size_mb,
             "processing_time_seconds": _elapsed_seconds,
         }
 
@@ -1996,6 +2151,9 @@ def chat_node(state: ChatState, config=None):
             thread_id_str = str(thread_id)
     _mark_step("resolve_thread_id")
     short_mode_active = _consume_short_mode_turn(thread_id_str)
+    token_pressure_active = _consume_token_pressure_turn(thread_id_str)
+    if token_pressure_active:
+        short_mode_active = True
 
     # Check if a PDF document exists for this thread (from DB)
     has_document = False
@@ -2397,11 +2555,20 @@ def chat_node(state: ChatState, config=None):
             content=system_message.content
             + "\n\nSHORT MODE ACTIVE: keep response very concise (max 4 short sentences)."
         )
+    if token_pressure_active:
+        system_message = SystemMessage(
+            content=system_message.content
+            + "\n\nTOKEN PRESSURE SAFE MODE: do NOT call tools this turn. "
+              "Respond directly and keep the answer within 2-3 short sentences."
+        )
 
     initial_max_messages = 7  # Start with 7 messages
     max_attempts = 4  # Try with 7, 5, 3, 1 messages
     if short_mode_active:
         initial_max_messages = 3
+        max_attempts = 2
+    if token_pressure_active:
+        initial_max_messages = 2
         max_attempts = 2
     
     def _is_token_error(error_msg: str) -> bool:
@@ -2562,7 +2729,7 @@ def chat_node(state: ChatState, config=None):
             
             # First get the main response.
             # If tool outputs are present, don't allow additional tool calls.
-            if tool_outputs_present:
+            if tool_outputs_present or token_pressure_active:
                 response = user_llm.invoke(messages, config=config)
             else:
                 response = user_llm_with_tools.invoke(messages, config=config)
@@ -2577,9 +2744,22 @@ def chat_node(state: ChatState, config=None):
             if tool_outputs_present and isinstance(response, AIMessage) and getattr(response, "tool_calls", None):
                 logger.warning("Suppressed additional tool calls after tool output to prevent recursion loops")
                 response = AIMessage(content=response.content if hasattr(response, "content") else str(response))
+            if token_pressure_active and isinstance(response, AIMessage) and getattr(response, "tool_calls", None):
+                logger.warning("Suppressed tool calls in token pressure mode")
+                response = AIMessage(content=response.content if hasattr(response, "content") else str(response))
 
             # Extract lesson text from AI response
             response_content = response.content if hasattr(response, 'content') else str(response)
+            if short_mode_active or token_pressure_active:
+                response_content = _apply_strict_response_cap(
+                    response_content,
+                    short_mode=short_mode_active,
+                    token_pressure=token_pressure_active,
+                )
+                try:
+                    response.content = response_content
+                except Exception:
+                    pass
             _mark_step("extract_response")
             
             # Try to get lesson state, but make it optional to save tokens and avoid rate limits
@@ -2786,6 +2966,9 @@ def chat_node(state: ChatState, config=None):
                 
                 if is_token_limit:
                     _activate_short_mode(thread_id_str, reason="tpm_limit")
+                    _activate_token_pressure_mode(thread_id_str, reason="tpm_limit")
+                    short_mode_active = True
+                    token_pressure_active = True
                     # For token limit errors, try with fewer messages if possible
                     if attempt < effective_max_attempts - 1:
                         logger.info(f"Groq token limit (TPM) error detected, retrying with fewer messages (attempt {attempt + 2})")
@@ -2915,6 +3098,9 @@ def chat_node(state: ChatState, config=None):
             # Check if it's a token error (context length)
             if _is_token_error(error_msg):
                 _activate_short_mode(thread_id_str, reason="context_limit")
+                _activate_token_pressure_mode(thread_id_str, reason="context_limit")
+                short_mode_active = True
+                token_pressure_active = True
                 # If this is not the last attempt, try with fewer messages
                 if attempt < effective_max_attempts - 1:
                     logger.info(f"Token error detected, retrying with fewer messages (current: {current_max}, next: {current_max - 2 if current_max > 2 else 1})")
