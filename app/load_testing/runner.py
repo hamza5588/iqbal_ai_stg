@@ -4,6 +4,7 @@ import logging
 import time
 import json
 import random
+import os
 import traceback
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -27,6 +28,7 @@ class LoadTestRunner:
         self.is_running = False
         self.stop_requested = False
         self._set_prompt = None  # Custom RAG prompt for teacher sets
+        self._active_user_count = 0
 
     def stop(self):
         """Signal the runner to stop"""
@@ -64,6 +66,7 @@ class LoadTestRunner:
                 # Limit users to concurrent_users count
                 if len(users) > self.config.concurrent_users:
                     users = users[:self.config.concurrent_users]
+                self._active_user_count = len(users)
                 
                 logger.info(f"Using {len(users)} users for the test")
 
@@ -150,6 +153,11 @@ class LoadTestRunner:
         logger.info(f"Worker {worker_id} started for user {user_email}")
         
         try:
+            # Apply startup staggering so login bursts do not instantly trigger edge rate limits.
+            startup_delay = self._get_worker_start_delay(worker_id)
+            if startup_delay > 0:
+                await asyncio.sleep(startup_delay)
+
             # Create a dedicated session for this user with a high-tolerance timeout (5 mins)
             # connect=10s catches dead servers quickly, total=300s allows slow AI/Ingest tasks.
             timeout = aiohttp.ClientTimeout(total=300, connect=10)
@@ -273,6 +281,37 @@ class LoadTestRunner:
                 return False
 
         return False
+
+    def _get_worker_start_delay(self, worker_id: int) -> float:
+        """
+        Calculate per-worker startup delay.
+        - Honors configured ramp_up_seconds when provided.
+        - Uses adaptive fallback when ramp_up_seconds=0 to avoid login thundering herd.
+        """
+        total_users = max(1, self._active_user_count)
+        if total_users <= 1:
+            return 0.0
+
+        # Explicit ramp-up from test config (preferred).
+        if self.config.ramp_up_seconds > 0:
+            return (worker_id / max(1, total_users - 1)) * float(self.config.ramp_up_seconds)
+
+        # Adaptive fallback for zero-ramp tests to reduce immediate 429 storms.
+        # Override via env if you want stricter/looser pacing.
+        target_login_rps = float(os.getenv("LOAD_TEST_TARGET_LOGIN_RPS", "40"))
+        max_auto_ramp = float(os.getenv("LOAD_TEST_MAX_AUTO_RAMP_SECONDS", "30"))
+        target_login_rps = max(1.0, target_login_rps)
+        auto_ramp_seconds = min(total_users / target_login_rps, max_auto_ramp)
+
+        # One-time visibility for operators.
+        if worker_id == 0 and auto_ramp_seconds > 0:
+            self._log(
+                f"ramp_up_seconds is 0; applying adaptive startup spread of {auto_ramp_seconds:.1f}s "
+                f"for {total_users} users (~{target_login_rps:.0f} login req/s target).",
+                level="WARNING",
+            )
+
+        return (worker_id / max(1, total_users - 1)) * auto_ramp_seconds
 
     async def _dispatch_scenario(self, session: aiohttp.ClientSession, user: TestUser, config: LoadTestConfig):
         """Dispatch execution to the appropriate scenario function"""
