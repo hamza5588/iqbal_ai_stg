@@ -1592,6 +1592,51 @@ def _persist_headings_for_thread(thread_id: str, user_id: int, topics: List[dict
 
     db = get_db()
     stored_count = 0
+
+    # DB columns for heading/normalized_heading are varchar(512); keep app-side cap
+    # slightly conservative and filter obvious prompt/instruction leakage.
+    max_heading_len = 512
+
+    def _clean_heading_candidate(value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        if not text:
+            return ""
+
+        # Normalize whitespace/newlines and remove surrounding quotes/backticks.
+        text = re.sub(r"\s+", " ", text).strip("`\"' ").strip()
+        if not text:
+            return ""
+
+        lower = text.lower()
+        # Filter common instruction/meta leakage from LLM outputs.
+        blocked_markers = (
+            "identify all possible headings",
+            "clean them by removing",
+            "assign the correct page number",
+            "format into json",
+            "instructions:",
+            "return your response as",
+            "pages to analyze",
+            "output:",
+        )
+        if any(marker in lower for marker in blocked_markers):
+            return ""
+
+        # Skip content that looks like serialized JSON/meta rather than a heading.
+        if ("{" in text and "}" in text) or ("[" in text and "]" in text):
+            return ""
+
+        # Keep within DB limits; trim gracefully.
+        if len(text) > max_heading_len:
+            text = text[:max_heading_len].rstrip()
+
+        # Very short leftovers are usually noise.
+        if len(text) < 3:
+            return ""
+        return text
+
     try:
         # Remove any stale headings for this thread/user
         db.query(RAGHeading).filter(
@@ -1600,11 +1645,11 @@ def _persist_headings_for_thread(thread_id: str, user_id: int, topics: List[dict
         ).delete()
 
         for item in topics or []:
-            heading_text = (item.get("topic") or item.get("heading") or "").strip()
+            heading_text = _clean_heading_candidate(item.get("topic") or item.get("heading"))
             if not heading_text:
                 continue
             page = item.get("page")
-            normalized = heading_text.lower()
+            normalized = heading_text.lower()[:max_heading_len]
             db.add(
                 RAGHeading(
                     thread_id=thread_id,
@@ -2362,6 +2407,9 @@ def chat_node(state: ChatState, config=None):
             f"- For identity-related queries , try rag_tool before marking irrelevant.\n"
             f"- If the question is irrelevant to the PDF, respond exactly with: "
             f"\"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
+            f"do not says in resposnce like that user is askling just answer user question do not repeat the user question" 
+            f"Provide direct, concise answers to user questions based on the uploaded PDF without any explanation of tool usage or internal reasoning."
+            f"when call the tool only answer the question question do not gave the tool extra details"
         )
 
         # In load-test mode, keep instructions compact to reduce input tokens and TPM pressure.
@@ -3138,7 +3186,7 @@ def _tool_router(state: ChatState):
         except Exception:
             return default
 
-    max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2))
+    max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
 
     # Turn-scoped tool routing:
     # Count tool rounds in this turn as the number of AI messages containing
