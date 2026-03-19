@@ -167,7 +167,7 @@ class Config:
     # RAG load-test flags
     # -------------------
     # Use `LOAD_TEST_MODE=true` in staging/load testing to reduce concurrency pressure.
-    LOAD_TEST_MODE = os.getenv('LOAD_TEST_MODE', 'true').lower() in ('true', '1', 'yes')
+    LOAD_TEST_MODE = os.getenv('LOAD_TEST_MODE', 'false').lower() in ('true', '1', 'yes')
 
     # Enable/disable headings extraction completely.
     # Normal users should keep headings enabled by default.
@@ -176,7 +176,7 @@ class Config:
     # When load testing, delay headings extraction so it doesn't contend with ingestion.
     DELAY_RAG_HEADINGS_FOR_LOAD_TEST = os.getenv(
         'DELAY_RAG_HEADINGS_FOR_LOAD_TEST',
-        'true' if (LOAD_TEST_MODE or ENV == 'staging') else 'false'
+        'false' if (LOAD_TEST_MODE or ENV == 'staging') else 'false'
     ).lower() in ('true', '1', 'yes')
 
     # Optional delay seconds before starting headings extraction in load-test mode.
