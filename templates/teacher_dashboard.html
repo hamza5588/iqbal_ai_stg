@@ -1420,6 +1420,20 @@
       background: #a1a1a1;
     }
 
+    /* Sidebar: keep scroll behavior but hide visible scrollbar (ChatGPT-like) */
+    #chatHistoryContainer,
+    #chatHistoryContainer-mobile {
+      scrollbar-width: none;      /* Firefox */
+      -ms-overflow-style: none;   /* IE/Edge legacy */
+    }
+
+    #chatHistoryContainer::-webkit-scrollbar,
+    #chatHistoryContainer-mobile::-webkit-scrollbar {
+      display: none;              /* Chrome/Safari/Opera */
+      width: 0;
+      height: 0;
+    }
+
     /* Lessons Table Styles */
     .lessons-table-container {
       background: white;
@@ -3904,6 +3918,15 @@
         }
 
         // Helper to create chat item HTML
+        function sidebarChatTitle(rawTitle) {
+          let title = (rawTitle || '').toString().trim();
+          if (!title) title = 'New Conversation';
+          if (/^chat\s*:/i.test(title)) {
+            title = title.replace(/^chat\s*:/i, '').trim() || 'New Conversation';
+          }
+          return `Chat: ${title}`;
+        }
+
         function createChatItemHTML(chat) {
           const isActive = chat.id === currentChatId ? 'active' : '';
           const snippet = chat.lastMessageSnippet ? escapeHtml(chat.lastMessageSnippet) : '';
@@ -3913,7 +3936,7 @@
             <div class="flex items-center justify-between">
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <p class="text-sm text-gray-900 truncate flex-1">${escapeHtml(chat.title)}</p>
+                  <p class="text-sm text-gray-900 truncate flex-1">${escapeHtml(sidebarChatTitle(chat.title))}</p>
                   ${unread}
                 </div>
                 <p class="text-xs text-gray-500 truncate">${snippet || formatTime(chat.timestamp)}</p>
@@ -5072,6 +5095,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         var metaConvId = (window._createLessonMeta && window._createLessonMeta.conversationId) || null;
         var newConvId = metaConvId != null ? metaConvId : window.currentRAGConversationId;
         if (newConvId != null) {
+          setBackendConversationTitle(newConvId, lessonTitle);
           loadChatHistoryFromBackend().then(function () {
             return loadChatPromise(newConvId);
           }).then(function () {
@@ -5105,8 +5129,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       async function showMyLessonsPage() {
         // Deactivate all tabs, then activate lessons tab
         deactivateAllTabs();
-        const lessonsTabBtn = document.getElementById('lessonsTabBtn');
-        if (lessonsTabBtn) lessonsTabBtn.classList.add('active-tab');
+        document.querySelectorAll('#lessonsTabBtn').forEach(function (btn) {
+          btn.classList.add('active-tab');
+        });
 
         // Hide chat input area and floating button
         const chatInputArea = document.getElementById('chatInputArea');
@@ -6211,6 +6236,34 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function normalizeLessonSidebarTitle(lessonName) {
+        let base = (lessonName || '').toString().trim();
+        if (!base) base = 'New Conversation';
+        base = base.replace(/^chat\s*:/i, '').trim();
+        return `Chat: ${base || 'New Conversation'}`;
+      }
+
+      async function setBackendConversationTitle(conversationId, lessonName) {
+        if (conversationId == null) return;
+        const title = normalizeLessonSidebarTitle(lessonName);
+        try {
+          const response = await fetch('/update_conversation_title/' + conversationId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ title: title })
+          });
+          if (!response.ok) return;
+          const chat = chatHistory.find(c => String(c.id) === String(conversationId));
+          if (chat) {
+            chat.title = title;
+            renderChatSidebar();
+          }
+        } catch (e) {
+          console.error('Failed to set conversation title', e);
+        }
+      }
+
       function startNewChat() {
         // ════════════════════════════════════════════════════════════════════════════════
         // SPECIFICATION #3: CHAT FINALIZATION
@@ -6280,12 +6333,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             <h4 class="font-display font-semibold text-surface-900 mb-2">🎯 New Teaching Session Started</h4>
             <p class="text-surface-700 mb-4">I'm ready to assist you with your teaching needs. What would you like to work on today?</p>
             <div class="grid grid-cols-2 gap-3">
-              <button onclick="showCreateLessonWizard()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
+              <button onclick="insertCreateLessonPrompt()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
                 <i class="fas fa-file-pdf mb-2"></i>
                 <p class="font-medium">Create Lesson</p>
                 <p class="text-sm opacity-75">From PDF upload</p>
               </button>
-              <button onclick="quickQuestion('Generate assessment questions for')" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
+              <button onclick="insertAssessmentPrompt()" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
                 <i class="fas fa-clipboard-check mb-2"></i>
                 <p class="font-medium">Assessments</p>
                 <p class="text-sm opacity-75">Create quizzes and tests</p>
@@ -6306,6 +6359,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       function loadChat(chatId) {
         window._loadChatPromise = Promise.resolve();
         window._loadChatResolve = null;
+        // Ensure "My Lessons" is not highlighted while a chat is open.
+        deactivateAllTabs();
         // 1. Clear previous context (no carryover from other chats)
         clearChatContext();
 
@@ -6393,12 +6448,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             <h4 class="font-display font-semibold text-surface-900 mb-2">🎯 New Teaching Session Started</h4>
             <p class="text-surface-700 mb-4">I'm ready to assist you with your teaching needs. What would you like to work on today?</p>
             <div class="grid grid-cols-2 gap-3">
-              <button onclick="showCreateLessonWizard()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
+              <button onclick="insertCreateLessonPrompt()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
                 <i class="fas fa-file-pdf mb-2"></i>
                 <p class="font-medium">Create Lesson</p>
                 <p class="text-sm opacity-75">From PDF upload</p>
               </button>
-              <button onclick="quickQuestion('Generate assessment questions for')" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
+              <button onclick="insertAssessmentPrompt()" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
                 <i class="fas fa-clipboard-check mb-2"></i>
                 <p class="font-medium">Assessments</p>
                 <p class="text-sm opacity-75">Create quizzes and tests</p>
@@ -6424,8 +6479,37 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           if (prependRAG) {
             renderRAGPreamble(options.uploaded_filename || options.uploadedFilename || 'document');
           }
-          if (messages && messages.length > 0) {
-            messages.forEach(function (msg) {
+          let effectiveMessages = Array.isArray(messages) ? messages.slice() : [];
+
+          // Keep the opening screen clean on RAG threads:
+          // remove bootstrap upload/context/success chatter that duplicates preamble.
+          if (prependRAG && effectiveMessages.length > 0) {
+            effectiveMessages = effectiveMessages.filter(function (msg) {
+              const roleRaw = String(msg.role || '').toLowerCase();
+              const role = roleRaw === 'bot' ? 'assistant' : roleRaw;
+              const content = String(msg.content || msg.message || '').trim();
+              if (!content) return false;
+
+              // User-side bootstrap messages
+              if (role === 'user') {
+                if (/^📚\s*(uploaded|uploading)\s+pdf:/i.test(content)) return false;
+                if (/^📝\s*context:/i.test(content)) return false;
+              }
+
+              // Assistant-side bootstrap messages
+              if (role === 'assistant') {
+                if (/successfully uploaded/i.test(content)) return false;
+                if (/pdf uploaded(\.|!)/i.test(content)) return false;
+                if (/i can now answer questions based on this material/i.test(content)) return false;
+                if (/what would you like to do\?/i.test(content)) return false;
+              }
+
+              return true;
+            });
+          }
+
+          if (effectiveMessages.length > 0) {
+            effectiveMessages.forEach(function (msg) {
               const role = msg.role === 'bot' ? 'assistant' : 'user';
               const content = msg.content || msg.message || '';
               renderMessageDOM(role, content);
@@ -6433,15 +6517,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           } else if (!prependRAG) {
             renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
           }
-
-          // Always scroll to the latest message after (re)loading a chat,
-          // including async backend loads that finish after initial page render.
-          if (typeof scrollToBottom === 'function') {
-            // Use rAF so layout has updated before scrolling.
-            requestAnimationFrame(function () {
-              scrollToBottom();
-            });
-          }
+          // Ensure reopened chats land at the latest message.
+          requestAnimationFrame(function () { scrollToBottom('auto'); });
         }
 
         if (isBackendConversationId) {
@@ -7209,6 +7286,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             window.currentRAGConversationId = conversationId;
             try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
           }
+          // Keep sidebar chat naming consistent for PDF chats.
+          const inferredLessonName = (file.name || 'New Conversation').replace(/\.pdf$/i, '').trim();
+          await setBackendConversationTitle(conversationId, inferredLessonName);
 
           // Close the upload modal
           const modal = document.querySelector('[onclick="processPDFUpload()"]')?.closest('.fixed');
@@ -8010,19 +8090,50 @@ To continue your learning journey:
         document.getElementById('messageInput').focus();
       }
 
+      function insertCreateLessonPrompt() {
+        quickQuestion(`Create a complete lesson draft using the uploaded document as the source of truth. Include:
+- Lesson title
+- Short summary
+- Learning objectives
+- Prerequisites/background
+- Key concepts
+- Step-by-step lesson sections
+- 2 teaching activities
+- Teacher notes
+Keep it grade-appropriate, structured from basic to advanced, and do not invent missing information.`);
+      }
+
+      function insertAssessmentPrompt() {
+        quickQuestion(`Create assessment material using the uploaded document and current lesson as the source of truth. Include:
+- 8 MCQs with 4 options, correct answer, and short explanation
+- 5 short-answer questions
+- 3 long-answer questions
+- Answer key
+- Difficulty level for each question: Easy / Medium / Hard
+Align everything with the lesson objectives and do not invent missing information.`);
+      }
+
       // Scroll to bottom of chat
-      function scrollToBottom() {
-        // Use scrollIntoView on the input element - more reliable than managing container scroll
-        const messageInput = document.getElementById('messageInput');
-        if (messageInput) {
-          // Scroll the input into view with smooth behavior
-          messageInput.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      function scrollToBottom(behavior) {
+        const mode = behavior || 'smooth';
+        const chatArea = document.getElementById('chatArea');
+        const chatMessages = document.getElementById('chatMessages');
+
+        if (chatArea) {
+          try {
+            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: mode });
+          } catch (e) {
+            chatArea.scrollTop = chatArea.scrollHeight;
+          }
         }
 
-        // Also try scrolling the chatArea as fallback
-        const chatArea = document.getElementById('chatArea');
-        if (chatArea) {
-          chatArea.scrollTop = chatArea.scrollHeight;
+        if (chatMessages && chatMessages.parentElement) {
+          const container = chatMessages.parentElement;
+          try {
+            container.scrollTo({ top: container.scrollHeight, behavior: mode });
+          } catch (e) {
+            container.scrollTop = container.scrollHeight;
+          }
         }
       }
 
@@ -8240,13 +8351,9 @@ To continue your learning journey:
       }
 
       function deactivateAllTabs() {
-        const chatTabBtn = document.getElementById('chatTabBtn');
-        const lessonsTabBtn = document.getElementById('lessonsTabBtn');
-        const promptTabBtn = document.getElementById('promptTabBtn');
-
-        if (chatTabBtn) chatTabBtn.classList.remove('active-tab');
-        if (lessonsTabBtn) lessonsTabBtn.classList.remove('active-tab');
-        if (promptTabBtn) promptTabBtn.classList.remove('active-tab');
+        document.querySelectorAll('#chatTabBtn, #lessonsTabBtn, #promptTabBtn').forEach(function (el) {
+          el.classList.remove('active-tab');
+        });
       }
 
       // Show Chat Tab
