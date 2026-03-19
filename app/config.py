@@ -139,7 +139,7 @@ class Config:
     # Set USE_CELERY_FOR_INGESTION=true in production/staging so PDF ingestion runs in Celery workers.
     # Upload then returns immediately with task_id; client polls for status. Avoids gateway timeouts (504)
     # and keeps web workers free for login/chat. Set to false for local dev (no Redis/Celery needed).
-    USE_CELERY_FOR_INGESTION = os.getenv('USE_CELERY_FOR_INGESTION', 'flase').lower() in ('true', '1')
+    USE_CELERY_FOR_INGESTION = os.getenv('USE_CELERY_FOR_INGESTION', 'false').lower() in ('true', '1')
     CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
     CELERY_ACCEPT_CONTENT = ['json']
@@ -158,7 +158,7 @@ class Config:
     # RAG load-test flags
     # -------------------
     # Use `LOAD_TEST_MODE=true` in staging/load testing to reduce concurrency pressure.
-    LOAD_TEST_MODE = os.getenv('LOAD_TEST_MODE', 'false').lower() in ('true', '1', 'yes')
+    LOAD_TEST_MODE = os.getenv('LOAD_TEST_MODE', 'true').lower() in ('true', '1', 'yes')
 
     # Enable/disable headings extraction completely.
     # Normal users should keep headings enabled by default.

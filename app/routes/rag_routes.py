@@ -186,6 +186,22 @@ def ingest():
         if not file.filename.lower().endswith('.pdf'):
             return jsonify({'error': 'Only PDF files are supported'}), 400
 
+        # Enforce a hard maximum upload size to avoid extremely large PDFs
+        # causing ingest timeouts under load (e.g. 90MB+ scanned documents).
+        # Default: 50 MB, configurable via MAX_RAG_PDF_MB.
+        import os
+        max_mb = int(os.getenv("MAX_RAG_PDF_MB", "50"))
+        file.seek(0, os.SEEK_END)
+        size_bytes = file.tell()
+        file.seek(0)
+        size_mb = size_bytes / (1024 * 1024)
+        if size_mb > max_mb:
+            return jsonify({
+                'error': f'PDF is too large for ingestion ({size_mb:.1f} MB). '
+                         f'Maximum allowed size is {max_mb} MB. '
+                         'Please upload a smaller or split document.'
+            }), 400
+
         # Get thread_id from request or create new thread
         # IMPORTANT: Each new PDF upload must get its own conversation and thread.
         # When create_new_thread is True, we never reuse the current conversation so we

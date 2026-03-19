@@ -170,6 +170,12 @@ def _prune_messages(messages, max_turns: int = 15):
     for human, ai in pruned_turns:
         pruned.append(human)
         pruned.append(ai)
+
+    # In load-test or staging environments, be more aggressive to avoid
+    # token/context errors under heavy concurrency.
+    if _LOAD_TEST_MODE and len(pruned_turns) > 6:
+        pruned = pruned[-12:]
+
     return pruned
 
 def get_cached_llm(user_id: int, api_key: str, provider: str):
@@ -542,7 +548,7 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
                     query_vector=query_vector,
                     thread_id=self.thread_id,
                     user_id=self.user_id,
-                    k=12,
+                    k=6,
                 )
                 print("[RAG] hybrid_search returned %d chunks" % len(results))
                 logger.info(
@@ -559,7 +565,7 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
                     query_vector=query_vector,
                     thread_id=self.thread_id,
                     user_id=self.user_id,
-                    k=12,
+                    k=6,
                 )
                 logger.info(
                     "RAG retrieval: similarity_search returned %d chunks for thread_id=%s",
@@ -759,9 +765,11 @@ def ingest_pdf(
             logger.warning("Could not save markdown export: %s", e)
 
         _send_progress("splitting", 40, "Splitting document into chunks...")
+        # Reduce total chunk count by using larger chunks with lower overlap.
+        # This lowers ingestion load and context pressure during retrieval.
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1600,
-            chunk_overlap=600,
+            chunk_size=2200,
+            chunk_overlap=300,
             separators=["\n\n", "\n", " ", ""],
         )
         chunks = splitter.split_documents(docs)
@@ -2820,15 +2828,50 @@ else:
 # -------------------
 # 8. Graph
 # -------------------
+
+
+def _tool_router(state: ChatState):
+    """
+    Decide whether to route to tools or end the graph.
+
+    - If the last AI message has tool_calls, route to the tools node.
+    - If recent messages already contain ToolMessage objects, do NOT
+      invoke tools again – this prevents chat_node <-> tools infinite
+      ping‑pong that can hit LangGraph's recursion_limit.
+    - Otherwise, end the graph and return the current state.
+    """
+    msgs = state.get("messages", []) or []
+    if not msgs:
+        return "__end__"
+
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    last = msgs[-1]
+    if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
+        return "tools"
+
+    recent = msgs[-6:]
+    if any(isinstance(m, ToolMessage) for m in recent):
+        return "__end__"
+
+    return "__end__"
+
+
 graph = StateGraph(ChatState)
 graph.add_node("chat_node", chat_node)
 graph.add_node("tools", tool_node)
+graph.add_node("__end__", lambda s: s)
 
 graph.add_edge(START, "chat_node")
-graph.add_conditional_edges("chat_node", tools_condition)
+graph.add_conditional_edges(
+    "chat_node",
+    _tool_router,
+    {"tools": "tools", "__end__": "__end__"},
+)
 graph.add_edge("tools", "chat_node")
 
-chatbot = graph.compile(checkpointer=checkpointer)
+_default_recursion_limit = int(os.getenv("RAG_RECURSION_LIMIT", "16"))
+chatbot = graph.compile(checkpointer=checkpointer, recursion_limit=_default_recursion_limit)
 
 # -------------------
 # 9. Helpers
