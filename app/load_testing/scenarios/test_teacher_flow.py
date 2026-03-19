@@ -124,6 +124,31 @@ async def run(
                     log_func(f"[{user.email}] Upload logic fail in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
                     return
             else:
+                body_text = ""
+                body_json = {}
+                try:
+                    body_json = await resp.json()
+                except Exception:
+                    try:
+                        body_text = await resp.text()
+                    except Exception:
+                        body_text = ""
+
+                # Expected guardrail: oversized PDFs are intentionally rejected by API.
+                # Treat as skipped user flow (not a platform failure) so load-test error
+                # metrics focus on true regressions.
+                error_code = (body_json or {}).get("code")
+                error_text = (body_json or {}).get("error") or body_text
+                if resp.status == 400 and (
+                    error_code == "PDF_TOO_LARGE"
+                    or "too large for ingestion" in (error_text or "").lower()
+                ):
+                    log_func(
+                        f"[{user.email}] Upload skipped in {upload_duration:.0f}ms: oversized document ({filename})",
+                        level="WARNING",
+                    )
+                    return
+
                 summary.failed_requests += 1
                 log_func(f"[{user.email}] Upload HTTP error in {upload_duration:.0f}ms: {resp.status}", level="ERROR")
                 return

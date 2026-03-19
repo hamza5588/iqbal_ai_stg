@@ -2367,7 +2367,8 @@ def chat_node(state: ChatState, config=None):
             )
 
     # Progressive message reduction on token errors
-    conversation_messages = _prune_messages(state["messages"], max_turns=15)
+    raw_messages = state.get("messages", []) or []
+    conversation_messages = _prune_messages(raw_messages, max_turns=15)
     if len(state.get("messages", [])) > int(os.getenv("RAG_SUMMARY_TRIGGER_MESSAGES", "20")):
         older_messages = state["messages"][:-8]
         compact_summary = _build_compact_history_summary(
@@ -2380,7 +2381,11 @@ def chat_node(state: ChatState, config=None):
 
     # If tool outputs are already present (we just ran tool_node), we must avoid
     # requesting more tool calls or LangGraph can loop until recursion_limit.
-    tool_outputs_present = any(isinstance(m, ToolMessage) for m in conversation_messages[-6:]) if conversation_messages else False
+    # IMPORTANT: detect on raw state, because pruned history can drop ToolMessage.
+    tool_outputs_present = any(isinstance(m, ToolMessage) for m in raw_messages[-8:]) if raw_messages else False
+    if tool_outputs_present and raw_messages:
+        # Keep the most recent raw window so tool call + tool output pairs remain visible.
+        conversation_messages = raw_messages[-12:]
     if tool_outputs_present:
         system_message = SystemMessage(
             content=system_message.content
@@ -3015,13 +3020,13 @@ def _tool_router(state: ChatState):
 
     from langchain_core.messages import AIMessage, ToolMessage
 
-    last = msgs[-1]
-    if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
-        return "tools"
-
     recent = msgs[-6:]
     if any(isinstance(m, ToolMessage) for m in recent):
         return "end"
+
+    last = msgs[-1]
+    if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
+        return "tools"
 
     return "end"
 
