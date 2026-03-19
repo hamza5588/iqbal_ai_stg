@@ -6,6 +6,7 @@ import tempfile
 import json
 import re
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Dict, Optional, TypedDict, List, Tuple
 
@@ -1810,6 +1811,63 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
         # Important for load-test: do NOT query the headings table unless
         # headings are actually marked ready. This avoids DB contention/timeouts.
         if not getattr(thread_row, "headings_ready", False):
+            # Recovery path:
+            # In staging/deployments, background heading extraction may fail or be delayed.
+            # If headings already exist, return them immediately and self-heal the thread flag.
+            existing_headings = (
+                db.query(RAGHeading)
+                .filter(
+                    RAGHeading.thread_id == thread_id,
+                    RAGHeading.user_id == user_id,
+                )
+                .order_by(RAGHeading.page.asc(), RAGHeading.id.asc())
+                .all()
+            )
+            if existing_headings:
+                topics = [{"topic": h.heading, "page": h.page} for h in existing_headings]
+                try:
+                    thread_row.headings_ready = True
+                    thread_row.headings_count = len(topics)
+                    thread_row.headings_last_scanned_at = datetime.utcnow()
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                return {
+                    "thread_id": thread_id,
+                    "topics": topics,
+                    "topics_count": len(topics),
+                    "method": "db_heading_cache_recovered",
+                    "chunks_scanned": getattr(thread_row, "num_pages", None),
+                }
+
+            # Optional on-demand recovery when background task is stuck.
+            # Enabled by default so heading-related questions don't stay pending forever.
+            enable_on_demand = os.getenv("RAG_HEADINGS_ON_DEMAND_RECOVERY", "true").lower() in ("true", "1", "yes")
+            if enable_on_demand:
+                try:
+                    recovery_wait = int(os.getenv("RAG_HEADINGS_RECOVERY_MAX_WAIT_SECONDS", "45"))
+                    recovery_result = extract_and_store_headings_for_thread(
+                        thread_id=thread_id,
+                        user_id=user_id,
+                        max_wait_seconds=max(5, recovery_wait),
+                        poll_interval_seconds=2.0,
+                    )
+                    topics = recovery_result.get("topics") or []
+                    return {
+                        "thread_id": thread_id,
+                        "topics": topics,
+                        "topics_count": len(topics),
+                        "method": "on_demand_heading_recovery",
+                        "chunks_scanned": recovery_result.get("chunks_scanned") or getattr(thread_row, "num_pages", None),
+                    }
+                except Exception as recovery_err:
+                    logger.warning(
+                        "On-demand heading recovery failed for thread_id=%s user_id=%s: %s",
+                        thread_id,
+                        user_id,
+                        recovery_err,
+                    )
+
             return {
                 "thread_id": thread_id,
                 "topics": [],
