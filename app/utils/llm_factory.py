@@ -271,6 +271,7 @@ def create_llm(
             openai_api_key=api_key_to_use,
             model_name=model,
             temperature=temp,
+            max_tokens=max_toks,
             timeout=time_out,
         )
         
@@ -300,6 +301,7 @@ def create_llm(
             groq_api_key=api_key_to_use,
             model_name=model,
             temperature=temp,
+            max_tokens=max_toks,
             timeout=time_out,
         )
         
@@ -318,6 +320,7 @@ def create_llm(
             openai_api_base=api_base,
             model_name=model,
             temperature=temp,
+            max_tokens=max_toks,
             timeout=time_out,
         )
         

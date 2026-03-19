@@ -178,6 +178,43 @@ def _prune_messages(messages, max_turns: int = 15):
 
     return pruned
 
+
+def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
+    """
+    Approximate token-budget trimming:
+    - keep the first SystemMessage (if present)
+    - keep most recent messages that fit in budget
+    Uses a 1 token ~= 4 chars approximation for speed.
+    """
+    if not messages:
+        return messages
+
+    token_budget_chars = max(400, int(max_input_tokens) * 4)
+    kept = []
+    total_chars = 0
+
+    system_msg = None
+    start_idx = 0
+    try:
+        from langchain_core.messages import SystemMessage
+        if isinstance(messages[0], SystemMessage):
+            system_msg = messages[0]
+            start_idx = 1
+            total_chars += len(getattr(system_msg, "content", "") or "")
+    except Exception:
+        pass
+
+    for msg in reversed(messages[start_idx:]):
+        content = getattr(msg, "content", "") or ""
+        msg_chars = len(content)
+        if total_chars + msg_chars > token_budget_chars:
+            break
+        kept.append(msg)
+        total_chars += msg_chars
+
+    kept.reverse()
+    return [system_msg, *kept] if system_msg is not None else kept
+
 def get_cached_llm(user_id: int, api_key: str, provider: str):
     """Get or create a cached LLM instance for a user"""
     cache_key = f"{user_id}_{provider}_{api_key[:10] if api_key else 'none'}"
@@ -235,13 +272,13 @@ def _get_api_key_from_admin_settings():
 # -------------------
 # Use dynamic LLM factory - RAG uses Groq or vLLM only (no OpenAI)
 # Note: RAG service uses a global LLM instance, but individual requests should use user-specific API keys
-def get_rag_llm(api_key=None, provider=None, user_id=None):
+def get_rag_llm(api_key=None, provider=None, user_id=None, **kwargs):
     """Get LLM for RAG service, using system settings or provided parameters.
     Prefers: (1) get_chat_model(user_id) then (2) Admin Panel API key from DB then (3) env."""
     # If user_id is provided, use get_chat_model which reads Admin Panel / user settings
     if user_id:
         try:
-            return get_chat_model(user_id=user_id, timeout=120, temperature=0.7)
+            return get_chat_model(user_id=user_id, timeout=120, temperature=0.7, **kwargs)
         except Exception as e:
             logger.warning(f"Error using get_chat_model with user_id {user_id}, falling back to Admin Panel key: {str(e)}")
     
@@ -275,7 +312,8 @@ def get_rag_llm(api_key=None, provider=None, user_id=None):
         temperature=0.7,
         api_key=api_key if provider in ['groq', 'vllm'] else None,
         provider=provider,
-        timeout=timeout_override
+        timeout=timeout_override,
+        **kwargs,
     )
 
 """
@@ -1935,14 +1973,28 @@ def chat_node(state: ChatState, config=None):
             with _llm_cache_lock:
                 if cache_key not in _llm_cache:
                     logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
-                    _llm_cache[cache_key] = get_chat_model(user_id=user_id, timeout=120, temperature=0.7)
+                    loadtest_max_tokens = int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
+                    runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))
+                    runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.7
+                    _llm_cache[cache_key] = get_chat_model(
+                        user_id=user_id,
+                        timeout=120,
+                        temperature=runtime_temp,
+                        max_tokens=runtime_max_tokens,
+                    )
                     logger.info(f"Created and cached {provider} LLM instance for user {user_id}")
                 else:
                     logger.debug(f"Reusing cached LLM instance for user {user_id} with provider {provider}")
                 user_llm = _llm_cache[cache_key]
         else:
             # No user_id, use fallback
-            user_llm = get_rag_llm(user_id=None, provider=provider, timeout=120, temperature=0.7)
+            user_llm = get_rag_llm(
+                user_id=None,
+                provider=provider,
+                timeout=120,
+                temperature=(0.3 if _LOAD_TEST_MODE else 0.7),
+                max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))),
+            )
         
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
@@ -1963,7 +2015,13 @@ def chat_node(state: ChatState, config=None):
             return {"messages": [error_response]}
         
         # Fallback to generic LLM
-        user_llm = get_rag_llm(user_id=None, provider=provider, timeout=120, temperature=0.7)
+        user_llm = get_rag_llm(
+            user_id=None,
+            provider=provider,
+            timeout=120,
+            temperature=(0.3 if _LOAD_TEST_MODE else 0.7),
+            max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))),
+        )
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
         _mark_step("init_llm_fallback")
@@ -2195,6 +2253,19 @@ def chat_node(state: ChatState, config=None):
 
 )
 
+        # In load-test mode, keep instructions compact to reduce input tokens and TPM pressure.
+        if _LOAD_TEST_MODE:
+            rag_instructions = (
+                f"Use the uploaded PDF ({filename}) as primary source.\n"
+                f"- For page-specific questions, call get_page_tool(page=<n>, thread_id='{thread_id}').\n"
+                f"- For topics/outline/chapters, call list_topics_whole_doc_tool(thread_id='{thread_id}').\n"
+                f"- Otherwise call rag_tool(query=<user_question>, thread_id='{thread_id}').\n"
+                f"- Keep replies concise: 4-8 sentences unless user explicitly asks for detailed lesson.\n"
+                f"- Do not call tools repeatedly in one turn after getting tool results.\n"
+                f"- If question is irrelevant to PDF, reply exactly: "
+                f"\"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
+            )
+
         # Combine custom prompt with default RAG instructions
         if custom_prompt:
             # Custom prompt + default RAG instructions
@@ -2387,6 +2458,9 @@ def chat_node(state: ChatState, config=None):
             current_max = 1
         
         messages = _prepare_messages(current_max)
+        # Apply a hard input-budget trim to reduce token-limit failures.
+        max_input_tokens = int(os.getenv("RAG_MAX_INPUT_TOKENS_LOAD_TEST", "2200")) if _LOAD_TEST_MODE else int(os.getenv("RAG_MAX_INPUT_TOKENS", "4200"))
+        messages = _trim_messages_for_token_budget(messages, max_input_tokens=max_input_tokens)
         
         try:
             # Make sequential calls to avoid rate limits
@@ -2405,6 +2479,12 @@ def chat_node(state: ChatState, config=None):
             # Record success to reset error count
             if provider == 'groq':
                 groq_rate_limiter.record_success()
+
+            # If tool outputs already exist for this turn, force-disable any
+            # additional tool calls to avoid chat_node <-> tools recursion loops.
+            if tool_outputs_present and isinstance(response, AIMessage) and getattr(response, "tool_calls", None):
+                logger.warning("Suppressed additional tool calls after tool output to prevent recursion loops")
+                response = AIMessage(content=response.content if hasattr(response, "content") else str(response))
 
             # Extract lesson text from AI response
             response_content = response.content if hasattr(response, 'content') else str(response)

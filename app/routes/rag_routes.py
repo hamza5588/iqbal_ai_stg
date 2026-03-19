@@ -803,8 +803,8 @@ def chat():
                 "configurable": {
                     "thread_id": thread_id
                 },
-                # Defensive: prevent endless tool loops from crashing the endpoint.
-                "recursion_limit": 50
+                # Defensive: keep recursion bounded under load.
+                "recursion_limit": 16
             }
             # #region agent log
             try:
