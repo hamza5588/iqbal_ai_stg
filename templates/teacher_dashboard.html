@@ -4629,12 +4629,27 @@
 
       // Graceful cancel for create-lesson upload: abort in-flight request or revoke Celery task, then close modal
       function cancelCreateLessonUpload() {
+        window._ingestCancelRequested = true;
         if (window._ingestTaskId) {
           fetch('/api/rag/ingest/cancel/' + window._ingestTaskId, { method: 'POST', credentials: 'include' }).catch(function() {});
-          window._ingestCancelRequested = true;
         }
         if (window._ingestAbortController) {
           window._ingestAbortController.abort();
+        }
+        // Preserve the user's currently opened chat/thread after cancellation.
+        if (Object.prototype.hasOwnProperty.call(window, '_ingestPrevThreadId')) {
+          window.currentRAGThreadId = window._ingestPrevThreadId || null;
+          try {
+            if (window.currentRAGThreadId) localStorage.setItem('teacher_currentRAGThreadId', window.currentRAGThreadId);
+            else localStorage.removeItem('teacher_currentRAGThreadId');
+          } catch (e) {}
+        }
+        if (Object.prototype.hasOwnProperty.call(window, '_ingestPrevConversationId')) {
+          window.currentRAGConversationId = window._ingestPrevConversationId != null ? window._ingestPrevConversationId : null;
+          try {
+            if (window.currentRAGConversationId != null) localStorage.setItem('teacher_currentRAGConversationId', String(window.currentRAGConversationId));
+            else localStorage.removeItem('teacher_currentRAGConversationId');
+          } catch (e) {}
         }
         closeCreateLessonModal();
       }
@@ -4652,10 +4667,15 @@
           closeCreateLessonModal();
           return;
         }
+        // Snapshot currently opened chat so cancel never hijacks user context.
+        window._ingestPrevThreadId = window.currentRAGThreadId || null;
+        window._ingestPrevConversationId = window.currentRAGConversationId != null ? window.currentRAGConversationId : null;
         window._ingestAbortController = new AbortController();
         window._ingestTaskId = null;
         window._ingestCancelRequested = false;
         window._ingestCompletedSuccessfully = false;
+        let pendingThreadId = null;
+        let pendingConversationId = null;
         const formData = new FormData();
         formData.append('file', file);
         formData.append('create_new_thread', 'true');
@@ -4692,11 +4712,15 @@
           const data = await response.json().catch(() => ({}));
           let threadId = data.thread_id || null;
           let conversationId = data.conversation_id != null ? data.conversation_id : null;
+          pendingThreadId = threadId;
+          pendingConversationId = conversationId;
           if (data.task_id && data.status === 'processing') {
             window._ingestTaskId = data.task_id;
             if (progressStatus) progressStatus.textContent = 'Processing in background...';
             threadId = data.thread_id || null;
             conversationId = data.conversation_id != null ? data.conversation_id : null;
+            pendingThreadId = threadId;
+            pendingConversationId = conversationId;
             const taskId = data.task_id;
             const pollMax = 120;
             for (let i = 0; i < pollMax; i++) {
@@ -4722,6 +4746,8 @@
               if (statusData.status === 'success') {
                 threadId = statusData.thread_id || threadId;
                 conversationId = statusData.conversation_id != null ? statusData.conversation_id : conversationId;
+                pendingThreadId = threadId;
+                pendingConversationId = conversationId;
                 window._ingestCompletedSuccessfully = true;
                 break;
               }
@@ -4732,23 +4758,33 @@
               }
             }
           }
-          if (threadId) {
-            window.currentRAGThreadId = threadId;
-            try { localStorage.setItem('teacher_currentRAGThreadId', threadId); } catch (e) {}
-          }
-          if (conversationId != null) {
-            window.currentRAGConversationId = conversationId;
-            try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
-            if (window._createLessonMeta) {
-              window._createLessonMeta.conversationId = conversationId;
-              window._createLessonMeta.threadId = threadId;
+          const ingestSuccess = !window._ingestCancelRequested && (window._ingestCompletedSuccessfully || (!data.task_id && threadId)) && threadId;
+
+          // Commit new thread/conversation only after confirmed success.
+          if (ingestSuccess) {
+            if (threadId) {
+              window.currentRAGThreadId = threadId;
+              try { localStorage.setItem('teacher_currentRAGThreadId', threadId); } catch (e) {}
             }
-          }
-          if (!window._ingestCancelRequested && (window._ingestCompletedSuccessfully || (!data.task_id && threadId)) && threadId) {
+            if (conversationId != null) {
+              window.currentRAGConversationId = conversationId;
+              try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
+              if (window._createLessonMeta) {
+                window._createLessonMeta.conversationId = conversationId;
+                window._createLessonMeta.threadId = threadId;
+              }
+            }
             setTimeout(() => {
               showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
             }, 500);
           } else {
+            // Best-effort cleanup for cancelled thread so it cannot be used accidentally.
+            if (window._ingestCancelRequested && pendingThreadId) {
+              fetch('/api/rag/thread/' + encodeURIComponent(pendingThreadId), {
+                method: 'DELETE',
+                credentials: 'include'
+              }).catch(function() {});
+            }
             closeCreateLessonModal();
           }
         } catch (e) {
