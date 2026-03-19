@@ -77,16 +77,16 @@ def _get_ingest_tier(file_size_mb: float) -> dict:
         return {
             "name": "large",
             "queue": os.getenv("RAG_INGEST_LARGE_QUEUE", "ingest_large"),
-            "soft_time_limit": int(os.getenv("RAG_INGEST_LARGE_SOFT_TIME_LIMIT", "3300")),
-            "time_limit": int(os.getenv("RAG_INGEST_LARGE_TIME_LIMIT", "3600")),
-            "stream_join_timeout": int(os.getenv("RAG_INGEST_LARGE_STREAM_TIMEOUT", "900")),
+            "soft_time_limit": int(os.getenv("RAG_INGEST_LARGE_SOFT_TIME_LIMIT", "5400")),
+            "time_limit": int(os.getenv("RAG_INGEST_LARGE_TIME_LIMIT", "6000")),
+            "stream_join_timeout": int(os.getenv("RAG_INGEST_LARGE_STREAM_TIMEOUT", "1800")),
         }
     return {
         "name": "standard",
         "queue": os.getenv("RAG_INGEST_STANDARD_QUEUE", "ingest"),
-        "soft_time_limit": int(os.getenv("RAG_INGEST_STANDARD_SOFT_TIME_LIMIT", "1500")),
-        "time_limit": int(os.getenv("RAG_INGEST_STANDARD_TIME_LIMIT", "1800")),
-        "stream_join_timeout": int(os.getenv("RAG_INGEST_STANDARD_STREAM_TIMEOUT", "300")),
+        "soft_time_limit": int(os.getenv("RAG_INGEST_STANDARD_SOFT_TIME_LIMIT", "2400")),
+        "time_limit": int(os.getenv("RAG_INGEST_STANDARD_TIME_LIMIT", "2700")),
+        "stream_join_timeout": int(os.getenv("RAG_INGEST_STANDARD_STREAM_TIMEOUT", "600")),
     }
 
 
@@ -256,6 +256,9 @@ def _get_thread_id_for_conversation(user_id: int, conversation_id: int):
     """
     Resolve the RAG thread_id for a given conversation (one thread per conversation).
     Returns the most recent thread whose thread_id matches user_X_conv_Y_*.
+    NOTE: Do not require has_document=True here; under heavy async load,
+    the worker may finish chunk writes before the thread flag update commits.
+    Chat flow already validates/repairs has_document based on chunk presence.
     """
     db = get_db()
     prefix = f"user_{user_id}_conv_{conversation_id}_"
@@ -264,7 +267,6 @@ def _get_thread_id_for_conversation(user_id: int, conversation_id: int):
         .filter(
             RAGThread.user_id == user_id,
             RAGThread.thread_id.like(prefix + "%"),
-            RAGThread.has_document == True,
         )
         .order_by(RAGThread.created_at.desc())
         .first()
@@ -478,6 +480,14 @@ def ingest():
         # Use Celery for background processing (production).
         # To keep Redis payloads small and avoid broker memory pressure under load,
         # we write the upload to a temporary file and pass only the file path.
+        # Pre-create/update the thread row before queueing so conversation->thread
+        # resolution is available immediately even if worker-side DB flag update
+        # is delayed or transiently fails under load.
+        try:
+            _save_thread_to_db(user_id, thread_id, filename, ingest_result=None)
+        except Exception:
+            logger.warning("Failed to precreate thread row for thread_id=%s", thread_id, exc_info=True)
+
         tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR") or "/app/tmp"
         os.makedirs(tmp_dir, exist_ok=True)
         tmp_kwargs = {"delete": False, "suffix": ".pdf", "dir": tmp_dir}
