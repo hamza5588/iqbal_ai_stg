@@ -14,7 +14,7 @@ from app.utils.rag_service import (
     MARKDOWN_EXPORTS_DIR,
 )
 from app.utils.db import get_db
-from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk
+from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
 from app.tasks.ingest_tasks import ingest_pdf_task, extract_headings_task
 from langchain_core.messages import HumanMessage
@@ -29,6 +29,7 @@ import base64
 import tempfile
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
+_CANCELLED_UPLOAD_FILENAME = "__CANCELLED_UPLOAD__"
 
 # Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
 _user_chat_locks = {}
@@ -915,6 +916,14 @@ def chat():
                 'thread_id': thread_id
             }), 400
 
+        if (getattr(thread_row, 'filename', None) or "") == _CANCELLED_UPLOAD_FILENAME:
+            logger.info("RAG chat blocked: thread_id=%s was marked as cancelled upload", thread_id)
+            return jsonify({
+                'error': 'This PDF upload was cancelled. Please upload the document again before asking questions.',
+                'code': 'UPLOAD_CANCELLED',
+                'thread_id': thread_id
+            }), 400
+
         if not getattr(thread_row, 'has_document', False):
             # Auto-repair: if chunks exist in DB, ingest completed but has_document was never set
             chunk_count = db.query(RAGChunk).filter_by(thread_id=thread_id, user_id=user_id).count()
@@ -1162,12 +1171,80 @@ def cancel_ingest(task_id):
             return jsonify({
                 'error': 'Cancel is not available. PDF ingestion is running in-process (Celery is disabled).'
             }), 400
+        payload = request.get_json(silent=True) or {}
+        provided_thread_id = (
+            payload.get('thread_id')
+            or request.form.get('thread_id')
+            or request.args.get('thread_id')
+        )
+        thread_id = str(provided_thread_id).strip() if provided_thread_id else None
+        if thread_id and not _validate_thread_id(thread_id, session['user_id']):
+            return jsonify({'error': 'Access denied. You can only cancel your own thread uploads.'}), 403
+
         task = ingest_pdf_task.AsyncResult(task_id)
-        if task.state not in ('PENDING', 'PROCESSING', 'RETRY'):
-            return jsonify({'message': 'Task already finished or not found', 'task_id': task_id}), 200
-        task.revoke(terminate=True)
-        logger.info(f"User {session['user_id']} cancelled ingest task {task_id}")
-        return jsonify({'message': 'Upload cancelled', 'task_id': task_id, 'status': 'revoked'}), 200
+        if task.state in ('PENDING', 'PROCESSING', 'RETRY'):
+            task.revoke(terminate=True)
+
+        cleanup_performed = False
+        if thread_id:
+            db = get_db()
+            try:
+                # Persist a cancellation marker so late worker completion cannot resurrect this thread.
+                thread_row = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=session['user_id']).first()
+                now = datetime.utcnow()
+                if thread_row:
+                    thread_row.has_document = False
+                    thread_row.doc_count = 0
+                    thread_row.num_pages = None
+                    thread_row.headings_ready = False
+                    thread_row.headings_count = 0
+                    thread_row.filename = _CANCELLED_UPLOAD_FILENAME
+                    thread_row.updated_at = now
+                else:
+                    db.add(RAGThread(
+                        user_id=session['user_id'],
+                        thread_id=thread_id,
+                        name=f"Cancelled Upload {now.strftime('%Y-%m-%d %H:%M')}",
+                        filename=_CANCELLED_UPLOAD_FILENAME,
+                        has_document=False,
+                        doc_count=0,
+                        created_at=now,
+                        updated_at=now,
+                    ))
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.warning("Failed to persist cancellation marker for thread_id=%s", thread_id, exc_info=True)
+
+            # Best-effort cleanup of already-written data.
+            try:
+                delete_thread(thread_id)
+            except Exception:
+                logger.warning("Failed vector/file cleanup for cancelled thread_id=%s", thread_id, exc_info=True)
+            try:
+                db.query(RAGChunk).filter_by(thread_id=thread_id, user_id=session['user_id']).delete(synchronize_session=False)
+                db.query(RAGHeading).filter_by(thread_id=thread_id, user_id=session['user_id']).delete(synchronize_session=False)
+                db.commit()
+                cleanup_performed = True
+            except Exception:
+                db.rollback()
+                logger.warning("Failed DB chunk/heading cleanup for cancelled thread_id=%s", thread_id, exc_info=True)
+
+        logger.info(
+            "User %s cancelled ingest task %s (thread_id=%s, state=%s, cleanup_performed=%s)",
+            session['user_id'],
+            task_id,
+            thread_id,
+            task.state,
+            cleanup_performed,
+        )
+        return jsonify({
+            'message': 'Upload cancelled',
+            'task_id': task_id,
+            'status': 'revoked',
+            'thread_id': thread_id,
+            'cleanup_performed': cleanup_performed
+        }), 200
     except Exception as e:
         logger.error(f"Error cancelling ingest task: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
@@ -1253,6 +1330,23 @@ def get_ingest_status(task_id):
             warmup_rag_embeddings()
             result = task.result
             thread_id = result.get('thread_id')
+            if thread_id:
+                try:
+                    db = get_db()
+                    cancelled_row = db.query(RAGThread).filter_by(
+                        thread_id=thread_id,
+                        user_id=user_id,
+                        filename=_CANCELLED_UPLOAD_FILENAME
+                    ).first()
+                    if cancelled_row:
+                        return jsonify({
+                            'task_id': task_id,
+                            'status': 'revoked',
+                            'state': 'REVOKED',
+                            'message': 'Task was cancelled'
+                        })
+                except Exception:
+                    logger.warning("Could not verify cancelled marker for task_id=%s thread_id=%s", task_id, thread_id, exc_info=True)
             response = {
                 'task_id': task_id,
                 'status': 'success',
