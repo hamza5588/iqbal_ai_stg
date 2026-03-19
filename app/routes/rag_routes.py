@@ -33,12 +33,36 @@ bp = Blueprint('rag', __name__)
 # Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
 _user_chat_locks = {}
 _locks_lock = threading.Lock()
+_user_chat_rate = {}
+_rate_lock = threading.Lock()
 
 def _get_user_chat_lock(user_id):
     with _locks_lock:
         if user_id not in _user_chat_locks:
             _user_chat_locks[user_id] = threading.Lock()
         return _user_chat_locks[user_id]
+
+
+def _check_and_record_user_chat_rate(user_id):
+    """
+    Per-user burst throttling. Returns (allowed: bool, retry_after_sec: int).
+    Uses a sliding window with conservative defaults to protect backend stability.
+    """
+    max_requests = int(os.getenv("RAG_USER_RATE_LIMIT_COUNT", "6"))
+    window_seconds = int(os.getenv("RAG_USER_RATE_LIMIT_WINDOW_SECONDS", "10"))
+    now = time.time()
+    with _rate_lock:
+        history = _user_chat_rate.get(user_id, [])
+        cutoff = now - window_seconds
+        history = [ts for ts in history if ts >= cutoff]
+        if len(history) >= max_requests:
+            oldest = history[0]
+            retry_after = max(1, int(window_seconds - (now - oldest)))
+            _user_chat_rate[user_id] = history
+            return False, retry_after
+        history.append(now)
+        _user_chat_rate[user_id] = history
+    return True, 0
 
 
 def _strip_lesson_finalization_from_response(text):
@@ -785,6 +809,14 @@ def chat():
                     'code': 'NO_DOCUMENT',
                     'thread_id': thread_id
                 }), 400
+
+        allowed, retry_after = _check_and_record_user_chat_rate(user_id)
+        if not allowed:
+            return jsonify({
+                'error': f'Too many requests in a short time. Please wait {retry_after} seconds and try again.',
+                'code': 'USER_RATE_LIMITED',
+                'retry_after': retry_after,
+            }), 429
 
         # One message at a time per user: enforce a per-user lock with a bounded wait.
         # This prevents "zombie" locks from immediately causing 429s after upstream timeouts,

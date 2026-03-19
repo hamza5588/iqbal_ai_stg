@@ -139,6 +139,40 @@ groq_rate_limiter = GroqRateLimiter()
 # -------------------
 _llm_cache = {}
 _llm_cache_lock = Lock()
+_thread_short_mode = {}
+_thread_short_mode_lock = Lock()
+
+
+def _activate_short_mode(thread_id: Optional[str], reason: str = "token_limit"):
+    """Enable temporary low-token response mode for a thread."""
+    if not thread_id:
+        return
+    turns = int(os.getenv("RAG_SHORT_MODE_TURNS", "8"))
+    with _thread_short_mode_lock:
+        _thread_short_mode[str(thread_id)] = {
+            "remaining_turns": max(1, turns),
+            "reason": reason,
+            "updated_at": time.time(),
+        }
+
+
+def _consume_short_mode_turn(thread_id: Optional[str]) -> bool:
+    """Consume one short-mode turn if enabled; returns whether short-mode is active for this turn."""
+    if not thread_id:
+        return False
+    with _thread_short_mode_lock:
+        entry = _thread_short_mode.get(str(thread_id))
+        if not entry:
+            return False
+        remaining = int(entry.get("remaining_turns", 0))
+        if remaining <= 0:
+            _thread_short_mode.pop(str(thread_id), None)
+            return False
+        entry["remaining_turns"] = remaining - 1
+        entry["updated_at"] = time.time()
+        if entry["remaining_turns"] <= 0:
+            _thread_short_mode.pop(str(thread_id), None)
+        return True
 
 
 def _prune_messages(messages, max_turns: int = 15):
@@ -214,6 +248,36 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
 
     kept.reverse()
     return [system_msg, *kept] if system_msg is not None else kept
+
+
+def _build_compact_history_summary(messages, max_items: int = 10, max_chars: int = 900) -> str:
+    """
+    Build a compact, deterministic summary of older chat turns.
+    Avoids another model call and keeps token usage predictable.
+    """
+    if not messages:
+        return ""
+    lines = []
+    chars = 0
+    for msg in messages:
+        role = getattr(msg, "type", "") or getattr(msg, "role", "")
+        content = (getattr(msg, "content", "") or "").strip().replace("\n", " ")
+        if not content:
+            continue
+        if "tool" in str(role).lower():
+            continue
+        prefix = "U" if "human" in str(role).lower() or "user" in str(role).lower() else "A"
+        snippet = content[:120]
+        line = f"{prefix}: {snippet}"
+        if chars + len(line) > max_chars:
+            break
+        lines.append(line)
+        chars += len(line)
+        if len(lines) >= max_items:
+            break
+    if not lines:
+        return ""
+    return "Conversation context (older turns):\n" + "\n".join(lines)
 
 def get_cached_llm(user_id: int, api_key: str, provider: str):
     """Get or create a cached LLM instance for a user"""
@@ -1931,6 +1995,7 @@ def chat_node(state: ChatState, config=None):
         if thread_id:
             thread_id_str = str(thread_id)
     _mark_step("resolve_thread_id")
+    short_mode_active = _consume_short_mode_turn(thread_id_str)
 
     # Check if a PDF document exists for this thread (from DB)
     has_document = False
@@ -1969,13 +2034,16 @@ def chat_node(state: ChatState, config=None):
         # Use cached LLM instance to avoid recreating on every call
         if user_id:
             # Include provider in cache key to ensure correct provider is used
-            cache_key = f"{user_id}_{provider}_factory"
+            cache_key = f"{user_id}_{provider}_factory_{'short' if short_mode_active else 'normal'}"
             with _llm_cache_lock:
                 if cache_key not in _llm_cache:
                     logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
                     loadtest_max_tokens = int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
                     runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))
                     runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.7
+                    if short_mode_active:
+                        runtime_max_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128"))
+                        runtime_temp = 0.2
                     _llm_cache[cache_key] = get_chat_model(
                         user_id=user_id,
                         timeout=120,
@@ -2019,8 +2087,8 @@ def chat_node(state: ChatState, config=None):
             user_id=None,
             provider=provider,
             timeout=120,
-            temperature=(0.3 if _LOAD_TEST_MODE else 0.7),
-            max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))),
+            temperature=(0.2 if short_mode_active else (0.3 if _LOAD_TEST_MODE else 0.7)),
+            max_tokens=(int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128")) if short_mode_active else (int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768")))),
         )
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
@@ -2300,6 +2368,15 @@ def chat_node(state: ChatState, config=None):
 
     # Progressive message reduction on token errors
     conversation_messages = _prune_messages(state["messages"], max_turns=15)
+    if len(state.get("messages", [])) > int(os.getenv("RAG_SUMMARY_TRIGGER_MESSAGES", "20")):
+        older_messages = state["messages"][:-8]
+        compact_summary = _build_compact_history_summary(
+            older_messages,
+            max_items=int(os.getenv("RAG_SUMMARY_MAX_ITEMS", "10")),
+            max_chars=int(os.getenv("RAG_SUMMARY_MAX_CHARS", "900")),
+        )
+        if compact_summary:
+            system_message = SystemMessage(content=system_message.content + "\n\n" + compact_summary)
 
     # If tool outputs are already present (we just ran tool_node), we must avoid
     # requesting more tool calls or LangGraph can loop until recursion_limit.
@@ -2310,9 +2387,17 @@ def chat_node(state: ChatState, config=None):
             + "\n\nIMPORTANT: Tool outputs are already included in the conversation above. "
               "Do NOT call any tools again—answer directly using the provided tool results."
         )
+    if short_mode_active:
+        system_message = SystemMessage(
+            content=system_message.content
+            + "\n\nSHORT MODE ACTIVE: keep response very concise (max 4 short sentences)."
+        )
 
     initial_max_messages = 7  # Start with 7 messages
     max_attempts = 4  # Try with 7, 5, 3, 1 messages
+    if short_mode_active:
+        initial_max_messages = 3
+        max_attempts = 2
     
     def _is_token_error(error_msg: str) -> bool:
         """Check if error is related to token/context length limits."""
@@ -2460,6 +2545,8 @@ def chat_node(state: ChatState, config=None):
         messages = _prepare_messages(current_max)
         # Apply a hard input-budget trim to reduce token-limit failures.
         max_input_tokens = int(os.getenv("RAG_MAX_INPUT_TOKENS_LOAD_TEST", "2200")) if _LOAD_TEST_MODE else int(os.getenv("RAG_MAX_INPUT_TOKENS", "4200"))
+        if short_mode_active:
+            max_input_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_INPUT_TOKENS", "1200"))
         messages = _trim_messages_for_token_budget(messages, max_input_tokens=max_input_tokens)
         
         try:
@@ -2693,6 +2780,7 @@ def chat_node(state: ChatState, config=None):
                 is_token_limit = 'tokens per minute' in error_msg.lower() or 'TPM' in error_msg or '413' in error_msg
                 
                 if is_token_limit:
+                    _activate_short_mode(thread_id_str, reason="tpm_limit")
                     # For token limit errors, try with fewer messages if possible
                     if attempt < effective_max_attempts - 1:
                         logger.info(f"Groq token limit (TPM) error detected, retrying with fewer messages (attempt {attempt + 2})")
@@ -2821,6 +2909,7 @@ def chat_node(state: ChatState, config=None):
             
             # Check if it's a token error (context length)
             if _is_token_error(error_msg):
+                _activate_short_mode(thread_id_str, reason="context_limit")
                 # If this is not the last attempt, try with fewer messages
                 if attempt < effective_max_attempts - 1:
                     logger.info(f"Token error detected, retrying with fewer messages (current: {current_max}, next: {current_max - 2 if current_max > 2 else 1})")
