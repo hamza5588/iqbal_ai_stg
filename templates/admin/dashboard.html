@@ -69,8 +69,8 @@
                     </a>
                     <a href="#" onclick="showSection('prompts'); return false;"
                         class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
-                        <i class="fas fa-comment-dots w-5 mr-3"></i>
-                        <span>Global Prompts</span>
+                        <i class="fas fa-file-pdf w-5 mr-3"></i>
+                        <span>RAG prompts</span>
                     </a>
                     <a href="#" onclick="showSection('coupons'); return false;"
                         class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
@@ -249,30 +249,57 @@
                 </div>
             </div>
 
-            <!-- Prompts Section -->
+            <!-- Prompts Section (RAG / PDF chat only; unused global prompt UI removed) -->
             <div id="prompts-section" class="section hidden">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6">Global Prompt Management</h2>
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">RAG / PDF chat prompts</h2>
 
                 <div class="bg-white rounded-lg shadow-md p-6">
-                    <p class="text-gray-600 mb-4">Set a global system prompt that will be applied to all users. This
-                        prompt will be combined with user-specific prompts.</p>
+                    <h3 class="text-xl font-semibold text-gray-800 mb-2">System instructions</h3>
+                    <p class="text-gray-600 mb-4 text-sm">These instructions are sent to the model for
+                        <span class="font-mono text-xs">/api/rag/chat</span> (PDF upload conversations). User-level RAG
+                        prompts from the API are still prepended above this block when set.</p>
+                    <div id="rag-prompt-limits-box" class="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 hidden">
+                        <p class="font-semibold text-slate-800 mb-2">Token budget (Groq / Qwen-class models)</p>
+                        <p class="text-xs text-slate-600 mb-2" id="rag-prompt-limits-doc"></p>
+                        <ul class="list-disc list-inside text-xs space-y-1" id="rag-prompt-limits-list"></ul>
+                        <p class="text-xs text-slate-600 mt-2">Each field below is capped so the rest of the context can hold
+                            multi-turn chat (user/assistant pairs), tool results, completion, and the teacher&rsquo;s custom RAG prompt.</p>
+                    </div>
+                    <p class="text-gray-600 mb-4 text-sm">In the &quot;PDF uploaded&quot; field you may use placeholders:
+                        <code class="bg-gray-100 px-1 rounded text-xs">{filename}</code>,
+                        <code class="bg-gray-100 px-1 rounded text-xs">{page_info}</code>,
+                        <code class="bg-gray-100 px-1 rounded text-xs">{thread_id}</code>
+                        (for tool calls). Load Current shows the active text (including built-in defaults if nothing
+                        was saved yet).</p>
 
-                    <textarea id="global-prompt-text" rows="15"
+                    <label class="block text-sm font-medium text-gray-700 mb-1">When a PDF is uploaded</label>
+                    <p class="text-xs text-gray-500 mb-1">Estimated tokens: <span id="rag-est-with-pdf">0</span> / <span class="rag-max-tok">—</span></p>
+                    <textarea id="rag-prompt-with-pdf" rows="14"
                         class="w-full border border-gray-300 rounded-lg p-4 font-mono text-sm"
-                        placeholder="Enter global system prompt here..."></textarea>
+                        placeholder="System instructions with placeholders {filename}, {page_info}, {thread_id}"
+                        oninput="updateRagAdminTokenEstimates()"></textarea>
 
-                    <div class="flex gap-4 mt-4">
-                        <button onclick="loadGlobalPrompt()"
+                    <label class="block text-sm font-medium text-gray-700 mb-1 mt-4">When no PDF is uploaded</label>
+                    <p class="text-xs text-gray-500 mb-1">Estimated tokens: <span id="rag-est-no-pdf">0</span> / <span class="rag-max-tok">—</span></p>
+                    <textarea id="rag-prompt-no-pdf" rows="4"
+                        class="w-full border border-gray-300 rounded-lg p-4 font-mono text-sm"
+                        placeholder="System message before a document is attached"
+                        oninput="updateRagAdminTokenEstimates()"></textarea>
+
+                    <p id="rag-prompt-status" class="text-xs text-gray-500 mt-3"></p>
+
+                    <div class="flex flex-wrap gap-4 mt-4">
+                        <button onclick="loadRagSystemPrompt()"
                             class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors">
-                            <i class="fas fa-sync mr-2"></i>Load Current
+                            <i class="fas fa-sync mr-2"></i>Load current
                         </button>
-                        <button onclick="saveGlobalPrompt()"
+                        <button onclick="saveRagSystemPrompt()"
                             class="bg-[#05B0FC] text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors">
-                            <i class="fas fa-save mr-2"></i>Save Prompt
+                            <i class="fas fa-save mr-2"></i>Save RAG prompts
                         </button>
-                        <button onclick="deleteGlobalPrompt()"
+                        <button onclick="resetRagSystemPrompt()"
                             class="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors">
-                            <i class="fas fa-trash mr-2"></i>Delete Prompt
+                            <i class="fas fa-undo mr-2"></i>Reset to built-in defaults
                         </button>
                     </div>
                 </div>
@@ -759,7 +786,7 @@
             } else if (sectionName === 'users') {
                 loadUsers();
             } else if (sectionName === 'prompts') {
-                loadGlobalPrompt();
+                loadRagSystemPrompt();
             } else if (sectionName === 'coupons') {
                 loadCoupons();
             } else if (sectionName === 'lessons') {
@@ -834,64 +861,126 @@
         }
 
         // Global Prompt Management
-        async function loadGlobalPrompt() {
-            try {
-                const response = await fetch('/admin/prompt/global');
-                const data = await response.json();
+        function estimateTokensRough(text) {
+            if (!text) return 0;
+            return Math.max(0, Math.floor(text.length / 4));
+        }
 
-                if (data.success) {
-                    document.getElementById('global-prompt-text').value = data.prompt || '';
-                } else {
-                    showNotification('Error loading prompt: ' + data.error, 'error');
-                }
-            } catch (error) {
-                console.error('Error loading prompt:', error);
-                showNotification('Error loading prompt', 'error');
+        function renderRagPromptLimits(limits) {
+            const box = document.getElementById('rag-prompt-limits-box');
+            const doc = document.getElementById('rag-prompt-limits-doc');
+            const list = document.getElementById('rag-prompt-limits-list');
+            if (!limits || !box || !list) return;
+            box.classList.remove('hidden');
+            if (doc) doc.textContent = limits.doc_note || '';
+            const max = limits.max_system_body_tokens_estimated;
+            document.querySelectorAll('.rag-max-tok').forEach(el => { el.textContent = max != null ? String(max) : '—'; });
+            list.innerHTML = `
+                <li>Model context window: ${limits.context_window_tokens?.toLocaleString()} tokens (Groq model docs)</li>
+                <li>Reserved for completion: ${limits.reserved_output_tokens?.toLocaleString()} tokens</li>
+                <li>Reserved for chat history + tools: ${limits.reserved_history_tokens?.toLocaleString()} tokens</li>
+                <li>Reserved for user custom RAG prompt: ${limits.reserved_user_custom_rag_prompt_tokens?.toLocaleString()} tokens</li>
+                <li>Reserved misc (overhead): ${limits.reserved_misc_tokens?.toLocaleString()} tokens</li>
+                <li><strong>Max per admin field (estimated): ${max?.toLocaleString()} tokens</strong> (~4 characters per token)</li>
+            `;
+        }
+
+        function updateRagAdminTokenEstimates() {
+            const w = document.getElementById('rag-prompt-with-pdf');
+            const n = document.getElementById('rag-prompt-no-pdf');
+            const ew = document.getElementById('rag-est-with-pdf');
+            const en = document.getElementById('rag-est-no-pdf');
+            const maxEl = document.querySelector('.rag-max-tok');
+            const max = maxEl && maxEl.textContent !== '—' ? parseInt(maxEl.textContent.replace(/,/g, ''), 10) : null;
+            const tw = w ? estimateTokensRough(w.value) : 0;
+            const tn = n ? estimateTokensRough(n.value) : 0;
+            if (ew) {
+                ew.textContent = tw.toLocaleString();
+                ew.classList.toggle('text-red-600', max != null && !isNaN(max) && tw > max);
+            }
+            if (en) {
+                en.textContent = tn.toLocaleString();
+                en.classList.toggle('text-red-600', max != null && !isNaN(max) && tn > max);
             }
         }
 
-        async function saveGlobalPrompt() {
-            const prompt = document.getElementById('global-prompt-text').value.trim();
+        async function loadRagSystemPrompt() {
+            const statusEl = document.getElementById('rag-prompt-status');
+            try {
+                const response = await fetch('/admin/prompt/rag');
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('rag-prompt-with-pdf').value = data.prompt_with_pdf || '';
+                    document.getElementById('rag-prompt-no-pdf').value = data.prompt_no_pdf || '';
+                    if (data.limits) renderRagPromptLimits(data.limits);
+                    updateRagAdminTokenEstimates();
+                    if (statusEl) {
+                        const parts = [];
+                        parts.push(data.using_defaults_with_pdf ? 'with PDF: built-in default' : 'with PDF: custom saved');
+                        parts.push(data.using_defaults_no_pdf ? 'no PDF: built-in default' : 'no PDF: custom saved');
+                        if (data.updated_at) {
+                            parts.push('last updated: ' + new Date(data.updated_at).toLocaleString());
+                        }
+                        statusEl.textContent = parts.join(' · ');
+                    }
+                } else {
+                    showNotification('Error loading RAG prompt: ' + data.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error loading RAG prompt:', error);
+                showNotification('Error loading RAG prompt', 'error');
+            }
+        }
+
+        async function saveRagSystemPrompt() {
+            const body = {
+                prompt_with_pdf: document.getElementById('rag-prompt-with-pdf').value,
+                prompt_no_pdf: document.getElementById('rag-prompt-no-pdf').value
+            };
 
             try {
-                const response = await fetch('/admin/prompt/global', {
+                const response = await fetch('/admin/prompt/rag', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: prompt })
+                    body: JSON.stringify(body)
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    showNotification('Global prompt saved successfully!', 'success');
+                    showNotification('RAG system prompts saved.', 'success');
+                    loadRagSystemPrompt();
                 } else {
-                    showNotification('Error saving prompt: ' + data.error, 'error');
+                    let msg = data.error || 'Save failed';
+                    if (data.code === 'RAG_PROMPT_TOO_LONG' && data.limits) {
+                        renderRagPromptLimits(data.limits);
+                        updateRagAdminTokenEstimates();
+                    }
+                    showNotification(msg, 'error');
                 }
             } catch (error) {
-                console.error('Error saving prompt:', error);
-                showNotification('Error saving prompt', 'error');
+                console.error('Error saving RAG prompt:', error);
+                showNotification('Error saving RAG prompt', 'error');
             }
         }
 
-        async function deleteGlobalPrompt() {
-            if (!confirm('Are you sure you want to delete the global prompt?')) return;
+        async function resetRagSystemPrompt() {
+            if (!confirm('Reset RAG system prompts to built-in defaults?')) return;
 
             try {
-                const response = await fetch('/admin/prompt/global', {
-                    method: 'DELETE'
-                });
-
+                const response = await fetch('/admin/prompt/rag', { method: 'DELETE' });
                 const data = await response.json();
 
                 if (data.success) {
-                    document.getElementById('global-prompt-text').value = '';
-                    showNotification('Global prompt deleted successfully!', 'success');
+                    showNotification('RAG prompts reset to defaults.', 'success');
+                    loadRagSystemPrompt();
                 } else {
-                    showNotification('Error deleting prompt: ' + data.error, 'error');
+                    showNotification('Error: ' + data.error, 'error');
                 }
             } catch (error) {
-                console.error('Error deleting prompt:', error);
-                showNotification('Error deleting prompt', 'error');
+                console.error('Error resetting RAG prompt:', error);
+                showNotification('Error resetting RAG prompt', 'error');
             }
         }
 

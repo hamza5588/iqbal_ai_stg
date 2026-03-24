@@ -12,6 +12,10 @@ from app.utils.rag_service import (
     delete_thread,
     warmup_rag_embeddings,
     MARKDOWN_EXPORTS_DIR,
+    DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF,
+    RAG_SYSTEM_SETTING_KEY_WITH_PDF,
+    _get_stored_rag_system_template,
+    _substitute_rag_system_placeholders,
 )
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
@@ -23,6 +27,7 @@ import threading
 import uuid
 from datetime import datetime
 import os
+import re
 import json
 import time
 import base64
@@ -30,6 +35,15 @@ import tempfile
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 _CANCELLED_UPLOAD_FILENAME = "__CANCELLED_UPLOAD__"
+
+# Max word count for user-supplied RAG custom prompt (teacher / user UI)
+RAG_USER_PROMPT_MAX_WORDS = int(os.getenv("RAG_USER_PROMPT_MAX_WORDS", "300"))
+
+
+def _count_words(text: str) -> int:
+    if not text or not str(text).strip():
+        return 0
+    return len(re.findall(r"\S+", str(text).strip()))
 
 # Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
 _user_chat_locks = {}
@@ -488,8 +502,18 @@ def ingest():
         except Exception:
             logger.warning("Failed to precreate thread row for thread_id=%s", thread_id, exc_info=True)
 
-        tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR") or "/app/tmp"
-        os.makedirs(tmp_dir, exist_ok=True)
+        configured_tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR") or "/app/tmp"
+        fallback_tmp_dir = os.path.join(tempfile.gettempdir(), "iqbalai_uploads")
+        tmp_dir = configured_tmp_dir
+        try:
+            os.makedirs(tmp_dir, exist_ok=True)
+            if not os.access(tmp_dir, os.W_OK):
+                raise OSError(f"Upload temp dir is not writable: {tmp_dir}")
+        except OSError:
+            # In some staging/container setups `/app` can be read-only.
+            # Fall back to system temp so ingestion still works.
+            tmp_dir = fallback_tmp_dir
+            os.makedirs(tmp_dir, exist_ok=True)
         tmp_kwargs = {"delete": False, "suffix": ".pdf", "dir": tmp_dir}
         with tempfile.NamedTemporaryFile(**tmp_kwargs) as tmp:
             tmp.write(file_bytes)
@@ -1572,6 +1596,65 @@ def get_rag_prompt():
         return jsonify({'error': f'Failed to get prompt: {str(e)}'}), 500
 
 
+@bp.route('/prompt/preview', methods=['GET'])
+@login_required
+def get_rag_prompt_system_preview():
+    """
+    Read-only full system prompt for PDF chats: optional user custom text + separator + server RAG instructions.
+    Uses sample values for {filename}, {page_info}, and {thread_id} so teachers can see the combined shape.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'error': 'Not authenticated', 'code': 'NOT_AUTHENTICATED'}), 401
+
+        user_id = session['user_id']
+        db = get_db()
+        prompt_obj = (
+            db.query(RAGPrompt)
+            .filter(RAGPrompt.user_id == user_id, RAGPrompt.thread_id.is_(None))
+            .order_by(RAGPrompt.updated_at.desc())
+            .first()
+        )
+        custom = (prompt_obj.prompt or "").strip() if prompt_obj else ""
+
+        template_src = (
+            _get_stored_rag_system_template(RAG_SYSTEM_SETTING_KEY_WITH_PDF)
+            or DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF
+        )
+        demo_filename = "your-document.pdf"
+        demo_page_info = " The PDF has 12 pages."
+        demo_thread_id = f"user_{user_id}_conv_<conversation_id>_…"
+        rag_body = _substitute_rag_system_placeholders(
+            template_src,
+            filename=demo_filename,
+            page_info=demo_page_info,
+            thread_id=demo_thread_id,
+        )
+        if custom:
+            full = f"{custom}\n\n---\n\n{rag_body}"
+        else:
+            full = rag_body
+
+        return jsonify({
+            'success': True,
+            'custom_prompt': custom,
+            'rag_system_body': rag_body,
+            'full_combined_preview': full,
+            'note': (
+                'Sample values are used for filename, page count, and thread id. '
+                'Real chats substitute the actual PDF name and thread id.'
+            ),
+        })
+    except Exception as e:
+        logger.error(f"Error building RAG prompt preview: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Could not build the prompt preview. Try again in a moment.',
+            'code': 'PREVIEW_FAILED',
+            'detail': str(e),
+        }), 500
+
+
 @bp.route('/prompt', methods=['POST'])
 @login_required
 def set_rag_prompt():
@@ -1593,7 +1676,28 @@ def set_rag_prompt():
         prompt = data.get('prompt', '').strip()
         
         if not prompt:
-            return jsonify({'error': 'Prompt is required'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'Prompt cannot be empty. Enter your custom instructions (up to '
+                f'{RAG_USER_PROMPT_MAX_WORDS} words), or use Delete to remove your custom prompt.',
+                'code': 'PROMPT_REQUIRED',
+            }), 400
+
+        wc = _count_words(prompt)
+        if wc > RAG_USER_PROMPT_MAX_WORDS:
+            return jsonify({
+                'success': False,
+                'error': (
+                    f'Your custom prompt is {wc} words. '
+                    f'Shorten it to {RAG_USER_PROMPT_MAX_WORDS} words or fewer, then save again.'
+                ),
+                'code': 'PROMPT_TOO_LONG',
+                'max_words': RAG_USER_PROMPT_MAX_WORDS,
+                'word_count': wc,
+                # backwards compatibility for older clients
+                'max_length': RAG_USER_PROMPT_MAX_WORDS,
+                'length': wc,
+            }), 400
         
         db = get_db()
         try:

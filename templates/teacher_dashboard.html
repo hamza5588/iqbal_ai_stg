@@ -2804,8 +2804,8 @@
                   </div>
 
                   <div class="flex justify-between items-center mb-3">
-                    <span class="text-sm font-medium text-gray-700">Character count: <span
-                        id="charCount">0</span>/2000</span>
+                    <span class="text-sm font-medium text-gray-700">Word count: <span
+                        id="charCount">0</span>/300</span>
                     <button onclick="clearPrompt()"
                       class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
                       <i class="fas fa-trash-alt"></i> Clear
@@ -2815,7 +2815,7 @@
                   <div class="relative">
                     <textarea id="customPrompt"
                       class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
-                      placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
+                      placeholder="Instructions for PDF chat (max 300 words). E.g. tone, audience, and teaching style."
                       oninput="updateCharCount(this)"></textarea>
                     <div class="absolute bottom-3 right-3">
                       <button onclick="generatePrompt()"
@@ -3036,8 +3036,8 @@
 
               <!-- Character Count -->
               <div class="flex justify-between items-center mb-3">
-                <span class="text-sm font-medium text-gray-700">Character count: <span
-                    id="charCount">0</span>/2000</span>
+                <span class="text-sm font-medium text-gray-700">Word count: <span
+                    id="charCount">0</span>/300</span>
                 <button onclick="clearPrompt()" class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
                   <i class="fas fa-trash-alt"></i> Clear
                 </button>
@@ -3047,8 +3047,8 @@
               <div class="relative">
                 <textarea id="customPrompt"
                   class="w-full h-64 p-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-primary-500 focus:border-primary-500 text-gray-700 resize-none custom-scrollbar"
-                  placeholder="Example: You are an expert teacher specializing in STEM education. Provide detailed explanations, include practical examples, and suggest interactive activities. Always maintain a supportive and encouraging tone."
-                  oninput="updateCharCount(this)">Explore a world where human emotions are traded as currency. In this society, happiness, love, fear, and anger can be harvested, sold, or stolen. Follow the story of a reluctant 'emotion thief' who discovers a secret that could upend the entire system. As they navigate political intrigue, moral dilemmas, and forbidden connections, they must decide whether to exploit the system for personal gain or risk everything to restore emotional freedom to humanity.</textarea>
+                  placeholder="Instructions for PDF chat (max 300 words). E.g. tone, audience, and teaching style."
+                  oninput="updateCharCount(this)"></textarea>
                 <div class="absolute bottom-3 right-3">
                   <button onclick="generatePrompt()"
                     class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 hover:bg-primary-200 flex items-center justify-center">
@@ -8550,6 +8550,9 @@ Align everything with the lesson objectives and do not invent missing informatio
         modal.style.pointerEvents = 'auto';
         modal.style.zIndex = '99999';
         if (typeof loadRAGPrompt === 'function') loadRAGPrompt();
+        if (typeof updateRagPromptCharCount === 'function') {
+          setTimeout(updateRagPromptCharCount, 0);
+        }
       }
 
       function closeRAGPromptModal() {
@@ -8562,6 +8565,15 @@ Align everything with the lesson objectives and do not invent missing informatio
           modal.style.pointerEvents = '';
           modal.style.zIndex = '';
         }
+        const wrap = document.getElementById('ragSystemPromptPreviewWrap');
+        const errEl = document.getElementById('ragSystemPromptPreviewError');
+        const pre = document.getElementById('ragFullSystemPromptReadonly');
+        if (wrap) wrap.classList.add('hidden');
+        if (errEl) {
+          errEl.classList.add('hidden');
+          errEl.textContent = '';
+        }
+        if (pre) pre.textContent = '';
       }
 
       // Download Chat (from stored messages for current chat)
@@ -8624,16 +8636,29 @@ Align everything with the lesson objectives and do not invent missing informatio
       // Add these functions to your existing JavaScript
 
 
-      // Character count
+      const RAG_USER_PROMPT_MAX = 300;
+
+      function countWords(text) {
+        if (!text || !String(text).trim()) return 0;
+        return String(text).trim().split(/\s+/).filter(Boolean).length;
+      }
+
+      function truncateToWordLimit(text, maxWords) {
+        const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+        if (words.length <= maxWords) return String(text || '').trim();
+        return words.slice(0, maxWords).join(' ');
+      }
+
+      // Word count (custom prompt textarea; max RAG_USER_PROMPT_MAX words)
       function updateCharCount(textarea) {
         const charCount = document.getElementById('charCount');
         if (charCount) {
-          charCount.textContent = textarea.value.length;
+          const n = countWords(textarea.value);
+          charCount.textContent = n;
 
-          // Change color based on length
-          if (textarea.value.length > 1800) {
+          if (n > RAG_USER_PROMPT_MAX) {
             charCount.style.color = '#dc2626';
-          } else if (textarea.value.length > 1500) {
+          } else if (n > Math.floor(RAG_USER_PROMPT_MAX * 0.9)) {
             charCount.style.color = '#f59e0b';
           } else {
             charCount.style.color = '#4b5563';
@@ -8660,36 +8685,138 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
 
       // === Legacy-style global RAG prompt API bindings (match chat.html) ===
+      function updateRagPromptCharCount() {
+        const textarea = document.getElementById('ragPromptTextarea');
+        const el = document.getElementById('ragPromptCharCount');
+        if (!textarea || !el) return;
+        const n = countWords(textarea.value);
+        el.textContent = String(n);
+        el.style.color = n > RAG_USER_PROMPT_MAX ? '#dc2626' : '#4b5563';
+      }
+
       async function loadRAGPrompt() {
+        const textarea = document.getElementById('ragPromptTextarea');
         try {
           const response = await fetch('/api/rag/prompt', {
             method: 'GET',
             credentials: 'include'
           });
-          if (response.ok) {
-            const data = await response.json();
-            const textarea = document.getElementById('ragPromptTextarea');
-            if (textarea) {
-              textarea.value = (data.success && data.prompt) ? data.prompt : '';
+          const data = await response.json().catch(() => ({}));
+          if (response.status === 401) {
+            showToast(
+              'Your session expired. Sign in again, then reopen Set Prompt to load your saved text.',
+              'error',
+              6000
+            );
+            return;
+          }
+          if (!response.ok) {
+            const err =
+              data.error ||
+              (response.status === 403
+                ? 'You do not have access to load this prompt.'
+                : `The server returned an error (${response.status}). Try again in a moment.`);
+            showToast(err, 'error', 5000);
+            return;
+          }
+          if (textarea) {
+            textarea.value = data.success && data.prompt != null ? (data.prompt || '') : '';
+            if (countWords(textarea.value) > RAG_USER_PROMPT_MAX) {
+              textarea.value = truncateToWordLimit(textarea.value, RAG_USER_PROMPT_MAX);
+              showToast(
+                `Your saved prompt was longer than ${RAG_USER_PROMPT_MAX} words. It was trimmed to the first ${RAG_USER_PROMPT_MAX} words. Edit and save if needed.`,
+                'warning',
+                7000
+              );
             }
-          } else {
-            console.error('Failed to load prompt');
+            updateRagPromptCharCount();
           }
         } catch (error) {
           console.error('Error loading prompt:', error);
-          showToast('Failed to load prompt', 'error');
+          showToast(
+            'Could not reach the server to load your prompt. Check your network connection and try again.',
+            'error',
+            5000
+          );
+        }
+      }
+
+      async function loadRAGSystemPrompt() {
+        const wrap = document.getElementById('ragSystemPromptPreviewWrap');
+        const errEl = document.getElementById('ragSystemPromptPreviewError');
+        const pre = document.getElementById('ragFullSystemPromptReadonly');
+        const noteEl = document.getElementById('ragSystemPromptPreviewNote');
+        if (errEl) {
+          errEl.classList.add('hidden');
+          errEl.textContent = '';
+        }
+        try {
+          const response = await fetch('/api/rag/prompt/preview', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          const data = await response.json().catch(() => ({}));
+          if (response.status === 401) {
+            const msg =
+              'You must be signed in to view the full system prompt. Refresh the page and sign in, then try again.';
+            if (errEl) {
+              errEl.textContent = msg;
+              errEl.classList.remove('hidden');
+            }
+            showToast(msg, 'error', 6000);
+            return;
+          }
+          if (!response.ok || !data.success) {
+            const msg =
+              data.error ||
+              (response.status >= 500
+                ? 'The server could not build the preview. Wait a moment and try again.'
+                : `Could not load preview (${response.status}).`);
+            if (errEl) {
+              errEl.textContent = msg;
+              errEl.classList.remove('hidden');
+            }
+            showToast(msg, 'error', 5000);
+            return;
+          }
+          if (pre) pre.textContent = data.full_combined_preview || '';
+          if (noteEl && data.note) noteEl.textContent = data.note;
+          if (wrap) wrap.classList.remove('hidden');
+          showToast('Full system prompt is shown below (read-only).', 'success', 3500);
+        } catch (error) {
+          console.error('Error loading system prompt preview:', error);
+          const msg =
+            'Could not load the system prompt preview. Check your network connection and try again.';
+          if (errEl) {
+            errEl.textContent = msg;
+            errEl.classList.remove('hidden');
+          }
+          showToast(msg, 'error', 5000);
         }
       }
 
       async function saveRAGPrompt() {
         const textarea = document.getElementById('ragPromptTextarea');
         if (!textarea) {
-          showToast('Prompt textarea not found', 'error');
+          showToast('Prompt field is missing from the page. Refresh and try again.', 'error');
           return;
         }
         const prompt = textarea.value.trim();
         if (!prompt) {
-          showToast('Please enter a prompt', 'warning');
+          showToast(
+            'Enter your custom instructions in the box, or use Delete prompt to clear your custom text.',
+            'warning',
+            5000
+          );
+          return;
+        }
+        const wc = countWords(prompt);
+        if (wc > RAG_USER_PROMPT_MAX) {
+          showToast(
+            `Your text is ${wc} words. Shorten it to ${RAG_USER_PROMPT_MAX} words or fewer, then click Save.`,
+            'warning',
+            6000
+          );
           return;
         }
         try {
@@ -8699,21 +8826,39 @@ Align everything with the lesson objectives and do not invent missing informatio
             credentials: 'include',
             body: JSON.stringify({ prompt: prompt })
           });
-          const data = await response.json();
+          const data = await response.json().catch(() => ({}));
           if (response.ok && data.success) {
-            showToast('Prompt saved successfully! It will apply to all your threads.', 'success');
+            showToast('Your custom prompt was saved. It applies to all your PDF chats.', 'success');
             closeRAGPromptModal();
-          } else {
-            throw new Error(data.error || 'Failed to save prompt');
+            return;
           }
+          let msg = data.error || 'Save failed.';
+          if (data.code === 'PROMPT_TOO_LONG') {
+            msg =
+              data.error ||
+              `Maximum is ${data.max_words || data.max_length || RAG_USER_PROMPT_MAX} words (you have ${data.word_count ?? data.length ?? wc}). Shorten your text and save again.`;
+          } else if (data.code === 'PROMPT_REQUIRED') {
+            msg = data.error || 'Enter a non-empty prompt or use Delete.';
+          } else if (response.status === 401) {
+            msg = 'Your session expired. Sign in again, then save your prompt.';
+          }
+          showToast(msg, 'error', 7000);
         } catch (error) {
           console.error('Error saving prompt:', error);
-          showToast('Failed to save prompt: ' + error.message, 'error');
+          showToast(
+            'Could not reach the server to save. Check your connection and try again.',
+            'error',
+            5000
+          );
         }
       }
 
       async function deleteRAGPrompt() {
-        if (!confirm('Are you sure you want to delete the custom prompt? This will remove it from all your threads. The default prompt will be used.')) {
+        if (
+          !confirm(
+            'Remove your custom prompt from all threads? The app will use only the default PDF instructions until you save a new prompt.'
+          )
+        ) {
           return;
         }
         try {
@@ -8721,17 +8866,35 @@ Align everything with the lesson objectives and do not invent missing informatio
             method: 'DELETE',
             credentials: 'include'
           });
-          const data = await response.json();
+          const data = await response.json().catch(() => ({}));
+          if (response.status === 401) {
+            showToast(
+              'Your session expired. Sign in again, then use Delete prompt if you still want to clear your custom text.',
+              'error',
+              6000
+            );
+            return;
+          }
           if (response.ok && data.success) {
             const textarea = document.getElementById('ragPromptTextarea');
             if (textarea) textarea.value = '';
-            showToast('Prompt deleted successfully.', 'success');
-          } else {
-            throw new Error(data.error || 'Failed to delete prompt');
+            updateRagPromptCharCount();
+            showToast('Your custom prompt was removed.', 'success');
+            return;
           }
+          const msg =
+            data.error ||
+            (response.status >= 500
+              ? 'The server could not delete your prompt. Try again in a moment.'
+              : `Delete failed (${response.status}).`);
+          showToast(msg, 'error', 5000);
         } catch (error) {
           console.error('Error deleting prompt:', error);
-          showToast('Failed to delete prompt: ' + error.message, 'error');
+          showToast(
+            'Could not reach the server. Check your connection and try again.',
+            'error',
+            5000
+          );
         }
       }
 
@@ -8995,7 +9158,20 @@ Align everything with the lesson objectives and do not invent missing informatio
         const prompt = textarea && textarea.value.trim();
 
         if (!prompt) {
-          alert('Please enter a custom prompt.');
+          showToast(
+            'Enter your custom instructions in the box, or cancel. Empty prompts cannot be saved.',
+            'warning',
+            5000
+          );
+          return;
+        }
+        const wcSave = countWords(prompt);
+        if (wcSave > RAG_USER_PROMPT_MAX) {
+          showToast(
+            `Your text is ${wcSave} words. Shorten it to ${RAG_USER_PROMPT_MAX} words or fewer, then save.`,
+            'warning',
+            6000
+          );
           return;
         }
 
@@ -9008,17 +9184,31 @@ Align everything with the lesson objectives and do not invent missing informatio
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
-            showToast(data.error || 'Failed to save prompt', 'error', 4000);
+            let msg = data.error || 'Save failed.';
+            if (data.code === 'PROMPT_TOO_LONG') {
+              msg =
+                data.error ||
+                `Maximum is ${data.max_words || data.max_length || RAG_USER_PROMPT_MAX} words (you have ${data.word_count ?? data.length ?? wcSave}). Shorten your text and try again.`;
+            } else if (data.code === 'PROMPT_REQUIRED') {
+              msg = data.error || 'Enter a non-empty prompt.';
+            } else if (response.status === 401) {
+              msg = 'Your session expired. Sign in again, then save your prompt.';
+            }
+            showToast(msg, 'error', 7000);
             return;
           }
           localStorage.setItem('teacher_custom_prompt', prompt);
           localStorage.setItem('teacher_prompt_tone', selectedTone);
           if (textarea) updateCharCount(textarea);
-          showToast('✅ Custom prompt saved. It will apply to all your RAG chats.', 'success', 3000);
+          showToast('Custom prompt saved. It applies to all your PDF chats.', 'success', 3000);
           closeSetPromptModal();
         } catch (e) {
           console.error('Save prompt error:', e);
-          showToast('Failed to save prompt. Check your connection.', 'error', 4000);
+          showToast(
+            'Could not reach the server to save. Check your connection and try again.',
+            'error',
+            5000
+          );
         }
       }
 
@@ -9029,21 +9219,41 @@ Align everything with the lesson objectives and do not invent missing informatio
         try {
           const response = await fetch('/api/rag/prompt', { method: 'GET', credentials: 'include' });
           const data = await response.json().catch(() => ({}));
+          if (response.status === 401) {
+            showToast(
+              'Your session expired. Sign in again, then use Load current to fetch your saved prompt.',
+              'error',
+              6000
+            );
+            return;
+          }
           const prompt = (response.ok && data.prompt != null) ? (data.prompt || '') : (localStorage.getItem('teacher_custom_prompt') || '');
           const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
           textarea.value = prompt;
+          if (countWords(textarea.value) > RAG_USER_PROMPT_MAX) {
+            textarea.value = truncateToWordLimit(textarea.value, RAG_USER_PROMPT_MAX);
+            showToast(
+              `Your saved prompt was longer than ${RAG_USER_PROMPT_MAX} words; it was trimmed to the first ${RAG_USER_PROMPT_MAX} words. Edit and save.`,
+              'warning',
+              7000
+            );
+          }
           selectTone(savedTone);
           updateCharCount(textarea);
-          localStorage.setItem('teacher_custom_prompt', prompt);
-          if (response.ok && data.prompt != null) showToast('Prompt loaded from server', 'info');
+          localStorage.setItem('teacher_custom_prompt', textarea.value);
+          if (response.ok && data.prompt != null) showToast('Loaded your prompt from the server.', 'info', 3000);
         } catch (e) {
           console.error('Load prompt error:', e);
           const savedPrompt = localStorage.getItem('teacher_custom_prompt') || '';
           const savedTone = localStorage.getItem('teacher_prompt_tone') || 'professional';
-          textarea.value = savedPrompt;
+          textarea.value = truncateToWordLimit(savedPrompt, RAG_USER_PROMPT_MAX);
           selectTone(savedTone);
           updateCharCount(textarea);
-          showToast('Using locally saved prompt', 'info');
+          showToast(
+            'Could not reach the server. Showing any text stored in this browser for this prompt.',
+            'warning',
+            5000
+          );
         }
       }
 
@@ -9052,7 +9262,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         // Load saved templates
         loadSavedTemplates();
 
-        // Initialize character count
+        // Initialize word count for custom prompt
         const textarea = document.getElementById('customPrompt');
         if (textarea) {
           updateCharCount(textarea);
@@ -9078,19 +9288,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         }
       };
 
-      // Simple RAG Prompt modal - duplicate def removed; uses showRAGPromptModal above
-
-      function closeRAGPromptModal() {
-        const modal = document.getElementById('ragPromptModal');
-        if (modal) {
-          modal.classList.add('hidden');
-          modal.style.display = '';
-          modal.style.visibility = '';
-          modal.style.opacity = '';
-          modal.style.pointerEvents = '';
-          modal.style.zIndex = '';
-        }
-      }
+      // Simple RAG Prompt modal - closeRAGPromptModal defined above with preview cleanup
     </script>
 
   <!-- Simple RAG Prompt Modal (legacy-style Set Prompt) -->
@@ -9100,48 +9298,65 @@ Align everything with the lesson objectives and do not invent missing informatio
       <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 rounded-t-lg">
         <h3 class="text-xl font-semibold text-white">Set Custom System Prompt</h3>
         <p class="text-primary-100 text-sm mt-1">
-          Customize how the AI assistant behaves. This prompt will apply to all your threads.
+          Up to 300 words, combined with the server PDF instructions for all your threads.
         </p>
       </div>
       <div class="p-6 flex-1 overflow-y-auto">
         <div class="mb-4">
-          <label class="block text-gray-700 text-sm font-semibold mb-2">
-            Custom Prompt
-          </label>
+          <div class="flex justify-between items-center mb-2">
+            <label class="block text-gray-700 text-sm font-semibold">
+              Your custom instructions (editable)
+            </label>
+            <span class="text-xs text-gray-600">Words: <span id="ragPromptCharCount">0</span>/300</span>
+          </div>
           <textarea id="ragPromptTextarea"
-            class="w-full h-64 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
-            placeholder="Enter your custom system prompt here. This will be combined with the default RAG instructions..."></textarea>
+            class="w-full h-48 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
+            placeholder="Instructions (max 300 words). Placed before the PDF system instructions."
+            oninput="updateRagPromptCharCount()"></textarea>
           <p class="text-xs text-gray-500 mt-2">
             <i class="fas fa-info-circle mr-1"></i>
-            Your custom prompt will be combined with the default RAG instructions for PDF queries. This prompt will
-            apply to all your threads.
+            This text is prepended to the app’s PDF chat instructions. Use &quot;Load system prompt&quot; below to see the
+            full read-only text sent to the model.
           </p>
         </div>
+
+        <div id="ragSystemPromptPreviewError"
+          class="hidden mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+
+        <div id="ragSystemPromptPreviewWrap" class="mb-4 hidden">
+          <label class="block text-gray-700 text-sm font-semibold mb-2">
+            Full system prompt (read-only)
+          </label>
+          <p id="ragSystemPromptPreviewNote" class="text-xs text-gray-500 mb-2"></p>
+          <pre id="ragFullSystemPromptReadonly"
+            class="w-full max-h-56 overflow-y-auto p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-800 whitespace-pre-wrap font-sans"></pre>
+        </div>
+
         <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p class="text-xs text-blue-800 font-semibold mb-1">Note:</p>
           <p class="text-xs text-blue-700">
-            The default RAG instructions (for PDF queries) will always be included along with your custom prompt. This
-            prompt applies to all your threads, not just the current one.
+            The default PDF instructions are always included after your text (and a separator). Use
+            &quot;Load system prompt&quot; to preview the exact combined message.
           </p>
         </div>
       </div>
-      <div class="px-6 py-4 border-t border-gray-200 flex gap-3">
-        <button onclick="loadRAGPrompt()"
+      <div class="px-6 py-4 border-t border-gray-200 flex flex-wrap gap-2">
+        <button type="button" onclick="loadRAGSystemPrompt()"
           class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-          Load Current
+          Load system prompt
         </button>
-        <button onclick="deleteRAGPrompt()"
+        <button type="button" onclick="deleteRAGPrompt()"
           class="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50">
-          Delete Prompt
+          Delete prompt
         </button>
-        <div class="flex-1"></div>
-        <button onclick="closeRAGPromptModal()"
+        <div class="flex-1 min-w-[1rem]"></div>
+        <button type="button" onclick="closeRAGPromptModal()"
           class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
           Cancel
         </button>
-        <button onclick="saveRAGPrompt()"
+        <button type="button" onclick="saveRAGPrompt()"
           class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-          Save Prompt
+          Save prompt
         </button>
       </div>
     </div>

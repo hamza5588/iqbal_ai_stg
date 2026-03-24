@@ -26,9 +26,9 @@ async def run(
     log_func("Authentication successful, verifying dashboard access...")
     
     url = f"{config.base_url}/"
-    max_dashboard_attempts = 4
-    base_backoff_seconds = 0.2
-    max_backoff_seconds = 2.0
+    max_dashboard_attempts = 5
+    base_backoff_seconds = 0.5
+    max_backoff_seconds = 8.0
     
     try:
         if summary.stop_requested:
@@ -43,7 +43,13 @@ async def run(
                 if response.status == 429:
                     summary.rate_limit_hits += 1
                     if attempt < max_dashboard_attempts:
+                        retry_after = response.headers.get("Retry-After")
                         backoff = min(base_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds)
+                        if retry_after:
+                            try:
+                                backoff = max(backoff, float(retry_after))
+                            except ValueError:
+                                pass
                         jitter = random.uniform(0.0, backoff * 0.3)
                         delay = backoff + jitter
                         log_func(

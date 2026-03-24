@@ -29,6 +29,9 @@ class LoadTestRunner:
         self.stop_requested = False
         self._set_prompt = None  # Custom RAG prompt for teacher sets
         self._active_user_count = 0
+        # Auth gate prevents login stampedes when high user counts start together.
+        self._login_concurrency_limit = max(1, int(os.getenv("LOAD_TEST_MAX_PARALLEL_LOGINS", "30")))
+        self._login_semaphore = asyncio.Semaphore(self._login_concurrency_limit)
 
     def stop(self):
         """Signal the runner to stop"""
@@ -166,12 +169,21 @@ class LoadTestRunner:
                 timeout=timeout
             ) as session:
                 
-                # 1. Login
-                login_success = await self._login(session, user)
+                # 1. Login (guarded by semaphore to avoid auth endpoint bursts)
+                async with self._login_semaphore:
+                    login_success = await self._login(session, user)
                 if not login_success:
                     self.summary.failed_requests += 1
                     self.summary.errors.append({"user": user_email, "error": "Login failed"})
                     return
+
+                # 2. Add small randomized "think time" after login so dashboard checks
+                # are not synchronized across hundreds of users.
+                post_login_delay_min = max(0.0, float(os.getenv("LOAD_TEST_POST_LOGIN_DELAY_MIN_SECONDS", "0.2")))
+                post_login_delay_max = max(post_login_delay_min, float(os.getenv("LOAD_TEST_POST_LOGIN_DELAY_MAX_SECONDS", "1.0")))
+                post_login_delay = random.uniform(post_login_delay_min, post_login_delay_max)
+                if post_login_delay > 0:
+                    await asyncio.sleep(post_login_delay)
 
                 # 2. Set custom RAG prompt if configured (teacher sets only)
                 if self._set_prompt:
@@ -194,9 +206,9 @@ class LoadTestRunner:
             "useremail": user.email,
             "password": user.password
         }
-        max_attempts = 4
-        base_backoff_seconds = 0.25
-        max_backoff_seconds = 3.0
+        max_attempts = 5
+        base_backoff_seconds = 0.5
+        max_backoff_seconds = 8.0
 
         for attempt in range(1, max_attempts + 1):
             start = time.time()
@@ -246,7 +258,13 @@ class LoadTestRunner:
                     if response.status == 429:
                         self.summary.rate_limit_hits += 1
                         if attempt < max_attempts:
+                            retry_after = response.headers.get("Retry-After")
                             backoff = min(base_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds)
+                            if retry_after:
+                                try:
+                                    backoff = max(backoff, float(retry_after))
+                                except ValueError:
+                                    pass
                             jitter = random.uniform(0.0, backoff * 0.3)
                             delay = backoff + jitter
                             self._log(
@@ -298,8 +316,8 @@ class LoadTestRunner:
 
         # Adaptive fallback for zero-ramp tests to reduce immediate 429 storms.
         # Override via env if you want stricter/looser pacing.
-        target_login_rps = float(os.getenv("LOAD_TEST_TARGET_LOGIN_RPS", "40"))
-        max_auto_ramp = float(os.getenv("LOAD_TEST_MAX_AUTO_RAMP_SECONDS", "30"))
+        target_login_rps = float(os.getenv("LOAD_TEST_TARGET_LOGIN_RPS", "15"))
+        max_auto_ramp = float(os.getenv("LOAD_TEST_MAX_AUTO_RAMP_SECONDS", "120"))
         target_login_rps = max(1.0, target_login_rps)
         auto_ramp_seconds = min(total_users / target_login_rps, max_auto_ramp)
 
@@ -307,7 +325,8 @@ class LoadTestRunner:
         if worker_id == 0 and auto_ramp_seconds > 0:
             self._log(
                 f"ramp_up_seconds is 0; applying adaptive startup spread of {auto_ramp_seconds:.1f}s "
-                f"for {total_users} users (~{target_login_rps:.0f} login req/s target).",
+                f"for {total_users} users (~{target_login_rps:.0f} login req/s target), "
+                f"login gate={self._login_concurrency_limit}.",
                 level="WARNING",
             )
 

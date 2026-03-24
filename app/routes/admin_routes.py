@@ -1,7 +1,7 @@
 """
 Admin routes for system management
-Provides comprehensive admin functionality including user management, 
-prompt management, coupon management, and lesson management.
+Provides comprehensive admin functionality including user management,
+RAG prompt management, coupon management, and lesson management.
 """
 from flask import Blueprint, request, jsonify, session, render_template
 from app.utils.auth import login_required
@@ -17,9 +17,14 @@ from app.models.database_models import (
     Lesson as DBLesson,
     UserPrompt,
     RAGPrompt,
-    GlobalPrompt,
     SystemSettings,
     UserSettings
+)
+from app.utils.rag_service import (
+    DEFAULT_RAG_CHAT_SYSTEM_BODY_NO_PDF,
+    DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF,
+    RAG_SYSTEM_SETTING_KEY_NO_PDF,
+    RAG_SYSTEM_SETTING_KEY_WITH_PDF,
 )
 from sqlalchemy import or_, func, desc
 from datetime import datetime
@@ -28,6 +33,44 @@ import os
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+
+def _estimate_tokens_rough(text: str) -> int:
+    """Conservative token estimate (~4 characters per token) for admin prompt limits."""
+    if not text:
+        return 0
+    return max(0, len(text) // 4)
+
+
+def get_rag_admin_system_prompt_limits() -> dict:
+    """
+    Token budget for admin-edited RAG system bodies.
+
+    Groq model docs (e.g. qwen/qwen3-32b) list CONTEXT WINDOW 131,072 — same model limit on free vs paid;
+    paid tiers mainly increase throughput (TPM/RPM), not context size.
+
+    We reserve space for: completion, multi-turn history + tool messages, user custom RAG prompt (~300 words),
+    and misc overhead so admin prompts cannot consume the full window.
+    """
+    context = int(os.getenv("GROQ_MODEL_CONTEXT_WINDOW_TOKENS", "131072"))
+    reserved_out = int(os.getenv("RAG_RESERVED_OUTPUT_TOKENS", "8192"))
+    reserved_history = int(os.getenv("RAG_RESERVED_HISTORY_TOKENS", "52000"))
+    reserved_user_custom = int(os.getenv("RAG_RESERVED_USER_RAG_PROMPT_TOKENS", "800"))
+    reserved_misc = int(os.getenv("RAG_RESERVED_MISC_TOKENS", "8192"))
+    max_body = context - reserved_out - reserved_history - reserved_user_custom - reserved_misc
+    max_body = max(4096, int(max_body))
+    return {
+        "context_window_tokens": context,
+        "reserved_output_tokens": reserved_out,
+        "reserved_history_tokens": reserved_history,
+        "reserved_user_custom_rag_prompt_tokens": reserved_user_custom,
+        "reserved_misc_tokens": reserved_misc,
+        "max_system_body_tokens_estimated": max_body,
+        "doc_note": (
+            "Based on Groq model context limits (e.g. Qwen 3 32B: 131,072 tokens — "
+            "see console.groq.com/docs/model/qwen3-32b). Paid plan increases rate limits, not context window."
+        ),
+    }
 
 
 def is_admin():
@@ -406,93 +449,149 @@ def delete_document(doc_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ==================== GLOBAL PROMPT MANAGEMENT ====================
+# ==================== RAG / PDF CHAT SYSTEM PROMPT (system_settings) ====================
 
-@bp.route('/prompt/global', methods=['GET'])
+def _upsert_or_delete_system_text(db, key: str, value: str, user_id: int, description: str = None):
+    """Persist non-empty text; delete row if value is empty (revert to app default)."""
+    row = db.query(SystemSettings).filter(SystemSettings.key == key).first()
+    cleaned = (value or "").strip()
+    if not cleaned:
+        if row:
+            db.delete(row)
+        return
+    if row:
+        row.value = cleaned
+        row.updated_at = datetime.utcnow()
+        row.updated_by = user_id
+        if description is not None:
+            row.description = description
+    else:
+        db.add(
+            SystemSettings(
+                key=key,
+                value=cleaned,
+                description=description,
+                updated_by=user_id,
+            )
+        )
+
+
+@bp.route('/prompt/rag', methods=['GET'])
 @login_required
 @admin_only
-def get_global_prompt():
-    """Get global system prompt"""
+def get_rag_system_prompt():
+    """Get RAG chat system prompt bodies (stored or built-in defaults for display)."""
     try:
         db = get_db()
-        # Get the global prompt (there should only be one)
-        global_prompt = db.query(GlobalPrompt).first()
-        
-        if global_prompt:
-            return jsonify({
-                'success': True,
-                'prompt': global_prompt.prompt,
-                'updated_at': global_prompt.updated_at.isoformat() if global_prompt.updated_at else None
-            })
-        else:
-            return jsonify({
-                'success': True,
-                'prompt': '',
-                'updated_at': None
-            })
+        row_pdf = db.query(SystemSettings).filter(SystemSettings.key == RAG_SYSTEM_SETTING_KEY_WITH_PDF).first()
+        row_no = db.query(SystemSettings).filter(SystemSettings.key == RAG_SYSTEM_SETTING_KEY_NO_PDF).first()
+
+        prompt_with_pdf = (
+            row_pdf.value if row_pdf and row_pdf.value.strip() else DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF
+        )
+        prompt_no_pdf = (
+            row_no.value if row_no and row_no.value.strip() else DEFAULT_RAG_CHAT_SYSTEM_BODY_NO_PDF
+        )
+        updated_at = None
+        for r in (row_pdf, row_no):
+            if r and r.updated_at:
+                if updated_at is None or r.updated_at > updated_at:
+                    updated_at = r.updated_at
+
+        return jsonify({
+            'success': True,
+            'prompt_with_pdf': prompt_with_pdf,
+            'prompt_no_pdf': prompt_no_pdf,
+            'using_defaults_with_pdf': row_pdf is None or not (row_pdf.value or '').strip(),
+            'using_defaults_no_pdf': row_no is None or not (row_no.value or '').strip(),
+            'updated_at': updated_at.isoformat() if updated_at else None,
+            'limits': get_rag_admin_system_prompt_limits(),
+            'estimated_tokens': {
+                'with_pdf': _estimate_tokens_rough(prompt_with_pdf),
+                'no_pdf': _estimate_tokens_rough(prompt_no_pdf),
+            },
+        })
     except Exception as e:
-        logger.error(f"Error getting global prompt: {str(e)}")
+        logger.error(f"Error getting RAG system prompt: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@bp.route('/prompt/global', methods=['POST'])
+@bp.route('/prompt/rag', methods=['POST'])
 @login_required
 @admin_only
-def set_global_prompt():
-    """Set or update global system prompt"""
+def set_rag_system_prompt():
+    """Save RAG chat system prompts. Empty string for a field removes override (uses code default)."""
     try:
-        data = request.json
-        prompt = data.get('prompt', '').strip()
-        
+        data = request.get_json(silent=True) or {}
+        prompt_with_pdf = data.get('prompt_with_pdf', '')
+        prompt_no_pdf = data.get('prompt_no_pdf', '')
+
+        limits = get_rag_admin_system_prompt_limits()
+        max_tok = limits["max_system_body_tokens_estimated"]
+
+        checks = [
+            ("prompt_with_pdf", prompt_with_pdf),
+            ("prompt_no_pdf", prompt_no_pdf),
+        ]
+        for field_name, text in checks:
+            if not (text or "").strip():
+                continue
+            est = _estimate_tokens_rough(text)
+            if est > max_tok:
+                return jsonify({
+                    'success': False,
+                    'error': (
+                        f'{field_name} is too long: about {est} tokens estimated (~4 chars/token), '
+                        f'max allowed {max_tok} tokens for the admin RAG system body. '
+                        f'Shorten the text so the model still has room for chat history, tools, and output '
+                        f'(context window {limits["context_window_tokens"]} tokens; see limits in GET response).'
+                    ),
+                    'code': 'RAG_PROMPT_TOO_LONG',
+                    'field': field_name,
+                    'estimated_tokens': est,
+                    'max_system_body_tokens_estimated': max_tok,
+                    'limits': limits,
+                }), 400
+
         db = get_db()
-        
-        # Check if global prompt exists
-        global_prompt = db.query(GlobalPrompt).first()
-        
-        if global_prompt:
-            # Update existing
-            global_prompt.prompt = prompt
-            global_prompt.updated_at = datetime.utcnow()
-            global_prompt.updated_by = session['user_id']
-        else:
-            # Create new (only one should exist - application logic ensures this)
-            global_prompt = GlobalPrompt(
-                prompt=prompt,
-                updated_by=session['user_id']
-            )
-            db.add(global_prompt)
-        
+        _upsert_or_delete_system_text(
+            db,
+            RAG_SYSTEM_SETTING_KEY_WITH_PDF,
+            prompt_with_pdf,
+            session['user_id'],
+            description='RAG chat system message when a PDF is uploaded ({filename}, {page_info}, {thread_id})',
+        )
+        _upsert_or_delete_system_text(
+            db,
+            RAG_SYSTEM_SETTING_KEY_NO_PDF,
+            prompt_no_pdf,
+            session['user_id'],
+            description='RAG chat system message when no PDF is uploaded yet',
+        )
         db.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Global prompt updated successfully'
-        })
+
+        return jsonify({'success': True, 'message': 'RAG system prompts updated'})
     except Exception as e:
-        logger.error(f"Error setting global prompt: {str(e)}")
+        logger.error(f"Error saving RAG system prompt: {str(e)}")
         db.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@bp.route('/prompt/global', methods=['DELETE'])
+@bp.route('/prompt/rag', methods=['DELETE'])
 @login_required
 @admin_only
-def delete_global_prompt():
-    """Delete global system prompt"""
+def delete_rag_system_prompt():
+    """Remove stored RAG prompts so built-in defaults are used."""
     try:
         db = get_db()
-        global_prompt = db.query(GlobalPrompt).first()
-        
-        if global_prompt:
-            db.delete(global_prompt)
-            db.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Global prompt deleted successfully'
-        })
+        for key in (RAG_SYSTEM_SETTING_KEY_WITH_PDF, RAG_SYSTEM_SETTING_KEY_NO_PDF):
+            row = db.query(SystemSettings).filter(SystemSettings.key == key).first()
+            if row:
+                db.delete(row)
+        db.commit()
+        return jsonify({'success': True, 'message': 'RAG system prompts reset to defaults'})
     except Exception as e:
-        logger.error(f"Error deleting global prompt: {str(e)}")
+        logger.error(f"Error deleting RAG system prompt: {str(e)}")
         db.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 

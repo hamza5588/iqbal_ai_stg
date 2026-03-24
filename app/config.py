@@ -152,7 +152,8 @@ class Config:
 
     # Temporary upload directory for PDF ingestion when using Celery.
     # This path is shared between the web app and Celery workers via Docker volumes.
-    UPLOAD_TEMP_DIR = os.getenv('UPLOAD_TEMP_DIR', '/app/tmp')
+    # Use system temp by default to avoid read-only bind mounts (e.g. /app in some containers).
+    UPLOAD_TEMP_DIR = os.getenv('UPLOAD_TEMP_DIR', os.path.join('/tmp', 'iqbalai_uploads'))
     RAG_LARGE_DOC_THRESHOLD_MB = int(os.getenv('RAG_LARGE_DOC_THRESHOLD_MB', '40'))
     RAG_INGEST_STANDARD_QUEUE = os.getenv('RAG_INGEST_STANDARD_QUEUE', 'ingest')
     RAG_INGEST_LARGE_QUEUE = os.getenv('RAG_INGEST_LARGE_QUEUE', 'ingest_large')
