@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, send_file, after_this_request, render_template
+from flask import Blueprint, request, jsonify, session, send_file, after_this_request, render_template, current_app
 from app.models.models import UserModel, LessonModel
 from app.models.database_models import Lesson as DBLesson
 from app.services.lesson_service import LessonService
@@ -11,8 +11,77 @@ import logging
 import os
 from io import BytesIO
 import tempfile
+import threading
+import time
 
 logger = logging.getLogger(__name__)
+
+_lesson_qa_user_locks = {}
+_lesson_qa_locks_lock = threading.Lock()
+_lesson_qa_user_rate = {}
+_lesson_qa_rate_lock = threading.Lock()
+
+
+def _get_lesson_qa_user_lock(user_id: int) -> threading.Lock:
+    with _lesson_qa_locks_lock:
+        if user_id not in _lesson_qa_user_locks:
+            _lesson_qa_user_locks[user_id] = threading.Lock()
+        return _lesson_qa_user_locks[user_id]
+
+
+def _check_and_record_lesson_qa_rate(user_id: int) -> tuple[bool, int]:
+    """Per-user burst throttling for lesson Q&A requests."""
+    max_requests = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_COUNT", "6"))
+    window_seconds = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_WINDOW_SECONDS", "10"))
+    now = time.time()
+
+    with _lesson_qa_rate_lock:
+        history = _lesson_qa_user_rate.get(user_id, [])
+        cutoff = now - window_seconds
+        history = [ts for ts in history if ts >= cutoff]
+        if len(history) >= max_requests:
+            oldest = history[0]
+            retry_after = max(1, int(window_seconds - (now - oldest)))
+            _lesson_qa_user_rate[user_id] = history
+            return False, retry_after
+        history.append(now)
+        _lesson_qa_user_rate[user_id] = history
+
+    return True, 0
+
+
+def _canonicalize_and_log_in_background(
+    app,
+    lesson_id: int,
+    user_id: int,
+    question: str,
+    chat_history_id: int,
+    api_key: str,
+) -> None:
+    """Canonicalize and FAQ-log question without blocking the API response."""
+    with app.app_context():
+        from app.models.models import LessonChatHistory, LessonFAQ
+
+        canonical = question
+        try:
+            service = LessonService(api_key=api_key)
+            canonical = service.canonicalize_question(int(lesson_id), question) or question
+        except Exception as e:
+            logger.error(f"Background canonicalization failed for lesson {lesson_id}, user {user_id}: {str(e)}")
+            canonical = question
+
+        try:
+            LessonChatHistory.update_canonical_question(chat_history_id, canonical)
+        except Exception as e:
+            logger.error(
+                f"Failed to update canonical_question for lesson_chat_history {chat_history_id}: {str(e)}"
+            )
+
+        try:
+            LessonFAQ.log_question(int(lesson_id), canonical)
+            logger.info(f"Question logged to FAQ table for lesson {lesson_id}: {canonical}")
+        except Exception as e:
+            logger.error(f"Error logging question to FAQ table: {str(e)}")
 
 
 def _get_lesson_api_key() -> str:
@@ -393,12 +462,24 @@ def ask_general_question():
 @bp.route('/my_lessons', methods=['GET'])
 @teacher_required
 def get_my_lessons():
-    """Get all lessons created by the current teacher"""
+    """Get teacher lessons with server-side pagination."""
     try:
-        lessons = LessonModel.get_lessons_by_teacher(session['user_id'])
+        page = request.args.get('page', default=1, type=int)
+        per_page = request.args.get('per_page', default=10, type=int)
+        search_term = (request.args.get('q') or '').strip() or None
+        result = LessonModel.get_lessons_by_teacher_paginated(
+            teacher_id=session['user_id'],
+            page=page,
+            per_page=per_page,
+            search_term=search_term,
+        )
         return jsonify({
             'success': True,
-            'lessons': lessons
+            'lessons': result['lessons'],
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'total_pages': result['total_pages'],
         })
     except Exception as e:
         logger.error(f"Error getting teacher lessons: {str(e)}", exc_info=True)
@@ -407,15 +488,28 @@ def get_my_lessons():
 @bp.route('/browse_lessons', methods=['GET'])
 @student_required
 def browse_lessons():
-    """Browse available lessons for students"""
+    """Browse public lessons for students with server-side pagination."""
     try:
         grade_level = request.args.get('grade_level')
         focus_area = request.args.get('focus_area')
-        
-        lessons = LessonModel.get_public_latest_lessons(grade_level=grade_level, focus_area=focus_area)
+        page = request.args.get('page', default=1, type=int)
+        per_page = request.args.get('per_page', default=10, type=int)
+        search_term = (request.args.get('q') or '').strip() or None
+
+        result = LessonModel.get_public_latest_lessons_paginated(
+            grade_level=grade_level,
+            focus_area=focus_area,
+            page=page,
+            per_page=per_page,
+            search_term=search_term,
+        )
         return jsonify({
             'success': True,
-            'lessons': lessons
+            'lessons': result['lessons'],
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'total_pages': result['total_pages'],
         })
     except Exception as e:
         logger.error(f"Error browsing lessons: {str(e)}", exc_info=True)
@@ -946,50 +1040,72 @@ def ask_lesson_question():
     if not lesson_id or not question:
         return jsonify({'error': 'lesson_id and question are required'}), 400
 
-    from app.models.models import LessonChatHistory, LessonFAQ
+    from app.models.models import LessonChatHistory
 
     user_id = session['user_id']
-
-    result = invoke_lesson_qa(
-        lesson_id=int(lesson_id),
-        question=question,
-        user_id=int(user_id),
-        allow_rag=bool(allow_rag),
-    )
-
-    # Frontend shows Yes/No; on Yes, re-send with allow_rag=true
-    if result.get('status') == 'needs_rag_confirmation':
+    allowed, retry_after = _check_and_record_lesson_qa_rate(int(user_id))
+    if not allowed:
         return jsonify({
-            'status': 'needs_rag_confirmation',
-            'permission_request': result.get('permission_request'),
-        })
+            'error': f'Too many requests in a short time. Please wait {retry_after} seconds and try again.',
+            'code': 'USER_RATE_LIMITED',
+            'retry_after': retry_after,
+        }), 429
 
-    answer = (result.get('answer') or '').strip()
-    if not answer:
-        return jsonify({'error': 'Failed to generate an answer.'}), 500
+    user_lock = _get_lesson_qa_user_lock(int(user_id))
+    acquired = user_lock.acquire(blocking=True, timeout=120)
+    if not acquired:
+        return jsonify({
+            'error': 'Your previous message is still being processed. Please try again in a moment.',
+            'code': 'CONCURRENT_REQUEST_TIMEOUT',
+        }), 429
 
-    # Canonicalize question for history & FAQ logging using existing service logic
-    api_key = session.get('groq_api_key', '')
-    service = LessonService(api_key=api_key)
-    canonical = service.canonicalize_question(int(lesson_id), question) or question
-
-    # Save the Q&A to lesson chat history
-    LessonChatHistory.save_qa(int(lesson_id), user_id, question, answer, canonical_question=canonical)
-
-    # Log the question to FAQ table for teacher visibility
     try:
-        LessonFAQ.log_question(int(lesson_id), canonical)
-        logger.info(f"Question logged to FAQ table for lesson {lesson_id}: {canonical}")
-    except Exception as e:
-        logger.error(f"Error logging question to FAQ table: {str(e)}")
+        result = invoke_lesson_qa(
+            lesson_id=int(lesson_id),
+            question=question,
+            user_id=int(user_id),
+            allow_rag=bool(allow_rag),
+        )
 
-    return jsonify({
-        'status': 'completed',
-        'answer': answer,
-        'canonical_question': canonical,
-        'source': 'lesson_or_rag_graph',
-        'confidence': 0.9,
-    })
+        # Frontend shows Yes/No; on Yes, re-send with allow_rag=true
+        if result.get('status') == 'needs_rag_confirmation':
+            return jsonify({
+                'status': 'needs_rag_confirmation',
+                'permission_request': result.get('permission_request'),
+            })
+
+        answer = (result.get('answer') or '').strip()
+        if not answer:
+            return jsonify({'error': 'Failed to generate an answer.'}), 500
+
+        # Persist the answer immediately; canonicalization runs asynchronously.
+        chat_history_id = LessonChatHistory.save_qa(
+            int(lesson_id),
+            user_id,
+            question,
+            answer,
+            canonical_question=question,
+        )
+
+        api_key = session.get('groq_api_key', '')
+        app_obj = current_app._get_current_object()
+        bg_thread = threading.Thread(
+            target=_canonicalize_and_log_in_background,
+            args=(app_obj, int(lesson_id), int(user_id), question, int(chat_history_id), api_key),
+            daemon=True,
+        )
+        bg_thread.start()
+
+        return jsonify({
+            'status': 'completed',
+            'answer': answer,
+            # Return the original immediately; canonical value is updated in DB asynchronously.
+            'canonical_question': question,
+            'source': 'lesson_or_rag_graph',
+            'confidence': 0.9,
+        })
+    finally:
+        user_lock.release()
 
 
 @bp.route('/lesson_chat_history/<int:lesson_id>', methods=['GET'])

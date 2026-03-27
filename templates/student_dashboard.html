@@ -207,8 +207,20 @@
   <!-- Font Awesome -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
 
-  <!-- marked (UMD): Markdown → HTML so # ## ### headings, tables, lists render correctly -->
+  <!-- marked: Markdown -> HTML -->
   <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
+  <!-- DOMPurify: XSS-safe HTML -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <!-- KaTeX: Math formulas -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <!-- highlight.js: Code highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <!-- Chat response formatter (marked + DOMPurify + KaTeX + highlight.js) -->
+  <script src="{{ url_for('static', filename='teacher/js/chat-response-formatter.js') }}"></script>
 
   <!-- Markdown Parser -->
   <script src="{{ url_for('static', filename='teacher/js/markdown-parser.js') }}"></script>
@@ -1775,6 +1787,124 @@
       color: #1e293b;
     }
 
+    /* Student lesson lecture formatting (long-form readability + equation stability) */
+    .lesson-content-formatted {
+      max-width: 74ch;
+      margin: 0 auto;
+      font-size: clamp(1rem, 0.96rem + 0.2vw, 1.08rem);
+      line-height: 1.72;
+      color: #1f2937;
+      letter-spacing: 0.005em;
+      word-break: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .lesson-content-formatted h1,
+    .lesson-content-formatted h2,
+    .lesson-content-formatted h3,
+    .lesson-content-formatted h4,
+    .lesson-content-formatted h5,
+    .lesson-content-formatted h6 {
+      color: #0f172a;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      margin-top: 1.1em;
+      margin-bottom: 0.45em;
+    }
+
+    .lesson-content-formatted h1 { font-size: clamp(1.55rem, 1.35rem + 0.6vw, 1.9rem); font-weight: 800; }
+    .lesson-content-formatted h2 { font-size: clamp(1.35rem, 1.2rem + 0.5vw, 1.6rem); font-weight: 750; }
+    .lesson-content-formatted h3 { font-size: clamp(1.16rem, 1.08rem + 0.35vw, 1.3rem); font-weight: 700; }
+    .lesson-content-formatted h4,
+    .lesson-content-formatted h5,
+    .lesson-content-formatted h6 { font-size: 1.05rem; font-weight: 700; }
+
+    .lesson-content-formatted p {
+      margin: 0.52em 0;
+    }
+
+    .lesson-content-formatted ul,
+    .lesson-content-formatted ol {
+      margin: 0.65em 0 0.85em 0;
+      padding-left: 1.3rem;
+    }
+
+    .lesson-content-formatted li {
+      margin: 0.28em 0;
+      line-height: 1.62;
+    }
+
+    .lesson-content-formatted table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.9em 0;
+      font-size: 0.96em;
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .lesson-content-formatted th,
+    .lesson-content-formatted td {
+      border: 1px solid #e5e7eb;
+      padding: 0.52rem 0.72rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .lesson-content-formatted th {
+      background: #f8fafc;
+      font-weight: 700;
+    }
+
+    .lesson-content-formatted pre {
+      overflow-x: auto;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+    }
+
+    .lesson-content-formatted code {
+      font-size: 0.92em;
+    }
+
+    .lesson-content-formatted mjx-container[display="true"],
+    .lesson-content-formatted .katex-display,
+    .chat-message-content mjx-container[display="true"],
+    .chat-message-content .katex-display {
+      overflow-x: auto;
+      overflow-y: hidden;
+      margin: 0.75rem 0;
+      padding-bottom: 0.12rem;
+    }
+
+    .lesson-content-formatted mjx-container[jax="CHTML"] {
+      font-size: 1.02em;
+    }
+
+    @media (max-width: 768px) {
+      #viewLessonModal .lesson-content-formatted,
+      #lessonQAContent .lesson-content-formatted {
+        font-size: 0.99rem !important;
+        line-height: 1.68 !important;
+      }
+
+      #viewLessonModal .lesson-content-formatted h1 { font-size: 1.36rem !important; }
+      #viewLessonModal .lesson-content-formatted h2 { font-size: 1.2rem !important; }
+      #viewLessonModal .lesson-content-formatted h3 { font-size: 1.08rem !important; }
+      #viewLessonModal .lesson-content-formatted p,
+      #viewLessonModal .lesson-content-formatted li { font-size: 0.98rem !important; }
+    }
+
+    @media (max-width: 480px) {
+      #viewLessonModal .lesson-content-formatted,
+      #lessonQAContent .lesson-content-formatted {
+        max-width: 100%;
+        font-size: 0.96rem !important;
+      }
+    }
+
     .view-lesson-actions-row {
       display: flex;
       flex-wrap: wrap;
@@ -3091,7 +3221,7 @@
     <script>
       // Chat History Management
       let chatHistory = [];
-      let currentChatId = 'chat1';
+      let currentChatId = null;
       let isListening = false;
       let speechRecognition = null;
       let speechSynthesis = null;
@@ -3220,9 +3350,9 @@
       }
 
       // Initialize chat state on page load per specification #6
-      function initializeChatState() {
-        // Load chat history from storage
-        loadInitialChatHistory();
+      async function initializeChatState() {
+        // Load chat history from backend
+        await loadInitialChatHistory();
         renderChatSidebar();
 
         // If chat history exists, load the most recent chat
@@ -3440,28 +3570,32 @@
 
       // Chat threads persistence - ENABLED
       function saveChatThreads() {
-        try {
-          localStorage.setItem('Student_chat_threads', JSON.stringify(chatHistory || []));
-        } catch (e) {
-          console.error('Failed to save chat threads', e);
-        }
+        // Chat metadata is persisted in DB conversations.
+        // Keep this as a no-op to avoid localStorage chat persistence.
       }
 
-      function loadInitialChatHistory() {
+      async function loadInitialChatHistory() {
         try {
-          const saved = JSON.parse(localStorage.getItem('Student_chat_threads') || 'null');
-          if (saved && Array.isArray(saved) && saved.length) {
-            // One-time cleanup: if this looks like old seeded dummy data (only chat1–chat4), clear it
-            var legacyOnly = saved.length <= 4 && saved.every(function (c) { return /^chat[1-4]$/.test(String(c.id)); });
-            if (legacyOnly) {
-              chatHistory = [];
-              saveChatThreads();
-            } else {
-              chatHistory = saved;
-            }
-          } else {
-            chatHistory = [];
+          const response = await fetch('/get_conversations?limit=200', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to load conversations');
           }
+          const conversations = Array.isArray(data.conversations) ? data.conversations : [];
+          chatHistory = conversations.map(function (conv) {
+            const ts = conv.last_message || conv.updated_at || conv.created_at || new Date().toISOString();
+            return {
+              id: conv.id,
+              title: conv.title || 'New Conversation',
+              timestamp: ts,
+              active: false,
+              lastMessageSnippet: '',
+              unreadCount: 0
+            };
+          });
         } catch (e) {
           console.error('Failed to load chat threads', e);
           chatHistory = [];
@@ -3711,7 +3845,7 @@
       }
 
       // Build chat layout for a given chatId (adds lesson panel only if bound to that chat)
-      function renderChatLayoutForChat(chatId) {
+      async function renderChatLayoutForChat(chatId) {
         const chatArea = document.getElementById('chatArea');
         if (!chatArea) return;
 
@@ -3763,21 +3897,35 @@
         messagesWrapper.appendChild(chatMessages);
         chatArea.appendChild(messagesWrapper);
 
-        // Load messages for this chat
-        const storedMessages = loadMessagesForChat(chatId || 'chat1');
+        // Load messages for this chat from DB
+        let storedMessages = [];
+        const numericChatId = parseInt(chatId, 10);
+        if (!isNaN(numericChatId)) {
+          try {
+            const res = await fetch('/get_messages/' + numericChatId, {
+              method: 'GET',
+              credentials: 'include'
+            });
+            const data = await res.json().catch(function () { return {}; });
+            if (res.ok && data && Array.isArray(data.messages)) {
+              storedMessages = data.messages.map(function (msg) {
+                return {
+                  role: (msg.role === 'bot') ? 'assistant' : (msg.role || 'user'),
+                  content: msg.message || msg.content || ''
+                };
+              });
+            }
+          } catch (e) {
+            console.error('Failed to load chat messages from DB', e);
+          }
+        }
 
         function renderMsg(role, content) {
           const msgDiv = document.createElement('div');
+          const isLessonMetaBlock = typeof content === 'string' && content.indexOf('id="current-lesson-metadata"') !== -1;
           if (role === 'user') {
             msgDiv.className = 'chat-message user animate-fade-in';
-            const normalized = (content || '')
-              .replace(/&lt;strong&gt;/gi, '**')
-              .replace(/&lt;\/strong&gt;/gi, '**')
-              .replace(/<strong>/gi, '**')
-              .replace(/<\/strong>/gi, '**');
-            const rendered = (typeof MarkdownParser !== 'undefined' && MarkdownParser.parse && MarkdownParser.sanitizeHtml)
-              ? MarkdownParser.sanitizeHtml(MarkdownParser.parse(normalized))
-              : escapeHtml(content || '');
+            const rendered = formatRichContent(content || '');
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
                 <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
@@ -3786,14 +3934,7 @@
             `;
           } else {
             msgDiv.className = 'chat-message assistant animate-fade-in';
-            const normalized = (content || '')
-              .replace(/&lt;strong&gt;/gi, '**')
-              .replace(/&lt;\/strong&gt;/gi, '**')
-              .replace(/<strong>/gi, '**')
-              .replace(/<\/strong>/gi, '**');
-            const rendered = (typeof MarkdownParser !== 'undefined' && MarkdownParser.parse && MarkdownParser.sanitizeHtml)
-              ? MarkdownParser.sanitizeHtml(MarkdownParser.parse(normalized))
-              : (content || '');
+            const rendered = isLessonMetaBlock ? (content || '') : formatRichContent(content || '');
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
                 <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
@@ -3802,13 +3943,13 @@
             `;
           }
           chatMessages.appendChild(msgDiv);
+          const contentEl = msgDiv.querySelector('.chat-message-content');
+          if (contentEl) applyRenderedFormatting(contentEl);
         }
 
         if (storedMessages && storedMessages.length > 0) {
           storedMessages.forEach(msg => renderMsg(msg.role, msg.content));
-          if (window.MathJax && window.MathJax.typesetPromise) {
-            window.MathJax.typesetPromise([chatMessages]).catch(err => console.warn('MathJax rendering on loaded messages skipped:', err));
-          }
+          applyRenderedFormatting(chatMessages);
         } else if (!lessonCtx) {
           // Welcome state for empty chat WITHOUT a lesson context
           chatMessages.innerHTML = `
@@ -3841,17 +3982,18 @@
       // Show My Lessons Page (API-integrated for students)
       // Students browse available lessons from the backend; no dummy seed data.
 
-      // In-memory cache to avoid refetching repeatedly during a single page session
-      let _studentLessonsCache = null;
-      let _studentLessonsCacheAt = 0;
+      // Current page cache only (server-side pagination)
+      let _studentLessonsCache = [];
+      let studentLessonsTotalPages = 1;
+      let studentLessonsTotalCount = 0;
 
-      async function fetchStudentLessons() {
-        const now = Date.now();
-        // short cache (10s) to keep UI responsive without showing stale dummy data
-        if (_studentLessonsCache && (now - _studentLessonsCacheAt) < 10_000) {
-          return _studentLessonsCache;
-        }
-        const response = await fetch('/api/lessons/browse_lessons', { method: 'GET', credentials: 'include' });
+      async function fetchStudentLessonsPage(page, perPage, searchTerm) {
+        const params = new URLSearchParams({
+          page: String(page || 1),
+          per_page: String(perPage || lessonsPerPage)
+        });
+        if (searchTerm) params.set('q', String(searchTerm).trim());
+        const response = await fetch('/api/lessons/browse_lessons?' + params.toString(), { method: 'GET', credentials: 'include' });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data || data.success !== true) {
           const msg = (data && (data.error || data.message)) || `Failed to load lessons (${response.status})`;
@@ -3859,8 +4001,15 @@
         }
         const lessons = Array.isArray(data.lessons) ? data.lessons : [];
         _studentLessonsCache = lessons;
-        _studentLessonsCacheAt = now;
-        return lessons;
+        studentLessonsTotalPages = Math.max(1, Number(data.total_pages || 1));
+        studentLessonsTotalCount = Number(data.total || lessons.length || 0);
+        currentPage = Math.max(1, Number(data.page || currentPage));
+        return {
+          lessons,
+          total_pages: studentLessonsTotalPages,
+          total: studentLessonsTotalCount,
+          page: currentPage
+        };
       }
 
       // Validate MathJax rendering in content
@@ -3963,10 +4112,10 @@
           </div>
         `;
 
-        fetchStudentLessons()
-          .then(apiLessons => {
-            lessons = apiLessons || [];
-            // Continue rendering below by re-invoking the function that renders with `lessons`
+        fetchStudentLessonsPage(currentPage, lessonsPerPage, lessonSearchTerm)
+          .then(payload => {
+            lessons = (payload && payload.lessons) || [];
+            // Continue rendering with current page data from backend
             renderLessonsTable(lessons);
           })
           .catch(err => {
@@ -3981,19 +4130,10 @@
 
       function renderLessonsTable(lessons) {
         lessons = Array.isArray(lessons) ? lessons : [];
-
-        // Sort lessons by date (newest first)
-        lessons.sort((a, b) => new Date(b.created_at || b.createdAt || b.updated_at || b.updatedAt || 0) - new Date(a.created_at || a.createdAt || a.updated_at || a.updatedAt || 0));
-
-        // Apply search filter and paginate
-        const filteredLessons = getFilteredLessons(lessons);
-        const totalPages = Math.max(1, Math.ceil(filteredLessons.length / lessonsPerPage));
-        if (currentPage > totalPages) currentPage = 1;
         const startIdx = (currentPage - 1) * lessonsPerPage;
-        const pageLessons = filteredLessons.slice(startIdx, startIdx + lessonsPerPage);
 
         // Format lessons for display (API uses created_at/updated_at)
-        const formattedLessons = pageLessons.map((lesson, index) => {
+        const formattedLessons = lessons.map((lesson, index) => {
           const date = new Date(lesson.created_at || lesson.createdAt || lesson.updated_at || lesson.updatedAt || Date.now());
           const now = new Date();
           const diffTime = Math.abs(now - date);
@@ -4118,8 +4258,8 @@
     </div>
   `;
 
-        // Initialize pagination based on filtered lessons
-        updatePagination(filteredLessons.length);
+        // Initialize pagination based on backend totals
+        updatePagination();
 
         // Always start lessons view at the top after render
         const chatAreaEl = document.getElementById('chatArea');
@@ -4153,18 +4293,23 @@
             return;
           }
 
-          // Ensure cache is hydrated
-          fetchStudentLessons().then(() => {
-            const index = findLessonById(lessonId);
-            console.log('🔍 findLessonById returned index:', index);
-            const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
-
-            if (index !== -1 && lessons[index]) {
-              populateViewLessonModal(lessons[index]);
-              showViewLessonModal();
-            } else {
-              alert('Error: Lesson not found. Please refresh and try again.');
-            }
+          fetch('/api/lessons/lesson/' + lessonId + '/view', { method: 'GET', credentials: 'include' }).then(function (res) {
+            if (!res.ok) throw new Error('Failed to load lesson');
+            return res.json();
+          }).then(function (data) {
+            const lesson = data.lesson || {};
+            const versions = Array.isArray(data.versions) ? data.versions : [];
+            const sortedVersions = versions.slice().sort((a, b) => (b.version_number || b.version || 0) - (a.version_number || a.version || 0));
+            const currentVersion = sortedVersions[0] || lesson;
+            populateViewLessonModal({
+              id: lesson.id,
+              title: lesson.title,
+              subject: lesson.focus_area || lesson.subject || 'General',
+              grade: lesson.grade_level || lesson.grade || 'General',
+              content: currentVersion.content || lesson.content || '',
+              body: currentVersion.content || lesson.content || ''
+            });
+            showViewLessonModal();
           }).catch(err => {
             console.error('❌ viewLesson fetch error:', err);
             showToast(err.message || 'Failed to load lesson', 'error', 4000);
@@ -4176,7 +4321,113 @@
         }
       }
 
-      // Format lesson content for view: markdown → HTML (# ## headings, tables, bullets, formulas)
+      function normalizeFormattingInput(content) {
+        return String(content || '')
+          .replace(/&lt;strong&gt;/gi, '**')
+          .replace(/&lt;\/strong&gt;/gi, '**')
+          .replace(/<strong>/gi, '**')
+          .replace(/<\/strong>/gi, '**');
+      }
+
+      function normalizeLessonPlainTextToMarkdown(content) {
+        const raw = String(content || '').replace(/\r\n/g, '\n');
+        const sourceLines = raw.split('\n');
+        const lines = [];
+
+        function isEquationFragment(line) {
+          const t = (line || '').trim();
+          if (!t || t.length > 18) return false;
+          if (/[:;]/.test(t)) return false;
+          if (/^(\s{0,3}(#{1,6}\s|[-*]\s|\d+\.\s|>\s|\|)|\s*```)/.test(t)) return false;
+          const words = t.split(/\s+/).filter(Boolean);
+          if (words.length > 3) return false;
+          if (/[.!?]/.test(t) && /[a-z]{3,}/i.test(t)) return false;
+          return /[=+\-*/×÷^()°Δα-ωΑ-ΩA-Za-z0-9]/.test(t);
+        }
+
+        for (let i = 0; i < sourceLines.length; i++) {
+          const current = (sourceLines[i] || '').trim();
+          if (isEquationFragment(current)) {
+            let j = i;
+            const run = [];
+            while (j < sourceLines.length && isEquationFragment(sourceLines[j])) {
+              run.push((sourceLines[j] || '').trim());
+              j += 1;
+            }
+            if (run.length >= 4) {
+              lines.push(run.join(' '));
+              i = j - 1;
+              continue;
+            }
+          }
+          lines.push(sourceLines[i] || '');
+        }
+
+        const out = [];
+        const alreadyMarkdown = /^(\s{0,3}(#{1,6}\s|[-*]\s|\d+\.\s|>\s|\|)|\s*```)/;
+        const shortHeadingLike = /^[A-Z][A-Za-z0-9,&()\-/'\s]{2,90}$/;
+
+        for (let i = 0; i < lines.length; i++) {
+          const original = lines[i] || '';
+          const line = original.trim();
+
+          if (!line) {
+            out.push('');
+            continue;
+          }
+
+          if (alreadyMarkdown.test(line)) {
+            out.push(original);
+            continue;
+          }
+
+          const words = line.split(/\s+/).filter(Boolean).length;
+          const next = (lines[i + 1] || '').trim();
+
+          // Convert plain section titles into markdown headings for consistent rendering.
+          if (line.endsWith(':') && words <= 10 && line.length <= 80) {
+            out.push(`### ${line.slice(0, -1).trim()}`);
+            continue;
+          }
+
+          if (shortHeadingLike.test(line) && words <= 8 && next) {
+            out.push(`## ${line}`);
+            continue;
+          }
+
+          out.push(original);
+        }
+
+        return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      }
+
+      function formatRichContent(content) {
+        const normalized = normalizeFormattingInput(content);
+        if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
+          return TeacherChatFormatter.formatChatResponse(normalized);
+        }
+        if (typeof MarkdownParser !== 'undefined' && MarkdownParser.parse && MarkdownParser.sanitizeHtml) {
+          return MarkdownParser.sanitizeHtml(MarkdownParser.parse(normalized));
+        }
+        return escapeHtml(normalized).replace(/\n/g, '<br>');
+      }
+
+      function applyRenderedFormatting(el) {
+        if (!el) return;
+        if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+          TeacherChatFormatter.processRenderedContent(el);
+          return;
+        }
+        if (window.typesetMathIn) {
+          window.typesetMathIn(el).catch(console.warn);
+          return;
+        }
+        if (window.MathJax && window.MathJax.typesetPromise) {
+          window.MathJax.typesetPromise([el]).catch(err => console.warn('MathJax rendering skipped:', err));
+        }
+      }
+
+      // Format lesson content for view using the same pipeline as teacher chat formatting.
       function formatLessonContentForView(content) {
         if (!content || (typeof content === 'string' && content.trim() === '')) {
           return '<p class="text-gray-500 italic">No content available</p>';
@@ -4193,16 +4444,10 @@
           .replace(/^Lesson Title:.*$/gm, '').replace(/^Grade Level:.*$/gm, '').replace(/^Focus Area:.*$/gm, '')
           .replace(/^Subject:.*$/gm, '').replace(/^Topic:.*$/gm, '').replace(/^Duration:.*$/gm, '').replace(/^Materials:.*$/gm, '')
           .replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
-        try {
-          if (typeof marked !== 'undefined') {
-            marked.setOptions({ breaks: true, gfm: true });
-            const html = marked.parse(raw);
-            return '<div class="prose prose-sm max-w-none text-gray-700 leading-relaxed lesson-content-formatted">' +
-              '<style>.lesson-content-formatted table{border-collapse:collapse;width:100%;}.lesson-content-formatted th,.lesson-content-formatted td{border:1px solid #e5e7eb;padding:0.5rem 0.75rem;text-align:left;}.lesson-content-formatted th{background:#f3f4f6;font-weight:700;}.lesson-content-formatted ul,.lesson-content-formatted ol{margin:0.75rem 0;padding-left:1.5rem;}.lesson-content-formatted li{margin:0.4rem 0;font-weight:500;line-height:1.6;}.lesson-content-formatted li::marker{color:#0ea5e9;font-weight:700;}.lesson-content-formatted strong{font-weight:700;color:#111827;}.lesson-content-formatted h1{font-size:1.6rem;font-weight:700;margin-top:1rem;margin-bottom:0.5rem;color:#111827;letter-spacing:-0.02em;}.lesson-content-formatted h2{font-size:1.35rem;font-weight:700;margin-top:0.9rem;margin-bottom:0.45rem;color:#111827;letter-spacing:-0.01em;}.lesson-content-formatted h3{font-size:1.2rem;font-weight:700;margin-top:0.8rem;margin-bottom:0.4rem;color:#1f2937;}.lesson-content-formatted h4,.lesson-content-formatted h5,.lesson-content-formatted h6{font-size:1.05rem;font-weight:700;margin-top:0.7rem;margin-bottom:0.35rem;color:#1f2937;}.lesson-content-formatted p{margin:0.4rem 0;line-height:1.65;}</style>' +
-              html + '</div>';
-          }
-        } catch (e) { console.warn('formatLessonContentForView', e); }
-        return '<div class="text-gray-700 leading-relaxed whitespace-pre-wrap">' + (raw.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</div>';
+        raw = normalizeLessonPlainTextToMarkdown(raw);
+        const html = formatRichContent(raw);
+        return '<div class="prose prose-sm md:prose-base max-w-none text-gray-700 leading-relaxed markdown-content lesson-content-formatted">' +
+          html + '</div>';
       }
 
       // Populate the view lesson modal with data (student read-only version)
@@ -4230,29 +4475,13 @@
             subtitleEl.textContent = `📚 ${lesson.subject || 'General'} • Grade ${lesson.grade || 'N/A'}`;
           }
 
-          // Populate lesson content: parse markdown to HTML and sanitize for proper formatting
+          // Populate lesson content with teacher-equivalent formatting pipeline
           const contentEl = document.getElementById('viewLessonCurrent');
           if (contentEl) {
             const rawContent = (lesson.content || lesson.body || '').trim();
-            let contentHtml;
-            if (!rawContent) {
-              contentHtml = '<p class="text-gray-500 italic">No content available</p>';
-            } else if (typeof MarkdownParser !== 'undefined' && MarkdownParser.parse && MarkdownParser.sanitizeHtml) {
-              contentHtml = MarkdownParser.sanitizeHtml(MarkdownParser.parse(rawContent));
-            } else {
-              contentHtml = rawContent.replace(/\n/g, '<br>');
-            }
-            contentEl.innerHTML = contentHtml;
+            contentEl.innerHTML = formatLessonContentForView(rawContent);
             contentEl.classList.add('markdown-content');
-
-            // Trigger MathJax to reprocess the newly added content
-            if (window.MathJax && window.MathJax.typesetPromise) {
-              window.MathJax.typesetPromise([contentEl]).then(() => {
-                console.log('MathJax rendered successfully in View Lesson modal');
-              }).catch(err => {
-                console.warn('MathJax processing error:', err);
-              });
-            }
+            applyRenderedFormatting(contentEl);
           }
 
           console.log('✅ populateViewLessonModal completed successfully');
@@ -4541,7 +4770,7 @@
       }
 
       // Switch lesson context (when user selects a different lesson)
-      function switchLessonContext(lessonId) {
+      async function switchLessonContext(lessonId) {
         const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
         const index = findLessonById(lessonId);
         if (index === -1 || !lessons[index]) {
@@ -4558,7 +4787,8 @@
         }
         
         // Start new chat and bind new lesson
-        startNewChat();
+        await startNewChat();
+        if (!currentChatId) return false;
         bindLessonToChatSession(lesson);
         return true;
       }
@@ -4580,7 +4810,7 @@
       }
 
       // Switch to main chatbot interface in this file and integrate ask_question API for this lesson
-      function openLessonChat() {
+      async function openLessonChat() {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) {
           showToast('No lesson selected', 'error', 2000);
@@ -4623,10 +4853,8 @@
         // Close the view modal and open chat with this lesson context (mobile + desktop)
         closeViewLessonModal();
         lessonCreationCompleted = true;
-        // Build chat UI for this chatId before we assign the context
-        renderChatLayoutForChat(currentChatId);
-        startNewChat();
-        // If startNewChat reset the layout, rebuild again
+        await startNewChat();
+        if (!currentChatId) return;
         renderChatLayoutForChat(currentChatId);
         // NOW bind the lesson after startNewChat
         bindLessonToChatSession(lesson);
@@ -4719,14 +4947,7 @@
         if (contentEl) {
           const raw = lesson.content || lesson.body || '';
           contentEl.innerHTML = formatLessonContentForView(raw);
-
-          if (window.MathJax && window.MathJax.typesetPromise) {
-            window.MathJax.typesetPromise([contentEl]).then(() => {
-              console.log('MathJax rendered in lesson context display');
-            }).catch(err => {
-              console.warn('MathJax processing error in lesson context:', err);
-            });
-          }
+          applyRenderedFormatting(contentEl);
         }
 
         // Generate and display teaching recommendations
@@ -4836,9 +5057,11 @@
             messagesEl.appendChild(userMsg);
             const aiMsg = document.createElement('div');
             aiMsg.className = 'mb-4 flex justify-start';
-            const answerHtml = (entry.answer || '').replace(/\n/g, '<br>');
+            const answerHtml = formatRichContent(entry.answer || '');
             aiMsg.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none"><div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + (entry.created_at ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '') + '</p></div>';
             messagesEl.appendChild(aiMsg);
+            const aiContent = aiMsg.querySelector('.prose');
+            if (aiContent) applyRenderedFormatting(aiContent);
           });
           messagesEl.scrollTop = messagesEl.scrollHeight;
         } catch (e) {
@@ -4916,8 +5139,9 @@
                 body: JSON.stringify({ lesson_id: lessonId, question: message, allow_rag: true })
               }).then(function(r) { return r.json(); }).then(function(d) {
                 const ans = (d && d.answer) ? d.answer : (d.error || 'Sorry, could not get an answer.');
-                const answerHtml = String(ans).replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;br&gt;/g, '<br>');
+                const answerHtml = formatRichContent(String(ans));
                 innerDiv.innerHTML = '<div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p>';
+                applyRenderedFormatting(innerDiv);
               }).catch(function() {
                 innerDiv.innerHTML = '<p class="text-red-600">Sorry, could not get an answer.</p>';
               });
@@ -4931,9 +5155,11 @@
             const answer = response.ok && data.answer ? data.answer : (data.error || 'Sorry, could not get an answer.');
             const aiMsgEl = document.createElement('div');
             aiMsgEl.className = 'mb-4 flex justify-start';
-            const answerHtml = String(answer).replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&lt;br&gt;/g, '<br>');
+            const answerHtml = formatRichContent(String(answer));
             aiMsgEl.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none"><div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p></div>';
             messagesEl.appendChild(aiMsgEl);
+            const aiContent = aiMsgEl.querySelector('.prose');
+            if (aiContent) applyRenderedFormatting(aiContent);
           }
         } catch (e) {
           console.error('ask_question', e);
@@ -5049,7 +5275,7 @@
       }
 
       function updatePagination(totalFilteredCount) {
-        const totalPages = Math.max(1, Math.ceil(totalFilteredCount / lessonsPerPage));
+        const totalPages = Math.max(1, studentLessonsTotalPages);
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
         const pageInfo = document.getElementById('pageInfo');
@@ -5066,11 +5292,7 @@
       }
 
       function nextPage() {
-        const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
-        const filteredLessons = getFilteredLessons(lessons);
-        const totalPages = Math.max(1, Math.ceil(filteredLessons.length / lessonsPerPage));
-
-        if (currentPage < totalPages) {
+        if (currentPage < Math.max(1, studentLessonsTotalPages)) {
           currentPage++;
           showMyLessonsPage();
         }
@@ -5142,7 +5364,7 @@
         }
       }
 
-      function startNewChat() {
+      async function startNewChat() {
         // ════════════════════════════════════════════════════════════════════════════════
         // SPECIFICATION #3: CHAT FINALIZATION
         // Finalize current chat before creating new one
@@ -5159,8 +5381,27 @@
         // Create new unique conversation ID with empty context
         // ════════════════════════════════════════════════════════════════════════════════
 
-        // 1. Generate unique conversation ID
-        const chatId = 'chat_' + Date.now();
+        // 1. Create DB conversation ID
+        let chatId = null;
+        try {
+          const createRes = await fetch('/create_conversation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ title: 'New Conversation' })
+          });
+          const createData = await createRes.json().catch(function () { return {}; });
+          if (!createRes.ok || !createData.conversation_id) {
+            throw new Error(createData.error || 'Failed to create conversation');
+          }
+          chatId = createData.conversation_id;
+        } catch (e) {
+          console.error('Failed to create new chat conversation', e);
+          if (typeof showToast === 'function') {
+            showToast('Failed to start new chat', 'error', 2500);
+          }
+          return;
+        }
         currentChatId = chatId;
 
         // 2. Initialize empty message array (scoped to this chat ID)
@@ -5180,13 +5421,6 @@
         chatHistory.unshift(newChat);
         saveChatThreads();
         renderChatSidebar();
-
-        // 5. Initialize empty messages array for this chat in localStorage
-        try {
-          saveMessagesForChat(chatId, []);
-        } catch (e) {
-          console.error('Failed to initialize messages for new chat', e);
-        }
 
         // ════════════════════════════════════════════════════════════════════════════════
         // SPECIFICATION #2: MESSAGE ISOLATION
@@ -5222,7 +5456,7 @@
       // SPECIFICATION #5: REOPENING A CHAT
       // Load only that chat's messages, clear previous context
       // ════════════════════════════════════════════════════════════════════════════════
-      function loadChat(chatId) {
+      async function loadChat(chatId) {
         // 1. Close mobile sidebar when chat is clicked
         const mobileSidebar = document.getElementById('mobileSidebar');
         const mobileOverlay = document.getElementById('mobileOverlay');
@@ -5266,8 +5500,8 @@
         }
         window.currentLessonQAId = null;
 
-        // Rebuild chat UI and render messages for this chat (messages from localStorage)
-        renderChatLayoutForChat(chatId);
+        // Rebuild chat UI and render messages for this chat (messages from DB)
+        await renderChatLayoutForChat(chatId);
 
         // After the UI is built, asynchronously restore the bound lesson (if any)
         // from the database so that this chat continues to use the same lesson
@@ -5468,13 +5702,6 @@
         function applyLocalDeletion() {
           chatHistory = chatHistory.filter(function (chat) { return String(chat.id) !== String(currentChatMenuId); });
 
-          // Remove stored messages for this chat
-          try {
-            localStorage.removeItem('Student_chat_messages_' + currentChatMenuId);
-          } catch (e) {
-            console.error('Failed to remove chat messages', e);
-          }
-
           saveChatThreads();
           renderChatSidebar(); // Update sidebar after deletion
 
@@ -5670,7 +5897,8 @@
                 body: JSON.stringify({ lesson_id: lessonId, question: message, allow_rag: true })
               }).then(function (r) { return r.json(); }).then(function (d) {
                 const ans = (d && d.answer != null) ? d.answer : (d.error || 'Sorry, I couldn\'t process that question. Please try again.');
-                bubble.innerHTML = '<div class="prose prose-sm max-w-none text-gray-800">' + ans.replace(/\n/g, '<br>') + '</div>';
+                bubble.innerHTML = '<div class="prose prose-sm max-w-none text-gray-800">' + formatRichContent(ans) + '</div>';
+                applyRenderedFormatting(bubble);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
               }).catch(function () {
                 bubble.innerHTML = '<p class="text-red-600">Sorry, I couldn\'t process that question. Please try again.</p>';
@@ -5697,11 +5925,15 @@
       }
 
       // Send message
-      function sendMessage() {
+      async function sendMessage() {
         const input = document.getElementById('messageInput');
         const message = input.value.trim();
 
         if (!message) return;
+        if (!currentChatId) {
+          await startNewChat();
+          if (!currentChatId) return;
+        }
 
         console.log('[StudentDash] sendMessage()', {
           message,
@@ -5776,21 +6008,27 @@
         }
       }
 
-      // Message persistence helpers
-      function saveMessagesForChat(chatId, messages) {
+      async function persistMessageToDb(chatId, role, content) {
         try {
-          localStorage.setItem('Student_chat_messages_' + chatId, JSON.stringify(messages || []));
+          const normalizedRole = (role === 'assistant') ? 'bot' : role;
+          const response = await fetch('/save_message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              conversation_id: chatId,
+              role: normalizedRole,
+              message: String(content || '')
+            })
+          });
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save message');
+          }
+          return data;
         } catch (e) {
-          console.error('Failed to save chat messages', e);
-        }
-      }
-
-      function loadMessagesForChat(chatId) {
-        try {
-          return JSON.parse(localStorage.getItem('Student_chat_messages_' + chatId) || '[]');
-        } catch (e) {
-          console.error('Failed to load chat messages', e);
-          return [];
+          console.error('Failed to persist message to DB', e);
+          return null;
         }
       }
 
@@ -5799,49 +6037,33 @@
       // All messages stored ONLY under the active conversation ID
       // Messages NEVER shared, merged, or inferred across different conversation IDs
       // ════════════════════════════════════════════════════════════════════════════════
-      function appendMessageToChat(chatId, role, content) {
-        // Load messages for THIS SPECIFIC chat only
-        // Storage key: localStorage['Student_chat_messages_' + chatId]
-        const messages = loadMessagesForChat(chatId);
+      async function appendMessageToChat(chatId, role, content) {
+        const numericChatId = parseInt(chatId, 10);
+        const activeConversationId = !isNaN(numericChatId) ? numericChatId : null;
+        if (!activeConversationId) {
+          console.warn('Skipping message persistence without valid conversation id', chatId);
+          return;
+        }
 
-        // Create message object
+        await persistMessageToDb(activeConversationId, role, content);
+
         const messageObj = { role: role, content: content, timestamp: new Date().toISOString() };
-
-        // Append to this chat's message array (isolated by chatId)
-        messages.push(messageObj);
-
-        // Persist back to storage (scoped to chatId, not shared with other chats)
-        saveMessagesForChat(chatId, messages);
-
-        // Update chat thread metadata (move to top and refresh timestamp)
         try {
-          const idx = chatHistory.findIndex(c => c.id === chatId);
+          const idx = chatHistory.findIndex(c => String(c.id) === String(activeConversationId));
           if (idx !== -1) {
-            // Update timestamp and last message snippet
             chatHistory[idx].timestamp = messageObj.timestamp;
             const plainText = (typeof content === 'string') ? content.replace(/<[^>]*>/g, '') : String(content);
             chatHistory[idx].lastMessageSnippet = plainText.slice(0, 120);
-
-            // If the message is from the assistant and the chat is NOT currently open, increment unreadCount
-            if (role === 'assistant' && currentChatId !== chatId) {
+            if (role === 'assistant' && String(currentChatId) !== String(activeConversationId)) {
               chatHistory[idx].unreadCount = (chatHistory[idx].unreadCount || 0) + 1;
-            } else if (currentChatId === chatId) {
-              // If we're in this chat, reset unread
+            } else if (String(currentChatId) === String(activeConversationId)) {
               chatHistory[idx].unreadCount = 0;
             }
-
-            // Move to front
             const [chatObj] = chatHistory.splice(idx, 1);
             chatHistory.unshift(chatObj);
-          } else {
-            // Create a new thread if missing (initialize snippet/unread)
-            const plainText = (typeof content === 'string') ? content.replace(/<[^>]*>/g, '') : String(content);
-            const newThread = { id: chatId, title: 'Conversation', timestamp: messageObj.timestamp, active: false, lastMessageSnippet: plainText.slice(0, 120), unreadCount: (role === 'assistant' && currentChatId !== chatId) ? 1 : 0 };
-            chatHistory.unshift(newThread);
           }
-          saveChatThreads();
           updateChatHistoryUI();
-          renderChatSidebar(); // Re-render sidebar to show updated timestamp and position
+          renderChatSidebar();
         } catch (e) {
           console.error('Failed to update chat thread metadata', e);
         }
@@ -5852,30 +6074,22 @@
         const chatMessages = document.getElementById('chatMessages');
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message user animate-fade-in';
+        const rendered = formatRichContent(message || '');
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
           <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
         </div>
-        <div class="chat-message-content">${MarkdownParser.sanitizeHtml(MarkdownParser.parse(
-          (message || '')
-            .replace(/&lt;strong&gt;/gi, '**')
-            .replace(/&lt;\/strong&gt;/gi, '**')
-            .replace(/<strong>/gi, '**')
-            .replace(/<\/strong>/gi, '**')
-        ))}</div>
+        <div class="chat-message-content">${rendered}</div>
       `;
         chatMessages.appendChild(messageDiv);
         
         // Scroll to bottom after message is added
         requestAnimationFrame(() => scrollToBottom());
 
-        // Typeset math inside user message
-        if (window.typesetMathIn) {
-          window.typesetMathIn(messageDiv.querySelector('.chat-message-content')).catch(console.warn);
-        }
+        const contentEl = messageDiv.querySelector('.chat-message-content');
+        if (contentEl) applyRenderedFormatting(contentEl);
 
         // Persist to active chat (scoped by currentChatId - ensures isolation)
-        if (!currentChatId) currentChatId = 'chat1';
         appendMessageToChat(currentChatId, 'user', message);
       }
 
@@ -5886,14 +6100,8 @@
         messageDiv.className = 'chat-message assistant animate-fade-in';
         const contentDiv = document.createElement('div');
         contentDiv.className = 'chat-message-content';
-        // Normalize legacy <strong> tags that may come through as plain text
-        const normalizedMessage = (message || '')
-          .replace(/&lt;strong&gt;/gi, '**')
-          .replace(/&lt;\/strong&gt;/gi, '**')
-          .replace(/<strong>/gi, '**')
-          .replace(/<\/strong>/gi, '**');
-        const safeHtml = MarkdownParser.sanitizeHtml(MarkdownParser.parse(normalizedMessage));
-        contentDiv.innerHTML = safeHtml;
+        const isLessonMetaBlock = typeof message === 'string' && message.indexOf('id="current-lesson-metadata"') !== -1;
+        contentDiv.innerHTML = isLessonMetaBlock ? String(message || '') : formatRichContent(message || '');
         
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
@@ -5906,15 +6114,9 @@
         // Scroll to bottom after message is added
         requestAnimationFrame(() => scrollToBottom());
 
-        // Trigger MathJax on the new message
-        if (window.MathJax && window.MathJax.typesetPromise) {
-          window.MathJax.typesetPromise([contentDiv]).catch(err => {
-            console.warn('MathJax rendering skipped on assistant message:', err);
-          });
-        }
+        applyRenderedFormatting(contentDiv);
 
         // Persist
-        if (!currentChatId) currentChatId = 'chat1';
         appendMessageToChat(currentChatId, 'assistant', message);
 
         // Auto-read if text-to-speech is active
@@ -6269,7 +6471,11 @@
 
         if (chatInputArea) chatInputArea.style.display = 'block';
         // Rebuild chat area for the current chat
-        renderChatLayoutForChat(currentChatId || 'chat1');
+        if (currentChatId) {
+          renderChatLayoutForChat(currentChatId);
+        } else {
+          showEmptyChatState();
+        }
 
       }
 
@@ -6298,29 +6504,20 @@
 
       // Download Chat (from stored messages for current chat)
       // Reset Chat
-      function resetChat() {
+      async function resetChat() {
         if (confirm('Are you sure you want to reset the chat? This will clear all messages.')) {
-          // Clear messages and show welcome
-          const chatMessages = document.getElementById('chatMessages');
-          chatMessages.innerHTML = `
-          <div class="chat-message assistant animate-fade-in">
-            <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
-            </div>
-            <div class="chat-message-content">
-              <h4 class="font-display font-semibold text-surface-900 mb-2">Chat Reset</h4>
-              <p class="text-surface-700">Your conversation has been cleared. Feel free to start a new discussion!</p>
-            </div>
-          </div>
-        `;
-          scrollToBottom();
-
-          // Remove stored messages for this chat
           try {
-            localStorage.removeItem('Student_chat_messages_' + (currentChatId || 'chat1'));
+            const numericId = parseInt(currentChatId, 10);
+            if (!isNaN(numericId)) {
+              await fetch('/delete_conversation/' + numericId, {
+                method: 'DELETE',
+                credentials: 'include'
+              });
+            }
           } catch (e) {
-            console.error('Failed to clear stored chat messages', e);
+            console.error('Failed to reset chat conversation', e);
           }
+          startNewChat();
         }
       }
 

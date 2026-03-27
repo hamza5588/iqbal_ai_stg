@@ -2157,6 +2157,19 @@
       color: #0284c7;
     }
 
+    /* Keep rendered equations readable inside chat bubbles */
+    .chat-message-content mjx-container[display="true"],
+    .chat-message-content .katex-display {
+      overflow-x: auto;
+      overflow-y: hidden;
+      margin: 0.75rem 0;
+      padding-bottom: 0.125rem;
+    }
+
+    .chat-message-content mjx-container[jax="CHTML"] {
+      font-size: 1.02em;
+    }
+
     /* Chat input button enhanced */
     .chat-input-button {
       min-width: 2.5rem;
@@ -5204,18 +5217,25 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         let lessons = [];
         try {
-          const response = await fetch('/api/lessons/my_lessons', { method: 'GET', credentials: 'include' });
+          const params = new URLSearchParams({
+            page: String(currentPage),
+            per_page: String(lessonsPerPage)
+          });
+          if (teacherLessonSearchTerm) params.set('q', teacherLessonSearchTerm);
+          const response = await fetch('/api/lessons/my_lessons?' + params.toString(), { method: 'GET', credentials: 'include' });
           if (response.ok) {
             const data = await response.json();
             lessons = data.lessons || [];
+            teacherLessonsTotalPages = Math.max(1, Number(data.total_pages || 1));
+            teacherLessonsTotalCount = Number(data.total || lessons.length || 0);
+            currentPage = Math.max(1, Number(data.page || currentPage));
           }
         } catch (e) {
           console.error('Failed to load lessons', e);
           showToast('Failed to load lessons', 'error');
         }
 
-        // Sort by date (newest first)
-        lessons.sort((a, b) => new Date((b.created_at || b.updated_at || 0)) - new Date((a.created_at || a.updated_at || 0)));
+        // Keep current page lessons only (server-side pagination)
         window.availableLessons = lessons;
 
         // If no lessons, show empty state
@@ -5310,6 +5330,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                id="lessonSearch" 
                placeholder="Search lessons by title, subject, or grade..." 
                class="search-input"
+               value="${teacherLessonSearchTerm}"
                oninput="filterLessons(this.value)">
       </div>
       
@@ -5372,7 +5393,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           <button class="pagination-btn" onclick="previousPage()" id="prevBtn" disabled>
             Previous
           </button>
-          <span class="pagination-info" id="pageInfo">Page 1 of 1</span>
+          <span class="pagination-info" id="pageInfo">Page ${currentPage} of ${teacherLessonsTotalPages}</span>
           <button class="pagination-btn" onclick="nextPage()" id="nextBtn" disabled>
             Next
           </button>
@@ -5388,16 +5409,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       // Filter lessons based on search
       function filterLessons(searchTerm) {
-        const tableBody = document.getElementById('lessonsTableBody');
-        if (!tableBody) return;
-
-        const rows = tableBody.querySelectorAll('tr');
-        searchTerm = searchTerm.toLowerCase();
-
-        rows.forEach(row => {
-          const text = row.textContent.toLowerCase();
-          row.style.display = text.includes(searchTerm) ? '' : 'none';
-        });
+        teacherLessonSearchTerm = (searchTerm || '').trim();
+        currentPage = 1;
+        showMyLessonsPage();
       }
 
       // Find lesson by ID
@@ -5441,6 +5455,28 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      // Render markdown into an element and apply post-processing (math/code formatting)
+      function renderLessonMarkdown(el, markdownText, emptyHtml) {
+        if (!el) return;
+        const raw = (markdownText == null) ? '' : String(markdownText);
+        if (!raw.trim()) {
+          el.innerHTML = emptyHtml || '';
+          return;
+        }
+
+        if (typeof marked !== 'undefined' && marked.parse) {
+          el.innerHTML = marked.parse(raw);
+        } else {
+          el.textContent = raw;
+        }
+
+        if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+          TeacherChatFormatter.processRenderedContent(el);
+        } else if (typeof window.typesetMathIn === 'function') {
+          window.typesetMathIn(el).catch(function () {});
+        }
+      }
+
       // Populate the view lesson modal with data
       async function populateViewLessonModal(lesson) {
         try {
@@ -5468,11 +5504,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const subjectEl = document.getElementById('viewLessonSubject');
           if (subjectEl) subjectEl.textContent = lesson.subject || 'General';
 
-          // Populate current version preview (support markdown via marked if available)
+          // Populate current version preview
           const rawContent = lesson.content || lesson.body || 'No content yet';
-          const currentVersionHtml = (typeof marked !== 'undefined' && rawContent) ? marked.parse(rawContent) : escapeHtml(rawContent);
           const currentEl = document.getElementById('viewLessonCurrent');
-          if (currentEl) currentEl.innerHTML = currentVersionHtml;
+          renderLessonMarkdown(currentEl, rawContent);
 
           // Load draft content from backend so edits persist across sessions
           const draftTextarea = document.getElementById('viewLessonDraft');
@@ -5491,13 +5526,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             } catch (e) {
               console.warn('get_draft error:', e);
             }
-            if (!draftValue) {
-              draftTextarea.innerHTML = '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>';
-            } else if (typeof marked !== 'undefined') {
-              draftTextarea.innerHTML = marked.parse(draftValue);
-            } else {
-              draftTextarea.textContent = draftValue;
-            }
+            renderLessonMarkdown(
+              draftTextarea,
+              draftValue,
+              '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
+            );
           }
 
           // Populate version history with dropdown
@@ -5713,11 +5746,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const draftEl = document.getElementById('viewLessonDraft');
           if (draftEl) {
             // Render improved content as formatted HTML while preserving text content for backend via innerText
-            if (typeof marked !== 'undefined' && improved) {
-              draftEl.innerHTML = marked.parse(improved);
-            } else {
-              draftEl.textContent = improved;
-            }
+            renderLessonMarkdown(draftEl, improved);
           }
 
           showToast('AI enhancement applied to draft!', 'success', 2500);
@@ -5855,11 +5884,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         if (versionContent) {
           const draftTextarea = document.getElementById('viewLessonDraft');
           if (draftTextarea) {
-            if (typeof marked !== 'undefined') {
-              draftTextarea.innerHTML = marked.parse(versionContent);
-            } else {
-              draftTextarea.textContent = versionContent;
-            }
+            renderLessonMarkdown(draftTextarea, versionContent);
             draftTextarea.focus();
           }
 
@@ -6141,14 +6166,18 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Pagination functions
       let currentPage = 1;
       const lessonsPerPage = 10;
+      let teacherLessonsTotalPages = 1;
+      let teacherLessonsTotalCount = 0;
+      let teacherLessonSearchTerm = '';
 
       function updatePagination() {
-        const lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const totalPages = Math.ceil(lessons.length / lessonsPerPage);
-
-        document.getElementById('prevBtn').disabled = currentPage === 1;
-        document.getElementById('nextBtn').disabled = currentPage === totalPages;
-        document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+        const totalPages = Math.max(1, teacherLessonsTotalPages);
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageInfo = document.getElementById('pageInfo');
+        if (prevBtn) prevBtn.disabled = currentPage === 1;
+        if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+        if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
       }
 
       function previousPage() {
@@ -6159,10 +6188,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       function nextPage() {
-        const lessons = JSON.parse(localStorage.getItem('teacher_lessons') || '[]');
-        const totalPages = Math.ceil(lessons.length / lessonsPerPage);
-
-        if (currentPage < totalPages) {
+        if (currentPage < Math.max(1, teacherLessonsTotalPages)) {
           currentPage++;
           showMyLessonsPage();
         }
@@ -9277,16 +9303,6 @@ Align everything with the lesson objectives and do not invent missing informatio
         // Sync custom prompt from backend so localStorage and RAG use same source
         loadCurrentPrompt();
       });
-
-      window.MathJax = {
-        tex: {
-          inlineMath: [['$', '$'], ['\\(', '\\)']],
-          displayMath: [['$$', '$$'], ['\\[', '\\]']]
-        },
-        options: {
-          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
-        }
-      };
 
       // Simple RAG Prompt modal - closeRAGPromptModal defined above with preview cleanup
     </script>
