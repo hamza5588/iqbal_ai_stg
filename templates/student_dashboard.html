@@ -3228,6 +3228,41 @@
       let isTextToSpeechActive = false;
       let currentChatMenuId = null;
       let lessonCreationCompleted = false; // Flag to track if first lesson is created
+      const STUDENT_ACTIVE_VIEW_KEY = 'Student_active_view';
+      let studentActiveView = 'lessons';
+      let lessonsRenderRequestId = 0;
+
+      function setStudentActiveView(view) {
+        studentActiveView = (view === 'chat') ? 'chat' : 'lessons';
+        try {
+          localStorage.setItem(STUDENT_ACTIVE_VIEW_KEY, studentActiveView);
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
+
+      function getStudentActiveView() {
+        try {
+          const stored = localStorage.getItem(STUDENT_ACTIVE_VIEW_KEY);
+          return stored === 'chat' ? 'chat' : 'lessons';
+        } catch (e) {
+          return 'lessons';
+        }
+      }
+
+      function getStudentWelcomeMessageHtml() {
+        return `
+        <div class="chat-message assistant animate-fade-in">
+          <div class="chat-message-avatar">
+            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          </div>
+          <div class="chat-message-content">
+            <h4 class="font-display font-semibold text-surface-900 mb-2">📚 Welcome to Learning</h4>
+            <p class="text-surface-700">I'm here to help you learn! Ask me questions about your lessons, clarify concepts, or dive deeper into any topic. Select a lesson to get started or ask me anything!</p>
+          </div>
+        </div>
+      `;
+      }
 
       // ════════════════════════════════════════════════════════════════════════════════
       // 🔐 CHAT LIFECYCLE SYSTEM - CORE SPECIFICATION
@@ -3353,7 +3388,6 @@
       async function initializeChatState() {
         // Load chat history from backend
         await loadInitialChatHistory();
-        renderChatSidebar();
 
         // If chat history exists, load the most recent chat
         if (chatHistory.length > 0) {
@@ -3365,13 +3399,16 @@
             return new Date(chat.timestamp) > new Date(latest.timestamp) ? chat : latest;
           });
 
-          // Auto-select and load the most recent chat
+          // Track the most recent chat for quick restore, but do not render
+          // here; initial view selection decides chat vs lessons.
           currentChatId = mostRecentChat.id;
-          loadChat(mostRecentChat.id);
+          chatHistory.forEach(function (chat) {
+            chat.active = String(chat.id) === String(currentChatId);
+          });
         } else {
-          // No chats exist - show empty state
-          showEmptyChatState();
+          currentChatId = null;
         }
+        renderChatSidebar();
       }
 
       // Show empty state when no chats exist
@@ -3432,7 +3469,7 @@
       }
 
       // Initialize on page load
-      document.addEventListener('DOMContentLoaded', function () {
+      document.addEventListener('DOMContentLoaded', async function () {
         // Hide loading overlay if it exists
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) {
@@ -3451,10 +3488,13 @@
         // Initialize chat state per specification #6
         // If chat history exists, load most recent chat
         // If no chats, show empty state
-        initializeChatState();
-
-        // Initialize with My Lessons tab (not Chat tab)
-        showMyLessonsPage();
+        await initializeChatState();
+        const preferredView = getStudentActiveView();
+        if (preferredView === 'chat' && currentChatId) {
+          showChatTab();
+        } else {
+          showMyLessonsPage();
+        }
 
         // Setup textarea auto-resize and validation
         const textarea = document.getElementById('messageInput');
@@ -3612,6 +3652,30 @@
       // Survives page refresh and browser restart
       // ════════════════════════════════════════════════════════════════════════════════
       function renderChatSidebar() {
+        let lessonBindings = {};
+        try {
+          lessonBindings = JSON.parse(localStorage.getItem('Student_chat_lesson_bindings') || '{}') || {};
+        } catch (e) {
+          lessonBindings = {};
+        }
+
+        function getSidebarConversationTitle(chat) {
+          const boundLessonId = lessonBindings[String(chat.id)] || lessonBindings[chat.id];
+          if (!boundLessonId) return chat.title;
+
+          const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
+          const boundLesson = lessons.find(function (l) {
+            return String(l.id) === String(boundLessonId);
+          });
+          if (boundLesson && boundLesson.title) {
+            return formatStudentConversationTitle(boundLesson.title);
+          }
+
+          // If lesson cache is unavailable, keep pattern using existing title text.
+          const base = String(chat.title || 'Lesson').replace(/^Conversation with\s*/i, '').trim();
+          return formatStudentConversationTitle(base);
+        }
+
         // Group chats by time
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -3661,12 +3725,13 @@
         const isActive = chat.id === currentChatId ? 'active' : '';
           const snippet = chat.lastMessageSnippet ? escapeHtml(chat.lastMessageSnippet) : '';
           const unread = chat.unreadCount && chat.unreadCount > 0 ? `<span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500 text-white">${chat.unreadCount}</span>` : '';
+          const displayTitle = getSidebarConversationTitle(chat);
           return `
           <div class="chat-history-item ${isActive}" onclick="loadChat('${chat.id}')">
             <div class="flex items-center justify-between">
               <div class="flex-1 min-w-0 sb-hide-when-collapsed">
                 <div class="flex items-center gap-2">
-                  <p class="text-sm text-gray-900 truncate flex-1">${escapeHtml(chat.title)}</p>
+                  <p class="text-sm text-gray-900 truncate flex-1">${escapeHtml(displayTitle)}</p>
                   ${unread}
                 </div>
                 <p class="text-xs text-gray-500 truncate">${snippet || formatTime(chat.timestamp)}</p>
@@ -3951,24 +4016,8 @@
           storedMessages.forEach(msg => renderMsg(msg.role, msg.content));
           applyRenderedFormatting(chatMessages);
         } else if (!lessonCtx) {
-          // Welcome state for empty chat WITHOUT a lesson context
-          chatMessages.innerHTML = `
-            <div class="chat-message assistant animate-fade-in">
-              <div class="chat-message-avatar">
-                <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
-              </div>
-              <div class="chat-message-content">
-                <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Student Portal!</h4>
-                <p class="text-surface-700">You can explore and learn from:</p>
-                <ul class="mt-2 space-y-1 text-surface-600">
-                  <li class="flex items-start gap-2"><i class="fas fa-check-circle text-success-500 mt-0.5"></i><span>All available lessons</span></li>
-                  <li class="flex items-start gap-2"><i class="fas fa-check-circle text-success-500 mt-0.5"></i><span>Course materials and resources</span></li>
-                  <li class="flex items-start gap-2"><i class="fas fa-check-circle text-success-500 mt-0.5"></i><span>Learning objectives and assessments</span></li>
-                  <li class="flex items-start gap-2"><i class="fas fa-check-circle text-success-500 mt-0.5"></i><span>Track your learning progress</span></li>
-                </ul>
-              </div>
-            </div>
-          `;
+          // Keep welcome message consistent across new/reloaded chats.
+          chatMessages.innerHTML = getStudentWelcomeMessageHtml();
         }
 
         scrollToBottom();
@@ -4087,6 +4136,8 @@
 
       async function showMyLessonsPage() {
         window.currentLessonQAId = null;
+        setStudentActiveView('lessons');
+        const requestId = ++lessonsRenderRequestId;
         // Deactivate all tabs, then activate lessons tab
         deactivateAllTabs();
         const lessonsTabBtn = document.getElementById('lessonsTabBtn');
@@ -4114,11 +4165,13 @@
 
         fetchStudentLessonsPage(currentPage, lessonsPerPage, lessonSearchTerm)
           .then(payload => {
+            if (studentActiveView !== 'lessons' || requestId !== lessonsRenderRequestId) return;
             lessons = (payload && payload.lessons) || [];
             // Continue rendering with current page data from backend
             renderLessonsTable(lessons);
           })
           .catch(err => {
+            if (studentActiveView !== 'lessons' || requestId !== lessonsRenderRequestId) return;
             console.error('Failed to fetch student lessons', err);
             showToast(err.message || 'Failed to load lessons', 'error', 4000);
             renderLessonsTable([]); // empty state
@@ -4129,6 +4182,7 @@
       }
 
       function renderLessonsTable(lessons) {
+        if (studentActiveView !== 'lessons') return;
         lessons = Array.isArray(lessons) ? lessons : [];
         const startIdx = (currentPage - 1) * lessonsPerPage;
 
@@ -4755,6 +4809,34 @@
         window.currentLessonContext = null;
       }
 
+      function formatStudentConversationTitle(lessonName) {
+        const cleanName = String(lessonName || 'Lesson').replace(/\s+/g, ' ').trim();
+        return `Conversation with ${cleanName || 'Lesson'}`;
+      }
+
+      function applyStudentConversationTitle(chatId, lessonName) {
+        if (!chatId) return;
+        const title = formatStudentConversationTitle(lessonName);
+
+        const chat = chatHistory.find(function (c) { return String(c.id) === String(chatId); });
+        if (chat) {
+          chat.title = title;
+          renderChatSidebar();
+        }
+
+        const numericId = parseInt(chatId, 10);
+        if (!isNaN(numericId)) {
+          fetch('/update_conversation_title/' + encodeURIComponent(String(numericId)), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ title: title })
+          }).catch(function (e) {
+            console.warn('Failed to persist student conversation title', e);
+          });
+        }
+      }
+
       // Bind lesson to current chat session
       function bindLessonToChatSession(lesson) {
         if (!lesson) return false;
@@ -4785,6 +4867,9 @@
           localStorage.setItem('Student_chat_lesson_bindings', JSON.stringify(map));
         } catch (e) {
           console.warn('Unable to persist lesson binding for chat', e);
+        }
+        if (currentChatId) {
+          applyStudentConversationTitle(currentChatId, lesson.title);
         }
         return true;
       }
@@ -5456,18 +5541,7 @@
 
         // Display welcome message for new chat
         const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = `
-        <!-- AI message on RIGHT side -->
-        <div class="chat-message assistant animate-fade-in">
-          <div class="chat-message-avatar">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
-          </div>
-          <div class="chat-message-content">
-            <h4 class="font-display font-semibold text-surface-900 mb-2">📚 Welcome to Learning</h4>
-            <p class="text-surface-700">I'm here to help you learn! Ask me questions about your lessons, clarify concepts, or dive deeper into any topic. Select a lesson to get started or ask me anything!</p>
-          </div>
-        </div>
-      `;
+        chatMessages.innerHTML = getStudentWelcomeMessageHtml();
 
         // Keep scroll position stable when starting a fresh chat; user can scroll/messages appear naturally
       }
@@ -5477,6 +5551,7 @@
       // Load only that chat's messages, clear previous context
       // ════════════════════════════════════════════════════════════════════════════════
       async function loadChat(chatId) {
+        setStudentActiveView('chat');
         // 1. Close mobile sidebar when chat is clicked
         const mobileSidebar = document.getElementById('mobileSidebar');
         const mobileOverlay = document.getElementById('mobileOverlay');
@@ -6474,6 +6549,7 @@
 
       // Show Chat Tab
       function showChatTab() {
+        setStudentActiveView('chat');
         // Check if lesson creation is complete
         if (!lessonCreationCompleted) {
           showToast('Please create a lesson first to access the chat feature.', 'warning', 3000);
