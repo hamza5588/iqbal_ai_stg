@@ -24,6 +24,7 @@ from langgraph.graph import StateGraph, START, END
 
 from app.models.models import LessonModel
 from app.services.lesson_service import LessonService
+from app.utils.rag_service import groq_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,28 @@ def _strip_reasoning(text: str) -> str:
     if not text or not isinstance(text, str):
         return text
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
+def _invoke_with_groq_rate_limit(chain, payload: Dict[str, Any]) -> str:
+    """Wrap chain.invoke with shared Groq limiter used in rag_service."""
+    groq_rate_limiter.wait_if_needed()
+    try:
+        response = chain.invoke(payload)
+        groq_rate_limiter.record_success()
+        return response
+    except Exception as exc:
+        groq_rate_limiter.release_slot()
+        error_text = str(exc).lower()
+        if (
+            "429" in error_text
+            or "413" in error_text
+            or "rate limit" in error_text
+            or "rate_limit" in error_text
+            or "tokens per minute" in error_text
+            or "tpm" in error_text
+        ):
+            groq_rate_limiter.record_429_error()
+        raise
 
 
 def load_lesson(state: LessonQAState) -> LessonQAState:
@@ -112,7 +135,7 @@ Can this question be answered using ONLY the lesson content above? Reply with ex
         chain = prompt | lesson_service.student_service.llm | StrOutputParser()
         # Truncate very long lesson content to avoid token limits; keep enough for classification
         content_snippet = (lesson_content or "")[:8000].strip() or "(No content)"
-        reply = chain.invoke({"lesson_content": content_snippet, "question": question})
+        reply = _invoke_with_groq_rate_limit(chain, {"lesson_content": content_snippet, "question": question})
         reply = _strip_reasoning(reply or "").strip().upper()
         return reply.startswith("YES")
     except Exception as e:
@@ -240,7 +263,7 @@ Answer in clear, professional English:"""
         lesson_service = LessonService(api_key=None)
         llm = lesson_service.student_service.llm  # reuse configured LLM
         chain = rag_prompt | llm | StrOutputParser()
-        answer = chain.invoke({"context": context, "question": question})
+        answer = _invoke_with_groq_rate_limit(chain, {"context": context, "question": question})
         answer = _strip_reasoning(answer or "")
         answer = answer.strip()
         if not answer:
