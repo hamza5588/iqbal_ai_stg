@@ -4639,9 +4639,34 @@
         showToast(`Tone: ${tone}`, 'info', 1500);
       }
 
+      function getFilenameFromContentDisposition(contentDisposition, fallbackName) {
+        if (!contentDisposition) return fallbackName;
+
+        const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;\n]+)/i);
+        if (utf8Match && utf8Match[1]) {
+          try {
+            return decodeURIComponent(utf8Match[1].replace(/['"]/g, '').trim());
+          } catch (_) {
+            return utf8Match[1].replace(/['"]/g, '').trim();
+          }
+        }
+
+        const simpleMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+        if (simpleMatch && simpleMatch[1]) {
+          return simpleMatch[1].replace(/['"]/g, '').trim();
+        }
+
+        return fallbackName;
+      }
+
       // Download lesson as PPT
       function downloadLessonPPT(lessonId) {
-        // API-integrated download (same endpoint as teacher dashboard)
+        if (!lessonId) {
+          showToast('No lesson selected for download.', 'error', 3000);
+          return;
+        }
+
+        showToast('Preparing PowerPoint...', 'info', 1500);
         fetch('/api/lessons/download_lesson_ppt/' + encodeURIComponent(String(lessonId)), { method: 'GET', credentials: 'include' })
           .then(async (res) => {
             if (!res.ok) {
@@ -4652,12 +4677,13 @@
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `lesson_${lessonId}.pptx`;
+            const cd = res.headers.get('Content-Disposition');
+            a.download = getFilenameFromContentDisposition(cd, `lesson_${lessonId}.pptx`);
             document.body.appendChild(a);
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-            showToast('Lesson downloaded', 'success', 2000);
+            showToast('Lesson downloaded as PPT!', 'success', 2000);
           })
           .catch(err => {
             console.error('Download PPT error', err);
@@ -4703,13 +4729,7 @@
 
           // Try to get filename from Content-Disposition header
           const cd = response.headers.get('Content-Disposition');
-          let filename = `lesson_${lessonId}.docx`;
-          if (cd) {
-            const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-            if (match && match[1]) {
-              filename = match[1].replace(/['"]/g, '');
-            }
-          }
+          const filename = getFilenameFromContentDisposition(cd, `lesson_${lessonId}.docx`);
           a.download = filename;
 
           document.body.appendChild(a);
