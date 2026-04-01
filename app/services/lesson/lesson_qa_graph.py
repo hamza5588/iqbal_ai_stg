@@ -41,6 +41,7 @@ class LessonQAState(TypedDict, total=False):
     lesson_title: str
     rag_thread_id: Optional[str]
     teacher_id: Optional[int]
+    lesson_service: LessonService
 
     # Decisions
     needs_rag: bool
@@ -102,7 +103,11 @@ def load_lesson(state: LessonQAState) -> LessonQAState:
     }
 
 
-def can_answer_from_lesson_only(question: str, lesson_content: str) -> bool:
+def can_answer_from_lesson_only(
+    question: str,
+    lesson_content: str,
+    lesson_service: LessonService,
+) -> bool:
     """
     Decide if the question can be answered using ONLY the lesson content.
 
@@ -131,7 +136,6 @@ Student question: {question}
 
 Can this question be answered using ONLY the lesson content above? Reply with exactly YES or NO."""),
         ])
-        lesson_service = LessonService(api_key=None)
         chain = prompt | lesson_service.student_service.llm | StrOutputParser()
         # Truncate very long lesson content to avoid token limits; keep enough for classification
         content_snippet = (lesson_content or "")[:8000].strip() or "(No content)"
@@ -156,7 +160,11 @@ def decide_route(state: LessonQAState) -> LessonQAState:
     rag_thread_id = state.get("rag_thread_id")
     allow_rag = state.get("allow_rag")
 
-    covered = can_answer_from_lesson_only(question=question, lesson_content=lesson_content)
+    covered = can_answer_from_lesson_only(
+        question=question,
+        lesson_content=lesson_content,
+        lesson_service=state["lesson_service"],
+    )
     has_rag = bool(rag_thread_id)
     not_covered = not covered
 
@@ -178,7 +186,7 @@ def answer_from_lesson(state: LessonQAState) -> LessonQAState:
     Uses existing LessonService.llm_answer to stay consistent with your stack.
     The underlying prompts SHOULD be English-only and lesson-focused.
     """
-    lesson_service = LessonService(api_key=None)  # central LLM provider
+    lesson_service = state["lesson_service"]  # central LLM provider
     answer = lesson_service.llm_answer(
         lesson_content=state.get("lesson_content") or "",
         question=state["question"],
@@ -217,6 +225,7 @@ def _answer_from_rag_impl(
     question: str,
     rag_thread_id: str,
     teacher_id: Optional[int],
+    lesson_service: LessonService,
 ) -> str:
     """
     Internal helper: retrieve from RAG and answer from PDF chunks.
@@ -260,7 +269,6 @@ Student question: {question}
 
 Answer in clear, professional English:"""
         )
-        lesson_service = LessonService(api_key=None)
         llm = lesson_service.student_service.llm  # reuse configured LLM
         chain = rag_prompt | llm | StrOutputParser()
         answer = _invoke_with_groq_rate_limit(chain, {"context": context, "question": question})
@@ -284,6 +292,7 @@ def answer_from_rag(state: LessonQAState) -> LessonQAState:
         question=state["question"],
         rag_thread_id=state.get("rag_thread_id") or "",
         teacher_id=state.get("teacher_id"),
+        lesson_service=state["lesson_service"],
     )
     return {
         **state,
@@ -377,11 +386,13 @@ def invoke_lesson_qa(
     if LESSON_QA_GRAPH is None:
         raise RuntimeError("LESSON_QA_GRAPH is not initialized. Call init_lesson_qa_graph() at startup.")
 
+    lesson_service = LessonService(api_key=None)
     result = LESSON_QA_GRAPH.invoke({
         "lesson_id": lesson_id,
         "question": question,
         "user_id": user_id,
         "allow_rag": allow_rag,
+        "lesson_service": lesson_service,
     })
 
     if result.get("needs_rag_confirmation") and result.get("permission_request"):
