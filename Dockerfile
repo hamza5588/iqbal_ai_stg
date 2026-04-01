@@ -33,4 +33,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "9", "--threads", "8", "--worker-class", "gthread", "--timeout", "1800", "--graceful-timeout", "30", "--keep-alive", "5", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "9", "--threads", "8", "--worker-class", "gthread", "--timeout", "120", "--graceful-timeout", "30", "--keep-alive", "5", "run:app"]
