@@ -205,6 +205,8 @@ def create_llm(
             GROQ_TEMPERATURE: Temperature (default: 0.7)
             GROQ_MAX_TOKENS: Max tokens (default: 1024)
             GROQ_TIMEOUT: Timeout in seconds (default: 60)
+            For Qwen models (qwen/...): reasoning is off by default (reasoning_effort=none,
+            reasoning_format=hidden). Override with GROQ_REASONING_EFFORT and GROQ_REASONING_FORMAT.
             
         For vLLM:
             VLLM_API_BASE: vLLM API base URL (default: 'http://69.28.92.113:8000/v1')
@@ -320,14 +322,27 @@ def create_llm(
         if apply_max_tokens:
             groq_kwargs["max_tokens"] = max_toks
 
+        # Qwen 3 on Groq emits visible "thinking" unless reasoning is disabled (Groq reasoning docs).
+        # reasoning_effort=none: no reasoning tokens; reasoning_format=hidden: final answer only in content.
+        # Override with GROQ_REASONING_EFFORT / GROQ_REASONING_FORMAT if needed.
+        if "qwen" in (model or "").lower():
+            groq_kwargs["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "none")
+            groq_kwargs["reasoning_format"] = os.getenv("GROQ_REASONING_FORMAT", "hidden")
+
         llm = ChatGroq(**groq_kwargs)
         
         logger.info(
-            "Initialized Groq LLM: model=%s, temperature=%s, max_tokens=%s (applied=%s)",
+            "Initialized Groq LLM: model=%s, temperature=%s, max_tokens=%s (applied=%s)%s",
             model,
             temp,
             max_toks if apply_max_tokens else "provider-default",
             apply_max_tokens,
+            (
+                f", reasoning_effort={groq_kwargs.get('reasoning_effort')}, "
+                f"reasoning_format={groq_kwargs.get('reasoning_format')}"
+                if "qwen" in (model or "").lower()
+                else ""
+            ),
         )
         
     elif provider == 'vllm':

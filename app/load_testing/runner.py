@@ -3,6 +3,8 @@ import aiohttp
 import logging
 import time
 import json
+import random
+import os
 import traceback
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -26,6 +28,10 @@ class LoadTestRunner:
         self.is_running = False
         self.stop_requested = False
         self._set_prompt = None  # Custom RAG prompt for teacher sets
+        self._active_user_count = 0
+        # Auth gate prevents login stampedes when high user counts start together.
+        self._login_concurrency_limit = max(1, int(os.getenv("LOAD_TEST_MAX_PARALLEL_LOGINS", "30")))
+        self._login_semaphore = asyncio.Semaphore(self._login_concurrency_limit)
 
     def stop(self):
         """Signal the runner to stop"""
@@ -63,6 +69,7 @@ class LoadTestRunner:
                 # Limit users to concurrent_users count
                 if len(users) > self.config.concurrent_users:
                     users = users[:self.config.concurrent_users]
+                self._active_user_count = len(users)
                 
                 logger.info(f"Using {len(users)} users for the test")
 
@@ -149,6 +156,11 @@ class LoadTestRunner:
         logger.info(f"Worker {worker_id} started for user {user_email}")
         
         try:
+            # Apply startup staggering so login bursts do not instantly trigger edge rate limits.
+            startup_delay = self._get_worker_start_delay(worker_id)
+            if startup_delay > 0:
+                await asyncio.sleep(startup_delay)
+
             # Create a dedicated session for this user with a high-tolerance timeout (5 mins)
             # connect=10s catches dead servers quickly, total=300s allows slow AI/Ingest tasks.
             timeout = aiohttp.ClientTimeout(total=300, connect=10)
@@ -157,12 +169,21 @@ class LoadTestRunner:
                 timeout=timeout
             ) as session:
                 
-                # 1. Login
-                login_success = await self._login(session, user)
+                # 1. Login (guarded by semaphore to avoid auth endpoint bursts)
+                async with self._login_semaphore:
+                    login_success = await self._login(session, user)
                 if not login_success:
                     self.summary.failed_requests += 1
                     self.summary.errors.append({"user": user_email, "error": "Login failed"})
                     return
+
+                # 2. Add small randomized "think time" after login so dashboard checks
+                # are not synchronized across hundreds of users.
+                post_login_delay_min = max(0.0, float(os.getenv("LOAD_TEST_POST_LOGIN_DELAY_MIN_SECONDS", "0.2")))
+                post_login_delay_max = max(post_login_delay_min, float(os.getenv("LOAD_TEST_POST_LOGIN_DELAY_MAX_SECONDS", "1.0")))
+                post_login_delay = random.uniform(post_login_delay_min, post_login_delay_max)
+                if post_login_delay > 0:
+                    await asyncio.sleep(post_login_delay)
 
                 # 2. Set custom RAG prompt if configured (teacher sets only)
                 if self._set_prompt:
@@ -185,61 +206,131 @@ class LoadTestRunner:
             "useremail": user.email,
             "password": user.password
         }
-        
-        start = time.time()
-        try:
-            self.summary.total_requests += 1
-            async with session.post(url, data=payload, allow_redirects=False) as response:
-                duration = time.time() - start
-                
-                # Flask login typically redirects on success (302)
-                if response.status == 302:
-                    # Verify we got a session cookie
-                    cookies = session.cookie_jar.filter_cookies(self.config.base_url)
-                    if 'session' in cookies:
-                        logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
-                        self.summary.successful_requests += 1
-                        return True
-                    else:
+        max_attempts = 5
+        base_backoff_seconds = 0.5
+        max_backoff_seconds = 8.0
+
+        for attempt in range(1, max_attempts + 1):
+            start = time.time()
+            try:
+                self.summary.total_requests += 1
+                async with session.post(url, data=payload, allow_redirects=False) as response:
+                    duration = time.time() - start
+
+                    # Flask login typically redirects on success (302)
+                    if response.status == 302:
+                        # Verify we got a session cookie
+                        cookies = session.cookie_jar.filter_cookies(self.config.base_url)
+                        if 'session' in cookies:
+                            logger.info(f"User {user.email} logged in successfully ({duration:.2f}s)")
+                            self.summary.successful_requests += 1
+                            return True
                         logger.warning(f"User {user.email} login redirect but no session cookie found for {self.config.base_url}")
                         self._log(f"User {user.email} no session cookie", level="WARNING")
                         return False
-                elif response.status == 200:
-                    text = await response.text()
-                    try:
-                        data = json.loads(text)
-                        if data.get("success") is True:
-                            # Verify we got a session cookie
-                            cookies = session.cookie_jar.filter_cookies(self.config.base_url)
-                            if 'session' in cookies:
-                                logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
-                                self.summary.successful_requests += 1
-                                return True
-                            else:
+
+                    if response.status == 200:
+                        text = await response.text()
+                        try:
+                            data = json.loads(text)
+                            if data.get("success") is True:
+                                # Verify we got a session cookie
+                                cookies = session.cookie_jar.filter_cookies(self.config.base_url)
+                                if 'session' in cookies:
+                                    logger.info(f"User {user.email} logged in successfully via JSON ({duration:.2f}s)")
+                                    self.summary.successful_requests += 1
+                                    return True
                                 logger.warning(f"User {user.email} login success JSON but no session cookie")
                                 self._log(f"User {user.email} no session cookie", level="WARNING")
                                 return False
-                        else:
                             logger.warning(f"User {user.email} login failed via JSON: {data.get('error')}")
                             self._log(f"User {user.email} login failed: {data.get('error')}", level="ERROR")
                             return False
-                    except json.JSONDecodeError:
-                        if "Invalid credentials" in text:
-                            logger.warning(f"User {user.email} invalid credentials")
-                            self._log(f"User {user.email} invalid credentials", level="ERROR")
-                        else:
-                            logger.warning(f"User {user.email} login returned 200 but not redirected and not JSON success. Text: {text[:100]}...")
-                            self._log(f"User {user.email} login returned 200 (unexpected)", level="WARNING")
+                        except json.JSONDecodeError:
+                            if "Invalid credentials" in text:
+                                logger.warning(f"User {user.email} invalid credentials")
+                                self._log(f"User {user.email} invalid credentials", level="ERROR")
+                            else:
+                                logger.warning(f"User {user.email} login returned 200 but not redirected and not JSON success. Text: {text[:100]}...")
+                                self._log(f"User {user.email} login returned 200 (unexpected)", level="WARNING")
+                            return False
+
+                    if response.status == 429:
+                        self.summary.rate_limit_hits += 1
+                        if attempt < max_attempts:
+                            retry_after = response.headers.get("Retry-After")
+                            backoff = min(base_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds)
+                            if retry_after:
+                                try:
+                                    backoff = max(backoff, float(retry_after))
+                                except ValueError:
+                                    pass
+                            jitter = random.uniform(0.0, backoff * 0.3)
+                            delay = backoff + jitter
+                            self._log(
+                                f"User {user.email} login rate-limited (429). Retrying attempt {attempt + 1}/{max_attempts} after {delay:.2f}s",
+                                level="WARNING",
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        text = await response.text()
+                        logger.warning(f"User {user.email} login failed with status {response.status} after retries. Text: {text[:200]}...")
+                        self._log(f"User {user.email} login failed with status {response.status}", level="ERROR")
                         return False
-                else:
+
                     text = await response.text()
                     logger.warning(f"User {user.email} login failed with status {response.status}. Text: {text[:200]}...")
                     self._log(f"User {user.email} login failed with status {response.status}", level="ERROR")
                     return False
-        except Exception as e:
-            logger.error(f"User {user.email} login exception: {str(e)}")
-            self._log(f"User {user.email} login exception: {str(e)}", level="ERROR")
-            return False
+            except Exception as e:
+                logger.error(f"User {user.email} login exception: {str(e)}")
+                # Retry transient exceptions for first attempts, then fail hard.
+                if attempt < max_attempts:
+                    backoff = min(base_backoff_seconds * (2 ** (attempt - 1)), max_backoff_seconds)
+                    jitter = random.uniform(0.0, backoff * 0.3)
+                    delay = backoff + jitter
+                    self._log(
+                        f"User {user.email} login exception on attempt {attempt}/{max_attempts}: {str(e)}. Retrying in {delay:.2f}s",
+                        level="WARNING",
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                self._log(f"User {user.email} login exception: {str(e)}", level="ERROR")
+                return False
+
+        return False
+
+    def _get_worker_start_delay(self, worker_id: int) -> float:
+        """
+        Calculate per-worker startup delay.
+        - Honors configured ramp_up_seconds when provided.
+        - Uses adaptive fallback when ramp_up_seconds=0 to avoid login thundering herd.
+        """
+        total_users = max(1, self._active_user_count)
+        if total_users <= 1:
+            return 0.0
+
+        # Explicit ramp-up from test config (preferred).
+        if self.config.ramp_up_seconds > 0:
+            return (worker_id / max(1, total_users - 1)) * float(self.config.ramp_up_seconds)
+
+        # Adaptive fallback for zero-ramp tests to reduce immediate 429 storms.
+        # Override via env if you want stricter/looser pacing.
+        target_login_rps = float(os.getenv("LOAD_TEST_TARGET_LOGIN_RPS", "15"))
+        max_auto_ramp = float(os.getenv("LOAD_TEST_MAX_AUTO_RAMP_SECONDS", "120"))
+        target_login_rps = max(1.0, target_login_rps)
+        auto_ramp_seconds = min(total_users / target_login_rps, max_auto_ramp)
+
+        # One-time visibility for operators.
+        if worker_id == 0 and auto_ramp_seconds > 0:
+            self._log(
+                f"ramp_up_seconds is 0; applying adaptive startup spread of {auto_ramp_seconds:.1f}s "
+                f"for {total_users} users (~{target_login_rps:.0f} login req/s target), "
+                f"login gate={self._login_concurrency_limit}.",
+                level="WARNING",
+            )
+
+        return (worker_id / max(1, total_users - 1)) * auto_ramp_seconds
 
     async def _dispatch_scenario(self, session: aiohttp.ClientSession, user: TestUser, config: LoadTestConfig):
         """Dispatch execution to the appropriate scenario function"""

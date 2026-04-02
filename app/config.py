@@ -152,16 +152,18 @@ class Config:
 
     # Temporary upload directory for PDF ingestion when using Celery.
     # This path is shared between the web app and Celery workers via Docker volumes.
-    UPLOAD_TEMP_DIR = os.getenv('UPLOAD_TEMP_DIR', '/app/tmp')
+    # Use system temp by default to avoid read-only bind mounts (e.g. /app in some containers).
+    UPLOAD_TEMP_DIR = os.getenv('UPLOAD_TEMP_DIR', os.path.join('/tmp', 'iqbalai_uploads'))
     RAG_LARGE_DOC_THRESHOLD_MB = int(os.getenv('RAG_LARGE_DOC_THRESHOLD_MB', '40'))
     RAG_INGEST_STANDARD_QUEUE = os.getenv('RAG_INGEST_STANDARD_QUEUE', 'ingest')
     RAG_INGEST_LARGE_QUEUE = os.getenv('RAG_INGEST_LARGE_QUEUE', 'ingest_large')
-    RAG_INGEST_STANDARD_SOFT_TIME_LIMIT = int(os.getenv('RAG_INGEST_STANDARD_SOFT_TIME_LIMIT', '1500'))
-    RAG_INGEST_STANDARD_TIME_LIMIT = int(os.getenv('RAG_INGEST_STANDARD_TIME_LIMIT', '1800'))
-    RAG_INGEST_LARGE_SOFT_TIME_LIMIT = int(os.getenv('RAG_INGEST_LARGE_SOFT_TIME_LIMIT', '3300'))
-    RAG_INGEST_LARGE_TIME_LIMIT = int(os.getenv('RAG_INGEST_LARGE_TIME_LIMIT', '3600'))
-    RAG_INGEST_STANDARD_STREAM_TIMEOUT = int(os.getenv('RAG_INGEST_STANDARD_STREAM_TIMEOUT', '300'))
-    RAG_INGEST_LARGE_STREAM_TIMEOUT = int(os.getenv('RAG_INGEST_LARGE_STREAM_TIMEOUT', '900'))
+    # Increased defaults to better tolerate heavy PDFs and staging load spikes.
+    RAG_INGEST_STANDARD_SOFT_TIME_LIMIT = int(os.getenv('RAG_INGEST_STANDARD_SOFT_TIME_LIMIT', '2400'))
+    RAG_INGEST_STANDARD_TIME_LIMIT = int(os.getenv('RAG_INGEST_STANDARD_TIME_LIMIT', '2700'))
+    RAG_INGEST_LARGE_SOFT_TIME_LIMIT = int(os.getenv('RAG_INGEST_LARGE_SOFT_TIME_LIMIT', '5400'))
+    RAG_INGEST_LARGE_TIME_LIMIT = int(os.getenv('RAG_INGEST_LARGE_TIME_LIMIT', '6000'))
+    RAG_INGEST_STANDARD_STREAM_TIMEOUT = int(os.getenv('RAG_INGEST_STANDARD_STREAM_TIMEOUT', '600'))
+    RAG_INGEST_LARGE_STREAM_TIMEOUT = int(os.getenv('RAG_INGEST_LARGE_STREAM_TIMEOUT', '1800'))
 
     # -------------------
     # RAG load-test flags

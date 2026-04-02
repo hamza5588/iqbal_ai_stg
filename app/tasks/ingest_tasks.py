@@ -6,16 +6,20 @@ import logging
 import os
 from app.celery_app import celery
 from app.utils.rag_service import ingest_pdf, extract_and_store_headings_for_thread
-from app.models.database_models import RAGThread
+from app.models.database_models import RAGThread, RAGChunk, RAGHeading
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+_CANCELLED_UPLOAD_FILENAME = "__CANCELLED_UPLOAD__"
 
 _LOAD_TEST_MODE = os.getenv("LOAD_TEST_MODE", "true").lower() in ("true", "1", "yes")
-_ENV = os.getenv("ENV", "local").lower()
-# For load testing/staging we isolate headings extraction onto a dedicated queue.
-# For normal operation we keep compatibility by defaulting to the existing ingest queue.
-RAG_HEADINGS_QUEUE = "headings" if (_LOAD_TEST_MODE or _ENV == "staging") else "ingest"
+# Use a dedicated headings queue only when explicitly requested (or in load tests).
+# This prevents "headings pending forever" when a deployment runs workers on ingest/default only.
+RAG_HEADINGS_QUEUE = os.getenv(
+    "RAG_HEADINGS_QUEUE",
+    "headings" if _LOAD_TEST_MODE else "ingest",
+).strip() or "ingest"
+logger.info("Configured headings extraction queue: %s", RAG_HEADINGS_QUEUE)
 
 
 def _run_ingest_in_context(self, file_path: str, thread_id: str, filename: str, user_id: int, conversation_id: int = None):
@@ -109,6 +113,26 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
     try:
         existing_thread = db.query(RAGThread).filter_by(thread_id=thread_id).first()
         now = datetime.utcnow()
+        if existing_thread and (getattr(existing_thread, "filename", None) or "") == _CANCELLED_UPLOAD_FILENAME:
+            logger.info(
+                "Skipping persist for cancelled upload thread_id=%s user_id=%s",
+                thread_id,
+                user_id,
+            )
+            try:
+                from app.utils.rag_vectorstore import delete_by_thread
+                delete_by_thread(thread_id, user_id)
+            except Exception:
+                logger.warning("Failed to cleanup vectors for cancelled thread_id=%s", thread_id, exc_info=True)
+            try:
+                db.query(RAGChunk).filter_by(thread_id=thread_id, user_id=user_id).delete(synchronize_session=False)
+                db.query(RAGHeading).filter_by(thread_id=thread_id, user_id=user_id).delete(synchronize_session=False)
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.warning("Failed to cleanup db artifacts for cancelled thread_id=%s", thread_id, exc_info=True)
+            return
+
         if not existing_thread:
             thread_name = f"Thread {now.strftime('%Y-%m-%d %H:%M')}"
             rag_thread = RAGThread(

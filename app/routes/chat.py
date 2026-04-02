@@ -1,7 +1,7 @@
 # app/routes/chat.py
 from flask import Blueprint, redirect, request, session, jsonify, render_template, url_for, send_file
 from app.services import ChatService, PromptService
-from app.models.models import SurveyModel, LessonModel
+from app.models.models import SurveyModel, LessonModel, ConversationModel
 # from app.utils.decorators import login_required
 from app.utils.auth import login_required
 from app.utils.routes import get_default_route_by_role
@@ -287,6 +287,52 @@ def create_conversation():
     except Exception as e:
         logger.error(f"Error creating conversation: {str(e)}")
         return jsonify({'error': 'Failed to create conversation'}), 500
+
+@bp.route('/save_message', methods=['POST'])
+@login_required
+def save_message():
+    """Persist a single message to DB conversation history."""
+    try:
+        data = request.get_json(silent=True) or {}
+        raw_message = data.get('message', '')
+        message = str(raw_message).strip()
+        if not message:
+            return jsonify({'error': 'Message is required'}), 400
+
+        role = str(data.get('role', '')).strip().lower()
+        if role == 'assistant':
+            role = 'bot'
+        if role not in ('user', 'bot'):
+            return jsonify({'error': 'Invalid role. Use user or bot.'}), 400
+
+        conv_model = ConversationModel(session['user_id'])
+        conversation_id = data.get('conversation_id')
+        title = str(data.get('title') or 'New Conversation').strip() or 'New Conversation'
+
+        if conversation_id is None or str(conversation_id).strip() == '':
+            conversation_id = conv_model.create_conversation(title[:120])
+        else:
+            try:
+                conversation_id = int(conversation_id)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'Invalid conversation_id'}), 400
+            conversation = conv_model.get_conversation_by_id(conversation_id)
+            if not conversation:
+                return jsonify({'error': 'Conversation not found or access denied'}), 404
+
+        message_id = conv_model.save_message(
+            conversation_id=conversation_id,
+            message=message,
+            role=role,
+        )
+        return jsonify({
+            'success': True,
+            'conversation_id': conversation_id,
+            'message_id': message_id,
+        })
+    except Exception as e:
+        logger.error(f"Error saving message: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to save message'}), 500
 
 @bp.route('/get_conversations')
 @login_required

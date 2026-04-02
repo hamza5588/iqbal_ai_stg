@@ -111,23 +111,45 @@
 
   /**
    * Run on the message content element after it's in the DOM:
-   * - KaTeX auto-render for math ($$ ... $$, \( ... \), etc.)
+   * - Prefer MathJax typesetting (better compatibility with AI-generated TeX)
+   * - Fallback to KaTeX auto-render when MathJax is unavailable
    * - highlight.js on <pre><code>
    */
   function processRenderedContent(containerElement) {
     if (!containerElement) return;
     try {
-      if (typeof renderMathInElement === 'function') {
-        renderMathInElement(containerElement, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\[', right: '\\]', display: true },
-            { left: '\\(', right: '\\)', display: false }
-          ],
-          throwOnError: false
+      var usedMathJax = false;
+      if (
+        typeof window !== 'undefined' &&
+        window.MathJax &&
+        typeof window.MathJax.typesetPromise === 'function'
+      ) {
+        usedMathJax = true;
+        // Clear previous math state for dynamic content updates
+        if (typeof window.MathJax.typesetClear === 'function') {
+          window.MathJax.typesetClear([containerElement]);
+        }
+        window.MathJax.typesetPromise([containerElement]).catch(function (err) {
+          console.warn('MathJax typeset failed:', err);
         });
       }
+
+      if (!usedMathJax && typeof renderMathInElement === 'function') {
+        try {
+          renderMathInElement(containerElement, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\[', right: '\\]', display: true },
+              { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false
+          });
+        } catch (err) {
+          console.warn('KaTeX render failed:', err);
+        }
+      }
+
       if (typeof hljs !== 'undefined' && hljs.highlightAll) {
         containerElement.querySelectorAll('pre code').forEach(function (block) {
           try { hljs.highlightElement(block); } catch (e) { /* ignore */ }
