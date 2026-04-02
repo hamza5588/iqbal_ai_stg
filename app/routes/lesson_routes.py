@@ -801,9 +801,8 @@ def download_lesson_ppt(lesson_id):
         ppt_buffer = BytesIO(ppt_bytes)
         ppt_buffer.seek(0)
         
-        # Delete FAISS index after successful download
+        # Delete FAISS index after successful download (best-effort cleanup)
         try:
-            lesson_service = LessonService(api_key=api_key)
             lesson_service._delete_faiss_index(lesson_id)
             logger.info(f"Deleted FAISS index after PPT download for lesson {lesson_id}")
         except Exception as e:

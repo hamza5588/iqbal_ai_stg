@@ -5370,6 +5370,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                     <button class="action-btn edit-btn" title="Edit" onclick="editLesson('${lesson.id}')">
                       <i class="fas fa-edit"></i>
                     </button>
+                    <button class="action-btn" style="background: #d1fae5; color: #065f46;" title="Download DOCX" onclick="downloadLessonDocx('${lesson.id}')">
+                      <i class="fas fa-file-word"></i>
+                    </button>
                     <button class="action-btn" style="background: #dbeafe; color: #1e40af;" title="Download PPT" onclick="downloadLessonPPT('${lesson.id}')">
                       <i class="fas fa-file-powerpoint"></i>
                     </button>
@@ -5953,19 +5956,63 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
-      // Download lesson as PPT - API: GET /api/lessons/download_lesson_ppt/:id
-      async function downloadLessonPPT(lessonId) {
+      function getFilenameFromContentDisposition(contentDisposition, fallbackName) {
+        if (!contentDisposition) return fallbackName;
+        const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;\n]+)/i);
+        if (utf8Match && utf8Match[1]) {
+          try {
+            return decodeURIComponent(utf8Match[1].replace(/['"]/g, '').trim());
+          } catch (_) {
+            return utf8Match[1].replace(/['"]/g, '').trim();
+          }
+        }
+        const simpleMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+        return (simpleMatch && simpleMatch[1]) ? simpleMatch[1].replace(/['"]/g, '').trim() : fallbackName;
+      }
+
+      async function downloadLessonDocx(lessonId) {
         if (!lessonId) return;
         try {
-          showToast('Preparing PPT download...', 'info');
-          const response = await fetch('/api/lessons/download_lesson_ppt/' + lessonId, { method: 'GET', credentials: 'include' });
-          if (!response.ok) { showToast('Download failed', 'error'); return; }
+          showToast('Preparing DOCX download...', 'info');
+          const response = await fetch('/api/lessons/download_lesson/' + encodeURIComponent(String(lessonId)), { method: 'GET', credentials: 'include' });
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            showToast(data.error || 'Download failed', 'error');
+            return;
+          }
           const blob = await response.blob();
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
           const cd = response.headers.get('Content-Disposition');
-          a.download = (cd && cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/) && RegExp.$1.replace(/['"]/g, '')) || 'lesson_' + lessonId + '.pptx';
+          a.download = getFilenameFromContentDisposition(cd, 'lesson_' + lessonId + '.docx');
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(url);
+          a.remove();
+          showToast('Lesson downloaded as DOCX!', 'success');
+        } catch (e) {
+          showToast('Error downloading DOCX', 'error');
+        }
+      }
+
+      // Download lesson as PPT - API: GET /api/lessons/download_lesson_ppt/:id
+      async function downloadLessonPPT(lessonId) {
+        if (!lessonId) return;
+        try {
+          showToast('Preparing PPT download...', 'info');
+          const response = await fetch('/api/lessons/download_lesson_ppt/' + encodeURIComponent(String(lessonId)), { method: 'GET', credentials: 'include' });
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            showToast(data.error || 'Download failed', 'error');
+            return;
+          }
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const cd = response.headers.get('Content-Disposition');
+          a.download = getFilenameFromContentDisposition(cd, 'lesson_' + lessonId + '.pptx');
           document.body.appendChild(a);
           a.click();
           URL.revokeObjectURL(url);

@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from .base_service import BaseLessonService
+from app.utils.rag_service import groq_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,28 @@ def _strip_reasoning(text: str) -> str:
     if not text or not isinstance(text, str):
         return text
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+
+
+def _invoke_with_groq_rate_limit(chain, payload: Dict[str, Any]) -> str:
+    """Wrap chain.invoke with shared Groq limiter used in rag_service."""
+    groq_rate_limiter.wait_if_needed()
+    try:
+        response = chain.invoke(payload)
+        groq_rate_limiter.record_success()
+        return response
+    except Exception as exc:
+        groq_rate_limiter.release_slot()
+        error_text = str(exc).lower()
+        if (
+            "429" in error_text
+            or "413" in error_text
+            or "rate limit" in error_text
+            or "rate_limit" in error_text
+            or "tokens per minute" in error_text
+            or "tpm" in error_text
+        ):
+            groq_rate_limiter.record_429_error()
+        raise
 
 
 class StudentLessonService(BaseLessonService):
@@ -113,7 +136,7 @@ class StudentLessonService(BaseLessonService):
             
             chain = prompt | self.llm | StrOutputParser()
             
-            faq_response = chain.invoke({
+            faq_response = _invoke_with_groq_rate_limit(chain, {
                 "lesson_title": lesson_title,
                 "lesson_content": lesson_content,
                 "limit": limit
@@ -162,7 +185,7 @@ class StudentLessonService(BaseLessonService):
             
             chain = prompt | self.llm | StrOutputParser()
             
-            summary = chain.invoke({
+            summary = _invoke_with_groq_rate_limit(chain, {
                 "lesson_title": lesson_title,
                 "lesson_content": lesson_content
             })
@@ -205,7 +228,7 @@ class StudentLessonService(BaseLessonService):
             
             chain = prompt | self.llm | StrOutputParser()
             
-            key_points_response = chain.invoke({
+            key_points_response = _invoke_with_groq_rate_limit(chain, {
                 "lesson_title": lesson_title,
                 "lesson_content": lesson_content
             })
@@ -236,7 +259,7 @@ class StudentLessonService(BaseLessonService):
             
             chain = prompt | self.llm | StrOutputParser()
             
-            answer = chain.invoke({
+            answer = _invoke_with_groq_rate_limit(chain, {
                 "lesson_title": lesson_title,
                 "lesson_content": lesson_content,
                 "question": question
@@ -272,7 +295,7 @@ class StudentLessonService(BaseLessonService):
             
             chain = prompt | self.llm | StrOutputParser()
             
-            canonical_question = chain.invoke({
+            canonical_question = _invoke_with_groq_rate_limit(chain, {
                 "lesson_content": lesson_content,
                 "question": question
             })
