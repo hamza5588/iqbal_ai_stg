@@ -278,7 +278,12 @@ def _resolve_thread_retrieval_k(thread_id: str, user_id: int) -> int:
     return default_k
 
 
-def _apply_strict_response_cap(text: Any, short_mode: bool = False, token_pressure: bool = False) -> str:
+def _apply_strict_response_cap(
+    text: Any,
+    short_mode: bool = False,
+    token_pressure: bool = False,
+    lesson_mode: bool = False,
+) -> str:
     """
     Enforce a hard output cap under token pressure.
     Keeps responses compact and reduces follow-up token pressure.
@@ -290,15 +295,51 @@ def _apply_strict_response_cap(text: Any, short_mode: bool = False, token_pressu
     if not text.strip():
         return text
 
-    max_chars = int(os.getenv("RAG_STRICT_RESPONSE_MAX_CHARS", "900"))
-    max_sentences = int(os.getenv("RAG_STRICT_RESPONSE_MAX_SENTENCES", "6"))
+    if lesson_mode:
+        max_chars = int(
+            os.getenv(
+                "RAG_LESSON_STRICT_RESPONSE_MAX_CHARS",
+                os.getenv("RAG_STRICT_RESPONSE_MAX_CHARS", "900"),
+            )
+        )
+        max_sentences = int(
+            os.getenv(
+                "RAG_LESSON_STRICT_RESPONSE_MAX_SENTENCES",
+                os.getenv("RAG_STRICT_RESPONSE_MAX_SENTENCES", "6"),
+            )
+        )
+    else:
+        max_chars = int(os.getenv("RAG_STRICT_RESPONSE_MAX_CHARS", "900"))
+        max_sentences = int(os.getenv("RAG_STRICT_RESPONSE_MAX_SENTENCES", "6"))
 
     if short_mode:
-        max_chars = min(max_chars, int(os.getenv("RAG_SHORT_MODE_RESPONSE_MAX_CHARS", "520")))
-        max_sentences = min(max_sentences, int(os.getenv("RAG_SHORT_MODE_RESPONSE_MAX_SENTENCES", "4")))
+        if lesson_mode:
+            # Keep lesson generation permissive unless explicitly tightened via lesson-specific env.
+            short_mode_chars = int(
+                os.getenv("RAG_LESSON_SHORT_MODE_RESPONSE_MAX_CHARS", str(max_chars))
+            )
+            short_mode_sentences = int(
+                os.getenv("RAG_LESSON_SHORT_MODE_RESPONSE_MAX_SENTENCES", str(max_sentences))
+            )
+        else:
+            short_mode_chars = int(os.getenv("RAG_SHORT_MODE_RESPONSE_MAX_CHARS", "520"))
+            short_mode_sentences = int(os.getenv("RAG_SHORT_MODE_RESPONSE_MAX_SENTENCES", "4"))
+        max_chars = min(max_chars, short_mode_chars)
+        max_sentences = min(max_sentences, short_mode_sentences)
     if token_pressure:
-        max_chars = min(max_chars, int(os.getenv("RAG_TOKEN_PRESSURE_RESPONSE_MAX_CHARS", "420")))
-        max_sentences = min(max_sentences, int(os.getenv("RAG_TOKEN_PRESSURE_RESPONSE_MAX_SENTENCES", "3")))
+        if lesson_mode:
+            # Keep lesson generation permissive unless explicitly tightened via lesson-specific env.
+            token_pressure_chars = int(
+                os.getenv("RAG_LESSON_TOKEN_PRESSURE_RESPONSE_MAX_CHARS", str(max_chars))
+            )
+            token_pressure_sentences = int(
+                os.getenv("RAG_LESSON_TOKEN_PRESSURE_RESPONSE_MAX_SENTENCES", str(max_sentences))
+            )
+        else:
+            token_pressure_chars = int(os.getenv("RAG_TOKEN_PRESSURE_RESPONSE_MAX_CHARS", "420"))
+            token_pressure_sentences = int(os.getenv("RAG_TOKEN_PRESSURE_RESPONSE_MAX_SENTENCES", "3"))
+        max_chars = min(max_chars, token_pressure_chars)
+        max_sentences = min(max_sentences, token_pressure_sentences)
 
     compact = re.sub(r"\s+", " ", text).strip()
     if len(compact) > max_chars:
@@ -366,7 +407,7 @@ def _sanitize_user_facing_response(text: Any) -> str:
     return out
 
 
-def _apply_moderate_response_cap(text: Any) -> str:
+def _apply_moderate_response_cap(text: Any, lesson_mode: bool = False) -> str:
     """
     Keep default answers at a moderate enterprise-friendly length.
     """
@@ -377,8 +418,22 @@ def _apply_moderate_response_cap(text: Any) -> str:
     if not text.strip():
         return text
 
-    max_chars = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "1700"))
-    max_sentences = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_SENTENCES", "12"))
+    if lesson_mode:
+        max_chars = int(
+            os.getenv(
+                "RAG_LESSON_MODERATE_RESPONSE_MAX_CHARS",
+                os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "1700"),
+            )
+        )
+        max_sentences = int(
+            os.getenv(
+                "RAG_LESSON_MODERATE_RESPONSE_MAX_SENTENCES",
+                os.getenv("RAG_MODERATE_RESPONSE_MAX_SENTENCES", "12"),
+            )
+        )
+    else:
+        max_chars = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "1700"))
+        max_sentences = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_SENTENCES", "12"))
 
     compact = re.sub(r"\s+", " ", text).strip()
     if len(compact) > max_chars:
@@ -391,6 +446,28 @@ def _apply_moderate_response_cap(text: Any) -> str:
         if not compact.endswith((".", "!", "?")):
             compact += "..."
     return compact
+
+
+def _is_lesson_creation_request(text: str) -> bool:
+    """Heuristic intent detection for lesson-generation turns in mixed chat."""
+    if not text:
+        return False
+    normalized = re.sub(r"\s+", " ", str(text).strip().lower())
+    if not normalized:
+        return False
+    lesson_intent_patterns = (
+        r"\bcreate\b.*\blesson\b",
+        r"\bgenerate\b.*\blesson\b",
+        r"\bmake\b.*\blesson\b",
+        r"\bwrite\b.*\blesson\b",
+        r"\bbuild\b.*\blesson\b",
+        r"\blesson\s*plan\b",
+        r"\bcreate\b.*\blecture\b",
+        r"\bgenerate\b.*\blecture\b",
+        r"\bmake\b.*\blecture\b",
+        r"\bfull\s+lesson\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in lesson_intent_patterns)
 
 
 def _prune_messages(messages, max_turns: int = 15):
@@ -2552,6 +2629,12 @@ def chat_node(state: ChatState, config=None):
 
     # Progressive message reduction on token errors
     raw_messages = state.get("messages", []) or []
+    last_user_msg_text = ""
+    for msg in reversed(raw_messages):
+        if isinstance(msg, HumanMessage):
+            last_user_msg_text = (getattr(msg, "content", "") or "").strip()
+            break
+    is_lesson_creation_turn = _is_lesson_creation_request(last_user_msg_text)
     conversation_messages = _prune_messages(raw_messages, max_turns=15)
     if len(state.get("messages", [])) > int(os.getenv("RAG_SUMMARY_TRIGGER_MESSAGES", "20")):
         older_messages = state["messages"][:-8]
@@ -2572,7 +2655,16 @@ def chat_node(state: ChatState, config=None):
         except Exception:
             return default
 
-    max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2))
+    if is_lesson_creation_turn:
+        max_tool_rounds_per_turn = max(
+            1,
+            _safe_int_env(
+                "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
+                _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2),
+            ),
+        )
+    else:
+        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2))
 
     # IMPORTANT: this is turn-scoped. Older ToolMessage objects from previous turns
     # should not affect a fresh user question.
@@ -2816,12 +2908,16 @@ def chat_node(state: ChatState, config=None):
             response_content = response.content if hasattr(response, 'content') else str(response)
             response_content = _sanitize_user_facing_response(response_content)
             if not short_mode_active and not token_pressure_active:
-                response_content = _apply_moderate_response_cap(response_content)
+                response_content = _apply_moderate_response_cap(
+                    response_content,
+                    lesson_mode=is_lesson_creation_turn,
+                )
             if short_mode_active or token_pressure_active:
                 response_content = _apply_strict_response_cap(
                     response_content,
                     short_mode=short_mode_active,
                     token_pressure=token_pressure_active,
+                    lesson_mode=is_lesson_creation_turn,
                 )
                 try:
                     response.content = response_content
@@ -2831,15 +2927,6 @@ def chat_node(state: ChatState, config=None):
             
             # Try to get lesson state, but make it optional to save tokens and avoid rate limits
             # Skip lesson_state call for Groq to reduce API calls and avoid rate limits
-
-            last_user_msg_text = ""
-            try:
-                for msg in reversed(conversation_messages):
-                    if isinstance(msg, HumanMessage):
-                        last_user_msg_text = (msg.content or "")
-                        break
-            except Exception:
-                last_user_msg_text = ""
 
             msg_lower = last_user_msg_text.lower()
 
@@ -3276,7 +3363,23 @@ def _tool_router(state: ChatState):
         except Exception:
             return default
 
-    max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
+    latest_user_text = ""
+    for i in range(len(msgs) - 1, -1, -1):
+        if isinstance(msgs[i], HumanMessage):
+            latest_user_text = (getattr(msgs[i], "content", "") or "").strip()
+            break
+    is_lesson_creation_turn = _is_lesson_creation_request(latest_user_text)
+
+    if is_lesson_creation_turn:
+        max_tool_rounds_per_turn = max(
+            1,
+            _safe_int_env(
+                "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
+                _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3),
+            ),
+        )
+    else:
+        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
 
     # Turn-scoped tool routing:
     # Count tool rounds in this turn as the number of AI messages containing
