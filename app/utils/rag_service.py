@@ -2660,11 +2660,12 @@ def chat_node(state: ChatState, config=None):
             1,
             _safe_int_env(
                 "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
-                _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2),
+                _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 10),
             ),
         )
     else:
-        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2))
+        max_tool_rounds_per_turn = min(3, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
+
 
     # IMPORTANT: this is turn-scoped. Older ToolMessage objects from previous turns
     # should not affect a fresh user question.
