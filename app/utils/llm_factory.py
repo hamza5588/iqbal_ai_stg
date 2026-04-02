@@ -254,10 +254,10 @@ def create_llm(
     # Final fallback to config default if still not resolved
     provider = (resolved_provider or Config.LLM_PROVIDER).lower()
 
-    # Apply output token cap only in load-test mode.
-    # Outside load-test, we intentionally do not send max_tokens so provider defaults apply.
+    # Apply output token cap in load-test mode or when caller explicitly requests max_tokens.
+    # This lets production callers raise completion length when needed without forcing caps globally.
     load_test_mode = os.getenv('LOAD_TEST_MODE', 'false').lower() in ('true', '1', 'yes')
-    apply_max_tokens = bool(load_test_mode)
+    apply_max_tokens = bool(load_test_mode or max_tokens is not None)
     
     # Use provided values or fall back to config defaults
     if provider == 'openai':
