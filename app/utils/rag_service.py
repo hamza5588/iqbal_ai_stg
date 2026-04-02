@@ -2518,17 +2518,20 @@ def chat_node(state: ChatState, config=None):
     try:
         # Use cached LLM instance to avoid recreating on every call
         if user_id:
+            loadtest_max_tokens = int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
+            runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "4096"))
+            runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.7
+            if short_mode_active:
+                runtime_max_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128"))
+                runtime_temp = 0.2
             # Include provider in cache key to ensure correct provider is used
-            cache_key = f"{user_id}_{provider}_factory_{'short' if short_mode_active else 'normal'}"
+            cache_key = (
+                f"{user_id}_{provider}_factory_{'short' if short_mode_active else 'normal'}"
+                f"_mt{runtime_max_tokens}"
+            )
             with _llm_cache_lock:
                 if cache_key not in _llm_cache:
                     logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
-                    loadtest_max_tokens = int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
-                    runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))
-                    runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.7
-                    if short_mode_active:
-                        runtime_max_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128"))
-                        runtime_temp = 0.2
                     _llm_cache[cache_key] = get_chat_model(
                         user_id=user_id,
                         timeout=120,
@@ -2546,7 +2549,7 @@ def chat_node(state: ChatState, config=None):
                 provider=provider,
                 timeout=120,
                 temperature=(0.3 if _LOAD_TEST_MODE else 0.7),
-                max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))),
+                max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "4096"))),
             )
         
         user_llm_with_tools = user_llm.bind_tools(tools)
@@ -2573,7 +2576,7 @@ def chat_node(state: ChatState, config=None):
             provider=provider,
             timeout=120,
             temperature=(0.2 if short_mode_active else (0.3 if _LOAD_TEST_MODE else 0.7)),
-            max_tokens=(int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128")) if short_mode_active else (int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768")))),
+            max_tokens=(int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128")) if short_mode_active else (int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "4096")))),
         )
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
@@ -2660,12 +2663,11 @@ def chat_node(state: ChatState, config=None):
             1,
             _safe_int_env(
                 "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
-                _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 10),
+                _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2),
             ),
         )
     else:
-        max_tool_rounds_per_turn = min(3, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
-
+        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 2))
 
     # IMPORTANT: this is turn-scoped. Older ToolMessage objects from previous turns
     # should not affect a fresh user question.
@@ -2908,22 +2910,10 @@ def chat_node(state: ChatState, config=None):
             # Extract lesson text from AI response
             response_content = response.content if hasattr(response, 'content') else str(response)
             response_content = _sanitize_user_facing_response(response_content)
-            if not short_mode_active and not token_pressure_active:
-                response_content = _apply_moderate_response_cap(
-                    response_content,
-                    lesson_mode=is_lesson_creation_turn,
-                )
-            if short_mode_active or token_pressure_active:
-                response_content = _apply_strict_response_cap(
-                    response_content,
-                    short_mode=short_mode_active,
-                    token_pressure=token_pressure_active,
-                    lesson_mode=is_lesson_creation_turn,
-                )
-                try:
-                    response.content = response_content
-                except Exception:
-                    pass
+            try:
+                response.content = response_content
+            except Exception:
+                pass
             _mark_step("extract_response")
             
             # Try to get lesson state, but make it optional to save tokens and avoid rate limits
@@ -3380,7 +3370,7 @@ def _tool_router(state: ChatState):
             ),
         )
     else:
-        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
+        max_tool_rounds_per_turn = min(3, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
 
     # Turn-scoped tool routing:
     # Count tool rounds in this turn as the number of AI messages containing
