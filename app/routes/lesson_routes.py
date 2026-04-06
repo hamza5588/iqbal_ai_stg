@@ -1,12 +1,13 @@
 from flask import Blueprint, request, jsonify, session, send_file, after_this_request, render_template, current_app
 from app.models.models import UserModel, LessonModel
-from app.models.database_models import Lesson as DBLesson
+from app.models.database_models import Lesson as DBLesson, LessonFAQ as DBLessonFAQ, LessonChatHistory as DBLessonChatHistory
 from app.services.lesson_service import LessonService
 from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 from app.utils.decorators import login_required, teacher_required, student_required
 from app.utils.db import get_db
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
+from sqlalchemy import func, or_, desc
 import logging
 import os
 from io import BytesIO
@@ -1324,35 +1325,22 @@ def get_lesson_faqs(lesson_id):
         if not lesson:
             return jsonify({'error': 'Lesson not found'}), 404
         
-        # Read FAQs from the lesson_faq table (real student questions)
-        import sqlite3
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
-        
-        # Get questions from lesson_faq table for this specific lesson
-        # Use canonical form when available
-        c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC', (lesson_id,))
-        faq_rows = c.fetchall()
-        conn.close()
+        db = get_db()
+        canonical_expr = func.coalesce(DBLessonFAQ.canonical_question, DBLessonFAQ.question)
+        faq_rows = (
+            db.query(
+                canonical_expr.label('question'),
+                func.sum(DBLessonFAQ.count).label('count')
+            )
+            .filter(DBLessonFAQ.lesson_id == lesson_id)
+            .group_by(canonical_expr)
+            .order_by(desc('count'))
+            .all()
+        )
         
         # Format the FAQs to match the expected structure
         faqs = []
         
-        # Prepare DB for fetching latest answers from lesson_chat_history
-        import sqlite3 as _sqlite3
-        _conn2 = _sqlite3.connect('instance/chatbot.db')
-        _c2 = _conn2.cursor()
-        # Ensure table exists (defensive)
-        _c2.execute('''CREATE TABLE IF NOT EXISTS lesson_chat_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lesson_id INTEGER,
-            user_id INTEGER,
-            question TEXT,
-            answer TEXT,
-            canonical_question TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-
         for row in faq_rows:
             # Determine version display text
             version_text = ""
@@ -1365,28 +1353,41 @@ def get_lesson_faqs(lesson_id):
             # Fetch latest answer using canonical match first, then exact, then partial
             latest_answer = None
             try:
-                # Try canonical match first
-                _c2.execute(
-                    'SELECT answer FROM lesson_chat_history WHERE lesson_id = ? AND canonical_question = ? ORDER BY datetime(created_at) DESC LIMIT 1',
-                    (lesson_id, canonical_or_question)
+                row_ans = (
+                    db.query(DBLessonChatHistory.answer)
+                    .filter(
+                        DBLessonChatHistory.lesson_id == lesson_id,
+                        DBLessonChatHistory.canonical_question == canonical_or_question,
+                    )
+                    .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
+                    .first()
                 )
-                _row_ans = _c2.fetchone()
-                if not _row_ans:
-                    # Fallback exact text match
-                    _c2.execute(
-                        'SELECT answer FROM lesson_chat_history WHERE lesson_id = ? AND question = ? ORDER BY datetime(created_at) DESC LIMIT 1',
-                        (lesson_id, canonical_or_question)
+                if not row_ans:
+                    row_ans = (
+                        db.query(DBLessonChatHistory.answer)
+                        .filter(
+                            DBLessonChatHistory.lesson_id == lesson_id,
+                            DBLessonChatHistory.question == canonical_or_question,
+                        )
+                        .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
+                        .first()
                     )
-                    _row_ans = _c2.fetchone()
-                if not _row_ans:
-                    # Fallback: partial match using LIKE
-                    _c2.execute(
-                        'SELECT answer FROM lesson_chat_history WHERE lesson_id = ? AND (question LIKE ? OR canonical_question LIKE ?) ORDER BY datetime(created_at) DESC LIMIT 1',
-                        (lesson_id, f"%{canonical_or_question[:30]}%", f"%{canonical_or_question[:30]}%")
+                if not row_ans:
+                    needle = f"%{str(canonical_or_question)[:30]}%"
+                    row_ans = (
+                        db.query(DBLessonChatHistory.answer)
+                        .filter(
+                            DBLessonChatHistory.lesson_id == lesson_id,
+                            or_(
+                                DBLessonChatHistory.question.ilike(needle),
+                                DBLessonChatHistory.canonical_question.ilike(needle),
+                            ),
+                        )
+                        .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
+                        .first()
                     )
-                    _row_ans = _c2.fetchone()
-                if _row_ans:
-                    latest_answer = _row_ans[0]
+                if row_ans:
+                    latest_answer = row_ans[0]
             except Exception:
                 latest_answer = None
 
@@ -1403,7 +1404,6 @@ def get_lesson_faqs(lesson_id):
                 'parent_lesson_id': lesson.get('parent_lesson_id'),
                 'answer': latest_answer
             })
-        _conn2.close()
         
         return jsonify({'faqs': faqs})
         
@@ -1415,21 +1415,18 @@ def get_lesson_faqs(lesson_id):
 @login_required
 def get_lesson_faq_count(lesson_id):
     try:
-        import sqlite3
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS lesson_faq (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lesson_id INTEGER,
-            question TEXT,
-            count INTEGER DEFAULT 1,
-            canonical_question TEXT
-        )''')
-        c.execute('SELECT COALESCE(SUM(count), 0) FROM lesson_faq WHERE lesson_id=?', (lesson_id,))
-        total = c.fetchone()[0] or 0
-        c.execute('SELECT COUNT(*) FROM lesson_faq WHERE lesson_id=?', (lesson_id,))
-        unique_qs = c.fetchone()[0] or 0
-        conn.close()
+        db = get_db()
+        total = (
+            db.query(func.coalesce(func.sum(DBLessonFAQ.count), 0))
+            .filter(DBLessonFAQ.lesson_id == lesson_id)
+            .scalar()
+            or 0
+        )
+        unique_qs = (
+            db.query(DBLessonFAQ.id)
+            .filter(DBLessonFAQ.lesson_id == lesson_id)
+            .count()
+        )
         return jsonify({'total_count': int(total), 'unique_count': int(unique_qs)})
     except Exception:
         return jsonify({'total_count': 0, 'unique_count': 0})
@@ -1441,19 +1438,25 @@ def faq_dashboard():
         user_id = session['user_id']
         # Get all lessons for this teacher
         lessons = LessonModel.get_lessons_by_teacher(user_id)
-        lesson_ids = [lesson['id'] for lesson in lessons]
         top_questions = []
         total_questions = 0
         recent_questions = []
-        import sqlite3
-        from datetime import datetime, timedelta
-
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
+        db = get_db()
+        canonical_expr = func.coalesce(DBLessonFAQ.canonical_question, DBLessonFAQ.question)
         # For each lesson, get top questions
         for lesson in lessons:
-            c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC LIMIT 3', (lesson['id'],))
-            faqs = [{'question': row[0], 'count': row[1]} for row in c.fetchall()]
+            rows = (
+                db.query(
+                    canonical_expr.label('question'),
+                    func.sum(DBLessonFAQ.count).label('count')
+                )
+                .filter(DBLessonFAQ.lesson_id == lesson['id'])
+                .group_by(canonical_expr)
+                .order_by(desc('count'))
+                .limit(3)
+                .all()
+            )
+            faqs = [{'question': row[0], 'count': int(row[1] or 0)} for row in rows]
             total_questions += sum(row['count'] for row in faqs)
             if faqs:
                 top_questions.append({
@@ -1465,8 +1468,16 @@ def faq_dashboard():
         # If you want real recent questions, you need to log timestamps in lesson_faq
         # For now, just return the most asked question per lesson
         for lesson in lessons:
-            c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC LIMIT 1', (lesson['id'],))
-            row = c.fetchone()
+            row = (
+                db.query(
+                    canonical_expr.label('question'),
+                    func.sum(DBLessonFAQ.count).label('count')
+                )
+                .filter(DBLessonFAQ.lesson_id == lesson['id'])
+                .group_by(canonical_expr)
+                .order_by(desc('count'))
+                .first()
+            )
             if row:
                 recent_questions.append({
                     'question': row[0],
@@ -1474,7 +1485,6 @@ def faq_dashboard():
                     'lesson_title': lesson['title'],
                     'time_ago': 'Recently'
                 })
-        conn.close()
         return jsonify({
             'total_questions': total_questions,
             'weekly_questions': total_questions,  # Placeholder
@@ -1492,19 +1502,26 @@ def export_faq_dashboard():
     try:
         user_id = session['user_id']
         lessons = LessonModel.get_lessons_by_teacher(user_id)
-        import sqlite3
         from io import BytesIO
         from docx import Document
         from docx.shared import Pt
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
+        db = get_db()
+        canonical_expr = func.coalesce(DBLessonFAQ.canonical_question, DBLessonFAQ.question)
         # Prepare data for export
         rows = []
         for lesson in lessons:
-            c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC', (lesson['id'],))
-            faqs = c.fetchall()
+            faqs = (
+                db.query(
+                    canonical_expr.label('question'),
+                    func.sum(DBLessonFAQ.count).label('count')
+                )
+                .filter(DBLessonFAQ.lesson_id == lesson['id'])
+                .group_by(canonical_expr)
+                .order_by(desc('count'))
+                .all()
+            )
             for faq in faqs:
                 rows.append({
                     'lesson_title': lesson['title'],
@@ -1512,7 +1529,6 @@ def export_faq_dashboard():
                     'question': faq[0],
                     'count': faq[1]
                 })
-        conn.close()
 
         # Create Word document
         doc = Document()
