@@ -106,7 +106,7 @@ def check_lesson_response(text: str, groq_api_key: str):
     # Use the same central/provider-aware logic as RAG (Admin settings + decrypted DB API key).
     # This avoids depending on environment variables like GROQ_API_KEY in production.
     from app.utils.llm_factory import get_chat_model
-    llm = get_chat_model(timeout=120, temperature=0.7)
+    llm = get_chat_model(timeout=120, temperature=0.5)
     
     # Create a prompt to analyze if the response is a complete lesson or just an outline/draft
     analysis_prompt = f"""Analyze the following AI response and determine if it contains a COMPLETE LESSON or just an OUTLINE/DRAFT.
@@ -160,7 +160,7 @@ class TeacherLessonService(BaseLessonService):
         # If you want a dedicated model for images, it should still be created via get_chat_model()
         # so it doesn't require GROQ_API_KEY/OPENAI_API_KEY env vars.
         from app.utils.llm_factory import get_chat_model
-        self.multimodal_llm = get_chat_model(timeout=120, temperature=0.7)
+        self.multimodal_llm = get_chat_model(timeout=120, temperature=0.5)
         teacher_logger.info("Multimodal LLM initialized for image descriptions (central provider)")
     
     def _detect_pages_with_tables(self, file_path: str) -> List[int]:

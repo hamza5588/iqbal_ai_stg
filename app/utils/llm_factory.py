@@ -309,7 +309,7 @@ def create_llm(
             )
         
         model = model_name or os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
-        temp = temperature if temperature is not None else float(os.getenv('GROQ_TEMPERATURE', '0.7'))
+        temp = temperature if temperature is not None else float(os.getenv('GROQ_TEMPERATURE', '0.5'))
         max_toks = max_tokens if max_tokens is not None else int(os.getenv('GROQ_MAX_TOKENS', '1024'))
         time_out = timeout if timeout is not None else int(os.getenv('GROQ_TIMEOUT', '60'))
         

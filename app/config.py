@@ -107,21 +107,21 @@ class Config:
     # OpenAI Configuration
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
     OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
-    OPENAI_TEMPERATURE = float(os.getenv('OPENAI_TEMPERATURE', '0.7'))
+    OPENAI_TEMPERATURE = float(os.getenv('OPENAI_TEMPERATURE', '0.5'))
     OPENAI_MAX_TOKENS = int(os.getenv('OPENAI_MAX_TOKENS', '1024'))
     OPENAI_TIMEOUT = int(os.getenv('OPENAI_TIMEOUT', '60'))
     
     # Groq Configuration
     GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
     GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
-    GROQ_TEMPERATURE = float(os.getenv('GROQ_TEMPERATURE', '0.7'))
+    GROQ_TEMPERATURE = float(os.getenv('GROQ_TEMPERATURE', '0.5'))
     GROQ_MAX_TOKENS = int(os.getenv('GROQ_MAX_TOKENS', '1024'))
     GROQ_TIMEOUT = int(os.getenv('GROQ_TIMEOUT', '60'))
     
     # vLLM Configuration
     VLLM_API_BASE = os.getenv('VLLM_API_BASE', 'http://69.28.92.113:8000/v1')
     VLLM_MODEL = os.getenv('VLLM_MODEL', 'Qwen/Qwen2.5-14B-Instruct')
-    VLLM_TEMPERATURE = float(os.getenv('VLLM_TEMPERATURE', '0.7'))
+    VLLM_TEMPERATURE = float(os.getenv('VLLM_TEMPERATURE', '0.5'))
     VLLM_MAX_TOKENS = int(os.getenv('VLLM_MAX_TOKENS', '1024'))
     VLLM_TIMEOUT = int(os.getenv('VLLM_TIMEOUT', '600'))
     

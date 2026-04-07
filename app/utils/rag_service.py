@@ -634,7 +634,7 @@ def get_rag_llm(api_key=None, provider=None, user_id=None, **kwargs):
     # If user_id is provided, use get_chat_model which reads Admin Panel / user settings
     if user_id:
         try:
-            return get_chat_model(user_id=user_id, timeout=120, temperature=0.7, **kwargs)
+            return get_chat_model(user_id=user_id, timeout=120, temperature=0.5, **kwargs)
         except Exception as e:
             logger.warning(f"Error using get_chat_model with user_id {user_id}, falling back to Admin Panel key: {str(e)}")
     
@@ -665,7 +665,7 @@ def get_rag_llm(api_key=None, provider=None, user_id=None, **kwargs):
         timeout_override = int(env_timeout) if env_timeout else 120
     
     return create_llm(
-        temperature=0.7,
+        temperature=0.5,
         api_key=api_key if provider in ['groq', 'vllm'] else None,
         provider=provider,
         timeout=timeout_override,
@@ -2525,7 +2525,7 @@ def chat_node(state: ChatState, config=None):
                     logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
                     loadtest_max_tokens = int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
                     runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))
-                    runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.7
+                    runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.5
                     if short_mode_active:
                         runtime_max_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128"))
                         runtime_temp = 0.2
@@ -2545,7 +2545,7 @@ def chat_node(state: ChatState, config=None):
                 user_id=None,
                 provider=provider,
                 timeout=120,
-                temperature=(0.3 if _LOAD_TEST_MODE else 0.7),
+                temperature=(0.3 if _LOAD_TEST_MODE else 0.5),
                 max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))),
             )
         
@@ -2572,7 +2572,7 @@ def chat_node(state: ChatState, config=None):
             user_id=None,
             provider=provider,
             timeout=120,
-            temperature=(0.2 if short_mode_active else (0.3 if _LOAD_TEST_MODE else 0.7)),
+            temperature=(0.2 if short_mode_active else (0.3 if _LOAD_TEST_MODE else 0.5)),
             max_tokens=(int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128")) if short_mode_active else (int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768")))),
         )
         user_llm_with_tools = user_llm.bind_tools(tools)

@@ -180,7 +180,7 @@ class BaseLessonService:
                     logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
                     try:
                         # Call get_chat_model exactly as RAG service does - it handles all provider/model selection
-                        _llm_cache[cache_key] = get_chat_model(user_id=user_id, timeout=120, temperature=0.7)
+                        _llm_cache[cache_key] = get_chat_model(user_id=user_id, timeout=120, temperature=0.5)
                         logger.info(f"Created and cached {provider} LLM instance for user {user_id}")
                     except ValueError as e:
                         # On API key error: fall back to session/user key (same source as RAG chat)
@@ -223,7 +223,7 @@ class BaseLessonService:
             # No user_id, try get_chat_model then fall back to session/admin key
             logger.debug(f"Creating LLM without user_id (no caching)")
             try:
-                return get_chat_model(user_id=None, timeout=120, temperature=0.7)
+                return get_chat_model(user_id=None, timeout=120, temperature=0.5)
             except ValueError as e:
                 if "API key" in str(e).lower() or "required" in str(e).lower():
                     from app.utils.rag_service import get_rag_llm, _get_api_key_from_admin_settings
@@ -427,7 +427,7 @@ class BaseLessonService:
             return {
                 'provider': 'openai',
                 'model': os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
-                'temperature': float(os.getenv('OPENAI_TEMPERATURE', '0.7')),
+                'temperature': float(os.getenv('OPENAI_TEMPERATURE', '0.5')),
                 'max_tokens': int(os.getenv('OPENAI_MAX_TOKENS', '1024')),
                 'timeout': int(os.getenv('OPENAI_TIMEOUT', '60'))
             }
@@ -436,7 +436,7 @@ class BaseLessonService:
                 'provider': 'vllm',
                 'base_url': os.getenv('VLLM_API_BASE', 'http://69.28.92.113:8000/v1'),
                 'model': os.getenv('VLLM_MODEL', 'Qwen/Qwen2.5-14B-Instruct'),
-                'temperature': float(os.getenv('VLLM_TEMPERATURE', '0.7')),
+                'temperature': float(os.getenv('VLLM_TEMPERATURE', '0.5')),
                 'max_tokens': int(os.getenv('VLLM_MAX_TOKENS', '1024')),
                 'timeout': int(os.getenv('VLLM_TIMEOUT', '600'))
             }

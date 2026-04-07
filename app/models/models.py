@@ -1194,7 +1194,7 @@ class ChatModel:
                 # For OpenAI and Groq, use the api_key (from env if OpenAI set from admin, else from self.api_key)
                 # For vLLM, api_key is not needed
                 self._chat_model = create_llm(
-                    temperature=0.7,
+                    temperature=0.5,
                     max_tokens=1024,
                     api_key=api_key_to_use,
                     provider=provider
