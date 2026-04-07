@@ -341,7 +341,7 @@ def _apply_strict_response_cap(
         max_chars = min(max_chars, token_pressure_chars)
         max_sentences = min(max_sentences, token_pressure_sentences)
 
-    compact = re.sub(r"\s+", " ", text).strip()
+    compact = re.sub(r"[^\S\n]+", " ", text).strip()
     if len(compact) > max_chars:
         compact = compact[:max_chars].rstrip(" ,.;:-")
         compact += "..."
@@ -435,7 +435,7 @@ def _apply_moderate_response_cap(text: Any, lesson_mode: bool = False) -> str:
         max_chars = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "1700"))
         max_sentences = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_SENTENCES", "12"))
 
-    compact = re.sub(r"\s+", " ", text).strip()
+    compact = re.sub(r"[^\S\n]+", " ", text).strip()
     if len(compact) > max_chars:
         compact = compact[:max_chars].rstrip(" ,.;:-")
         compact += "..."
@@ -2907,22 +2907,10 @@ def chat_node(state: ChatState, config=None):
             # Extract lesson text from AI response
             response_content = response.content if hasattr(response, 'content') else str(response)
             response_content = _sanitize_user_facing_response(response_content)
-            if not short_mode_active and not token_pressure_active:
-                response_content = _apply_moderate_response_cap(
-                    response_content,
-                    lesson_mode=is_lesson_creation_turn,
-                )
-            if short_mode_active or token_pressure_active:
-                response_content = _apply_strict_response_cap(
-                    response_content,
-                    short_mode=short_mode_active,
-                    token_pressure=token_pressure_active,
-                    lesson_mode=is_lesson_creation_turn,
-                )
-                try:
-                    response.content = response_content
-                except Exception:
-                    pass
+            try:
+                response.content = response_content
+            except Exception:
+                pass
             _mark_step("extract_response")
             
             # Try to get lesson state, but make it optional to save tokens and avoid rate limits
@@ -3379,7 +3367,7 @@ def _tool_router(state: ChatState):
             ),
         )
     else:
-        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
+        max_tool_rounds_per_turn = min(3, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
 
     # Turn-scoped tool routing:
     # Count tool rounds in this turn as the number of AI messages containing
