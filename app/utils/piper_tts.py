@@ -38,13 +38,22 @@ _piper_available = None
 
 
 def _voice_urls(voice_name: str):
-    """Build HuggingFace download URLs for a piper voice."""
-    base = f"https://huggingface.co/rhasspy/piper-voices/resolve/main"
-    lang_parts = voice_name.split("-")[0]  # e.g. en_US
-    lang_code = lang_parts.split("_")[0]   # e.g. en
+    """Build HuggingFace download URLs for a piper voice.
+
+    Repo layout: /{lang}/{lang_REGION}/{name}/{quality}/{voice_name}.onnx
+    e.g. en_US-lessac-medium → /en/en_US/lessac/medium/en_US-lessac-medium.onnx
+    """
+    base = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+    # voice_name format: {lang_REGION}-{name}-{quality}
+    parts = voice_name.split("-")        # ['en_US', 'lessac', 'medium']
+    lang_region = parts[0]               # en_US
+    lang_code = lang_region.split("_")[0]  # en
+    name = parts[1] if len(parts) > 1 else ""
+    quality = parts[2] if len(parts) > 2 else ""
+    path = f"{base}/{lang_code}/{lang_region}/{name}/{quality}"
     return {
-        "model": f"{base}/{lang_code}/{lang_parts}/{voice_name}/{voice_name}.onnx",
-        "config": f"{base}/{lang_code}/{lang_parts}/{voice_name}/{voice_name}.onnx.json",
+        "model": f"{path}/{voice_name}.onnx",
+        "config": f"{path}/{voice_name}.onnx.json",
     }
 
 
