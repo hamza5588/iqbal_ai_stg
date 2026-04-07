@@ -70,4 +70,3 @@ nginx_error.log
 pdf_ingestion_logs.log
 verify_ingestion_flow.py
 verify_ingestion_pipeline_status.py
-/piper_models

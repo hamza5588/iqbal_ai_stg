@@ -1,5 +1,8 @@
-# ---- Core numeric ----
+# ---- Core numeric (pinned as requested) ----
+# Numba (used by openai-whisper) requires NumPy 2.3 or less
 numpy<2.4
+llvmlite
+numba
 mpmath
 
 # ---- Web / API ----
@@ -195,8 +198,7 @@ opentelemetry-exporter-otlp-proto-grpc
 opentelemetry-semantic-conventions
 coloredlogs
 gTTS
-faster-whisper
-piper-tts
+openai-whisper
 
 langgraph
 langgraph-checkpoint
