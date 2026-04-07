@@ -194,3 +194,24 @@ class Config:
     # Control embedding batch parallelism defaults.
     # NOTE: Actual effective default is also enforced in `app/utils/rag_service.py`.
     RAG_EMBED_PARALLEL_BATCHES_LOAD_TEST_DEFAULT = int(os.getenv('RAG_EMBED_PARALLEL_BATCHES_LOAD_TEST_DEFAULT', '1'))
+
+    # ── Voice / Speech Configuration (STT + TTS) ──
+    # STT: faster-whisper (local Whisper via CTranslate2)
+    #   WHISPER_MODEL_SIZE  — tiny, base, small, medium, large-v2 (default: base)
+    #   WHISPER_DEVICE      — cpu or cuda (default: cpu)
+    #   WHISPER_COMPUTE_TYPE — int8, float16, float32 (default: int8)
+    #   WHISPER_LANGUAGE    — en, es, fr, etc. Empty string = auto-detect (default: en)
+    # WHISPER_MODEL_SIZE = os.getenv('WHISPER_MODEL_SIZE', 'base')
+    WHISPER_MODEL_SIZE=os.getenv('WHISPER_MODEL_SIZE', 'small')   # ~460MB, noticeably better in noise
+    WHISPER_DEVICE = os.getenv('WHISPER_DEVICE', 'cpu')
+    WHISPER_COMPUTE_TYPE = os.getenv('WHISPER_COMPUTE_TYPE', 'int8')
+    WHISPER_LANGUAGE = os.getenv('WHISPER_LANGUAGE', 'en')
+
+    # TTS: piper-tts (local, configurable voice) with gTTS fallback
+    #   PIPER_VOICE      — Voice name (default: en_US-lessac-medium)
+    #                       See https://rhasspy.github.io/piper-samples/ for all voices.
+    #                       Examples: en_US-lessac-medium, en_GB-alba-medium, en_US-ryan-high
+    #   PIPER_MODELS_DIR — Directory for cached voice models (default: <project>/piper_models)
+    # PIPER_VOICE = os.getenv('PIPER_VOICE', 'en_US-lessac-medium')
+    PIPER_VOICE = os.getenv('PIPER_VOICE', 'en_US-ryan-high')  # Clear and energetic, good for demos
+    PIPER_MODELS_DIR = os.getenv('PIPER_MODELS_DIR', '')

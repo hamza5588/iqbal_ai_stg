@@ -11,40 +11,13 @@ from app.utils.db import get_db
 import time
 from functools import lru_cache
 from io import BytesIO
-from langdetect import detect
-from gtts import gTTS
 import os
 
 from openai import OpenAI
-import whisper
-import torch
 
 import logging
 
 bp = Blueprint("stt", __name__)
-logger = logging.getLogger(__name__)
-
-# ✅ Whisper / PyTorch configuration (server-safe)
-# Some CPU environments (e.g. certain staging/production hosts) can fail with
-# "RuntimeError: could not create a primitive" when using oneDNN/MKLDNN for conv1d.
-# Disabling MKLDNN and forcing CPU+float32 keeps behavior correct while avoiding
-# those hardware-specific crashes.
-torch.backends.mkldnn.enabled = False  # avoid oneDNN primitive creation issues
-
-# Lazy-load Whisper on first STT request to avoid startup OOM (DefaultCPUAllocator: not enough memory)
-_whisper_model = None
-
-def _get_whisper_model():
-    """Load Whisper base model on first use; cache or return None if OOM."""
-    global _whisper_model
-    if _whisper_model is not None:
-        return _whisper_model
-    try:
-        _whisper_model = whisper.load_model("base", device="cpu")
-        return _whisper_model
-    except Exception as e:
-        logger.warning("Whisper model load failed (STT disabled): %s", e)
-        return None
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('chat', __name__)
@@ -719,10 +692,11 @@ def get_user_info():
 @login_required
 def speech_to_text():
     """
-    Convert uploaded speech audio to text using local Whisper base model.
+    Convert uploaded speech audio to text using faster-whisper.
 
     Expects multipart/form-data with field "audio".
-    Returns JSON: {"text": "..."} on success.
+    Returns JSON: {"text": "..."} on success, or {"error": "...", "warning": "..."} on failure.
+    The "warning" field (when present) is a user-friendly message suitable for UI toast display.
     """
     try:
         if 'audio' not in request.files:
@@ -733,10 +707,7 @@ def speech_to_text():
             return jsonify({'error': 'Empty audio filename'}), 400
 
         from tempfile import NamedTemporaryFile
-
-        model = _get_whisper_model()
-        if model is None:
-            return jsonify({'error': 'Speech-to-text unavailable (model could not be loaded)'}), 503
+        from app.utils.whisper_stt import transcribe_audio
 
         tmp_path = None
         try:
@@ -744,15 +715,15 @@ def speech_to_text():
                 audio_file.save(tmp.name)
                 tmp_path = tmp.name
 
-            result = model.transcribe(
-                tmp_path,
-                fp16=False,      # important if no GPU
-                language="en"    # optional but faster if known
-            )
+            text = transcribe_audio(tmp_path)
+            if text is None:
+                return jsonify({
+                    'error': 'Speech service unavailable',
+                    'warning': 'Speech service unavailable — please check server logs'
+                }), 503
 
-            text = result.get("text", "").strip()
             if not text:
-                return jsonify({'error': 'Transcription failed'}), 500
+                return jsonify({'error': 'Could not transcribe audio'}), 500
 
             return jsonify({'text': text})
         finally:
@@ -764,7 +735,10 @@ def speech_to_text():
 
     except Exception as e:
         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Failed to transcribe audio'}), 500
+        return jsonify({
+            'error': 'Failed to transcribe audio',
+            'warning': 'Speech service unavailable — please check server logs'
+        }), 500
 
 # @bp.route('/api/stt', methods=['POST'])
 # @login_required
@@ -842,8 +816,6 @@ def chatbot_update():
 import re
 from io import BytesIO
 from flask import request, jsonify, send_file
-from gtts import gTTS
-from langdetect import detect
 
 def clean_text_for_tts(text: str) -> str:
     """
@@ -862,8 +834,9 @@ def clean_text_for_tts(text: str) -> str:
 @login_required
 def text_to_speech():
     """
-    Convert text to speech using gTTS.
-    Cleans symbols before sending text to TTS.
+    Convert text to speech. Tries piper-tts first (local, configurable voice),
+    falls back to gTTS (requires internet). Returns audio with a JSON "warning"
+    header when using fallback so the UI can show a toast.
     """
     try:
         data = request.get_json() or {}
@@ -872,32 +845,54 @@ def text_to_speech():
         if not text:
             return jsonify({'error': 'Text is required'}), 400
 
-        # ✅ Clean text before TTS
         text = clean_text_for_tts(text)
 
-        # Detect language; fallback to English
+        # Try piper-tts first (local, no internet needed, configurable voice)
         try:
-            lang = detect(text)
+            from app.utils.piper_tts import synthesize_speech
+            wav_buffer = synthesize_speech(text)
+            if wav_buffer is not None:
+                return send_file(
+                    wav_buffer,
+                    mimetype='audio/wav',
+                    as_attachment=False,
+                    download_name='tts.wav'
+                )
+            logger.warning("Piper synthesis returned None, falling back to gTTS")
         except Exception as e:
-            logger.warning(f"Language detection failed, defaulting to 'en': {str(e)}")
-            lang = 'en'
+            logger.warning("Piper TTS failed (%s), falling back to gTTS", e)
 
-        # Generate speech
-        tts = gTTS(text=text, lang=lang)
+        # Fallback: gTTS (requires internet)
+        try:
+            from gtts import gTTS as GTTS
+        except ImportError as e:
+            logger.warning("gTTS not installed (%s). No TTS engine available.", e)
+            return jsonify({
+                'error': 'Text-to-speech unavailable',
+                'warning': 'Voice service unavailable — install piper-tts or gTTS'
+            }), 503
+
+        tts = GTTS(text=text, lang='en')
         audio_fp = BytesIO()
         tts.write_to_fp(audio_fp)
         audio_fp.seek(0)
 
-        return send_file(
+        response = send_file(
             audio_fp,
             mimetype='audio/mpeg',
             as_attachment=False,
             download_name='tts.mp3'
         )
+        # Signal to UI that we used fallback voice
+        response.headers['X-TTS-Warning'] = 'Using basic voice (install piper-tts for better quality)'
+        return response
 
     except Exception as e:
         logger.error(f"Error in text_to_speech: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Failed to generate speech'}), 500
+        return jsonify({
+            'error': 'Failed to generate speech',
+            'warning': 'Voice playback failed — please check server logs'
+        }), 500
 
 
 
