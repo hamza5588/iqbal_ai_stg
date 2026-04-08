@@ -422,7 +422,7 @@ def _apply_moderate_response_cap(text: Any, lesson_mode: bool = False) -> str:
         max_chars = int(
             os.getenv(
                 "RAG_LESSON_MODERATE_RESPONSE_MAX_CHARS",
-                os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "1700"),
+                os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "25000"),
             )
         )
         max_sentences = int(
@@ -432,7 +432,7 @@ def _apply_moderate_response_cap(text: Any, lesson_mode: bool = False) -> str:
             )
         )
     else:
-        max_chars = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "1700"))
+        max_chars = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "25000"))
         max_sentences = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_SENTENCES", "12"))
 
     compact = re.sub(r"[^\S\n]+", " ", text).strip()
@@ -2524,7 +2524,7 @@ def chat_node(state: ChatState, config=None):
                 if cache_key not in _llm_cache:
                     logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
                     loadtest_max_tokens = int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
-                    runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))
+                    runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "5000"))
                     runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.5
                     if short_mode_active:
                         runtime_max_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128"))
@@ -2546,7 +2546,7 @@ def chat_node(state: ChatState, config=None):
                 provider=provider,
                 timeout=120,
                 temperature=(0.3 if _LOAD_TEST_MODE else 0.5),
-                max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768"))),
+                max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "5000"))),
             )
         
         user_llm_with_tools = user_llm.bind_tools(tools)
@@ -2573,7 +2573,7 @@ def chat_node(state: ChatState, config=None):
             provider=provider,
             timeout=120,
             temperature=(0.2 if short_mode_active else (0.3 if _LOAD_TEST_MODE else 0.5)),
-            max_tokens=(int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128")) if short_mode_active else (int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "768")))),
+            max_tokens=(int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128")) if short_mode_active else (int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "5000")))),
         )
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
@@ -3367,7 +3367,8 @@ def _tool_router(state: ChatState):
             ),
         )
     else:
-        max_tool_rounds_per_turn = min(3, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
+        # Honor configured value directly. Avoid hidden hard cap at 3.
+        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 3))
 
     # Turn-scoped tool routing:
     # Count tool rounds in this turn as the number of AI messages containing

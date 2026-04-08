@@ -1005,12 +1005,27 @@ def chat():
 
         try:
             # Prepare config for LangGraph
+            max_tool_rounds = max(
+                1,
+                int(
+                    os.getenv(
+                        "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
+                        os.getenv("RAG_MAX_TOOL_ROUNDS_PER_TURN", "3"),
+                    )
+                ),
+            )
+            # chat -> tools -> chat consumes multiple graph steps per tool round.
+            # Ensure recursion budget can accommodate configured tool rounds.
+            runtime_recursion_limit = max(
+                16,
+                int(os.getenv("RAG_GRAPH_RECURSION_LIMIT", str((max_tool_rounds * 2) + 8))),
+            )
             config = {
                 "configurable": {
                     "thread_id": thread_id
                 },
-                # Defensive: keep recursion bounded under load.
-                "recursion_limit": 16
+                # Defensive: keep recursion bounded under load while allowing deeper tool loops.
+                "recursion_limit": runtime_recursion_limit
             }
             # #region agent log
             try:
