@@ -14,6 +14,7 @@ from io import BytesIO
 import tempfile
 import threading
 import time
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,69 @@ _lesson_qa_user_locks = {}
 _lesson_qa_locks_lock = threading.Lock()
 _lesson_qa_user_rate = {}
 _lesson_qa_rate_lock = threading.Lock()
+
+
+def _normalize_faq_question_text(question: str) -> str:
+    """Normalize semantically similar student questions into a stable FAQ key."""
+    text = str(question or '').strip().lower()
+    if not text:
+        return ''
+
+    # Expand common contractions to improve matching.
+    contractions = {
+        r"\bwhat's\b": "what is",
+        r"\bwhats\b": "what is",
+        r"\bwho's\b": "who is",
+        r"\bwhere's\b": "where is",
+        r"\bhow's\b": "how is",
+        r"\bit's\b": "it is",
+        r"\bcan't\b": "cannot",
+        r"\bdon't\b": "do not",
+    }
+    for pattern, replacement in contractions.items():
+        text = re.sub(pattern, replacement, text)
+
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"^(what is\s+)?rephrased question\s+", "", text).strip()
+
+    # Remove polite wrappers and request phrasing.
+    text = re.sub(r"^(please\s+)?(can|could|would)\s+you\s+(tell|explain|define|describe)\s+", "", text)
+    text = re.sub(r"^(can|could)\s+you\s+tell\s+me\s+", "", text)
+    text = re.sub(r"^please\s+", "", text).strip()
+
+    # Collapse semantic variants such as:
+    # "what is a magnet", "what is the meaning of a magnet", "meaning of magnet".
+    core = text
+    for prefix in (
+        "what is the meaning of ",
+        "what is meaning of ",
+        "what are the different types of ",
+        "meaning of ",
+        "define ",
+        "explain ",
+        "what is ",
+        "what are ",
+    ):
+        if core.startswith(prefix):
+            core = core[len(prefix):].strip()
+            break
+
+    core = re.sub(r"^(a|an|the)\s+", "", core).strip()
+    core = re.sub(r"\s+", " ", core)
+    if not core:
+        return text
+    return f"what is {core}"
+
+
+def _faq_display_question(question_key: str) -> str:
+    """Convert normalized key into a readable FAQ question."""
+    cleaned = str(question_key or "").strip()
+    if not cleaned:
+        return ""
+    if not cleaned.endswith("?"):
+        cleaned += "?"
+    return cleaned[:1].upper() + cleaned[1:]
 
 
 def _get_lesson_qa_user_lock(user_id: int) -> threading.Lock:
@@ -70,6 +134,7 @@ def _canonicalize_and_log_in_background(
         except Exception as e:
             logger.error(f"Background canonicalization failed for lesson {lesson_id}, user {user_id}: {str(e)}")
             canonical = question
+        canonical = _normalize_faq_question_text(canonical or question) or (question or '').strip()
 
         try:
             LessonChatHistory.update_canonical_question(chat_history_id, canonical)
@@ -1338,63 +1403,61 @@ def get_lesson_faqs(lesson_id):
             .all()
         )
         
+        # Load latest chat answers once, then map to normalized question keys.
+        answer_rows = (
+            db.query(
+                DBLessonChatHistory.question,
+                DBLessonChatHistory.canonical_question,
+                DBLessonChatHistory.answer,
+                DBLessonChatHistory.created_at,
+                DBLessonChatHistory.id,
+            )
+            .filter(DBLessonChatHistory.lesson_id == lesson_id)
+            .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
+            .all()
+        )
+        latest_answer_by_key = {}
+        for ans_row in answer_rows:
+            row_key = _normalize_faq_question_text(
+                ans_row.canonical_question or ans_row.question or ''
+            )
+            if not row_key or row_key in latest_answer_by_key:
+                continue
+            latest_answer_by_key[row_key] = ans_row.answer
+
+        # Merge semantically equivalent FAQ rows into one canonical entry.
+        merged = {}
+        for row in faq_rows:
+            raw_question = row[0] or ''
+            normalized_key = _normalize_faq_question_text(raw_question) or str(raw_question).strip().lower()
+            if not normalized_key:
+                continue
+            entry = merged.get(normalized_key)
+            row_count = int(row[1] or 0)
+            if not entry:
+                merged[normalized_key] = {
+                    'question_key': normalized_key,
+                    'count': row_count,
+                }
+            else:
+                entry['count'] += row_count
+
         # Format the FAQs to match the expected structure
         faqs = []
-        
-        for row in faq_rows:
+        for merged_row in sorted(merged.values(), key=lambda item: item['count'], reverse=True):
             # Determine version display text
             version_text = ""
             if lesson.get('parent_lesson_id'):
                 version_text = f"v{lesson.get('version', 1)}"
             else:
                 version_text = "v1 (Original)"
-            
-            canonical_or_question = row[0]
-            # Fetch latest answer using canonical match first, then exact, then partial
-            latest_answer = None
-            try:
-                row_ans = (
-                    db.query(DBLessonChatHistory.answer)
-                    .filter(
-                        DBLessonChatHistory.lesson_id == lesson_id,
-                        DBLessonChatHistory.canonical_question == canonical_or_question,
-                    )
-                    .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
-                    .first()
-                )
-                if not row_ans:
-                    row_ans = (
-                        db.query(DBLessonChatHistory.answer)
-                        .filter(
-                            DBLessonChatHistory.lesson_id == lesson_id,
-                            DBLessonChatHistory.question == canonical_or_question,
-                        )
-                        .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
-                        .first()
-                    )
-                if not row_ans:
-                    needle = f"%{str(canonical_or_question)[:30]}%"
-                    row_ans = (
-                        db.query(DBLessonChatHistory.answer)
-                        .filter(
-                            DBLessonChatHistory.lesson_id == lesson_id,
-                            or_(
-                                DBLessonChatHistory.question.ilike(needle),
-                                DBLessonChatHistory.canonical_question.ilike(needle),
-                            ),
-                        )
-                        .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
-                        .first()
-                    )
-                if row_ans:
-                    latest_answer = row_ans[0]
-            except Exception:
-                latest_answer = None
+            question_key = merged_row['question_key']
+            latest_answer = latest_answer_by_key.get(question_key)
 
             faqs.append({
-                'question': row[0],
-                'count': row[1],
-                'times_asked': row[1],  # For compatibility with frontend
+                'question': _faq_display_question(question_key),
+                'count': merged_row['count'],
+                'times_asked': merged_row['count'],  # For compatibility with frontend
                 'lessonTitle': f"{lesson.get('title', '')} {version_text}",
                 'subject': lesson.get('focus_area', ''),
                 'grade': lesson.get('grade_level', ''),
@@ -1402,7 +1465,8 @@ def get_lesson_faqs(lesson_id):
                 'version': lesson.get('version', 1),
                 'is_version': lesson.get('parent_lesson_id') is not None,
                 'parent_lesson_id': lesson.get('parent_lesson_id'),
-                'answer': latest_answer
+                'answer': latest_answer,
+                'question_key': question_key,
             })
         
         return jsonify({'faqs': faqs})

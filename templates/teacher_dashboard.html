@@ -3379,7 +3379,8 @@
                 <span>Close</span>
               </button>
               <button onclick="finalizeNewVersionLesson()"
-                class="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 md:py-3 px-4 md:px-6 rounded-lg md:rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all font-bold flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
+                id="finalizeVersionBtn"
+                class="hidden flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 md:py-3 px-4 md:px-6 rounded-lg md:rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all font-bold flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
                 <i class="fas fa-check-circle text-sm md:text-base"></i>
                 <span>✅ Finalize</span>
               </button>
@@ -5480,6 +5481,16 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function setFinalizeButtonVisible(isVisible) {
+        const finalizeBtn = document.getElementById('finalizeVersionBtn');
+        if (!finalizeBtn) return;
+        if (isVisible) {
+          finalizeBtn.classList.remove('hidden');
+        } else {
+          finalizeBtn.classList.add('hidden');
+        }
+      }
+
       // Populate the view lesson modal with data
       async function populateViewLessonModal(lesson) {
         try {
@@ -5534,6 +5545,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               draftValue,
               '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
             );
+            // Finalize button should be hidden until user edits the draft.
+            setFinalizeButtonVisible(false);
+            draftTextarea.oninput = function () {
+              setFinalizeButtonVisible(true);
+            };
           }
 
           // Populate version history with dropdown
@@ -5750,6 +5766,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           if (draftEl) {
             // Render improved content as formatted HTML while preserving text content for backend via innerText
             renderLessonMarkdown(draftEl, improved);
+            // AI-generated draft is a valid draft change; allow finalization immediately.
+            setFinalizeButtonVisible(true);
           }
 
           showToast('AI enhancement applied to draft!', 'success', 2500);
@@ -6023,40 +6041,263 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function normalizeFaqQuestionText(question) {
+        let text = String(question || '').toLowerCase().trim();
+        if (!text) return '';
+
+        const replacements = [
+          [/\bwhat's\b/g, 'what is'],
+          [/\bwhats\b/g, 'what is'],
+          [/\bwho's\b/g, 'who is'],
+          [/\bwhere's\b/g, 'where is'],
+          [/\bhow's\b/g, 'how is'],
+          [/\bit's\b/g, 'it is']
+        ];
+        replacements.forEach(function(pair) {
+          text = text.replace(pair[0], pair[1]);
+        });
+
+        text = text.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        text = text.replace(/^(what is\s+)?rephrased question\s+/, '').trim();
+        text = text.replace(/^(please\s+)?(can|could|would)\s+you\s+(tell|explain|define|describe)\s+/, '');
+        text = text.replace(/^(can|could)\s+you\s+tell\s+me\s+/, '');
+        text = text.replace(/^please\s+/, '').trim();
+
+        const prefixes = [
+          'what is the meaning of ',
+          'what is meaning of ',
+          'what are the different types of ',
+          'meaning of ',
+          'define ',
+          'explain ',
+          'what is ',
+          'what are '
+        ];
+        let core = text;
+        for (let i = 0; i < prefixes.length; i++) {
+          if (core.indexOf(prefixes[i]) === 0) {
+            core = core.slice(prefixes[i].length).trim();
+            break;
+          }
+        }
+        core = core.replace(/^(a|an|the)\s+/, '').replace(/\s+/g, ' ').trim();
+        if (!core) return text;
+        return 'what is ' + core;
+      }
+
+      function formatFaqQuestionFromKey(questionKey) {
+        const q = String(questionKey || '').trim();
+        if (!q) return '';
+        const withMark = q.endsWith('?') ? q : (q + '?');
+        return withMark.charAt(0).toUpperCase() + withMark.slice(1);
+      }
+
+      function renderFaqAnswerContent(answer) {
+        const text = String(answer || '');
+        if (!text.trim()) {
+          return '<p class="text-sm text-gray-500 italic">Answer unavailable.</p>';
+        }
+        try {
+          if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
+            return TeacherChatFormatter.formatChatResponse(text);
+          }
+        } catch (e) {
+          console.warn('TeacherChatFormatter.formatChatResponse failed for FAQ answer', e);
+        }
+        return escapeHtml(text).replace(/\n/g, '<br>');
+      }
+
+      function applyFaqAnswerFormatting(node) {
+        if (!node) return;
+        try {
+          if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+            TeacherChatFormatter.processRenderedContent(node);
+            return;
+          }
+        } catch (e) {
+          console.warn('TeacherChatFormatter.processRenderedContent failed for FAQ answer', e);
+        }
+      }
+
+      function toggleFaqAnswer(button) {
+        const card = button ? button.closest('.faq-modern-card') : null;
+        if (!card) return;
+        const answer = card.querySelector('.faq-modern-answer');
+        const chevron = card.querySelector('.faq-modern-chevron');
+        if (!answer) return;
+        const isHidden = answer.classList.contains('hidden');
+        if (isHidden) {
+          answer.classList.remove('hidden');
+          card.classList.add('ring-2', 'ring-primary-100');
+          if (chevron) chevron.classList.add('rotate-180');
+        } else {
+          answer.classList.add('hidden');
+          card.classList.remove('ring-2', 'ring-primary-100');
+          if (chevron) chevron.classList.remove('rotate-180');
+        }
+      }
+
+      function copyFaqQuestion(button) {
+        try {
+          const card = button ? button.closest('.faq-modern-card') : null;
+          const titleEl = card ? card.querySelector('.faq-modern-question') : null;
+          const text = titleEl ? String(titleEl.textContent || '').trim() : '';
+          if (!text) return;
+          navigator.clipboard.writeText(text).then(function() {
+            showToast('Question copied', 'success', 1200);
+          }).catch(function() {
+            showToast('Copy failed', 'error', 1200);
+          });
+        } catch (e) {
+          showToast('Copy failed', 'error', 1200);
+        }
+      }
+
+      function mergeFrequentFaqs(rawFaqs) {
+        const grouped = {};
+        (Array.isArray(rawFaqs) ? rawFaqs : []).forEach(function(item) {
+          const key = normalizeFaqQuestionText(item.question || item.question_key || '');
+          if (!key) return;
+          const count = Number(item.times_asked || item.count || 1) || 1;
+          if (!grouped[key]) {
+            grouped[key] = {
+              question_key: key,
+              count: 0,
+              answer: item.answer || ''
+            };
+          }
+          grouped[key].count += count;
+          if (!grouped[key].answer && item.answer) {
+            grouped[key].answer = item.answer;
+          }
+        });
+
+        // Only include genuinely frequent questions (asked 2+ times).
+        return Object.keys(grouped)
+          .map(function(key) {
+            return {
+              question_key: key,
+              question: formatFaqQuestionFromKey(key),
+              count: grouped[key].count,
+              times_asked: grouped[key].count,
+              answer: grouped[key].answer || ''
+            };
+          })
+          .filter(function(item) { return item.count >= 2; })
+          .sort(function(a, b) { return b.count - a.count; });
+      }
+
       // Show FAQ for lesson - API: GET /api/lessons/faqs/:id
       async function showLessonFAQ(lessonId) {
         if (!lessonId) return;
         try {
           const response = await fetch('/api/lessons/faqs/' + lessonId, { method: 'GET', credentials: 'include' });
           const data = response.ok ? await response.json() : { faqs: [] };
-          const faqs = data.faqs || [];
+          const faqs = mergeFrequentFaqs(data.faqs || []);
           const lessonTitle = (window.availableLessons && window.availableLessons.find(function(l) { return String(l.id) === String(lessonId); })) ? (window.availableLessons.find(function(l) { return String(l.id) === String(lessonId); }).title) : 'Lesson';
-          const faqRows = faqs.length ? faqs.map(function(faq) {
-            return '<div class="border-l-4 border-primary-500 pl-3 py-2"><h4 class="text-sm font-medium text-gray-900">' + (faq.question || '') + '</h4><p class="text-xs text-gray-600 mt-1">Times asked: ' + (faq.times_asked || faq.count || 1) + '</p></div>';
-          }).join('') : '<p class="text-gray-500 text-sm">No student questions for this lesson yet.</p>';
+          const totalAsks = faqs.reduce(function(sum, row) { return sum + Number(row.times_asked || row.count || 0); }, 0);
+          const faqRows = faqs.length ? faqs.map(function(faq, idx) {
+            const renderedAnswer = renderFaqAnswerContent(faq.answer);
+            return `
+              <div class="faq-modern-card rounded-2xl border border-primary-100 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md">
+                <div class="flex items-start gap-3">
+                  <button type="button"
+                          onclick="toggleFaqAnswer(this)"
+                          class="mt-0.5 flex-shrink-0 w-8 h-8 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors flex items-center justify-center"
+                          aria-label="Toggle answer">
+                    <i class="faq-modern-chevron fas fa-chevron-down transition-transform duration-200"></i>
+                  </button>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <h4 class="faq-modern-question text-sm md:text-base font-semibold text-gray-900 leading-6">${escapeHtml(faq.question || '')}</h4>
+                      <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-100 text-primary-700 whitespace-nowrap">
+                        <i class="fas fa-fire-alt mr-1"></i> ${faq.times_asked || faq.count || 1} asks
+                      </span>
+                    </div>
+                    <div class="mt-2 flex items-center gap-2">
+                      <span class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">FAQ #${idx + 1}</span>
+                      <span class="text-gray-300">•</span>
+                      <button type="button"
+                              onclick="copyFaqQuestion(this)"
+                              class="text-xs text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1">
+                        <i class="far fa-copy"></i> Copy question
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="faq-modern-answer hidden mt-4 rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-4">
+                  <p class="text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">Answer</p>
+                  <div class="prose prose-sm max-w-none text-gray-800">${renderedAnswer}</div>
+                </div>
+              </div>
+            `;
+          }).join('') : `
+            <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/70 p-8 text-center">
+              <div class="w-12 h-12 mx-auto rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-400">
+                <i class="fas fa-comments"></i>
+              </div>
+              <p class="mt-3 text-sm font-semibold text-gray-700">No frequently asked questions yet</p>
+              <p class="text-xs text-gray-500 mt-1">FAQs appear here after students ask similar questions more than once.</p>
+            </div>
+          `;
           const faqContent = `
-      <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4" id="faqModalOverlay">
-        <div class="bg-white rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">Student questions - ${lessonTitle}</h3>
-            <button onclick="document.getElementById('faqModalOverlay').remove()" class="text-gray-400 hover:text-gray-600">
-              <i class="fas fa-times"></i>
+      <div class="fixed inset-0 bg-black/55 backdrop-blur-[2px] flex items-center justify-center z-[70] p-3 md:p-6" id="faqModalOverlay">
+        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden shadow-2xl border border-gray-100">
+          <div class="px-5 md:px-6 py-4 md:py-5 bg-gradient-to-r from-primary-600 to-sky-500 text-white">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.18em] text-white/80 font-semibold">Insights</p>
+                <h3 class="text-lg md:text-xl font-bold">Frequently Asked Questions</h3>
+                <p class="text-sm text-white/90 mt-1">${escapeHtml(lessonTitle)}</p>
+              </div>
+              <button onclick="document.getElementById('faqModalOverlay').remove()"
+                      class="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 transition-colors flex items-center justify-center">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/20">
+                <i class="fas fa-layer-group mr-1.5"></i>${faqs.length} FAQ topics
+              </span>
+              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/20">
+                <i class="fas fa-chart-line mr-1.5"></i>${totalAsks} repeated asks
+              </span>
+            </div>
+          </div>
+          <div class="px-5 md:px-6 py-5 overflow-y-auto max-h-[calc(88vh-170px)]">
+            <div class="space-y-3">${faqRows}</div>
+          </div>
+          <div class="px-5 md:px-6 py-3.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+            <p class="text-xs text-gray-500">Only recurring student questions are shown.</p>
+            <button onclick="document.getElementById('faqModalOverlay').remove()"
+                    class="px-3.5 py-2 rounded-lg bg-gray-800 text-white text-xs font-medium hover:bg-black transition-colors">
+              Close
             </button>
           </div>
-          <div class="space-y-3">${faqRows}</div>
-          <button onclick="document.getElementById('faqModalOverlay').remove()" 
-                  class="w-full mt-4 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300">
-            Close
-          </button>
         </div>
       </div>
     `;
 
+          const existingFaqModal = document.getElementById('faqModalOverlay');
+          if (existingFaqModal) existingFaqModal.remove();
+
           const container = document.createElement('div');
           container.innerHTML = faqContent;
-          document.body.appendChild(container.firstElementChild);
-          showToast('FAQ opened', 'info', 1500);
+          const modalEl = container.firstElementChild;
+          document.body.appendChild(modalEl);
+          if (modalEl) {
+            modalEl.querySelectorAll('.prose').forEach(function(el) {
+              applyFaqAnswerFormatting(el);
+            });
+            modalEl.addEventListener('click', function(event) {
+              if (event.target && event.target.id === 'faqModalOverlay') {
+                modalEl.remove();
+              }
+            });
+          }
+          showToast('FAQ opened', 'info', 1200);
         } catch (e) {
+          console.error('showLessonFAQ failed', e);
           showToast('Failed to load FAQs', 'error');
         }
       }

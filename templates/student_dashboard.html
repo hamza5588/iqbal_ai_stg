@@ -3231,6 +3231,9 @@
       const STUDENT_ACTIVE_VIEW_KEY = 'Student_active_view';
       let studentActiveView = 'lessons';
       let lessonsRenderRequestId = 0;
+      let chatLoadInProgress = false;
+      let chatLoadInProgressId = null;
+      window.studentLessonThreadCache = window.studentLessonThreadCache || {};
 
       function setStudentActiveView(view) {
         studentActiveView = (view === 'chat') ? 'chat' : 'lessons';
@@ -3909,6 +3912,91 @@
         });
       }
 
+      function getLessonThreadSignature(lessonCtx) {
+        if (!lessonCtx) return '';
+        const content = String(lessonCtx.content || '');
+        return [
+          String(lessonCtx.id || ''),
+          String(lessonCtx.title || ''),
+          String(lessonCtx.subject || ''),
+          String(lessonCtx.grade || ''),
+          String(content.length),
+          String(content.slice(0, 160))
+        ].join('|');
+      }
+
+      function buildPinnedLessonHtml(chatId, lessonCtx) {
+        if (!lessonCtx) return '';
+        const cacheKey = String(chatId || '');
+        const signature = getLessonThreadSignature(lessonCtx);
+        const cache = window.studentLessonThreadCache[cacheKey];
+        if (cache && cache.signature === signature && cache.html) {
+          return cache.html;
+        }
+
+        const safeTitle = escapeHtml(lessonCtx.title || 'Lesson');
+        const safeSubject = escapeHtml(lessonCtx.subject || 'Subject');
+        const safeGrade = escapeHtml(lessonCtx.grade || 'N/A');
+        const contentHtml = formatLessonContentForView(lessonCtx.content || '');
+
+        const html = `
+          <div id="current-lesson-metadata"
+               data-lesson-id="${escapeHtml(String(lessonCtx.id || ''))}"
+               data-lesson-title="${safeTitle}"
+               data-lesson-subject="${safeSubject}"
+               data-lesson-grade="${safeGrade}"
+               class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+            <div class="font-semibold text-blue-800">📚 Lesson: ${safeTitle}</div>
+            <div class="text-xs text-blue-700 mt-1">${safeSubject} • Grade ${safeGrade}</div>
+            <div class="text-xs text-blue-600 mt-2 italic">This lesson remains pinned for this thread.</div>
+            <div class="lesson-thread-content mt-3">${contentHtml}</div>
+          </div>
+        `;
+
+        window.studentLessonThreadCache[cacheKey] = { signature: signature, html: html };
+        return html;
+      }
+
+      function ensurePinnedLessonContentForChat(chatId) {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        const normalizedChatId = String(chatId || '');
+        const lessonCtx = (window.currentLessonContext && String(window.currentLessonContext.chatId) === normalizedChatId)
+          ? window.currentLessonContext
+          : null;
+
+        const existingPins = chatMessages.querySelectorAll('.lesson-thread-pin');
+        if (!lessonCtx) {
+          existingPins.forEach(function (pin) { pin.remove(); });
+          return;
+        }
+
+        if (existingPins.length > 1) {
+          for (let i = 1; i < existingPins.length; i++) existingPins[i].remove();
+        }
+
+        let pin = existingPins[0];
+        if (!pin) {
+          pin = document.createElement('div');
+          pin.className = 'lesson-thread-pin';
+          chatMessages.prepend(pin);
+        } else if (chatMessages.firstElementChild !== pin) {
+          chatMessages.prepend(pin);
+        }
+
+        const signature = getLessonThreadSignature(lessonCtx);
+        if (pin.dataset.signature !== signature) {
+          pin.innerHTML = buildPinnedLessonHtml(chatId, lessonCtx);
+          pin.dataset.signature = signature;
+        }
+
+        const lessonContent = pin.querySelector('.lesson-thread-content');
+        if (lessonContent) {
+          applyRenderedFormatting(lessonContent);
+        }
+      }
+
       // Build chat layout for a given chatId (adds lesson panel only if bound to that chat)
       async function renderChatLayoutForChat(chatId) {
         const chatArea = document.getElementById('chatArea');
@@ -3933,8 +4021,8 @@
               <p class="text-sm text-blue-100">${lessonCtx.subject} • Grade ${lessonCtx.grade}</p>
             </div>
             <div class="flex-1 overflow-y-auto px-4 py-4 max-h-[400px] md:max-h-[70vh]">
-              <div id="lessonContextContent" class="prose prose-sm max-w-none text-gray-700 leading-relaxed space-y-4">
-                ${lessonCtx.content}
+              <div id="lessonContextContent" class="text-gray-700 leading-relaxed space-y-4">
+                ${formatLessonContentForView(lessonCtx.content || '')}
               </div>
             </div>
           `;
@@ -3988,6 +4076,10 @@
         function renderMsg(role, content) {
           const msgDiv = document.createElement('div');
           const isLessonMetaBlock = typeof content === 'string' && content.indexOf('id="current-lesson-metadata"') !== -1;
+          if (isLessonMetaBlock) {
+            // Legacy pinned lesson messages are now rendered in a dedicated top block.
+            return;
+          }
           if (role === 'user') {
             msgDiv.className = 'chat-message user animate-fade-in';
             const rendered = formatRichContent(content || '');
@@ -4019,6 +4111,8 @@
           // Keep welcome message consistent across new/reloaded chats.
           chatMessages.innerHTML = getStudentWelcomeMessageHtml();
         }
+
+        ensurePinnedLessonContentForChat(chatId);
 
         scrollToBottom();
 
@@ -4931,36 +5025,12 @@
 
         const lesson = lessons[index];
 
-        // Helper to strip HTML tags to plain text for chat context
-        function stripHtml(html) {
-          const tmp = document.createElement('div');
-          tmp.innerHTML = html || '';
-          return (tmp.textContent || tmp.innerText || '').trim();
-        }
-
-        const lessonHtml = lesson.content || lesson.body || '<p class="text-gray-500 italic">No content available.</p>';
-        const safeTitle = escapeHtml(lesson.title || 'Lesson');
-        const safeSubject = escapeHtml(lesson.subject || 'Subject');
-        const safeGrade = escapeHtml(lesson.grade || 'N/A');
-        const lessonBlock = `
-        <div id="current-lesson-metadata"
-             data-lesson-id="${lesson.id}"
-             data-lesson-title="${safeTitle}"
-             data-lesson-subject="${safeSubject}"
-             data-lesson-grade="${safeGrade}"
-             class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-          <div class="font-semibold text-blue-800">📚 Lesson: ${safeTitle}</div>
-          <div class="text-xs text-blue-700">${safeSubject} • Grade ${safeGrade}</div>
-          <div class="text-xs text-blue-600 mt-2 italic">I'll answer all questions based on this lesson content only.</div>
-        </div>
-        <div class="prose prose-sm max-w-none text-gray-800">${lessonHtml}</div>`;
-
         // Close the view modal and open chat with this lesson context (mobile + desktop)
         closeViewLessonModal();
         lessonCreationCompleted = true;
         await startNewChat();
         if (!currentChatId) return;
-        renderChatLayoutForChat(currentChatId);
+        await renderChatLayoutForChat(currentChatId);
         // NOW bind the lesson after startNewChat
         bindLessonToChatSession(lesson);
         // Clear any placeholder/welcome content in the freshly built chat before pinning lesson
@@ -4969,8 +5039,8 @@
           chatMessages.innerHTML = '';
         }
 
-        // Pin lesson context at top of chat and invite questions
-        addAssistantMessage(lessonBlock);
+        // Pin lesson context at top of chat and invite questions.
+        ensurePinnedLessonContentForChat(currentChatId);
         addAssistantMessage('Thanks for opening this lesson! 📖 I\'m now familiar with all the content. Feel free to ask questions about <strong>"' + escapeHtml(lesson.title) + '"</strong> and I\'ll explain using only what\'s in this lesson.');
         // Enable lesson Q&A mode in main chat so sendMessage() routes via /api/lessons/ask_question
         window.currentLessonQAId = lesson.id;
@@ -5552,6 +5622,24 @@
       // ════════════════════════════════════════════════════════════════════════════════
       async function loadChat(chatId) {
         setStudentActiveView('chat');
+        const normalizedChatId = String(chatId || '');
+        if (!normalizedChatId) return;
+
+        if (chatLoadInProgress && String(chatLoadInProgressId) === normalizedChatId) {
+          return;
+        }
+
+        // Repeated clicks on the same active thread should not rebuild layout.
+        if (String(currentChatId) === normalizedChatId && document.getElementById('chatMessages')) {
+          closeAllDropdowns();
+          closeMobileSidebar();
+          ensurePinnedLessonContentForChat(chatId);
+          return;
+        }
+
+        chatLoadInProgress = true;
+        chatLoadInProgressId = normalizedChatId;
+        try {
         // 1. Close mobile sidebar when chat is clicked
         const mobileSidebar = document.getElementById('mobileSidebar');
         const mobileOverlay = document.getElementById('mobileOverlay');
@@ -5566,10 +5654,10 @@
         // 3. Set this chat as the ONLY active chat
         currentChatId = chatId;
         chatHistory.forEach(chat => {
-          chat.active = chat.id === chatId;
+          chat.active = String(chat.id) === normalizedChatId;
         });
         // Clear unread count for this chat when opened
-        const opened = chatHistory.find(c => c.id === chatId);
+        const opened = chatHistory.find(c => String(c.id) === normalizedChatId);
         if (opened) {
           opened.unreadCount = 0;
         }
@@ -5602,10 +5690,11 @@
         // from the database so that this chat continues to use the same lesson
         // context when asking questions.
         try {
-          restoreLessonContextForChat(chatId);
+          await restoreLessonContextForChat(chatId);
         } catch (e) {
           console.warn('restoreLessonContextForChat error', e);
         }
+        ensurePinnedLessonContentForChat(chatId);
 
         // Show chat input area
         const chatInputArea = document.getElementById('chatInputArea');
@@ -5617,6 +5706,10 @@
         // Deactivate lessons tab to show chat is active
         const lessonsTabBtn = document.getElementById('lessonsTabBtn');
         if (lessonsTabBtn) lessonsTabBtn.classList.remove('active-tab');
+        } finally {
+          chatLoadInProgress = false;
+          chatLoadInProgressId = null;
+        }
 
       }
 
@@ -6069,6 +6162,7 @@
           if (window.currentLessonQAId && window.currentLessonQAId === lessonId) {
             window.currentLessonQAId = null;
           }
+          ensurePinnedLessonContentForChat(chatId);
           return;
         }
 
@@ -6098,6 +6192,7 @@
           bindLessonToChatSession(normalizedLesson);
           // Ensure lesson Q&A API uses this lesson id for subsequent questions
           window.currentLessonQAId = normalizedLesson.id;
+          ensurePinnedLessonContentForChat(chatId);
         } catch (e) {
           console.warn('Error restoring lesson context for chat', chatId, e);
         }
