@@ -8293,6 +8293,18 @@ To continue your learning journey:
       }
 
       // Save lesson to My Lessons (saves to database via API)
+      function getCurrentChatThreadTitleForLesson() {
+        const fallback = 'Lesson ' + new Date().toLocaleDateString();
+        const currentId = String(currentChatId || '').trim();
+        if (!currentId || !Array.isArray(chatHistory)) return fallback;
+        const chat = chatHistory.find(function (c) { return String(c.id) === currentId; });
+        if (!chat) return fallback;
+        const raw = String(chat.title || '').trim();
+        if (!raw) return fallback;
+        // Keep saved lesson titles aligned to the actual thread title.
+        return raw.replace(/^chat\s*:/i, '').trim() || fallback;
+      }
+
       async function saveLessonToMyLessons(pdfDataOverride, lessonContentOverride) {
         const pdfData = pdfDataOverride || currentPDFData;
         const lessonContent = lessonContentOverride || currentLessonMarkdown;
@@ -8302,8 +8314,7 @@ To continue your learning journey:
           return;
         }
 
-        const title = (pdfData && pdfData.title) ? String(pdfData.title).trim() : '';
-        const finalTitle = title || ('Lesson ' + new Date().toLocaleDateString());
+        const finalTitle = getCurrentChatThreadTitleForLesson();
         const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
         const gradeLevel = (pdfData && pdfData.grade) ? String(pdfData.grade) : (pdfData && pdfData.gradeLevel) || 'General';
         const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
