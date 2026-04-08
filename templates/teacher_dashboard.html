@@ -2885,7 +2885,7 @@
           <span>Create Lesson</span>
         </div>
 
-        <div class="floating-menu-item" onclick="saveLessonFromChat(); toggleFloatingMenu();">
+        <div id="floatingSaveLessonItem" class="floating-menu-item hidden" onclick="saveLessonFromChat(); toggleFloatingMenu();">
           <i class="fas fa-save"></i>
           <span>Save Lesson</span>
         </div>
@@ -3664,6 +3664,75 @@
       // Current PDF/Lesson data (stored in localStorage so it persists across tabs)
       let currentPDFData = null;
       let currentLessonMarkdown = null;
+      const LESSON_SAVE_SIGNATURES_KEY = 'teacher_saved_lesson_signatures';
+      const LESSON_USED_TITLES_KEY = 'teacher_used_lesson_titles';
+      const LESSON_SAVE_META_KEY = 'teacher_last_saved_lesson_meta';
+
+      function getSavedLessonSignatures() {
+        try {
+          const raw = JSON.parse(localStorage.getItem(LESSON_SAVE_SIGNATURES_KEY) || '[]');
+          return Array.isArray(raw) ? raw : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function persistSavedLessonSignatures(signatures) {
+        try {
+          localStorage.setItem(LESSON_SAVE_SIGNATURES_KEY, JSON.stringify(Array.isArray(signatures) ? signatures : []));
+        } catch (e) {
+          console.error('Failed to persist saved lesson signatures', e);
+        }
+      }
+
+      function getUsedLessonTitles() {
+        try {
+          const raw = JSON.parse(localStorage.getItem(LESSON_USED_TITLES_KEY) || '[]');
+          return Array.isArray(raw) ? raw : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function persistUsedLessonTitles(titles) {
+        try {
+          localStorage.setItem(LESSON_USED_TITLES_KEY, JSON.stringify(Array.isArray(titles) ? titles : []));
+        } catch (e) {
+          console.error('Failed to persist used lesson titles', e);
+        }
+      }
+
+      function setSaveLessonButtonsVisible(isVisible) {
+        const saveBtn = document.getElementById('saveLessonBtn');
+        const floatingSaveItem = document.getElementById('floatingSaveLessonItem');
+        if (saveBtn) {
+          if (isVisible) {
+            saveBtn.classList.remove('hidden');
+            saveBtn.classList.add('md:flex');
+          } else {
+            saveBtn.classList.add('hidden');
+          }
+        }
+        if (floatingSaveItem) {
+          floatingSaveItem.classList.toggle('hidden', !isVisible);
+        }
+      }
+
+      async function refreshSaveLessonAvailability() {
+        let canSave = !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
+        if (window.currentRAGThreadId) {
+          try {
+            const res = await fetch('/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson', { method: 'GET', credentials: 'include' });
+            const data = await res.json().catch(function () { return {}; });
+            if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
+              canSave = true;
+            }
+          } catch (e) {
+            console.warn('Failed to evaluate finalized lesson availability:', e);
+          }
+        }
+        setSaveLessonButtonsVisible(canSave);
+      }
 
       // Save current PDF data to localStorage
       function savePDFDataToStorage() {
@@ -3705,6 +3774,7 @@
 
       // Initialize on page load
       document.addEventListener('DOMContentLoaded', function () {
+        setSaveLessonButtonsVisible(false);
         // Hide loading overlay if it exists
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) {
@@ -6909,11 +6979,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               opts.uploadedFilename = data.uploaded_filename || null;
             }
             applyLoadedMessages(messages, opts);
+            refreshSaveLessonAvailability();
             if (window._loadChatResolve) { window._loadChatResolve(); window._loadChatResolve = null; }
           }).catch(function (err) {
             console.error('Error loading chat messages', err);
             applyLoadedMessages([]);
             renderMessageDOM('assistant', 'Unable to load previous messages for this conversation.');
+            refreshSaveLessonAvailability();
             if (window._loadChatResolve) { window._loadChatResolve(); window._loadChatResolve = null; }
           });
         } else {
@@ -6943,6 +7015,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           window._loadChatResolve();
           window._loadChatResolve = null;
         }
+        refreshSaveLessonAvailability();
       }
 
       // Returns a promise that resolves when messages have been applied (for backend chats). Client-only chats resolve immediately after applyLoadedMessages.
@@ -7831,6 +7904,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           var formatted = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
             ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
           addAssistantMessage(formatted);
+          await refreshSaveLessonAvailability();
         } catch (e) {
           const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
           addAssistantMessage(isAbort
@@ -8305,6 +8379,31 @@ To continue your learning journey:
         return raw.replace(/^chat\s*:/i, '').trim() || fallback;
       }
 
+      function buildLessonSaveSignature(baseTitle, lessonContent) {
+        const threadPart = String(window.currentRAGThreadId || currentChatId || 'no-thread').trim();
+        const titlePart = String(baseTitle || '').trim().toLowerCase();
+        const contentPart = String(lessonContent || '').replace(/\s+/g, ' ').trim();
+        return threadPart + '::' + titlePart + '::' + contentPart;
+      }
+
+      function getUniqueLessonTitle(baseTitle) {
+        const cleanedBase = String(baseTitle || '').trim() || ('Lesson ' + new Date().toLocaleDateString());
+        const usedTitles = getUsedLessonTitles();
+        const usedLookup = new Set(usedTitles.map(function (t) { return String(t || '').trim().toLowerCase(); }));
+
+        if (!usedLookup.has(cleanedBase.toLowerCase())) {
+          return cleanedBase;
+        }
+
+        let counter = 1;
+        let candidate = cleanedBase + ' - Lesson Saved';
+        while (usedLookup.has(candidate.toLowerCase())) {
+          counter += 1;
+          candidate = cleanedBase + ' - Lesson Saved ' + counter;
+        }
+        return candidate;
+      }
+
       async function saveLessonToMyLessons(pdfDataOverride, lessonContentOverride) {
         const pdfData = pdfDataOverride || currentPDFData;
         const lessonContent = lessonContentOverride || currentLessonMarkdown;
@@ -8314,7 +8413,15 @@ To continue your learning journey:
           return;
         }
 
-        const finalTitle = getCurrentChatThreadTitleForLesson();
+        const baseTitle = getCurrentChatThreadTitleForLesson();
+        const lessonSignature = buildLessonSaveSignature(baseTitle, lessonContent);
+        const savedSignatures = getSavedLessonSignatures();
+        if (savedSignatures.includes(lessonSignature)) {
+          showToast("This lesson has already been saved. If you'd like to save a new lesson, please create a new lesson and save it.", 'warning', 4500);
+          return;
+        }
+
+        const finalTitle = getUniqueLessonTitle(baseTitle);
         const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
         const gradeLevel = (pdfData && pdfData.grade) ? String(pdfData.grade) : (pdfData && pdfData.gradeLevel) || 'General';
         const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
@@ -8338,6 +8445,15 @@ To continue your learning journey:
           const data = await response.json().catch(function() { return {}; });
 
           if (response.ok && data && data.success) {
+            savedSignatures.push(lessonSignature);
+            persistSavedLessonSignatures(savedSignatures);
+            const usedTitles = getUsedLessonTitles();
+            usedTitles.push(finalTitle);
+            persistUsedLessonTitles(usedTitles);
+            try {
+              localStorage.setItem(LESSON_SAVE_META_KEY, JSON.stringify({ chatId: String(currentChatId || ''), signature: lessonSignature }));
+            } catch (e) {}
+
             showToast(`✅ Lesson "${finalTitle}" saved to My Lessons!`, 'success', 3000);
 
             // Display full lesson with formatting
@@ -8383,6 +8499,7 @@ To continue your learning journey:
             currentPDFData = null;
             currentLessonMarkdown = null;
             clearPDFDataFromStorage();
+            setSaveLessonButtonsVisible(false);
           } else {
             showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
           }
@@ -8408,6 +8525,7 @@ To continue your learning journey:
         currentPDFData = null;
         currentLessonMarkdown = null;
         clearPDFDataFromStorage();
+        setSaveLessonButtonsVisible(false);
         addAssistantMessage(`❌ <strong>Lesson Cancelled</strong><br><br>
         The lesson was not saved. You can:<br>
         • Upload another PDF<br>
@@ -9000,6 +9118,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           } catch (e) {
             console.error('Failed to clear stored chat messages', e);
           }
+          setSaveLessonButtonsVisible(false);
         }
       }
 
