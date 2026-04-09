@@ -463,9 +463,6 @@
       border-radius: 0.5rem;
       cursor: pointer;
       transition: all 0.2s ease;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
       border-left: 3px solid transparent;
     }
 
@@ -1546,6 +1543,20 @@
 
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
       background: #a1a1a1;
+    }
+
+    /* Sidebar: scroll without visible scrollbar (match teacher / ChatGPT-like) */
+    #chatHistoryContainer,
+    #chatHistoryContainer-mobile {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    #chatHistoryContainer::-webkit-scrollbar,
+    #chatHistoryContainer-mobile::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
     }
 
     /* Lessons Table Styles */
@@ -3419,6 +3430,8 @@
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
 
+        chatMessages.removeAttribute('data-active-thread-id');
+
         chatMessages.innerHTML = `
         <div class="max-w-2xl mx-auto p-8 h-full flex flex-col items-center justify-center text-center">
           <i class="fas fa-comments text-6xl text-gray-300 mb-4"></i>
@@ -3434,6 +3447,7 @@
 
       // Show Math Demo Tab with example formulas and ensure only the new content is typeset
       function showMathDemo() {
+        stopTextToSpeechSession();
         deactivateAllTabs();
         const mathDemoTabBtn = document.getElementById('mathDemoTabBtn');
         if (mathDemoTabBtn) mathDemoTabBtn.classList.add('active-tab');
@@ -3460,6 +3474,7 @@
         const chatMessages = document.getElementById('chatMessages');
         // Clear previous and append demo wrapper
         if (chatMessages) {
+          chatMessages.removeAttribute('data-active-thread-id');
           chatMessages.innerHTML = '';
           const wrapper = document.createElement('div');
           wrapper.innerHTML = demoHtml;
@@ -3731,13 +3746,13 @@
           const displayTitle = getSidebarConversationTitle(chat);
           return `
           <div class="chat-history-item ${isActive}" onclick="loadChat('${chat.id}')">
-            <div class="flex items-center justify-between">
+            <div class="flex items-start justify-between gap-2">
               <div class="flex-1 min-w-0 sb-hide-when-collapsed">
-                <div class="flex items-center gap-2">
-                  <p class="text-sm text-gray-900 truncate flex-1">${escapeHtml(displayTitle)}</p>
+                <div class="flex items-start gap-2">
+                  <p class="text-sm text-gray-900 flex-1 min-w-0 break-words whitespace-normal leading-snug">${escapeHtml(displayTitle)}</p>
                   ${unread}
                 </div>
-                <p class="text-xs text-gray-500 truncate">${snippet || formatTime(chat.timestamp)}</p>
+                <p class="text-xs text-gray-500 line-clamp-2 break-words">${snippet || formatTime(chat.timestamp)}</p>
               </div>
               <div class="relative">
                 <button onclick="toggleChatMenu(event, '${chat.id}')" class="text-gray-400 hover:text-gray-600 p-1">
@@ -4114,6 +4129,8 @@
 
         ensurePinnedLessonContentForChat(chatId);
 
+        chatMessages.setAttribute('data-active-thread-id', String(chatId));
+
         scrollToBottom();
 
         // Ensure chat input is visible after layout rebuild
@@ -4229,6 +4246,7 @@
       }
 
       async function showMyLessonsPage() {
+        stopTextToSpeechSession();
         window.currentLessonQAId = null;
         setStudentActiveView('lessons');
         const requestId = ++lessonsRenderRequestId;
@@ -4248,7 +4266,9 @@
         // NOTE: showMyLessonsPage is called from click handlers; keep it non-async
         // by rendering a quick loading state then hydrating with API results.
         const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = `
+        if (chatMessages) {
+          chatMessages.removeAttribute('data-active-thread-id');
+          chatMessages.innerHTML = `
           <div class="max-w-6xl mx-auto">
             <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
               <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View Lessons</h1>
@@ -4256,6 +4276,7 @@
             </div>
           </div>
         `;
+        }
 
         fetchStudentLessonsPage(currentPage, lessonsPerPage, lessonSearchTerm)
           .then(payload => {
@@ -4277,6 +4298,9 @@
 
       function renderLessonsTable(lessons) {
         if (studentActiveView !== 'lessons') return;
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+        chatMessages.removeAttribute('data-active-thread-id');
         lessons = Array.isArray(lessons) ? lessons : [];
         const startIdx = (currentPage - 1) * lessonsPerPage;
 
@@ -5356,15 +5380,17 @@
           const lesson = lessons[index];
 
           const faqContent = `
-      <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
-        <div class="bg-white rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">Frequently Asked Questions</h3>
-            <button onclick="this.parentElement.parentElement.parentElement.remove()" 
-                    class="text-gray-400 hover:text-gray-600">
+      <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 pointer-events-auto" style="z-index:10050">
+        <div class="bg-white rounded-xl max-w-md w-full max-h-[80vh] shadow-xl flex flex-col min-h-0 overflow-hidden relative">
+          <div class="flex-shrink-0 relative z-10 flex items-center justify-between gap-3 px-6 pt-6 pb-2 border-b border-gray-100 bg-white">
+            <h3 class="text-lg font-semibold text-gray-900 min-w-0">Frequently Asked Questions</h3>
+            <button type="button" onclick="this.closest('.fixed').remove()" 
+                    class="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center"
+                    aria-label="Close FAQ dialog">
               <i class="fas fa-times"></i>
             </button>
           </div>
+          <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-4">
           
           <div class="space-y-3">
             <div class="border-l-4 border-blue-500 pl-3 py-2">
@@ -5402,6 +5428,7 @@
                   class="w-full mt-4 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300">
             Close
           </button>
+          </div>
         </div>
       </div>
     `;
@@ -5611,7 +5638,10 @@
 
         // Display welcome message for new chat
         const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = getStudentWelcomeMessageHtml();
+        if (chatMessages) {
+          chatMessages.innerHTML = getStudentWelcomeMessageHtml();
+          chatMessages.setAttribute('data-active-thread-id', String(chatId));
+        }
 
         // Keep scroll position stable when starting a fresh chat; user can scroll/messages appear naturally
       }
@@ -5629,8 +5659,13 @@
           return;
         }
 
-        // Repeated clicks on the same active thread should not rebuild layout.
-        if (String(currentChatId) === normalizedChatId && document.getElementById('chatMessages')) {
+        const chatMessagesEl = document.getElementById('chatMessages');
+        const renderedThreadId = chatMessagesEl && chatMessagesEl.getAttribute('data-active-thread-id');
+        const threadUiMatches =
+          renderedThreadId != null && String(renderedThreadId) === normalizedChatId;
+
+        // Skip only when this thread is already rendered in #chatMessages (not lessons/Math demo/etc.)
+        if (String(currentChatId) === normalizedChatId && chatMessagesEl && threadUiMatches) {
           closeAllDropdowns();
           closeMobileSidebar();
           ensurePinnedLessonContentForChat(chatId);
@@ -5967,18 +6002,24 @@
         }
       }
 
+      function stopTextToSpeechSession() {
+        if (window.speechSynthesis && speechSynthesis.speaking) {
+          speechSynthesis.cancel();
+        }
+        isTextToSpeechActive = false;
+        const speakerBtn = document.getElementById('speakerBtn');
+        if (speakerBtn) {
+          speakerBtn.classList.remove('active');
+          speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        }
+      }
+
       // Toggle text-to-speech
       function toggleTextToSpeech() {
         const speakerBtn = document.getElementById('speakerBtn');
 
         if (isTextToSpeechActive) {
-          // Deactivate
-          speakerBtn.classList.remove('active');
-          speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
-          if (speechSynthesis.speaking) {
-            speechSynthesis.cancel();
-          }
-          isTextToSpeechActive = false;
+          stopTextToSpeechSession();
         } else {
           // Activate
           speakerBtn.classList.add('active');
