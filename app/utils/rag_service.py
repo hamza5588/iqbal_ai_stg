@@ -341,16 +341,13 @@ def _apply_strict_response_cap(
         max_chars = min(max_chars, token_pressure_chars)
         max_sentences = min(max_sentences, token_pressure_sentences)
 
+    # Normalize horizontal whitespace while preserving line breaks/markdown layout.
     compact = re.sub(r"[^\S\n]+", " ", text).strip()
     if len(compact) > max_chars:
         compact = compact[:max_chars].rstrip(" ,.;:-")
         compact += "..."
 
-    sentences = re.split(r"(?<=[.!?])\s+", compact)
-    if len(sentences) > max_sentences:
-        compact = " ".join(sentences[:max_sentences]).strip()
-        if not compact.endswith((".", "!", "?")):
-            compact += "..."
+    compact = _truncate_to_sentence_limit_preserve_format(compact, max_sentences)
     return compact
 
 
@@ -435,17 +432,33 @@ def _apply_moderate_response_cap(text: Any, lesson_mode: bool = False) -> str:
         max_chars = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_CHARS", "25000"))
         max_sentences = int(os.getenv("RAG_MODERATE_RESPONSE_MAX_SENTENCES", "12"))
 
+    # Normalize horizontal whitespace while preserving line breaks/markdown layout.
     compact = re.sub(r"[^\S\n]+", " ", text).strip()
     if len(compact) > max_chars:
         compact = compact[:max_chars].rstrip(" ,.;:-")
         compact += "..."
 
-    sentences = re.split(r"(?<=[.!?])\s+", compact)
-    if len(sentences) > max_sentences:
-        compact = " ".join(sentences[:max_sentences]).strip()
-        if not compact.endswith((".", "!", "?")):
-            compact += "..."
+    compact = _truncate_to_sentence_limit_preserve_format(compact, max_sentences)
     return compact
+
+
+def _truncate_to_sentence_limit_preserve_format(text: str, max_sentences: int) -> str:
+    """
+    Truncate by sentence count without flattening newlines.
+    Keeps markdown/list formatting intact instead of joining with spaces.
+    """
+    if not text or max_sentences <= 0:
+        return text
+
+    sentence_end_matches = list(re.finditer(r"[.!?](?:[\"')\]]+)?(?:\s+|$)", text))
+    if len(sentence_end_matches) <= max_sentences:
+        return text
+
+    cut_idx = sentence_end_matches[max_sentences - 1].end()
+    truncated = text[:cut_idx].rstrip()
+    if not truncated.endswith((".", "!", "?")):
+        truncated += "..."
+    return truncated
 
 
 def _is_lesson_creation_request(text: str) -> bool:
@@ -2304,13 +2317,39 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     num_pages = thread_meta.get("num_pages") or thread_meta.get("pages") or thread_meta.get("documents")
     source_file = thread_meta.get("filename") or "PDF"
 
-    # Return content-only string for the LLM so internal metadata is not shown to the user
-    cleaned_chunks = [_strip_metadata_like_lines(c) for c in context if c and c.strip()]
+    # Return citation-ready evidence blocks with explicit page metadata.
+    # This gives the model grounded page numbers and reduces fabricated citations.
+    evidence_blocks = []
+    cleaned_chunks = []
+    for idx, (chunk_text, chunk_meta) in enumerate(zip(context, metadata), start=1):
+        if not chunk_text or not str(chunk_text).strip():
+            continue
+        cleaned_text = _strip_metadata_like_lines(chunk_text)
+        if not cleaned_text or not cleaned_text.strip():
+            continue
+        cleaned_chunks.append(cleaned_text)
+        page_val = (chunk_meta or {}).get("page")
+        source_val = (chunk_meta or {}).get("source") or source_file
+        chunk_idx_val = (chunk_meta or {}).get("chunk_index")
+
+        try:
+            page_label = str(int(page_val)) if page_val is not None and str(page_val).strip() else "unknown"
+        except Exception:
+            page_label = str(page_val).strip() if page_val is not None else "unknown"
+        chunk_label = str(chunk_idx_val) if chunk_idx_val is not None else str(idx - 1)
+        evidence_blocks.append(
+            f"[Evidence {idx} | Page {page_label} | Chunk {chunk_label} | Source {source_val}]\n{cleaned_text}"
+        )
+
     _rag_step("clean_chunks")
-    content_block = "\n\n---\n\n".join(cleaned_chunks) if cleaned_chunks else "(No relevant content found.)"
+    content_block = "\n\n---\n\n".join(evidence_blocks) if evidence_blocks else "(No relevant content found.)"
     content_for_llm = (
-        f"Relevant content from the PDF:\n\n{content_block}\n\n"
-        f"Source: {source_file}. Total pages: {num_pages or 'unknown'}."
+        "Relevant content from the PDF (citation-ready evidence):\n\n"
+        f"{content_block}\n\n"
+        "Citation policy for this evidence:\n"
+        "- Cite only page numbers that appear in the evidence headers above.\n"
+        "- If page is unknown, cite using section/source wording instead of inventing a page number.\n\n"
+        f"Source file: {source_file}. Total pages: {num_pages or 'unknown'}."
     )
     _rag_step("build_content_for_llm")
 

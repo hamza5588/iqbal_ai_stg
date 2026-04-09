@@ -808,6 +808,16 @@
       pointer-events: auto;
     }
 
+    /* Toasts must stack above all modals (view lesson may use high z-index inline) */
+    #toastContainer {
+      z-index: 200000 !important;
+    }
+
+    /* FAQ modal must sit above dashboard chrome and lesson cards; below toasts */
+    #faqModalOverlay {
+      z-index: 10050 !important;
+    }
+
     /* Prevent body scroll when modal is open */
     body:has(#createLessonModal) {
       overflow: hidden;
@@ -2515,7 +2525,7 @@
 <body class="min-h-screen bg-gradient-to-b from-surface-50 to-white font-sans text-surface-900 antialiased">
 
   <!-- Toast Notifications Container -->
-  <div id="toastContainer" class="fixed top-4 right-4 z-[9999] space-y-3 pointer-events-none"></div>
+  <div id="toastContainer" class="fixed top-4 right-4 z-[200000] space-y-3 pointer-events-none"></div>
 
   <!-- Loading Overlay -->
   <div id="loading-overlay"
@@ -3365,14 +3375,9 @@
             </div>
           </div>
 
-          <!-- Action Buttons Footer -->
+          <!-- Action Buttons Footer (draft edits are in-column; no separate Edit CTA) -->
           <div class="border-t-2 md:border-t-3 border-gray-200 pt-4 md:pt-8">
             <div class="flex flex-col md:flex-row gap-2 md:gap-3 lg:gap-4">
-              <button onclick="editWithHumanLessonModal()"
-                class="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 text-white py-2 md:py-3 px-4 md:px-6 rounded-lg md:rounded-xl hover:from-amber-600 hover:to-amber-700 transition-all font-bold flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
-                <i class="fas fa-pen-to-square text-sm md:text-base"></i>
-                <span>✏️ Edit</span>
-              </button>
               <button onclick="closeViewLessonModal()"
                 class="flex-1 bg-gray-200 text-gray-800 py-2 md:py-3 px-4 md:px-6 rounded-lg md:rounded-xl hover:bg-gray-300 transition-colors font-bold flex items-center justify-center gap-2 text-sm md:text-base">
                 <i class="fas fa-times text-sm md:text-base"></i>
@@ -3402,6 +3407,7 @@
       let audioChunks = [];
       let mediaStream = null;
       let ttsAudio = null;
+      let ttsObjectUrl = null;
       let currentChatMenuId = null;
       let lessonCreationCompleted = false; // Flag to track if first lesson is created
 
@@ -3620,6 +3626,7 @@
 
       // Show Math Demo Tab with example formulas and ensure only the new content is typeset
       function showMathDemo() {
+        stopTextToSpeechSession();
         deactivateAllTabs();
         const mathDemoTabBtn = document.getElementById('mathDemoTabBtn');
         if (mathDemoTabBtn) mathDemoTabBtn.classList.add('active-tab');
@@ -4279,7 +4286,12 @@
                         <input type="text" id="lessonTitle" 
                                class="w-full px-4 md:px-5 py-2.5 md:py-3.5 border-2 border-gray-200 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all placeholder-gray-400 font-medium text-gray-900 text-sm md:text-base"
                                placeholder="e.g., 'Introduction to Algebra'"
+                               oninput="clearLessonTitleFormError()"
                                required>
+                        <div id="lessonTitleError" class="text-red-600 text-xs md:text-sm mt-2 hidden flex items-start gap-2 bg-red-50 p-2 md:p-3 rounded-lg border border-red-200" role="alert">
+                            <i class="fas fa-exclamation-circle flex-shrink-0 mt-0.5 text-sm md:text-base"></i>
+                            <span id="lessonTitleErrorText" class="font-medium"></span>
+                        </div>
                     </div>
 
                     <!-- Subject and Grade Row -->
@@ -4517,6 +4529,30 @@
         });
       }
 
+      function clearLessonTitleFormError() {
+        const wrap = document.getElementById('lessonTitleError');
+        const textEl = document.getElementById('lessonTitleErrorText');
+        const input = document.getElementById('lessonTitle');
+        if (wrap) wrap.classList.add('hidden');
+        if (textEl) textEl.textContent = '';
+        if (input) {
+          input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+          input.classList.add('border-gray-200');
+        }
+      }
+
+      function showLessonTitleFormError(message) {
+        const wrap = document.getElementById('lessonTitleError');
+        const textEl = document.getElementById('lessonTitleErrorText');
+        const input = document.getElementById('lessonTitle');
+        if (textEl) textEl.textContent = message;
+        if (wrap) wrap.classList.remove('hidden');
+        if (input) {
+          input.classList.remove('border-gray-200');
+          input.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+        }
+      }
+
       // Clear file selection
       function clearFileSelection() {
         const fileInput = document.getElementById('pdfFileInput');
@@ -4529,7 +4565,7 @@
       }
 
       // Step 1 processing with better validation
-      function processCreateLessonStep1() {
+      async function processCreateLessonStep1() {
         console.log('processCreateLessonStep1 called');
 
         // Get elements directly from the document
@@ -4595,6 +4631,22 @@
         if (!file.type.includes('pdf')) {
           alert('Please upload a PDF file only.');
           return;
+        }
+
+        try {
+          const checkRes = await fetch(
+            '/api/lessons/check_title_exists?' + new URLSearchParams({ title: lessonTitle }),
+            { method: 'GET', credentials: 'include' }
+          );
+          const checkData = await checkRes.json().catch(function () { return {}; });
+          if (checkRes.ok && checkData.exists) {
+            showLessonTitleFormError('This title is already used by another lesson. Please choose a different title.');
+            lessonTitleInput.focus();
+            return;
+          }
+        } catch (e) {
+          console.warn('Could not verify lesson title uniqueness:', e);
+          showToast('Could not verify if this title is available. If the problem persists, check your connection.', 'warning', 3500);
         }
 
         console.log('All validations passed, proceeding to step 2');
@@ -5261,6 +5313,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       // Show My Lessons Page (API-integrated: fetches from /api/lessons/my_lessons)
       async function showMyLessonsPage() {
+        stopTextToSpeechSession();
         // Deactivate all tabs, then activate lessons tab
         deactivateAllTabs();
         document.querySelectorAll('#lessonsTabBtn').forEach(function (btn) {
@@ -5729,9 +5782,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             modal.style.visibility = 'visible';
             modal.style.opacity = '1';
             modal.style.pointerEvents = 'auto';
-            modal.style.zIndex = '99999';
+            /* Stay below #toastContainer so Save Draft / errors are visible */
+            modal.style.zIndex = '10040';
             modal.setAttribute('aria-hidden', 'false');
-            console.log('📺 Step 5: Applied inline styles (zIndex=99999)');
+            console.log('📺 Step 5: Applied inline styles (zIndex=10040)');
           
           // Step 5: Check what browser computed
           const computed = window.getComputedStyle(modal);
@@ -6311,17 +6365,18 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             </div>
           `;
           const faqContent = `
-      <div class="fixed inset-0 bg-black/55 backdrop-blur-[2px] flex items-center justify-center z-[70] p-3 md:p-6" id="faqModalOverlay">
-        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden shadow-2xl border border-gray-100">
-          <div class="px-5 md:px-6 py-4 md:py-5 bg-gradient-to-r from-primary-600 to-sky-500 text-white">
+      <div class="fixed inset-0 bg-black/55 backdrop-blur-[2px] flex items-center justify-center p-3 md:p-6 pointer-events-auto" id="faqModalOverlay" style="z-index:10050">
+        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] shadow-2xl border border-gray-100 flex flex-col min-h-0 overflow-hidden relative">
+          <div class="flex-shrink-0 relative z-20 px-5 md:px-6 py-4 md:py-5 bg-gradient-to-r from-primary-600 to-sky-500 text-white shadow-md">
             <div class="flex items-start justify-between gap-4">
-              <div>
+              <div class="min-w-0 pr-2">
                 <p class="text-xs uppercase tracking-[0.18em] text-white/80 font-semibold">Insights</p>
                 <h3 class="text-lg md:text-xl font-bold">Frequently Asked Questions</h3>
-                <p class="text-sm text-white/90 mt-1">${escapeHtml(lessonTitle)}</p>
+                <p class="text-sm text-white/90 mt-1 truncate">${escapeHtml(lessonTitle)}</p>
               </div>
-              <button onclick="document.getElementById('faqModalOverlay').remove()"
-                      class="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 transition-colors flex items-center justify-center">
+              <button type="button" onclick="document.getElementById('faqModalOverlay').remove()"
+                      class="flex-shrink-0 w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 transition-colors flex items-center justify-center shadow-sm"
+                      aria-label="Close FAQ dialog">
                 <i class="fas fa-times"></i>
               </button>
             </div>
@@ -6334,13 +6389,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               </span>
             </div>
           </div>
-          <div class="px-5 md:px-6 py-5 overflow-y-auto max-h-[calc(88vh-170px)]">
+          <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 md:px-6 py-5">
             <div class="space-y-3">${faqRows}</div>
           </div>
-          <div class="px-5 md:px-6 py-3.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-            <p class="text-xs text-gray-500">Only recurring student questions are shown.</p>
-            <button onclick="document.getElementById('faqModalOverlay').remove()"
-                    class="px-3.5 py-2 rounded-lg bg-gray-800 text-white text-xs font-medium hover:bg-black transition-colors">
+          <div class="flex-shrink-0 relative z-10 px-5 md:px-6 py-3.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+            <p class="text-xs text-gray-500 min-w-0">Only recurring student questions are shown.</p>
+            <button type="button" onclick="document.getElementById('faqModalOverlay').remove()"
+                    class="flex-shrink-0 px-3.5 py-2 rounded-lg bg-gray-800 text-white text-xs font-medium hover:bg-black transition-colors">
               Close
             </button>
           </div>
@@ -7350,19 +7405,34 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function stopTextToSpeechSession() {
+        if (ttsAudio) {
+          try {
+            ttsAudio.pause();
+            ttsAudio.currentTime = 0;
+          } catch (e) {}
+          ttsAudio = null;
+        }
+        if (ttsObjectUrl) {
+          try {
+            URL.revokeObjectURL(ttsObjectUrl);
+          } catch (e) {}
+          ttsObjectUrl = null;
+        }
+        isTextToSpeechActive = false;
+        const speakerBtn = document.getElementById('speakerBtn');
+        if (speakerBtn) {
+          speakerBtn.classList.remove('active');
+          speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        }
+      }
+
       // Toggle text-to-speech: use backend /api/tts (gTTS) and play returned audio
       async function toggleTextToSpeech() {
         const speakerBtn = document.getElementById('speakerBtn');
 
         if (isTextToSpeechActive) {
-          if (ttsAudio) {
-            ttsAudio.pause();
-            ttsAudio.currentTime = 0;
-            ttsAudio = null;
-          }
-          speakerBtn.classList.remove('active');
-          speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
-          isTextToSpeechActive = false;
+          stopTextToSpeechSession();
           return;
         }
 
@@ -7393,17 +7463,33 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             return;
           }
           const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          ttsAudio = new Audio(url);
+          if (ttsObjectUrl) {
+            try {
+              URL.revokeObjectURL(ttsObjectUrl);
+            } catch (e) {}
+            ttsObjectUrl = null;
+          }
+          ttsObjectUrl = URL.createObjectURL(blob);
+          ttsAudio = new Audio(ttsObjectUrl);
           ttsAudio.onended = function () {
-            URL.revokeObjectURL(url);
+            if (ttsObjectUrl) {
+              try {
+                URL.revokeObjectURL(ttsObjectUrl);
+              } catch (e) {}
+              ttsObjectUrl = null;
+            }
             ttsAudio = null;
             speakerBtn.classList.remove('active');
             speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
             isTextToSpeechActive = false;
           };
           ttsAudio.onerror = function () {
-            URL.revokeObjectURL(url);
+            if (ttsObjectUrl) {
+              try {
+                URL.revokeObjectURL(ttsObjectUrl);
+              } catch (e) {}
+              ttsObjectUrl = null;
+            }
             ttsAudio = null;
             speakerBtn.classList.remove('active');
             speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
@@ -8032,12 +8118,41 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ text: plain }) })
               .then(function (r) { return r.ok ? r.blob() : null; })
               .then(function (blob) {
-                if (blob) {
-                  var url = URL.createObjectURL(blob);
-                  var a = new Audio(url);
-                  a.onended = function () { URL.revokeObjectURL(url); };
-                  a.play();
+                if (!blob || !isTextToSpeechActive) return;
+                if (ttsAudio) {
+                  try {
+                    ttsAudio.pause();
+                    ttsAudio.currentTime = 0;
+                  } catch (e) {}
+                  ttsAudio = null;
                 }
+                if (ttsObjectUrl) {
+                  try {
+                    URL.revokeObjectURL(ttsObjectUrl);
+                  } catch (e) {}
+                  ttsObjectUrl = null;
+                }
+                ttsObjectUrl = URL.createObjectURL(blob);
+                ttsAudio = new Audio(ttsObjectUrl);
+                ttsAudio.onended = function () {
+                  if (ttsObjectUrl) {
+                    try {
+                      URL.revokeObjectURL(ttsObjectUrl);
+                    } catch (e) {}
+                    ttsObjectUrl = null;
+                  }
+                  ttsAudio = null;
+                };
+                ttsAudio.onerror = function () {
+                  if (ttsObjectUrl) {
+                    try {
+                      URL.revokeObjectURL(ttsObjectUrl);
+                    } catch (e) {}
+                    ttsObjectUrl = null;
+                  }
+                  ttsAudio = null;
+                };
+                ttsAudio.play();
               })
               .catch(function () {});
           }
