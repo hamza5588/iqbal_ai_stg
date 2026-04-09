@@ -146,6 +146,8 @@ _thread_token_pressure_mode = {}
 _thread_token_pressure_mode_lock = Lock()
 _thread_ingest_profiles = {}
 _thread_ingest_profiles_lock = Lock()
+_thread_page_label_maps = {}
+_thread_page_label_maps_lock = Lock()
 
 
 def _activate_short_mode(thread_id: Optional[str], reason: str = "token_limit"):
@@ -222,6 +224,23 @@ def _cache_thread_ingest_profile(thread_id: str, profile_name: str, file_size_mb
             "file_size_mb": float(file_size_mb),
             "updated_at": time.time(),
         }
+
+
+def _cache_thread_page_label_map(thread_id: str, page_label_map: Dict[int, int]) -> None:
+    """Cache logical->physical page map for this process."""
+    if not thread_id:
+        return
+    with _thread_page_label_maps_lock:
+        _thread_page_label_maps[str(thread_id)] = dict(page_label_map or {})
+
+
+def _get_cached_thread_page_label_map(thread_id: str) -> Dict[int, int]:
+    """Return cached logical->physical page map if present."""
+    if not thread_id:
+        return {}
+    with _thread_page_label_maps_lock:
+        mapping = _thread_page_label_maps.get(str(thread_id), {})
+    return dict(mapping) if isinstance(mapping, dict) else {}
 
 
 def _resolve_ingest_profile(file_size_mb: float) -> dict:
@@ -813,6 +832,279 @@ MARKDOWN_EXPORTS_DIR.mkdir(exist_ok=True)
 SPEED_LOG_PATH = BASE_DIR / "speed.txt"
 
 
+def _parse_roman_numeral(value: str) -> Optional[int]:
+    """Parse Roman numeral string into int. Returns None when invalid."""
+    if not value:
+        return None
+    s = value.strip().upper()
+    if not s or not re.fullmatch(r"[IVXLCDM]+", s):
+        return None
+    roman_map = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+    total = 0
+    prev = 0
+    for ch in reversed(s):
+        cur = roman_map[ch]
+        if cur < prev:
+            total -= cur
+        else:
+            total += cur
+            prev = cur
+    return total if total > 0 else None
+
+
+def _parse_page_label_to_int(label: Any) -> Optional[int]:
+    """
+    Try to parse numeric page number from a page label.
+    Supports plain numbers ("12"), prefixed labels ("A-12"), and Roman numerals ("iv").
+    """
+    if label is None:
+        return None
+    text = str(label).strip()
+    if not text:
+        return None
+    if text.isdigit():
+        num = int(text)
+        return num if num > 0 else None
+    numeric_tokens = re.findall(r"(\d+)", text)
+    if numeric_tokens:
+        num = int(numeric_tokens[-1])
+        return num if num > 0 else None
+    return _parse_roman_numeral(text)
+
+
+def _find_uploaded_pdf_for_thread(thread_id: str) -> Optional[Path]:
+    """Find the uploaded PDF path for this thread."""
+    if not thread_id:
+        return None
+    candidates = sorted(
+        UPLOADED_FILES_DIR.glob(f"{str(thread_id)}_*.pdf"),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def _logical_page_map_json_path(thread_id: str) -> Path:
+    """Persisted logical->physical map from last ingest (footer + native labels)."""
+    return UPLOADED_FILES_DIR / f"{str(thread_id)}_logical_page_map.json"
+
+
+def _save_logical_page_map_to_disk(thread_id: str, mapping: Dict[int, int]) -> None:
+    if not thread_id or not mapping:
+        return
+    try:
+        path = _logical_page_map_json_path(thread_id)
+        payload = {
+            "logical_to_physical": {str(k): int(v) for k, v in sorted(mapping.items())},
+            "updated_at": time.time(),
+        }
+        path.write_text(json.dumps(payload, indent=0), encoding="utf-8")
+    except Exception as e:
+        logger.debug("Could not save logical page map for thread %s: %s", thread_id, e)
+
+
+def _load_logical_page_map_from_disk(thread_id: str) -> Dict[int, int]:
+    """Load map saved during ingest (preferred: matches chunk text order)."""
+    if not thread_id:
+        return {}
+    path = _logical_page_map_json_path(thread_id)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        raw = data.get("logical_to_physical") or {}
+        out: Dict[int, int] = {}
+        for k, v in raw.items():
+            try:
+                ik = int(k)
+                iv = int(v)
+                if ik > 0 and iv > 0:
+                    out[ik] = iv
+            except (TypeError, ValueError):
+                continue
+        return out
+    except Exception as e:
+        logger.debug("Could not load logical page map for thread %s: %s", thread_id, e)
+        return {}
+
+
+def _extract_printed_number_from_footer_text(text: str) -> Optional[int]:
+    """
+    Guess printed page number from footer/header snippet (last lines of page text).
+    Many PDFs have no /PageLabels; numbers appear only as text in margins.
+    """
+    if not text or not text.strip():
+        return None
+    tail = text.strip()[-1400:]
+    lines = [ln.strip() for ln in tail.splitlines() if ln.strip()]
+    if not lines:
+        return None
+    # Prefer bottom lines (typical footer order in extract_text)
+    for line in reversed(lines[-6:]):
+        m = re.search(
+            r"(?:^|\s)(?:page|pg\.|p\.)\s*:?\s*(\d{1,4})\b",
+            line,
+            re.IGNORECASE,
+        )
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= 50000:
+                return n
+        m = re.search(r"(\d{1,4})\s*/\s*\d{1,4}\s*$", line)
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= 50000:
+                return n
+        m = re.search(r"^\s*[-–—]?\s*(\d{1,4})\s*[-–—]?\s*$", line)
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= 50000:
+                return n
+        if re.match(r"^\d{1,4}$", line):
+            n = int(line)
+            if 1 <= n <= 50000:
+                return n
+    return None
+
+
+def _is_trivial_identity_map(m: Dict[int, int]) -> bool:
+    """True when map is only logical N -> physical N (no real printed offset)."""
+    if not m:
+        return False
+    return all(int(k) == int(v) for k, v in m.items())
+
+
+def _build_native_label_map_fitz(doc: Any) -> Dict[int, int]:
+    """Per-page PDF /PageLabels via PyMuPDF (empty when catalog has no labels)."""
+    mapping: Dict[int, int] = {}
+    try:
+        for i in range(doc.page_count):
+            label = ""
+            try:
+                page = doc.load_page(i)
+                if hasattr(page, "get_label"):
+                    label = (page.get_label() or "").strip()
+            except Exception:
+                label = ""
+            logical_num = _parse_page_label_to_int(label)
+            if logical_num and logical_num > 0 and logical_num not in mapping:
+                mapping[logical_num] = i + 1
+    except Exception as e:
+        logger.debug("native label map error: %s", e)
+    return mapping
+
+
+def _build_footer_printed_map_fitz(pdf_path: str) -> Dict[int, int]:
+    """
+    Map printed page number -> physical page (1-indexed) using footer/header text.
+    Later physical pages overwrite earlier (reduces TOC false positives).
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return {}
+    printed_to_physical: Dict[int, int] = {}
+    try:
+        doc = fitz.open(str(pdf_path))
+        for i in range(doc.page_count):
+            page = doc.load_page(i)
+            r = page.rect
+            h, w = r.height, r.width
+            snippets: List[str] = []
+            # Bottom band (common footer)
+            clip = fitz.Rect(r.x0, r.y0 + h * 0.86, r.x1, r.y1)
+            snippets.append(page.get_text("text", clip=clip) or "")
+            # Bottom-center strip (some layouts)
+            clip2 = fitz.Rect(r.x0 + w * 0.30, r.y0 + h * 0.88, r.x0 + w * 0.70, r.y1)
+            snippets.append(page.get_text("text", clip=clip2) or "")
+            # Top band (some books number headers)
+            clip_top = fitz.Rect(r.x0, r.y0, r.x1, r.y0 + h * 0.12)
+            snippets.append(page.get_text("text", clip=clip_top) or "")
+            pnum: Optional[int] = None
+            for snip in snippets:
+                pnum = _extract_printed_number_from_footer_text(snip)
+                if pnum is not None:
+                    break
+            if pnum is None:
+                full_tail = (page.get_text("text") or "")[-1800:]
+                pnum = _extract_printed_number_from_footer_text(full_tail)
+            if pnum is not None and 1 <= pnum <= 50000:
+                printed_to_physical[pnum] = i + 1
+        doc.close()
+    except Exception as e:
+        logger.debug("footer printed map error for %s: %s", pdf_path, e)
+        return {}
+    return printed_to_physical
+
+
+def _merge_logical_page_maps(a: Dict[int, int], b: Dict[int, int]) -> Dict[int, int]:
+    """
+    Combine two logical->physical maps. Drops trivial identity maps (1->1, 2->2, ...).
+    On key collision, values from `b` win.
+    """
+    aa = {} if _is_trivial_identity_map(dict(a or {})) else dict(a or {})
+    bb = {} if _is_trivial_identity_map(dict(b or {})) else dict(b or {})
+    out = dict(aa)
+    out.update(bb)
+    return out
+
+
+def _build_combined_logical_page_map(thread_id: str) -> Dict[int, int]:
+    """
+    Logical printed page -> physical PDF page.
+    Uses (in order): persisted JSON from ingest, then live merge of footer text + /PageLabels.
+    """
+    disk_map = _load_logical_page_map_from_disk(thread_id)
+    if disk_map:
+        return disk_map
+    pdf_path = _find_uploaded_pdf_for_thread(thread_id)
+    if not pdf_path:
+        return {}
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return {}
+    native: Dict[int, int] = {}
+    try:
+        doc = fitz.open(str(pdf_path))
+        native = _build_native_label_map_fitz(doc)
+        doc.close()
+    except Exception as e:
+        logger.debug("combined map: native labels failed for %s: %s", thread_id, e)
+    footer = _build_footer_printed_map_fitz(str(pdf_path))
+    merged = _merge_logical_page_maps(footer, native)
+    if merged:
+        _save_logical_page_map_to_disk(thread_id, merged)
+    return merged
+
+
+def _resolve_requested_page(page_requested: int, thread_id: str) -> Tuple[int, str]:
+    """
+    Resolve user-requested page number to physical PDF page.
+    Resolution order:
+      1) UI alias: 0 -> 1
+      2) In-memory cache, else disk + combined map (footer text + PDF page labels)
+      3) Physical page passthrough
+    Returns: (resolved_physical_page, resolution_method)
+    """
+    if page_requested == 0:
+        return 1, "ui_zero_alias"
+    if page_requested < 0:
+        return page_requested, "physical_passthrough"
+
+    cached_map = _get_cached_thread_page_label_map(thread_id)
+    if not cached_map:
+        cached_map = _load_logical_page_map_from_disk(thread_id)
+    if not cached_map:
+        label_map = _build_combined_logical_page_map(thread_id)
+        if label_map:
+            _cache_thread_page_label_map(thread_id, label_map)
+            cached_map = label_map
+    if cached_map and page_requested in cached_map:
+        return int(cached_map[page_requested]), "logical_page_map"
+    return page_requested, "physical_passthrough"
+
+
 def _write_speed_log(section: str, thread_id: Optional[str], steps: list[tuple[str, float]], started_at: float) -> None:
     """Append per-step timing to speed.txt for PDF query performance analysis."""
     if not steps:
@@ -1149,17 +1441,45 @@ def ingest_pdf(
             )
 
         _send_progress("metadata", 30, "Adding metadata to pages...")
+        ingest_page_label_map: Dict[int, int] = {}
         for i, doc in enumerate(docs):
+            existing_meta = dict(doc.metadata or {})
+            raw_page_label = (
+                existing_meta.get("page_label")
+                or existing_meta.get("label")
+                or existing_meta.get("logical_page")
+            )
+            logical_page_num = _parse_page_label_to_int(raw_page_label)
+            if logical_page_num and logical_page_num > 0 and logical_page_num not in ingest_page_label_map:
+                ingest_page_label_map[logical_page_num] = i + 1
             doc.metadata = {
-                **(doc.metadata or {}),
+                **existing_meta,
                 "thread_id": thread_id_str,
                 "user_id": user_id,
                 "filename": filename or os.path.basename(temp_path),
+                "page_label": str(raw_page_label).strip() if raw_page_label is not None else "",
+                "logical_page_number": logical_page_num,
                 "page": i + 1,            # 1-indexed
                 "page_number": i + 1,     # alias
                 "page_zero_index": i,     # 0-indexed
                 "total_pages": num_pages,
             }
+        combined_logical_map = dict(ingest_page_label_map)
+        try:
+            import fitz  # PyMuPDF
+            footer_m = _build_footer_printed_map_fitz(temp_path)
+            doc_fitz = fitz.open(temp_path)
+            try:
+                native_m = _build_native_label_map_fitz(doc_fitz)
+            finally:
+                doc_fitz.close()
+            m1 = _merge_logical_page_maps(footer_m, native_m)
+            combined_logical_map = _merge_logical_page_maps(m1, ingest_page_label_map)
+        except Exception as e:
+            logger.debug("Could not build combined logical page map at ingest: %s", e)
+        if combined_logical_map:
+            _cache_thread_page_label_map(thread_id_str, combined_logical_map)
+            _save_logical_page_map_to_disk(thread_id_str, combined_logical_map)
 
         # Export extracted text as markdown for user download (## Page N + content per page)
         safe_base = (safe_filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
@@ -1393,7 +1713,9 @@ def calculator(first_num: float, second_num: float, operation: str) -> dict:
 def get_page_tool(page: int, thread_id: str) -> dict:
     """
     Get the content of a specific page from the uploaded PDF for this chat thread.
-    Page numbers: 0 or 1 both refer to the first page (page 1 in the PDF).
+    Supports logical page requests: when PDF page labels exist, user page numbers
+    (e.g., printed page "1") are mapped to the corresponding physical PDF page.
+    Page numbers: 0 or 1 both refer to the first page.
     Always include the thread_id when calling this tool.
     """
     logger.info(f"get_page_tool called: page={page}, thread_id={thread_id}")
@@ -1409,17 +1731,25 @@ def get_page_tool(page: int, thread_id: str) -> dict:
             "chunks_found": 0,
         }
     
-    # Map UI page=0 to page=1 (ingestion uses 1-indexed pages)
     original_page = page
-    if page == 0:
-        resolved_page = 1
-    else:
-        resolved_page = page
-    
-    logger.info("get_page_tool: page_requested=%s, page_resolved=%s, user_id=%s", original_page, resolved_page, user_id)
+    resolved_page, resolution_method = _resolve_requested_page(page_requested=page, thread_id=str(thread_id))
+    logger.info(
+        "get_page_tool: page_requested=%s, page_resolved=%s, method=%s, user_id=%s",
+        original_page,
+        resolved_page,
+        resolution_method,
+        user_id,
+    )
 
     from app.utils.rag_vectorstore import query_chunks_by_page
     results = query_chunks_by_page(thread_id=thread_id, user_id=user_id, page=resolved_page)
+
+    if not results and resolution_method == "logical_page_map" and original_page > 0 and resolved_page != original_page:
+        # Defensive fallback: if mapping had no chunks, try physical page directly.
+        results = query_chunks_by_page(thread_id=thread_id, user_id=user_id, page=original_page)
+        if results:
+            resolved_page = original_page
+            resolution_method = "physical_fallback"
 
     if not results:
         return {
@@ -1427,6 +1757,7 @@ def get_page_tool(page: int, thread_id: str) -> dict:
             "thread_id": thread_id,
             "page_requested": original_page,
             "page_resolved": resolved_page,
+            "page_resolution_method": resolution_method,
             "chunks_found": 0,
         }
 
@@ -1438,6 +1769,7 @@ def get_page_tool(page: int, thread_id: str) -> dict:
         "thread_id": thread_id,
         "page_requested": original_page,
         "page_resolved": resolved_page,
+        "page_resolution_method": resolution_method,
         "chunks_found": len(results),
         "content": content,
         "metadata": metadata,
@@ -3631,6 +3963,12 @@ def delete_thread(thread_id: str) -> dict:
                     logger.info("Deleted uploaded file: %s", file_path)
                 except Exception as e:
                     logger.warning("Failed to delete uploaded file %s: %s", file_path, e)
+            map_json = _logical_page_map_json_path(thread_id_str)
+            if map_json.is_file():
+                try:
+                    map_json.unlink()
+                except OSError:
+                    pass
         except Exception as e:
             logger.warning("Error removing uploaded files: %s", e)
 

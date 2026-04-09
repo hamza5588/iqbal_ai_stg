@@ -3244,6 +3244,9 @@
       let lessonsRenderRequestId = 0;
       let chatLoadInProgress = false;
       let chatLoadInProgressId = null;
+      let sendMessageInProgress = false;
+      let startChatPromise = null;
+      let openLessonChatInProgress = false;
       window.studentLessonThreadCache = window.studentLessonThreadCache || {};
 
       function setStudentActiveView(view) {
@@ -4247,6 +4250,7 @@
 
       async function showMyLessonsPage() {
         stopTextToSpeechSession();
+        closeAllModals();
         window.currentLessonQAId = null;
         setStudentActiveView('lessons');
         const requestId = ++lessonsRenderRequestId;
@@ -4255,11 +4259,16 @@
         const lessonsTabBtn = document.getElementById('lessonsTabBtn');
         if (lessonsTabBtn) lessonsTabBtn.classList.add('active-tab');
 
-        // Hide chat input area and floating button
+        // Hide chat input area and reset main container for lessons rendering
         const chatInputArea = document.getElementById('chatInputArea');
         if (chatInputArea) chatInputArea.style.display = 'none';
         const chatArea = document.getElementById('chatArea');
-        if (chatArea) chatArea.style.display = 'block';
+        if (chatArea) {
+          // Reset to a clean single-column lessons container to avoid stale overlap.
+          chatArea.style.display = 'block';
+          chatArea.className = 'flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar';
+          chatArea.innerHTML = '<div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6"></div>';
+        }
 
         // Fetch lessons from API (no dummy/localStorage lessons)
         let lessons = [];
@@ -5001,6 +5010,20 @@
           return false;
         }
         const lesson = lessons[index];
+
+        // Switch to chat mode before any async work to prevent lessons/chat overlap races.
+        setStudentActiveView('chat');
+        lessonsRenderRequestId += 1; // invalidate stale lessons render callbacks
+        deactivateAllTabs();
+        const sidebarChatTabBtn = document.getElementById('chatTabBtn');
+        if (sidebarChatTabBtn) sidebarChatTabBtn.classList.add('active-tab');
+        const chatInputArea = document.getElementById('chatInputArea');
+        const chatArea = document.getElementById('chatArea');
+        if (chatInputArea) chatInputArea.style.display = 'block';
+        if (chatArea) {
+          chatArea.style.display = 'block';
+          chatArea.classList.remove('hidden');
+        }
         
         // If we're in a lesson-bound chat, clear it and start fresh
         if (window.currentLessonContext) {
@@ -5034,6 +5057,14 @@
 
       // Switch to main chatbot interface in this file and integrate ask_question API for this lesson
       async function openLessonChat() {
+        if (openLessonChatInProgress) return;
+        openLessonChatInProgress = true;
+        const askBtn = document.querySelector('button[onclick="openLessonChat()"]');
+        if (askBtn) {
+          askBtn.disabled = true;
+          askBtn.classList.add('opacity-60', 'cursor-not-allowed');
+        }
+        try {
         const lessonId = window.currentViewLessonId;
         if (!lessonId) {
           showToast('No lesson selected', 'error', 2000);
@@ -5049,13 +5080,69 @@
 
         const lesson = lessons[index];
 
+        // Reuse an existing chat already bound to this lesson (do not create a new one each time).
+        let existingChatId = null;
+        try {
+          const raw = localStorage.getItem('Student_chat_lesson_bindings') || '{}';
+          const map = JSON.parse(raw || '{}') || {};
+          const lessonIdStr = String(lesson.id);
+          for (const [chatId, boundLessonId] of Object.entries(map)) {
+            if (String(boundLessonId) !== lessonIdStr) continue;
+            const existsInHistory = chatHistory.some(function (c) {
+              return String(c.id) === String(chatId);
+            });
+            if (existsInHistory) {
+              existingChatId = chatId;
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to read Student_chat_lesson_bindings while opening lesson chat', e);
+        }
+
         // Close the view modal and open chat with this lesson context (mobile + desktop)
         closeViewLessonModal();
         lessonCreationCompleted = true;
+        const alreadyRenderedThreadId = (function () {
+          const el = document.getElementById('chatMessages');
+          return el ? el.getAttribute('data-active-thread-id') : null;
+        })();
+        const sameChatAlreadyOpen =
+          existingChatId &&
+          studentActiveView === 'chat' &&
+          String(currentChatId || '') === String(existingChatId) &&
+          String(alreadyRenderedThreadId || '') === String(existingChatId);
+
+        // Idempotent open: if this lesson conversation is already open, do nothing heavy.
+        if (sameChatAlreadyOpen) {
+          ensurePinnedLessonContentForChat(existingChatId);
+          window.currentLessonQAId = lesson.id;
+          scrollToBottom();
+          return;
+        }
+
+        if (existingChatId) {
+          await loadChat(existingChatId);
+
+          // Defensive fallback: if an async lessons render/race left stale DOM,
+          // force a clean chat layout for this existing conversation.
+          const chatMessagesEl = document.getElementById('chatMessages');
+          const renderedThreadId = chatMessagesEl && chatMessagesEl.getAttribute('data-active-thread-id');
+          if (String(renderedThreadId || '') !== String(existingChatId)) {
+            currentChatId = existingChatId;
+            await renderChatLayoutForChat(existingChatId);
+            await restoreLessonContextForChat(existingChatId);
+            ensurePinnedLessonContentForChat(existingChatId);
+          }
+
+          showToast('Opened existing conversation for this lesson.', 'info', 1800);
+          return;
+        }
+
         await startNewChat();
         if (!currentChatId) return;
         await renderChatLayoutForChat(currentChatId);
-        // NOW bind the lesson after startNewChat
+        // Bind the lesson to this newly created chat
         bindLessonToChatSession(lesson);
         // Clear any placeholder/welcome content in the freshly built chat before pinning lesson
         const chatMessages = document.getElementById('chatMessages');
@@ -5068,6 +5155,13 @@
         addAssistantMessage('Thanks for opening this lesson! 📖 I\'m now familiar with all the content. Feel free to ask questions about <strong>"' + escapeHtml(lesson.title) + '"</strong> and I\'ll explain using only what\'s in this lesson.');
         // Enable lesson Q&A mode in main chat so sendMessage() routes via /api/lessons/ask_question
         window.currentLessonQAId = lesson.id;
+        } finally {
+          openLessonChatInProgress = false;
+          if (askBtn) {
+            askBtn.disabled = false;
+            askBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+          }
+        }
       }
 
       // Generate teaching recommendations based on lesson
@@ -5205,6 +5299,7 @@
               if (chatBtn) {
                 chatBtn.classList.add('bg-gray-100','text-primary-600');
               }
+              setTimeout(function () { if (typeof scrollToBottom === 'function') scrollToBottom(); }, 0);
             } catch (e) { console.warn('showChatPanel error', e); }
           }
 
@@ -5318,13 +5413,13 @@
           // Approach 3: needs_rag_confirmation - show in-chat message with Yes/No buttons
           if (response.ok && data && data.status === 'needs_rag_confirmation' && data.permission_request) {
             const promptMsg = data.permission_request.message ||
-              'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+              'I could not find this fully in the lesson summary. Do you want me to search the teacher-uploaded PDF to answer this question?';
             const aiMsgEl = document.createElement('div');
             aiMsgEl.className = 'mb-4 flex justify-start';
             const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             aiMsgEl.innerHTML = '<div class="bg-gray-200 text-gray-800 px-4 py-3 rounded-lg max-w-xs md:max-w-md text-sm rounded-bl-none">' +
               '<p class="mb-3">' + promptEscaped + '</p>' +
-              '<div class="flex gap-2 mt-2"><button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, search PDF</button>' +
+              '<div class="flex gap-2 mt-2"><button type="button" class="rag-confirm-yes px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Yes, use teacher PDF</button>' +
               '<button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button></div></div>';
             messagesEl.appendChild(aiMsgEl);
             const yesBtn = aiMsgEl.querySelector('.rag-confirm-yes');
@@ -5347,7 +5442,18 @@
             };
             noBtn.onclick = function() {
               yesBtn.disabled = true; noBtn.disabled = true;
-              innerDiv.innerHTML = '<p>Your question is not covered in the lesson content.</p>';
+              const lessonTitle = (window.currentLessonContext && window.currentLessonContext.title)
+                ? escapeHtml(window.currentLessonContext.title)
+                : 'this lesson';
+              innerDiv.innerHTML =
+                '<p class="text-gray-700 mb-2">No problem — we will continue with the lecture flow without using the teacher PDF.</p>' +
+                '<p class="text-gray-700 mb-2">Let\'s focus on <strong>' + lessonTitle + '</strong>. Try one of these:</p>' +
+                '<ul class="list-disc list-inside text-gray-700 text-sm space-y-1">' +
+                '<li>What is the main idea of this lesson?</li>' +
+                '<li>Can you explain one example from this lesson?</li>' +
+                '<li>Give me a quick recap in simple words.</li>' +
+                '</ul>';
+              messagesEl.scrollTop = messagesEl.scrollHeight;
             };
             messagesEl.scrollTop = messagesEl.scrollHeight;
           } else {
@@ -5643,7 +5749,7 @@
           chatMessages.setAttribute('data-active-thread-id', String(chatId));
         }
 
-        // Keep scroll position stable when starting a fresh chat; user can scroll/messages appear naturally
+        scrollToBottom();
       }
 
       // ════════════════════════════════════════════════════════════════════════════════
@@ -5669,6 +5775,7 @@
           closeAllDropdowns();
           closeMobileSidebar();
           ensurePinnedLessonContentForChat(chatId);
+          scrollToBottom();
           return;
         }
 
@@ -5744,6 +5851,7 @@
         } finally {
           chatLoadInProgress = false;
           chatLoadInProgressId = null;
+          scrollToBottom();
         }
 
       }
@@ -6093,7 +6201,7 @@
           if (response.ok && data && data.status === 'needs_rag_confirmation' && data.permission_request) {
             removeTypingIndicator();
             const promptMsg = data.permission_request.message ||
-              'This question may require searching the uploaded PDF. Do you want me to use the document to answer?';
+              'I could not find this fully in the lesson summary. Do you want me to search the teacher-uploaded PDF to answer this question?';
             const promptEscaped = (promptMsg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
             const chatMessages = document.getElementById('chatMessages');
@@ -6104,7 +6212,7 @@
               '<div class="chat-message-content bg-gray-100 rounded-2xl">' +
               '<p class="text-gray-700 leading-relaxed mb-3">' + promptEscaped + '</p>' +
               '<div class="flex gap-2 mt-2">' +
-              '<button type="button" class="rag-confirm-yes px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700">Yes, search PDF</button>' +
+              '<button type="button" class="rag-confirm-yes px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700">Yes, use teacher PDF</button>' +
               '<button type="button" class="rag-confirm-no px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-300">No</button>' +
               '</div>' +
               '</div>';
@@ -6128,16 +6236,31 @@
                 const ans = (d && d.answer != null) ? d.answer : (d.error || 'Sorry, I couldn\'t process that question. Please try again.');
                 bubble.innerHTML = '<div class="prose prose-sm max-w-none text-gray-800">' + formatRichContent(ans) + '</div>';
                 applyRenderedFormatting(bubble);
+                appendMessageToChat(currentChatId, 'assistant', ans);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
               }).catch(function () {
-                bubble.innerHTML = '<p class="text-red-600">Sorry, I couldn\'t process that question. Please try again.</p>';
+                const errMsg = 'Sorry, I couldn\'t process that question. Please try again.';
+                bubble.innerHTML = '<p class="text-red-600">' + errMsg + '</p>';
+                appendMessageToChat(currentChatId, 'assistant', errMsg);
               });
             };
 
             noBtn.onclick = function () {
               yesBtn.disabled = true;
               noBtn.disabled = true;
-              bubble.innerHTML = '<p class="text-gray-700 leading-relaxed">Your question is not covered in the lesson content.</p>';
+              const lessonTitle = (window.currentLessonContext && window.currentLessonContext.title)
+                ? escapeHtml(window.currentLessonContext.title)
+                : 'this lesson';
+              bubble.innerHTML =
+                '<p class="text-gray-700 leading-relaxed mb-2">No problem — we will continue with the lecture flow without using the teacher PDF.</p>' +
+                '<p class="text-gray-700 leading-relaxed mb-2">Let\'s stay on <strong>' + lessonTitle + '</strong>. Try:</p>' +
+                '<ul class="list-disc list-inside text-gray-700 text-sm space-y-1">' +
+                '<li>Explain the key concept from this lesson.</li>' +
+                '<li>Show one worked example from this lesson.</li>' +
+                '<li>Summarize this lesson in 3 points.</li>' +
+                '</ul>';
+              appendMessageToChat(currentChatId, 'assistant', "No problem — we'll continue with the lecture flow without using the teacher PDF.");
+              chatMessages.scrollTop = chatMessages.scrollHeight;
             };
           } else if (response.ok && data && data.answer != null) {
             removeTypingIndicator();
@@ -6155,29 +6278,41 @@
 
       // Send message
       async function sendMessage() {
+        if (sendMessageInProgress) return;
+
         const input = document.getElementById('messageInput');
         const message = input.value.trim();
 
         if (!message) return;
-        if (!currentChatId) {
-          await startNewChat();
-          if (!currentChatId) return;
+        sendMessageInProgress = true;
+        try {
+          if (!currentChatId) {
+            if (!startChatPromise) {
+              startChatPromise = startNewChat().finally(function () {
+                startChatPromise = null;
+              });
+            }
+            await startChatPromise;
+            if (!currentChatId) return;
+          }
+
+          console.log('[StudentDash] sendMessage()', {
+            message,
+            currentLessonQAId: window.currentLessonQAId,
+            hasLessonContext: !!(window.currentLessonContext && window.currentLessonContext.id)
+          });
+
+          // Always use backend Lesson Q&A API path in student dashboard
+          // so questions go to /api/lessons/ask_question instead of local template.
+          await sendLessonQAMessageInMain(message);
+
+          // Clear input and reset height
+          input.value = '';
+          autoResizeTextarea(input);
+          updateSendButton();
+        } finally {
+          sendMessageInProgress = false;
         }
-
-        console.log('[StudentDash] sendMessage()', {
-          message,
-          currentLessonQAId: window.currentLessonQAId,
-          hasLessonContext: !!(window.currentLessonContext && window.currentLessonContext.id)
-        });
-
-        // Always use backend Lesson Q&A API path in student dashboard
-        // so questions go to /api/lessons/ask_question instead of local template.
-        sendLessonQAMessageInMain(message);
-
-        // Clear input and reset height
-        input.value = '';
-        autoResizeTextarea(input);
-        updateSendButton();
       }
 
       // Restore lesson context for a given chat from the backend.
@@ -6246,6 +6381,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
+            keepalive: true,
             body: JSON.stringify({
               conversation_id: chatId,
               role: normalizedRole,
@@ -6473,26 +6609,38 @@
         autoResizeTextarea(document.getElementById('messageInput'));
         updateSendButton();
         document.getElementById('messageInput').focus();
+        sendMessage();
       }
 
-      // Scroll to bottom of chat
+      // Scroll to bottom of chat (latest messages). Prefer #messagesWrapper when present
+      // (renderChatLayoutForChat uses overflow-y there; #chatArea is overflow-hidden).
       function scrollToBottom() {
+        const messagesWrapper = document.getElementById('messagesWrapper');
         const chatArea = document.getElementById('chatArea');
         const chatMessages = document.getElementById('chatMessages');
-        
-        if (chatArea) {
-          // Use requestAnimationFrame to ensure DOM is fully painted
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              chatArea.scrollTop = chatArea.scrollHeight;
-              
-              // Fallback: also try scrolling chatMessages if it exists
-              if (chatMessages) {
-                chatMessages.parentElement.scrollTop = chatMessages.parentElement.scrollHeight;
-              }
-            }, 0);
-          });
+
+        function doScroll() {
+          const primary = messagesWrapper || chatArea;
+          if (primary) {
+            primary.scrollTop = primary.scrollHeight;
+          }
+          if (chatMessages && chatMessages.parentElement && chatMessages.parentElement !== primary) {
+            const p = chatMessages.parentElement;
+            p.scrollTop = p.scrollHeight;
+          }
+          if (chatArea && chatArea !== primary && chatArea.scrollHeight > chatArea.clientHeight) {
+            chatArea.scrollTop = chatArea.scrollHeight;
+          }
         }
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            doScroll();
+            setTimeout(doScroll, 0);
+            setTimeout(doScroll, 50);
+            setTimeout(doScroll, 150);
+          });
+        });
       }
 
       // Escape HTML to prevent XSS
@@ -6663,13 +6811,35 @@
       function closeAllModals() {
         try {
           const viewLessonModal = document.getElementById('viewLessonModal');
+          const lessonQAModal = document.getElementById('lessonQAModal');
 
           if (viewLessonModal) {
             viewLessonModal.classList.add('hidden');
             viewLessonModal.classList.remove('visible-modal');
+            viewLessonModal.style.display = 'none';
+          }
+
+          if (lessonQAModal) {
+            lessonQAModal.classList.add('hidden');
+            lessonQAModal.style.display = 'none';
+
+            // Reset Q&A panel classes to avoid stale hidden states on reopen.
+            const lessonPanel = document.getElementById('lessonPanel');
+            const recommendPanel = document.getElementById('recommendPanel');
+            const chatPanel = document.getElementById('chatPanel');
+            if (lessonPanel) lessonPanel.classList.remove('hidden');
+            if (recommendPanel) recommendPanel.classList.remove('hidden');
+            if (chatPanel) chatPanel.classList.remove('hidden');
+
+            // Reset mobile tab highlight classes.
+            const lessonTabBtn = document.getElementById('lessonTabBtn');
+            const chatTabBtn = document.getElementById('chatTabBtn');
+            if (lessonTabBtn) lessonTabBtn.classList.remove('bg-gray-100', 'text-primary-600');
+            if (chatTabBtn) chatTabBtn.classList.remove('bg-gray-100', 'text-primary-600');
           }
 
           window.currentViewLessonId = null;
+          window.currentLessonQAId = null;
         } catch (e) {
           console.error('Error closing modals:', e);
         }
@@ -6704,7 +6874,9 @@
         if (chatInputArea) chatInputArea.style.display = 'block';
         // Rebuild chat area for the current chat
         if (currentChatId) {
-          renderChatLayoutForChat(currentChatId);
+          void renderChatLayoutForChat(currentChatId).then(function () {
+            scrollToBottom();
+          });
         } else {
           showEmptyChatState();
         }

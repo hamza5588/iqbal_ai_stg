@@ -8553,7 +8553,11 @@ To continue your learning journey:
               content: lessonContent,
               focus_area: focusArea,
               grade_level: gradeLevel,
-              summary: summary
+              summary: summary,
+              // Preserve PDF retrieval linkage for student Ask Question flow.
+              // lesson_routes.create_lesson_simple accepts either rag_thread_id or thread_id.
+              rag_thread_id: window.currentRAGThreadId || null,
+              thread_id: window.currentRAGThreadId || null
             })
           });
 
