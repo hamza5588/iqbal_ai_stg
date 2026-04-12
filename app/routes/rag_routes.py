@@ -152,6 +152,15 @@ def _strip_internal_reasoning_from_response(text):
     import re
 
     cleaned = text
+    t,h,i,n,k = map(chr, (116,104,105,110,107))
+    think = t+h+i+n+k
+    think_o = chr(60) + think + chr(62)
+    think_c = chr(60) + chr(47) + think + chr(62)
+    red = "redacted_thinking"
+    red_o = chr(60) + red + chr(62)
+    red_c = chr(60) + chr(47) + red + chr(62)
+    pattern = think_o + r"[\s\S]*?" + think_c + "|" + red_o + r"[\s\S]*?" + red_c
+    cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
 
     # Common leaked headings/sections that should never be shown to end users.
     leak_markers = [

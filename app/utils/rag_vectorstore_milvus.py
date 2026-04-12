@@ -134,7 +134,24 @@ def similarity_search(
                 "score": float(hit.distance),
             })
     out = out[:k]
-    logger.info("similarity_search: thread_id=%s user_id=%s returned %d hits", thread_id, user_id, len(out))
+    max_l2 = float(os.getenv("RAG_MAX_L2_DISTANCE", "1.25"))
+    filtered = [r for r in out if float(r.get("score", 999)) <= max_l2]
+    if not filtered and out:
+        logger.warning(
+            "similarity_search: all %d hits above RAG_MAX_L2_DISTANCE=%s; keeping top unfiltered hits as fallback",
+            len(out),
+            max_l2,
+        )
+        out = out[: min(3, len(out))]
+    else:
+        out = filtered
+    logger.info(
+        "similarity_search: thread_id=%s user_id=%s returned %d hits (max_l2=%s)",
+        thread_id,
+        user_id,
+        len(out),
+        max_l2,
+    )
     return out
 
 

@@ -326,7 +326,8 @@ def create_llm(
         # reasoning_effort=none: no reasoning tokens; reasoning_format=hidden: final answer only in content.
         # Override with GROQ_REASONING_EFFORT / GROQ_REASONING_FORMAT if needed.
         if "qwen" in (model or "").lower():
-            groq_kwargs["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "none")
+            # Groq API allows reasoning_effort "none" | "default" for Qwen; default enables planning (better tool use).
+            groq_kwargs["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "default")
             groq_kwargs["reasoning_format"] = os.getenv("GROQ_REASONING_FORMAT", "hidden")
 
         llm = ChatGroq(**groq_kwargs)

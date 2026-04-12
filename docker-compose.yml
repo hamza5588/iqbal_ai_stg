@@ -130,12 +130,21 @@ services:
       - VLLM_API_BASE=http://69.28.92.113:8000/v1
       - VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct
       - VLLM_TIMEOUT=600
-      - RAG_RESPONSE_MAX_TOKENS=${RAG_RESPONSE_MAX_TOKENS:-4096}
+      - RAG_RESPONSE_MAX_TOKENS=${RAG_RESPONSE_MAX_TOKENS:-25000}
       - RAG_MODERATE_RESPONSE_MAX_CHARS=${RAG_MODERATE_RESPONSE_MAX_CHARS:-25000}
       - RAG_LESSON_MODERATE_RESPONSE_MAX_CHARS=${RAG_LESSON_MODERATE_RESPONSE_MAX_CHARS:-25000}
       - RAG_MAX_TOOL_ROUNDS_PER_TURN=${RAG_MAX_TOOL_ROUNDS_PER_TURN:-15}
       - RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN=${RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN:-15}
       - RAG_GRAPH_RECURSION_LIMIT=${RAG_GRAPH_RECURSION_LIMIT:-48}
+      # Groq Qwen 3: reasoning_effort must be "none" or "default" (API). default enables internal reasoning for better tool use.
+      - GROQ_REASONING_EFFORT=${GROQ_REASONING_EFFORT:-default}
+      - GROQ_REASONING_FORMAT=${GROQ_REASONING_FORMAT:-hidden}
+      # Hybrid retrieval: dense (Milvus L2) + lexical fusion (rag_vectorstore.hybrid_search)
+      - USE_HYBRID_RAG=${USE_HYBRID_RAG:-true}
+      # Milvus L2 distance ceiling for similarity_search (see rag_vectorstore_milvus.similarity_search)
+      - RAG_MAX_L2_DISTANCE=${RAG_MAX_L2_DISTANCE:-1.25}
+      # Server-side prefetch before first LLM reply (rag_service chat_node)
+      - RAG_MANDATORY_PREFETCH=${RAG_MANDATORY_PREFETCH:-true}
 
       # Celery Configuration
       - USE_CELERY_FOR_INGESTION=true
