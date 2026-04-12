@@ -2855,6 +2855,229 @@ NOT a lesson to finalize:
 
 Output your judgment: user must say somethin like "create a lesson", "generate a lesson", "make a lesson plan", "create lesson on X" to finalize the lesson. Then in  the  AI RESPINSE must be a well structured lesson with headings, sections, bullet points, or organized topics."""
 
+
+class LectureFailsafeEvalResult(BaseModel):
+    """Structured verdict for lecture-only RAG quality gate (retrieval grounding + citations)."""
+
+    passed: bool = Field(
+        description="True if failsafe criteria are met, OR the output is a non-substantive clarification (see is_underspecified_clarification)."
+    )
+    is_underspecified_clarification: bool = Field(
+        default=False,
+        description="True if the assistant only asked a brief clarification or gave a short meta reply, not substantive lecture body text.",
+    )
+    reasoning: str = Field(default="", description="Brief justification.")
+    feedback_for_regeneration: str = Field(
+        default="",
+        description="If passed is false for a substantive lecture, concrete fixes: citations, retrieval gaps, or required fallback_behavior wording.",
+    )
+
+
+LECTURE_FAILSAFE_EVAL_PROMPT = """You are a strict quality verifier for LECTURE / lesson BODY text in a document-grounded (RAG) teaching assistant.
+
+<failsafe_check>
+Apply only to SUBSTANTIVE answers that state document facts or deliver lecture body text.
+• Was appropriate retrieval used for this answer (prefetched evidence and/or tool outputs below count as returned evidence)?
+• Is every factual claim in the lecture supported by the RETURNED EVIDENCE, with honest citations or clear attribution to the document?
+• If evidence does not support a claim, the lecture must follow fallback_behavior: state when content is not in the document and only then offer general knowledge as your product rules describe.
+
+Do not apply these checks to pure UNDERSPECIFIED clarification questions: if the assistant output is only a short clarification question to the user (not substantive lecture body), set is_underspecified_clarification=true and passed=true.
+</failsafe_check>
+
+USER REQUEST:
+---
+{user_query}
+---
+
+RETURNED EVIDENCE (prefetch + tool outputs for this turn; may be minimal if no PDF):
+---
+{evidence}
+---
+
+LECTURE TEXT TO EVALUATE:
+---
+{lecture}
+---
+
+Judge whether the lecture (if substantive) is fully grounded in the evidence. Return structured output only."""
+
+
+def _collect_document_evidence_for_failsafe(
+    conversation_messages: List[BaseMessage],
+    prefetch_evidence: str,
+    max_chars: int = 16000,
+) -> str:
+    """Merge prefetch text with ToolMessage bodies from the current user turn for eval."""
+    parts: List[str] = []
+    pe = (prefetch_evidence or "").strip()
+    if pe:
+        parts.append("## Prefetched / injected evidence\n" + pe)
+    last_h = -1
+    for i, m in enumerate(conversation_messages):
+        if isinstance(m, HumanMessage):
+            last_h = i
+    tail = conversation_messages[last_h + 1 :] if last_h >= 0 else conversation_messages
+    tool_chunks: List[str] = []
+    for m in tail:
+        if isinstance(m, ToolMessage):
+            c = (getattr(m, "content", "") or "")[:12000]
+            if str(c).strip():
+                tool_chunks.append(str(c))
+    if tool_chunks:
+        parts.append("## Tool retrieval outputs (this turn)\n" + "\n---\n".join(tool_chunks))
+    out = "\n\n".join(parts).strip()
+    if not out:
+        out = "(no document evidence captured for this turn)"
+    if len(out) > max_chars:
+        return out[:max_chars] + "\n...[evidence truncated for evaluation]"
+    return out
+
+
+def _format_lecture_failsafe_prompt(user_query: str, evidence: str, lecture: str) -> str:
+    """Avoid str.format issues if lecture contains braces."""
+    uq = (user_query or "")[:6000]
+    ev = (evidence or "")[:20000]
+    lec = (lecture or "")[:24000]
+    return (
+        LECTURE_FAILSAFE_EVAL_PROMPT.replace("{user_query}", uq)
+        .replace("{evidence}", ev)
+        .replace("{lecture}", lec)
+    )
+
+
+def _lecture_failsafe_eval_and_maybe_regenerate(
+    *,
+    user_llm: Any,
+    system_message: SystemMessage,
+    conversation_messages: List[BaseMessage],
+    response: AIMessage,
+    response_content: str,
+    last_user_msg_text: str,
+    prefetch_evidence_for_eval: str,
+    has_document: bool,
+    is_lesson_creation_turn: bool,
+    user_id: Optional[int],
+    provider: str,
+    config: Any,
+    max_input_tokens: int,
+    short_mode_active: bool,
+    token_pressure_active: bool,
+    _mark_step: Any,
+) -> Tuple[str, AIMessage]:
+    """
+    Lecture-only gate: verify grounding vs evidence; optionally regenerate without tools until pass or max attempts.
+    """
+    if not is_lesson_creation_turn:
+        return response_content, response
+    if short_mode_active or token_pressure_active:
+        return response_content, response
+    if os.getenv("RAG_LECTURE_FAILSAFE_ENABLED", "true").lower() not in ("true", "1", "yes"):
+        return response_content, response
+    if _LOAD_TEST_MODE and os.getenv("RAG_LECTURE_FAILSAFE_IN_LOAD_TEST", "false").lower() not in (
+        "true",
+        "1",
+        "yes",
+    ):
+        return response_content, response
+    if not (response_content or "").strip():
+        return response_content, response
+    if _is_underspecified_rag_query(last_user_msg_text):
+        return response_content, response
+
+    # Full evaluate→(maybe regen) cycles; e.g. 4 rounds = up to 3 regenerations after failed evals.
+    max_rounds = max(2, int(os.getenv("RAG_LECTURE_FAILSAFE_MAX_ROUNDS", "4")))
+    eval_llm = user_llm.with_structured_output(LectureFailsafeEvalResult)
+
+    evidence_bundle = _collect_document_evidence_for_failsafe(
+        conversation_messages,
+        prefetch_evidence_for_eval,
+    )
+    if not has_document:
+        evidence_bundle = "(no PDF for this thread)\n\n" + evidence_bundle
+
+    current = (response_content or "").strip()
+    current_response = response
+
+    for attempt in range(max_rounds):
+        prompt = _format_lecture_failsafe_prompt(last_user_msg_text, evidence_bundle, current)
+        try:
+            if provider == "groq":
+                groq_rate_limiter.wait_if_needed()
+            verdict: Any = eval_llm.invoke(prompt, config=config)
+            if provider == "groq":
+                groq_rate_limiter.record_success()
+        except Exception as ex:
+            logger.warning("Lecture failsafe eval failed (non-fatal): %s", ex, exc_info=True)
+            _mark_step("lecture_failsafe_eval_error")
+            break
+
+        passed = bool(getattr(verdict, "passed", False))
+        is_clar = bool(getattr(verdict, "is_underspecified_clarification", False))
+        reasoning = getattr(verdict, "reasoning", "") or ""
+        feedback = (getattr(verdict, "feedback_for_regeneration", "") or "").strip()
+
+        logger.info(
+            "Lecture failsafe attempt %s/%s: passed=%s underspec_clar=%s reasoning=%s",
+            attempt + 1,
+            max_rounds,
+            passed,
+            is_clar,
+            (reasoning[:200] + "…") if len(reasoning) > 200 else reasoning,
+        )
+        _mark_step(f"lecture_failsafe_eval_{attempt + 1}")
+
+        if passed or is_clar:
+            try:
+                current_response.content = current
+            except Exception:
+                pass
+            return current, current_response
+
+        if attempt >= max_rounds - 1:
+            logger.warning(
+                "Lecture failsafe: max rounds (%s) reached; keeping last draft.",
+                max_rounds,
+            )
+            _mark_step("lecture_failsafe_max_regen")
+            break
+
+        revision_human = (
+            "[Automated quality verification — lecture only]\n"
+            "The previous draft did not satisfy document-grounding rules.\n\n"
+            f"Required fixes:\n{feedback or reasoning or 'Ground every factual claim in the returned evidence; add honest citations; use fallback wording when the document does not support a claim.'}\n\n"
+            "Regenerate the **complete** lecture for the user. Do not describe this verification step. "
+            "Answer only with the revised lecture (and citations as appropriate)."
+        )
+        regen_messages: List[BaseMessage] = [
+            system_message,
+            *conversation_messages,
+            AIMessage(content=current),
+            HumanMessage(content=revision_human),
+        ]
+        regen_messages = _trim_messages_for_token_budget(regen_messages, max_input_tokens=max_input_tokens)
+        try:
+            if provider == "groq":
+                groq_rate_limiter.wait_if_needed()
+            regen = user_llm.invoke(regen_messages, config=config)
+            if provider == "groq":
+                groq_rate_limiter.record_success()
+        except Exception as ex:
+            logger.warning("Lecture failsafe regeneration failed: %s", ex, exc_info=True)
+            _mark_step("lecture_failsafe_regen_error")
+            break
+
+        raw_next = regen.content if hasattr(regen, "content") else str(regen)
+        current = _sanitize_user_facing_response(raw_next)
+        current_response = AIMessage(content=current)
+        _mark_step(f"lecture_failsafe_regen_{attempt + 1}")
+
+    try:
+        current_response.content = current
+    except Exception:
+        pass
+    return current, current_response
+
+
 # Admin-editable RAG chat system bodies (stored in system_settings). Placeholders: {filename}, {page_info}, {thread_id}
 RAG_SYSTEM_SETTING_KEY_WITH_PDF = "rag_chat_system_body_with_pdf"
 RAG_SYSTEM_SETTING_KEY_NO_PDF = "rag_chat_system_body_no_pdf"
@@ -3115,6 +3338,7 @@ def chat_node(state: ChatState, config=None):
             last_user_msg_text = (getattr(msg, "content", "") or "").strip()
             break
     is_lesson_creation_turn = _is_lesson_creation_request(last_user_msg_text)
+    prefetch_evidence_for_eval = ""
 
     # P0-4 / P0-5: server-side prefetch so answers are grounded even if the model skips tools.
     enable_prefetch = os.getenv("RAG_MANDATORY_PREFETCH", "true").lower() in ("true", "1", "yes")
@@ -3155,6 +3379,7 @@ def chat_node(state: ChatState, config=None):
             except Exception as ex:
                 logger.warning("Mandatory document prefetch failed: %s", ex, exc_info=True)
                 prefetch_blob = ""
+            prefetch_evidence_for_eval = (prefetch_blob or "").strip()
             if prefetch_blob:
                 system_message = SystemMessage(content=system_message.content + "\n\n" + prefetch_blob)
 
@@ -3435,6 +3660,31 @@ def chat_node(state: ChatState, config=None):
             except Exception:
                 pass
             _mark_step("extract_response")
+
+            # Lecture-only: verify grounding vs prefetch/tool evidence; regenerate without tools until pass or cap.
+            if (
+                is_lesson_creation_turn
+                and isinstance(response, AIMessage)
+                and not getattr(response, "tool_calls", None)
+            ):
+                response_content, response = _lecture_failsafe_eval_and_maybe_regenerate(
+                    user_llm=user_llm,
+                    system_message=system_message,
+                    conversation_messages=conversation_messages,
+                    response=response,
+                    response_content=response_content,
+                    last_user_msg_text=last_user_msg_text,
+                    prefetch_evidence_for_eval=prefetch_evidence_for_eval,
+                    has_document=has_document,
+                    is_lesson_creation_turn=is_lesson_creation_turn,
+                    user_id=user_id,
+                    provider=provider,
+                    config=config,
+                    max_input_tokens=max_input_tokens,
+                    short_mode_active=short_mode_active,
+                    token_pressure_active=token_pressure_active,
+                    _mark_step=_mark_step,
+                )
             
             # Try to get lesson state, but make it optional to save tokens and avoid rate limits
             # Skip lesson_state call for Groq to reduce API calls and avoid rate limits
