@@ -2142,10 +2142,25 @@
     .chat-message-content ol {
       margin-left: 1.25rem;
       margin-top: 0.5rem;
+      /* Visible bullets/numbers — Tailwind preflight removes list markers */
+      list-style-position: outside;
+    }
+
+    .chat-message-content ul {
+      list-style-type: disc;
+    }
+
+    .chat-message-content ol {
+      list-style-type: decimal;
     }
 
     .chat-message-content li {
       margin-bottom: 0.5rem;
+      display: list-item;
+    }
+
+    .chat-message-content li::marker {
+      color: #0f172a;
     }
 
     .chat-message-content blockquote {
@@ -5591,7 +5606,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        if (typeof marked !== 'undefined' && marked.parse) {
+        if (el.tagName === 'TEXTAREA') {
+          el.value = raw;
+          return;
+        }
+
+        el.classList.add('tex2jax_process');
+        if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
+          el.innerHTML = TeacherChatFormatter.formatChatResponse(raw);
+        } else if (typeof marked !== 'undefined' && marked.parse) {
           el.innerHTML = marked.parse(raw);
         } else {
           el.textContent = raw;
@@ -6351,7 +6374,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 </div>
                 <div class="faq-modern-answer hidden mt-4 rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-4">
                   <p class="text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">Answer</p>
-                  <div class="prose prose-sm max-w-none text-gray-800">${renderedAnswer}</div>
+                  <div class="prose prose-sm max-w-none text-gray-800 tex2jax_process">${renderedAnswer}</div>
                 </div>
               </div>
             `;
@@ -6908,7 +6931,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             <div class="chat-message-avatar">
               <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
             </div>
-            <div class="chat-message-content markdown-content">${formattedContent}</div>
+            <div class="chat-message-content markdown-content tex2jax_process">${formattedContent}</div>
           `;
             chatMessages.appendChild(messageDiv);
             var contentEl = messageDiv.querySelector('.chat-message-content');
@@ -8098,7 +8121,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         <div class="chat-message-avatar">
           <img src="${imgUrl}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
         </div>
-        <div class="chat-message-content markdown-content">${message}</div>
+        <div class="chat-message-content markdown-content tex2jax_process">${message}</div>
       `;
         chatMessages.appendChild(messageDiv);
         var contentEl = messageDiv.querySelector('.chat-message-content');

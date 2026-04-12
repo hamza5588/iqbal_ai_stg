@@ -1263,8 +1263,8 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
             self.thread_id = str(thread_id)
             self.user_id = int(user_id)
             self.steps_list = steps_list
-            # Feature flag so we can safely switch between pure semantic and hybrid.
-            self.use_hybrid = os.getenv("USE_HYBRID_RAG", "false").lower() in ("true", "1", "yes")
+            # Feature flag: hybrid (semantic + lexical) is default; set USE_HYBRID_RAG=false for vector-only.
+            self.use_hybrid = os.getenv("USE_HYBRID_RAG", "true").lower() in ("true", "1", "yes")
             self.retrieval_k = _resolve_thread_retrieval_k(self.thread_id, self.user_id)
 
         def invoke(self, query: str) -> List[Document]:
@@ -1336,8 +1336,8 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
             logger.info("VectorRetriever: returned %d documents for thread_id=%s", len(docs), self.thread_id)
             return docs
 
-    use_hybrid = os.getenv("USE_HYBRID_RAG", "false").lower() in ("true", "1", "yes")
-    print("[RAG] Retriever created: use_hybrid=%s (set USE_HYBRID_RAG=true for hybrid)" % use_hybrid)
+    use_hybrid = os.getenv("USE_HYBRID_RAG", "true").lower() in ("true", "1", "yes")
+    print("[RAG] Retriever created: use_hybrid=%s (set USE_HYBRID_RAG=false for semantic-only)" % use_hybrid)
     logger.info(
         "RAG retriever created thread_id=%s user_id=%s use_hybrid=%s (USE_HYBRID_RAG env)",
         thread_id, user_id, use_hybrid,
@@ -3082,6 +3082,14 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
 RAG_SYSTEM_SETTING_KEY_WITH_PDF = "rag_chat_system_body_with_pdf"
 RAG_SYSTEM_SETTING_KEY_NO_PDF = "rag_chat_system_body_no_pdf"
 
+# Inserted before "Teacher additional instructions" when a per-teacher custom prompt exists (positional priority: admin → this → teacher).
+RAG_REPLY_FORMATTING_INSTRUCTIONS = (
+    "Formatting: Use Markdown structure where it helps readability — headings (e.g. ## Section, ### Subsection), "
+    "bullet lists (- item) for enumerations, and **bold** sparingly for emphasis. "
+    "For mathematics, use $...$ for inline math. For display equations, put the full formula on a single line "
+    "between $$ and $$ (do not put $$ alone on its own line with the equation in separate paragraphs)."
+)
+
 DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "You are a helpful assistant. A PDF document ({filename}) has been uploaded for this conversation.{page_info}\n\n"
     "Use the uploaded PDF ({filename}) as the primary source for factual answers.\n"
@@ -3374,22 +3382,26 @@ def _chat_build_system_message(
                 page_info=page_info,
                 thread_id=thread_id_str or "",
             )
-            # Admin template first so global rules (security, tools) take positional priority.
-            base_content = f"{rag_body}\n\n---\n\nTeacher additional instructions:\n{custom_resolved}"
+            # Admin template first; then formatting hint; then teacher customizations.
+            base_content = (
+                f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
+                f"---\n\nTeacher additional instructions:\n{custom_resolved}"
+            )
         else:
-            base_content = rag_body
+            base_content = f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}"
 
         system_message = SystemMessage(content=base_content)
     else:
         # No document uploaded
         if custom_prompt:
+            custom_resolved = _substitute_rag_system_placeholders(
+                custom_prompt,
+                filename="PDF",
+                page_info="",
+                thread_id=thread_id_str or "",
+            )
             system_message = SystemMessage(
-                content=_substitute_rag_system_placeholders(
-                    custom_prompt,
-                    filename="PDF",
-                    page_info="",
-                    thread_id=thread_id_str or "",
-                )
+                content=f"{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n---\n\n{custom_resolved}"
             )
         else:
             if _LOAD_TEST_MODE:
