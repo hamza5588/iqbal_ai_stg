@@ -8,7 +8,7 @@ import re
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Dict, Optional, TypedDict, List, Tuple
+from typing import Annotated, Any, Dict, Optional, TypedDict, List, Tuple, NamedTuple
 
 from pydantic import BaseModel, Field
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -3146,74 +3146,129 @@ def _get_stored_rag_system_template(setting_key: str) -> Optional[str]:
     return None
 
 
-# -------------------
-# 6. Nodes
-# -------------------
+class _ChatTurnSystemPrep(NamedTuple):
+    """Prepared system prompt + conversation window for one graph step."""
+
+    system_message: SystemMessage
+    prefetch_evidence_for_eval: str
+    conversation_messages: List[BaseMessage]
+    last_user_msg_text: str
+    is_lesson_creation_turn: bool
+    tool_rounds_current_turn: int
+    tool_round_limit_reached: bool
+    max_tool_rounds_per_turn: int
 
 
-def chat_node(state: ChatState, config=None):
-    """LLM node that may answer or request a tool call."""
-    perf_steps = []
-    perf_started = time.perf_counter()
+class _ChatLlmBundle(NamedTuple):
+    user_llm: Any
+    user_llm_with_tools: Any
+    user_llm_structured_output: Any
+    error_payload: Optional[Dict[str, List[AIMessage]]]
 
-    def _mark_step(label: str) -> None:
-        perf_steps.append((label, time.perf_counter()))
 
-    thread_id = None
-    thread_id_str = None
-    if config and isinstance(config, dict):
-        thread_id = config.get("configurable", {}).get("thread_id")
-        if thread_id:
-            thread_id_str = str(thread_id)
-    _mark_step("resolve_thread_id")
-    short_mode_active = _consume_short_mode_turn(thread_id_str)
-    token_pressure_active = _consume_token_pressure_turn(thread_id_str)
-    if token_pressure_active:
-        short_mode_active = True
+def _chat_safe_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except Exception:
+        return default
 
-    # Check if a PDF document exists for this thread (from DB)
-    has_document = False
-    if thread_id_str:
-        has_document = thread_has_document(thread_id_str)
-    _mark_step("check_thread_document")
 
-    # Get user_id from thread_id
-    user_id = _get_user_id_for_thread(thread_id_str) if thread_id_str else None
-    _mark_step("resolve_user_id")
-    
-    # Get active provider from admin settings (needed for error handling and rate limiting)
-    # Initialize with default first to ensure it's always defined
-    provider = os.getenv('LLM_PROVIDER', 'groq').lower()
+def _chat_tool_outputs_in_current_turn(messages: List[BaseMessage]) -> bool:
+    if not messages:
+        return False
+    last_human_idx = -1
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            last_human_idx = i
+            break
+    tail = messages[last_human_idx + 1 :] if last_human_idx >= 0 else messages
+    return any(isinstance(m, ToolMessage) for m in tail)
+
+
+def _chat_tool_rounds_in_current_turn(messages: List[BaseMessage]) -> int:
+    if not messages:
+        return 0
+    last_human_idx = -1
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            last_human_idx = i
+            break
+    tail = messages[last_human_idx + 1 :] if last_human_idx >= 0 else messages
+    rounds = 0
+    for m in tail:
+        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
+            rounds += 1
+    return rounds
+
+
+def _chat_is_token_error(error_msg: str) -> bool:
+    error_lower = error_msg.lower()
+    token_keywords = [
+        "maximum context length",
+        "context length exceeded",
+        "exceeds maximum",
+        "too many tokens",
+        "maximum tokens",
+        "context window",
+        "token limit",
+        "token count",
+        "input length",
+        "maximum input length",
+        "input tokens",
+        "tokens per minute",
+        "tpm",
+        "request too large",
+        "payload too large",
+    ]
+    is_413 = "413" in error_msg or "payload too large" in error_lower
+    return is_413 or any(keyword in error_lower for keyword in token_keywords)
+
+
+def _chat_get_active_llm_provider() -> str:
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
     try:
         from app.utils.db import get_db
         from app.models.database_models import SystemSettings
+
         db = get_db()
-        # Check for new active_provider setting first
-        setting = db.query(SystemSettings).filter(SystemSettings.key == 'active_provider').first()
+        setting = db.query(SystemSettings).filter(SystemSettings.key == "active_provider").first()
         if setting:
             provider = setting.value.lower()
         else:
-            # Fallback to old llm_provider setting
-            setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
+            setting = db.query(SystemSettings).filter(SystemSettings.key == "llm_provider").first()
             if setting:
                 provider = setting.value.lower()
     except Exception as e:
-        logger.warning(f"Error getting provider from settings: {str(e)}, using default: {provider}")
-    _mark_step("load_provider_settings")
+        logger.warning("Error getting provider from settings: %s, using default: %s", str(e), provider)
+    return provider
 
-    # Use new get_chat_model which handles admin/user settings automatically
-    logger.info(f"Creating LLM for user {user_id} (thread: {thread_id_str}, provider: {provider})")
-    
+
+def _chat_init_llms_for_turn(
+    *,
+    user_id: Optional[int],
+    provider: str,
+    short_mode_active: bool,
+    thread_id_str: Optional[str],
+    perf_steps: List[Tuple[str, float]],
+    perf_started: float,
+    _mark_step: Any,
+) -> _ChatLlmBundle:
+    """Create or load cached LLMs for this turn. On API-key failure, returns error_payload."""
+    logger.info("Creating LLM for user %s (thread: %s, provider: %s)", user_id, thread_id_str, provider)
     try:
-        # Use cached LLM instance to avoid recreating on every call
         if user_id:
-            # Include provider in cache key to ensure correct provider is used
             cache_key = f"{user_id}_{provider}_factory_{'short' if short_mode_active else 'normal'}"
             with _llm_cache_lock:
                 if cache_key not in _llm_cache:
-                    logger.debug(f"Creating new LLM instance using get_chat_model for user {user_id} with provider {provider}")
+                    logger.debug(
+                        "Creating new LLM instance using get_chat_model for user %s with provider %s",
+                        user_id,
+                        provider,
+                    )
                     loadtest_max_tokens = int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
-                    runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "25000"))
+                    runtime_max_tokens = loadtest_max_tokens if _LOAD_TEST_MODE else int(
+                        os.getenv("RAG_RESPONSE_MAX_TOKENS", "25000")
+                    )
                     runtime_temp = 0.3 if _LOAD_TEST_MODE else 0.5
                     if short_mode_active:
                         runtime_max_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128"))
@@ -3224,58 +3279,74 @@ def chat_node(state: ChatState, config=None):
                         temperature=runtime_temp,
                         max_tokens=runtime_max_tokens,
                     )
-                    logger.info(f"Created and cached {provider} LLM instance for user {user_id}")
+                    logger.info("Created and cached %s LLM instance for user %s", provider, user_id)
                 else:
-                    logger.debug(f"Reusing cached LLM instance for user {user_id} with provider {provider}")
+                    logger.debug("Reusing cached LLM instance for user %s with provider %s", user_id, provider)
                 user_llm = _llm_cache[cache_key]
         else:
-            # No user_id, use fallback
             user_llm = get_rag_llm(
                 user_id=None,
                 provider=provider,
                 timeout=120,
                 temperature=(0.3 if _LOAD_TEST_MODE else 0.5),
-                max_tokens=(int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "25000"))),
+                max_tokens=(
+                    int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
+                    if _LOAD_TEST_MODE
+                    else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "25000"))
+                ),
             )
-        
+
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
-        logger.debug(f"Successfully created/retrieved {provider} LLM instance for user {user_id}")
+        logger.debug("Successfully created/retrieved %s LLM instance for user %s", provider, user_id)
         _mark_step("init_llm")
+        return _ChatLlmBundle(user_llm, user_llm_with_tools, user_llm_structured_output, None)
     except Exception as e:
-        logger.error(f"Error creating user-specific LLM: {str(e)}, falling back to global LLM")
-        # Fallback to global LLM if user-specific LLM creation fails
-        # But only if it's not a missing API key error
+        logger.error("Error creating user-specific LLM: %s, falling back to global LLM", str(e))
         if "API key" in str(e) or "api key" in str(e).lower():
             _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
-            error_response = AIMessage(
+            err = AIMessage(
                 content=(
                     f"⚠️ **API Key Error**: {str(e)}\n\n"
                     f"Please configure your {provider.upper()} API key to continue using the chat feature."
                 )
             )
-            return {"messages": [error_response]}
-        
-        # Fallback to generic LLM
+            return _ChatLlmBundle(None, None, None, {"messages": [err]})
+
         user_llm = get_rag_llm(
             user_id=None,
             provider=provider,
             timeout=120,
             temperature=(0.2 if short_mode_active else (0.3 if _LOAD_TEST_MODE else 0.5)),
-            max_tokens=(int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128")) if short_mode_active else (int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256")) if _LOAD_TEST_MODE else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "25000")))),
+            max_tokens=(
+                int(os.getenv("RAG_SHORT_MODE_MAX_TOKENS", "128"))
+                if short_mode_active
+                else (
+                    int(os.getenv("RAG_RESPONSE_MAX_TOKENS_LOAD_TEST", "256"))
+                    if _LOAD_TEST_MODE
+                    else int(os.getenv("RAG_RESPONSE_MAX_TOKENS", "25000"))
+                )
+            ),
         )
         user_llm_with_tools = user_llm.bind_tools(tools)
         user_llm_structured_output = user_llm.with_structured_output(LessonState)
         _mark_step("init_llm_fallback")
+        return _ChatLlmBundle(user_llm, user_llm_with_tools, user_llm_structured_output, None)
 
-    # Get custom prompt from database (user-level, applies to all threads)
-    custom_prompt = _get_rag_prompt(user_id, thread_id_str)
 
-        
-    
-    
-    # """
-    
+def _chat_build_system_message(
+    state: ChatState,
+    *,
+    has_document: bool,
+    thread_id_str: Optional[str],
+    custom_prompt: Optional[str],
+    token_pressure_active: bool,
+    short_mode_active: bool,
+) -> _ChatTurnSystemPrep:
+    """
+    Build system message (admin + teacher + optional prefetch + summary + turn limits),
+    prune conversation, and compute tool-round caps for this user turn.
+    """
     if has_document:
         # Get document info from DB
         doc_meta = _get_thread_metadata_from_db(thread_id_str) or {}
@@ -3394,56 +3465,20 @@ def chat_node(state: ChatState, config=None):
         if compact_summary:
             system_message = SystemMessage(content=system_message.content + "\n\n" + compact_summary)
 
-    # Turn-scoped tool-loop control:
-    # Allow a bounded number of tool rounds in a single user turn (LangGraph supports
-    # looping model -> tools -> model). We keep a safety cap to avoid runaway loops.
-    def _safe_int_env(name: str, default: int) -> int:
-        try:
-            return int(os.getenv(name, str(default)))
-        except Exception:
-            return default
-
+    # Turn-scoped tool-loop control (bounded model <-> tools loops per user turn).
     if is_lesson_creation_turn:
         max_tool_rounds_per_turn = max(
             1,
-            _safe_int_env(
+            _chat_safe_int_env(
                 "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
-                _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 15),
+                _chat_safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 15),
             ),
         )
     else:
-        max_tool_rounds_per_turn = max(1, _safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 15))
+        max_tool_rounds_per_turn = max(1, _chat_safe_int_env("RAG_MAX_TOOL_ROUNDS_PER_TURN", 15))
 
-    # IMPORTANT: this is turn-scoped. Older ToolMessage objects from previous turns
-    # should not affect a fresh user question.
-    def _tool_outputs_in_current_turn(messages: list[BaseMessage]) -> bool:
-        if not messages:
-            return False
-        last_human_idx = -1
-        for i in range(len(messages) - 1, -1, -1):
-            if isinstance(messages[i], HumanMessage):
-                last_human_idx = i
-                break
-        tail = messages[last_human_idx + 1:] if last_human_idx >= 0 else messages
-        return any(isinstance(m, ToolMessage) for m in tail)
-
-    def _tool_rounds_in_current_turn(messages: list[BaseMessage]) -> int:
-        if not messages:
-            return 0
-        last_human_idx = -1
-        for i in range(len(messages) - 1, -1, -1):
-            if isinstance(messages[i], HumanMessage):
-                last_human_idx = i
-                break
-        tail = messages[last_human_idx + 1:] if last_human_idx >= 0 else messages
-        rounds = 0
-        for m in tail:
-            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
-                rounds += 1
-        return rounds
-
-    tool_outputs_present = _tool_outputs_in_current_turn(raw_messages)
-    tool_rounds_current_turn = _tool_rounds_in_current_turn(raw_messages)
+    tool_outputs_present = _chat_tool_outputs_in_current_turn(raw_messages)
+    tool_rounds_current_turn = _chat_tool_rounds_in_current_turn(raw_messages)
     tool_round_limit_reached = tool_rounds_current_turn >= max_tool_rounds_per_turn
     if tool_outputs_present and raw_messages:
         # Keep the most recent raw window so tool call + tool output pairs remain visible.
@@ -3467,149 +3502,276 @@ def chat_node(state: ChatState, config=None):
               "Respond directly and keep the answer within 2-3 short sentences."
         )
 
-    initial_max_messages = 7  # Start with 7 messages
-    max_attempts = 4  # Try with 7, 5, 3, 1 messages
-    if short_mode_active:
-        initial_max_messages = 3
-        max_attempts = 2
-    if token_pressure_active:
-        initial_max_messages = 2
-        max_attempts = 2
-    
-    def _is_token_error(error_msg: str) -> bool:
-        """Check if error is related to token/context length limits."""
-        error_lower = error_msg.lower()
-        token_keywords = [
-            "maximum context length",
-            "context length exceeded",
-            "exceeds maximum",
-            "too many tokens",
-            "maximum tokens",
-            "context window",
-            "token limit",
-            "token count",
-            "input length",
-            "maximum input length",
-            "input tokens",
-            "tokens per minute",  # Groq TPM limit
-            "tpm",  # Tokens per minute abbreviation
-            "request too large",  # 413 Payload Too Large
-            "payload too large",  # 413 error
-        ]
-        # Also check for 413 status code
-        is_413 = '413' in error_msg or 'payload too large' in error_lower
-        return is_413 or any(keyword in error_lower for keyword in token_keywords)
-    
-    def _prepare_messages(num_messages: int):
-        """Prepare messages list with specified number of conversation messages.
-        Ensures tool messages are always properly paired with their assistant messages.
-        Only includes complete tool call sequences (assistant with tool_calls + all corresponding tool messages)."""
-        if len(conversation_messages) <= num_messages:
-            return [system_message, *conversation_messages]
-        
-        # Helper function to check if a message is an assistant with tool_calls
-        def is_assistant_with_tool_calls(msg):
-            return isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls
-        
-        # Helper function to check if a message is a tool message
-        def is_tool_message(msg):
-            return isinstance(msg, ToolMessage)
-        
-        # Helper function to find complete tool call sequence starting from an assistant message
-        def get_tool_sequence_start(assistant_idx):
-            """Returns the start index of a complete tool call sequence, or None if incomplete."""
-            if assistant_idx < 0 or assistant_idx >= len(conversation_messages):
-                return None
-            
-            assistant_msg = conversation_messages[assistant_idx]
-            if not is_assistant_with_tool_calls(assistant_msg):
-                return None
-            
-            # Get all tool_call_ids from the assistant message
-            tool_call_ids = {tc.get('id') for tc in assistant_msg.tool_calls if isinstance(tc, dict) and 'id' in tc}
-            if not tool_call_ids:
-                return None
-            
-            # Look forward to find all corresponding tool messages
-            found_tool_ids = set()
-            tool_start_idx = assistant_idx + 1
-            
-            # Collect all consecutive tool messages
-            for j in range(assistant_idx + 1, len(conversation_messages)):
-                msg = conversation_messages[j]
-                if is_tool_message(msg):
-                    tool_id = getattr(msg, 'tool_call_id', None)
-                    if tool_id and tool_id in tool_call_ids:
-                        found_tool_ids.add(tool_id)
-                else:
-                    # Stop at first non-tool message
-                    break
-            
-            # Only return if we found all tool responses
-            if found_tool_ids == tool_call_ids:
-                return assistant_idx
+    return _ChatTurnSystemPrep(
+        system_message=system_message,
+        prefetch_evidence_for_eval=prefetch_evidence_for_eval,
+        conversation_messages=conversation_messages,
+        last_user_msg_text=last_user_msg_text,
+        is_lesson_creation_turn=is_lesson_creation_turn,
+        tool_rounds_current_turn=tool_rounds_current_turn,
+        tool_round_limit_reached=tool_round_limit_reached,
+        max_tool_rounds_per_turn=max_tool_rounds_per_turn,
+    )
+
+
+def _chat_limit_messages_for_llm(
+    system_message: SystemMessage,
+    conversation_messages: List[BaseMessage],
+    num_messages: int,
+) -> List[BaseMessage]:
+    """Build [system] + last N conversation messages, keeping tool call sequences intact."""
+    if len(conversation_messages) <= num_messages:
+        return [system_message, *conversation_messages]
+
+    def is_assistant_with_tool_calls(msg):
+        return isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls
+
+    def is_tool_message(msg):
+        return isinstance(msg, ToolMessage)
+
+    def get_tool_sequence_start(assistant_idx):
+        if assistant_idx < 0 or assistant_idx >= len(conversation_messages):
             return None
-        
-        # Start from the end and work backwards, including complete sequences only
-        limited_messages = []
-        included_indices = set()
-        i = len(conversation_messages) - 1
-        
-        while i >= 0 and len(limited_messages) < num_messages:
-            if i in included_indices:
-                i -= 1
-                continue
-            
-            msg = conversation_messages[i]
-            
-            # If this is a tool message, skip it - we'll handle it when we encounter its assistant
+        assistant_msg = conversation_messages[assistant_idx]
+        if not is_assistant_with_tool_calls(assistant_msg):
+            return None
+        tool_call_ids = {tc.get("id") for tc in assistant_msg.tool_calls if isinstance(tc, dict) and "id" in tc}
+        if not tool_call_ids:
+            return None
+        found_tool_ids = set()
+        for j in range(assistant_idx + 1, len(conversation_messages)):
+            msg = conversation_messages[j]
             if is_tool_message(msg):
-                i -= 1
-                continue
-            elif is_assistant_with_tool_calls(msg):
-                # Check if this is a complete sequence
-                seq_start = get_tool_sequence_start(i)
-                if seq_start == i:
-                    # Complete sequence, include it
-                    tool_msgs = []
-                    for k in range(i + 1, len(conversation_messages)):
-                        if k in included_indices:
-                            break
-                        next_msg = conversation_messages[k]
-                        if is_tool_message(next_msg):
-                            tool_msgs.append((k, next_msg))
-                        else:
-                            break
-                    
-                    sequence_size = 1 + len(tool_msgs)
-                    if len(limited_messages) + sequence_size <= num_messages:
-                        # Add assistant message
-                        limited_messages.insert(0, msg)
-                        included_indices.add(i)
-                        # Add tool messages right after assistant (in order)
-                        for idx, (tool_idx, tool_msg) in enumerate(tool_msgs):
-                            limited_messages.insert(1 + idx, tool_msg)
-                            included_indices.add(tool_idx)
-                    i -= 1
-                else:
-                    # Incomplete sequence, skip it
-                    i -= 1
+                tool_id = getattr(msg, "tool_call_id", None)
+                if tool_id and tool_id in tool_call_ids:
+                    found_tool_ids.add(tool_id)
             else:
-                # Regular message (user, system, etc.), include it
-                if len(limited_messages) < num_messages:
+                break
+        if found_tool_ids == tool_call_ids:
+            return assistant_idx
+        return None
+
+    limited_messages = []
+    included_indices = set()
+    i = len(conversation_messages) - 1
+    while i >= 0 and len(limited_messages) < num_messages:
+        if i in included_indices:
+            i -= 1
+            continue
+        msg = conversation_messages[i]
+        if is_tool_message(msg):
+            i -= 1
+            continue
+        if is_assistant_with_tool_calls(msg):
+            seq_start = get_tool_sequence_start(i)
+            if seq_start == i:
+                tool_msgs = []
+                for k in range(i + 1, len(conversation_messages)):
+                    if k in included_indices:
+                        break
+                    next_msg = conversation_messages[k]
+                    if is_tool_message(next_msg):
+                        tool_msgs.append((k, next_msg))
+                    else:
+                        break
+                sequence_size = 1 + len(tool_msgs)
+                if len(limited_messages) + sequence_size <= num_messages:
                     limited_messages.insert(0, msg)
                     included_indices.add(i)
+                    for idx, (tool_idx, tool_msg) in enumerate(tool_msgs):
+                        limited_messages.insert(1 + idx, tool_msg)
+                        included_indices.add(tool_idx)
                 i -= 1
-        
-        logger.debug(f"Limited conversation history to latest {len(limited_messages)} messages (requested {num_messages})")
-        return [system_message, *limited_messages]
-    
-    # Try with progressively fewer messages if token errors occur
-    # For Groq, reduce max attempts to avoid rate limit cascades (Groq SDK handles retries internally)
-    effective_max_attempts = max_attempts if provider != 'groq' else min(max_attempts, 2)
-    logger.debug(f"Using {effective_max_attempts} max attempts for provider {provider}")
+            else:
+                i -= 1
+        else:
+            if len(limited_messages) < num_messages:
+                limited_messages.insert(0, msg)
+                included_indices.add(i)
+            i -= 1
+    logger.debug(
+        "Limited conversation history to latest %s messages (requested %s)",
+        len(limited_messages),
+        num_messages,
+    )
+    return [system_message, *limited_messages]
+
+
+def _chat_handle_lesson_state_and_persistence(
+    *,
+    response: AIMessage,
+    response_content: str,
+    messages: List[BaseMessage],
+    last_user_msg_text: str,
+    conversation_messages: List[BaseMessage],
+    thread_id_str: Optional[str],
+    user_id: Optional[int],
+    provider: str,
+    user_llm_structured_output: Any,
+    config: Any,
+    _mark_step: Any,
+) -> AIMessage:
+    """Structured lesson_state, user-driven finalization, and DB persistence for lesson text."""
+    msg_lower = last_user_msg_text.lower()
+    needs_lesson_state = any(
+        k in msg_lower
+        for k in [
+            "lesson",
+            "lecture",
+            "lesson plan",
+            "generate a lesson",
+            "create a lesson",
+            "finalize",
+            "finalise",
+            "save the lesson",
+            "complete the lesson",
+            "lesson title",
+            "make this final",
+        ]
+    )
+    if provider != "groq" and needs_lesson_state and not _LOAD_TEST_MODE:
+        try:
+            _ = user_llm_structured_output.invoke(messages, config=config)
+            _mark_step("lesson_state_invoke")
+        except Exception as lesson_error:
+            logger.warning("Failed to get lesson state (non-critical): %s", str(lesson_error))
+
+    user_wants_to_finalize = False
+    if conversation_messages:
+        last_user_msg = None
+        for msg in reversed(conversation_messages):
+            if isinstance(msg, HumanMessage):
+                last_user_msg = msg.content.lower() if hasattr(msg, "content") else str(msg).lower()
+                break
+        if last_user_msg:
+            finalization_keywords = [
+                "finalize",
+                "finalise",
+                "finalize the lesson",
+                "finalise the lesson",
+                "final",
+                "this is final",
+                "this is the final",
+                "lesson final",
+                "lesson finalized",
+                "i am satisfied",
+                "i'm satisfied",
+                "i am done",
+                "i'm done",
+                "complete the lesson",
+                "finish the lesson",
+                "save the lesson",
+                "this lesson is complete",
+                "lesson is ready",
+                "ready to save",
+                "finalize this lesson",
+                "finalise this lesson",
+                "make this final",
+            ]
+            user_wants_to_finalize = any(keyword in last_user_msg for keyword in finalization_keywords)
+
+    if thread_id_str and response_content and user_wants_to_finalize:
+        finalized_source_content = response_content
+        if conversation_messages:
+            try:
+                for msg in reversed(conversation_messages):
+                    if isinstance(msg, AIMessage):
+                        prev_text = (msg.content or "").strip()
+                        if prev_text:
+                            finalized_source_content = prev_text
+                            break
+            except Exception:
+                pass
+        if finalized_source_content:
+            user_query_before_lesson = ""
+            last_human_content = ""
+            for msg in conversation_messages:
+                if isinstance(msg, HumanMessage):
+                    last_human_content = (msg.content or "").strip() if hasattr(msg, "content") else str(msg)
+                elif isinstance(msg, AIMessage):
+                    ai_text = (msg.content or "").strip()
+                    if ai_text and ai_text == finalized_source_content:
+                        user_query_before_lesson = last_human_content
+                        break
+            is_lesson = _check_if_content_is_lesson(
+                finalized_source_content,
+                user_query=user_query_before_lesson,
+                user_id=user_id,
+            )
+            if is_lesson:
+                _persist_finalized_lesson_static(thread_id_str, finalized_source_content)
+                _mark_step("persist_finalized_lesson")
+                try:
+                    response.content = "Lesson finalized and saved. You can download it now."
+                except Exception:
+                    pass
+            else:
+                _mark_step("lesson_validation_no")
+                try:
+                    response.content = "There is no lesson to finalize."
+                except Exception:
+                    pass
+    else:
+        if thread_id_str and response_content:
+            try:
+                db = get_db()
+                thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
+                if thread_row and not getattr(thread_row, "lesson_finalized", False):
+                    is_likely_lesson = (
+                        len(response_content) > 200 or "#" in response_content or "\n\n" in response_content
+                    )
+                    if is_likely_lesson:
+                        thread_row.last_lesson_text = response_content
+                    db.commit()
+            except Exception as e:
+                logger.warning("Error saving lesson text to DB: %s", e)
+        _mark_step("persist_in_progress_lesson")
+
+    return response
+
+
+def _chat_invoke_llm_with_retry(
+    *,
+    state: ChatState,
+    config: Any,
+    thread_id_str: Optional[str],
+    user_id: Optional[int],
+    provider: str,
+    user_llm: Any,
+    user_llm_with_tools: Any,
+    user_llm_structured_output: Any,
+    prep: _ChatTurnSystemPrep,
+    has_document: bool,
+    short_mode_active: bool,
+    token_pressure_active: bool,
+    perf_steps: List[Tuple[str, float]],
+    perf_started: float,
+    _mark_step: Any,
+) -> Dict[str, List[AIMessage]]:
+    """Single graph step: invoke LLM with progressive message reduction on recoverable errors."""
+    system_message = prep.system_message
+    conversation_messages = prep.conversation_messages
+    prefetch_evidence_for_eval = prep.prefetch_evidence_for_eval
+    last_user_msg_text = prep.last_user_msg_text
+    is_lesson_creation_turn = prep.is_lesson_creation_turn
+    tool_round_limit_reached = prep.tool_round_limit_reached
+    tool_rounds_current_turn = prep.tool_rounds_current_turn
+    max_tool_rounds_per_turn = prep.max_tool_rounds_per_turn
+
+    mode_flags = [short_mode_active, token_pressure_active]
+
+    initial_max_messages = 7
+    max_attempts = 4
+    if mode_flags[0]:
+        initial_max_messages = 3
+        max_attempts = 2
+    if mode_flags[1]:
+        initial_max_messages = 2
+        max_attempts = 2
+
+    effective_max_attempts = max_attempts if provider != "groq" else min(max_attempts, 2)
+    logger.debug("Using %s max attempts for provider %s", effective_max_attempts, provider)
     for attempt in range(effective_max_attempts):
-        # Calculate number of messages for this attempt: 7, 5, 3, 1
         if attempt == 0:
             current_max = initial_max_messages
         elif attempt == 1:
@@ -3618,42 +3780,35 @@ def chat_node(state: ChatState, config=None):
             current_max = 3
         else:
             current_max = 1
-        
-        messages = _prepare_messages(current_max)
-        # Apply a hard input-budget trim to reduce token-limit failures.
-        max_input_tokens = int(os.getenv("RAG_MAX_INPUT_TOKENS_LOAD_TEST", "2200")) if _LOAD_TEST_MODE else int(os.getenv("RAG_MAX_INPUT_TOKENS", "4200"))
-        if short_mode_active:
+
+        messages = _chat_limit_messages_for_llm(system_message, conversation_messages, current_max)
+        max_input_tokens = (
+            int(os.getenv("RAG_MAX_INPUT_TOKENS_LOAD_TEST", "2200"))
+            if _LOAD_TEST_MODE
+            else int(os.getenv("RAG_MAX_INPUT_TOKENS", "4200"))
+        )
+        if mode_flags[0]:
             max_input_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_INPUT_TOKENS", "1200"))
         messages = _trim_messages_for_token_budget(messages, max_input_tokens=max_input_tokens)
-        
+
         try:
-            # Make sequential calls to avoid rate limits
-            # Use global rate limiter for Groq
-            if provider == 'groq':
+            if provider == "groq":
                 groq_rate_limiter.wait_if_needed()
-            
-            # First get the main response.
-            # Allow bounded tool rounds; force direct answer only when round cap is reached.
-            if tool_round_limit_reached or token_pressure_active:
+            if tool_round_limit_reached or mode_flags[1]:
                 response = user_llm.invoke(messages, config=config)
             else:
                 response = user_llm_with_tools.invoke(messages, config=config)
             _mark_step("llm_invoke")
-
-            # Record success to reset error count
-            if provider == 'groq':
+            if provider == "groq":
                 groq_rate_limiter.record_success()
-
-            # If we have reached the tool-round cap for this turn, suppress extra calls.
             if tool_round_limit_reached and isinstance(response, AIMessage) and getattr(response, "tool_calls", None):
                 logger.warning("Suppressed tool calls after reaching per-turn tool round cap")
                 response = AIMessage(content=response.content if hasattr(response, "content") else str(response))
-            if token_pressure_active and isinstance(response, AIMessage) and getattr(response, "tool_calls", None):
+            if mode_flags[1] and isinstance(response, AIMessage) and getattr(response, "tool_calls", None):
                 logger.warning("Suppressed tool calls in token pressure mode")
                 response = AIMessage(content=response.content if hasattr(response, "content") else str(response))
 
-            # Extract lesson text from AI response
-            response_content = response.content if hasattr(response, 'content') else str(response)
+            response_content = response.content if hasattr(response, "content") else str(response)
             response_content = _sanitize_user_facing_response(response_content)
             try:
                 response.content = response_content
@@ -3661,7 +3816,6 @@ def chat_node(state: ChatState, config=None):
                 pass
             _mark_step("extract_response")
 
-            # Lecture-only: verify grounding vs prefetch/tool evidence; regenerate without tools until pass or cap.
             if (
                 is_lesson_creation_turn
                 and isinstance(response, AIMessage)
@@ -3681,281 +3835,136 @@ def chat_node(state: ChatState, config=None):
                     provider=provider,
                     config=config,
                     max_input_tokens=max_input_tokens,
-                    short_mode_active=short_mode_active,
-                    token_pressure_active=token_pressure_active,
+                    short_mode_active=mode_flags[0],
+                    token_pressure_active=mode_flags[1],
                     _mark_step=_mark_step,
                 )
-            
-            # Try to get lesson state, but make it optional to save tokens and avoid rate limits
-            # Skip lesson_state call for Groq to reduce API calls and avoid rate limits
 
-            msg_lower = last_user_msg_text.lower()
+            response = _chat_handle_lesson_state_and_persistence(
+                response=response,
+                response_content=response_content,
+                messages=messages,
+                last_user_msg_text=last_user_msg_text,
+                conversation_messages=conversation_messages,
+                thread_id_str=thread_id_str,
+                user_id=user_id,
+                provider=provider,
+                user_llm_structured_output=user_llm_structured_output,
+                config=config,
+                _mark_step=_mark_step,
+            )
 
-            needs_lesson_state = any(k in msg_lower for k in [
-                "lesson", "lecture", "lesson plan", "generate a lesson", "create a lesson",
-                "finalize", "finalise", "save the lesson", "complete the lesson",
-                "lesson title", "make this final"
-            ])
-
-            lesson_state = None
-
-            # Only make the second call when needed.
-            # In load-test mode we skip this non-finalization structured call to reduce chat latency.
-            if provider != "groq" and needs_lesson_state and not _LOAD_TEST_MODE:
-                try:
-                    # time.sleep(0.5)  # optional
-                    lesson_state = user_llm_structured_output.invoke(messages, config=config)
-                    _mark_step("lesson_state_invoke")
-                except Exception as lesson_error:
-                    logger.warning(f"Failed to get lesson state (non-critical): {str(lesson_error)}")
-                    lesson_state = {
-                        "lesson_in_progress": False,
-                        "lesson_finalized": False,
-                        "last_lesson_text": response_content,
-                        "lesson_title": ""
-                    }
-            else:
-                # No second call: still keep a consistent structure for downstream logic
-                lesson_state = {
-                    "lesson_in_progress": False,
-                    "lesson_finalized": False,
-                    "last_lesson_text": response_content,
-                    "lesson_title": ""
-                }
-            # lesson_state = None
-            # if provider != 'groq':
-            #     # Only call lesson_state for non-Groq providers to avoid rate limits
-            #     try:
-            #         # Add delay before the second call to avoid rate limits
-            #         # time.sleep(0.5)  # 500ms for other providers
-            #         lesson_state = user_llm_structured_output.invoke(messages, config=config)
-            #     except Exception as lesson_error:
-            #         logger.warning(f"Failed to get lesson state (non-critical): {str(lesson_error)}")
-            #         lesson_state = {
-            #             "lesson_in_progress": False,
-            #             "lesson_finalized": False,
-            #             "last_lesson_text": response_content,  # Fallback: use response content
-            #             "lesson_title": ""
-            #         }
-            # else:
-            #     # For Groq, skip lesson_state to avoid rate limits and save tokens
-            #     logger.debug("Skipping lesson_state call for Groq to avoid rate limits")
-            #     lesson_state = {
-            #         "lesson_in_progress": False,
-            #         "lesson_finalized": False,
-            #         "last_lesson_text": response_content,
-            #         "lesson_title": ""
-            #     }
-          
-            # lesson_state is a dict (TypedDict), so access it with dictionary syntax
-            # Only finalize lesson if user explicitly requests it
-            # Check the last user message for explicit finalization requests
-            user_wants_to_finalize = False
-            if conversation_messages:
-                # Get the last user message
-                last_user_msg = None
-                for msg in reversed(conversation_messages):
-                    if isinstance(msg, HumanMessage):
-                        last_user_msg = msg.content.lower() if hasattr(msg, 'content') else str(msg).lower()
-                        break
-                
-                # Static approach: check for finalization keywords in user message
-                # IMPORTANT: Do NOT treat generic creation phrases like "create the lesson"
-                # as finalization triggers, otherwise normal lesson-creation requests will
-                # immediately mark the lesson as finalized and show a misleading message.
-                if last_user_msg:
-                    finalization_keywords = [
-                        # direct "final" / "done" intents
-                        'finalize', 'finalise', 'finalize the lesson', 'finalise the lesson',
-                        'final', 'this is final', 'this is the final',
-                        'lesson final', 'lesson finalized',
-                        'i am satisfied', "i'm satisfied", 'i am done', "i'm done",
-                        'complete the lesson', 'finish the lesson', 'save the lesson',
-                        'this lesson is complete', 'lesson is ready', 'ready to save',
-                        'finalize this lesson', 'finalise this lesson', 'make this final'
-                    ]
-                    user_wants_to_finalize = any(keyword in last_user_msg for keyword in finalization_keywords)
-            
-            # Static approach: when user says final/finalized/create the lesson etc., validate then save the previous AI response (response -1)
-            if thread_id_str and response_content and user_wants_to_finalize:
-                finalized_source_content = response_content
-                if conversation_messages:
-                    try:
-                        for msg in reversed(conversation_messages):
-                            if isinstance(msg, AIMessage):
-                                prev_text = (msg.content or "").strip()
-                                if prev_text:
-                                    finalized_source_content = prev_text
-                                    break
-                    except Exception:
-                        pass
-                if finalized_source_content:
-                    # Get the user query that preceded the lesson (the message before the AI response we're finalizing)
-                    user_query_before_lesson = ""
-                    last_human_content = ""
-                    for msg in conversation_messages:
-                        if isinstance(msg, HumanMessage):
-                            last_human_content = (msg.content or "").strip() if hasattr(msg, "content") else str(msg)
-                        elif isinstance(msg, AIMessage):
-                            ai_text = (msg.content or "").strip()
-                            if ai_text and ai_text == finalized_source_content:
-                                user_query_before_lesson = last_human_content
-                                break
-                    is_lesson = _check_if_content_is_lesson(
-                        finalized_source_content,
-                        user_query=user_query_before_lesson,
-                        user_id=user_id,
-                    )
-                    if is_lesson:
-                        _persist_finalized_lesson_static(thread_id_str, finalized_source_content)
-                        _mark_step("persist_finalized_lesson")
-                        try:
-                            response.content = "Lesson finalized and saved. You can download it now."
-                        except Exception:
-                            pass
-                    else:
-                        _mark_step("lesson_validation_no")
-                        try:
-                            response.content = "There is no lesson to finalize."
-                        except Exception:
-                            pass
-            else:
-                # Track last AI response as "in-progress" lesson only when thread is NOT already finalized (so we don't overwrite the saved lesson)
-                if thread_id_str and response_content:
-                    try:
-                        db = get_db()
-                        thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-                        if thread_row and not getattr(thread_row, "lesson_finalized", False):
-                            is_likely_lesson = (
-                                len(response_content) > 200 or
-                                '#' in response_content or
-                                '\n\n' in response_content
-                            )
-                            if is_likely_lesson:
-                                thread_row.last_lesson_text = response_content
-                            db.commit()
-                    except Exception as e:
-                        logger.warning("Error saving lesson text to DB: %s", e)
-                _mark_step("persist_in_progress_lesson")
-
-            # Log if we had to reduce messages
             if attempt > 0:
-                logger.info(f"Successfully processed request after reducing to {current_max} messages (attempt {attempt + 1})")
+                logger.info(
+                    "Successfully processed request after reducing to %s messages (attempt %s)",
+                    current_max,
+                    attempt + 1,
+                )
             _mark_step("postprocess_done")
             _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
-            
             return {"messages": [response]}
-            
+
         except Exception as e:
-            if provider == 'groq':
+            if provider == "groq":
                 groq_rate_limiter.release_slot()
             error_msg = str(e)
             error_type = type(e).__name__
-            logger.warning(f"LLM API error in chat_node (attempt {attempt + 1} with {current_max} messages): {error_type}: {error_msg}")
-            
-            # Check for timeout exceptions by type (in addition to string matching)
+            logger.warning(
+                "LLM API error in chat_node (attempt %s with %s messages): %s: %s",
+                attempt + 1,
+                current_max,
+                error_type,
+                error_msg,
+            )
             is_timeout_exception = (
-                'Timeout' in error_type or 
-                'TimeoutError' in error_type or
-                hasattr(e, '__class__') and 'timeout' in e.__class__.__name__.lower()
+                "Timeout" in error_type
+                or "TimeoutError" in error_type
+                or hasattr(e, "__class__")
+                and "timeout" in e.__class__.__name__.lower()
             )
-            
-            # Record 429/413 errors for rate limiter adjustment
-            # Note: 413 Payload Too Large is also a rate limit (TPM - tokens per minute)
             is_rate_limit_error = (
-                '429' in error_msg or 
-                '413' in error_msg or
-                'Rate limit' in error_msg or 
-                'rate_limit' in error_msg.lower() or
-                'tokens per minute' in error_msg.lower() or
-                'TPM' in error_msg
+                "429" in error_msg
+                or "413" in error_msg
+                or "Rate limit" in error_msg
+                or "rate_limit" in error_msg.lower()
+                or "tokens per minute" in error_msg.lower()
+                or "TPM" in error_msg
             )
-            
-            if provider == 'groq' and is_rate_limit_error:
+            if provider == "groq" and is_rate_limit_error:
                 groq_rate_limiter.record_429_error()
-                
-                # Check if it's a token limit (TPM) error - these need message reduction
-                is_token_limit = 'tokens per minute' in error_msg.lower() or 'TPM' in error_msg or '413' in error_msg
-                
+                is_token_limit = (
+                    "tokens per minute" in error_msg.lower() or "TPM" in error_msg or "413" in error_msg
+                )
                 if is_token_limit:
                     _activate_short_mode(thread_id_str, reason="tpm_limit")
                     _activate_token_pressure_mode(thread_id_str, reason="tpm_limit")
-                    short_mode_active = True
-                    token_pressure_active = True
-                    # For token limit errors, try with fewer messages if possible
+                    mode_flags[0] = True
+                    mode_flags[1] = True
                     if attempt < effective_max_attempts - 1:
-                        logger.info(f"Groq token limit (TPM) error detected, retrying with fewer messages (attempt {attempt + 2})")
-                        continue  # Retry with fewer messages
-                    else:
-                        # Last attempt failed, return error
-                        logger.error(f"Groq token limit error after {effective_max_attempts} attempts.")
-                        # Extract limit info from error if available
-                        import re
-                        limit_match = re.search(r'Limit (\d+)', error_msg)
-                        requested_match = re.search(r'Requested (\d+)', error_msg)
-                        limit = limit_match.group(1) if limit_match else '6000'
-                        requested = requested_match.group(1) if requested_match else 'Unknown'
-                        
-                        error_response = AIMessage(
-                            content=(
-                                "⚠️ **Token Limit Exceeded**: Your request is too large for the current Groq plan.\n\n"
-                                f"- **Limit**: {limit} tokens/minute\n"
-                                f"- **Requested**: {requested} tokens\n\n"
-                                "**Solutions:**\n"
-                                "- Start a new conversation (shorter history)\n"
-                                "- Reduce the conversation context\n"
-                                "- Upgrade your Groq plan at https://console.groq.com/settings/billing\n\n"
-                                f"*This error occurred after {effective_max_attempts} retry attempts.*"
-                            )
+                        logger.info(
+                            "Groq token limit (TPM) error detected, retrying with fewer messages (attempt %s)",
+                            attempt + 2,
                         )
-                        _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
-                        return {"messages": [error_response]}
-                else:
-                    # For regular rate limit (429), don't retry in our loop - Groq SDK handles retries internally
-                    # But we still need to return something to the user if it's the last attempt
-                    logger.warning(f"Groq rate limit (429) error on attempt {attempt + 1}. Groq SDK will handle retry.")
-                    if attempt >= effective_max_attempts - 1:
-                        error_response = AIMessage(
-                            content=(
-                                "⚠️ **Rate Limit Reached**: Groq API rate limit has been exceeded.\n\n"
-                                "The Groq service is currently handling too many requests. Please:\n"
-                                "- Wait a few moments and try again\n"
-                                "- Reduce the frequency of your requests\n"
-                                "- Check your Groq API quota at https://console.groq.com\n\n"
-                                f"*This error occurred after {effective_max_attempts} retry attempts.*"
-                            )
+                        continue
+                    logger.error("Groq token limit error after %s attempts.", effective_max_attempts)
+                    import re as _re
+
+                    limit_match = _re.search(r"Limit (\d+)", error_msg)
+                    requested_match = _re.search(r"Requested (\d+)", error_msg)
+                    limit = limit_match.group(1) if limit_match else "6000"
+                    requested = requested_match.group(1) if requested_match else "Unknown"
+                    error_response = AIMessage(
+                        content=(
+                            "⚠️ **Token Limit Exceeded**: Your request is too large for the current Groq plan.\n\n"
+                            f"- **Limit**: {limit} tokens/minute\n"
+                            f"- **Requested**: {requested} tokens\n\n"
+                            "**Solutions:**\n"
+                            "- Start a new conversation (shorter history)\n"
+                            "- Reduce the conversation context\n"
+                            "- Upgrade your Groq plan at https://console.groq.com/settings/billing\n\n"
+                            f"*This error occurred after {effective_max_attempts} retry attempts.*"
                         )
-                        _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
-                        return {"messages": [error_response]}
-                    # For first attempts, continue to let Groq SDK handle retry
-                    # But we need to wait a bit to avoid immediate retry
-                    time.sleep(2)  # Wait 2 seconds before continuing
-                    continue
-            
-            # Check if it's a Groq daily token limit error (429 with type 'tokens')
-            if 'Rate limit reached' in error_msg and 'tokens per day' in error_msg and 'TPD' in error_msg:
-                # Parse the error to extract useful information
-                import re
+                    )
+                    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
+                    return {"messages": [error_response]}
+                logger.warning(
+                    "Groq rate limit (429) error on attempt %s. Groq SDK will handle retry.",
+                    attempt + 1,
+                )
+                if attempt >= effective_max_attempts - 1:
+                    error_response = AIMessage(
+                        content=(
+                            "⚠️ **Rate Limit Reached**: Groq API rate limit has been exceeded.\n\n"
+                            "The Groq service is currently handling too many requests. Please:\n"
+                            "- Wait a few moments and try again\n"
+                            "- Reduce the frequency of your requests\n"
+                            "- Check your Groq API quota at https://console.groq.com\n\n"
+                            f"*This error occurred after {effective_max_attempts} retry attempts.*"
+                        )
+                    )
+                    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
+                    return {"messages": [error_response]}
+                time.sleep(2)
+                continue
+
+            if "Rate limit reached" in error_msg and "tokens per day" in error_msg and "TPD" in error_msg:
+                import re as _re
+
                 try:
-                    # Extract limit, used, requested, and wait time
-                    limit_match = re.search(r'Limit (\d+)', error_msg)
-                    used_match = re.search(r'Used (\d+)', error_msg)
-                    requested_match = re.search(r'Requested (\d+)', error_msg)
-                    wait_match = re.search(r'try again in ([\dm\.]+)', error_msg)
-                    
-                    limit = limit_match.group(1) if limit_match else '100,000'
-                    used = used_match.group(1) if used_match else 'Unknown'
-                    requested = requested_match.group(1) if requested_match else 'Unknown'
-                    wait_time = wait_match.group(1) if wait_match else 'Unknown'
-                    
-                    # Format numbers with commas
+                    limit_match = _re.search(r"Limit (\d+)", error_msg)
+                    used_match = _re.search(r"Used (\d+)", error_msg)
+                    requested_match = _re.search(r"Requested (\d+)", error_msg)
+                    wait_match = _re.search(r"try again in ([\dm\.]+)", error_msg)
+                    limit = limit_match.group(1) if limit_match else "100,000"
+                    used = used_match.group(1) if used_match else "Unknown"
+                    requested = requested_match.group(1) if requested_match else "Unknown"
+                    wait_time = wait_match.group(1) if wait_match else "Unknown"
                     try:
                         limit = f"{int(limit):,}"
                         used = f"{int(used):,}"
                         requested = f"{int(requested):,}"
-                    except:
+                    except Exception:
                         pass
-                    
                     error_response = AIMessage(
                         content=(
                             f"⚠️ **Groq Daily Token Limit Reached**\n\n"
@@ -3969,100 +3978,95 @@ def chat_node(state: ChatState, config=None):
                             f"*The limit resets daily. You can continue using the service after the reset.*"
                         )
                     )
-                    logger.error(f"Groq daily token limit reached: Used {used}/{limit}, Wait {wait_time}")
+                    logger.error("Groq daily token limit reached: Used %s/%s, Wait %s", used, limit, wait_time)
                     _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                     return {"messages": [error_response]}
                 except Exception as parse_error:
-                    logger.error(f"Error parsing Groq token limit error: {parse_error}")
-                    # Fall through to generic error handling
-            
-            # Check if it's a timeout error (by exception type or message)
+                    logger.error("Error parsing Groq token limit error: %s", parse_error)
+
             is_timeout_error = is_timeout_exception or (
-                "timeout" in error_msg.lower() or 
-                "timed out" in error_msg.lower() or
-                "Request timed out" in error_msg
+                "timeout" in error_msg.lower()
+                or "timed out" in error_msg.lower()
+                or "Request timed out" in error_msg
             )
-            
             if is_timeout_error:
-                # For timeout errors, try once more with fewer messages if not last attempt
                 if attempt < effective_max_attempts - 1:
-                    logger.info(f"Timeout error detected, retrying with fewer messages (current: {current_max}, next: {current_max - 2 if current_max > 2 else 1})")
-                    continue  # Retry with fewer messages
-                else:
-                    # Last attempt failed with timeout
-                    logger.error(f"Request timed out after {effective_max_attempts} attempts. Final attempt with {current_max} messages.")
-                    error_response = AIMessage(
-                        content=(
-                            "⚠️ **Request Timeout**: The request took too long to process.\n\n"
-                            "This can happen when:\n"
-                            "- The conversation history is very long\n"
-                            "- The AI service is experiencing high load\n"
-                            "- The network connection is slow\n\n"
-                            "**Suggestions:**\n"
-                            "- Try starting a new conversation\n"
-                            "- Reduce the conversation history\n"
-                            "- Try again in a few moments\n\n"
-                            f"*The request timed out after multiple retry attempts.*"
-                        )
+                    logger.info("Timeout error detected, retrying with fewer messages")
+                    continue
+                logger.error(
+                    "Request timed out after %s attempts. Final attempt with %s messages.",
+                    effective_max_attempts,
+                    current_max,
+                )
+                error_response = AIMessage(
+                    content=(
+                        "⚠️ **Request Timeout**: The request took too long to process.\n\n"
+                        "This can happen when:\n"
+                        "- The conversation history is very long\n"
+                        "- The AI service is experiencing high load\n"
+                        "- The network connection is slow\n\n"
+                        "**Suggestions:**\n"
+                        "- Try starting a new conversation\n"
+                        "- Reduce the conversation history\n"
+                        "- Try again in a few moments\n\n"
+                        "*The request timed out after multiple retry attempts.*"
                     )
-                    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
-                    return {"messages": [error_response]}
-            
-            # Check if it's a token error (context length)
-            if _is_token_error(error_msg):
-                _activate_short_mode(thread_id_str, reason="context_limit")
-                _activate_token_pressure_mode(thread_id_str, reason="context_limit")
-                short_mode_active = True
-                token_pressure_active = True
-                # If this is not the last attempt, try with fewer messages
-                if attempt < effective_max_attempts - 1:
-                    logger.info(f"Token error detected, retrying with fewer messages (current: {current_max}, next: {current_max - 2 if current_max > 2 else 1})")
-                    continue  # Retry with fewer messages
-                else:
-                    # Last attempt failed, show error
-                    logger.error(f"All retry attempts failed with token errors. Final attempt with {current_max} messages.")
-                    error_response = AIMessage(
-                        content=(
-                            "⚠️ **Context Length Error**: The conversation is too long to process. "
-                            "Please start a new conversation or upload a shorter document.\n\n"
-                            f"*Error details: {error_msg}*"
-                        )
-                    )
-                    _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
-                    return {"messages": [error_response]}
-            else:
-                # Not a token error, check if it's a connection error
-                if "Connection error" in error_msg or "No connection could be made" in error_msg or "actively refused" in error_msg:
-                    error_response = AIMessage(
-                        content=(
-                            "⚠️ **Connection Error**: Unable to connect to the AI service. "
-                            "The server may be temporarily unavailable.\n\n"
-                            "Please try again in a few moments, or contact support if the issue persists.\n\n"
-                            f"*Error details: {error_msg}*"
-                        )
-                    )
-                else:
-                    # Generic error handling (only show if not retrying)
-                    if attempt < effective_max_attempts - 1:
-                        # Try one more time with fewer messages even for non-token errors
-                        logger.info(f"Non-token error detected, retrying with fewer messages (attempt {attempt + 2})")
-                        continue
-                    else:
-                        # Final attempt failed
-                        error_response = AIMessage(
-                            content=(
-                                "⚠️ **Error**: An error occurred while processing your request.\n\n"
-                                "Please try again, or contact support if the issue persists.\n\n"
-                                f"*Error details: {error_msg}*"
-                            )
-                        )
-                
+                )
                 _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
                 return {"messages": [error_response]}
-    
-    # Fallback: If we somehow exit the loop without returning, return a generic error
-    # This should never happen, but ensures we always return a response
-    logger.error(f"Retry loop completed without returning a response. This should not happen!")
+
+            if _chat_is_token_error(error_msg):
+                _activate_short_mode(thread_id_str, reason="context_limit")
+                _activate_token_pressure_mode(thread_id_str, reason="context_limit")
+                mode_flags[0] = True
+                mode_flags[1] = True
+                if attempt < effective_max_attempts - 1:
+                    logger.info("Token error detected, retrying with fewer messages")
+                    continue
+                logger.error(
+                    "All retry attempts failed with token errors. Final attempt with %s messages.",
+                    current_max,
+                )
+                error_response = AIMessage(
+                    content=(
+                        "⚠️ **Context Length Error**: The conversation is too long to process. "
+                        "Please start a new conversation or upload a shorter document.\n\n"
+                        f"*Error details: {error_msg}*"
+                    )
+                )
+                _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
+                return {"messages": [error_response]}
+            if (
+                "Connection error" in error_msg
+                or "No connection could be made" in error_msg
+                or "actively refused" in error_msg
+            ):
+                error_response = AIMessage(
+                    content=(
+                        "⚠️ **Connection Error**: Unable to connect to the AI service. "
+                        "The server may be temporarily unavailable.\n\n"
+                        "Please try again in a few moments, or contact support if the issue persists.\n\n"
+                        f"*Error details: {error_msg}*"
+                    )
+                )
+            else:
+                if attempt < effective_max_attempts - 1:
+                    logger.info(
+                        "Non-token error detected, retrying with fewer messages (attempt %s)",
+                        attempt + 2,
+                    )
+                    continue
+                error_response = AIMessage(
+                    content=(
+                        "⚠️ **Error**: An error occurred while processing your request.\n\n"
+                        "Please try again, or contact support if the issue persists.\n\n"
+                        f"*Error details: {error_msg}*"
+                    )
+                )
+            _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
+            return {"messages": [error_response]}
+
+    logger.error("Retry loop completed without returning a response. This should not happen!")
     error_response = AIMessage(
         content=(
             "⚠️ **Error**: An unexpected error occurred while processing your request.\n\n"
@@ -4072,6 +4076,78 @@ def chat_node(state: ChatState, config=None):
     )
     _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
     return {"messages": [error_response]}
+
+
+def chat_node(state: ChatState, config=None):
+    """LLM node: orchestrates system prompt, tool-round limits, LLM invoke with retry, and lesson handling."""
+    perf_steps: List[Tuple[str, float]] = []
+    perf_started = time.perf_counter()
+
+    def _mark_step(label: str) -> None:
+        perf_steps.append((label, time.perf_counter()))
+
+    thread_id_str = None
+    if config and isinstance(config, dict):
+        tid = config.get("configurable", {}).get("thread_id")
+        if tid:
+            thread_id_str = str(tid)
+    _mark_step("resolve_thread_id")
+
+    short_mode_active = _consume_short_mode_turn(thread_id_str)
+    token_pressure_active = _consume_token_pressure_turn(thread_id_str)
+    if token_pressure_active:
+        short_mode_active = True
+
+    has_document = bool(thread_id_str and thread_has_document(thread_id_str))
+    _mark_step("check_thread_document")
+
+    user_id = _get_user_id_for_thread(thread_id_str) if thread_id_str else None
+    _mark_step("resolve_user_id")
+
+    provider = _chat_get_active_llm_provider()
+    _mark_step("load_provider_settings")
+
+    llm_bundle = _chat_init_llms_for_turn(
+        user_id=user_id,
+        provider=provider,
+        short_mode_active=short_mode_active,
+        thread_id_str=thread_id_str,
+        perf_steps=perf_steps,
+        perf_started=perf_started,
+        _mark_step=_mark_step,
+    )
+    if llm_bundle.error_payload is not None:
+        return llm_bundle.error_payload
+
+    custom_prompt = _get_rag_prompt(user_id, thread_id_str)
+    prep = _chat_build_system_message(
+        state,
+        has_document=has_document,
+        thread_id_str=thread_id_str,
+        custom_prompt=custom_prompt,
+        token_pressure_active=token_pressure_active,
+        short_mode_active=short_mode_active,
+    )
+
+    return _chat_invoke_llm_with_retry(
+        state=state,
+        config=config,
+        thread_id_str=thread_id_str,
+        user_id=user_id,
+        provider=provider,
+        user_llm=llm_bundle.user_llm,
+        user_llm_with_tools=llm_bundle.user_llm_with_tools,
+        user_llm_structured_output=llm_bundle.user_llm_structured_output,
+        prep=prep,
+        has_document=has_document,
+        short_mode_active=short_mode_active,
+        token_pressure_active=token_pressure_active,
+        perf_steps=perf_steps,
+        perf_started=perf_started,
+        _mark_step=_mark_step,
+    )
+
+
 
 tool_node = ToolNode(tools)
 
