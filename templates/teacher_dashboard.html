@@ -1829,6 +1829,185 @@
       font-weight: 600;
     }
 
+    /* ── Version Dropdown (Lessons Table) ──────────────────────── */
+    .version-dropdown-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .version-dropdown-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      background: #dbeafe;
+      color: #1e40af;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #bfdbfe;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      user-select: none;
+      line-height: 1.4;
+    }
+
+    .version-dropdown-btn:hover {
+      background: #bfdbfe;
+    }
+
+    .version-dropdown-btn.open {
+      background: #bfdbfe;
+      border-color: #93c5fd;
+    }
+
+    .version-dropdown-btn .version-chevron {
+      font-size: 0.58rem;
+      transition: transform 0.2s;
+      margin-left: 0.1rem;
+    }
+
+    .version-dropdown-btn.open .version-chevron {
+      transform: rotate(180deg);
+    }
+
+    .version-dropdown-menu {
+      position: fixed;
+      min-width: 230px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.625rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
+      z-index: 9990;
+      overflow: hidden;
+      display: none;
+    }
+
+    .version-dropdown-menu.open {
+      display: block;
+      animation: vdropIn 0.14s ease;
+    }
+
+    @keyframes vdropIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .version-dropdown-header {
+      padding: 0.45rem 0.75rem 0.4rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      background: #f8fafc;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .version-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.8rem;
+      color: #334155;
+      border-bottom: 1px solid #f8fafc;
+      transition: background 0.1s;
+    }
+
+    .version-dropdown-item:last-child {
+      border-bottom: none;
+    }
+
+    .version-dropdown-item:hover {
+      background: #f1f5f9;
+    }
+
+    .version-dropdown-item.is-current {
+      background: #f0fdf4;
+    }
+
+    .version-dropdown-item.is-selected {
+      background: #eff6ff;
+      border-left: 2px solid #3b82f6;
+    }
+
+    .version-dropdown-item.is-selected .v-label {
+      color: #1d4ed8;
+    }
+
+    .version-dropdown-item.is-selected .v-meta {
+      color: #60a5fa;
+    }
+
+    .version-dropdown-btn.version-selected {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }
+
+    .version-older-notice {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: #fef9c3;
+      border: 1px solid #fde047;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      color: #854d0e;
+      margin-bottom: 0.75rem;
+    }
+
+    .version-dropdown-item .v-label {
+      font-weight: 700;
+      color: #1e40af;
+      min-width: 2rem;
+      font-size: 0.78rem;
+    }
+
+    .version-dropdown-item.is-current .v-label {
+      color: #166534;
+    }
+
+    .version-dropdown-item .v-meta {
+      flex: 1;
+      color: #94a3b8;
+      font-size: 0.72rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .v-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.1rem 0.45rem;
+      border-radius: 9999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .v-status-badge.current {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .v-status-badge.draft {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .version-dropdown-loading {
+      padding: 0.85rem 0.75rem;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.8rem;
+    }
+
     /* Enhanced Input Field Styling */
     input[type="text"],
     input[type="email"],
@@ -5413,6 +5592,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         // Format lessons for display (API shape: focus_area, grade_level, created_at, version_number)
+        // The backend already filters to latest_only so each lesson appears once.
         const formattedLessons = lessons.map((lesson, index) => {
           const date = new Date(lesson.created_at || lesson.updated_at || 0);
           const now = new Date();
@@ -5437,7 +5617,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             subject: lesson.focus_area || lesson.focusArea || 'General',
             grade: lesson.grade_level || lesson.gradeLevel || 'General',
             createdBy: lesson.teacher_name || (window.teacherUserInfo && window.teacherUserInfo.username) || 'Teacher',
-            versions: '<span class="version-badge">v' + (lesson.version_number || lesson.version || 1) + '</span>',
+            versions: '<div class="version-dropdown-wrapper"><button class="version-dropdown-btn" onclick="toggleVersionDropdown(event, \'' + lesson.id + '\', this)">v' + (lesson.version_number || lesson.version || 1) + '<i class="fas fa-chevron-down version-chevron"></i></button><div class="version-dropdown-menu" id="vdrop-' + lesson.id + '"></div></div>',
             timestamp: timestamp,
             fullDate: date,
             status: lesson.status || 'draft',
@@ -5564,8 +5744,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         return lessons.findIndex(lesson => String(lesson.id) === needle);
       }
 
-      // Lesson actions - API: fetch /api/lessons/lesson/:id/view then show modal
-      async function viewLesson(lessonId) {
+      // Lesson actions - API: fetch /api/lessons/lesson/:id/view then show modal.
+      // Pass selectedVersionNumber to open at a specific version (default = latest).
+      async function viewLesson(lessonId, selectedVersionNumber) {
         if (!lessonId) { showToast('No lesson ID provided', 'error'); return; }
         try {
           const response = await fetch('/api/lessons/lesson/' + lessonId + '/view', { method: 'GET', credentials: 'include' });
@@ -5575,21 +5756,38 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const versions = data.versions || [];
           if (!lesson) { showToast('Lesson not found', 'error'); return; }
           const sortedVersions = versions.slice().sort((a, b) => (b.version_number || b.version || 0) - (a.version_number || a.version || 0));
-          const currentVersion = sortedVersions[0] || lesson;
           window.currentLessonVersions = sortedVersions;
+
+          // Resolve which version to display
+          const latestVersion = sortedVersions[0] || lesson;
+          const latestVersionNum = latestVersion.version_number || latestVersion.version || 1;
+          let targetVersion = latestVersion;
+          if (selectedVersionNumber != null) {
+            const found = sortedVersions.find(function(v) {
+              return (v.version_number || v.version || 1) === selectedVersionNumber;
+            });
+            if (found) targetVersion = found;
+          }
+          const viewedVersionNum = targetVersion.version_number || targetVersion.version || 1;
+          const isLatestVersion = viewedVersionNum === latestVersionNum;
+
           const forModal = {
             id: lesson.id,
             title: lesson.title,
             subject: lesson.focus_area || lesson.focusArea,
             grade: lesson.grade_level || lesson.gradeLevel,
-            content: currentVersion.content || lesson.content,
-            created_at: lesson.created_at || currentVersion.created_at,
-            createdAt: lesson.created_at || currentVersion.created_at,
-            version: currentVersion.version_number || currentVersion.version || 1,
-            versions: sortedVersions.map(v => ({ version: v.version_number || v.version || 1, createdAt: v.created_at, content: v.content })),
-            status: lesson.status || 'draft'
+            content: targetVersion.content || lesson.content,
+            created_at: lesson.created_at || targetVersion.created_at,
+            createdAt: lesson.created_at || targetVersion.created_at,
+            version: viewedVersionNum,
+            versions: sortedVersions.map(function(v) {
+              return { version: v.version_number || v.version || 1, createdAt: v.created_at, content: v.content };
+            }),
+            status: lesson.status || 'draft',
+            isLatestVersion: isLatestVersion,
+            latestVersionNum: latestVersionNum
           };
-          populateViewLessonModal(forModal);
+          await populateViewLessonModal(forModal);
           showViewLessonModal();
         } catch (err) {
           console.error('viewLesson error:', err);
@@ -5630,6 +5828,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       function setFinalizeButtonVisible(isVisible) {
         const finalizeBtn = document.getElementById('finalizeVersionBtn');
         if (!finalizeBtn) return;
+        // Never show finalize if the user is viewing an older version
+        if (isVisible && window.currentViewingVersionIsLatest === false) return;
         if (isVisible) {
           finalizeBtn.classList.remove('hidden');
         } else {
@@ -5698,35 +5898,60 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             };
           }
 
-          // Populate version history with dropdown
+          // ── Version history panel ──────────────────────────────────────────────
+          const viewedVersion = lesson.version || 1;
+          const latestVersionNum = lesson.latestVersionNum || viewedVersion;
+          const isLatestVersion = lesson.isLatestVersion !== false;
+          window.currentViewingVersionIsLatest = isLatestVersion;
+          window.currentViewingVersion = viewedVersion;
+
           let versionsHtml = '';
           let latestVersion = null;
 
           if (lesson.versions && Array.isArray(lesson.versions) && lesson.versions.length > 0) {
-            // Sort versions by version number descending to show latest at top
             const sortedVersions = [...lesson.versions].sort((a, b) => (b.version || 0) - (a.version || 0));
             latestVersion = sortedVersions[0];
 
-            // Generate version items
-            versionsHtml = sortedVersions.map((v, idx) => `
-      <div class="view-lesson-version-item ${idx === 0 ? 'current' : ''}">
-        <div class="flex items-center justify-between">
-          <div>
-            <strong>Version ${v.version || idx + 1}</strong>
-            <div class="text-xs mt-0.5">Created: ${new Date(v.createdAt).toLocaleDateString()}</div>
+            versionsHtml = sortedVersions.map((v, idx) => {
+              const vNum = v.version || idx + 1;
+              const isViewing = vNum === viewedVersion;
+              const isLatest = idx === 0;
+              const dateStr = v.createdAt ? new Date(v.createdAt).toLocaleDateString() : '—';
+              return `
+      <div class="view-lesson-version-item ${isViewing ? 'current' : ''}"
+           style="cursor:pointer"
+           onclick="switchViewedVersion(${vNum})"
+           title="${isLatest ? 'Current version' : 'Click to view this version'}">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <strong>v${vNum}</strong>
+              ${isLatest ? '<span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">Current</span>' : ''}
+              ${isViewing && !isLatest ? '<span class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Viewing</span>' : ''}
+            </div>
+            <div class="text-xs mt-0.5 text-gray-500">${dateStr}</div>
           </div>
-          ${idx === 0 ? '' : `<button onclick="loadVersionIntoDraft('${lesson.id}', ${v.version || idx + 1})" class="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors">Load</button>`}
+          ${!isLatest ? `<button onclick="event.stopPropagation(); loadVersionIntoDraft('${lesson.id}', ${vNum})"
+                         class="flex-shrink-0 px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-700 border border-gray-200 rounded transition-colors"
+                         title="Load into draft editor">Edit</button>` : ''}
         </div>
-      </div>
-    `).join('');
+      </div>`;
+            }).join('');
           } else {
             latestVersion = { version: lesson.version || 1, createdAt: lesson.createdAt || new Date().toISOString() };
-            versionsHtml = `<div class="view-lesson-version-item current"><strong>Version 1</strong><div class="text-xs mt-0.5">Current published version</div></div>`;
+            versionsHtml = `<div class="view-lesson-version-item current" style="cursor:default">
+              <strong>v1</strong>
+              <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full ml-1">Current</span>
+              <div class="text-xs mt-0.5 text-gray-500">Only version</div>
+            </div>`;
           }
 
-          // Update the dropdown button to show latest version
-          if (latestVersion) {
-            document.getElementById('currentVersionDisplay').textContent = `v${latestVersion.version || 1} (Current)`;
+          // Update the dropdown button label
+          const currentVersionDisplay = document.getElementById('currentVersionDisplay');
+          if (currentVersionDisplay) {
+            currentVersionDisplay.textContent = isLatestVersion
+              ? `v${viewedVersion} (Current)`
+              : `v${viewedVersion} (Older)`;
           }
 
           document.getElementById('viewLessonVersions').innerHTML = versionsHtml;
@@ -5737,11 +5962,48 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const dropdownIcon = document.getElementById('versionDropdownIcon');
 
           if (dropdownBtn && versionsList && dropdownIcon) {
+            // Style the button to reflect whether viewing latest or older
+            dropdownBtn.className = dropdownBtn.className
+              .replace(/\bfrom-\S+\b|\bto-\S+\b|\bborder-\S+\b/g, '');
+            if (isLatestVersion) {
+              dropdownBtn.classList.add('from-emerald-50', 'to-emerald-100', 'border-emerald-300');
+              dropdownBtn.classList.remove('from-amber-50', 'to-amber-100', 'border-amber-300');
+            } else {
+              dropdownBtn.classList.add('from-amber-50', 'to-amber-100', 'border-amber-300');
+              dropdownBtn.classList.remove('from-emerald-50', 'to-emerald-100', 'border-emerald-300');
+            }
             dropdownBtn.onclick = function () {
               versionsList.classList.toggle('hidden');
               dropdownIcon.classList.toggle('fa-chevron-down');
               dropdownIcon.classList.toggle('fa-chevron-up');
             };
+          }
+
+          // Show/hide older-version notice and restrict new version creation
+          const existingNotice = document.getElementById('olderVersionNotice');
+          if (existingNotice) existingNotice.remove();
+          const finalizeBtn = document.getElementById('finalizeVersionBtn');
+          if (!isLatestVersion) {
+            // Insert a notice above the version selector
+            const notice = document.createElement('div');
+            notice.id = 'olderVersionNotice';
+            notice.className = 'version-older-notice';
+            notice.innerHTML = '<i class="fas fa-info-circle"></i>'
+              + ' Viewing v' + viewedVersion + ' (older). New versions can only be created from the latest (v' + latestVersionNum + ').';
+            if (dropdownBtn && dropdownBtn.parentNode) {
+              dropdownBtn.parentNode.insertBefore(notice, dropdownBtn);
+            }
+            // Lock the finalize button completely for older versions
+            if (finalizeBtn) {
+              finalizeBtn.classList.add('hidden');
+              finalizeBtn.disabled = true;
+            }
+          } else {
+            if (finalizeBtn) {
+              // Restore finalize button to its draft-controlled state
+              finalizeBtn.disabled = false;
+              // setFinalizeButtonVisible controls the actual visibility based on draft edits
+            }
           }
 
           // Load saved templates
@@ -6034,6 +6296,86 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         } catch (e) {
           showToast('Error deleting lesson', 'error');
         }
+      }
+
+      // Switch the content displayed in the view modal to a specific version number.
+      // Uses the already-fetched window.currentLessonVersions — no extra API call needed.
+      function switchViewedVersion(versionNumber) {
+        const versions = window.currentLessonVersions || [];
+        if (!versions.length) return;
+
+        const sortedVersions = versions.slice().sort(function(a, b) {
+          return (b.version_number || b.version || 0) - (a.version_number || a.version || 0);
+        });
+        const latestVersionNum = sortedVersions[0].version_number || sortedVersions[0].version || 1;
+        const isLatest = versionNumber === latestVersionNum;
+
+        const target = sortedVersions.find(function(v) {
+          return (v.version_number || v.version || 1) === versionNumber;
+        });
+        if (!target) return;
+
+        // Update preview content
+        const currentEl = document.getElementById('viewLessonCurrent');
+        if (currentEl) renderLessonMarkdown(currentEl, target.content || '');
+
+        // Update version badge in header
+        const versionEl = document.getElementById('viewLessonVersion');
+        if (versionEl) versionEl.textContent = 'v' + versionNumber;
+
+        // Update the dropdown button label
+        const currentVersionDisplay = document.getElementById('currentVersionDisplay');
+        if (currentVersionDisplay) {
+          currentVersionDisplay.innerHTML =
+            '<i class="fas fa-code-branch"></i> '
+            + (isLatest ? 'v' + versionNumber + ' (Current)' : 'v' + versionNumber + ' (Older)');
+        }
+
+        // Highlight the selected version in the list
+        document.querySelectorAll('#viewLessonVersions .view-lesson-version-item').forEach(function(el) {
+          el.classList.remove('current');
+        });
+        const versionItems = document.querySelectorAll('#viewLessonVersions .view-lesson-version-item');
+        sortedVersions.forEach(function(v, idx) {
+          const vNum = v.version_number || v.version || 1;
+          if (vNum === versionNumber && versionItems[idx]) {
+            versionItems[idx].classList.add('current');
+          }
+        });
+
+        // Manage finalize button and older-version notice
+        const finalizeBtn = document.getElementById('finalizeVersionBtn');
+        const existingNotice = document.getElementById('olderVersionNotice');
+        if (existingNotice) existingNotice.remove();
+
+        const dropdownBtn = document.getElementById('versionDropdownBtn');
+        if (!isLatest) {
+          if (finalizeBtn) { finalizeBtn.classList.add('hidden'); finalizeBtn.disabled = true; }
+          // Insert notice
+          const notice = document.createElement('div');
+          notice.id = 'olderVersionNotice';
+          notice.className = 'version-older-notice';
+          notice.innerHTML = '<i class="fas fa-info-circle"></i>'
+            + ' Viewing v' + versionNumber + ' (older). New versions can only be created from v' + latestVersionNum + '.';
+          if (dropdownBtn && dropdownBtn.parentNode) {
+            dropdownBtn.parentNode.insertBefore(notice, dropdownBtn);
+          }
+          // Amber tint on dropdown button
+          if (dropdownBtn) {
+            dropdownBtn.classList.add('from-amber-50', 'to-amber-100', 'border-amber-300');
+            dropdownBtn.classList.remove('from-emerald-50', 'to-emerald-100', 'border-emerald-300');
+          }
+        } else {
+          if (finalizeBtn) { finalizeBtn.disabled = false; }
+          // Restore green tint
+          if (dropdownBtn) {
+            dropdownBtn.classList.add('from-emerald-50', 'to-emerald-100', 'border-emerald-300');
+            dropdownBtn.classList.remove('from-amber-50', 'to-amber-100', 'border-amber-300');
+          }
+        }
+
+        window.currentViewingVersion = versionNumber;
+        window.currentViewingVersionIsLatest = isLatest;
       }
 
       function loadVersionIntoDraft(lessonId, versionNumber) {
@@ -9100,7 +9442,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         floatingMenu.classList.toggle('hidden-menu');
       }
 
-      // Close floating menu when clicking outside
+      // Close floating menu and version dropdowns when clicking outside
       document.addEventListener('click', function (event) {
         const floatingBtn = document.getElementById('floatingActionBtn');
         const floatingMenu = document.getElementById('floatingMenu');
@@ -9108,6 +9450,11 @@ Align everything with the lesson objectives and do not invent missing informatio
         if (!event.target.closest('.floating-action-button') &&
           !event.target.closest('.floating-menu')) {
           floatingMenu.classList.add('hidden-menu');
+        }
+
+        // Close any open version dropdown when clicking outside
+        if (!event.target.closest('.version-dropdown-wrapper')) {
+          closeAllVersionDropdowns();
         }
       });
 
@@ -9920,6 +10267,158 @@ Align everything with the lesson objectives and do not invent missing informatio
       });
 
       // Simple RAG Prompt modal - closeRAGPromptModal defined above with preview cleanup
+
+      // ─── Version Dropdown (Lessons Table) ─────────────────────────────────────
+      const _versionDropCache = {};
+      // Tracks which version number was last selected per lessonId
+      const _versionSelectedMap = {};
+
+      function toggleVersionDropdown(event, lessonId, btn) {
+        event.stopPropagation();
+        const menu = document.getElementById('vdrop-' + lessonId);
+        if (!menu) return;
+
+        // Close every other open version dropdown first
+        closeAllVersionDropdowns(menu);
+
+        const isOpen = menu.classList.contains('open');
+        if (isOpen) {
+          menu.classList.remove('open');
+          btn.classList.remove('open');
+          return;
+        }
+
+        // Position the menu below the button using fixed coords (bypasses overflow:hidden)
+        const rect = btn.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 4) + 'px';
+        const menuWidth = 230;
+        const leftPos = Math.min(rect.left, window.innerWidth - menuWidth - 8);
+        menu.style.left = leftPos + 'px';
+
+        menu.classList.add('open');
+        btn.classList.add('open');
+
+        // Use cached data if available
+        if (_versionDropCache[lessonId]) {
+          renderVersionDropdownMenu(menu, _versionDropCache[lessonId]);
+          return;
+        }
+
+        // Show loading placeholder then fetch
+        menu.innerHTML = '<div class="version-dropdown-loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+
+        fetch('/api/lessons/lesson/' + lessonId + '/view', { method: 'GET', credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
+          .then(function(data) {
+            const versions = (data.versions || [])
+              .slice()
+              .sort(function(a, b) {
+                return (b.version_number || b.version || 0) - (a.version_number || a.version || 0);
+              });
+            const status = (data.lesson && data.lesson.status) || 'draft';
+            const payload = { versions: versions, status: status };
+            _versionDropCache[lessonId] = payload;
+            if (menu.classList.contains('open')) renderVersionDropdownMenu(menu, payload);
+          })
+          .catch(function() {
+            if (menu.classList.contains('open'))
+              menu.innerHTML = '<div class="version-dropdown-loading" style="color:#ef4444;"><i class="fas fa-exclamation-circle"></i> Failed to load</div>';
+          });
+      }
+
+      function renderVersionDropdownMenu(menu, data) {
+        const versions = data.versions;
+        const status = data.status;
+        // Extract lessonId from the menu element id ("vdrop-{lessonId}")
+        const lessonId = menu.id.replace('vdrop-', '');
+        const selectedVer = _versionSelectedMap[lessonId] || null;
+
+        if (!versions || versions.length === 0) {
+          menu.innerHTML = '<div class="version-dropdown-loading">No versions found</div>';
+          return;
+        }
+
+        const rows = versions.map(function(v, i) {
+          const isCurrent = i === 0;
+          const vNum = v.version_number || v.version || 1;
+          // A version is "selected" if it was previously clicked; otherwise default to the latest
+          const isSelected = selectedVer !== null ? (vNum === selectedVer) : isCurrent;
+          const dateStr = v.created_at
+            ? new Date(v.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+          const isDraft = isCurrent && status === 'draft';
+          let badge = '';
+          if (isCurrent && !isDraft) {
+            badge = '<span class="v-status-badge current"><i class="fas fa-check"></i> Current</span>';
+          } else if (isDraft) {
+            badge = '<span class="v-status-badge draft">Draft</span>';
+          }
+          return '<div class="version-dropdown-item'
+            + (isCurrent ? ' is-current' : '')
+            + (isSelected ? ' is-selected' : '')
+            + '" style="cursor:pointer" title="View v' + vNum + '"'
+            + ' onclick="selectVersionFromDropdown(event,\'' + lessonId + '\',' + vNum + ',this)">'
+            + '<span class="v-label">v' + vNum + '</span>'
+            + '<span class="v-meta">' + dateStr + '</span>'
+            + badge
+            + '</div>';
+        }).join('');
+
+        menu.innerHTML = '<div class="version-dropdown-header"><i class="fas fa-code-branch"></i> Version History</div>' + rows;
+      }
+
+      function closeAllVersionDropdowns(except) {
+        document.querySelectorAll('.version-dropdown-menu.open').forEach(function(m) {
+          if (m === except) return;
+          m.classList.remove('open');
+          const wrapper = m.closest('.version-dropdown-wrapper');
+          if (wrapper) {
+            const b = wrapper.querySelector('.version-dropdown-btn');
+            if (b) b.classList.remove('open');
+          }
+        });
+      }
+
+      // Called when a user clicks a specific version in the table dropdown.
+      // Highlights the selection, updates the badge, then opens the view modal
+      // at that version's content.
+      async function selectVersionFromDropdown(event, lessonId, versionNumber, itemEl) {
+        event.stopPropagation();
+
+        // Record selection
+        _versionSelectedMap[lessonId] = versionNumber;
+
+        // Highlight the clicked item; deselect siblings
+        const menu = document.getElementById('vdrop-' + lessonId);
+        if (menu) {
+          menu.querySelectorAll('.version-dropdown-item').forEach(function(el) {
+            el.classList.remove('is-selected');
+          });
+          itemEl.classList.add('is-selected');
+        }
+
+        // Update the badge button text to the selected version
+        const wrapper = menu ? menu.closest('.version-dropdown-wrapper') : null;
+        const btn = wrapper ? wrapper.querySelector('.version-dropdown-btn') : null;
+        if (btn) {
+          // Determine if this is the latest version
+          const cached = _versionDropCache[lessonId];
+          const isLatest = cached && cached.versions.length > 0 &&
+            (cached.versions[0].version_number || cached.versions[0].version || 1) === versionNumber;
+          // Rebuild button content (chevron must be preserved)
+          btn.innerHTML = 'v' + versionNumber
+            + (isLatest ? '' : ' <span style="font-size:0.65rem;opacity:0.7">(older)</span>')
+            + '<i class="fas fa-chevron-down version-chevron"></i>';
+          btn.classList.toggle('version-selected', !isLatest);
+        }
+
+        // Close the dropdown
+        closeAllVersionDropdowns();
+
+        // Open the view modal showing the selected version
+        await viewLesson(lessonId, versionNumber);
+      }
+
     </script>
 
   <!-- Simple RAG Prompt Modal (legacy-style Set Prompt) -->
