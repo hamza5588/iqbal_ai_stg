@@ -5819,10 +5819,11 @@
         // switching between chats never loses the lesson context.
         // ════════════════════════════════════════════════════════════════════════════════
 
-        // Clear any lesson context that belonged to a different chat
-        if (window.currentLessonContext && window.currentLessonContext.chatId !== chatId) {
-          window.currentLessonContext = null;
-        }
+        // Always clear lesson context before renderChatLayoutForChat.
+        // If context was kept, renderChatLayoutForChat would create a lesson side panel
+        // AND ensurePinnedLessonContentForChat would also add a pinned block, showing
+        // the lesson content twice. restoreLessonContextForChat() below will rebuild it.
+        window.currentLessonContext = null;
         window.currentLessonQAId = null;
 
         // Rebuild chat UI and render messages for this chat (messages from DB)
@@ -5839,11 +5840,11 @@
         ensurePinnedLessonContentForChat(chatId);
 
         // Show chat input area
+        // NOTE: Do NOT override chatArea.style.display here — renderChatLayoutForChat()
+        // already sets it to 'flex' for the correct two-column lesson+chat layout.
+        // Setting it to 'block' breaks the flex layout and causes UI overlap.
         const chatInputArea = document.getElementById('chatInputArea');
-        const chatArea = document.getElementById('chatArea');
-
         if (chatInputArea) chatInputArea.style.display = 'block';
-        if (chatArea) chatArea.style.display = 'block';
 
         // Deactivate lessons tab to show chat is active
         const lessonsTabBtn = document.getElementById('lessonsTabBtn');
