@@ -328,7 +328,8 @@ class LessonModel:
         teacher_id: int,
         page: int = 1,
         per_page: int = 10,
-        search_term: str = None
+        search_term: str = None,
+        latest_only: bool = True,
     ) -> Dict[str, Any]:
         """Get teacher lessons with DB-level pagination."""
         try:
@@ -337,6 +338,11 @@ class LessonModel:
             per_page = max(1, min(100, int(per_page or 10)))
 
             query = db.query(DBLesson).filter(DBLesson.teacher_id == teacher_id)
+
+            if latest_only:
+                # Exclude older versions: has_child_version=True means a newer version exists.
+                # This ensures each logical lesson appears only once (its latest version).
+                query = query.filter(DBLesson.has_child_version == False)  # noqa: E712
 
             if search_term:
                 term = f"%{search_term.strip()}%"

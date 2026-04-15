@@ -2971,7 +2971,7 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
         return response_content, response
     if short_mode_active or token_pressure_active:
         return response_content, response
-    if os.getenv("RAG_LECTURE_FAILSAFE_ENABLED", "true").lower() not in ("true", "1", "yes"):
+    if os.getenv("RAG_LECTURE_FAILSAFE_ENABLED", "false").lower() not in ("true", "1", "yes"):
         return response_content, response
     if _LOAD_TEST_MODE and os.getenv("RAG_LECTURE_FAILSAFE_IN_LOAD_TEST", "false").lower() not in (
         "true",

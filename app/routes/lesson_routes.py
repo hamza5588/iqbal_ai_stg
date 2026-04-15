@@ -533,11 +533,15 @@ def get_my_lessons():
         page = request.args.get('page', default=1, type=int)
         per_page = request.args.get('per_page', default=10, type=int)
         search_term = (request.args.get('q') or '').strip() or None
+        # latest_only=true (default) hides older versions so only the latest version
+        # of each logical lesson is returned — avoids duplicate rows in the UI table.
+        latest_only = request.args.get('latest_only', 'true').lower() != 'false'
         result = LessonModel.get_lessons_by_teacher_paginated(
             teacher_id=session['user_id'],
             page=page,
             per_page=per_page,
             search_term=search_term,
+            latest_only=latest_only,
         )
         return jsonify({
             'success': True,
@@ -661,9 +665,13 @@ def view_lesson(lesson_id):
             logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
             return jsonify({'error': 'Access denied'}), 403
         
-        # Get lesson versions
-        versions = LessonModel.get_lesson_versions(lesson_id)
-        
+        # get_lesson_versions queries by (id == root_id OR parent_lesson_id == root_id).
+        # All child versions store parent_lesson_id pointing to the ROOT lesson, so we
+        # must resolve to the root before querying — otherwise only the clicked version
+        # is returned (its own row) with no history.
+        root_lesson_id = lesson.get('parent_lesson_id') or lesson_id
+        versions = LessonModel.get_lesson_versions(root_lesson_id)
+
         return jsonify({
             'success': True,
             'lesson': lesson,
