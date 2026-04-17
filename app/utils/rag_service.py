@@ -3656,31 +3656,22 @@ def _chat_handle_lesson_state_and_persistence(
                 last_user_msg = msg.content.lower() if hasattr(msg, "content") else str(msg).lower()
                 break
         if last_user_msg:
-            finalization_keywords = [
-                "finalize",
-                "finalise",
-                "finalize the lesson",
-                "finalise the lesson",
-                "final",
-                "this is final",
-                "this is the final",
-                "lesson final",
-                "lesson finalized",
-                "i am satisfied",
-                "i'm satisfied",
-                "i am done",
-                "i'm done",
-                "complete the lesson",
-                "finish the lesson",
-                "save the lesson",
-                "this lesson is complete",
-                "lesson is ready",
-                "ready to save",
-                "finalize this lesson",
-                "finalise this lesson",
-                "make this final",
+            # Keep lesson-finalization intent strict to avoid false positives like
+            # "finally in gas" matching a loose "final" substring.
+            finalization_patterns = [
+                r"\bfinali[sz]e\b",
+                r"\bfinali[sz]e\s+(?:this|the)\s+(?:lesson|lecture|presentation)\b",
+                r"\b(?:complete|finish|save)\s+(?:this|the)\s+(?:lesson|lecture|presentation)\b",
+                r"\b(?:lesson|lecture|presentation)\s+(?:is\s+)?(?:ready|complete|completed|finali[sz]ed)\b",
+                r"\bthis\s+(?:lesson|lecture|presentation)\s+is\s+(?:ready|complete|completed|finali[sz]ed)\b",
+                r"\bready\s+to\s+save\s+(?:this|the)\s+(?:lesson|lecture|presentation)\b",
+                r"\bmake\s+(?:this|the)\s+(?:lesson|lecture|presentation)\s+final\b",
+                r"\bthis\s+is\s+the\s+final\s+(?:lesson|lecture|presentation)\b",
             ]
-            user_wants_to_finalize = any(keyword in last_user_msg for keyword in finalization_keywords)
+            user_wants_to_finalize = any(
+                re.search(pattern, last_user_msg, flags=re.IGNORECASE)
+                for pattern in finalization_patterns
+            )
 
     if thread_id_str and response_content and user_wants_to_finalize:
         finalized_source_content = response_content
