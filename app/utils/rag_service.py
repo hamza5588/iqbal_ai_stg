@@ -427,6 +427,39 @@ def _sanitize_user_facing_response(text: Any) -> str:
         out,
         flags=re.IGNORECASE,
     ).strip()
+    out = _normalize_math_markdown_for_rendering(out)
+    return out
+
+
+def _normalize_math_markdown_for_rendering(text: str) -> str:
+    """
+    Keep math markup stable for markdown renderers across long follow-up turns.
+    - Canonicalize display math to single-line `$$ ... $$`.
+    - If model leaves an unmatched display delimiter, close it to avoid broken render.
+    """
+    if not text or "$" not in text:
+        return text
+
+    out = text
+
+    def _collapse_display_block(match: re.Match) -> str:
+        inner = match.group(1) or ""
+        # Normalize whitespace inside display math while preserving symbols.
+        inner = re.sub(r"\s+", " ", inner).strip()
+        return f"$$ {inner} $$"
+
+    # Convert multiline display blocks into a stable one-line format.
+    out = re.sub(
+        r"\$\$\s*([\s\S]*?)\s*\$\$",
+        _collapse_display_block,
+        out,
+        flags=re.MULTILINE,
+    )
+
+    # If an odd number of display delimiters exists, close the trailing one.
+    if out.count("$$") % 2 == 1:
+        out = out.rstrip() + "\n$$"
+
     return out
 
 
@@ -3087,7 +3120,8 @@ RAG_REPLY_FORMATTING_INSTRUCTIONS = (
     "Formatting: Use Markdown structure where it helps readability — headings (e.g. ## Section, ### Subsection), "
     "bullet lists (- item) for enumerations, and **bold** sparingly for emphasis. "
     "For mathematics, use $...$ for inline math. For display equations, put the full formula on a single line "
-    "between $$ and $$ (do not put $$ alone on its own line with the equation in separate paragraphs)."
+    "between $$ and $$ (do not put $$ alone on its own line with the equation in separate paragraphs). "
+    "When the user asks for more detail or expansion, preserve existing equation delimiters and math formatting style."
 )
 
 DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
