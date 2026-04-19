@@ -307,6 +307,24 @@ def create_app():
     # Canonical HTTPS enforcement
     # ------------------------------------------------------------------
     @app.before_request
+    def _llm_telemetry_request_context():
+        try:
+            from app.utils.llm_gateway import init_flask_request_llm_telemetry
+
+            init_flask_request_llm_telemetry()
+        except Exception:
+            pass
+
+    @app.teardown_request
+    def _llm_telemetry_request_teardown(exc):
+        try:
+            from app.utils.llm_gateway import teardown_flask_request_llm_telemetry
+
+            teardown_flask_request_llm_telemetry(exc)
+        except Exception:
+            pass
+
+    @app.before_request
     def _enforce_https_in_proxy_setups():
         """
         Enforce HTTPS for staging/production when requests accidentally arrive

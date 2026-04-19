@@ -2218,6 +2218,17 @@ def extract_and_store_headings_for_thread(
     if user_id is None:
         raise ValueError(f"Could not determine user_id for thread_id={thread_id_str}")
 
+    try:
+        from app.utils.llm_gateway import update_llm_telemetry_context
+
+        update_llm_telemetry_context(
+            workflow="rag_heading_extraction",
+            thread_id=thread_id_str,
+            user_id=user_id,
+        )
+    except Exception:
+        pass
+
     from app.utils.rag_vectorstore import query_all_chunks
 
     deadline = time.time() + max_wait_seconds

@@ -10,15 +10,17 @@ from app.models import UserModel
 from app.models.models import LessonModel
 from app.utils.db import get_db
 from app.models.database_models import (
-    User as DBUser, 
-    UserDocument, 
-    Coupon, 
+    User as DBUser,
+    UserDocument,
+    Coupon,
     CouponRedemption,
     Lesson as DBLesson,
     UserPrompt,
     RAGPrompt,
     SystemSettings,
-    UserSettings
+    UserSettings,
+    LLMUsageEvent,
+    LLMModelPricing,
 )
 from app.utils.rag_service import (
     DEFAULT_RAG_CHAT_SYSTEM_BODY_NO_PDF,
@@ -26,8 +28,9 @@ from app.utils.rag_service import (
     RAG_SYSTEM_SETTING_KEY_NO_PDF,
     RAG_SYSTEM_SETTING_KEY_WITH_PDF,
 )
-from sqlalchemy import or_, func, desc
-from datetime import datetime
+from sqlalchemy import or_, func, desc, cast, Date
+from datetime import datetime, timedelta
+from decimal import Decimal
 import logging
 import os
 
@@ -1182,4 +1185,316 @@ def set_user_model():
 def load_testing_dashboard():
     """Load testing dashboard"""
     return render_template('admin/load_testing.html')
+
+
+# ==================== LLM TELEMETRY ====================
+
+
+@bp.route('/llm-telemetry', methods=['GET'])
+@login_required
+@admin_only
+def llm_telemetry_page():
+    """LLM usage, cost, and latency analytics."""
+    return render_template('admin/llm_telemetry.html')
+
+
+@bp.route('/llm-telemetry/api/summary', methods=['GET'])
+@login_required
+@admin_only
+def llm_telemetry_api_summary():
+    """Aggregated metrics for charts and cards."""
+    try:
+        db = get_db()
+        days = max(1, min(90, int(request.args.get('days', 7))))
+        traffic = (request.args.get('traffic_source') or 'production').strip().lower()
+        workflow_filter = (request.args.get('workflow') or '').strip() or None
+        provider_filter = (request.args.get('provider') or '').strip() or None
+
+        since = datetime.utcnow() - timedelta(days=days)
+        q = db.query(LLMUsageEvent).filter(LLMUsageEvent.created_at >= since)
+        if traffic == 'production':
+            q = q.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            q = q.filter(LLMUsageEvent.traffic_source == 'load_test')
+        if workflow_filter:
+            q = q.filter(LLMUsageEvent.workflow == workflow_filter)
+        if provider_filter:
+            q = q.filter(LLMUsageEvent.provider == provider_filter)
+
+        total_requests = q.count()
+        err_q = q.filter(LLMUsageEvent.success.is_(False))
+        error_count = err_q.count()
+
+        sum_cost = db.query(func.coalesce(func.sum(LLMUsageEvent.cost_usd), 0)).filter(
+            LLMUsageEvent.created_at >= since,
+        )
+        sum_tokens = db.query(func.coalesce(func.sum(LLMUsageEvent.total_tokens), 0)).filter(
+            LLMUsageEvent.created_at >= since,
+        )
+        if traffic == 'production':
+            sum_cost = sum_cost.filter(LLMUsageEvent.traffic_source == 'production')
+            sum_tokens = sum_tokens.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            sum_cost = sum_cost.filter(LLMUsageEvent.traffic_source == 'load_test')
+            sum_tokens = sum_tokens.filter(LLMUsageEvent.traffic_source == 'load_test')
+        if workflow_filter:
+            sum_cost = sum_cost.filter(LLMUsageEvent.workflow == workflow_filter)
+            sum_tokens = sum_tokens.filter(LLMUsageEvent.workflow == workflow_filter)
+        if provider_filter:
+            sum_cost = sum_cost.filter(LLMUsageEvent.provider == provider_filter)
+            sum_tokens = sum_tokens.filter(LLMUsageEvent.provider == provider_filter)
+
+        total_cost = float(sum_cost.scalar() or 0)
+        total_token_sum = int(sum_tokens.scalar() or 0)
+
+        by_workflow = (
+            db.query(
+                LLMUsageEvent.workflow,
+                func.count(LLMUsageEvent.id),
+                func.coalesce(func.sum(LLMUsageEvent.cost_usd), 0),
+            )
+            .filter(LLMUsageEvent.created_at >= since)
+        )
+        if traffic == 'production':
+            by_workflow = by_workflow.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            by_workflow = by_workflow.filter(LLMUsageEvent.traffic_source == 'load_test')
+        if workflow_filter:
+            by_workflow = by_workflow.filter(LLMUsageEvent.workflow == workflow_filter)
+        if provider_filter:
+            by_workflow = by_workflow.filter(LLMUsageEvent.provider == provider_filter)
+        by_workflow = (
+            by_workflow.group_by(LLMUsageEvent.workflow)
+            .order_by(desc(func.count(LLMUsageEvent.id)))
+            .all()
+        )
+
+        by_provider_model = (
+            db.query(
+                LLMUsageEvent.provider,
+                LLMUsageEvent.model,
+                func.count(LLMUsageEvent.id),
+                func.coalesce(func.sum(LLMUsageEvent.cost_usd), 0),
+            )
+            .filter(LLMUsageEvent.created_at >= since)
+        )
+        if traffic == 'production':
+            by_provider_model = by_provider_model.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            by_provider_model = by_provider_model.filter(LLMUsageEvent.traffic_source == 'load_test')
+        if workflow_filter:
+            by_provider_model = by_provider_model.filter(LLMUsageEvent.workflow == workflow_filter)
+        if provider_filter:
+            by_provider_model = by_provider_model.filter(LLMUsageEvent.provider == provider_filter)
+        by_provider_model = (
+            by_provider_model.group_by(LLMUsageEvent.provider, LLMUsageEvent.model)
+            .order_by(desc(func.count(LLMUsageEvent.id)))
+            .limit(50)
+            .all()
+        )
+
+        by_day = (
+            db.query(
+                cast(LLMUsageEvent.created_at, Date),
+                func.count(LLMUsageEvent.id),
+                func.coalesce(func.sum(LLMUsageEvent.cost_usd), 0),
+            )
+            .filter(LLMUsageEvent.created_at >= since)
+        )
+        if traffic == 'production':
+            by_day = by_day.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            by_day = by_day.filter(LLMUsageEvent.traffic_source == 'load_test')
+        if workflow_filter:
+            by_day = by_day.filter(LLMUsageEvent.workflow == workflow_filter)
+        if provider_filter:
+            by_day = by_day.filter(LLMUsageEvent.provider == provider_filter)
+        by_day = by_day.group_by(cast(LLMUsageEvent.created_at, Date)).order_by(cast(LLMUsageEvent.created_at, Date)).all()
+
+        top_users = (
+            db.query(
+                LLMUsageEvent.user_id,
+                func.count(LLMUsageEvent.id).label('n'),
+                func.coalesce(func.sum(LLMUsageEvent.cost_usd), 0).label('c'),
+            )
+            .filter(LLMUsageEvent.created_at >= since)
+            .filter(LLMUsageEvent.user_id.isnot(None))
+        )
+        if traffic == 'production':
+            top_users = top_users.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            top_users = top_users.filter(LLMUsageEvent.traffic_source == 'load_test')
+        if workflow_filter:
+            top_users = top_users.filter(LLMUsageEvent.workflow == workflow_filter)
+        if provider_filter:
+            top_users = top_users.filter(LLMUsageEvent.provider == provider_filter)
+        top_users = top_users.group_by(LLMUsageEvent.user_id).order_by(desc('n')).limit(15).all()
+
+        latency_avg = db.query(func.avg(LLMUsageEvent.duration_ms)).filter(
+            LLMUsageEvent.created_at >= since,
+            LLMUsageEvent.success.is_(True),
+        )
+        if traffic == 'production':
+            latency_avg = latency_avg.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            latency_avg = latency_avg.filter(LLMUsageEvent.traffic_source == 'load_test')
+        if workflow_filter:
+            latency_avg = latency_avg.filter(LLMUsageEvent.workflow == workflow_filter)
+        if provider_filter:
+            latency_avg = latency_avg.filter(LLMUsageEvent.provider == provider_filter)
+        avg_ms = float(latency_avg.scalar() or 0)
+
+        return jsonify({
+            'success': True,
+            'period_days': days,
+            'traffic_source': traffic,
+            'totals': {
+                'requests': total_requests,
+                'errors': error_count,
+                'total_cost_usd': total_cost,
+                'total_tokens': total_token_sum,
+                'avg_latency_ms_success': avg_ms,
+            },
+            'by_workflow': [
+                {'workflow': w, 'requests': int(n), 'cost_usd': float(c or 0)}
+                for w, n, c in by_workflow
+            ],
+            'by_provider_model': [
+                {'provider': p, 'model': m, 'requests': int(n), 'cost_usd': float(c or 0)}
+                for p, m, n, c in by_provider_model
+            ],
+            'by_day': [
+                {'day': str(d), 'requests': int(n), 'cost_usd': float(c or 0)}
+                for d, n, c in by_day
+            ],
+            'top_users': [
+                {'user_id': uid, 'requests': int(n), 'cost_usd': float(c or 0)}
+                for uid, n, c in top_users
+            ],
+        })
+    except Exception as e:
+        logger.error(f"llm_telemetry_api_summary: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/llm-telemetry/api/pricing', methods=['GET', 'POST'])
+@login_required
+@admin_only
+def llm_telemetry_api_pricing():
+    """List or upsert per-model pricing (USD per 1M tokens)."""
+    db = get_db()
+    if request.method == 'GET':
+        try:
+            rows = db.query(LLMModelPricing).order_by(LLMModelPricing.provider, LLMModelPricing.model).all()
+            return jsonify({
+                'success': True,
+                'pricing': [
+                    {
+                        'id': r.id,
+                        'provider': r.provider,
+                        'model': r.model,
+                        'input_usd_per_million': float(r.input_usd_per_million or 0),
+                        'output_usd_per_million': float(r.output_usd_per_million or 0),
+                        'updated_at': r.updated_at.isoformat() if r.updated_at else None,
+                    }
+                    for r in rows
+                ],
+            })
+        except Exception as e:
+            logger.error(f"llm pricing get: {e}", exc_info=True)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    data = request.get_json() or {}
+    provider = (data.get('provider') or '').strip().lower()
+    model = (data.get('model') or '').strip()
+    try:
+        inp = Decimal(str(data.get('input_usd_per_million', 0)))
+        out = Decimal(str(data.get('output_usd_per_million', 0)))
+    except Exception:
+        return jsonify({'success': False, 'error': 'Invalid numeric pricing'}), 400
+    if not provider or not model:
+        return jsonify({'success': False, 'error': 'provider and model are required'}), 400
+    try:
+        row = (
+            db.query(LLMModelPricing)
+            .filter(LLMModelPricing.provider == provider, LLMModelPricing.model == model)
+            .first()
+        )
+        if row:
+            row.input_usd_per_million = inp
+            row.output_usd_per_million = out
+            row.updated_at = datetime.utcnow()
+        else:
+            row = LLMModelPricing(
+                provider=provider,
+                model=model,
+                input_usd_per_million=inp,
+                output_usd_per_million=out,
+            )
+            db.add(row)
+        db.commit()
+        return jsonify({'success': True, 'id': row.id})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"llm pricing post: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/llm-telemetry/api/export.csv', methods=['GET'])
+@login_required
+@admin_only
+def llm_telemetry_export_csv():
+    """Export raw events for the selected window (cap rows)."""
+    import csv
+    from io import StringIO
+
+    try:
+        db = get_db()
+        days = max(1, min(90, int(request.args.get('days', 7))))
+        traffic = (request.args.get('traffic_source') or 'production').strip().lower()
+        since = datetime.utcnow() - timedelta(days=days)
+        q = db.query(LLMUsageEvent).filter(LLMUsageEvent.created_at >= since).order_by(LLMUsageEvent.created_at.desc())
+        if traffic == 'production':
+            q = q.filter(LLMUsageEvent.traffic_source == 'production')
+        elif traffic == 'load_test':
+            q = q.filter(LLMUsageEvent.traffic_source == 'load_test')
+        rows = q.limit(50000).all()
+
+        buf = StringIO()
+        w = csv.writer(buf)
+        w.writerow([
+            'created_at', 'user_id', 'user_role', 'traffic_source', 'workflow', 'provider', 'model',
+            'input_tokens', 'output_tokens', 'total_tokens', 'cost_usd', 'duration_ms', 'success',
+            'error_class', 'conversation_id', 'thread_id', 'celery_task_name',
+        ])
+        for r in rows:
+            w.writerow([
+                r.created_at.isoformat() if r.created_at else '',
+                r.user_id or '',
+                r.user_role or '',
+                r.traffic_source or '',
+                r.workflow or '',
+                r.provider or '',
+                r.model or '',
+                r.input_tokens if r.input_tokens is not None else '',
+                r.output_tokens if r.output_tokens is not None else '',
+                r.total_tokens if r.total_tokens is not None else '',
+                float(r.cost_usd) if r.cost_usd is not None else '',
+                r.duration_ms,
+                r.success,
+                r.error_class or '',
+                r.conversation_id or '',
+                r.thread_id or '',
+                r.celery_task_name or '',
+            ])
+        from flask import Response
+
+        return Response(
+            buf.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=llm_usage_events.csv'},
+        )
+    except Exception as e:
+        logger.error(f"llm export: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 

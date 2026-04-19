@@ -6,6 +6,11 @@ import logging
 import os
 from app.celery_app import celery
 from app.utils.rag_service import ingest_pdf, extract_and_store_headings_for_thread
+from app.utils.llm_gateway import (
+    LlmTelemetryContext,
+    reset_llm_telemetry_context,
+    set_llm_telemetry_context,
+)
 from app.models.database_models import RAGThread, RAGChunk, RAGHeading
 from datetime import datetime
 
@@ -190,10 +195,28 @@ def extract_headings_task(self, thread_id: str, user_id: int):
                     'message': 'Starting heading extraction...'
                 },
             )
-            result = extract_and_store_headings_for_thread(
-                thread_id=thread_id,
-                user_id=user_id,
+            _ts = (
+                "load_test"
+                if os.getenv("LOAD_TEST_MODE", "false").lower() in ("true", "1", "yes")
+                else "production"
             )
+            _tok = set_llm_telemetry_context(
+                LlmTelemetryContext(
+                    user_id=user_id,
+                    user_role=None,
+                    workflow="rag_heading_extraction",
+                    traffic_source=_ts,
+                    thread_id=thread_id,
+                    celery_task_name="extract_headings_task",
+                )
+            )
+            try:
+                result = extract_and_store_headings_for_thread(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                )
+            finally:
+                reset_llm_telemetry_context(_tok)
             headings_count = result.get('topics_count', 0)
             self.update_state(
                 state='SUCCESS',
