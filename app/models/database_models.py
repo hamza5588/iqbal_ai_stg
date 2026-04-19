@@ -1,7 +1,7 @@
 """SQLAlchemy database models for the application"""
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, DateTime, Date, ForeignKey, 
-    CheckConstraint, UniqueConstraint, Index, func
+    Column, Integer, String, Text, Boolean, DateTime, Date, ForeignKey,
+    CheckConstraint, UniqueConstraint, Index, func, Numeric,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -39,7 +39,8 @@ class User(Base):
     token_usage = relationship("UserTokenUsage", back_populates="user", cascade="all, delete-orphan")
     token_reset_history = relationship("TokenResetHistory", back_populates="user", cascade="all, delete-orphan")
     rag_threads = relationship("RAGThread", back_populates="user", cascade="all, delete-orphan")
-    
+    llm_usage_events = relationship("LLMUsageEvent", back_populates="user")
+
     __table_args__ = (
         CheckConstraint("role IN ('student', 'teacher', 'admin')", name='check_user_role'),
         CheckConstraint("subscription_tier IN ('free', 'pro', 'pro_plus')", name='check_subscription_tier'),
@@ -479,5 +480,62 @@ class UserSettings(Base):
     
     __table_args__ = (
         Index('idx_user_settings_user_id', 'user_id'),
+    )
+
+
+class LLMModelPricing(Base):
+    """Per (provider, model) pricing for LLM cost estimation (USD per 1M tokens)."""
+    __tablename__ = 'llm_model_pricing'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    provider = Column(String(64), nullable=False, index=True)
+    model = Column(String(255), nullable=False, index=True)
+    input_usd_per_million = Column(Numeric(20, 10), nullable=False, default=0)
+    output_usd_per_million = Column(Numeric(20, 10), nullable=False, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+                        server_default=func.now(), server_onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('provider', 'model', name='uq_llm_pricing_provider_model'),
+        Index('idx_llm_pricing_provider_model', 'provider', 'model'),
+    )
+
+
+class LLMUsageEvent(Base):
+    """Per-request LLM telemetry for cost and usage analytics."""
+    __tablename__ = 'llm_usage_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True, server_default=func.now())
+
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    user_role = Column(String(50), nullable=True)
+    traffic_source = Column(String(32), nullable=False, default='production', server_default='production', index=True)
+    workflow = Column(String(64), nullable=False, default='unknown', server_default='unknown', index=True)
+
+    provider = Column(String(64), nullable=False, index=True)
+    model = Column(String(255), nullable=False, index=True)
+
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    total_tokens = Column(Integer, nullable=True)
+    cost_usd = Column(Numeric(24, 12), nullable=True)
+
+    duration_ms = Column(Integer, nullable=False, default=0, server_default='0')
+    success = Column(Boolean, nullable=False, default=True, server_default='1')
+    error_class = Column(String(255), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    conversation_id = Column(Integer, nullable=True, index=True)
+    thread_id = Column(String(255), nullable=True, index=True)
+    celery_task_name = Column(String(255), nullable=True, index=True)
+
+    user = relationship("User", back_populates="llm_usage_events")
+
+    __table_args__ = (
+        Index('idx_llm_usage_created_at', 'created_at'),
+        Index('idx_llm_usage_workflow_created', 'workflow', 'created_at'),
+        Index('idx_llm_usage_user_created', 'user_id', 'created_at'),
+        Index('idx_llm_usage_traffic_created', 'traffic_source', 'created_at'),
     )
 

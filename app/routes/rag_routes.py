@@ -810,7 +810,30 @@ def _start_heading_extraction_background(thread_id: str, user_id: int, app=None)
     def run():
         with app.app_context():
             try:
-                extract_and_store_headings_for_thread(thread_id=thread_id, user_id=user_id)
+                from app.utils.llm_gateway import (
+                    LlmTelemetryContext,
+                    reset_llm_telemetry_context,
+                    set_llm_telemetry_context,
+                )
+
+                _ts = (
+                    "load_test"
+                    if os.getenv("LOAD_TEST_MODE", "false").lower() in ("true", "1", "yes")
+                    else "production"
+                )
+                _tok = set_llm_telemetry_context(
+                    LlmTelemetryContext(
+                        user_id=user_id,
+                        workflow="rag_heading_extraction",
+                        traffic_source=_ts,
+                        thread_id=thread_id,
+                        celery_task_name="heading_extraction_background",
+                    )
+                )
+                try:
+                    extract_and_store_headings_for_thread(thread_id=thread_id, user_id=user_id)
+                finally:
+                    reset_llm_telemetry_context(_tok)
             except Exception as e:
                 logger.error(
                     "Error in background heading extraction for thread %s: %s",
@@ -992,6 +1015,18 @@ def chat():
                     'code': 'NO_DOCUMENT',
                     'thread_id': thread_id
                 }), 400
+
+        try:
+            from app.utils.llm_gateway import update_llm_telemetry_context
+
+            update_llm_telemetry_context(
+                workflow="rag_chat",
+                thread_id=thread_id,
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+        except Exception:
+            pass
 
         allowed, retry_after = _check_and_record_user_chat_rate(user_id)
         if not allowed:

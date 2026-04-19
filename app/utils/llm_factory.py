@@ -13,6 +13,7 @@ from app.utils.llm_models import (
     get_model_ids_for_provider
 )
 from app.utils.encryption import decrypt_api_key
+from app.utils.llm_gateway import wrap_llm_with_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -380,6 +381,6 @@ def create_llm(
             f"Invalid LLM_PROVIDER: '{provider}'. Must be 'openai', 'groq', or 'vllm'. "
             f"Current value: {provider or Config.LLM_PROVIDER}"
         )
-    
-    return llm
+
+    return wrap_llm_with_telemetry(llm, provider=provider, model_name=str(model))
 

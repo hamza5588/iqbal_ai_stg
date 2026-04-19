@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Telemetry - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
+            <div class="flex items-center gap-4">
+                <a href="/admin/" class="text-[#05B0FC] hover:underline"><i class="fas fa-arrow-left mr-2"></i>Admin</a>
+                <h1 class="text-xl font-bold text-gray-800">LLM Telemetry</h1>
+            </div>
+            <a href="/auth/logout" class="text-red-500 hover:underline text-sm">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-6">
+        <div class="flex flex-wrap gap-4 mb-6 items-end">
+            <div>
+                <label class="block text-sm text-gray-600 mb-1">Period (days)</label>
+                <select id="days" class="border rounded-lg px-3 py-2">
+                    <option value="7" selected>7</option>
+                    <option value="14">14</option>
+                    <option value="30">30</option>
+                    <option value="90">90</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-600 mb-1">Traffic</label>
+                <select id="traffic" class="border rounded-lg px-3 py-2">
+                    <option value="production" selected>Production</option>
+                    <option value="load_test">Load test</option>
+                    <option value="all">All</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-600 mb-1">Workflow (optional)</label>
+                <input id="workflow" type="text" placeholder="e.g. rag_chat" class="border rounded-lg px-3 py-2 w-48" />
+            </div>
+            <button id="refresh" class="bg-[#05B0FC] text-white px-4 py-2 rounded-lg hover:bg-blue-600">Refresh</button>
+            <a id="exportCsv" href="#" class="text-[#05B0FC] hover:underline py-2">Export CSV</a>
+        </div>
+
+        <div id="err" class="hidden mb-4 p-4 bg-red-50 text-red-700 rounded-lg"></div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-xl shadow p-4 border-l-4 border-blue-500">
+                <p class="text-sm text-gray-500">Requests</p>
+                <p class="text-2xl font-bold" id="t-req">—</p>
+            </div>
+            <div class="bg-white rounded-xl shadow p-4 border-l-4 border-amber-500">
+                <p class="text-sm text-gray-500">Est. cost (USD)</p>
+                <p class="text-2xl font-bold" id="t-cost">—</p>
+            </div>
+            <div class="bg-white rounded-xl shadow p-4 border-l-4 border-green-500">
+                <p class="text-sm text-gray-500">Total tokens</p>
+                <p class="text-2xl font-bold" id="t-tok">—</p>
+            </div>
+            <div class="bg-white rounded-xl shadow p-4 border-l-4 border-purple-500">
+                <p class="text-sm text-gray-500">Avg latency (ms, success)</p>
+                <p class="text-2xl font-bold" id="t-lat">—</p>
+                <p class="text-xs text-gray-400 mt-1">Errors: <span id="t-err">—</span></p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow p-4">
+                <h2 class="font-semibold mb-4">Cost per day</h2>
+                <canvas id="chartDay" height="200"></canvas>
+            </div>
+            <div class="bg-white rounded-xl shadow p-4">
+                <h2 class="font-semibold mb-4">Requests by workflow</h2>
+                <canvas id="chartWf" height="200"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow overflow-hidden mb-8">
+            <h2 class="font-semibold p-4 border-b">By provider / model</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="text-left p-3">Provider</th>
+                            <th class="text-left p-3">Model</th>
+                            <th class="text-right p-3">Requests</th>
+                            <th class="text-right p-3">Cost USD</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbl-pm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow overflow-hidden mb-8">
+            <h2 class="font-semibold p-4 border-b">Top users (by request count)</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="text-left p-3">User ID</th>
+                            <th class="text-right p-3">Requests</th>
+                            <th class="text-right p-3">Cost USD</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbl-u"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow p-4">
+            <h2 class="font-semibold mb-2">Pricing overrides (USD per 1M tokens)</h2>
+            <p class="text-sm text-gray-500 mb-4">Used when estimating cost. Defaults apply if not set.</p>
+            <div class="flex flex-wrap gap-2 mb-2">
+                <input id="p-prov" placeholder="provider (groq)" class="border rounded px-2 py-1 w-32" />
+                <input id="p-model" placeholder="model id" class="border rounded px-2 py-1 flex-1 min-w-[200px]" />
+                <input id="p-in" type="number" step="0.0001" placeholder="input $/1M" class="border rounded px-2 py-1 w-28" />
+                <input id="p-out" type="number" step="0.0001" placeholder="output $/1M" class="border rounded px-2 py-1 w-28" />
+                <button type="button" id="p-save" class="bg-gray-800 text-white px-3 py-1 rounded">Save</button>
+            </div>
+            <ul id="p-list" class="text-sm text-gray-700 list-disc pl-5"></ul>
+        </div>
+    </main>
+
+    <script>
+        let chartDay, chartWf;
+        function qs() {
+            const days = document.getElementById('days').value;
+            const traffic = document.getElementById('traffic').value;
+            const workflow = document.getElementById('workflow').value.trim();
+            let q = 'days=' + encodeURIComponent(days) + '&traffic_source=' + encodeURIComponent(traffic);
+            if (workflow) q += '&workflow=' + encodeURIComponent(workflow);
+            return q;
+        }
+        async function load() {
+            document.getElementById('err').classList.add('hidden');
+            try {
+                const r = await fetch('/admin/llm-telemetry/api/summary?' + qs(), { credentials: 'same-origin' });
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || 'Failed');
+                const t = d.totals;
+                document.getElementById('t-req').textContent = t.requests;
+                document.getElementById('t-cost').textContent = (t.total_cost_usd || 0).toFixed(4);
+                document.getElementById('t-tok').textContent = t.total_tokens ?? '—';
+                document.getElementById('t-lat').textContent = (t.avg_latency_ms_success || 0).toFixed(0);
+                document.getElementById('t-err').textContent = t.errors;
+
+                const days = d.by_day.map(x => x.day);
+                const costs = d.by_day.map(x => x.cost_usd);
+                const ctxD = document.getElementById('chartDay');
+                if (chartDay) chartDay.destroy();
+                chartDay = new Chart(ctxD, {
+                    type: 'line',
+                    data: { labels: days, datasets: [{ label: 'Cost USD', data: costs, borderColor: '#05B0FC', tension: 0.2 }] },
+                    options: { responsive: true, plugins: { legend: { display: false } } }
+                });
+
+                const wf = d.by_workflow.map(x => x.workflow);
+                const wfn = d.by_workflow.map(x => x.requests);
+                const ctxW = document.getElementById('chartWf');
+                if (chartWf) chartWf.destroy();
+                chartWf = new Chart(ctxW, {
+                    type: 'bar',
+                    data: { labels: wf, datasets: [{ label: 'Requests', data: wfn, backgroundColor: '#05B0FC' }] },
+                    options: { responsive: true, plugins: { legend: { display: false } } }
+                });
+
+                const pm = document.getElementById('tbl-pm');
+                pm.innerHTML = d.by_provider_model.map(r =>
+                    '<tr class="border-t"><td class="p-3">' + r.provider + '</td><td class="p-3">' + r.model + '</td>' +
+                    '<td class="p-3 text-right">' + r.requests + '</td><td class="p-3 text-right">' + (r.cost_usd || 0).toFixed(4) + '</td></tr>'
+                ).join('');
+
+                const tu = document.getElementById('tbl-u');
+                tu.innerHTML = (d.top_users || []).map(r =>
+                    '<tr class="border-t"><td class="p-3">' + r.user_id + '</td><td class="p-3 text-right">' + r.requests + '</td><td class="p-3 text-right">' + (r.cost_usd || 0).toFixed(4) + '</td></tr>'
+                ).join('');
+
+                document.getElementById('exportCsv').href = '/admin/llm-telemetry/api/export.csv?' + qs();
+            } catch (e) {
+                document.getElementById('err').textContent = e.message;
+                document.getElementById('err').classList.remove('hidden');
+            }
+        }
+        async function loadPricing() {
+            const r = await fetch('/admin/llm-telemetry/api/pricing', { credentials: 'same-origin' });
+            const d = await r.json();
+            const ul = document.getElementById('p-list');
+            if (!d.success || !d.pricing) { ul.innerHTML = ''; return; }
+            ul.innerHTML = d.pricing.map(p =>
+                '<li>' + p.provider + ' / ' + p.model + ' — in ' + p.input_usd_per_million + ' / out ' + p.output_usd_per_million + '</li>'
+            ).join('');
+        }
+        document.getElementById('refresh').addEventListener('click', load);
+        document.getElementById('p-save').addEventListener('click', async () => {
+            const body = {
+                provider: document.getElementById('p-prov').value.trim(),
+                model: document.getElementById('p-model').value.trim(),
+                input_usd_per_million: parseFloat(document.getElementById('p-in').value || '0'),
+                output_usd_per_million: parseFloat(document.getElementById('p-out').value || '0'),
+            };
+            const r = await fetch('/admin/llm-telemetry/api/pricing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(body),
+            });
+            const d = await r.json();
+            if (!d.success) alert(d.error || 'Save failed');
+            else loadPricing();
+        });
+        load();
+        loadPricing();
+    </script>
+</body>
+</html>
