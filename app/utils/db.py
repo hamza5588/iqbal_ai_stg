@@ -8,13 +8,39 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Global engine and session factory
+# Global engine and session factory (per-process)
 _engine = None
+_engine_pid = None
 _session_factory = None
 
 def get_engine():
-    """Get or create SQLAlchemy engine."""
-    global _engine
+    """Get or create SQLAlchemy engine.
+
+    IMPORTANT: the engine is kept per-process so that forking servers
+    (e.g. gunicorn or Celery workers) do not share the same DBAPI
+    connections across processes, which can corrupt PostgreSQL sessions.
+
+    Because each worker process now has its own independent engine and
+    connection pool, DB usage is naturally isolated per worker. This made
+    our earlier experiment of separating Celery ingestion into its own
+    queue/worker (to reduce DB pressure) unnecessary, so that queue split
+    was rolled back.
+    """
+    global _engine, _engine_pid
+
+    current_pid = os.getpid()
+
+    # If this is a new process compared to when the engine was created,
+    # dispose the old engine so a fresh connection pool is created.
+    if _engine is not None and _engine_pid is not None and _engine_pid != current_pid:
+        try:
+            _engine.dispose()
+            logger.info("Disposed SQLAlchemy engine after fork (pid changed)")
+        except Exception as ex:
+            logger.warning(f"Error disposing engine after fork: {ex}")
+        finally:
+            _engine = None
+
     if _engine is None:
         db_url = current_app.config['SQLALCHEMY_DATABASE_URI']
         engine_options = current_app.config.get('SQLALCHEMY_ENGINE_OPTIONS', {}).copy()
@@ -32,10 +58,12 @@ def get_engine():
                     'timeout': 20.0
                 }
         else:
-            # MySQL/PostgreSQL - use QueuePool
+            # MySQL/PostgreSQL - use QueuePool and enable pool_pre_ping
             engine_options.setdefault('poolclass', QueuePool)
+            engine_options.setdefault('pool_pre_ping', True)
         
         _engine = create_engine(db_url, **engine_options)
+        _engine_pid = current_pid
         
         # Add SQLite-specific event listeners
         if db_url.startswith('sqlite'):
@@ -48,7 +76,7 @@ def get_engine():
                 cursor.execute("PRAGMA busy_timeout = 30000")
                 cursor.close()
         
-        logger.info(f"Database engine created for: {db_url.split('@')[-1] if '@' in db_url else db_url}")
+        logger.info(f"Database engine created for: {db_url.split('@')[-1] if '@' in db_url else db_url} (pid={current_pid})")
     
     return _engine
 
@@ -202,6 +230,9 @@ def init_db(app):
         RAGChunk, RAGThread, RAGPrompt, Coupon, CouponRedemption, GlobalPrompt,
         SystemSettings, UserSettings
     )
+    from app.load_testing.models import (
+        TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog
+    )
     from sqlalchemy import inspect
     import time
     
@@ -244,6 +275,22 @@ def init_db(app):
                     logger.info(f"Migrated {len(existing_lessons)} existing lessons")
             except Exception as e:
                 logger.warning(f"Migration warning: {str(e)}")
+                db.rollback()
+            
+            # Migration: Ensure load_test_user_sets has set_prompt column
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if 'load_test_user_sets' in inspector.get_table_names():
+                    columns = [col['name'] for col in inspector.get_columns('load_test_user_sets')]
+                    if 'set_prompt' not in columns:
+                        logger.info("Adding set_prompt column to load_test_user_sets table...")
+                        # Works for SQLite and Postgres/MySQL; TEXT is portable here
+                        db.execute(text("ALTER TABLE load_test_user_sets ADD COLUMN set_prompt TEXT"))
+                        db.commit()
+                        logger.info("set_prompt column added successfully")
+            except Exception as e:
+                logger.warning(f"Load testing migration warning: {str(e)}")
                 db.rollback()
             
             # Migration: Add subscription fields to existing users

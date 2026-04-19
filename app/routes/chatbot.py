@@ -8,6 +8,7 @@ from app.utils.rag_service import (
 )
 from langchain_core.messages import HumanMessage
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
@@ -159,10 +160,25 @@ def chat():
             thread_id = _get_thread_id(user_id, conversation_id)
 
         # Prepare config for LangGraph
+        max_tool_rounds = max(
+            1,
+            int(
+                os.getenv(
+                    "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
+                    os.getenv("RAG_MAX_TOOL_ROUNDS_PER_TURN", "3"),
+                )
+            ),
+        )
+        runtime_recursion_limit = max(
+            16,
+            int(os.getenv("RAG_GRAPH_RECURSION_LIMIT", str((max_tool_rounds * 2) + 8))),
+        )
         config = {
             "configurable": {
                 "thread_id": thread_id
-            }
+            },
+            # LangGraph recursion limit must be supplied at invoke-time config.
+            "recursion_limit": runtime_recursion_limit,
         }
 
         # Create HumanMessage

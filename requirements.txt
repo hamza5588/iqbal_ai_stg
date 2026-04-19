@@ -1,5 +1,6 @@
 # ---- Core numeric (pinned as requested) ----
-numpy
+# Numba (used by openai-whisper) requires NumPy 2.3 or less
+numpy<2.4
 llvmlite
 numba
 mpmath
@@ -65,7 +66,7 @@ billiard
 amqp
 vine
 
-# ---- LangChain (PINNED – REQUIRED) ----
+# ---- LangChain (PINNED   REQUIRED) ----
 langchain==0.3.26
 langchain-core==0.3.66
 langchain-community==0.3.26
@@ -79,6 +80,7 @@ langsmith
 langgraph
 langgraph-checkpoint
 langgraph-checkpoint-sqlite
+langgraph-checkpoint-postgres
 langgraph-prebuilt
 langgraph-sdk
 hf-xet
@@ -197,3 +199,10 @@ opentelemetry-semantic-conventions
 coloredlogs
 gTTS
 openai-whisper
+
+langgraph
+langgraph-checkpoint
+langgraph-checkpoint-sqlite
+langgraph-checkpoint-postgres
+langgraph-prebuilt
+langgraph-sdk

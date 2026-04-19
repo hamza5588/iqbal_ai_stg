@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file
+from flask import Blueprint, request, jsonify, session, render_template, Response, stream_with_context, current_app, send_file, redirect, g
 from app.utils.auth import login_required
+from app.utils.routes import get_default_route_by_role
 from app.utils.rag_service import (
     ingest_pdf,
     chatbot,
@@ -11,34 +12,238 @@ from app.utils.rag_service import (
     delete_thread,
     warmup_rag_embeddings,
     MARKDOWN_EXPORTS_DIR,
+    DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF,
+    RAG_SYSTEM_SETTING_KEY_WITH_PDF,
+    _get_stored_rag_system_template,
+    _substitute_rag_system_placeholders,
 )
 from app.utils.db import get_db
-from app.models.database_models import RAGThread, RAGPrompt, UserDocument
+from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
-from app.tasks.ingest_tasks import ingest_pdf_task
+from app.tasks.ingest_tasks import ingest_pdf_task, extract_headings_task
 from langchain_core.messages import HumanMessage
 import logging
 import threading
 import uuid
 from datetime import datetime
 import os
+import re
 import json
 import time
 import base64
+import tempfile
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
+_CANCELLED_UPLOAD_FILENAME = "__CANCELLED_UPLOAD__"
+
+# Max word count for user-supplied RAG custom prompt (teacher / user UI)
+RAG_USER_PROMPT_MAX_WORDS = int(os.getenv("RAG_USER_PROMPT_MAX_WORDS", "300"))
+
+
+def _count_words(text: str) -> int:
+    if not text or not str(text).strip():
+        return 0
+    return len(re.findall(r"\S+", str(text).strip()))
+
+# Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
+_user_chat_locks = {}
+_locks_lock = threading.Lock()
+_user_chat_rate = {}
+_rate_lock = threading.Lock()
+
+def _get_user_chat_lock(user_id):
+    with _locks_lock:
+        if user_id not in _user_chat_locks:
+            _user_chat_locks[user_id] = threading.Lock()
+        return _user_chat_locks[user_id]
+
+
+def _check_and_record_user_chat_rate(user_id):
+    """
+    Per-user burst throttling. Returns (allowed: bool, retry_after_sec: int).
+    Uses a sliding window with conservative defaults to protect backend stability.
+    """
+    max_requests = int(os.getenv("RAG_USER_RATE_LIMIT_COUNT", "6"))
+    window_seconds = int(os.getenv("RAG_USER_RATE_LIMIT_WINDOW_SECONDS", "10"))
+    now = time.time()
+    with _rate_lock:
+        history = _user_chat_rate.get(user_id, [])
+        cutoff = now - window_seconds
+        history = [ts for ts in history if ts >= cutoff]
+        if len(history) >= max_requests:
+            oldest = history[0]
+            retry_after = max(1, int(window_seconds - (now - oldest)))
+            _user_chat_rate[user_id] = history
+            return False, retry_after
+        history.append(now)
+        _user_chat_rate[user_id] = history
+    return True, 0
+
+
+def _get_ingest_tier(file_size_mb: float) -> dict:
+    """
+    Resolve ingest execution strategy by file size.
+    Large docs get longer task limits and a dedicated queue.
+    """
+    threshold_mb = float(os.getenv("RAG_LARGE_DOC_THRESHOLD_MB", "40"))
+    is_large = float(file_size_mb) > threshold_mb
+    if is_large:
+        return {
+            "name": "large",
+            "queue": os.getenv("RAG_INGEST_LARGE_QUEUE", "ingest_large"),
+            "soft_time_limit": int(os.getenv("RAG_INGEST_LARGE_SOFT_TIME_LIMIT", "5400")),
+            "time_limit": int(os.getenv("RAG_INGEST_LARGE_TIME_LIMIT", "6000")),
+            "stream_join_timeout": int(os.getenv("RAG_INGEST_LARGE_STREAM_TIMEOUT", "1800")),
+        }
+    return {
+        "name": "standard",
+        "queue": os.getenv("RAG_INGEST_STANDARD_QUEUE", "ingest"),
+        "soft_time_limit": int(os.getenv("RAG_INGEST_STANDARD_SOFT_TIME_LIMIT", "2400")),
+        "time_limit": int(os.getenv("RAG_INGEST_STANDARD_TIME_LIMIT", "2700")),
+        "stream_join_timeout": int(os.getenv("RAG_INGEST_STANDARD_STREAM_TIMEOUT", "600")),
+    }
+
+
+def _strip_lesson_finalization_from_response(text):
+    """
+    Remove internal lesson-finalization lines from AI response so they are never
+    shown on the frontend or stored in chat history.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    import re
+    # Remove lines like "Lesson Finalized", "lesson_finalized = true", "lesson_title = \"...\""
+    cleaned = re.sub(r'^\s*Lesson\s+Finalized\s*$', '', text, flags=re.IGNORECASE | re.MULTILINE)
+    cleaned = re.sub(r'^\s*lesson_finalized\s*=\s*(?:true|false)\s*$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'^\s*lesson_title\s*=\s*["\'][^"\']*["\']\s*$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'^\s*last_lesson_text\s*=\s*.*$', '', cleaned, flags=re.MULTILINE)
+    # Collapse multiple blank lines and trim
+    cleaned = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned).strip()
+    return cleaned
+
+
+def _strip_tool_names_from_response(text):
+    """Remove tool names from AI response so they are never shown in chat."""
+    if not text or not isinstance(text, str):
+        return text
+    import re
+    # Tool names used by RAG (do not expose to user)
+    tool_names = [
+        r"rag_tool", r"get_page_tool", r"list_topics_whole_doc_tool",
+        r"count_pdf_words_tool", r"count_words_in_text_tool", r"calculator",
+        r"duckduckgo_search", r"stock_price",
+    ]
+    cleaned = text
+    for name in tool_names:
+        # Remove phrases like "I'll use rag_tool", "Calling get_page_tool", "using rag_tool"
+        cleaned = re.sub(rf"\b(?:using|use|call(?:ing)?|invok(?:e|ing)|via)\s+{name}\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(rf"\b{name}\s*(?:to|for)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _strip_internal_reasoning_from_response(text):
+    """
+    Remove leaked internal planning/rules blocks from model output.
+    This is a defensive filter for prompt-leak style responses.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    import re
+
+    cleaned = text
+    t,h,i,n,k = map(chr, (116,104,105,110,107))
+    think = t+h+i+n+k
+    think_o = chr(60) + think + chr(62)
+    think_c = chr(60) + chr(47) + think + chr(62)
+    red = "redacted_thinking"
+    red_o = chr(60) + red + chr(62)
+    red_c = chr(60) + chr(47) + red + chr(62)
+    pattern = think_o + r"[\s\S]*?" + think_c + "|" + red_o + r"[\s\S]*?" + red_c
+    cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+
+    # Common leaked headings/sections that should never be shown to end users.
+    leak_markers = [
+        "Assistant's Rules Summary for This Conversation",
+        "Document Access Tools",
+        "Word Count Rules",
+        "Page-specific queries:",
+        "General queries:",
+        "I need to figure out how to handle their queries",
+        "Just the final answer based on the tool outputs provided.",
+    ]
+
+    # If a leak marker appears, drop everything from the marker onward.
+    marker_positions = [cleaned.find(marker) for marker in leak_markers if marker in cleaned]
+    if marker_positions:
+        cut_at = min(marker_positions)
+        cleaned = cleaned[:cut_at]
+
+    # Remove obvious preamble labels often produced in leaked meta output.
+    cleaned = re.sub(r"^\s*AI Assistant\s*\n", "", cleaned, flags=re.IGNORECASE)
+
+    # Remove known chain-of-thought style opener when it appears as standalone prose.
+    cleaned = re.sub(
+        r"^\s*Okay,\s*let'?s\s+see\.[\s\S]{0,280}?(?=\n\n|\n[A-Z][^\n]*:|$)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove common meta/reasoning paragraphs if they leak.
+    meta_phrases = [
+        "the user uploaded a pdf called",
+        "i need to figure out how to handle",
+        "if they ask",
+        "for generating lessons",
+        "when finalizing",
+        "if the user's question isn't related to the pdf",
+        "do not mention internal tools or processes",
+        "based on the tool outputs",
+    ]
+    parts = [p.strip() for p in re.split(r"\n\s*\n", cleaned) if p.strip()]
+    if parts:
+        filtered_parts = [
+            p for p in parts
+            if not any(phrase in p.lower() for phrase in meta_phrases)
+        ]
+        if filtered_parts:
+            cleaned = "\n\n".join(filtered_parts)
+
+    cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned).strip()
+
+    # Ensure we do not return an empty message after sanitization.
+    if not cleaned:
+        return "I can help with your uploaded PDF. Please ask your question again and I will answer directly from the document."
+    return cleaned
+
+
+def _get_openai_client():
+    """
+    Lazily create an OpenAI client for Whisper STT.
+    Expects OPENAI_API_KEY in environment.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY environment variable is not set")
+    return OpenAI(api_key=api_key)
 
 
 def _get_thread_id(user_id: int, conversation_id: int = None) -> str:
     """
     Generate a unique thread_id for the RAG service.
-    Creates a new unique thread ID for each upload.
+    Always creates a new unique thread ID for each upload,
+    while still encoding the conversation_id when available.
+    This allows multiple PDFs per conversation.
     """
-    if conversation_id:
-        return f"user_{user_id}_conv_{conversation_id}"
-    # Generate unique thread ID with timestamp and UUID
+    # Generate unique suffix with timestamp and UUID
     unique_id = str(uuid.uuid4())[:8]
     timestamp = int(datetime.utcnow().timestamp())
+    if conversation_id:
+        # Keep conversation_id in the pattern so existing regex-based
+        # logic (e.g. extracting conv_id from thread_id) continues to work,
+        # but allow multiple threads per conversation by adding a unique suffix.
+        return f"user_{user_id}_conv_{conversation_id}_{timestamp}_{unique_id}"
     return f"user_{user_id}_thread_{timestamp}_{unique_id}"
 
 
@@ -49,8 +254,9 @@ def chatbot_page():
     Render the PDF chat interface.
     """
     try:
-        # Redirect to main chat interface instead of separate chatbot page
-        return render_template('chat.html')
+        # Legacy behavior previously rendered `chat.html`. Keep backwards
+        # compatibility but ensure legacy UI is only reachable explicitly.
+        return redirect('/legacy/chat')
     except Exception as e:
         logger.error(f"Error rendering chatbot page: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to render page: {str(e)}'}), 500
@@ -67,6 +273,28 @@ def _validate_thread_id(thread_id: str, user_id: int) -> bool:
     # Thread ID must start with the user's ID
     expected_prefix = f"user_{user_id}_"
     return thread_id.startswith(expected_prefix)
+
+
+def _get_thread_id_for_conversation(user_id: int, conversation_id: int):
+    """
+    Resolve the RAG thread_id for a given conversation (one thread per conversation).
+    Returns the most recent thread whose thread_id matches user_X_conv_Y_*.
+    NOTE: Do not require has_document=True here; under heavy async load,
+    the worker may finish chunk writes before the thread flag update commits.
+    Chat flow already validates/repairs has_document based on chunk presence.
+    """
+    db = get_db()
+    prefix = f"user_{user_id}_conv_{conversation_id}_"
+    row = (
+        db.query(RAGThread.thread_id)
+        .filter(
+            RAGThread.user_id == user_id,
+            RAGThread.thread_id.like(prefix + "%"),
+        )
+        .order_by(RAGThread.created_at.desc())
+        .first()
+    )
+    return row.thread_id if row else None
 
 
 @bp.route('/ingest', methods=['POST'])
@@ -99,14 +327,34 @@ def ingest():
         if not file.filename.lower().endswith('.pdf'):
             return jsonify({'error': 'Only PDF files are supported'}), 400
 
+        # Enforce a hard maximum upload size to avoid extremely large PDFs
+        # causing ingest timeouts under load (e.g. 90MB+ scanned documents).
+        # Default: 100 MB, configurable via MAX_RAG_PDF_MB.
+        import os
+        max_mb = int(os.getenv("MAX_RAG_PDF_MB", "100"))
+        file.seek(0, os.SEEK_END)
+        size_bytes = file.tell()
+        file.seek(0)
+        size_mb = size_bytes / (1024 * 1024)
+        ingest_tier = _get_ingest_tier(size_mb)
+        if size_mb > max_mb:
+            return jsonify({
+                'error': f'PDF is too large for ingestion ({size_mb:.1f} MB). '
+                         f'Maximum allowed size is {max_mb} MB. '
+                         'Please upload a smaller or split document.',
+                'code': 'PDF_TOO_LARGE'
+            }), 400
+
         # Get thread_id from request or create new thread
-        # IMPORTANT: By default, each PDF upload creates a NEW thread.
-        # This ensures that each uploaded document has its own separate thread/context.
-        conversation_id = request.form.get('conversation_id', type=int)
+        # IMPORTANT: Each new PDF upload must get its own conversation and thread.
+        # When create_new_thread is True, we never reuse the current conversation so we
+        # never override the existing thread the user is viewing.
         provided_thread_id = request.form.get('thread_id')
         create_new_thread = request.form.get('create_new_thread', 'true').lower() == 'true'
+        # For a new PDF we ignore conversation_id from the client so we always create a fresh thread
+        conversation_id = None if create_new_thread else request.form.get('conversation_id', type=int)
         
-        # If no conversation_id is provided, automatically create a new conversation
+        # If no conversation_id (new upload or not provided), create a new conversation
         if not conversation_id:
             try:
                 api_key = session.get('groq_api_key', '')
@@ -121,16 +369,17 @@ def ingest():
                 # Continue without conversation_id if creation fails
                 conversation_id = None
         
-        # ENFORCE: Check if conversation already has a PDF
+        # Verify conversation ownership (but allow multiple PDFs per conversation)
         if conversation_id:
-            # First verify conversation ownership
             try:
                 from app.models.models import ConversationModel
                 conversation_model = ConversationModel(user_id)
                 conv = conversation_model.get_conversation_by_id(conversation_id)
                 if not conv:
                     # Conversation doesn't exist or doesn't belong to user - create a new one
-                    logger.warning(f"Conversation {conversation_id} not found or doesn't belong to user {user_id}, creating new conversation")
+                    logger.warning(
+                        f"Conversation {conversation_id} not found or doesn't belong to user {user_id}, creating new conversation"
+                    )
                     filename = file.filename
                     conversation_title = f"Chat: {filename}" if filename else "New Chat"
                     conversation_id = conversation_model.create_conversation(conversation_title)
@@ -150,19 +399,6 @@ def ingest():
                     return jsonify({
                         'error': 'Error verifying conversation ownership. Please try again.'
                     }), 500
-            
-            # Check if this conversation already has a PDF uploaded (DB-based)
-            expected_thread_id = f"user_{user_id}_conv_{conversation_id}"
-            db = get_db()
-            existing_thread = db.query(RAGThread).filter_by(
-                user_id=user_id,
-                thread_id=expected_thread_id
-            ).first()
-            if existing_thread and existing_thread.has_document:
-                return jsonify({
-                    'error': 'This conversation already has a PDF uploaded. Each conversation can only have one PDF. Please create a new conversation to upload another PDF.',
-                    'existing_filename': existing_thread.filename
-                }), 400
         
         # If create_new_thread is False AND a thread_id is provided, use existing thread
         # (This is rare - normally each upload creates a new thread)
@@ -187,14 +423,20 @@ def ingest():
         
         filename = file.filename
 
-        # Read file bytes
+        # Read file bytes once so we can reuse them for sync/SSE paths
         file_bytes = file.read()
         if not file_bytes:
             return jsonify({'error': 'File is empty'}), 400
 
         # If streaming is requested, use SSE for backend processing progress (legacy support)
         if stream_progress:
-            return _ingest_with_progress(file_bytes, thread_id, filename, user_id)
+            return _ingest_with_progress(
+                file_bytes,
+                thread_id,
+                filename,
+                user_id,
+                join_timeout_seconds=ingest_tier["stream_join_timeout"],
+            )
 
         # When Celery is disabled (e.g. local dev), run ingestion synchronously in-process
         use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
@@ -210,6 +452,31 @@ def ingest():
                     user_id=user_id,
                 )
                 _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
+                # Kick off background heading extraction in-process when Celery is disabled
+                try:
+                    app_obj = current_app._get_current_object()
+                    load_test_mode = current_app.config.get("LOAD_TEST_MODE", False) or str(current_app.config.get("ENV", "")).lower() == "staging"
+                    enable_headings = current_app.config.get("ENABLE_RAG_HEADINGS", True)
+                    delay_headings_for_load_test = current_app.config.get("DELAY_RAG_HEADINGS_FOR_LOAD_TEST", False)
+                    if enable_headings and not (load_test_mode and delay_headings_for_load_test):
+                        _start_heading_extraction_background(thread_id, user_id, app_obj)
+                    elif enable_headings and load_test_mode and delay_headings_for_load_test:
+                        # Load-test mode: delay headings extraction so it doesn't contend with ingestion.
+                        delay_seconds = current_app.config.get("RAG_HEADINGS_DELAY_SECONDS", 30)
+                        t = threading.Timer(
+                            delay_seconds,
+                            _start_heading_extraction_background,
+                            args=(thread_id, user_id, app_obj),
+                        )
+                        t.daemon = True
+                        t.start()
+                except Exception as bg_err:
+                    logger.error(
+                        "Failed to start background heading extraction for thread %s (sync mode): %s",
+                        thread_id,
+                        bg_err,
+                        exc_info=True,
+                    )
                 logger.info(f"PDF ingested synchronously: {filename} (thread_id: {thread_id})")
                 return jsonify({
                     'success': True,
@@ -217,6 +484,7 @@ def ingest():
                     'message': 'PDF ingested successfully',
                     'thread_id': thread_id,
                     'conversation_id': conversation_id,
+                    'ingest_tier': ingest_tier["name"],
                     'filename': result.get('filename', filename),
                     'documents': result.get('documents', result.get('num_pages', 0)),
                     'num_pages': result.get('num_pages', result.get('documents', 0)),
@@ -232,16 +500,93 @@ def ingest():
                 logger.error(f"Error in sync PDF ingestion: {str(e)}", exc_info=True)
                 return jsonify({'error': f'Failed to ingest PDF: {str(e)}'}), 500
 
-        # Use Celery for background processing (production)
-        file_bytes_b64 = base64.b64encode(file_bytes).decode('utf-8')
-        task = ingest_pdf_task.delay(
-            file_bytes_b64=file_bytes_b64,
-            thread_id=thread_id,
-            filename=filename,
-            user_id=user_id,
-            conversation_id=conversation_id
+        # Use Celery for background processing (production).
+        # To keep Redis payloads small and avoid broker memory pressure under load,
+        # we write the upload to a temporary file and pass only the file path.
+        # Pre-create/update the thread row before queueing so conversation->thread
+        # resolution is available immediately even if worker-side DB flag update
+        # is delayed or transiently fails under load.
+        try:
+            _save_thread_to_db(user_id, thread_id, filename, ingest_result=None)
+        except Exception:
+            logger.warning("Failed to precreate thread row for thread_id=%s", thread_id, exc_info=True)
+
+        configured_tmp_dir = current_app.config.get("UPLOAD_TEMP_DIR") or "/app/tmp"
+        fallback_tmp_dir = os.path.join(tempfile.gettempdir(), "iqbalai_uploads")
+        tmp_dir = configured_tmp_dir
+        try:
+            os.makedirs(tmp_dir, exist_ok=True)
+            if not os.access(tmp_dir, os.W_OK):
+                raise OSError(f"Upload temp dir is not writable: {tmp_dir}")
+        except OSError:
+            # In some staging/container setups `/app` can be read-only.
+            # Fall back to system temp so ingestion still works.
+            tmp_dir = fallback_tmp_dir
+            os.makedirs(tmp_dir, exist_ok=True)
+        tmp_kwargs = {"delete": False, "suffix": ".pdf", "dir": tmp_dir}
+        with tempfile.NamedTemporaryFile(**tmp_kwargs) as tmp:
+            tmp.write(file_bytes)
+            tmp.flush()
+            tmp_path = tmp.name
+
+        task = ingest_pdf_task.apply_async(
+            kwargs={
+                "file_path": tmp_path,
+                "thread_id": thread_id,
+                "filename": filename,
+                "user_id": user_id,
+                "conversation_id": conversation_id,
+            },
+            queue=ingest_tier["queue"],
+            soft_time_limit=ingest_tier["soft_time_limit"],
+            time_limit=ingest_tier["time_limit"],
         )
-        logger.info(f"Started Celery task {task.id} for PDF ingestion: {filename} (thread_id: {thread_id})")
+        logger.info(
+            "Started Celery task %s for PDF ingestion: %s (thread_id: %s, tier=%s, queue=%s, limits=%ss/%ss)",
+            task.id,
+            filename,
+            thread_id,
+            ingest_tier["name"],
+            ingest_tier["queue"],
+            ingest_tier["soft_time_limit"],
+            ingest_tier["time_limit"],
+        )
+        # Start a separate Celery task to extract and store headings for this thread
+        try:
+            started = False
+            load_test_mode = current_app.config.get("LOAD_TEST_MODE", False) or str(current_app.config.get("ENV", "")).lower() == "staging"
+            enable_headings = current_app.config.get("ENABLE_RAG_HEADINGS", True)
+            delay_headings_for_load_test = current_app.config.get("DELAY_RAG_HEADINGS_FOR_LOAD_TEST", False)
+            if enable_headings and not (load_test_mode and delay_headings_for_load_test):
+                extract_headings_task.delay(thread_id=thread_id, user_id=user_id)
+                started = True
+            elif enable_headings and load_test_mode and delay_headings_for_load_test:
+                delay_seconds = current_app.config.get("RAG_HEADINGS_DELAY_SECONDS", 30)
+                extract_headings_task.apply_async(
+                    kwargs={"thread_id": thread_id, "user_id": user_id},
+                    countdown=delay_seconds,
+                )
+                started = True
+            if started:
+                logger.info(
+                    "Started Celery task for heading extraction (thread_id=%s, user_id=%s)",
+                    thread_id,
+                    user_id,
+                )
+            else:
+                logger.info(
+                    "Skipping heading extraction dispatch (enable_headings=%s, load_test_mode=%s, delay_headings_for_load_test=%s)",
+                    enable_headings,
+                    load_test_mode,
+                    delay_headings_for_load_test,
+                )
+        except Exception as e:
+            logger.error(
+                "Failed to start heading extraction Celery task for thread %s: %s",
+                thread_id,
+                e,
+                exc_info=True,
+            )
         return jsonify({
             'success': True,
             'message': 'PDF ingestion started in background',
@@ -249,7 +594,8 @@ def ingest():
             'status': 'processing',
             'thread_id': thread_id,
             'conversation_id': conversation_id,
-            'filename': filename
+            'filename': filename,
+            'ingest_tier': ingest_tier["name"],
         })
 
     except ValueError as e:
@@ -329,7 +675,13 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
         db.rollback()
 
 
-def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user_id: int):
+def _ingest_with_progress(
+    file_bytes: bytes,
+    thread_id: str,
+    filename: str,
+    user_id: int,
+    join_timeout_seconds: int = 300,
+):
     """
     Ingest PDF with Server-Sent Events (SSE) for real-time progress updates.
     """
@@ -409,7 +761,7 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
                     break
             
             # Wait for ingestion to complete
-            ingestion_thread.join(timeout=300)  # 5 minute timeout
+            ingestion_thread.join(timeout=max(30, int(join_timeout_seconds)))
             
             if result_container['error']:
                 error_msg = f"Error: {result_container['error']}"
@@ -436,6 +788,41 @@ def _ingest_with_progress(file_bytes: bytes, thread_id: str, filename: str, user
     )
 
 
+def _start_heading_extraction_background(thread_id: str, user_id: int, app=None):
+    """
+    Start background heading extraction when Celery is disabled.
+    Extracts headings/topics for the given thread and stores them in the database.
+    """
+    from app.utils.rag_service import extract_and_store_headings_for_thread
+
+    if app is None:
+        try:
+            app = current_app._get_current_object()
+        except RuntimeError:
+            logger.error(
+                "Cannot start heading extraction without Flask app context "
+                "(thread_id=%s, user_id=%s)",
+                thread_id,
+                user_id,
+            )
+            return
+
+    def run():
+        with app.app_context():
+            try:
+                extract_and_store_headings_for_thread(thread_id=thread_id, user_id=user_id)
+            except Exception as e:
+                logger.error(
+                    "Error in background heading extraction for thread %s: %s",
+                    thread_id,
+                    e,
+                    exc_info=True,
+                )
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+
+
 @bp.route('/chat', methods=['POST'])
 @login_required
 def chat():
@@ -443,8 +830,12 @@ def chat():
     Chat with the RAG-enabled chatbot.
     Accepts JSON or form-data with 'message' and optionally 'thread_id' or 'conversation_id'.
     """
-    _log_path = r"c:\Users\DCS\Desktop\New folder (14)\iqbalai\iqbal_ai_stg\.cursor\debug.log"
     import json as _json
+    # Debug log path under project root (works on any machine); skip log if path missing/unwritable
+    _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    _log_dir = os.path.join(_project_root, 'logs')
+    _log_path = os.path.join(_log_dir, 'rag_debug.log')
+    enable_debug_file_logs = current_app.config.get("ENABLE_RAG_DEBUG_FILE_LOGS", False)
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
@@ -459,6 +850,26 @@ def chat():
                 'code': 'VOICE_NOT_SUPPORTED'
             }), 400
 
+        # If audio is sent (voice input), transcribe using local Whisper base model
+        audio_text = None
+        tmp_path = None
+        try:
+            audio_file = request.files.get('audio')
+            if audio_file and audio_file.filename:
+                from app.utils.whisper_stt import transcribe_audio
+                with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+                    audio_file.save(tmp.name)
+                    tmp_path = tmp.name
+                audio_text = transcribe_audio(tmp_path)
+        except Exception as stt_error:
+            logger.error(f"Error transcribing audio for RAG chat: {str(stt_error)}", exc_info=True)
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+        
         # Try to get JSON data first
         data = request.get_json(force=True, silent=True)
         
@@ -477,16 +888,41 @@ def chat():
                     'conversation_id': request.args.get('conversation_id', type=int)
                 }
         
-        if not data:
-            return jsonify({'error': 'No data provided. Please send JSON, form-data with \"message\" field, or an audio file.'}), 400
+            elif audio_text:
+                # Pure audio request – use transcribed text as the message
+                data = {
+                    'message': audio_text,
+                    'thread_id': request.args.get('thread_id') if request.args else None,
+                    'conversation_id': request.args.get('conversation_id', type=int) if request.args else None
+                }
+                
+        # FormData with audio file: form may have thread_id/conversation_id but no message; use transcription
+        if data and not (data.get('message') or '').strip() and audio_text:
+            data['message'] = audio_text
+            if data.get('thread_id') is None and request.form:
+                data['thread_id'] = request.form.get('thread_id') or None
+            if data.get('conversation_id') is None and request.form:
+                try:
+                    data['conversation_id'] = request.form.get('conversation_id', type=int) or None
+                except (TypeError, ValueError):
+                    data['conversation_id'] = None
 
-        message = data.get('message', '').strip()
+        if not data:
+            logger.warning("RAG chat 400: No data provided (no JSON/form/audio)")
+            return jsonify({'error': 'No data provided. Please send JSON, form-data with "message" field, or an audio file.', 'code': 'NO_DATA'}), 400
+
+        message = (data.get('message') or '').strip()
         if not message:
-            return jsonify({'error': 'Message is required'}), 400
+            logger.warning("RAG chat 400: Empty message")
+            return jsonify({'error': 'Message is required', 'code': 'MESSAGE_REQUIRED'}), 400
 
         # thread_id is REQUIRED for RAG chat (no auto-create, no auto-pick)
         provided_thread_id = data.get('thread_id')
+        if isinstance(provided_thread_id, str):
+            provided_thread_id = provided_thread_id.strip() or None
         raw_conversation_id = data.get('conversation_id')
+        if raw_conversation_id == '' or (isinstance(raw_conversation_id, str) and not raw_conversation_id.strip()):
+            raw_conversation_id = None
         conversation_id = None
         if raw_conversation_id is not None:
             try:
@@ -495,10 +931,18 @@ def chat():
                 conversation_id = None
 
         if provided_thread_id:
-            thread_id = provided_thread_id
-        elif raw_conversation_id is not None and conversation_id is not None:
-            thread_id = _get_thread_id(user_id, conversation_id)
+            thread_id = str(provided_thread_id).strip()
+        elif conversation_id is not None:
+            # Resolve thread from conversation so each chat uses its own document (no cross-talk)
+            thread_id = _get_thread_id_for_conversation(user_id, conversation_id)
+            if not thread_id:
+                logger.warning("RAG chat 400: No thread with document for conversation_id=%s user_id=%s", conversation_id, user_id)
+                return jsonify({
+                    "error": "No PDF has been uploaded for this conversation yet. Please upload a PDF document first to chat with your document.",
+                    "code": "NO_DOCUMENT_UPLOADED",
+                }), 400
         else:
+            logger.warning("RAG chat 400: Missing thread_id and conversation_id (user_id=%s)", user_id)
             return jsonify({
                 'error': 'thread_id or conversation_id is required for RAG chat. Please select a conversation with an uploaded PDF or upload a PDF first.',
                 'code': 'MISSING_THREAD_ID'
@@ -508,137 +952,360 @@ def chat():
         db = get_db()
         thread_row = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
         if not thread_row:
+            logger.warning("RAG chat 400: No thread found for thread_id=%s user_id=%s", thread_id, user_id)
             return jsonify({
                 'error': 'No PDF has been uploaded for this conversation yet. Please upload a PDF document first to chat with your document.',
-                'code': 'NO_DOCUMENT_UPLOADED'
-            }), 400
-
-        if not thread_row.has_document:
-            return jsonify({
-                'error': 'No PDF has been uploaded for this thread yet. Please upload a PDF first.',
-                'code': 'NO_DOCUMENT',
+                'code': 'NO_DOCUMENT_UPLOADED',
                 'thread_id': thread_id
             }), 400
 
-        # Prepare config for LangGraph
-        config = {
-            "configurable": {
-                "thread_id": thread_id
-            }
-        }
-        # #region agent log
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
-        # #endregion
-        # Create HumanMessage
-        human_message = HumanMessage(content=message)
+        if (getattr(thread_row, 'filename', None) or "") == _CANCELLED_UPLOAD_FILENAME:
+            logger.info("RAG chat blocked: thread_id=%s was marked as cancelled upload", thread_id)
+            return jsonify({
+                'error': 'This PDF upload was cancelled. Please upload the document again before asking questions.',
+                'code': 'UPLOAD_CANCELLED',
+                'thread_id': thread_id
+            }), 400
 
-        # Invoke the chatbot - LangGraph returns the final state
-        # #region agent log
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-        # #endregion
-        state = chatbot.invoke(
-            {"messages": [human_message]},
-            config=config
-        )
-        # #region agent log
-        _msgs = state.get("messages", [])
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-        # #endregion
-
-        # Extract the last message from the state
-        messages = state.get("messages", [])
-        if not messages:
-            response_content = "I'm sorry, I couldn't generate a response."
-        else:
-            # Get the last message (should be the AI response)
-            last_msg = messages[-1]
-            if hasattr(last_msg, 'content'):
-                response_content = last_msg.content
-            elif isinstance(last_msg, dict):
-                response_content = last_msg.get('content', str(last_msg))
+        if not getattr(thread_row, 'has_document', False):
+            # Auto-repair: if chunks exist in DB, ingest completed but has_document was never set
+            chunk_count = db.query(RAGChunk).filter_by(thread_id=thread_id, user_id=user_id).count()
+            if chunk_count > 0:
+                try:
+                    thread_row.has_document = True
+                    if getattr(thread_row, 'doc_count', None) is None or thread_row.doc_count == 0:
+                        thread_row.doc_count = chunk_count
+                    db.commit()
+                    logger.info("RAG chat: repaired has_document=True for thread_id=%s (chunk_count=%s)", thread_id, chunk_count)
+                except Exception as e:
+                    logger.warning("RAG chat: failed to repair has_document for thread_id=%s: %s", thread_id, e)
+                    db.rollback()
+                    return jsonify({
+                        'error': 'Your PDF may still be processing. Please wait a moment and try again, or upload the PDF again.',
+                        'code': 'NO_DOCUMENT',
+                        'thread_id': thread_id
+                    }), 400
             else:
-                response_content = str(last_msg)
+                logger.warning("RAG chat 400: Thread exists but has_document=False and no chunks thread_id=%s", thread_id)
+                return jsonify({
+                    'error': 'Your PDF may still be processing. Please wait a moment and try again, or upload the PDF again.',
+                    'code': 'NO_DOCUMENT',
+                    'thread_id': thread_id
+                }), 400
 
-        # Save messages to database for chat history
-        db_conversation_id = None
+        allowed, retry_after = _check_and_record_user_chat_rate(user_id)
+        if not allowed:
+            return jsonify({
+                'error': f'Too many requests in a short time. Please wait {retry_after} seconds and try again.',
+                'code': 'USER_RATE_LIMITED',
+                'retry_after': retry_after,
+            }), 429
+
+        # One message at a time per user: enforce a per-user lock with a bounded wait.
+        # This prevents "zombie" locks from immediately causing 429s after upstream timeouts,
+        # while still guaranteeing only a single in-flight chat per user.
+        user_lock = _get_user_chat_lock(user_id)
+        acquired = user_lock.acquire(blocking=True, timeout=120)
+        if not acquired:
+            return jsonify({
+                'error': 'Your previous message is still being processed. Please try again in a moment.',
+                'code': 'CONCURRENT_REQUEST_TIMEOUT'
+            }), 429
+
         try:
-            from app.models.models import ConversationModel
-            conversation_model = ConversationModel(user_id)
-            
-            # Priority 1: Use conversation_id from request if provided (most reliable)
-            if conversation_id:
-                conv = conversation_model.get_conversation_by_id(conversation_id)
-                if conv:
-                    db_conversation_id = conversation_id
-                    logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
-                else:
-                    # Conversation doesn't exist or doesn't belong to user, create new one
-                    db_conversation_id = conversation_model.create_conversation(
-                        title=message[:50] if len(message) > 50 else message
+            # Prepare config for LangGraph
+            max_tool_rounds = max(
+                1,
+                int(
+                    os.getenv(
+                        "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
+                        os.getenv("RAG_MAX_TOOL_ROUNDS_PER_TURN", "3"),
                     )
-                    logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
-            else:
-                # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
-                import re
-                thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
-                if thread_conv_match:
-                    db_conversation_id = int(thread_conv_match.group(1))
-                    conv = conversation_model.get_conversation_by_id(db_conversation_id)
-                    if not conv:
+                ),
+            )
+            # chat -> tools -> chat consumes multiple graph steps per tool round.
+            # Ensure recursion budget can accommodate configured tool rounds.
+            runtime_recursion_limit = max(
+                16,
+                int(os.getenv("RAG_GRAPH_RECURSION_LIMIT", str((max_tool_rounds * 2) + 8))),
+            )
+            config = {
+                "configurable": {
+                    "thread_id": thread_id
+                },
+                # Defensive: keep recursion bounded under load while allowing deeper tool loops.
+                "recursion_limit": runtime_recursion_limit
+            }
+            # #region agent log
+            try:
+                if enable_debug_file_logs:
+                    os.makedirs(_log_dir, exist_ok=True)
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:thread_resolved", "message": "thread_id resolved", "data": {"thread_id": thread_id}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H2,H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            # Create HumanMessage
+            human_message = HumanMessage(content=message)
+
+            # Release DB session before long-running invoke so other requests aren't blocked (avoids connection pool exhaustion and long lock waits)
+            if 'db' in g:
+                _db = g.pop('db')
+                try:
+                    _db.commit()
+                except Exception:
+                    _db.rollback()
+                finally:
+                    _db.close()
+
+            # Invoke the chatbot - LangGraph returns the final state
+            # #region agent log
+            try:
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            state = chatbot.invoke(
+                {"messages": [human_message]},
+                config=config
+            )
+            # #region agent log
+            _msgs = state.get("messages", [])
+            try:
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
+            def _extract_and_sanitize_response(state_obj):
+                messages_local = state_obj.get("messages", []) if isinstance(state_obj, dict) else []
+                if not messages_local:
+                    content_local = ""
+                else:
+                    last_msg_local = messages_local[-1]
+                    if hasattr(last_msg_local, 'content'):
+                        content_local = last_msg_local.content
+                    elif isinstance(last_msg_local, dict):
+                        content_local = last_msg_local.get('content', str(last_msg_local))
+                    else:
+                        content_local = str(last_msg_local)
+
+                content_local = _strip_lesson_finalization_from_response(content_local)
+                content_local = _strip_tool_names_from_response(content_local)
+                content_local = _strip_internal_reasoning_from_response(content_local)
+                return content_local
+
+            response_content = _extract_and_sanitize_response(state)
+
+            # If model returned an empty/stripped response, do one recovery turn that
+            # explicitly asks the agent to run needed tools and provide the final answer.
+            if not isinstance(response_content, str) or not response_content.strip():
+                logger.warning(
+                    "RAG chat produced empty response after first invoke. Running one recovery invoke. "
+                    "thread_id=%s user_id=%s",
+                    thread_id,
+                    user_id,
+                )
+                recovery_prompt = (
+                    "Your previous response was empty. Re-run the needed tools for the user's last question "
+                    "and provide a final direct answer from the uploaded document. "
+                    "If document evidence is not found, say that clearly."
+                )
+                recovery_state = chatbot.invoke(
+                    {"messages": [HumanMessage(content=recovery_prompt)]},
+                    config=config
+                )
+                response_content = _extract_and_sanitize_response(recovery_state)
+
+            # Last-resort fallback to avoid blank frontend messages.
+            if not isinstance(response_content, str) or not response_content.strip():
+                response_content = (
+                    "I could not generate a complete response this time. "
+                    "Please ask again and I will answer directly from your document."
+                )
+
+            # Save messages to database for chat history
+            db_conversation_id = None
+            try:
+                from app.models.models import ConversationModel
+                conversation_model = ConversationModel(user_id)
+                
+                # Priority 1: Use conversation_id from request if provided (most reliable)
+                if conversation_id:
+                    conv = conversation_model.get_conversation_by_id(conversation_id)
+                    if conv:
+                        db_conversation_id = conversation_id
+                        logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
+                    else:
+                        # Conversation doesn't exist or doesn't belong to user, create new one
                         db_conversation_id = conversation_model.create_conversation(
                             title=message[:50] if len(message) > 50 else message
                         )
-                    logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                        logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
                 else:
-                    db_conversation_id = conversation_model.create_conversation(
-                        title=message[:50] if len(message) > 50 else message
-                    )
-                    logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
-            
-            # Save user message
-            conversation_model.save_message(
-                conversation_id=db_conversation_id,
-                message=message,
-                role='user'
-            )
-            
-            # Save AI response
-            conversation_model.save_message(
-                conversation_id=db_conversation_id,
-                message=response_content,
-                role='bot'  # Database constraint requires 'bot' not 'assistant'
-            )
-            
-            logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
-        except Exception as save_error:
-            # Don't fail the request if saving to database fails
-            logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
+                    # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
+                    import re
+                    thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
+                    if thread_conv_match:
+                        db_conversation_id = int(thread_conv_match.group(1))
+                        conv = conversation_model.get_conversation_by_id(db_conversation_id)
+                        if not conv:
+                            db_conversation_id = conversation_model.create_conversation(
+                                title=message[:50] if len(message) > 50 else message
+                            )
+                        logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                    else:
+                        db_conversation_id = conversation_model.create_conversation(
+                            title=message[:50] if len(message) > 50 else message
+                        )
+                        logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
+                
+                # Save user message
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=message,
+                    role='user'
+                )
+                
+                # Save AI response
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=response_content,
+                    role='bot'  # Database constraint requires 'bot' not 'assistant'
+                )
+                
+                logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
+            except Exception as save_error:
+                # Don't fail the request if saving to database fails
+                logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
 
-        # #region agent log
-        with open(_log_path, 'a', encoding='utf-8') as _f:
-            _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
-        # #endregion
-        return jsonify({
-            'success': True,
-            'message': response_content,
-            'thread_id': thread_id,
-            'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-            'has_document': thread_has_document(thread_id)
-        })
+            # #region agent log
+            try:
+                if enable_debug_file_logs:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            return jsonify({
+                'success': True,
+                'message': response_content,
+                'thread_id': thread_id,
+                'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
+                'has_document': thread_has_document(thread_id)
+            })
+        finally:
+            user_lock.release()
 
     except Exception as e:
         # #region agent log
         try:
-            with open(_log_path, 'a', encoding='utf-8') as _f:
-                _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+            if enable_debug_file_logs:
+                os.makedirs(_log_dir, exist_ok=True)
+                with open(_log_path, 'a', encoding='utf-8') as _f:
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
         except Exception:
             pass
         # #endregion
         logger.error(f"Error in RAG chat: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+
+
+@bp.route('/ingest/cancel/<task_id>', methods=['POST'])
+@login_required
+def cancel_ingest(task_id):
+    """
+    Gracefully cancel a PDF ingestion task (Celery revoke).
+    When USE_CELERY_FOR_INGESTION is False, returns 400.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+        if not current_app.config.get('USE_CELERY_FOR_INGESTION', False):
+            return jsonify({
+                'error': 'Cancel is not available. PDF ingestion is running in-process (Celery is disabled).'
+            }), 400
+        payload = request.get_json(silent=True) or {}
+        provided_thread_id = (
+            payload.get('thread_id')
+            or request.form.get('thread_id')
+            or request.args.get('thread_id')
+        )
+        thread_id = str(provided_thread_id).strip() if provided_thread_id else None
+        if thread_id and not _validate_thread_id(thread_id, session['user_id']):
+            return jsonify({'error': 'Access denied. You can only cancel your own thread uploads.'}), 403
+
+        task = ingest_pdf_task.AsyncResult(task_id)
+        if task.state in ('PENDING', 'PROCESSING', 'RETRY'):
+            task.revoke(terminate=True)
+
+        cleanup_performed = False
+        if thread_id:
+            db = get_db()
+            try:
+                # Persist a cancellation marker so late worker completion cannot resurrect this thread.
+                thread_row = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=session['user_id']).first()
+                now = datetime.utcnow()
+                if thread_row:
+                    thread_row.has_document = False
+                    thread_row.doc_count = 0
+                    thread_row.num_pages = None
+                    thread_row.headings_ready = False
+                    thread_row.headings_count = 0
+                    thread_row.filename = _CANCELLED_UPLOAD_FILENAME
+                    thread_row.updated_at = now
+                else:
+                    db.add(RAGThread(
+                        user_id=session['user_id'],
+                        thread_id=thread_id,
+                        name=f"Cancelled Upload {now.strftime('%Y-%m-%d %H:%M')}",
+                        filename=_CANCELLED_UPLOAD_FILENAME,
+                        has_document=False,
+                        doc_count=0,
+                        created_at=now,
+                        updated_at=now,
+                    ))
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.warning("Failed to persist cancellation marker for thread_id=%s", thread_id, exc_info=True)
+
+            # Best-effort cleanup of already-written data.
+            try:
+                delete_thread(thread_id)
+            except Exception:
+                logger.warning("Failed vector/file cleanup for cancelled thread_id=%s", thread_id, exc_info=True)
+            try:
+                db.query(RAGChunk).filter_by(thread_id=thread_id, user_id=session['user_id']).delete(synchronize_session=False)
+                db.query(RAGHeading).filter_by(thread_id=thread_id, user_id=session['user_id']).delete(synchronize_session=False)
+                db.commit()
+                cleanup_performed = True
+            except Exception:
+                db.rollback()
+                logger.warning("Failed DB chunk/heading cleanup for cancelled thread_id=%s", thread_id, exc_info=True)
+
+        logger.info(
+            "User %s cancelled ingest task %s (thread_id=%s, state=%s, cleanup_performed=%s)",
+            session['user_id'],
+            task_id,
+            thread_id,
+            task.state,
+            cleanup_performed,
+        )
+        return jsonify({
+            'message': 'Upload cancelled',
+            'task_id': task_id,
+            'status': 'revoked',
+            'thread_id': thread_id,
+            'cleanup_performed': cleanup_performed
+        }), 200
+    except Exception as e:
+        logger.error(f"Error cancelling ingest task: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/ingest/status/<task_id>', methods=['GET'])
@@ -721,6 +1388,23 @@ def get_ingest_status(task_id):
             warmup_rag_embeddings()
             result = task.result
             thread_id = result.get('thread_id')
+            if thread_id:
+                try:
+                    db = get_db()
+                    cancelled_row = db.query(RAGThread).filter_by(
+                        thread_id=thread_id,
+                        user_id=user_id,
+                        filename=_CANCELLED_UPLOAD_FILENAME
+                    ).first()
+                    if cancelled_row:
+                        return jsonify({
+                            'task_id': task_id,
+                            'status': 'revoked',
+                            'state': 'REVOKED',
+                            'message': 'Task was cancelled'
+                        })
+                except Exception:
+                    logger.warning("Could not verify cancelled marker for task_id=%s thread_id=%s", task_id, thread_id, exc_info=True)
             response = {
                 'task_id': task_id,
                 'status': 'success',
@@ -841,6 +1525,9 @@ def get_thread_document(thread_id):
             }), 404
 
         metadata = thread_document_metadata(thread_id)
+        # Do not expose lesson-finalization fields to frontend
+        if isinstance(metadata, dict):
+            metadata = {k: v for k, v in metadata.items() if k not in ('lesson_finalized', 'lesson_title', 'last_lesson_text')}
         return jsonify({
             'thread_id': thread_id,
             'metadata': metadata
@@ -933,6 +1620,65 @@ def get_rag_prompt():
         return jsonify({'error': f'Failed to get prompt: {str(e)}'}), 500
 
 
+@bp.route('/prompt/preview', methods=['GET'])
+@login_required
+def get_rag_prompt_system_preview():
+    """
+    Read-only full system prompt for PDF chats: optional user custom text + separator + server RAG instructions.
+    Uses sample values for {filename}, {page_info}, and {thread_id} so teachers can see the combined shape.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'error': 'Not authenticated', 'code': 'NOT_AUTHENTICATED'}), 401
+
+        user_id = session['user_id']
+        db = get_db()
+        prompt_obj = (
+            db.query(RAGPrompt)
+            .filter(RAGPrompt.user_id == user_id, RAGPrompt.thread_id.is_(None))
+            .order_by(RAGPrompt.updated_at.desc())
+            .first()
+        )
+        custom = (prompt_obj.prompt or "").strip() if prompt_obj else ""
+
+        template_src = (
+            _get_stored_rag_system_template(RAG_SYSTEM_SETTING_KEY_WITH_PDF)
+            or DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF
+        )
+        demo_filename = "your-document.pdf"
+        demo_page_info = " The PDF has 12 pages."
+        demo_thread_id = f"user_{user_id}_conv_<conversation_id>_…"
+        rag_body = _substitute_rag_system_placeholders(
+            template_src,
+            filename=demo_filename,
+            page_info=demo_page_info,
+            thread_id=demo_thread_id,
+        )
+        if custom:
+            full = f"{custom}\n\n---\n\n{rag_body}"
+        else:
+            full = rag_body
+
+        return jsonify({
+            'success': True,
+            'custom_prompt': custom,
+            'rag_system_body': rag_body,
+            'full_combined_preview': full,
+            'note': (
+                'Sample values are used for filename, page count, and thread id. '
+                'Real chats substitute the actual PDF name and thread id.'
+            ),
+        })
+    except Exception as e:
+        logger.error(f"Error building RAG prompt preview: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Could not build the prompt preview. Try again in a moment.',
+            'code': 'PREVIEW_FAILED',
+            'detail': str(e),
+        }), 500
+
+
 @bp.route('/prompt', methods=['POST'])
 @login_required
 def set_rag_prompt():
@@ -954,7 +1700,28 @@ def set_rag_prompt():
         prompt = data.get('prompt', '').strip()
         
         if not prompt:
-            return jsonify({'error': 'Prompt is required'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'Prompt cannot be empty. Enter your custom instructions (up to '
+                f'{RAG_USER_PROMPT_MAX_WORDS} words), or use Delete to remove your custom prompt.',
+                'code': 'PROMPT_REQUIRED',
+            }), 400
+
+        wc = _count_words(prompt)
+        if wc > RAG_USER_PROMPT_MAX_WORDS:
+            return jsonify({
+                'success': False,
+                'error': (
+                    f'Your custom prompt is {wc} words. '
+                    f'Shorten it to {RAG_USER_PROMPT_MAX_WORDS} words or fewer, then save again.'
+                ),
+                'code': 'PROMPT_TOO_LONG',
+                'max_words': RAG_USER_PROMPT_MAX_WORDS,
+                'word_count': wc,
+                # backwards compatibility for older clients
+                'max_length': RAG_USER_PROMPT_MAX_WORDS,
+                'length': wc,
+            }), 400
         
         db = get_db()
         try:

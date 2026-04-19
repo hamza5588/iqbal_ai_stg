@@ -16,7 +16,7 @@ from app.models.database_models import (
     LessonFAQ as DBLessonFAQ, LessonChatHistory as DBLessonChatHistory
 )
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import and_, or_, desc, func
+from sqlalchemy import and_, or_, desc, func, String
 from sqlalchemy.orm import joinedload
 import pickle
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -139,12 +139,17 @@ class UserModel:
 
     def get_role(self) -> str:
         """Get the user's role"""
+        db = get_db()
         try:
-            db = get_db()
             user = db.query(DBUser).filter(DBUser.id == self.user_id).first()
             return user.role if user else 'student'
         except Exception as e:
             logger.error(f"Error getting user role: {str(e)}")
+            # Ensure the session is not left in an invalid transaction state
+            try:
+                db.rollback()
+            except Exception as rollback_ex:
+                logger.error(f"Error rolling back after role lookup failure: {rollback_ex}")
             return 'student'
 
     def is_teacher(self) -> bool:
@@ -187,7 +192,7 @@ class LessonModel:
                      focus_area: str, grade_level: str, content: str, file_name: str = None,
                      is_public: bool = True, parent_lesson_id: int = None, draft_content: str = None,
                      lesson_id: str = None, version_number: int = 1, parent_version_id: int = None,
-                     original_content: str = None, status: str = "finalized") -> int:
+                     original_content: str = None, status: str = "finalized", rag_thread_id: str = None) -> int:
         """Create a new lesson in the database"""
         try:
             logger.info(f"Saving lesson to database with title: '{title}'")
@@ -236,7 +241,8 @@ class LessonModel:
                         version_number=version_number,
                         parent_version_id=parent_version_id,
                         original_content=original_content,
-                        status=status
+                        status=status,
+                        rag_thread_id=rag_thread_id,
                     )
                     db.add(lesson)
                     db.commit()
@@ -318,6 +324,58 @@ class LessonModel:
             raise
 
     @staticmethod
+    def get_lessons_by_teacher_paginated(
+        teacher_id: int,
+        page: int = 1,
+        per_page: int = 10,
+        search_term: str = None,
+        latest_only: bool = True,
+    ) -> Dict[str, Any]:
+        """Get teacher lessons with DB-level pagination."""
+        try:
+            db = get_db()
+            page = max(1, int(page or 1))
+            per_page = max(1, min(100, int(per_page or 10)))
+
+            query = db.query(DBLesson).filter(DBLesson.teacher_id == teacher_id)
+
+            if latest_only:
+                # Exclude older versions: has_child_version=True means a newer version exists.
+                # This ensures each logical lesson appears only once (its latest version).
+                query = query.filter(DBLesson.has_child_version == False)  # noqa: E712
+
+            if search_term:
+                term = f"%{search_term.strip()}%"
+                query = query.filter(
+                    or_(
+                        DBLesson.title.ilike(term),
+                        DBLesson.focus_area.ilike(term),
+                        DBLesson.grade_level.ilike(term),
+                    )
+                )
+
+            total = query.count()
+            lessons = (
+                query
+                .order_by(desc(DBLesson.created_at))
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+                .all()
+            )
+            total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+
+            return {
+                "lessons": [LessonModel._lesson_to_dict(lesson) for lesson in lessons],
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": total_pages,
+            }
+        except Exception as e:
+            logger.error(f"Error retrieving paginated lessons by teacher: {str(e)}")
+            raise
+
+    @staticmethod
     def get_public_lessons(grade_level: str = None, focus_area: str = None) -> List[Dict[str, Any]]:
         """Get all public lessons with optional filtering (including all versions)"""
         try:
@@ -381,6 +439,80 @@ class LessonModel:
             raise
 
     @staticmethod
+    def get_public_latest_lessons_paginated(
+        grade_level: str = None,
+        focus_area: str = None,
+        page: int = 1,
+        per_page: int = 10,
+        search_term: str = None
+    ) -> Dict[str, Any]:
+        """Get latest public lessons with DB-level pagination (one row per logical lesson)."""
+        try:
+            db = get_db()
+            page = max(1, int(page or 1))
+            per_page = max(1, min(100, int(per_page or 10)))
+
+            group_key = func.coalesce(DBLesson.lesson_id, func.cast(DBLesson.id, String))
+            filtered = db.query(DBLesson).filter(DBLesson.is_public.is_(True))
+
+            if grade_level:
+                filtered = filtered.filter(DBLesson.grade_level == grade_level)
+            if focus_area:
+                filtered = filtered.filter(DBLesson.focus_area == focus_area)
+            if search_term:
+                term = f"%{search_term.strip()}%"
+                filtered = filtered.filter(
+                    or_(
+                        DBLesson.title.ilike(term),
+                        DBLesson.focus_area.ilike(term),
+                        DBLesson.grade_level.ilike(term),
+                    )
+                )
+
+            latest_per_lesson = (
+                filtered
+                .with_entities(
+                    group_key.label("group_key"),
+                    func.max(DBLesson.created_at).label("max_created_at")
+                )
+                .group_by(group_key)
+                .subquery()
+            )
+
+            latest_query = (
+                db.query(DBLesson)
+                .options(joinedload(DBLesson.teacher))
+                .join(
+                    latest_per_lesson,
+                    and_(
+                        func.coalesce(DBLesson.lesson_id, func.cast(DBLesson.id, String)) == latest_per_lesson.c.group_key,
+                        DBLesson.created_at == latest_per_lesson.c.max_created_at,
+                    ),
+                )
+                .order_by(DBLesson.created_at.desc(), DBLesson.id.desc())
+            )
+
+            total = db.query(func.count()).select_from(latest_per_lesson).scalar() or 0
+            lessons = (
+                latest_query
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+                .all()
+            )
+            total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+
+            return {
+                "lessons": [LessonModel._lesson_to_dict(lesson, include_teacher_name=True) for lesson in lessons],
+                "page": page,
+                "per_page": per_page,
+                "total": int(total),
+                "total_pages": total_pages,
+            }
+        except Exception as e:
+            logger.error(f"Error retrieving paginated latest public lessons: {str(e)}")
+            raise
+
+    @staticmethod
     def search_lessons(search_term: str, grade_level: str = None) -> List[Dict[str, Any]]:
         """Search lessons by title, content, or focus area (including all versions)"""
         try:
@@ -410,7 +542,7 @@ class LessonModel:
 
     def update_lesson(self, title: str = None, summary: str = None, learning_objectives: str = None,
                      focus_area: str = None, grade_level: str = None, content: str = None,
-                     is_public: bool = None, detailed_answer: str = None) -> bool:
+                     is_public: bool = None, detailed_answer: str = None, rag_thread_id: str = None) -> bool:
         """Update lesson details"""
         try:
             db = get_db()
@@ -434,6 +566,8 @@ class LessonModel:
                 lesson.detailed_answer = detailed_answer
             if is_public is not None:
                 lesson.is_public = is_public
+            if rag_thread_id is not None:
+                lesson.rag_thread_id = rag_thread_id
             
             lesson.updated_at = datetime.utcnow()
             db.commit()
@@ -658,8 +792,8 @@ class LessonModel:
             actual_original_id = original_lesson.get('parent_lesson_id') or original_lesson_id
             actual_original_lesson = LessonModel.get_lesson_by_id(actual_original_id)
             
-            # Create new version with draft content as the main content
-            # The new version should start with empty draft content
+            # Create new version with draft content as the main content; copy RAG thread for "Ask Question"
+            rag_thread_id = original_lesson.get('rag_thread_id') or actual_original_lesson.get('rag_thread_id')
             new_lesson_id = LessonModel.create_lesson(
                 teacher_id=teacher_id,
                 title=title,
@@ -675,7 +809,8 @@ class LessonModel:
                 lesson_id=actual_original_lesson['lesson_id'],  # Use same lesson_id as root
                 parent_version_id=original_lesson_id,  # Set parent version (the one we're creating from)
                 original_content=draft_content,  # Draft content becomes original content for new version
-                status="finalized"
+                status="finalized",
+                rag_thread_id=rag_thread_id,
             )
             # Mark the source version as having a child version
             try:
@@ -1065,7 +1200,7 @@ class ChatModel:
                 # For OpenAI and Groq, use the api_key (from env if OpenAI set from admin, else from self.api_key)
                 # For vLLM, api_key is not needed
                 self._chat_model = create_llm(
-                    temperature=0.7,
+                    temperature=0.5,
                     max_tokens=1024,
                     api_key=api_key_to_use,
                     provider=provider
@@ -1648,6 +1783,62 @@ class ConversationModel:
             db.rollback()
             raise
 
+    def duplicate_conversation(self, conversation_id: int) -> Optional[int]:
+        """
+        Duplicate a conversation and all of its messages for the current user.
+
+        Returns the new conversation ID, or None if the source conversation
+        does not belong to this user.
+        """
+        try:
+            db = get_db()
+
+            # Ensure the conversation belongs to this user
+            source = db.query(DBConversation).filter(
+                and_(DBConversation.id == conversation_id, DBConversation.user_id == self.user_id)
+            ).first()
+            if not source:
+                logger.warning(
+                    "User %s attempted to duplicate conversation %s without ownership",
+                    self.user_id,
+                    conversation_id,
+                )
+                return None
+
+            # Create the new conversation with a copied title
+            new_title = f"{source.title} (Copy)"
+            new_conv = DBConversation(
+                user_id=self.user_id,
+                title=new_title,
+                is_active=source.is_active,
+            )
+            db.add(new_conv)
+            db.flush()  # Ensure new_conv.id is available
+
+            # Copy all chat history rows
+            messages = (
+                db.query(DBChatHistory)
+                .filter(DBChatHistory.conversation_id == source.id)
+                .order_by(DBChatHistory.created_at.asc())
+                .all()
+            )
+            for msg in messages:
+                cloned = DBChatHistory(
+                    conversation_id=new_conv.id,
+                    message=msg.message,
+                    role=msg.role,
+                    created_at=msg.created_at,
+                )
+                db.add(cloned)
+
+            db.commit()
+            db.refresh(new_conv)
+            return new_conv.id
+        except Exception as e:
+            logger.error(f"Error duplicating conversation: {str(e)}")
+            db.rollback()
+            raise
+
     def reset_all_chats(self) -> None:
         """Delete all conversations and chat history for the user"""
         try:
@@ -1819,6 +2010,21 @@ class LessonChatHistory:
             return chat_history.id
         except Exception as e:
             logger.error(f"Error saving lesson chat history: {str(e)}")
+            db.rollback()
+            raise
+
+    @staticmethod
+    def update_canonical_question(chat_history_id: int, canonical_question: str) -> None:
+        """Update canonical question for an existing lesson chat history row."""
+        try:
+            db = get_db()
+            row = db.query(DBLessonChatHistory).filter(DBLessonChatHistory.id == chat_history_id).first()
+            if not row:
+                return
+            row.canonical_question = canonical_question
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error updating canonical question for lesson chat history: {str(e)}")
             db.rollback()
             raise
     

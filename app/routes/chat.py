@@ -1,9 +1,10 @@
 # app/routes/chat.py
 from flask import Blueprint, redirect, request, session, jsonify, render_template, url_for, send_file
 from app.services import ChatService, PromptService
-from app.models.models import SurveyModel, LessonModel
+from app.models.models import SurveyModel, LessonModel, ConversationModel
 # from app.utils.decorators import login_required
 from app.utils.auth import login_required
+from app.utils.routes import get_default_route_by_role
 from app.utils.decorators import teacher_required
 import logging
 from app.utils.db import get_db
@@ -30,8 +31,20 @@ logger = logging.getLogger(__name__)
 # those hardware-specific crashes.
 torch.backends.mkldnn.enabled = False  # avoid oneDNN primitive creation issues
 
-# ✅ LOAD ONCE — app startup
-whisper_model = whisper.load_model("base", device="cpu")
+# Lazy-load Whisper on first STT request to avoid startup OOM (DefaultCPUAllocator: not enough memory)
+_whisper_model = None
+
+def _get_whisper_model():
+    """Load Whisper base model on first use; cache or return None if OOM."""
+    global _whisper_model
+    if _whisper_model is not None:
+        return _whisper_model
+    try:
+        _whisper_model = whisper.load_model("base", device="cpu")
+        return _whisper_model
+    except Exception as e:
+        logger.warning("Whisper model load failed (STT disabled): %s", e)
+        return None
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('chat', __name__)
@@ -56,34 +69,84 @@ def _get_openai_client():
         raise RuntimeError("OPENAI_API_KEY environment variable is not set")
     return OpenAI(api_key=api_key)
 
+@bp.route('/teacher-dashboard')
+@login_required
+@teacher_required
+def teacher_dashboard():
+    """Render teacher dashboard (teacher-only). Teachers use this page only, not chat.html. Template: teacher_dashboard.html; assets: /teacher-static/."""
+    try:
+        return render_template('teacher_dashboard.html')
+    except Exception as e:
+        logger.error(f"Error serving teacher dashboard: {str(e)}")
+        return redirect(url_for('chat.index'))
+
+
 @bp.route('/')
 @login_required
 def index():
-    """Render the main chat interface"""
+    """
+    Canonical authenticated landing.
+
+    `chat.html` is legacy and must not be the default entrypoint for the new UI.
+    We always redirect to the role dashboard.
+    """
+    return redirect(get_default_route_by_role(session.get('role')))
+
+
+@bp.route('/student-dashboard')
+@login_required
+def student_dashboard():
+    """
+    Render the new student dashboard UI.
+
+    Teachers/admins are redirected to their canonical dashboards.
+    """
+    role = session.get('role')
+    if role == 'admin':
+        return redirect('/admin/')
+    if role == 'teacher':
+        return redirect(url_for('chat.teacher_dashboard'))
+    return render_template('student_dashboard.html')
+
+
+def _render_legacy_chat():
+    """
+    Legacy UI renderer (`chat.html`).
+    Kept for backward compatibility, but only reachable via explicit /legacy/* routes.
+    """
     has_submitted_survey = False
     subscription_tier = 'free'
     try:
-        # Check if user has submitted survey
         survey_model = SurveyModel(session['user_id'])
         has_submitted_survey = survey_model.has_submitted_survey()
     except Exception as e:
-        logger.warning(f"Survey check failed in index: {e}")
+        logger.warning(f"Survey check failed in legacy chat: {e}")
+
     try:
-        # Get user subscription tier
         from app.models.database_models import User as DBUser
         db = get_db()
         user = db.query(DBUser).filter(DBUser.id == session['user_id']).first()
         if user and getattr(user, 'subscription_tier', None):
             subscription_tier = user.subscription_tier
     except Exception as e:
-        logger.warning(f"Subscription tier check failed in index: {e}")
+        logger.warning(f"Subscription tier check failed in legacy chat: {e}")
+
     try:
-        return render_template('chat.html',
-                               has_submitted_survey=has_submitted_survey,
-                               subscription_tier=subscription_tier)
+        return render_template(
+            'chat.html',
+            has_submitted_survey=has_submitted_survey,
+            subscription_tier=subscription_tier,
+        )
     except Exception as e:
-        logger.error(f"Error rendering chat template: {str(e)}", exc_info=True)
+        logger.error(f"Error rendering legacy chat template: {str(e)}", exc_info=True)
         return render_template('chat.html', has_submitted_survey=False, subscription_tier='free')
+
+
+@bp.route('/legacy/chat')
+@login_required
+def legacy_chat():
+    """Explicit legacy route for `chat.html` (old UI)."""
+    return _render_legacy_chat()
 
 # Add these routes to chat.py
 
@@ -225,13 +288,64 @@ def create_conversation():
         logger.error(f"Error creating conversation: {str(e)}")
         return jsonify({'error': 'Failed to create conversation'}), 500
 
+@bp.route('/save_message', methods=['POST'])
+@login_required
+def save_message():
+    """Persist a single message to DB conversation history."""
+    try:
+        data = request.get_json(silent=True) or {}
+        raw_message = data.get('message', '')
+        message = str(raw_message).strip()
+        if not message:
+            return jsonify({'error': 'Message is required'}), 400
+
+        role = str(data.get('role', '')).strip().lower()
+        if role == 'assistant':
+            role = 'bot'
+        if role not in ('user', 'bot'):
+            return jsonify({'error': 'Invalid role. Use user or bot.'}), 400
+
+        conv_model = ConversationModel(session['user_id'])
+        conversation_id = data.get('conversation_id')
+        title = str(data.get('title') or 'New Conversation').strip() or 'New Conversation'
+
+        if conversation_id is None or str(conversation_id).strip() == '':
+            conversation_id = conv_model.create_conversation(title[:120])
+        else:
+            try:
+                conversation_id = int(conversation_id)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'Invalid conversation_id'}), 400
+            conversation = conv_model.get_conversation_by_id(conversation_id)
+            if not conversation:
+                return jsonify({'error': 'Conversation not found or access denied'}), 404
+
+        message_id = conv_model.save_message(
+            conversation_id=conversation_id,
+            message=message,
+            role=role,
+        )
+        return jsonify({
+            'success': True,
+            'conversation_id': conversation_id,
+            'message_id': message_id,
+        })
+    except Exception as e:
+        logger.error(f"Error saving message: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to save message'}), 500
+
 @bp.route('/get_conversations')
 @login_required
 def get_conversations():
     """Get user's recent conversations"""
     try:
+        limit = request.args.get('limit', type=int)
+        if limit is None:
+            limit = 200
+        # Guardrails: prevent pathological values but keep room for long histories
+        limit = max(1, min(limit, 1000))
         chat_service = ChatService(session['user_id'], session['groq_api_key'])
-        conversations = chat_service.get_recent_conversations()
+        conversations = chat_service.get_recent_conversations(limit=limit)
         return jsonify({'conversations': conversations})  # <-- wrap in dict for frontend
     except Exception as e:
         logger.error(f"Error retrieving conversations: {str(e)}")
@@ -240,11 +354,33 @@ def get_conversations():
 @bp.route('/get_messages/<int:conversation_id>')
 @login_required
 def get_messages(conversation_id):
-    """Get messages for a specific conversation"""
+    """Get messages for a specific conversation. Includes thread_id when this conversation has an uploaded PDF."""
     try:
-        chat_service = ChatService(session['user_id'], session['groq_api_key'])
+        user_id = session['user_id']
+        chat_service = ChatService(user_id, session['groq_api_key'])
         messages = chat_service.get_conversation_messages(conversation_id)
-        return jsonify({'messages': messages})  # <-- wrap in dict for frontend
+        # Resolve RAG thread_id and filename for this conversation (for correct chat context and preamble)
+        thread_id = None
+        uploaded_filename = None
+        try:
+            from app.models.database_models import RAGThread
+            db = get_db()
+            prefix = f"user_{user_id}_conv_{conversation_id}_"
+            row = db.query(RAGThread.thread_id, RAGThread.filename).filter(
+                RAGThread.user_id == user_id,
+                RAGThread.thread_id.like(prefix + "%"),
+                RAGThread.has_document == True,
+            ).order_by(RAGThread.created_at.desc()).first()
+            if row:
+                thread_id = row[0] if isinstance(row, (tuple, list)) else row.thread_id
+                uploaded_filename = (row[1] if isinstance(row, (tuple, list)) and len(row) > 1 else getattr(row, 'filename', None)) or None
+        except Exception:
+            pass
+        return jsonify({
+            'messages': messages,
+            'thread_id': thread_id,
+            'uploaded_filename': uploaded_filename,
+        })
     except Exception as e:
         logger.error(f"Error retrieving messages: {str(e)}")
         return jsonify({'error': 'Failed to retrieve messages'}), 500
@@ -287,6 +423,29 @@ def delete_all_conversations():
     except Exception as e:
         logger.error(f"Error deleting all conversations: {str(e)}")
         return jsonify({'error': 'Failed to delete conversations'}), 500
+
+
+@bp.route('/duplicate_conversation/<int:conversation_id>', methods=['POST'])
+@login_required
+def duplicate_conversation(conversation_id):
+    """
+    Duplicate a conversation and all of its messages for the current user.
+    """
+    try:
+        chat_service = ChatService(session['user_id'], session['groq_api_key'])
+        new_id = chat_service.duplicate_conversation(conversation_id)
+        conversation = chat_service.get_conversation_details(new_id)
+        return jsonify({
+            'conversation_id': new_id,
+            'conversation': conversation,
+        })
+    except ValueError as ve:
+        logger.warning(f"Duplicate conversation failed: {ve}")
+        return jsonify({'error': str(ve)}), 404
+    except Exception as e:
+        logger.error(f"Error duplicating conversation: {str(e)}")
+        return jsonify({'error': 'Failed to duplicate conversation'}), 500
+
 
 @bp.route('/update_conversation_title/<int:conversation_id>', methods=['PUT'])
 @login_required
@@ -559,6 +718,12 @@ def get_user_info():
 @bp.route('/api/stt', methods=['POST'])
 @login_required
 def speech_to_text():
+    """
+    Convert uploaded speech audio to text using local Whisper base model.
+
+    Expects multipart/form-data with field "audio".
+    Returns JSON: {"text": "..."} on success.
+    """
     try:
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
@@ -569,22 +734,33 @@ def speech_to_text():
 
         from tempfile import NamedTemporaryFile
 
-        with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-            audio_file.save(tmp.name)
-            tmp_path = tmp.name
+        model = _get_whisper_model()
+        if model is None:
+            return jsonify({'error': 'Speech-to-text unavailable (model could not be loaded)'}), 503
 
-        # 👇 LOCAL WHISPER HERE
-        result = whisper_model.transcribe(
-            tmp_path,
-            fp16=False,      # important if no GPU
-            language="en"    # optional but faster if known
-        )
+        tmp_path = None
+        try:
+            with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+                audio_file.save(tmp.name)
+                tmp_path = tmp.name
 
-        text = result.get("text", "").strip()
-        if not text:
-            return jsonify({'error': 'Transcription failed'}), 500
+            result = model.transcribe(
+                tmp_path,
+                fp16=False,      # important if no GPU
+                language="en"    # optional but faster if known
+            )
 
-        return jsonify({'text': text})
+            text = result.get("text", "").strip()
+            if not text:
+                return jsonify({'error': 'Transcription failed'}), 500
+
+            return jsonify({'text': text})
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     except Exception as e:
         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)

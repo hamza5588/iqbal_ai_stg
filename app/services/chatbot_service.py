@@ -322,7 +322,7 @@ class DocumentChatBot:
         # For vLLM, api_key is not needed
         # IMPORTANT: When Groq is selected, we ONLY use Groq - no fallback to OpenAI
         self.llm = create_llm(
-            temperature=0.7,
+            temperature=0.5,
             max_tokens=1024,
             api_key=self.groq_api_key if provider in ['openai', 'groq'] else None,
             provider=provider

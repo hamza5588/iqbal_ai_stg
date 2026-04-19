@@ -1,0 +1,158 @@
+/* Global Theme CSS Variables */
+:root {
+    /* Primary Color Palette - Dynamically updated */
+    --primary-50: #f0f9ff;
+    --primary-100: #e0f2fe;
+    --primary-200: #bae6fd;
+    --primary-300: #7dd3fc;
+    --primary-400: #38bdf8;
+    --primary-500: #0ea5e9;
+    --primary-600: #0284c7;
+    --primary-700: #0369a1;
+    --primary-800: #075985;
+    --primary-900: #0c4a6e;
+    --primary-color: #0ea5e9;
+    --primary-rgb: 14, 165, 233;
+
+    /* Secondary Colors - Fixed */
+    --secondary-50: #f8fafc;
+    --secondary-100: #f1f5f9;
+    --secondary-200: #e2e8f0;
+    --secondary-300: #cbd5e1;
+    --secondary-400: #94a3b8;
+    --secondary-500: #64748b;
+    --secondary-600: #475569;
+    --secondary-700: #334155;
+    --secondary-800: #1e293b;
+    --secondary-900: #0f172a;
+
+    /* Accent Colors */
+    --accent-50: #fdf2f8;
+    --accent-100: #fce7f3;
+    --accent-200: #fbcfe8;
+    --accent-300: #f9a8d4;
+    --accent-400: #f472b6;
+    --accent-500: #ec4899;
+    --accent-600: #db2777;
+    --accent-700: #be185d;
+    --accent-800: #9d174d;
+    --accent-900: #831843;
+
+    /* Success/Warning/Error */
+    --success-50: #f0fdf4;
+    --success-100: #dcfce7;
+    --success-200: #bbf7d0;
+    --success-300: #86efac;
+    --success-400: #4ade80;
+    --success-500: #22c55e;
+    --success-600: #16a34a;
+    --success-700: #15803d;
+
+    --warning-50: #fffbeb;
+    --warning-100: #fef3c7;
+    --warning-200: #fde68a;
+    --warning-300: #fcd34d;
+    --warning-400: #fbbf24;
+    --warning-500: #f59e0b;
+    --warning-600: #d97706;
+    --warning-700: #b45309;
+
+    --error-50: #fef2f2;
+    --error-100: #fee2e2;
+    --error-200: #fecaca;
+    --error-300: #fca5a5;
+    --error-400: #f87171;
+    --error-500: #ef4444;
+    --error-600: #dc2626;
+    --error-700: #b91c1c;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-600) 100%);
+    --gradient-primary-accent: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-500) 100%);
+    --gradient-bg: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+/* Apply to dark mode */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --secondary-50: #1e293b;
+        --secondary-100: #0f172a;
+        --secondary-200: #0c4a6e;
+        --secondary-300: #075985;
+    }
+}
+
+/* Utility classes for theme colors */
+.bg-primary { background-color: var(--primary-color); }
+.text-primary { color: var(--primary-color); }
+.border-primary { border-color: var(--primary-color); }
+.bg-primary-50 { background-color: var(--primary-50); }
+.bg-primary-100 { background-color: var(--primary-100); }
+.bg-primary-500 { background-color: var(--primary-500); }
+.bg-primary-600 { background-color: var(--primary-600); }
+.text-primary-600 { color: var(--primary-600); }
+.text-primary-700 { color: var(--primary-700); }
+.border-primary-200 { border-color: var(--primary-200); }
+.border-primary-500 { border-color: var(--primary-500); }
+
+.bg-success { background-color: var(--success-500); }
+.text-success { color: var(--success-500); }
+.border-success { border-color: var(--success-500); }
+
+.bg-warning { background-color: var(--warning-500); }
+.text-warning { color: var(--warning-500); }
+.border-warning { border-color: var(--warning-500); }
+
+.bg-error { background-color: var(--error-500); }
+.text-error { color: var(--error-500); }
+.border-error { border-color: var(--error-500); }
+
+/* Focus states with primary color */
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1) !important;
+}
+
+/* Button hover states */
+.btn-primary:hover,
+button[class*="primary"]:hover {
+    opacity: 0.9;
+    filter: brightness(0.95);
+}
+
+/* Links with primary color */
+a.text-primary:hover {
+    opacity: 0.8;
+}
+
+/* Animations with primary color */
+@keyframes pulse-primary {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.3);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(var(--primary-rgb), 0.5);
+    }
+}
+
+.animate-pulse-primary {
+    animation: pulse-primary 2s ease-in-out infinite;
+}
+
+@keyframes glow-primary {
+    0%, 100% {
+        border-color: rgba(var(--primary-rgb), 0.3);
+        box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.2);
+    }
+    50% {
+        border-color: rgba(var(--primary-rgb), 0.6);
+        box-shadow: 0 0 25px rgba(var(--primary-rgb), 0.4);
+    }
+}
+
+.animate-glow-primary {
+    animation: glow-primary 3s ease-in-out infinite;
+}

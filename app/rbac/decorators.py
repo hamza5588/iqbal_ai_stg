@@ -11,13 +11,43 @@ from app.rbac.permissions import Permissions, has_permission
 logger = logging.getLogger(__name__)
 
 
+def _wants_json() -> bool:
+    """
+    Helper to determine whether a request is expecting JSON.
+
+    We treat a request as "API / JSON-style" if ANY of the following are true:
+    - The request body is JSON (`request.is_json`)
+    - The `Content-Type` header is `application/json`
+    - The `Accept` header explicitly prefers `application/json`
+    - The request was sent as an XMLHttpRequest (`X-Requested-With: XMLHttpRequest`)
+    """
+    content_type = (request.headers.get('Content-Type') or '').lower()
+    accept = (request.headers.get('Accept') or '').lower()
+    xrw = (request.headers.get('X-Requested-With') or '').lower()
+
+    # All `/api/...` routes are treated as JSON APIs
+    path = (request.path or "").lower()
+    if path.startswith('/api/'):
+        return True
+
+    if request.is_json:
+        return True
+    if 'application/json' in content_type:
+        return True
+    if 'application/json' in accept:
+        return True
+    if xrw == 'xmlhttprequest':
+        return True
+    return False
+
+
 def login_required(f):
     """Decorator to require login for routes."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             logger.info("Unauthorized access attempt - redirecting to login")
-            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            if _wants_json():
                 return jsonify({'error': 'Login required'}), 401
             return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
@@ -41,7 +71,7 @@ def role_required(required_role: Role | str):
         def decorated_function(*args, **kwargs):
             if 'user_id' not in session:
                 logger.info("Unauthorized access attempt - redirecting to login")
-                if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                if _wants_json():
                     return jsonify({'error': 'Login required'}), 401
                 return redirect(url_for('auth.login'))
             
@@ -91,7 +121,7 @@ def permission_required(permission: Permissions | str):
         def decorated_function(*args, **kwargs):
             if 'user_id' not in session:
                 logger.info("Unauthorized access attempt - redirecting to login")
-                if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                if _wants_json():
                     return jsonify({'error': 'Login required'}), 401
                 return redirect(url_for('auth.login'))
             
@@ -121,7 +151,7 @@ def student_only(f):
         user_model = UserModel(session['user_id'])
         if not user_model.is_student():
             logger.info(f"Non-student user {session['user_id']} attempted to access student-only route")
-            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            if _wants_json():
                 return jsonify({'error': 'Student access required'}), 403
             return redirect(url_for('chat.index'))
         return f(*args, **kwargs)
@@ -137,7 +167,7 @@ def teacher_only(f):
         user_model = UserModel(session['user_id'])
         if not user_model.is_teacher():
             logger.info(f"Non-teacher user {session['user_id']} attempted to access teacher-only route")
-            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            if _wants_json():
                 return jsonify({'error': 'Teacher access required'}), 403
             return redirect(url_for('chat.index'))
         return f(*args, **kwargs)
@@ -155,7 +185,7 @@ def admin_only(f):
         
         if Role.from_string(user_role) != Role.ADMIN:
             logger.info(f"Non-admin user {session['user_id']} attempted to access admin-only route")
-            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            if _wants_json():
                 return jsonify({'error': 'Admin access required'}), 403
             return redirect(url_for('chat.index'))
         return f(*args, **kwargs)

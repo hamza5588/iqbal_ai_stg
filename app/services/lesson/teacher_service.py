@@ -106,7 +106,7 @@ def check_lesson_response(text: str, groq_api_key: str):
     # Use the same central/provider-aware logic as RAG (Admin settings + decrypted DB API key).
     # This avoids depending on environment variables like GROQ_API_KEY in production.
     from app.utils.llm_factory import get_chat_model
-    llm = get_chat_model(timeout=120, temperature=0.7)
+    llm = get_chat_model(timeout=120, temperature=0.5)
     
     # Create a prompt to analyze if the response is a complete lesson or just an outline/draft
     analysis_prompt = f"""Analyze the following AI response and determine if it contains a COMPLETE LESSON or just an OUTLINE/DRAFT.
@@ -160,7 +160,7 @@ class TeacherLessonService(BaseLessonService):
         # If you want a dedicated model for images, it should still be created via get_chat_model()
         # so it doesn't require GROQ_API_KEY/OPENAI_API_KEY env vars.
         from app.utils.llm_factory import get_chat_model
-        self.multimodal_llm = get_chat_model(timeout=120, temperature=0.7)
+        self.multimodal_llm = get_chat_model(timeout=120, temperature=0.5)
         teacher_logger.info("Multimodal LLM initialized for image descriptions (central provider)")
     
     def _detect_pages_with_tables(self, file_path: str) -> List[int]:
@@ -2530,224 +2530,516 @@ Please provide an improved version of the lesson content that addresses the user
             logger.error(f"Error in simple lesson editing: {str(e)}")
             return lesson_text
 
-    def create_ppt(self, lesson_data: dict) -> bytes:
-        """Generate a basic PPTX file from the lesson structure using python-pptx"""
-        try:
-            logger.info(f"Creating PowerPoint for lesson: {lesson_data.get('title', 'Unknown')}")
-            logger.info(f"Lesson data keys: {list(lesson_data.keys())}")
-            logger.info(f"Content length: {len(lesson_data.get('content', ''))}")
-            
-            from pptx import Presentation
-            from pptx.util import Inches, Pt
-            prs = Presentation()
-            
-            # Title slide
-            slide_layout = prs.slide_layouts[0]
-            slide = prs.slides.add_slide(slide_layout)
-            slide.shapes.title.text = lesson_data.get('title', 'Lesson')
-            slide.placeholders[1].text = lesson_data.get('summary', '')
-            
-            # Learning Objectives
-            if lesson_data.get('learning_objectives'):
-                slide = prs.slides.add_slide(prs.slide_layouts[1])
-                slide.shapes.title.text = 'Learning Objectives'
-                body = slide.shapes.placeholders[1].text_frame
-                for obj in lesson_data['learning_objectives']:
-                    body.add_paragraph().text = str(obj)
-            
-            # Helper function to split content intelligently
-            def split_content_into_chunks(content: str, max_length: int = 800) -> List[str]:
-                """Split content into manageable chunks respecting paragraph boundaries"""
-                if len(content) <= max_length:
-                    return [content]
-                
-                chunks = []
-                paragraphs = content.split('\n\n')
-                current_chunk = ""
-                
-                for para in paragraphs:
-                    para = para.strip()
-                    if not para:
-                        continue
-                    
-                    # If adding this paragraph would exceed the limit
-                    if current_chunk and len(current_chunk) + len(para) + 2 > max_length:
-                        chunks.append(current_chunk)
-                        current_chunk = para
-                    else:
-                        if current_chunk:
-                            current_chunk += "\n\n" + para
-                        else:
-                            current_chunk = para
-                    
-                    # If a single paragraph is too long, split it by sentences
-                    if len(para) > max_length:
-                        if current_chunk:
-                            chunks.append(current_chunk)
-                            current_chunk = ""
-                        # Split by sentences
-                        sentences = para.replace('. ', '.\n').split('\n')
-                        temp_chunk = ""
-                        for sent in sentences:
-                            if temp_chunk and len(temp_chunk) + len(sent) + 1 > max_length:
-                                chunks.append(temp_chunk)
-                                temp_chunk = sent
-                            else:
-                                temp_chunk += "\n" + sent if temp_chunk else sent
-                        current_chunk = temp_chunk
-                
-                if current_chunk:
-                    chunks.append(current_chunk)
-                
-                return chunks
-            
-            # Sections
-            sections = lesson_data.get('sections', [])
-            if sections:
-                logger.info(f"Creating slides for {len(sections)} sections")
-                for section in sections:
-                    content = section.get('content', '')
-                    heading = section.get('heading', 'Section')
-                    
-                    # Split content into manageable chunks
-                    content_chunks = split_content_into_chunks(content)
-                    
-                    for chunk_idx, chunk in enumerate(content_chunks):
-                        slide = prs.slides.add_slide(prs.slide_layouts[1])
-                        
-                        # Set title - append part number if multiple slides
-                        if len(content_chunks) > 1:
-                            slide.shapes.title.text = f"{heading} (Part {chunk_idx + 1}/{len(content_chunks)})"
-                        else:
-                            slide.shapes.title.text = heading
-                        
-                        body = slide.shapes.placeholders[1].text_frame
-                        body.text = chunk
-                        
-                        # Configure text formatting for readability
-                        body.word_wrap = True
-                        for paragraph in body.paragraphs:
-                            paragraph.space_after = Pt(6)
-                            paragraph.font.size = Pt(12)
+    def _normalize_list_field(self, value: Any) -> List[str]:
+        """Normalize mixed list/string fields into a clean list of text entries."""
+        if value is None:
+            return []
+        if isinstance(value, list):
+            items = value
+        elif isinstance(value, str):
+            lines = re.split(r"\n|;|•", value)
+            items = [line.strip(" -\t") for line in lines if line.strip(" -\t")]
+        else:
+            items = [str(value)]
+        return [str(item).strip() for item in items if str(item).strip()]
+
+    def _extract_sections_from_text(self, raw_text: str) -> List[Dict[str, str]]:
+        """Parse markdown/plain lesson text into section dictionaries."""
+        content = (raw_text or "").strip()
+        if not content:
+            return []
+
+        sections: List[Dict[str, str]] = []
+        current_heading = "Lesson Content"
+        current_lines: List[str] = []
+
+        def flush_section() -> None:
+            section_body = "\n".join(current_lines).strip()
+            if section_body:
+                sections.append({
+                    "heading": self._sanitize_heading(current_heading),
+                    "content": section_body,
+                })
+
+        for line in content.splitlines():
+            stripped = line.strip()
+            markdown_heading = re.match(r"^#{1,6}\s+(.+)$", stripped)
+            simple_heading = re.match(r"^[A-Z][A-Za-z0-9 ,/&()'\"-]{2,80}:$", stripped)
+
+            if markdown_heading:
+                flush_section()
+                current_heading = markdown_heading.group(1).strip(" :")
+                current_lines = []
+                continue
+            if simple_heading and len(current_lines) > 1:
+                flush_section()
+                current_heading = stripped.strip(":")
+                current_lines = []
+                continue
+
+            current_lines.append(line)
+
+        flush_section()
+
+        if not sections:
+            sections.append({"heading": "Lesson Content", "content": content})
+        return sections
+
+    def _extract_bullets(self, text: str, max_items: int = 8) -> List[str]:
+        """Convert mixed text blocks into concise bullet points."""
+        if not text:
+            return []
+
+        bullets: List[str] = []
+        for block in self._parse_markdown_blocks(text):
+            if block["type"] == "table":
+                continue
+            if block["type"] == "heading":
+                clean = self._clean_markdown_text(block.get("text", ""))
+                if clean:
+                    bullets.append(clean)
+                continue
+
+            clean = self._clean_markdown_text(block.get("text", "")).strip()
+            if not clean:
+                continue
+
+            if len(clean) <= 140:
+                bullets.append(clean)
             else:
-                # If no sections, create a content slide with the main content
-                if lesson_data.get('content'):
-                    logger.info("Creating content slides with main lesson content")
-                    content = lesson_data['content']
-                    
-                    # Split content into manageable chunks
-                    content_chunks = split_content_into_chunks(content)
-                    
-                    for chunk_idx, chunk in enumerate(content_chunks):
-                        slide = prs.slides.add_slide(prs.slide_layouts[1])
-                        
-                        if len(content_chunks) > 1:
-                            slide.shapes.title.text = f'Lesson Content (Part {chunk_idx + 1}/{len(content_chunks)})'
-                        else:
-                            slide.shapes.title.text = 'Lesson Content'
-                        
-                        body = slide.shapes.placeholders[1].text_frame
-                        body.text = chunk
-                        
-                        # Configure text formatting for readability
-                        body.word_wrap = True
-                        for paragraph in body.paragraphs:
-                            paragraph.space_after = Pt(6)
-                            paragraph.font.size = Pt(12)
-            
-            # Key Concepts
-            if lesson_data.get('key_concepts'):
-                slide = prs.slides.add_slide(prs.slide_layouts[1])
-                slide.shapes.title.text = 'Key Concepts'
-                body = slide.shapes.placeholders[1].text_frame
-                for kc in lesson_data['key_concepts']:
-                    body.add_paragraph().text = str(kc)
-            
-            # Background Prerequisites
-            if lesson_data.get('background_prerequisites'):
-                slide = prs.slides.add_slide(prs.slide_layouts[1])
-                slide.shapes.title.text = 'Background Prerequisites'
-                body = slide.shapes.placeholders[1].text_frame
-                for prereq in lesson_data['background_prerequisites']:
-                    body.add_paragraph().text = str(prereq)
-            
-            # Creative Activities
-            if lesson_data.get('creative_activities'):
-                slide = prs.slides.add_slide(prs.slide_layouts[1])
-                slide.shapes.title.text = 'Creative Activities'
-                body = slide.shapes.placeholders[1].text_frame
-                for act in lesson_data['creative_activities']:
-                    body.add_paragraph().text = f"{act.get('name', '')}: {act.get('description', '')} ({act.get('duration', '')})"
-                    if act.get('learning_purpose'):
-                        body.add_paragraph().text = f"Purpose: {act.get('learning_purpose', '')}"
-            
-            # STEM Equations
-            if lesson_data.get('stem_equations'):
-                slide = prs.slides.add_slide(prs.slide_layouts[1])
-                slide.shapes.title.text = 'STEM Equations'
-                body = slide.shapes.placeholders[1].text_frame
-                for eq_data in lesson_data['stem_equations']:
-                    if eq_data.get('equation'):
-                        body.add_paragraph().text = f"Equation: {eq_data.get('equation', '')}"
-                    if eq_data.get('complete_equation_significance'):
-                        body.add_paragraph().text = f"Significance: {eq_data.get('complete_equation_significance', '')}"
-            
-            # Assessment Quiz
-            if lesson_data.get('assessment_quiz'):
-                slide = prs.slides.add_slide(prs.slide_layouts[1])
-                slide.shapes.title.text = 'Assessment Quiz'
-                body = slide.shapes.placeholders[1].text_frame
-                for q in lesson_data['assessment_quiz']:
-                    body.add_paragraph().text = f"Q: {q.get('question', '')}"
-                    for i, opt in enumerate(q.get('options', [])):
-                        body.add_paragraph().text = f"{chr(65+i)}. {opt}"
-                    body.add_paragraph().text = f"Answer: {q.get('answer', '')}"
-            
-            # Teacher Notes
-            if lesson_data.get('teacher_notes'):
-                slide = prs.slides.add_slide(prs.slide_layouts[1])
-                slide.shapes.title.text = 'Teacher Notes'
-                body = slide.shapes.placeholders[1].text_frame
-                for note in lesson_data['teacher_notes']:
-                    body.add_paragraph().text = str(note)
-            
-            # If we only have a title slide, add a content slide
-            if len(prs.slides) == 1 and lesson_data.get('content'):
-                logger.info("Adding content slide as only title slide exists")
-                content = lesson_data['content']
-                
-                # Split content into manageable chunks
-                content_chunks = split_content_into_chunks(content)
-                
-                for chunk_idx, chunk in enumerate(content_chunks):
-                    slide = prs.slides.add_slide(prs.slide_layouts[1])
-                    
-                    if len(content_chunks) > 1:
-                        slide.shapes.title.text = f'Lesson Content (Part {chunk_idx + 1}/{len(content_chunks)})'
-                    else:
-                        slide.shapes.title.text = 'Lesson Content'
-                    
-                    body = slide.shapes.placeholders[1].text_frame
-                    body.text = chunk
-                    
-                    # Configure text formatting for readability
-                    body.word_wrap = True
-                    for paragraph in body.paragraphs:
-                        paragraph.space_after = Pt(6)
-                        paragraph.font.size = Pt(12)
-            
-            logger.info(f"Created PowerPoint with {len(prs.slides)} slides")
-            
-            from io import BytesIO
+                for sentence in re.split(r"(?<=[.!?])\s+", clean):
+                    sentence = sentence.strip()
+                    if sentence:
+                        bullets.append(sentence[:160])
+                    if len(bullets) >= max_items:
+                        break
+
+            if len(bullets) >= max_items:
+                break
+
+        return bullets[:max_items]
+
+    def _clean_markdown_text(self, text: str) -> str:
+        """Remove markdown markers while preserving readable text."""
+        clean = (text or "").strip()
+        if not clean:
+            return ""
+        clean = re.sub(r"^#{1,6}\s*", "", clean)
+        clean = re.sub(r"^>\s*", "", clean)
+        clean = re.sub(r"(```|`)", "", clean)
+        clean = re.sub(r"\*\*(.*?)\*\*", r"\1", clean)
+        clean = re.sub(r"__(.*?)__", r"\1", clean)
+        clean = re.sub(r"\*(.*?)\*", r"\1", clean)
+        clean = re.sub(r"_(.*?)_", r"\1", clean)
+        return clean.strip()
+
+    def _is_markdown_table_delimiter(self, line: str) -> bool:
+        """Check whether a line is a markdown table alignment separator."""
+        return bool(re.match(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$", line or ""))
+
+    def _split_markdown_table_row(self, line: str) -> List[str]:
+        """Split a markdown table row into trimmed cells."""
+        row = (line or "").strip()
+        if row.startswith("|"):
+            row = row[1:]
+        if row.endswith("|"):
+            row = row[:-1]
+        return [self._clean_markdown_text(cell.strip()) for cell in row.split("|")]
+
+    def _parse_markdown_blocks(self, text: str) -> List[Dict[str, Any]]:
+        """Parse markdown-like content into semantic blocks."""
+        blocks: List[Dict[str, Any]] = []
+        lines = (text or "").splitlines()
+        i = 0
+
+        while i < len(lines):
+            raw = lines[i].rstrip()
+            stripped = raw.strip()
+            if not stripped:
+                i += 1
+                continue
+
+            heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+            if heading_match:
+                blocks.append({
+                    "type": "heading",
+                    "level": len(heading_match.group(1)),
+                    "text": self._clean_markdown_text(heading_match.group(2)),
+                })
+                i += 1
+                continue
+
+            if (
+                i + 1 < len(lines)
+                and "|" in stripped
+                and self._is_markdown_table_delimiter(lines[i + 1].strip())
+            ):
+                headers = self._split_markdown_table_row(stripped)
+                i += 2  # Skip header + delimiter row
+                rows: List[List[str]] = []
+                while i < len(lines):
+                    row_line = lines[i].strip()
+                    if not row_line or "|" not in row_line:
+                        break
+                    rows.append(self._split_markdown_table_row(row_line))
+                    i += 1
+                if headers and rows:
+                    blocks.append({"type": "table", "headers": headers, "rows": rows})
+                continue
+
+            bullet_match = re.match(r"^(?:[-*•]\s+|\d+[.)]\s+)(.+)$", stripped)
+            if bullet_match:
+                blocks.append({"type": "bullet", "text": self._clean_markdown_text(bullet_match.group(1))})
+                i += 1
+                continue
+
+            paragraph_lines = [stripped]
+            i += 1
+            while i < len(lines):
+                candidate = lines[i].strip()
+                if not candidate:
+                    i += 1
+                    break
+                if re.match(r"^(#{1,6})\s+.+$", candidate):
+                    break
+                if re.match(r"^(?:[-*•]\s+|\d+[.)]\s+).+$", candidate):
+                    break
+                if (
+                    i + 1 < len(lines)
+                    and "|" in candidate
+                    and self._is_markdown_table_delimiter(lines[i + 1].strip())
+                ):
+                    break
+                paragraph_lines.append(candidate)
+                i += 1
+
+            paragraph_text = self._clean_markdown_text(" ".join(paragraph_lines))
+            if paragraph_text:
+                blocks.append({"type": "paragraph", "text": paragraph_text})
+
+        return blocks
+
+    def _add_docx_inline_markdown(self, paragraph, text: str) -> None:
+        """Render simple bold/italic markdown into Word runs."""
+        source = (text or "").strip()
+        if not source:
+            paragraph.add_run("")
+            return
+
+        token_pattern = r"(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)"
+        tokens = re.split(token_pattern, source)
+        for token in tokens:
+            if not token:
+                continue
+            if token.startswith("**") and token.endswith("**"):
+                run = paragraph.add_run(token[2:-2])
+                run.bold = True
+                continue
+            if token.startswith("__") and token.endswith("__"):
+                run = paragraph.add_run(token[2:-2])
+                run.bold = True
+                continue
+            if token.startswith("*") and token.endswith("*"):
+                run = paragraph.add_run(token[1:-1])
+                run.italic = True
+                continue
+            if token.startswith("_") and token.endswith("_"):
+                run = paragraph.add_run(token[1:-1])
+                run.italic = True
+                continue
+            paragraph.add_run(token)
+
+    def _get_export_branding(self) -> Dict[str, Any]:
+        """Return branding configuration used by DOCX and PPT exporters."""
+        brand_name = (
+            os.getenv("EXPORT_BRAND_NAME")
+            or os.getenv("IQBALAI_BRAND_NAME")
+            or "Iqbal AI"
+        )
+        footer_text = os.getenv("EXPORT_BRAND_FOOTER") or f"{brand_name} - Professional lesson export"
+        return {
+            "brand_name": brand_name,
+            "footer_text": footer_text,
+            "logo_path": self._resolve_export_logo_path(),
+        }
+
+    def _resolve_export_logo_path(self) -> Optional[str]:
+        """Resolve logo path from env or common static locations."""
+        candidate_paths: List[str] = []
+
+        env_path = os.getenv("EXPORT_BRAND_LOGO_PATH")
+        if env_path:
+            candidate_paths.append(env_path)
+
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        candidate_paths.extend([
+            os.path.join(project_root, "app", "static", "logo.png"),
+            os.path.join(project_root, "app", "static", "images", "logo.png"),
+            os.path.join(project_root, "static", "logo.png"),
+        ])
+
+        for path in candidate_paths:
+            if not path:
+                continue
+            resolved = path if os.path.isabs(path) else os.path.join(project_root, path)
+            if os.path.isfile(resolved):
+                return resolved
+        return None
+
+    def _prepare_lesson_for_export(self, lesson_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a consistent export structure for DOCX and PPT generation."""
+        prepared: Dict[str, Any] = {
+            "title": self._sanitize_heading(str(lesson_data.get("title", "Generated Lesson"))),
+            "summary": str(lesson_data.get("summary", "")).strip(),
+            "learning_objectives": self._normalize_list_field(lesson_data.get("learning_objectives")),
+            "key_concepts": self._normalize_list_field(lesson_data.get("key_concepts")),
+            "background_prerequisites": self._normalize_list_field(lesson_data.get("background_prerequisites")),
+            "teacher_notes": self._normalize_list_field(lesson_data.get("teacher_notes")),
+            "creative_activities": lesson_data.get("creative_activities") or [],
+            "stem_equations": lesson_data.get("stem_equations") or [],
+            "assessment_quiz": lesson_data.get("assessment_quiz") or [],
+            "sections": [],
+        }
+
+        sections = lesson_data.get("sections") or []
+        normalized_sections: List[Dict[str, str]] = []
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            heading = self._sanitize_heading(str(section.get("heading", "Section")))
+            content = str(section.get("content", "")).strip()
+            if content:
+                normalized_sections.append({"heading": heading, "content": content})
+
+        full_content = str(lesson_data.get("content", "")).strip()
+        if not normalized_sections and full_content:
+            normalized_sections = self._extract_sections_from_text(full_content)
+        elif normalized_sections and full_content:
+            # Keep raw content as appendix context if caller provided both.
+            if not any(s.get("content", "").strip() == full_content for s in normalized_sections):
+                normalized_sections.append({"heading": "Additional Content", "content": full_content})
+
+        prepared["sections"] = normalized_sections
+        return prepared
+
+    def create_ppt(self, lesson_data: dict) -> bytes:
+        """Generate a professionally formatted PPTX from lesson structure using python-pptx."""
+        try:
+            from pptx import Presentation
+            from pptx.dml.color import RGBColor
+            from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+            from pptx.util import Inches, Pt
+
+            prepared = self._prepare_lesson_for_export(lesson_data)
+            branding = self._get_export_branding()
+            prs = Presentation()
+            prs.core_properties.author = "Iqbal AI"
+            prs.core_properties.title = prepared["title"]
+            brand_primary = RGBColor(0x0F, 0x4C, 0x81)
+            brand_accent = RGBColor(0x14, 0x72, 0xB9)
+            brand_muted = RGBColor(0x5A, 0x6B, 0x7A)
+
+            title_layout_idx = 0
+            content_layout_idx = 1 if len(prs.slide_layouts) > 1 else 0
+            max_bullets_per_slide = 6
+
+            def apply_title_style(slide_title, title_text: str, size: int = 34) -> None:
+                if not slide_title:
+                    return
+                tf = slide_title.text_frame
+                tf.clear()
+                p = tf.paragraphs[0]
+                p.alignment = PP_ALIGN.LEFT
+                run = p.add_run()
+                run.text = title_text
+                font = run.font
+                font.name = "Calibri"
+                font.bold = True
+                font.size = Pt(size)
+                font.color.rgb = brand_primary
+
+            def set_title_text(slide, title_text: str, size: int = 30) -> None:
+                if not slide.shapes.title:
+                    return
+                apply_title_style(slide.shapes.title, title_text, size=size)
+
+            def add_bullet_slides(title: str, bullets: List[str]) -> None:
+                if not bullets:
+                    return
+
+                for chunk_start in range(0, len(bullets), max_bullets_per_slide):
+                    chunk = bullets[chunk_start:chunk_start + max_bullets_per_slide]
+                    part = (chunk_start // max_bullets_per_slide) + 1
+                    total_parts = (len(bullets) + max_bullets_per_slide - 1) // max_bullets_per_slide
+                    slide_title = title if total_parts == 1 else f"{title} (Part {part}/{total_parts})"
+
+                    slide = prs.slides.add_slide(prs.slide_layouts[content_layout_idx])
+                    set_title_text(slide, slide_title, size=28)
+
+                    content_shape = slide.shapes.placeholders[1] if len(slide.placeholders) > 1 else None
+                    if not content_shape or not content_shape.has_text_frame:
+                        continue
+
+                    tf = content_shape.text_frame
+                    tf.clear()
+                    tf.margin_left = Inches(0.1)
+                    tf.margin_right = Inches(0.1)
+                    tf.margin_top = Inches(0.06)
+                    tf.margin_bottom = Inches(0.06)
+                    tf.word_wrap = True
+                    tf.vertical_anchor = MSO_ANCHOR.TOP
+
+                    for idx, bullet in enumerate(chunk):
+                        p = tf.paragraphs[0] if idx == 0 else tf.add_paragraph()
+                        p.text = bullet
+                        p.level = 0
+                        p.alignment = PP_ALIGN.LEFT
+                        p.space_after = Pt(7)
+                        p.font.name = "Calibri"
+                        p.font.size = Pt(20 if idx == 0 else 18)
+                        p.font.color.rgb = brand_muted
+
+            def add_table_slides(title: str, headers: List[str], rows: List[List[str]]) -> None:
+                if not headers or not rows:
+                    return
+
+                max_rows_per_slide = 8
+                cols = max(len(headers), max((len(r) for r in rows), default=0))
+                if cols <= 0:
+                    return
+
+                for start in range(0, len(rows), max_rows_per_slide):
+                    chunk = rows[start:start + max_rows_per_slide]
+                    part = (start // max_rows_per_slide) + 1
+                    total_parts = (len(rows) + max_rows_per_slide - 1) // max_rows_per_slide
+                    slide_title = title if total_parts == 1 else f"{title} (Table {part}/{total_parts})"
+
+                    slide = prs.slides.add_slide(prs.slide_layouts[content_layout_idx])
+                    set_title_text(slide, slide_title, size=26)
+
+                    left = Inches(0.5)
+                    top = Inches(1.6)
+                    width = prs.slide_width - Inches(1.0)
+                    height = Inches(4.8)
+                    shape = slide.shapes.add_table(len(chunk) + 1, cols, left, top, width, height)
+                    table = shape.table
+                    table.first_row = True
+
+                    col_width = int(width / cols)
+                    for col_idx in range(cols):
+                        table.columns[col_idx].width = col_width
+
+                    padded_headers = headers + [""] * (cols - len(headers))
+                    for col_idx, text in enumerate(padded_headers):
+                        cell = table.cell(0, col_idx)
+                        cell.text = self._clean_markdown_text(str(text))
+                        cell.fill.solid()
+                        cell.fill.fore_color.rgb = brand_accent
+                        para = cell.text_frame.paragraphs[0]
+                        para.font.bold = True
+                        para.font.name = "Calibri"
+                        para.font.size = Pt(13)
+                        para.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+
+                    for row_idx, row_data in enumerate(chunk, start=1):
+                        padded_row = row_data + [""] * (cols - len(row_data))
+                        for col_idx, text in enumerate(padded_row):
+                            cell = table.cell(row_idx, col_idx)
+                            cell.text = self._clean_markdown_text(str(text))[:220]
+                            para = cell.text_frame.paragraphs[0]
+                            para.font.bold = False
+                            para.font.name = "Calibri"
+                            para.font.size = Pt(12)
+                            para.font.color.rgb = RGBColor(0x22, 0x22, 0x22)
+
+            def add_brand_elements(slide) -> None:
+                footer = slide.shapes.add_textbox(
+                    Inches(0.35),
+                    prs.slide_height - Inches(0.45),
+                    prs.slide_width - Inches(0.7),
+                    Inches(0.2),
+                )
+                tf = footer.text_frame
+                tf.clear()
+                p = tf.paragraphs[0]
+                p.alignment = PP_ALIGN.RIGHT
+                p.text = branding["footer_text"]
+                p.font.name = "Calibri"
+                p.font.size = Pt(9)
+                p.font.color.rgb = brand_muted
+
+                if branding["logo_path"]:
+                    try:
+                        slide.shapes.add_picture(
+                            branding["logo_path"],
+                            prs.slide_width - Inches(1.5),
+                            Inches(0.1),
+                            width=Inches(1.2),
+                        )
+                    except Exception:
+                        logger.warning("Unable to place export logo in PPT slide", exc_info=True)
+
+            # Title slide
+            title_slide = prs.slides.add_slide(prs.slide_layouts[title_layout_idx])
+            if title_slide.shapes.title:
+                apply_title_style(title_slide.shapes.title, prepared["title"], size=40)
+            if len(title_slide.placeholders) > 1:
+                subtitle = prepared["summary"] or f"Lesson presentation generated by {branding['brand_name']}"
+                subtitle_para = title_slide.placeholders[1].text_frame.paragraphs[0]
+                subtitle_para.text = subtitle[:240]
+                subtitle_para.font.name = "Calibri"
+                subtitle_para.font.size = Pt(20)
+                subtitle_para.font.color.rgb = brand_accent
+
+            # Objectives and sections
+            add_bullet_slides("Learning Objectives", prepared["learning_objectives"])
+
+            for section in prepared["sections"]:
+                section_title = self._clean_markdown_text(section.get("heading", "Section"))
+                section_content = section.get("content", "")
+                blocks = self._parse_markdown_blocks(section_content)
+
+                section_bullets: List[str] = []
+                for block in blocks:
+                    if block["type"] == "table":
+                        add_table_slides(
+                            section_title,
+                            block.get("headers", []),
+                            block.get("rows", []),
+                        )
+                        continue
+                    if block["type"] in {"heading", "paragraph", "bullet"}:
+                        block_text = self._clean_markdown_text(block.get("text", ""))
+                        if block_text:
+                            section_bullets.append(block_text)
+
+                if not section_bullets:
+                    section_bullets = self._extract_bullets(section_content, max_items=24)
+                if not section_bullets and section_content.strip():
+                    section_bullets = [self._clean_markdown_text(section_content.strip())[:220]]
+                if section_bullets:
+                    add_bullet_slides(section_title, section_bullets[:24])
+
+            add_bullet_slides("Key Concepts", prepared["key_concepts"])
+            add_bullet_slides("Background Prerequisites", prepared["background_prerequisites"])
+
+            if prepared["teacher_notes"]:
+                add_bullet_slides("Teacher Notes", prepared["teacher_notes"])
+
+            if len(prs.slides) == 1:
+                add_bullet_slides("Lesson Highlights", [prepared.get("summary") or "Lesson content is available in the lesson document."])
+
+            for slide in prs.slides:
+                add_brand_elements(slide)
+
+            logger.info(f"Created professional PowerPoint with {len(prs.slides)} slides")
             buffer = BytesIO()
             prs.save(buffer)
             buffer.seek(0)
-            ppt_bytes = buffer.getvalue()
-            logger.info(f"PowerPoint generated successfully, size: {len(ppt_bytes)} bytes")
-            return ppt_bytes
+            return buffer.getvalue()
         except Exception as e:
             logger.error(f"Error creating PPTX: {str(e)}", exc_info=True)
-            return b''
+            return b""
 
     def _create_docx_from_text(self, lesson_text: str, lesson_details: Optional[Dict[str, str]] = None) -> bytes:
         """Create DOCX from plain text lesson response"""
@@ -2779,151 +3071,164 @@ Please provide an improved version of the lesson content that addresses the user
             return buffer.getvalue()
 
     def _create_docx(self, lesson_data: Dict[str, Any]) -> bytes:
-        """Convert structured lesson to DOCX format with improved formatting"""
+        """Convert structured lesson data into a professionally formatted DOCX file."""
         try:
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.oxml import parse_xml
+            from docx.oxml.ns import nsdecls
+            from docx.shared import Pt, RGBColor
+
+            prepared = self._prepare_lesson_for_export(lesson_data)
+            branding = self._get_export_branding()
             doc = DocxDocument()
-            
-            # Add title with formatting
-            title = doc.add_heading(level=1)
-            title_run = title.add_run(self._sanitize_heading(lesson_data.get("title", "Generated Lesson")))
+            doc.core_properties.author = "Iqbal AI"
+            doc.core_properties.title = prepared["title"]
+
+            # Page layout and default typography
+            section = doc.sections[0]
+            section.top_margin = Inches(1.0)
+            section.bottom_margin = Inches(1.0)
+            section.left_margin = Inches(1.0)
+            section.right_margin = Inches(1.0)
+
+            normal_style = doc.styles["Normal"]
+            normal_style.font.name = "Calibri"
+            normal_style.font.size = Pt(11)
+            normal_style.paragraph_format.line_spacing = 1.15
+            normal_style.paragraph_format.space_after = Pt(8)
+
+            heading1 = doc.styles["Heading 1"]
+            heading1.font.name = "Calibri"
+            heading1.font.bold = True
+            heading1.font.size = Pt(18)
+            heading1.font.color.rgb = RGBColor(0x0F, 0x4C, 0x81)
+
+            heading2 = doc.styles["Heading 2"]
+            heading2.font.name = "Calibri"
+            heading2.font.bold = True
+            heading2.font.size = Pt(14)
+            heading2.font.color.rgb = RGBColor(0x14, 0x72, 0xB9)
+
+            if branding["logo_path"]:
+                try:
+                    logo_para = doc.add_paragraph()
+                    logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    logo_run = logo_para.add_run()
+                    logo_run.add_picture(branding["logo_path"], width=Inches(1.2))
+                except Exception:
+                    logger.warning("Unable to place export logo in DOCX", exc_info=True)
+
+            # Cover/title block
+            title_para = doc.add_paragraph(style="Title")
+            title_run = title_para.add_run(prepared["title"])
             title_run.bold = True
-            
-            # Add summary section
-            if lesson_data.get("summary"):
-                doc.add_heading(self._sanitize_heading("Summary"), level=2)
-                summary = doc.add_paragraph(lesson_data["summary"])
-                summary.paragraph_format.space_after = Inches(0.1)
-            
-            # Add learning objectives with bullet points
-            if lesson_data.get("learning_objectives"):
-                doc.add_heading(self._sanitize_heading("Learning Objectives"), level=2)
-                for objective in lesson_data["learning_objectives"]:
-                    p = doc.add_paragraph(style='ListBullet')
-                    p.add_run(str(objective))
-                doc.add_paragraph()
-            
-            # Add sections with proper spacing
-            if lesson_data.get("sections"):
-                for section in lesson_data["sections"]:
-                    doc.add_heading(self._sanitize_heading(section.get("heading", "Section")), level=2)
-                    content = doc.add_paragraph(section.get("content", ""))
-                    content.paragraph_format.space_after = Inches(0.1)
-                    doc.add_paragraph()
-            
-            # Add key concepts
-            if lesson_data.get("key_concepts"):
-                doc.add_heading(self._sanitize_heading("Key Concepts"), level=2)
-                for concept in lesson_data["key_concepts"]:
-                    p = doc.add_paragraph(style='ListBullet')
-                    p.add_run(str(concept))
-                doc.add_paragraph()
-            
-            # Add background prerequisites
-            if lesson_data.get("background_prerequisites"):
-                doc.add_heading(self._sanitize_heading("Background Prerequisites"), level=2)
-                for prereq in lesson_data["background_prerequisites"]:
-                    p = doc.add_paragraph(style='ListBullet')
-                    p.add_run(str(prereq))
-                doc.add_paragraph()
-            
-            # Add creative activities with clear formatting
-            if lesson_data.get("creative_activities"):
-                doc.add_heading(self._sanitize_heading("Creative Activities"), level=2)
-                for i, activity in enumerate(lesson_data["creative_activities"], 1):
-                    activity_title = doc.add_heading(level=3)
-                    activity_title.add_run(self._sanitize_heading(f"Activity {i}: {activity.get('name', 'Unnamed Activity')}")).bold = True
-                    
-                    desc = doc.add_paragraph()
-                    desc.add_run("Description: ").bold = True
-                    desc.add_run(str(activity.get('description', '')))
-                    
-                    if activity.get('duration'):
-                        duration = doc.add_paragraph()
-                        duration.add_run("Duration: ").bold = True
-                        duration.add_run(str(activity['duration']))
-                    
-                    if activity.get('learning_purpose'):
-                        purpose = doc.add_paragraph()
-                        purpose.add_run("Learning Purpose: ").bold = True
-                        purpose.add_run(str(activity['learning_purpose']))
-                    
-                    doc.add_paragraph()
-            
-            # Add STEM equations if present
-            if lesson_data.get("stem_equations"):
-                doc.add_heading(self._sanitize_heading("STEM Equations"), level=2)
-                for i, equation_data in enumerate(lesson_data["stem_equations"], 1):
-                    if equation_data.get("equation"):
-                        eq_title = doc.add_heading(level=3)
-                        eq_title.add_run(self._sanitize_heading(f"Equation {i}")).bold = True
-                        
-                        eq_para = doc.add_paragraph()
-                        eq_para.add_run("Equation: ").bold = True
-                        eq_para.add_run(str(equation_data['equation']))
-                        
-                        if equation_data.get("term_explanations"):
-                            terms = doc.add_paragraph()
-                            terms.add_run("Term Explanations: ").bold = True
-                            for term in equation_data["term_explanations"]:
-                                term_p = doc.add_paragraph(style='ListBullet')
-                                term_p.add_run(str(term))
-                        
-                        if equation_data.get("mathematical_operations"):
-                            ops = doc.add_paragraph()
-                            ops.add_run("Mathematical Operations: ").bold = True
-                            ops.add_run(str(equation_data['mathematical_operations']))
-                        
-                        if equation_data.get("complete_equation_significance"):
-                            sig = doc.add_paragraph()
-                            sig.add_run("Complete Equation Significance: ").bold = True
-                            sig.add_run(str(equation_data['complete_equation_significance']))
-                        
+            title_run.font.name = "Calibri"
+            title_run.font.size = Pt(28)
+            title_run.font.color.rgb = RGBColor(0x0F, 0x4C, 0x81)
+            title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            metadata = doc.add_paragraph(f"Generated on {datetime.utcnow().strftime('%Y-%m-%d')} by {branding['brand_name']}")
+            metadata.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            metadata.runs[0].italic = True
+            metadata.runs[0].font.size = Pt(10)
+            doc.add_paragraph()
+
+            if prepared["summary"]:
+                doc.add_heading("Summary", level=2)
+                summary_p = doc.add_paragraph(prepared["summary"])
+                summary_p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+            if prepared["learning_objectives"]:
+                doc.add_heading("Learning Objectives", level=2)
+                for objective in prepared["learning_objectives"]:
+                    obj = doc.add_paragraph(style="List Bullet")
+                    obj.add_run(objective)
+
+            for section_data in prepared["sections"]:
+                doc.add_heading(self._sanitize_heading(self._clean_markdown_text(section_data.get("heading", "Section"))), level=2)
+                raw_section = section_data.get("content", "")
+                blocks = self._parse_markdown_blocks(raw_section)
+                for block in blocks:
+                    if block["type"] == "heading":
+                        nested_level = min(4, max(3, int(block.get("level", 2)) + 1))
+                        doc.add_heading(self._sanitize_heading(self._clean_markdown_text(block.get("text", ""))), level=nested_level)
+                        continue
+
+                    if block["type"] == "bullet":
+                        para = doc.add_paragraph(style="List Bullet")
+                        self._add_docx_inline_markdown(para, block.get("text", ""))
+                        continue
+
+                    if block["type"] == "paragraph":
+                        para = doc.add_paragraph()
+                        para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                        self._add_docx_inline_markdown(para, block.get("text", ""))
+                        continue
+
+                    if block["type"] == "table":
+                        headers = block.get("headers", [])
+                        rows = block.get("rows", [])
+                        if not headers or not rows:
+                            continue
+
+                        max_cols = max(len(headers), max((len(row) for row in rows), default=0))
+                        table = doc.add_table(rows=1, cols=max_cols)
+                        table.style = "Table Grid"
+                        hdr_cells = table.rows[0].cells
+
+                        padded_headers = headers + [""] * (max_cols - len(headers))
+                        for col_idx, header_text in enumerate(padded_headers):
+                            cell_para = hdr_cells[col_idx].paragraphs[0]
+                            run = cell_para.add_run(self._clean_markdown_text(str(header_text)))
+                            run.bold = True
+                            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                            shading_elm = parse_xml(r'<w:shd {} w:fill="1472B9"/>'.format(nsdecls('w')))
+                            hdr_cells[col_idx]._tc.get_or_add_tcPr().append(shading_elm)
+
+                        for row_data in rows:
+                            row_cells = table.add_row().cells
+                            padded_row = row_data + [""] * (max_cols - len(row_data))
+                            for col_idx, cell_text in enumerate(padded_row):
+                                row_cells[col_idx].text = self._clean_markdown_text(str(cell_text))
                         doc.add_paragraph()
-            
-            # Add assessment quiz with clear question/answer formatting
-            if lesson_data.get("assessment_quiz"):
-                doc.add_heading(self._sanitize_heading("Assessment Quiz"), level=2)
-                for i, question in enumerate(lesson_data["assessment_quiz"], 1):
-                    q = doc.add_paragraph()
-                    q.add_run(f"Question {i}: ").bold = True
-                    q.add_run(str(question.get('question', '')))
-                    
-                    # Add options with letters
-                    options = ['A', 'B', 'C', 'D']
-                    question_options = question.get("options", [])
-                    for opt, text in zip(options, question_options):
-                        p = doc.add_paragraph(style='ListBullet')
-                        p.add_run(f"{opt}. {str(text)}")
-                    
-                    # Add answer
-                    ans = doc.add_paragraph()
-                    ans.add_run("Correct Answer: ").bold = True
-                    ans.add_run(str(question.get('answer', '')))
-                    
-                    if question.get('explanation'):
-                        exp = doc.add_paragraph()
-                        exp.add_run("Explanation: ").bold = True
-                        exp.add_run(str(question['explanation']))
-                    
-                    doc.add_paragraph()
-            
-            # Add teacher notes
-            if lesson_data.get("teacher_notes"):
-                doc.add_heading(self._sanitize_heading("Teacher Notes"), level=2)
-                for note in lesson_data["teacher_notes"]:
-                    p = doc.add_paragraph(style='ListBullet')
-                    p.add_run(str(note))
-                doc.add_paragraph()
-            
-            # Save to bytes buffer
+
+            if prepared["key_concepts"]:
+                doc.add_heading("Key Concepts", level=2)
+                for concept in prepared["key_concepts"]:
+                    concept_para = doc.add_paragraph(style="List Bullet")
+                    concept_para.add_run(concept)
+
+            if prepared["background_prerequisites"]:
+                doc.add_heading("Background Prerequisites", level=2)
+                for prereq in prepared["background_prerequisites"]:
+                    prereq_para = doc.add_paragraph(style="List Bullet")
+                    prereq_para.add_run(prereq)
+
+            if prepared["teacher_notes"]:
+                doc.add_heading("Teacher Notes", level=2)
+                for note in prepared["teacher_notes"]:
+                    note_para = doc.add_paragraph(style="List Bullet")
+                    note_para.add_run(note)
+
+            if not prepared["sections"] and not prepared["summary"]:
+                doc.add_heading("Lesson Content", level=2)
+                doc.add_paragraph("Lesson details were generated successfully and are available in your dashboard.")
+
+            footer_para = section.footer.paragraphs[0] if section.footer.paragraphs else section.footer.add_paragraph()
+            footer_para.text = branding["footer_text"]
+            footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if footer_para.runs:
+                footer_para.runs[0].font.name = "Calibri"
+                footer_para.runs[0].font.size = Pt(9)
+                footer_para.runs[0].font.color.rgb = RGBColor(0x5A, 0x6B, 0x7A)
+
             buffer = BytesIO()
             doc.save(buffer)
             buffer.seek(0)
             return buffer.getvalue()
-            
+
         except Exception as e:
             logger.error(f"Error creating DOCX: {str(e)}")
-            # Return a simple DOCX with error message
             doc = DocxDocument()
             doc.add_heading(self._sanitize_heading("Lesson Generation"), level=1)
             doc.add_paragraph("A lesson has been generated from your content.")

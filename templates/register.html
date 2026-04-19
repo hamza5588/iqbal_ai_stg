@@ -3,280 +3,1591 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Complete Registration | Iqbal AI</title>
+  <title>Create Account | Iqbal AI - Secure Learning Platform</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            display: ['Poppins', 'Inter', 'sans-serif'],
+          },
           colors: {
-            'iqbal-primary': '#05B0FC',
-            'iqbal-light': '#E6F7FF'
+            'primary': {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            },
+            'secondary': {
+              50: '#f8fafc',
+              100: '#f1f5f9',
+              200: '#e2e8f0',
+              300: '#cbd5e1',
+              400: '#94a3b8',
+              500: '#64748b',
+              600: '#475569',
+              700: '#334155',
+              800: '#1e293b',
+              900: '#0f172a',
+            },
+            'accent': {
+              50: '#fdf2f8',
+              100: '#fce7f3',
+              200: '#fbcfe8',
+              300: '#f9a8d4',
+              400: '#f472b6',
+              500: '#ec4899',
+              600: '#db2777',
+              700: '#be185d',
+              800: '#9d174d',
+              900: '#831843',
+            },
+            'success': {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              200: '#bbf7d0',
+              300: '#86efac',
+              400: '#4ade80',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            },
+            'warning': {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              200: '#fde68a',
+              300: '#fcd34d',
+              400: '#fbbf24',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+              800: '#92400e',
+              900: '#78350f',
+            },
+            'error': {
+              50: '#fef2f2',
+              100: '#fee2e2',
+              200: '#fecaca',
+              300: '#fca5a5',
+              400: '#f87171',
+              500: '#ef4444',
+              600: '#dc2626',
+              700: '#b91c1c',
+              800: '#991b1b',
+              900: '#7f1d1d',
+            },
+            'surface': {
+              50: '#fafafa',
+              100: '#f5f5f5',
+              200: '#e5e5e5',
+              300: '#d4d4d4',
+              400: '#a3a3a3',
+              500: '#737373',
+              600: '#525252',
+              700: '#404040',
+              800: '#262626',
+              900: '#171717',
+            }
+          },
+          animation: {
+            'gradient-x': 'gradient-x 15s ease infinite',
+            'gradient-y': 'gradient-y 15s ease infinite',
+            'gradient-xy': 'gradient-xy 15s ease infinite',
+            'float-slow': 'float 8s ease-in-out infinite',
+            'float-slower': 'float 12s ease-in-out infinite',
+            'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+            'slide-in-right': 'slideInRight 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards',
+            'slide-in-up': 'slideInUp 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards',
+            'fade-in': 'fadeIn 0.8s ease-out forwards',
+            'border-glow': 'borderGlow 3s ease-in-out infinite',
+            'shimmer': 'shimmer 2s infinite linear',
+          },
+          animationDelay: {
+            '75': '75ms',
+            '100': '100ms',
+            '150': '150ms',
+            '200': '200ms',
+            '300': '300ms',
+            '500': '500ms',
+            '700': '700ms',
+            '1000': '1000ms',
+          },
+          keyframes: {
+            'gradient-y': {
+              '0%, 100%': {
+                'background-size': '400% 400%',
+                'background-position': 'center top'
+              },
+              '50%': {
+                'background-size': '200% 200%',
+                'background-position': 'center center'
+              }
+            },
+            'gradient-x': {
+              '0%, 100%': {
+                'background-size': '200% 200%',
+                'background-position': 'left center'
+              },
+              '50%': {
+                'background-size': '200% 200%',
+                'background-position': 'right center'
+              }
+            },
+            'gradient-xy': {
+              '0%, 100%': {
+                'background-position': '0% 0%'
+              },
+              '50%': {
+                'background-position': '100% 100%'
+              }
+            },
+            'float': {
+              '0%, 100%': { transform: 'translateY(0) translateX(0)' },
+              '33%': { transform: 'translateY(-20px) translateX(10px)' },
+              '66%': { transform: 'translateY(-10px) translateX(-10px)' }
+            },
+            'pulse-glow': {
+              '0%, 100%': { 
+                'box-shadow': '0 0 20px rgba(14, 165, 233, 0.3)',
+                'transform': 'scale(1)'
+              },
+              '50%': { 
+                'box-shadow': '0 0 40px rgba(14, 165, 233, 0.5)',
+                'transform': 'scale(1.05)'
+              }
+            },
+            'slideInRight': {
+              from: { opacity: '0', transform: 'translateX(30px)' },
+              to: { opacity: '1', transform: 'translateX(0)' }
+            },
+            'slideInUp': {
+              from: { opacity: '0', transform: 'translateY(30px)' },
+              to: { opacity: '1', transform: 'translateY(0)' }
+            },
+            'fadeIn': {
+              from: { opacity: '0' },
+              to: { opacity: '1' }
+            },
+            'borderGlow': {
+              '0%, 100%': { 
+                'border-color': 'rgba(14, 165, 233, 0.3)',
+                'box-shadow': '0 0 15px rgba(14, 165, 233, 0.2)'
+              },
+              '50%': { 
+                'border-color': 'rgba(236, 72, 153, 0.5)',
+                'box-shadow': '0 0 25px rgba(236, 72, 153, 0.3)'
+              }
+            },
+            'shimmer': {
+              '0%': { 'background-position': '-200px 0' },
+              '100%': { 'background-position': 'calc(200px + 100%) 0' }
+            }
+          },
+          backgroundImage: {
+            'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+            'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+            'gradient-diagonal': 'linear-gradient(135deg, var(--tw-gradient-stops))',
           }
         }
       }
     }
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
-   <style>
-    .bg-rect {
-      background-image: url("{{ url_for('static', filename='images/rect.png') }}");
-      background-size: cover;
-      background-position: center;
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-primary: #0ea5e9;
+      --color-secondary: #64748b;
+      --color-accent: #ec4899;
+    }
+    
+    * {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    body {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      min-height: 100vh;
+    }
+    
+    .glass-morphism {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+    }
+    
+    .glass-dark {
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .gradient-border {
+      position: relative;
+      background: linear-gradient(white, white) padding-box,
+                  linear-gradient(135deg, #0ea5e9, #ec4899) border-box;
+      border: 1.5px solid transparent;
+    }
+    
+    .gradient-text {
+      background: linear-gradient(135deg, #0ea5e9, #ec4899);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .gradient-bg {
+      background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 25%, #8b5cf6 50%, #ec4899 75%, #f59e0b 100%);
+      background-size: 300% 300%;
+      animation: gradient-xy 20s ease infinite;
+    }
+    
+    .input-gradient-focus {
+      background: linear-gradient(white, white) padding-box,
+                  linear-gradient(135deg, #0ea5e9, #ec4899) border-box;
+      border: 1.5px solid transparent;
+      transition: all 0.3s ease;
+    }
+    
+    .input-gradient-focus:focus {
+      box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1),
+                  0 0 20px rgba(14, 165, 233, 0.2);
+    }
+    
+    .select-gradient-focus {
+      background: linear-gradient(white, white) padding-box,
+                  linear-gradient(135deg, #0ea5e9, #ec4899) border-box;
+      border: 1.5px solid transparent;
+      transition: all 0.3s ease;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+      background-position: right 0.5rem center;
       background-repeat: no-repeat;
+      background-size: 1.5em 1.5em;
     }
-    .error-field {
-      border-color: #ef4444 !important;
-      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    
+    .select-gradient-focus:focus {
+      box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1),
+                  0 0 20px rgba(14, 165, 233, 0.2);
     }
-    .error-message {
-      color: #ef4444;
-      font-size: 0.875rem;
-      margin-top: 0.25rem;
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%);
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(14, 165, 233, 0.3);
+    }
+    
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+    
+    .btn-secondary {
+      background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+    }
+    
+    .btn-secondary:hover {
+      background: linear-gradient(135deg, #475569 0%, #334155 100%);
+    }
+    
+    .particle {
+      position: absolute;
+      pointer-events: none;
+      background: linear-gradient(135deg, #0ea5e9, #ec4899);
+      border-radius: 50%;
+    }
+    
+    .loading-dots {
+      display: inline-flex;
+      align-items: center;
+    }
+    
+    .loading-dots span {
+      animation: loading-dots 1.4s infinite ease-in-out both;
+      background-color: currentColor;
+      border-radius: 50%;
+      display: inline-block;
+      height: 8px;
+      width: 8px;
+      margin: 0 2px;
+    }
+    
+    .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+    .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes loading-dots {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+    
+    .toggle-password {
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .toggle-password:hover {
+      color: var(--color-primary);
+      transform: scale(1.1);
+    }
+    
+    .success-checkmark {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto;
+    }
+    
+    .success-checkmark .check-icon {
+      width: 80px;
+      height: 80px;
+      position: relative;
+      border-radius: 50%;
+      box-sizing: content-box;
+      border: 4px solid #22c55e;
+    }
+    
+    .success-checkmark .check-icon .icon-line {
+      height: 5px;
+      background-color: #22c55e;
+      display: block;
+      border-radius: 2px;
+      position: absolute;
+      z-index: 10;
+    }
+    
+    .success-checkmark .check-icon .icon-line.line-tip {
+      top: 46px;
+      left: 14px;
+      width: 25px;
+      transform: rotate(45deg);
+      animation: icon-line-tip 0.75s;
+    }
+    
+    .success-checkmark .check-icon .icon-line.line-long {
+      top: 38px;
+      right: 8px;
+      width: 47px;
+      transform: rotate(-45deg);
+      animation: icon-line-long 0.75s;
+    }
+    
+    @keyframes icon-line-tip {
+      0% { width: 0; left: 1px; top: 19px; }
+      54% { width: 0; left: 1px; top: 19px; }
+      70% { width: 50px; left: -8px; top: 37px; }
+      84% { width: 17px; left: 21px; top: 48px; }
+      100% { width: 25px; left: 14px; top: 45px; }
+    }
+    
+    @keyframes icon-line-long {
+      0% { width: 0; right: 46px; top: 54px; }
+      65% { width: 0; right: 46px; top: 54px; }
+      84% { width: 55px; right: 0px; top: 35px; }
+      100% { width: 47px; right: 8px; top: 38px; }
+    }
+    
+    .password-strength-meter {
+      height: 4px;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+    
+    .progress-bar {
+      transition: width 0.3s ease;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 1024px) {
+      .lg\:min-h-screen {
+        min-height: 50vh !important;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .lg\:min-h-screen {
+        min-height: 40vh !important;
+      }
+      
+      .glass-dark {
+        padding: 1rem !important;
+      }
+      
+      .grid-cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      }
+    }
+    
+    @media (max-width: 640px) {
+      .grid-cols-2 {
+        grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+      }
+      
+      .grid-cols-3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      }
+      
+      .text-4xl {
+        font-size: 2rem !important;
+        line-height: 2.5rem !important;
+      }
+      
+      .text-5xl {
+        font-size: 2.25rem !important;
+        line-height: 2.5rem !important;
+      }
+      
+      .text-xl {
+        font-size: 1rem !important;
+        line-height: 1.5rem !important;
+      }
+      
+      .p-8 {
+        padding: 1.5rem !important;
+      }
+      
+      .p-12 {
+        padding: 1rem !important;
+      }
+      
+      .py-4 {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+      }
+      
+      .px-5 {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .grid-cols-3 {
+        grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+      }
+      
+      .text-3xl {
+        font-size: 1.75rem !important;
+        line-height: 2rem !important;
+      }
+      
+      .space-y-6 > * + * {
+        margin-top: 1rem !important;
+      }
+      
+      .p-6 {
+        padding: 1rem !important;
+      }
+      
+      .py-8 {
+        padding-top: 1.5rem !important;
+        padding-bottom: 1.5rem !important;
+      }
+      
+      .px-8 {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+      }
+      
+      .social-buttons {
+        grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+      }
     }
   </style>
 </head>
-<body class="min-h-screen flex">
+<body class="min-h-screen font-sans text-surface-900 antialiased overflow-x-hidden">
 
-  <div class="flex flex-col lg:flex-row min-h-screen w-full">
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="fixed inset-0 bg-white z-50 flex items-center justify-center transition-opacity duration-300">
+    <div class="text-center">
+      <div class="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 relative">
+        <div class="absolute inset-0 rounded-full border-4 border-primary-100 animate-spin"></div>
+        <div class="absolute inset-2 rounded-full border-4 border-primary-300 animate-spin animation-delay-150"></div>
+        <div class="absolute inset-4 rounded-full border-4 border-primary-500 animate-spin animation-delay-300"></div>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-8 h-8 sm:w-10 sm:h-10" alt="Loading">
+        </div>
+      </div>
+      <p class="text-primary-600 font-medium text-sm sm:text-base">Loading Secure Portal...</p>
+    </div>
+  </div>
 
-    <!-- LEFT SIDE - Illustration -->
-    <div 
-      class="hidden lg:flex lg:w-1/2 items-center justify-center p-6 bg-rect h-screen"
+  <!-- Main Container -->
+  <div class="min-h-screen flex flex-col lg:flex-row">
+    
+    <!-- Left Panel - Brand & Visual (hidden on mobile) -->
+    <div class="hidden lg:flex left-0 top-0 lg:w-1/2 h-screen overflow-hidden bg-gradient-to-br from-primary-900 via-primary-800 to-secondary-900 lg:fixed">
+      <!-- Animated Background Elements -->
+      <div class="absolute inset-0">
+        <div class="absolute -top-20 -left-20 w-48 h-48 sm:w-64 sm:h-64 rounded-full bg-primary-400/10 blur-3xl animate-pulse-glow"></div>
+        <div class="absolute -bottom-20 -right-20 w-56 h-56 sm:w-80 sm:h-80 rounded-full bg-accent-400/10 blur-3xl animate-pulse-glow animation-delay-1000"></div>
+      </div>
       
-    >
-      <div class="text-center text-white">
-        <img src="{{ url_for('static', filename='images/logo.png') }}" class="mx-auto w-24 mb-4" alt="Iqbal AI">
-        <h1 class="text-3xl font-semibold text-[#146FAD] mb-3" style="text-shadow: 2px 2px 6px rgba(0,0,0,0.5);">
-          Welcome back to your learning journey
-        </h1>
-        <img src="{{ url_for('static', filename='images/rafiki.png') }}" 
-             alt="Illustration" 
-             class="h-[350px] w-[450px] object-contain">
+      <!-- Content -->
+      <div class="relative z-10 h-full flex flex-col justify-between p-6 sm:p-6 lg:p-8">
+        
+        <!-- Brand Header - Fixed spacing for all devices -->
+        <div class="mb-2 sm:mb-3 lg:mb-4">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
+              <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-6 h-6 sm:w-8 sm:h-8" alt="IQBAL AI">
+            </div>
+            <div>
+              <h1 class="text-xl sm:text-2xl font-bold text-white font-display">IQBAL AI</h1>
+              <p class="text-primary-200 text-xs sm:text-sm">Intelligent Learning Platform</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Hero Content - Fixed spacing -->
+        <div class="flex-1 flex flex-col py-2 sm:py-3 lg:py-4 max-w-2xl mx-auto px-2 sm:px-4">
+          <div class="mb-2 sm:mb-3 lg:mb-4">
+            <div class="inline-flex items-center px-3 py-1 sm:px-4 sm:py-2 rounded-full bg-white/10 backdrop-blur-sm text-white text-xs sm:text-sm font-medium mb-2 sm:mb-3 lg:mb-4">
+              <i class="fas fa-rocket mr-2"></i> Start Your Journey
+            </div>
+            
+            <h2 class="text-2xl sm:text-3xl lg:text-3xl xl:text-4xl font-bold text-white mb-3 sm:mb-4 lg:mb-5 font-display leading-tight">
+              Begin Your <span class="gradient-text">Learning Journey</span>
+            </h2>
+            
+            <p class="text-sm sm:text-base lg:text-lg xl:text-xl text-primary-100 mb-4 sm:mb-6 lg:mb-8 leading-relaxed">
+              Join thousands of learners and educators who are transforming education with AI-powered learning and teaching.
+            </p>
+          </div>
+          
+          <!-- Features Grid - Responsive adjustments -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8 lg:mb-12">
+            <div class="glass-dark rounded-xl p-3 sm:p-4 lg:p-5 border border-white/10">
+              <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center mb-3 sm:mb-4">
+                <i class="fas fa-user-graduate text-white text-base sm:text-lg"></i>
+              </div>
+              <h3 class="text-white font-semibold text-sm sm:text-base mb-1 sm:mb-2">For Students</h3>
+              <p class="text-primary-200 text-xs sm:text-sm">Personalized AI learning paths</p>
+            </div>
+            
+            <div class="glass-dark rounded-xl p-3 sm:p-4 lg:p-5 border border-white/10">
+              <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center mb-3 sm:mb-4">
+                <i class="fas fa-chalkboard-teacher text-white text-base sm:text-lg"></i>
+              </div>
+              <h3 class="text-white font-semibold text-sm sm:text-base mb-1 sm:mb-2">For Teachers</h3>
+              <p class="text-primary-200 text-xs sm:text-sm">AI-powered teaching tools</p>
+            </div>
+            
+            <div class="glass-dark rounded-xl p-3 sm:p-4 lg:p-5 border border-white/10">
+              <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-success-500 to-success-600 flex items-center justify-center mb-3 sm:mb-4">
+                <i class="fas fa-language text-white text-base sm:text-lg"></i>
+              </div>
+              <h3 class="text-white font-semibold text-sm sm:text-base mb-1 sm:mb-2">Dual Language</h3>
+              <p class="text-primary-200 text-xs sm:text-sm">Learn in English & Urdu</p>
+            </div>
+          </div>
+          
+          <!-- Testimonial - Responsive adjustments -->
+          <!-- <div class="glass-dark rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-white/10">
+            <div class="flex items-start mb-3 sm:mb-4">
+              <div class="flex-1">
+                <p class="text-primary-100 text-sm sm:text-base italic mb-2 sm:mb-3">"As a teacher, the AI tools have transformed how I create lessons and track student progress. My students' engagement has doubled!"</p>
+                <div class="flex items-center">
+                  <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold mr-2 sm:mr-3">
+                    A
+                  </div>
+                  <div>
+                    <p class="text-white font-medium text-sm sm:text-base">Prof. Ahmed Raza</p>
+                    <p class="text-primary-300 text-xs sm:text-sm">Computer Science Teacher</p>
+                  </div>
+                </div>
+              </div>
+              <div class="text-warning-400 text-2xl sm:text-3xl">
+                <i class="fas fa-quote-right"></i>
+              </div>
+            </div>
+          </div> -->
+        </div>
+        
+        <!-- Footer - Responsive adjustments -->
+        <div class="pt-4 sm:pt-6 lg:pt-6 border-t border-white/10">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-primary-200 text-xs sm:text-sm">
+            <div class="flex flex-wrap items-center space-x-3 sm:space-x-4 lg:space-x-6 mb-3 sm:mb-0">
+              <a href="#" class="hover:text-white transition-colors">Privacy Policy</a>
+              <a href="#" class="hover:text-white transition-colors">Terms of Service</a>
+              <a href="#" class="hover:text-white transition-colors">Support</a>
+            </div>
+            <div class="mt-2 sm:mt-0">
+              <p>© 2026 Iqbal AI. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-
-    <!-- RIGHT SIDE - Registration Form -->
-    <div class="flex flex-col justify-center w-full lg:w-1/2 p-4 sm:p-6">
-
-      <!-- Mobile Logo -->
-      <div class="lg:hidden text-center mb-4">
-        <img src="{{ url_for('static', filename='images/logo.png') }}" class="mx-auto w-20 mb-2" alt="Iqbal AI">
-        <h1 class="text-2xl font-bold text-gray-800">IQBAL AI</h1>
+    
+    <!-- Right Panel - Signup Form -->
+    <div class="lg:w-1/2 lg:ml-[50%] min-h-[50vh] lg:min-h-screen flex flex-col bg-gradient-to-b from-surface-50 to-white lg:overflow-y-auto">
+      
+      <!-- Mobile Header -->
+      <div class="lg:hidden p-4 sm:p-6">
+        <div class="relative">
+          <div class="flex items-center justify-center">
+            <div class="flex items-center space-x-2 sm:space-x-3">
+              <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-4 h-4 sm:w-6 sm:h-6 mx-auto" alt="IQBAL AI">
+              </div>
+              <div class="text-center">
+                <h1 class="font-bold text-surface-900 text-sm sm:text-base">IQBAL AI</h1>
+                <p class="text-surface-500 text-xs">Create Account</p>
+              </div>
+            </div>
+          </div>
+          <a href="{{ url_for('chat.index') }}" class="absolute right-4 top-1/2 transform -translate-y-1/2 text-primary-600 hover:text-primary-700 font-medium text-xs sm:text-sm">
+            <!-- <i class="fas fa-home mr-1 sm:mr-2"></i> <span class="hidden sm:inline">Home</span> -->
+          </a>
+        </div>
       </div>
-
-      <!-- Title -->
-      <div class="text-center mb-4">
-        <h2 class="text-3xl font-bold text-iqbal-primary">Complete Registration</h2>
-        <p class="text-gray-600 mt-2 text-sm sm:text-base">Fill in your details to finish signing up</p>
-      </div>
-
-      <!-- Form Card -->
-      <div class="p-2 sm:p-4 max-w-md mx-auto w-full">
-        <!-- Error Display -->
-        {% if error %}
-          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {{ error }}
+      
+      <!-- Form Container -->
+      <div class="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8 xl:p-12">
+        <div class="w-full max-w-md mx-auto px-2 sm:px-4">
+          
+          <!-- Welcome Message -->
+          <div class="mb-6 sm:mb-8 lg:mb-10 text-center">
+            <div class="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 mb-4 sm:mb-6">
+              <i class="fas fa-user-plus text-primary-600 text-xl sm:text-2xl"></i>
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-bold text-surface-900 mb-1 sm:mb-2 font-display">Complete Registration</h2>
+            <p class="text-surface-600 text-sm sm:text-base">Fill in your details to finish signing up</p>
+            
+            <!-- Signup Stats -->
+            <div class="mt-4 sm:mt-6 inline-flex items-center px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-primary-50 text-primary-700 text-xs sm:text-sm">
+              <i class="fas fa-user-plus mr-1 sm:mr-2"></i>
+              <span>Join 10,847+ learners & teachers today</span>
+            </div>
           </div>
-        {% endif %}
-        <form action="{{ url_for('auth.register') }}" method="POST" id="completeRegistrationForm" class="space-y-3">
-          <input type="hidden" name="useremail" value="{{ email }}">
+          
+          <!-- Form Card -->
+          <div class="glass-morphism rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 border border-surface-200 shadow-xl animate-slide-in-up">
+            {% if error %}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{{ error }}</div>
+            {% endif %}
+            <!-- Complete Registration (same API as old: form POST to auth.register with useremail, username, password, role, medium, class_standard) -->
+            <div id="email-sent-state" class="hidden">
+              <div class="text-center py-6 sm:py-8">
+                <div class="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 mb-4">
+                  <i class="fas fa-envelope-circle-check text-primary-600 text-xl sm:text-2xl"></i>
+                </div>
+                <h3 class="text-xl sm:text-2xl font-bold text-surface-900 mb-2 sm:mb-3">Verification Email Sent!</h3>
+                <p class="text-surface-600 text-sm sm:text-base mb-4 sm:mb-6">
+                  We've sent a verification link to <strong id="email-sent-display" class="text-surface-800"></strong>. Check your inbox and click the link to complete your registration (you will set your username and password on the next page).
+                </p>
+                <a href="{{ url_for('auth.login') }}" class="inline-block btn-primary text-white py-2.5 sm:py-3 px-6 rounded-lg font-medium text-sm sm:text-base">
+                  Back to Login
+                </a>
+              </div>
+            </div>
+            
+            <!-- Success State (Hidden by default) -->
+            <div id="success-state" class="hidden">
+              <div class="text-center py-6 sm:py-8">
+                <div class="success-checkmark mb-4 sm:mb-6">
+                  <div class="check-icon">
+                    <span class="icon-line line-tip"></span>
+                    <span class="icon-line line-long"></span>
+                    <div class="icon-circle"></div>
+                    <div class="icon-fix"></div>
+                  </div>
+                </div>
+                <h3 class="text-xl sm:text-2xl font-bold text-success-700 mb-2 sm:mb-3">Account Created Successfully!</h3>
+                <p class="text-surface-600 text-sm sm:text-base mb-6 sm:mb-8">Welcome to Iqbal AI! Redirecting to your dashboard...</p>
+                <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+                  <button onclick="resetForm()" class="sm:flex-1 bg-surface-100 hover:bg-surface-200 text-surface-800 py-2.5 sm:py-3 rounded-lg font-medium transition-colors text-sm sm:text-base">
+                    Back to Login
+                  </button>
+                  <a href="{{ url_for('chat.index') }}" class="sm:flex-1 btn-primary text-white py-2.5 sm:py-3 rounded-lg font-medium text-center text-sm sm:text-base">
+                    Go to Dashboard
+                  </a>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Email Confirmation State (Hidden by default) -->
+            <div id="email-confirm-state" class="hidden">
+              <div class="text-center py-4 sm:py-6">
+                <!-- Header -->
+                <div class="mb-6 sm:mb-8">
+                  <div class="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 mb-4 sm:mb-6">
+                    <i class="fas fa-envelope-open-text text-primary-600 text-xl sm:text-2xl"></i>
+                  </div>
+                  <h3 class="text-2xl sm:text-3xl font-bold text-surface-900 mb-2 sm:mb-3">Verify Your Email</h3>
+                  <p class="text-surface-600 text-sm sm:text-base">
+                    We've sent a 6-digit confirmation code to<br class="hidden sm:inline">
+                    <span class="font-semibold text-surface-700" id="confirm-email-display"></span>
+                  </p>
+                </div>
 
-          <!-- Username -->
-          <div>
-            <label for="username" class="block text-sm font-medium text-iqbal-primary mb-1">Username *</label>
-            <input 
-              type="text" 
-              id="username" 
-              name="username" 
-              required
-              placeholder="Enter your username"
-              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary placeholder-gray-400"
-            >
-            <div id="username-error" class="error-message hidden">Username is required</div>
+                <!-- OTP Input Fields -->
+                <div class="mb-6 sm:mb-8">
+                  <label class="block text-surface-700 font-semibold mb-4 sm:mb-6 text-sm sm:text-base">
+                    <i class="fas fa-lock mr-2 text-primary-500"></i> Enter Confirmation Code
+                  </label>
+                  <div class="flex justify-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+                    <input type="text" id="otp-1" class="w-12 h-12 sm:w-14 sm:h-14 text-center text-lg sm:text-2xl font-bold text-surface-900 bg-surface-50 rounded-lg border-2 border-surface-200 focus:border-primary-500 focus:outline-none transition-all otp-input" maxlength="1" inputmode="numeric">
+                    <input type="text" id="otp-2" class="w-12 h-12 sm:w-14 sm:h-14 text-center text-lg sm:text-2xl font-bold text-surface-900 bg-surface-50 rounded-lg border-2 border-surface-200 focus:border-primary-500 focus:outline-none transition-all otp-input" maxlength="1" inputmode="numeric">
+                    <input type="text" id="otp-3" class="w-12 h-12 sm:w-14 sm:h-14 text-center text-lg sm:text-2xl font-bold text-surface-900 bg-surface-50 rounded-lg border-2 border-surface-200 focus:border-primary-500 focus:outline-none transition-all otp-input" maxlength="1" inputmode="numeric">
+                    <input type="text" id="otp-4" class="w-12 h-12 sm:w-14 sm:h-14 text-center text-lg sm:text-2xl font-bold text-surface-900 bg-surface-50 rounded-lg border-2 border-surface-200 focus:border-primary-500 focus:outline-none transition-all otp-input" maxlength="1" inputmode="numeric">
+                    <input type="text" id="otp-5" class="w-12 h-12 sm:w-14 sm:h-14 text-center text-lg sm:text-2xl font-bold text-surface-900 bg-surface-50 rounded-lg border-2 border-surface-200 focus:border-primary-500 focus:outline-none transition-all otp-input" maxlength="1" inputmode="numeric">
+                    <input type="text" id="otp-6" class="w-12 h-12 sm:w-14 sm:h-14 text-center text-lg sm:text-2xl font-bold text-surface-900 bg-surface-50 rounded-lg border-2 border-surface-200 focus:border-primary-500 focus:outline-none transition-all otp-input" maxlength="1" inputmode="numeric">
+                  </div>
+                  <div id="otp-error" class="text-error-500 text-xs sm:text-sm mb-4 hidden">
+                    <i class="fas fa-exclamation-circle mr-1"></i> Invalid confirmation code. Please try again.
+                  </div>
+                </div>
+
+                <!-- Timer -->
+                <div class="mb-6 sm:mb-8">
+                  <p class="text-surface-600 text-sm mb-2">Code expires in: <span id="otp-timer" class="font-bold text-primary-600">15:00</span></p>
+                  <p class="text-surface-500 text-xs sm:text-sm">Haven't received the code? <span id="resend-counter" class="hidden">Wait <span id="resend-timer">60</span>s</span></p>
+                  <button type="button" id="resend-btn" class="hidden mt-2 text-primary-600 hover:text-primary-700 font-semibold text-sm">
+                    <i class="fas fa-redo mr-1"></i> Resend Code
+                  </button>
+                </div>
+
+                <!-- Test OTP Button -->
+                <div class="mb-6 sm:mb-8 p-4 bg-primary-50 rounded-lg border border-primary-200">
+                  <button type="button" id="use-test-otp-btn" class="w-full px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium text-sm transition-colors">
+                    <i class="fas fa-flask mr-2"></i> Use 123456 for Testing
+                  </button>
+                </div>
+
+                <!-- Verify Button -->
+                <button type="button" id="verify-otp-btn" data-original-html="<i class='fas fa-check mr-2'></i> Verify Code" class="w-full bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 shadow-lg">
+                  <i class="fas fa-check mr-2"></i> Verify Code
+                </button>
+
+                <!-- Back Link -->
+                <button type="button" id="back-to-register-btn" class="mt-4 text-surface-600 hover:text-surface-700 text-sm font-medium">
+                  <i class="fas fa-arrow-left mr-1"></i> Back to Registration
+                </button>
+              </div>
+            </div>
+            
+            <!-- Form (Visible by default) -->
+            <form action="{{ url_for('auth.register') }}" method="POST" id="completeRegistrationForm" class="space-y-4 sm:space-y-6">
+              <input type="hidden" name="useremail" value="{{ email }}">
+              <!-- Username -->
+              <div>
+                <label for="username" class="block text-surface-700 font-semibold mb-2 sm:mb-3 text-sm sm:text-base">
+                  <i class="fas fa-user mr-2 text-primary-500"></i> Username *
+                </label>
+                <input type="text" id="username" name="username" required placeholder="Enter your username"
+                  class="w-full px-4 py-3 sm:px-5 sm:py-4 text-surface-900 bg-surface-50 rounded-lg sm:rounded-xl input-gradient-focus focus:outline-none transition-all duration-300 text-sm sm:text-base">
+                <div id="username-error" class="text-error-500 text-xs sm:text-sm mt-1 sm:mt-2 hidden">Username is required</div>
+              </div>
+              <!-- Password -->
+              <div>
+                <label for="password" class="block text-surface-700 font-semibold mb-2 sm:mb-3 text-sm sm:text-base">
+                  <i class="fas fa-lock mr-2 text-primary-500"></i> Password *
+                </label>
+                <div class="relative">
+                  <input type="password" id="password" name="password" required placeholder="Enter a strong password"
+                    class="w-full px-4 py-3 sm:px-5 sm:py-4 pr-10 sm:pr-12 text-surface-900 bg-surface-50 rounded-lg sm:rounded-xl input-gradient-focus focus:outline-none transition-all duration-300 text-sm sm:text-base">
+                  <button type="button" id="toggle-password" class="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 cursor-pointer bg-transparent border-none p-0">
+                    <i class="fas fa-eye text-surface-400 toggle-password text-sm sm:text-base"></i>
+                  </button>
+                </div>
+                <div id="password-error" class="text-error-500 text-xs sm:text-sm mt-1 sm:mt-2 hidden">Password is required</div>
+                <!-- Password strength (static – client-side only; backend does not use) -->
+                <div class="mt-2 sm:mt-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs sm:text-sm text-surface-600">Password strength</span>
+                    <span id="password-strength-text" class="text-xs sm:text-sm font-medium">Weak</span>
+                  </div>
+                  <div class="w-full bg-surface-200 rounded-full h-1.5 sm:h-2">
+                    <div id="password-strength-meter" class="password-strength-meter bg-error-500 rounded-full" style="width: 0%"></div>
+                  </div>
+                  <div id="password-requirements" class="mt-1.5 sm:mt-2 text-xs text-surface-500 space-y-0.5 sm:space-y-1">
+                    <div id="req-length" class="flex items-center">
+                      <i class="fas fa-times text-error-500 mr-1 w-3"></i>
+                      <span>At least 8 characters</span>
+                    </div>
+                    <div id="req-uppercase" class="flex items-center">
+                      <i class="fas fa-times text-error-500 mr-1 w-3"></i>
+                      <span>One uppercase letter</span>
+                    </div>
+                    <div id="req-lowercase" class="flex items-center">
+                      <i class="fas fa-times text-error-500 mr-1 w-3"></i>
+                      <span>One lowercase letter</span>
+                    </div>
+                    <div id="req-number" class="flex items-center">
+                      <i class="fas fa-times text-error-500 mr-1 w-3"></i>
+                      <span>One number</span>
+                    </div>
+                    <div id="req-special" class="flex items-center">
+                      <i class="fas fa-times text-error-500 mr-1 w-3"></i>
+                      <span>One special character</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Role Dropdown -->
+              <div>
+                <label for="role" class="block text-surface-700 font-semibold mb-2 sm:mb-3 text-sm sm:text-base">
+                  <i class="fas fa-user-tag mr-2 text-primary-500"></i> Role
+                </label>
+                <div class="relative">
+                  <select id="role" name="role" required
+                    class="w-full px-4 py-3 sm:px-5 sm:py-4 pr-10 sm:pr-12 text-surface-900 bg-surface-50 rounded-lg sm:rounded-xl select-gradient-focus focus:outline-none transition-all duration-300 text-sm sm:text-base appearance-none"
+                    style="background-image: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22M6 8l4 4 4-4%22/%3E%3C/svg%3E'); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem;"
+                    onchange="handleRoleChange()">
+                    <option value="">Select your role...</option>
+                    <option value="student">Student - View lessons</option>
+                    <option value="teacher">Teacher - Create & manage lessons</option>
+                  </select>
+                </div>
+                <div id="role-error" class="text-error-500 text-xs sm:text-sm mt-1 sm:mt-2 hidden">Please select your role</div>
+              </div>
+              <!-- Class Standard (shown for student) -->
+              <div id="class-standard-section" class="hidden">
+                <label for="class_standard" class="block text-surface-700 font-semibold mb-2 sm:mb-3 text-sm sm:text-base">Class Standard *</label>
+                <select id="class_standard" name="class_standard"
+                  class="w-full px-4 py-3 sm:px-5 sm:py-4 pr-10 sm:pr-12 text-surface-900 bg-surface-50 rounded-lg sm:rounded-xl select-gradient-focus focus:outline-none transition-all duration-300 text-sm sm:text-base appearance-none"
+                  style="background-image: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22M6 8l4 4 4-4%22/%3E%3C/svg%3E'); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem;">
+                  <option value="">Select your class...</option>
+                  <option value="1st">1st Class</option>
+                  <option value="2nd">2nd Class</option>
+                  <option value="3rd">3rd Class</option>
+                  <option value="4th">4th Class</option>
+                  <option value="5th">5th Class</option>
+                  <option value="6th">6th Class</option>
+                  <option value="7th">7th Class</option>
+                  <option value="8th">8th Class</option>
+                  <option value="9th">9th Class</option>
+                  <option value="10th">10th Class</option>
+                  <option value="11th">11th Class</option>
+                  <option value="12th">12th Class</option>
+                  <option value="College">College</option>
+                  <option value="University">University</option>
+                  <option value="Other">Other</option>
+                </select>
+                <div id="class-standard-error" class="text-error-500 text-xs sm:text-sm mt-1 sm:mt-2 hidden">Please select your class standard</div>
+              </div>
+              <!-- Medium Dropdown -->
+              <div>
+                <label for="medium" class="block text-surface-700 font-semibold mb-2 sm:mb-3 text-sm sm:text-base">
+                  <i class="fas fa-language mr-2 text-primary-500"></i> Preferred Medium
+                </label>
+                <div class="relative">
+                  <select 
+                    id="medium" 
+                    name="medium"
+                    required
+                    class="w-full px-4 py-3 sm:px-5 sm:py-4 pr-10 sm:pr-12 text-surface-900 bg-surface-50 rounded-lg sm:rounded-xl select-gradient-focus focus:outline-none transition-all duration-300 text-sm sm:text-base appearance-none"
+                    style="background-image: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22M6 8l4 4 4-4%22/%3E%3C/svg%3E'); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem;"
+                  >
+                    <option value="">Select medium...</option>
+                    <option value="English">English</option>
+                    <option value="Urdu">Urdu</option>
+                  </select>
+                </div>
+                <div id="medium-error" class="text-error-500 text-xs sm:text-sm mt-1 sm:mt-2 hidden">Please select medium</div>
+              </div>
+              
+              <!-- Confirm Password (static – client-side only; backend does not use) -->
+              <div>
+                <label for="confirm-password" class="block text-surface-700 font-semibold mb-2 sm:mb-3 text-sm sm:text-base">
+                  <i class="fas fa-lock mr-2 text-primary-500"></i> Confirm Password *
+                </label>
+                <div class="relative">
+                  <input type="password" id="confirm-password" name="confirm_password" required placeholder="••••••••"
+                    class="w-full px-4 py-3 sm:px-5 sm:py-4 pr-10 sm:pr-12 text-surface-900 bg-surface-50 rounded-lg sm:rounded-xl input-gradient-focus focus:outline-none transition-all duration-300 text-sm sm:text-base">
+                  <button type="button" id="toggle-confirm-password" class="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 cursor-pointer bg-transparent border-none p-0 flex items-center justify-center hover:scale-110 transition-transform">
+                    <i class="fas fa-eye text-surface-400 toggle-password text-sm sm:text-base"></i>
+                  </button>
+                </div>
+                <div id="confirm-password-error" class="text-error-500 text-xs sm:text-sm mt-1 sm:mt-2 hidden">
+                  <i class="fas fa-exclamation-circle mr-1"></i> Passwords do not match
+                </div>
+              </div>
+              
+              <!-- Terms & Conditions (static – client-side only; backend does not use) -->
+              <div class="space-y-3 sm:space-y-4">
+                <div class="flex items-start">
+                  <input type="checkbox" id="terms" name="terms" required class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary-600 rounded focus:ring-primary-500 mt-0.5 sm:mt-1">
+                  <label for="terms" class="ml-2 text-surface-700 text-xs sm:text-sm">
+                    I agree to the <a href="#" class="text-primary-600 hover:text-primary-700 font-medium">Terms of Service</a> and <a href="#" class="text-primary-600 hover:text-primary-700 font-medium">Privacy Policy</a>
+                  </label>
+                </div>
+                <div id="terms-error" class="hidden text-error-500 text-xs sm:text-sm mt-1"><i class="fas fa-exclamation-circle mr-1"></i><span>Please agree to the Terms of Service and Privacy Policy</span></div>
+                <div class="flex items-start">
+                  <input type="checkbox" id="newsletter" name="newsletter" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary-600 rounded focus:ring-primary-500 mt-0.5 sm:mt-1">
+                  <label for="newsletter" class="ml-2 text-surface-700 text-xs sm:text-sm">
+                    Send me learning tips, course updates, and special offers
+                  </label>
+                </div>
+              </div>
+              
+              <!-- Submit (backend: POST to auth.register with useremail, username, password, role, medium, class_standard) -->
+              <button type="submit" id="submit-btn" class="w-full btn-primary text-white py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition-all duration-300 relative overflow-hidden group">
+                <span class="relative z-10 flex items-center justify-center">
+                  <i class="fas fa-check mr-2 sm:mr-3"></i> Complete Registration
+                </span>
+                <span class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+              </button>
+              
+              <!-- Divider (static) -->
+              <div class="relative">
+                <div class="absolute inset-0 flex items-center">
+                  <div class="w-full border-t border-surface-200"></div>
+                </div>
+                <div class="relative flex justify-center text-xs sm:text-sm">
+                  <span class="px-2 sm:px-4 bg-white text-surface-500">Or sign up with</span>
+                </div>
+              </div>
+              
+              <!-- Social signup (static – backend does not use) -->
+              <div class="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4 social-buttons">
+                <button type="button" class="flex items-center justify-center space-x-1 sm:space-x-2 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border border-surface-200 hover:border-error-300 hover:bg-error-50 transition-all duration-200 group">
+                  <i class="fab fa-google text-error-500 group-hover:scale-110 transition-transform text-sm sm:text-base"></i>
+                  <span class="font-medium text-surface-700 text-xs sm:text-sm">Google</span>
+                </button>
+                <button type="button" class="flex items-center justify-center space-x-1 sm:space-x-2 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border border-surface-200 hover:border-primary-300 hover:bg-primary-50 transition-all duration-200 group">
+                  <i class="fab fa-linkedin text-primary-600 group-hover:scale-110 transition-transform text-sm sm:text-base"></i>
+                  <span class="font-medium text-surface-700 text-xs sm:text-sm">LinkedIn</span>
+                </button>
+                <button type="button" class="flex items-center justify-center space-x-1 sm:space-x-2 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border border-surface-200 hover:border-surface-800 hover:bg-surface-100 transition-all duration-200 group">
+                  <i class="fab fa-github text-surface-800 group-hover:scale-110 transition-transform text-sm sm:text-base"></i>
+                  <span class="font-medium text-surface-700 text-xs sm:text-sm">GitHub</span>
+                </button>
+              </div>
+            </form>
+            
+            <!-- Login Link -->
+            <div class="mt-6 sm:mt-8 lg:mt-10 pt-4 sm:pt-6 lg:pt-8 border-t border-surface-100 text-center">
+              <p class="text-surface-600 text-xs sm:text-sm">
+                Already have an account? 
+                <a href="{{ url_for('auth.login') }}" class="text-primary-600 hover:text-primary-700 font-semibold ml-1 transition-colors">
+                  Sign in here <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+              </p>
+            </div>
+            
+            <!-- Support -->
+            <div class="mt-4 sm:mt-6 text-center">
+              <a href="#" class="inline-flex items-center text-surface-500 hover:text-surface-700 text-xs sm:text-sm transition-colors">
+                <i class="fas fa-life-ring mr-1 sm:mr-2"></i> Need help? Contact Support
+              </a>
+            </div>
           </div>
-
-          <!-- Password -->
-          <div>
-            <label for="password" class="block text-sm font-medium text-iqbal-primary mb-1">Password *</label>
-            <input 
-              type="password" 
-              id="password" 
-              name="password" 
-              required
-              placeholder="Enter a strong password"
-              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary placeholder-gray-400"
-            >
-            <div id="password-error" class="error-message hidden">Password is required</div>
+          
+          <!-- Security Badges -->
+          <div class="mt-4 sm:mt-6 lg:mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-4 lg:gap-6">
+            <div class="flex items-center space-x-1 sm:space-x-2 text-surface-500">
+              <i class="fas fa-shield-alt text-success-500 text-xs sm:text-sm"></i>
+              <span class="text-xs sm:text-sm">SSL Encrypted</span>
+            </div>
+            <div class="flex items-center space-x-1 sm:space-x-2 text-surface-500">
+              <i class="fas fa-lock text-primary-500 text-xs sm:text-sm"></i>
+              <span class="text-xs sm:text-sm">GDPR Compliant</span>
+            </div>
+            <div class="flex items-center space-x-1 sm:space-x-2 text-surface-500">
+              <i class="fas fa-user-shield text-accent-500 text-xs sm:text-sm"></i>
+              <span class="text-xs sm:text-sm">Privacy First</span>
+            </div>
           </div>
-
-          <!-- Role -->
-          <div>
-            <label for="role" class="block text-sm font-medium text-iqbal-primary mb-1">Role *</label>
-            <select 
-              id="role" 
-              name="role" 
-              required
-              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary"
-              onchange="handleRoleChange()"
-            >
-              <option value="">Select your role...</option>
-              <option value="student">Student - View lessons</option>
-              <option value="teacher">Teacher - Create & manage lessons</option>
-            </select>
-            <div id="role-error" class="error-message hidden">Please select your role</div>
-          </div>
-
-          <!-- Class Standard (shown after role selection) -->
-          <div id="class-standard-section" class="hidden">
-            <label for="class_standard" class="block text-sm font-medium text-iqbal-primary mb-1">Class Standard *</label>
-            <select 
-              id="class_standard" 
-              name="class_standard" 
-              required
-              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary"
-            >
-              <option value="">Select your class...</option>
-              <option value="1st">1st Class</option>
-              <option value="2nd">2nd Class</option>
-              <option value="3rd">3rd Class</option>
-              <option value="4th">4th Class</option>
-              <option value="5th">5th Class</option>
-              <option value="6th">6th Class</option>
-              <option value="7th">7th Class</option>
-              <option value="8th">8th Class</option>
-              <option value="9th">9th Class</option>
-              <option value="10th">10th Class</option>
-              <option value="11th">11th Class</option>
-              <option value="12th">12th Class</option>
-              <option value="College">College</option>
-              <option value="University">University</option>
-              <option value="Other">Other</option>
-            </select>
-            <div id="class-standard-error" class="error-message hidden">Please select your class standard</div>
-          </div>
-
-          <!-- Medium -->
-          <div>
-            <label for="medium" class="block text-sm font-medium text-iqbal-primary mb-1">Medium *</label>
-            <select 
-              id="medium" 
-              name="medium" 
-              required
-              class="w-full px-4 py-2 border border-[#05B0FC] rounded-lg focus:ring-2 focus:ring-iqbal-primary focus:border-iqbal-primary"
-            >
-              <option value="">Select medium...</option>
-              <option value="English">English</option>
-              <option value="Urdu">Urdu</option>
-            </select>
-            <div id="medium-error" class="error-message hidden">Please select medium</div>
-          </div>
-
-          <!-- Submit -->
-          <button 
-            type="submit"
-            class="w-full bg-blue-600 hover:bg-blue-800 text-white font-semibold py-2 rounded-lg transition duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring-iqbal-primary focus:ring-offset-1"
-            onclick="validateForm(event)"
-          >
-            Complete Registration
-          </button>
-        </form>
-
-        <!-- Already have account -->
-        <p class="text-center mt-3 text-gray-600 text-sm">
-          Already have an account? 
-          <a href="{{ url_for('auth.login') }}" class="text-iqbal-primary hover:underline font-medium">Login here</a>
-        </p>
+        </div>
       </div>
     </div>
   </div>
 
-
   <script>
+    // Same as old register.html: show class_standard for student role
     function handleRoleChange() {
-      const role = document.getElementById('role').value;
+      const role = document.getElementById('role');
       const classStandardSection = document.getElementById('class-standard-section');
-      
-      if (role === 'student') {
+      if (!role || !classStandardSection) return;
+      if (role.value === 'student') {
         classStandardSection.classList.remove('hidden');
         document.getElementById('class_standard').required = true;
-      } else if (role === 'teacher') {
+      } else if (role.value === 'teacher') {
         classStandardSection.classList.add('hidden');
-        document.getElementById('class_standard').required = false;
-        document.getElementById('class_standard').value = '';
+        const classStandard = document.getElementById('class_standard');
+        if (classStandard) { classStandard.required = false; classStandard.value = ''; }
       } else {
         classStandardSection.classList.add('hidden');
-        document.getElementById('class_standard').required = false;
-        document.getElementById('class_standard').value = '';
       }
     }
-
-    function validateForm(event) {
-      event.preventDefault();
+    // Initialize particles
+    function createParticles() {
+      const container = document.body;
+      const particleCount = window.innerWidth < 768 ? 10 : window.innerWidth < 1024 ? 15 : 25;
       
-      // Reset all error states
-      clearAllErrors();
-      
-      let isValid = true;
-      const requiredFields = [
-        { id: 'username', name: 'Username' },
-        { id: 'password', name: 'Password' },
-        { id: 'role', name: 'Role' },
-        { id: 'medium', name: 'Medium' }
-      ];
-
-      // Check if role is selected and add class standard if needed
-      const role = document.getElementById('role').value;
-      if (role === 'student') {
-        requiredFields.push({ id: 'class_standard', name: 'Class Standard' });
-      }
-
-      // Validate each required field
-      requiredFields.forEach(field => {
-        const element = document.getElementById(field.id);
-        const errorElement = document.getElementById(field.id + '-error');
+      for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
         
-        if (!element.value.trim()) {
-          element.classList.add('error-field');
-          errorElement.classList.remove('hidden');
-          isValid = false;
-        }
-      });
-
-      if (isValid) {
-        document.getElementById('completeRegistrationForm').submit();
+        // Random properties
+        const size = Math.random() * 4 + 1;
+        const posX = Math.random() * 100;
+        const posY = Math.random() * 100;
+        const opacity = Math.random() * 0.3 + 0.1;
+        const delay = Math.random() * 5;
+        const duration = Math.random() * 15 + 10;
+        const blur = Math.random() * 4 + 1;
+        
+        // Apply styles
+        particle.style.width = `${size}px`;
+        particle.style.height = `${size}px`;
+        particle.style.left = `${posX}vw`;
+        particle.style.top = `${posY}vh`;
+        particle.style.opacity = opacity;
+        particle.style.filter = `blur(${blur}px)`;
+        particle.style.animation = `float-slower ${duration}s ease-in-out ${delay}s infinite`;
+        
+        container.appendChild(particle);
       }
     }
-
-    function clearAllErrors() {
-      const errorFields = ['username', 'password', 'role', 'class_standard', 'medium'];
-      errorFields.forEach(fieldId => {
-        const element = document.getElementById(fieldId);
-        const errorElement = document.getElementById(fieldId + '-error');
-        if (element) {
-          element.classList.remove('error-field');
-        }
-        if (errorElement) {
-          errorElement.classList.add('hidden');
+    
+    // Email validation
+    function validateEmail(email) {
+      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return re.test(email);
+    }
+    
+    // Password strength validation
+    function checkPasswordStrength(password) {
+      let score = 0;
+      let strength = 'Weak';
+      let color = 'bg-error-500';
+      
+      // Length check
+      if (password.length >= 8) score++;
+      
+      // Uppercase check
+      if (/[A-Z]/.test(password)) score++;
+      
+      // Lowercase check
+      if (/[a-z]/.test(password)) score++;
+      
+      // Number check
+      if (/[0-9]/.test(password)) score++;
+      
+      // Special character check
+      if (/[^A-Za-z0-9]/.test(password)) score++;
+      
+      // Determine strength
+      if (score === 5) {
+        strength = 'Very Strong';
+        color = 'bg-success-500';
+      } else if (score >= 4) {
+        strength = 'Strong';
+        color = 'bg-success-400';
+      } else if (score >= 3) {
+        strength = 'Good';
+        color = 'bg-warning-500';
+      } else if (score >= 2) {
+        strength = 'Fair';
+        color = 'bg-warning-400';
+      } else {
+        strength = 'Weak';
+        color = 'bg-error-500';
+      }
+      
+      // Update requirements indicators
+      document.getElementById('req-length').innerHTML = `<i class="fas fa-${password.length >= 8 ? 'check' : 'times'} ${password.length >= 8 ? 'text-success-500' : 'text-error-500'} mr-1 w-3"></i><span>At least 8 characters</span>`;
+      document.getElementById('req-uppercase').innerHTML = `<i class="fas fa-${/[A-Z]/.test(password) ? 'check' : 'times'} ${/[A-Z]/.test(password) ? 'text-success-500' : 'text-error-500'} mr-1 w-3"></i><span>One uppercase letter</span>`;
+      document.getElementById('req-lowercase').innerHTML = `<i class="fas fa-${/[a-z]/.test(password) ? 'check' : 'times'} ${/[a-z]/.test(password) ? 'text-success-500' : 'text-error-500'} mr-1 w-3"></i><span>One lowercase letter</span>`;
+      document.getElementById('req-number').innerHTML = `<i class="fas fa-${/[0-9]/.test(password) ? 'check' : 'times'} ${/[0-9]/.test(password) ? 'text-success-500' : 'text-error-500'} mr-1 w-3"></i><span>One number</span>`;
+      document.getElementById('req-special').innerHTML = `<i class="fas fa-${/[^A-Za-z0-9]/.test(password) ? 'check' : 'times'} ${/[^A-Za-z0-9]/.test(password) ? 'text-success-500' : 'text-error-500'} mr-1 w-3"></i><span>One special character</span>`;
+      
+      return { score, strength, color, percentage: (score / 5) * 100 };
+    }
+    
+    // Set button to loading state (used for backend API submit)
+    function setButtonLoading(button) {
+      if (!button) return;
+      button.disabled = true;
+      button.innerHTML = `
+        <span class="relative z-10 flex items-center justify-center">
+          <div class="loading-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </span>
+        <span class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+      `;
+    }
+    
+    // Restore button to original state
+    function restoreButton(button) {
+      if (!button) return;
+      button.disabled = false;
+      button.innerHTML = `
+        <span class="relative z-10 flex items-center justify-center">
+          <i class="fas fa-check mr-2 sm:mr-3"></i> Complete Registration
+        </span>
+        <span class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+      `;
+    }
+    
+    // Toggle password visibility - works for all password fields
+    function setupPasswordToggle(toggleId, fieldId) {
+      const toggleBtn = document.getElementById(toggleId);
+      if (!toggleBtn) return;
+      
+      toggleBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const field = document.getElementById(fieldId);
+        if (!field) return;
+        const icon = this.querySelector("i");
+        
+        if (field.type === 'password') {
+          field.type = 'text';
+          icon.className = 'fas fa-eye-slash text-primary-500 toggle-password text-sm sm:text-base';
+        } else {
+          field.type = 'password';
+          icon.className = 'fas fa-eye text-surface-400 toggle-password text-sm sm:text-base';
         }
       });
     }
-
-    // Clear error when user starts typing/selecting
+    
+    // Initialize password toggles when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
-      const inputs = document.querySelectorAll('input, select');
+      setupPasswordToggle('toggle-password', 'password');
+      setupPasswordToggle('toggle-confirm-password', 'confirm-password');
+    });
+    
+    // Real-time password strength check
+    document.getElementById('password').addEventListener('input', function() {
+      const password = this.value;
+      const strengthInfo = checkPasswordStrength(password);
+      
+      // Update strength meter
+      const meter = document.getElementById('password-strength-meter');
+      const strengthText = document.getElementById('password-strength-text');
+      
+      meter.style.width = `${strengthInfo.percentage}%`;
+      meter.className = `password-strength-meter ${strengthInfo.color} rounded-full`;
+      strengthText.textContent = strengthInfo.strength;
+      strengthText.className = `text-xs sm:text-sm font-medium ${strengthInfo.color.replace('bg-', 'text-')}`;
+      
+      // Clear confirm password error if passwords match
+      const confirmPassword = document.getElementById('confirm-password').value;
+      if (confirmPassword && password === confirmPassword) {
+        document.getElementById('confirm-password-error').classList.add('hidden');
+        document.getElementById('confirm-password').classList.remove('!border-error-300');
+        document.getElementById('confirm-password').classList.add('!border-success-300');
+      }
+    });
+    
+    // Real-time confirm password validation
+    document.getElementById('confirm-password').addEventListener('input', function() {
+      const password = document.getElementById('password').value;
+      const confirmPassword = this.value;
+      const errorElement = document.getElementById('confirm-password-error');
+      
+      if (confirmPassword.length === 0) {
+        errorElement.classList.add('hidden');
+        this.classList.remove('!border-error-300', '!border-success-300');
+        return;
+      }
+      
+      if (password === confirmPassword) {
+        errorElement.classList.add('hidden');
+        this.classList.remove('!border-error-300');
+        this.classList.add('!border-success-300');
+      } else {
+        errorElement.classList.remove('hidden');
+        this.classList.add('!border-error-300');
+        this.classList.remove('!border-success-300');
+      }
+    });
+    
+    // Complete registration form: normal POST to auth.register with useremail, username, password, role, medium, class_standard.
+    // Client-side validation for static fields (confirm password, terms) before allowing submit.
+    const completeForm = document.getElementById('completeRegistrationForm');
+    if (completeForm) {
+      completeForm.addEventListener('submit', function(e) {
+        const password = document.getElementById('password');
+        const confirmPassword = document.getElementById('confirm-password');
+        const terms = document.getElementById('terms');
+        const confirmError = document.getElementById('confirm-password-error');
+        if (confirmPassword && password && password.value !== confirmPassword.value) {
+          e.preventDefault();
+          if (confirmError) { confirmError.classList.remove('hidden'); confirmError.textContent = 'Passwords do not match'; }
+          if (confirmPassword) confirmPassword.classList.add('!border-error-300');
+          return false;
+        }
+        if (terms && !terms.checked) {
+          e.preventDefault();
+          const termsError = document.getElementById('terms-error');
+          if (termsError) termsError.classList.remove('hidden');
+          return false;
+        }
+        const termsError = document.getElementById('terms-error');
+        if (termsError) termsError.classList.add('hidden');
+        if (confirmError) confirmError.classList.add('hidden');
+        if (confirmPassword) confirmPassword.classList.remove('!border-error-300');
+        return true;
+      });
+      const termsCheckbox = document.getElementById('terms');
+      if (termsCheckbox) termsCheckbox.addEventListener('change', function() {
+        const te = document.getElementById('terms-error');
+        if (te && this.checked) te.classList.add('hidden');
+      });
+    }
+    
+    // Real-time name validation (optional - only if element exists)
+    const nameEl = document.getElementById('name');
+    if (nameEl) nameEl.addEventListener('input', function() {
+      const name = this.value;
+      const nameIcon = document.getElementById('name-icon');
+      const nameError = document.getElementById('name-error');
+      
+      if (name.length === 0) {
+        nameIcon.className = 'fas fa-user text-surface-400';
+        nameError.classList.add('hidden');
+        this.classList.remove('!border-error-300', '!border-success-300');
+        return;
+      }
+      
+      if (name.length >= 2) {
+        nameIcon.className = 'fas fa-check-circle text-success-500';
+        nameError.classList.add('hidden');
+        this.classList.remove('!border-error-300');
+        this.classList.add('!border-success-300');
+      } else {
+        nameIcon.className = 'fas fa-exclamation-circle text-error-500';
+        if (name.length > 0) {
+          nameError.classList.remove('hidden');
+          this.classList.add('!border-error-300');
+          this.classList.remove('!border-success-300');
+        } else {
+          nameError.classList.add('hidden');
+          this.classList.remove('!border-error-300', '!border-success-300');
+        }
+      }
+    });
+    
+    // Real-time email validation (optional - only if element exists)
+    const emailEl = document.getElementById('email');
+    if (emailEl) emailEl.addEventListener('input', function() {
+      const email = this.value;
+      const emailIcon = document.getElementById('email-icon');
+      const emailError = document.getElementById('email-error');
+      
+      if (email.length === 0) {
+        emailIcon.className = 'fas fa-envelope text-surface-400';
+        emailError.classList.add('hidden');
+        this.classList.remove('!border-error-300', '!border-success-300');
+        return;
+      }
+      
+      if (validateEmail(email)) {
+        emailIcon.className = 'fas fa-check-circle text-success-500';
+        emailError.classList.add('hidden');
+        this.classList.remove('!border-error-300');
+        this.classList.add('!border-success-300');
+      } else {
+        emailIcon.className = 'fas fa-exclamation-circle text-error-500';
+        if (email.length > 3) {
+          emailError.classList.remove('hidden');
+          this.classList.add('!border-error-300');
+          this.classList.remove('!border-success-300');
+        } else {
+          emailError.classList.add('hidden');
+          this.classList.remove('!border-error-300', '!border-success-300');
+        }
+      }
+    });
+    
+    // Real-time role validation
+    document.getElementById('role').addEventListener('change', function() {
+      const role = this.value;
+      const roleError = document.getElementById('role-error');
+      
+      if (role) {
+        roleError.classList.add('hidden');
+        this.classList.remove('!border-error-300');
+        this.classList.add('!border-success-300');
+      } else {
+        roleError.classList.remove('hidden');
+        this.classList.add('!border-error-300');
+        this.classList.remove('!border-success-300');
+      }
+    });
+    
+    // Real-time medium validation
+    document.getElementById('medium').addEventListener('change', function() {
+      const medium = this.value;
+      const mediumError = document.getElementById('medium-error');
+      
+      if (medium) {
+        mediumError.classList.add('hidden');
+        this.classList.remove('!border-error-300');
+        this.classList.add('!border-success-300');
+      } else {
+        mediumError.classList.remove('hidden');
+        this.classList.add('!border-error-300');
+        this.classList.remove('!border-success-300');
+      }
+    });
+    
+    // Reset form function (complete registration + static fields)
+    window.resetForm = function() {
+      const form = document.getElementById('completeRegistrationForm');
+      if (form) form.classList.remove('hidden');
+      const successState = document.getElementById('success-state');
+      if (successState) successState.classList.add('hidden');
+      const emailSentState = document.getElementById('email-sent-state');
+      if (emailSentState) emailSentState.classList.add('hidden');
+      const username = document.getElementById('username');
+      if (username) username.value = '';
+      const role = document.getElementById('role');
+      if (role) { role.value = ''; role.classList.remove('!border-error-300', '!border-success-300'); }
+      const medium = document.getElementById('medium');
+      if (medium) { medium.value = ''; medium.classList.remove('!border-error-300', '!border-success-300'); }
+      const password = document.getElementById('password');
+      if (password) { password.value = ''; password.type = 'password'; }
+      const confirmPassword = document.getElementById('confirm-password');
+      if (confirmPassword) { confirmPassword.value = ''; confirmPassword.type = 'password'; confirmPassword.classList.remove('!border-error-300', '!border-success-300'); }
+      const terms = document.getElementById('terms');
+      if (terms) terms.checked = false;
+      const termsError = document.getElementById('terms-error');
+      if (termsError) termsError.classList.add('hidden');
+      const newsletter = document.getElementById('newsletter');
+      if (newsletter) newsletter.checked = false;
+      const classStandard = document.getElementById('class_standard');
+      if (classStandard) classStandard.value = '';
+      const classSection = document.getElementById('class-standard-section');
+      if (classSection) classSection.classList.add('hidden');
+      const confirmError = document.getElementById('confirm-password-error');
+      if (confirmError) confirmError.classList.add('hidden');
+      const submitBtn = document.getElementById('submit-btn');
+      if (submitBtn) restoreButton(submitBtn);
+      // Password strength (static)
+      const strengthMeter = document.getElementById('password-strength-meter');
+      if (strengthMeter) strengthMeter.style.width = '0%';
+      const strengthText = document.getElementById('password-strength-text');
+      if (strengthText) { strengthText.textContent = 'Weak'; strengthText.className = 'text-xs sm:text-sm font-medium text-error-500'; }
+      const reqs = ['length', 'uppercase', 'lowercase', 'number', 'special'];
+      reqs.forEach(req => {
+        const el = document.getElementById('req-' + req);
+        if (el) el.innerHTML = `<i class="fas fa-times text-error-500 mr-1 w-3"></i><span>${req === 'length' ? 'At least 8 characters' : req === 'uppercase' ? 'One uppercase letter' : req === 'lowercase' ? 'One lowercase letter' : req === 'number' ? 'One number' : 'One special character'}</span>`;
+      });
+    };
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hide loading overlay
+      setTimeout(() => {
+        document.getElementById('loading-overlay').classList.add('opacity-0', 'pointer-events-none');
+      }, 800);
+      
+      // Create particles
+      createParticles();
+      
+      // Add input focus effects
+      const inputs = document.querySelectorAll('input[type="email"], input[type="password"], input[type="text"], select');
       inputs.forEach(input => {
-        input.addEventListener('input', function() {
-          const fieldId = this.id;
-          const errorElement = document.getElementById(fieldId + '-error');
-          if (errorElement) {
-            this.classList.remove('error-field');
-            errorElement.classList.add('hidden');
-          }
+        input.addEventListener('focus', function() {
+          this.parentElement.classList.add('ring-2', 'ring-primary-100');
+        });
+        
+        input.addEventListener('blur', function() {
+          this.parentElement.classList.remove('ring-2', 'ring-primary-100');
         });
       });
     });
-
+    
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+      // Ctrl + Enter to submit form
+      if (e.ctrlKey && e.key === 'Enter') {
+        const submitBtn = document.getElementById('submit-btn');
+        if (!submitBtn.disabled) {
+          submitBtn.click();
+        }
+      }
+      
+      // Alt + N to focus on username
+      if (e.altKey && e.key === 'n') {
+        e.preventDefault();
+        const el = document.getElementById('username');
+        if (el) el.focus();
+      }
+      
+      // Alt + E to focus on email (optional)
+      if (e.altKey && e.key === 'e') {
+        e.preventDefault();
+        const el = document.getElementById('email');
+        if (el) el.focus();
+      }
+      
+      // Alt + R to focus on role
+      if (e.altKey && e.key === 'r') {
+        e.preventDefault();
+        document.getElementById('role').focus();
+      }
+      
+      // Alt + M to focus on medium
+      if (e.altKey && e.key === 'm') {
+        e.preventDefault();
+        document.getElementById('medium').focus();
+      }
+      
+      // Alt + P to focus on password
+      if (e.altKey && e.key === 'p') {
+        e.preventDefault();
+        document.getElementById('password').focus();
+      }
+    });
+    
+    // ===== OTP Verification Handlers =====
+    let otpTimerInterval;
+    let resendTimerInterval;
+    
+    // Start OTP countdown timer
+    window.startOTPTimer = function() {
+      let seconds = 15 * 60; // 15 minutes
+      
+      const updateTimer = () => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        document.getElementById('otp-timer').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        
+        if (seconds <= 0) {
+          clearInterval(otpTimerInterval);
+          document.getElementById('otp-timer').textContent = 'Expired';
+          document.getElementById('otp-timer').classList.add('text-error-600');
+        }
+        
+        seconds--;
+      };
+      
+      updateTimer();
+      otpTimerInterval = setInterval(updateTimer, 1000);
+    };
+    
+    // OTP Input auto-advance
+    document.querySelectorAll('.otp-input').forEach((input, index) => {
+      input.addEventListener('input', function(e) {
+        if (this.value && index < 5) {
+          document.getElementById(`otp-${index + 2}`).focus();
+        }
+      });
+      
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Backspace' && !this.value && index > 0) {
+          document.getElementById(`otp-${index}`).focus();
+        }
+      });
+    });
+    
+    // Use test OTP button
+    document.getElementById('use-test-otp-btn').addEventListener('click', function(e) {
+      e.preventDefault();
+      const testOTP = '123456';
+      for (let i = 0; i < 6; i++) {
+        document.getElementById(`otp-${i + 1}`).value = testOTP[i];
+      }
+      document.getElementById('verify-otp-btn').focus();
+    });
+    
+    // Verify OTP button
+    document.getElementById('verify-otp-btn').addEventListener('click', async function(e) {
+      e.preventDefault();
+      
+      // Get OTP value
+      const otp = Array.from(document.querySelectorAll('.otp-input'))
+        .map(input => input.value)
+        .join('');
+      
+      if (otp.length !== 6) {
+        document.getElementById('otp-error').classList.remove('hidden');
+        setTimeout(() => {
+          document.getElementById('otp-error').classList.add('hidden');
+        }, 3000);
+        return;
+      }
+      
+      // Dummy OTP validation - accept "123456" for testing
+      const validOTP = '123456';
+      if (otp !== validOTP) {
+        document.getElementById('otp-error').classList.remove('hidden');
+        setTimeout(() => {
+          document.getElementById('otp-error').classList.add('hidden');
+        }, 3000);
+        return;
+      }
+      
+      // Show loading state
+      setButtonLoading(this);
+      
+      try {
+        // Auto-login with stored credentials
+        const email = window.registrationEmail;
+        const password = window.registrationPassword;
+        
+        const loginResult = await auth.login(email, password);
+        
+        if (loginResult.success) {
+          // Redirect to chat
+          window.location.href = 'chat.html';
+        } else {
+          throw new Error('Login failed');
+        }
+      } catch (error) {
+        document.getElementById('otp-error').classList.remove('hidden');
+        document.getElementById('otp-error').innerHTML = '<i class="fas fa-exclamation-circle mr-1"></i> ' + (error.message || 'Verification failed');
+        restoreButton(this);
+      }
+    });
+    
+    // Back to register button
+    document.getElementById('back-to-register-btn').addEventListener('click', function(e) {
+      e.preventDefault();
+      clearInterval(otpTimerInterval);
+      clearInterval(resendTimerInterval);
+      
+      // Clear OTP fields
+      document.querySelectorAll('.otp-input').forEach(input => input.value = '');
+      
+      // Show form again
+      document.getElementById('email-confirm-state').classList.add('hidden');
+      document.getElementById('completeRegistrationForm').classList.remove('hidden');
+    });
+    
+    // Resend button
+    document.getElementById('resend-btn').addEventListener('click', function(e) {
+      e.preventDefault();
+      // In real app, resend OTP here
+      // For now, just restart timer
+      clearInterval(otpTimerInterval);
+      startOTPTimer();
+    });
   </script>
+  <!-- Authentication System -->
+  <script src="{{ url_for('static', filename='teacher/js/auth.js') }}"></script>
+  <!-- Demo Data System -->
+  <script src="{{ url_for('static', filename='teacher/js/demo-data.js') }}"></script>
+  <!-- Global Theme Switcher -->
+  <script src="{{ url_for('static', filename='teacher/js/theme-switcher.js') }}"></script>
 </body>
 </html>

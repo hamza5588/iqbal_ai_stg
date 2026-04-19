@@ -205,6 +205,8 @@ def create_llm(
             GROQ_TEMPERATURE: Temperature (default: 0.7)
             GROQ_MAX_TOKENS: Max tokens (default: 1024)
             GROQ_TIMEOUT: Timeout in seconds (default: 60)
+            For Qwen models (qwen/...): reasoning is off by default (reasoning_effort=none,
+            reasoning_format=hidden). Override with GROQ_REASONING_EFFORT and GROQ_REASONING_FORMAT.
             
         For vLLM:
             VLLM_API_BASE: vLLM API base URL (default: 'http://69.28.92.113:8000/v1')
@@ -251,6 +253,11 @@ def create_llm(
 
     # Final fallback to config default if still not resolved
     provider = (resolved_provider or Config.LLM_PROVIDER).lower()
+
+    # Apply output token cap in load-test mode or when caller explicitly requests max_tokens.
+    # This lets production callers raise completion length when needed without forcing caps globally.
+    load_test_mode = os.getenv('LOAD_TEST_MODE', 'false').lower() in ('true', '1', 'yes')
+    apply_max_tokens = bool(load_test_mode or max_tokens is not None)
     
     # Use provided values or fall back to config defaults
     if provider == 'openai':
@@ -267,14 +274,24 @@ def create_llm(
         max_toks = max_tokens if max_tokens is not None else Config.OPENAI_MAX_TOKENS
         time_out = timeout if timeout is not None else Config.OPENAI_TIMEOUT
         
-        llm = ChatOpenAI(
-            openai_api_key=api_key_to_use,
-            model_name=model,
-            temperature=temp,
-            timeout=time_out,
-        )
+        openai_kwargs = {
+            "openai_api_key": api_key_to_use,
+            "model_name": model,
+            "temperature": temp,
+            "timeout": time_out,
+        }
+        if apply_max_tokens:
+            openai_kwargs["max_tokens"] = max_toks
+
+        llm = ChatOpenAI(**openai_kwargs)
         
-        logger.info(f"Initialized OpenAI LLM: model={model}, temperature={temp}, max_tokens={max_toks}")
+        logger.info(
+            "Initialized OpenAI LLM: model=%s, temperature=%s, max_tokens=%s (applied=%s)",
+            model,
+            temp,
+            max_toks if apply_max_tokens else "provider-default",
+            apply_max_tokens,
+        )
         
     elif provider == 'groq':
         # Groq configuration
@@ -292,18 +309,42 @@ def create_llm(
             )
         
         model = model_name or os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
-        temp = temperature if temperature is not None else float(os.getenv('GROQ_TEMPERATURE', '0.7'))
+        temp = temperature if temperature is not None else float(os.getenv('GROQ_TEMPERATURE', '0.5'))
         max_toks = max_tokens if max_tokens is not None else int(os.getenv('GROQ_MAX_TOKENS', '1024'))
         time_out = timeout if timeout is not None else int(os.getenv('GROQ_TIMEOUT', '60'))
         
-        llm = ChatGroq(
-            groq_api_key=api_key_to_use,
-            model_name=model,
-            temperature=temp,
-            timeout=time_out,
-        )
+        groq_kwargs = {
+            "groq_api_key": api_key_to_use,
+            "model_name": model,
+            "temperature": temp,
+            "timeout": time_out,
+        }
+        if apply_max_tokens:
+            groq_kwargs["max_tokens"] = max_toks
+
+        # Qwen 3 on Groq emits visible "thinking" unless reasoning is disabled (Groq reasoning docs).
+        # reasoning_effort=none: no reasoning tokens; reasoning_format=hidden: final answer only in content.
+        # Override with GROQ_REASONING_EFFORT / GROQ_REASONING_FORMAT if needed.
+        if "qwen" in (model or "").lower():
+            # Groq API allows reasoning_effort "none" | "default" for Qwen; default enables planning (better tool use).
+            groq_kwargs["reasoning_effort"] = os.getenv("GROQ_REASONING_EFFORT", "default")
+            groq_kwargs["reasoning_format"] = os.getenv("GROQ_REASONING_FORMAT", "hidden")
+
+        llm = ChatGroq(**groq_kwargs)
         
-        logger.info(f"Initialized Groq LLM: model={model}, temperature={temp}, max_tokens={max_toks}")
+        logger.info(
+            "Initialized Groq LLM: model=%s, temperature=%s, max_tokens=%s (applied=%s)%s",
+            model,
+            temp,
+            max_toks if apply_max_tokens else "provider-default",
+            apply_max_tokens,
+            (
+                f", reasoning_effort={groq_kwargs.get('reasoning_effort')}, "
+                f"reasoning_format={groq_kwargs.get('reasoning_format')}"
+                if "qwen" in (model or "").lower()
+                else ""
+            ),
+        )
         
     elif provider == 'vllm':
         # vLLM configuration (OpenAI-compatible API)
@@ -313,15 +354,26 @@ def create_llm(
         max_toks = max_tokens if max_tokens is not None else Config.VLLM_MAX_TOKENS
         time_out = timeout if timeout is not None else Config.VLLM_TIMEOUT
         
-        llm = ChatOpenAI(
-            openai_api_key="EMPTY",  # vLLM doesn't require a real API key
-            openai_api_base=api_base,
-            model_name=model,
-            temperature=temp,
-            timeout=time_out,
-        )
+        vllm_kwargs = {
+            "openai_api_key": "EMPTY",  # vLLM doesn't require a real API key
+            "openai_api_base": api_base,
+            "model_name": model,
+            "temperature": temp,
+            "timeout": time_out,
+        }
+        if apply_max_tokens:
+            vllm_kwargs["max_tokens"] = max_toks
+
+        llm = ChatOpenAI(**vllm_kwargs)
         
-        logger.info(f"Initialized vLLM LLM: base={api_base}, model={model}, temperature={temp}, max_tokens={max_toks}")
+        logger.info(
+            "Initialized vLLM LLM: base=%s, model=%s, temperature=%s, max_tokens=%s (applied=%s)",
+            api_base,
+            model,
+            temp,
+            max_toks if apply_max_tokens else "provider-default",
+            apply_max_tokens,
+        )
         
     else:
         raise ValueError(

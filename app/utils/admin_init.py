@@ -40,7 +40,7 @@ def create_default_admin():
         
         base_username = 'admin'
         base_email = 'admin@iqbalai.com'
-        password = '123456'
+        password = 'Hamzakhanswati12@'
         
         # Find an available username and email
         username = base_username

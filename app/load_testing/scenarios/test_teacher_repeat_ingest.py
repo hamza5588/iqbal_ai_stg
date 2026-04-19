@@ -1,0 +1,255 @@
+import time
+import asyncio
+import aiohttp
+import logging
+import random
+import os
+import json
+import statistics
+from typing import Callable, Any, List, Dict
+from app.load_testing.config import LoadTestConfig, TestResultSummary
+from app.load_testing.models import TestDocument, TestDocumentSet
+from app.utils.db import get_session_factory
+
+logger = logging.getLogger(__name__)
+
+async def run(
+    session: aiohttp.ClientSession, 
+    user: Any, 
+    config: LoadTestConfig, 
+    summary: TestResultSummary, 
+    log_func: Callable,
+    messages: List[str] = None
+):
+    """
+    Execute Test 6: Same Document Uploaded N Times (Consistency/Stress).
+    Flow:
+    1. Select ONE document.
+    2. Loop N times:
+       - Create Conversation
+       - Upload Same Document
+       - Poll Status -> Record processing time, chunks
+       - (Optional) Chat -> Record response
+    3. Calculate consistency stats.
+    """
+    try:
+        if not config.test_doc_set_id:
+            msg = "Test 6 requires a test document set ID"
+            log_func(msg, level="ERROR")
+            summary.errors.append({"user": user.email, "error": msg})
+            return
+
+        # Fetch ONE random document to reuse
+        _session_factory = get_session_factory()
+        db_session = _session_factory()
+        try:
+            documents = db_session.query(TestDocument).filter_by(doc_set_id=config.test_doc_set_id).all()
+            if not documents:
+                msg = f"No documents found in set {config.test_doc_set_id}"
+                log_func(msg, level="ERROR")
+                summary.errors.append({"user": user.email, "error": msg})
+                return
+            
+            doc_record = random.choice(documents)
+            file_path = doc_record.file_path
+            filename = doc_record.filename
+            
+            if not os.path.exists(file_path):
+                msg = f"File not found on disk: {file_path}"
+                log_func(msg, level="ERROR")
+                summary.errors.append({"user": user.email, "error": msg})
+                return
+                
+        finally:
+            db_session.close()
+
+        iterations = config.requests_per_user or 5
+        log_func(f"Starting repeated ingest test ({iterations} times) with {filename}...")
+        
+        processing_times = []
+        chunk_counts = []
+        thread_ids = []
+        chat_responses = []
+
+        for i in range(iterations):
+            if summary.stop_requested:
+                log_func(f"[{user.email}] Repeated ingest stopped by user")
+                break
+            log_func(f"Iteration {i+1}/{iterations}...")
+            
+            # 1. Create Conversation
+            create_conv_url = f"{config.base_url}/create_conversation"
+            conversation_id = None
+            async with session.post(create_conv_url, json={"title": f"Repeat Test {i+1}"}) as resp:
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
+                if resp.status == 200:
+                    data = await resp.json()
+                    conversation_id = data.get('conversation_id')
+                    summary.total_requests += 1
+                    summary.successful_requests += 1
+                else:
+                    summary.total_requests += 1
+                    summary.failed_requests += 1
+                    log_func(f"Failed to create conversation: {resp.status}", level="ERROR")
+                    continue
+
+            # 2. Upload PDF
+            ingest_url = f"{config.base_url}/api/rag/ingest"
+            form_data = aiohttp.FormData()
+            form_data.add_field('file', open(file_path, 'rb'), filename=filename, content_type='application/pdf')
+            form_data.add_field('create_new_thread', 'true')
+            form_data.add_field('conversation_id', str(conversation_id))
+            
+            task_id = None
+            thread_id = None
+            start_time = time.time()
+            async with session.post(ingest_url, data=form_data) as resp:
+                summary.total_requests += 1
+                if resp.status == 429:
+                    summary.rate_limit_hits += 1
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('success'):
+                        file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
+                        summary.total_file_size_mb += file_size_mb
+                        task_id = data.get('task_id')
+                        thread_id = data.get('thread_id')
+                        summary.successful_requests += 1
+                        
+                        # Handle synchronous success (no task_id but has thread_id)
+                        if not task_id and thread_id:
+                            total_duration = time.time() - start_time
+                            summary.ingestion_iterations += 1
+                            summary.total_ingestion_time += total_duration
+                            chunks = data.get('chunks', 0)
+                            p_time = data.get('processing_time_seconds', 0)
+                            
+                            log_func(f"Iter {i+1}: Success (Sync) in {total_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {total_duration:.1f}s ({file_size_mb}MB)")
+                            
+                            summary.artifacts.append({
+                                "user_email": user.email,
+                                "type": "extracted_text",
+                                "thread_id": thread_id,
+                                "doc_name": filename,
+                                "iteration": i + 1,
+                                "size_mb": file_size_mb
+                            })
+                    else:
+                        summary.failed_requests += 1
+                        log_func(f"Upload failed: {data.get('error')}", level="ERROR")
+                        continue
+                else:
+                    summary.failed_requests += 1
+                    log_func(f"Upload HTTP error: {resp.status}", level="ERROR")
+                    continue
+
+            # 3. Poll Status (only if async task was started)
+            if task_id:
+                poll_url = f"{config.base_url}/api/rag/ingest/status/{task_id}"
+                max_retries = 60
+                retry_count = 0
+                success = False
+                poll_start = time.time()
+                while retry_count < max_retries:
+                    if summary.stop_requested:
+                        log_func(f"[{user.email}] Ingest poll stopped by user")
+                        return
+                    async with session.get(poll_url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            status = data.get('status')
+                            
+                            if status == 'success':
+                                summary.ingestion_iterations += 1
+                                thread_id = data.get('thread_id')
+                                p_time = data.get('processing_time_seconds', 0)
+                                
+                                polling_duration = time.time() - poll_start
+                                summary.total_ingestion_time += polling_duration
+                                chunks = data.get('chunks', 0)
+                                
+                                # Record polling_duration for SD calculation
+                                log_func(f"Iter {i+1}: Success in {polling_duration:.1f}s (Chunks: {chunks}, Backend: {p_time}s) - Total Ingest Time: {polling_duration:.1f}s ({file_size_mb}MB)")
+                                
+                                # Add iteration-specific extracted text artifact
+                                summary.artifacts.append({
+                                    "user_email": user.email,
+                                    "type": "extracted_text",
+                                    "thread_id": thread_id,
+                                    "doc_name": filename,
+                                    "iteration": i + 1,
+                                    "size_mb": file_size_mb
+                                })
+                                success = True
+                                break
+                            elif status in ['failure', 'revoked']:
+                                log_func(f"Iter {i+1}: Failed status {status}", level="ERROR")
+                                break
+                        else:
+                            summary.failed_requests += 1
+                    retry_count += 1
+                    await asyncio.sleep(2) # Prevent busy loop
+                
+                if not success:
+                    log_func(f"Iter {i+1}: Timed out", level="ERROR")
+                    continue
+
+            # 4. Optional Chat Check (Consistency)
+            if thread_id:
+                chat_url = f"{config.base_url}/api/rag/chat"
+                msg = "Summarize this document in one sentence."
+                async with session.post(chat_url, json={
+                    "message": msg,
+                    "thread_id": thread_id,
+                    "conversation_id": conversation_id
+                }) as resp:
+                    summary.total_requests += 1
+                    if resp.status == 429:
+                        summary.rate_limit_hits += 1
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get('success'):
+                            summary.messages_sent += 1
+                            chat_responses.append(data.get('message', ''))
+                            summary.successful_requests += 1
+                        else:
+                            chat_responses.append("ERROR")
+                            summary.failed_requests += 1
+                    else:
+                        chat_responses.append("HTTP_ERROR")
+                        summary.failed_requests += 1
+
+            # Cleanup thread/memory? usually we keep it for record, but delete_thread API exists
+            # We skip deletion for now to allow manual inspection if needed
+
+        # Calculate Stats
+        if processing_times:
+            avg_time = statistics.mean(processing_times)
+            stdev_time = statistics.stdev(processing_times) if len(processing_times) > 1 else 0
+            log_func(f"Processing Time: Avg={avg_time:.2f}s, Stdev={stdev_time:.2f}s")
+            
+            # Store in summary.errors (abuse slightly or add a new field)
+            # We'll log it as a special INFO message with details
+            summary.consistency_stdev = stdev_time
+            stats = {
+                "avg_processing_time": avg_time,
+                "stdev_processing_time": stdev_time,
+                "processing_times": processing_times,
+                "chunk_counts": chunk_counts,
+                "unique_chunk_counts": list(set(chunk_counts))
+            }
+            log_func("Detailed stats", details=stats)
+            
+            # Check consistency
+            if len(set(chunk_counts)) > 1:
+                log_func(f"WARNING: Inconsistent chunk counts: {set(chunk_counts)}", level="WARNING")
+            else:
+                log_func("Chunk count consistency: PASS")
+            
+            # Green summary log for Phase 13
+            log_func(f"Total File Processing Time across {len(processing_times)} iterations: {sum(processing_times):.2f}s (Complete)")
+
+    except Exception as e:
+        log_func(f"Repeat ingest exception: {str(e)}", level="ERROR")
+        summary.errors.append({"user": user.email, "error": str(e)})

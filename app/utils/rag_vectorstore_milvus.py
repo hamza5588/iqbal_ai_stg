@@ -97,7 +97,6 @@ def insert_chunks(
         created_ats,
     ]
     coll.insert(data)
-    coll.flush()
     logger.info("insert_chunks: inserted %d vectors thread_id=%s user_id=%s", len(vectors), thread_id, user_id)
     return len(vectors)
 
@@ -115,7 +114,6 @@ def similarity_search(
     from pymilvus import Collection
     coll_name = _collection_name()
     coll = Collection(coll_name)
-    coll.load()
     safe_tid = str(thread_id).replace('"', '\\"')
     expr = f'thread_id == "{safe_tid}" && user_id == {user_id}'
     results = coll.search(
@@ -136,7 +134,24 @@ def similarity_search(
                 "score": float(hit.distance),
             })
     out = out[:k]
-    logger.info("similarity_search: thread_id=%s user_id=%s returned %d hits", thread_id, user_id, len(out))
+    max_l2 = float(os.getenv("RAG_MAX_L2_DISTANCE", "1.25"))
+    filtered = [r for r in out if float(r.get("score", 999)) <= max_l2]
+    if not filtered and out:
+        logger.warning(
+            "similarity_search: all %d hits above RAG_MAX_L2_DISTANCE=%s; keeping top unfiltered hits as fallback",
+            len(out),
+            max_l2,
+        )
+        out = out[: min(3, len(out))]
+    else:
+        out = filtered
+    logger.info(
+        "similarity_search: thread_id=%s user_id=%s returned %d hits (max_l2=%s)",
+        thread_id,
+        user_id,
+        len(out),
+        max_l2,
+    )
     return out
 
 
@@ -145,9 +160,7 @@ def delete_by_thread(thread_id: str, user_id: int) -> None:
     from pymilvus import Collection
     coll_name = _collection_name()
     coll = Collection(coll_name)
-    coll.load()
     safe_tid = str(thread_id).replace('"', '\\"')
     expr = f'thread_id == "{safe_tid}" && user_id == {user_id}'
     coll.delete(expr)
-    coll.flush()
     logger.info("delete_by_thread: deleted vectors for thread_id=%s", thread_id)

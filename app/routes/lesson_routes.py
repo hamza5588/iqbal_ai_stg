@@ -1,17 +1,153 @@
-from flask import Blueprint, request, jsonify, session, send_file, after_this_request, render_template
+from flask import Blueprint, request, jsonify, session, send_file, after_this_request, render_template, current_app
 from app.models.models import UserModel, LessonModel
-from app.models.database_models import Lesson as DBLesson
+from app.models.database_models import Lesson as DBLesson, LessonFAQ as DBLessonFAQ, LessonChatHistory as DBLessonChatHistory
 from app.services.lesson_service import LessonService
+from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 from app.utils.decorators import login_required, teacher_required, student_required
 from app.utils.db import get_db
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
+from sqlalchemy import func, or_, desc
 import logging
 import os
 from io import BytesIO
 import tempfile
+import threading
+import time
+import re
 
 logger = logging.getLogger(__name__)
+
+_lesson_qa_user_locks = {}
+_lesson_qa_locks_lock = threading.Lock()
+_lesson_qa_user_rate = {}
+_lesson_qa_rate_lock = threading.Lock()
+
+
+def _normalize_faq_question_text(question: str) -> str:
+    """Normalize semantically similar student questions into a stable FAQ key."""
+    text = str(question or '').strip().lower()
+    if not text:
+        return ''
+
+    # Expand common contractions to improve matching.
+    contractions = {
+        r"\bwhat's\b": "what is",
+        r"\bwhats\b": "what is",
+        r"\bwho's\b": "who is",
+        r"\bwhere's\b": "where is",
+        r"\bhow's\b": "how is",
+        r"\bit's\b": "it is",
+        r"\bcan't\b": "cannot",
+        r"\bdon't\b": "do not",
+    }
+    for pattern, replacement in contractions.items():
+        text = re.sub(pattern, replacement, text)
+
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"^(what is\s+)?rephrased question\s+", "", text).strip()
+
+    # Remove polite wrappers and request phrasing.
+    text = re.sub(r"^(please\s+)?(can|could|would)\s+you\s+(tell|explain|define|describe)\s+", "", text)
+    text = re.sub(r"^(can|could)\s+you\s+tell\s+me\s+", "", text)
+    text = re.sub(r"^please\s+", "", text).strip()
+
+    # Collapse semantic variants such as:
+    # "what is a magnet", "what is the meaning of a magnet", "meaning of magnet".
+    core = text
+    for prefix in (
+        "what is the meaning of ",
+        "what is meaning of ",
+        "what are the different types of ",
+        "meaning of ",
+        "define ",
+        "explain ",
+        "what is ",
+        "what are ",
+    ):
+        if core.startswith(prefix):
+            core = core[len(prefix):].strip()
+            break
+
+    core = re.sub(r"^(a|an|the)\s+", "", core).strip()
+    core = re.sub(r"\s+", " ", core)
+    if not core:
+        return text
+    return f"what is {core}"
+
+
+def _faq_display_question(question_key: str) -> str:
+    """Convert normalized key into a readable FAQ question."""
+    cleaned = str(question_key or "").strip()
+    if not cleaned:
+        return ""
+    if not cleaned.endswith("?"):
+        cleaned += "?"
+    return cleaned[:1].upper() + cleaned[1:]
+
+
+def _get_lesson_qa_user_lock(user_id: int) -> threading.Lock:
+    with _lesson_qa_locks_lock:
+        if user_id not in _lesson_qa_user_locks:
+            _lesson_qa_user_locks[user_id] = threading.Lock()
+        return _lesson_qa_user_locks[user_id]
+
+
+def _check_and_record_lesson_qa_rate(user_id: int) -> tuple[bool, int]:
+    """Per-user burst throttling for lesson Q&A requests."""
+    max_requests = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_COUNT", "6"))
+    window_seconds = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_WINDOW_SECONDS", "10"))
+    now = time.time()
+
+    with _lesson_qa_rate_lock:
+        history = _lesson_qa_user_rate.get(user_id, [])
+        cutoff = now - window_seconds
+        history = [ts for ts in history if ts >= cutoff]
+        if len(history) >= max_requests:
+            oldest = history[0]
+            retry_after = max(1, int(window_seconds - (now - oldest)))
+            _lesson_qa_user_rate[user_id] = history
+            return False, retry_after
+        history.append(now)
+        _lesson_qa_user_rate[user_id] = history
+
+    return True, 0
+
+
+def _canonicalize_and_log_in_background(
+    app,
+    lesson_id: int,
+    user_id: int,
+    question: str,
+    chat_history_id: int,
+    api_key: str,
+) -> None:
+    """Canonicalize and FAQ-log question without blocking the API response."""
+    with app.app_context():
+        from app.models.models import LessonChatHistory, LessonFAQ
+
+        canonical = question
+        try:
+            service = LessonService(api_key=api_key)
+            canonical = service.canonicalize_question(int(lesson_id), question) or question
+        except Exception as e:
+            logger.error(f"Background canonicalization failed for lesson {lesson_id}, user {user_id}: {str(e)}")
+            canonical = question
+        canonical = _normalize_faq_question_text(canonical or question) or (question or '').strip()
+
+        try:
+            LessonChatHistory.update_canonical_question(chat_history_id, canonical)
+        except Exception as e:
+            logger.error(
+                f"Failed to update canonical_question for lesson_chat_history {chat_history_id}: {str(e)}"
+            )
+
+        try:
+            LessonFAQ.log_question(int(lesson_id), canonical)
+            logger.info(f"Question logged to FAQ table for lesson {lesson_id}: {canonical}")
+        except Exception as e:
+            logger.error(f"Error logging question to FAQ table: {str(e)}")
 
 
 def _get_lesson_api_key() -> str:
@@ -130,6 +266,11 @@ def create_lesson():
                 'image_extraction': image_extraction
             }
             
+            # Keep a copy of file bytes for RAG ingest (PDF only) after lesson is created
+            file.seek(0)
+            file_bytes_for_rag = file.read()
+            file.seek(0)
+            
             # Process the file first to create vector store
             process_result = lesson_service.process_file(file, lesson_details)
             
@@ -156,6 +297,27 @@ def create_lesson():
             
             if not lesson_id:
                 return jsonify({'error': 'Failed to save lesson to database'}), 500
+            
+            # Store RAG thread id when lesson is first saved (PDF only); then ingest for "Ask Question"
+            teacher_id = session['user_id']
+            if file_ext == '.pdf':
+                rag_thread_id = f"user_{teacher_id}_lesson_{lesson_id}"
+                lesson_model = LessonModel(lesson_id)
+                lesson_model.update_lesson(rag_thread_id=rag_thread_id)
+                logger.info("Lesson %s linked to RAG thread %s for student Q&A", lesson_id, rag_thread_id)
+                if file_bytes_for_rag:
+                    try:
+                        from app.utils.rag_service import ingest_pdf
+                        ingest_result = ingest_pdf(
+                            file_bytes_for_rag,
+                            rag_thread_id,
+                            filename=file.filename,
+                            user_id=teacher_id,
+                        )
+                        if ingest_result.get('error'):
+                            logger.warning("Lesson RAG ingest failed (non-fatal): %s", ingest_result.get('error'))
+                    except Exception as rag_e:
+                        logger.warning("Lesson RAG ingest failed (non-fatal): %s", rag_e)
             
             # Get the greeting message from process_result (no LLM call was made)
             greeting_message = process_result.get('lesson', 'Your file has been uploaded successfully.')
@@ -247,6 +409,7 @@ def create_lesson_simple():
         focus_area = data.get('focus_area', 'General')
         grade_level = data.get('grade_level', 'General')
         summary = data.get('summary', '') or data.get('additional_notes', '')
+        rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip() or None
         
         if not title:
             return jsonify({'error': 'Title is required'}), 400
@@ -268,7 +431,8 @@ def create_lesson_simple():
             grade_level=grade_level,
             focus_area=focus_area,
             is_public=True,
-            status='finalized'
+            status='finalized',
+            rag_thread_id=rag_thread_id
         )
         
         if not lesson_id:
@@ -364,12 +528,28 @@ def ask_general_question():
 @bp.route('/my_lessons', methods=['GET'])
 @teacher_required
 def get_my_lessons():
-    """Get all lessons created by the current teacher"""
+    """Get teacher lessons with server-side pagination."""
     try:
-        lessons = LessonModel.get_lessons_by_teacher(session['user_id'])
+        page = request.args.get('page', default=1, type=int)
+        per_page = request.args.get('per_page', default=10, type=int)
+        search_term = (request.args.get('q') or '').strip() or None
+        # latest_only=true (default) hides older versions so only the latest version
+        # of each logical lesson is returned — avoids duplicate rows in the UI table.
+        latest_only = request.args.get('latest_only', 'true').lower() != 'false'
+        result = LessonModel.get_lessons_by_teacher_paginated(
+            teacher_id=session['user_id'],
+            page=page,
+            per_page=per_page,
+            search_term=search_term,
+            latest_only=latest_only,
+        )
         return jsonify({
             'success': True,
-            'lessons': lessons
+            'lessons': result['lessons'],
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'total_pages': result['total_pages'],
         })
     except Exception as e:
         logger.error(f"Error getting teacher lessons: {str(e)}", exc_info=True)
@@ -378,15 +558,28 @@ def get_my_lessons():
 @bp.route('/browse_lessons', methods=['GET'])
 @student_required
 def browse_lessons():
-    """Browse available lessons for students"""
+    """Browse public lessons for students with server-side pagination."""
     try:
         grade_level = request.args.get('grade_level')
         focus_area = request.args.get('focus_area')
-        
-        lessons = LessonModel.get_public_latest_lessons(grade_level=grade_level, focus_area=focus_area)
+        page = request.args.get('page', default=1, type=int)
+        per_page = request.args.get('per_page', default=10, type=int)
+        search_term = (request.args.get('q') or '').strip() or None
+
+        result = LessonModel.get_public_latest_lessons_paginated(
+            grade_level=grade_level,
+            focus_area=focus_area,
+            page=page,
+            per_page=per_page,
+            search_term=search_term,
+        )
         return jsonify({
             'success': True,
-            'lessons': lessons
+            'lessons': result['lessons'],
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'total_pages': result['total_pages'],
         })
     except Exception as e:
         logger.error(f"Error browsing lessons: {str(e)}", exc_info=True)
@@ -472,9 +665,13 @@ def view_lesson(lesson_id):
             logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
             return jsonify({'error': 'Access denied'}), 403
         
-        # Get lesson versions
-        versions = LessonModel.get_lesson_versions(lesson_id)
-        
+        # get_lesson_versions queries by (id == root_id OR parent_lesson_id == root_id).
+        # All child versions store parent_lesson_id pointing to the ROOT lesson, so we
+        # must resolve to the root before querying — otherwise only the clicked version
+        # is returned (its own row) with no history.
+        root_lesson_id = lesson.get('parent_lesson_id') or lesson_id
+        versions = LessonModel.get_lesson_versions(root_lesson_id)
+
         return jsonify({
             'success': True,
             'lesson': lesson,
@@ -678,9 +875,8 @@ def download_lesson_ppt(lesson_id):
         ppt_buffer = BytesIO(ppt_bytes)
         ppt_buffer.seek(0)
         
-        # Delete FAISS index after successful download
+        # Delete FAISS index after successful download (best-effort cleanup)
         try:
-            lesson_service = LessonService(api_key=api_key)
             lesson_service._delete_faiss_index(lesson_id)
             logger.info(f"Deleted FAISS index after PPT download for lesson {lesson_id}")
         except Exception as e:
@@ -902,62 +1098,88 @@ def download_lesson_pdf(lesson_id):
 @bp.route('/ask_question', methods=['POST'])
 @student_required
 def ask_lesson_question():
-    data = request.get_json()
+    """
+    Student Q&A on a lesson (Approach 3: stateless flag).
+
+    Request body: lesson_id, question, allow_rag (optional, default False).
+    When allow_rag=False and lesson doesn't cover the question but has a PDF,
+    returns status=needs_rag_confirmation. Frontend shows Yes/No; on Yes,
+    re-send the same question with allow_rag=true.
+    """
+    data = request.get_json() or {}
     lesson_id = data.get('lesson_id')
-    question = data.get('question')
+    question = (data.get('question') or '').strip()
+    allow_rag = data.get('allow_rag', False)
     if not lesson_id or not question:
         return jsonify({'error': 'lesson_id and question are required'}), 400
-    
-    # vLLM doesn't require an API key, use empty string as placeholder
-    api_key = session.get('groq_api_key', '')
-    
-    service = LessonService(api_key=api_key)
-    
-    # Get conversation history for context
-    from app.models.models import LessonChatHistory, LessonFAQ
+
+    from app.models.models import LessonChatHistory
+
     user_id = session['user_id']
-    conversation_history = LessonChatHistory.get_lesson_chat_history(lesson_id, user_id)
-    
-    # Use the new query analysis system for better responses
-    query_analysis = service.analyze_user_query(question)
-    logger.info(f"Lesson question analysis: {query_analysis}")
-    
-    # Try to answer using the specific lesson first with conversation context
-    result = service.answer_lesson_question(lesson_id, question, conversation_history)
-    
-    # If the specific lesson doesn't have good results, try general search with context
-    if 'error' in result or not result.get('answer') or len(result.get('answer', '')) < 50:
-        logger.info("Specific lesson search didn't provide good results, trying general search")
-        
-        # Get available lesson IDs for broader context
-        available_lessons = service._get_available_lesson_ids()
-        if available_lessons:
-            general_result = service.answer_general_question(question, available_lessons, conversation_history)
-            if general_result.get('answer') and len(general_result.get('answer', '')) > 50:
-                result = general_result
-                logger.info("Using general search result for better answer")
-    
-    if 'error' in result:
-        return jsonify({'error': result['error']}), 400
-    
-    # Save the Q&A to lesson chat history
-    canonical = result.get('canonical_question', question)
-    LessonChatHistory.save_qa(lesson_id, user_id, question, result['answer'], canonical_question=canonical)
-    
-    # Log the question to FAQ table for teacher visibility
+    allowed, retry_after = _check_and_record_lesson_qa_rate(int(user_id))
+    if not allowed:
+        return jsonify({
+            'error': f'Too many requests in a short time. Please wait {retry_after} seconds and try again.',
+            'code': 'USER_RATE_LIMITED',
+            'retry_after': retry_after,
+        }), 429
+
+    user_lock = _get_lesson_qa_user_lock(int(user_id))
+    acquired = user_lock.acquire(blocking=True, timeout=120)
+    if not acquired:
+        return jsonify({
+            'error': 'Your previous message is still being processed. Please try again in a moment.',
+            'code': 'CONCURRENT_REQUEST_TIMEOUT',
+        }), 429
+
     try:
-        LessonFAQ.log_question(lesson_id, canonical)
-        logger.info(f"Question logged to FAQ table for lesson {lesson_id}: {canonical}")
-    except Exception as e:
-        logger.error(f"Error logging question to FAQ table: {str(e)}")
-    
-    return jsonify({
-        'answer': result['answer'], 
-        'canonical_question': canonical,
-        'source': result.get('source', 'unknown'),
-        'confidence': result.get('confidence', 0.8),
-        'query_analysis': query_analysis
-    })
+        result = invoke_lesson_qa(
+            lesson_id=int(lesson_id),
+            question=question,
+            user_id=int(user_id),
+            allow_rag=bool(allow_rag),
+        )
+
+        # Frontend shows Yes/No; on Yes, re-send with allow_rag=true
+        if result.get('status') == 'needs_rag_confirmation':
+            return jsonify({
+                'status': 'needs_rag_confirmation',
+                'permission_request': result.get('permission_request'),
+            })
+
+        answer = (result.get('answer') or '').strip()
+        if not answer:
+            return jsonify({'error': 'Failed to generate an answer.'}), 500
+
+        # Persist the answer immediately; canonicalization runs asynchronously.
+        chat_history_id = LessonChatHistory.save_qa(
+            int(lesson_id),
+            user_id,
+            question,
+            answer,
+            canonical_question=question,
+        )
+
+        api_key = session.get('groq_api_key', '')
+        app_obj = current_app._get_current_object()
+        bg_thread = threading.Thread(
+            target=_canonicalize_and_log_in_background,
+            args=(app_obj, int(lesson_id), int(user_id), question, int(chat_history_id), api_key),
+            daemon=True,
+        )
+        bg_thread.start()
+
+        return jsonify({
+            'status': 'completed',
+            'answer': answer,
+            # Return the original immediately; canonical value is updated in DB asynchronously.
+            'canonical_question': question,
+            'source': 'lesson_or_rag_graph',
+            'confidence': 0.9,
+        })
+    finally:
+        user_lock.release()
+
 
 @bp.route('/lesson_chat_history/<int:lesson_id>', methods=['GET'])
 @login_required
@@ -970,6 +1192,50 @@ def get_lesson_chat_history(lesson_id):
         return jsonify({'history': history})
     except Exception as e:
         logger.error(f"Error getting lesson chat history: {str(e)}")
+        return jsonify({'error': 'Failed to get lesson chat history'}), 500
+
+@bp.route('/teacher/lesson_chat_history/<int:lesson_id>', methods=['GET'])
+@teacher_required
+def get_teacher_lesson_chat_history(lesson_id):
+    """Get full chat history for a lesson for the owning teacher (all students for that lesson)."""
+    try:
+        # Ensure the requesting teacher owns this lesson (or is admin via decorator/role)
+        lesson = LessonModel.get_lesson_by_id(lesson_id)
+        if not lesson:
+            return jsonify({'error': 'Lesson not found'}), 404
+
+        user_id = session['user_id']
+        user_role = session.get('role', 'student')
+        lesson_teacher_id = lesson.get('teacher_id')
+
+        # Only the owning teacher (or admin) may see full lesson history
+        if user_role != 'admin' and lesson_teacher_id != user_id:
+            return jsonify({'error': 'Access denied'}), 403
+
+        # Query all history rows for this lesson across users
+        from app.models.database_models import LessonChatHistory as DBLessonChatHistory, User as DBUser
+        db = get_db()
+        rows = (
+            db.query(DBLessonChatHistory, DBUser)
+            .outerjoin(DBUser, DBLessonChatHistory.user_id == DBUser.id)
+            .filter(DBLessonChatHistory.lesson_id == lesson_id)
+            .order_by(DBLessonChatHistory.created_at.asc())
+            .all()
+        )
+
+        history = []
+        for record, user in rows:
+            history.append({
+                'question': record.question,
+                'answer': record.answer,
+                'created_at': record.created_at.isoformat() if record.created_at else None,
+                'user_id': record.user_id,
+                'user_email': getattr(user, 'email', None) if user else None
+            })
+
+        return jsonify({'history': history})
+    except Exception as e:
+        logger.error(f"Error getting teacher lesson chat history: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to get lesson chat history'}), 500
 
 @bp.route('/clear_lesson_chat_history/<int:lesson_id>', methods=['DELETE'])
@@ -1132,76 +1398,74 @@ def get_lesson_faqs(lesson_id):
         if not lesson:
             return jsonify({'error': 'Lesson not found'}), 404
         
-        # Read FAQs from the lesson_faq table (real student questions)
-        import sqlite3
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
+        db = get_db()
+        canonical_expr = func.coalesce(DBLessonFAQ.canonical_question, DBLessonFAQ.question)
+        faq_rows = (
+            db.query(
+                canonical_expr.label('question'),
+                func.sum(DBLessonFAQ.count).label('count')
+            )
+            .filter(DBLessonFAQ.lesson_id == lesson_id)
+            .group_by(canonical_expr)
+            .order_by(desc('count'))
+            .all()
+        )
         
-        # Get questions from lesson_faq table for this specific lesson
-        # Use canonical form when available
-        c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC', (lesson_id,))
-        faq_rows = c.fetchall()
-        conn.close()
-        
+        # Load latest chat answers once, then map to normalized question keys.
+        answer_rows = (
+            db.query(
+                DBLessonChatHistory.question,
+                DBLessonChatHistory.canonical_question,
+                DBLessonChatHistory.answer,
+                DBLessonChatHistory.created_at,
+                DBLessonChatHistory.id,
+            )
+            .filter(DBLessonChatHistory.lesson_id == lesson_id)
+            .order_by(DBLessonChatHistory.created_at.desc(), DBLessonChatHistory.id.desc())
+            .all()
+        )
+        latest_answer_by_key = {}
+        for ans_row in answer_rows:
+            row_key = _normalize_faq_question_text(
+                ans_row.canonical_question or ans_row.question or ''
+            )
+            if not row_key or row_key in latest_answer_by_key:
+                continue
+            latest_answer_by_key[row_key] = ans_row.answer
+
+        # Merge semantically equivalent FAQ rows into one canonical entry.
+        merged = {}
+        for row in faq_rows:
+            raw_question = row[0] or ''
+            normalized_key = _normalize_faq_question_text(raw_question) or str(raw_question).strip().lower()
+            if not normalized_key:
+                continue
+            entry = merged.get(normalized_key)
+            row_count = int(row[1] or 0)
+            if not entry:
+                merged[normalized_key] = {
+                    'question_key': normalized_key,
+                    'count': row_count,
+                }
+            else:
+                entry['count'] += row_count
+
         # Format the FAQs to match the expected structure
         faqs = []
-        
-        # Prepare DB for fetching latest answers from lesson_chat_history
-        import sqlite3 as _sqlite3
-        _conn2 = _sqlite3.connect('instance/chatbot.db')
-        _c2 = _conn2.cursor()
-        # Ensure table exists (defensive)
-        _c2.execute('''CREATE TABLE IF NOT EXISTS lesson_chat_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lesson_id INTEGER,
-            user_id INTEGER,
-            question TEXT,
-            answer TEXT,
-            canonical_question TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-
-        for row in faq_rows:
+        for merged_row in sorted(merged.values(), key=lambda item: item['count'], reverse=True):
             # Determine version display text
             version_text = ""
             if lesson.get('parent_lesson_id'):
                 version_text = f"v{lesson.get('version', 1)}"
             else:
                 version_text = "v1 (Original)"
-            
-            canonical_or_question = row[0]
-            # Fetch latest answer using canonical match first, then exact, then partial
-            latest_answer = None
-            try:
-                # Try canonical match first
-                _c2.execute(
-                    'SELECT answer FROM lesson_chat_history WHERE lesson_id = ? AND canonical_question = ? ORDER BY datetime(created_at) DESC LIMIT 1',
-                    (lesson_id, canonical_or_question)
-                )
-                _row_ans = _c2.fetchone()
-                if not _row_ans:
-                    # Fallback exact text match
-                    _c2.execute(
-                        'SELECT answer FROM lesson_chat_history WHERE lesson_id = ? AND question = ? ORDER BY datetime(created_at) DESC LIMIT 1',
-                        (lesson_id, canonical_or_question)
-                    )
-                    _row_ans = _c2.fetchone()
-                if not _row_ans:
-                    # Fallback: partial match using LIKE
-                    _c2.execute(
-                        'SELECT answer FROM lesson_chat_history WHERE lesson_id = ? AND (question LIKE ? OR canonical_question LIKE ?) ORDER BY datetime(created_at) DESC LIMIT 1',
-                        (lesson_id, f"%{canonical_or_question[:30]}%", f"%{canonical_or_question[:30]}%")
-                    )
-                    _row_ans = _c2.fetchone()
-                if _row_ans:
-                    latest_answer = _row_ans[0]
-            except Exception:
-                latest_answer = None
+            question_key = merged_row['question_key']
+            latest_answer = latest_answer_by_key.get(question_key)
 
             faqs.append({
-                'question': row[0],
-                'count': row[1],
-                'times_asked': row[1],  # For compatibility with frontend
+                'question': _faq_display_question(question_key),
+                'count': merged_row['count'],
+                'times_asked': merged_row['count'],  # For compatibility with frontend
                 'lessonTitle': f"{lesson.get('title', '')} {version_text}",
                 'subject': lesson.get('focus_area', ''),
                 'grade': lesson.get('grade_level', ''),
@@ -1209,9 +1473,9 @@ def get_lesson_faqs(lesson_id):
                 'version': lesson.get('version', 1),
                 'is_version': lesson.get('parent_lesson_id') is not None,
                 'parent_lesson_id': lesson.get('parent_lesson_id'),
-                'answer': latest_answer
+                'answer': latest_answer,
+                'question_key': question_key,
             })
-        _conn2.close()
         
         return jsonify({'faqs': faqs})
         
@@ -1223,21 +1487,18 @@ def get_lesson_faqs(lesson_id):
 @login_required
 def get_lesson_faq_count(lesson_id):
     try:
-        import sqlite3
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS lesson_faq (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lesson_id INTEGER,
-            question TEXT,
-            count INTEGER DEFAULT 1,
-            canonical_question TEXT
-        )''')
-        c.execute('SELECT COALESCE(SUM(count), 0) FROM lesson_faq WHERE lesson_id=?', (lesson_id,))
-        total = c.fetchone()[0] or 0
-        c.execute('SELECT COUNT(*) FROM lesson_faq WHERE lesson_id=?', (lesson_id,))
-        unique_qs = c.fetchone()[0] or 0
-        conn.close()
+        db = get_db()
+        total = (
+            db.query(func.coalesce(func.sum(DBLessonFAQ.count), 0))
+            .filter(DBLessonFAQ.lesson_id == lesson_id)
+            .scalar()
+            or 0
+        )
+        unique_qs = (
+            db.query(DBLessonFAQ.id)
+            .filter(DBLessonFAQ.lesson_id == lesson_id)
+            .count()
+        )
         return jsonify({'total_count': int(total), 'unique_count': int(unique_qs)})
     except Exception:
         return jsonify({'total_count': 0, 'unique_count': 0})
@@ -1249,19 +1510,25 @@ def faq_dashboard():
         user_id = session['user_id']
         # Get all lessons for this teacher
         lessons = LessonModel.get_lessons_by_teacher(user_id)
-        lesson_ids = [lesson['id'] for lesson in lessons]
         top_questions = []
         total_questions = 0
         recent_questions = []
-        import sqlite3
-        from datetime import datetime, timedelta
-
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
+        db = get_db()
+        canonical_expr = func.coalesce(DBLessonFAQ.canonical_question, DBLessonFAQ.question)
         # For each lesson, get top questions
         for lesson in lessons:
-            c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC LIMIT 3', (lesson['id'],))
-            faqs = [{'question': row[0], 'count': row[1]} for row in c.fetchall()]
+            rows = (
+                db.query(
+                    canonical_expr.label('question'),
+                    func.sum(DBLessonFAQ.count).label('count')
+                )
+                .filter(DBLessonFAQ.lesson_id == lesson['id'])
+                .group_by(canonical_expr)
+                .order_by(desc('count'))
+                .limit(3)
+                .all()
+            )
+            faqs = [{'question': row[0], 'count': int(row[1] or 0)} for row in rows]
             total_questions += sum(row['count'] for row in faqs)
             if faqs:
                 top_questions.append({
@@ -1273,8 +1540,16 @@ def faq_dashboard():
         # If you want real recent questions, you need to log timestamps in lesson_faq
         # For now, just return the most asked question per lesson
         for lesson in lessons:
-            c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC LIMIT 1', (lesson['id'],))
-            row = c.fetchone()
+            row = (
+                db.query(
+                    canonical_expr.label('question'),
+                    func.sum(DBLessonFAQ.count).label('count')
+                )
+                .filter(DBLessonFAQ.lesson_id == lesson['id'])
+                .group_by(canonical_expr)
+                .order_by(desc('count'))
+                .first()
+            )
             if row:
                 recent_questions.append({
                     'question': row[0],
@@ -1282,7 +1557,6 @@ def faq_dashboard():
                     'lesson_title': lesson['title'],
                     'time_ago': 'Recently'
                 })
-        conn.close()
         return jsonify({
             'total_questions': total_questions,
             'weekly_questions': total_questions,  # Placeholder
@@ -1300,19 +1574,26 @@ def export_faq_dashboard():
     try:
         user_id = session['user_id']
         lessons = LessonModel.get_lessons_by_teacher(user_id)
-        import sqlite3
         from io import BytesIO
         from docx import Document
         from docx.shared import Pt
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-        conn = sqlite3.connect('instance/chatbot.db')
-        c = conn.cursor()
+        db = get_db()
+        canonical_expr = func.coalesce(DBLessonFAQ.canonical_question, DBLessonFAQ.question)
         # Prepare data for export
         rows = []
         for lesson in lessons:
-            c.execute('SELECT COALESCE(canonical_question, question) as question, count FROM lesson_faq WHERE lesson_id=? ORDER BY count DESC', (lesson['id'],))
-            faqs = c.fetchall()
+            faqs = (
+                db.query(
+                    canonical_expr.label('question'),
+                    func.sum(DBLessonFAQ.count).label('count')
+                )
+                .filter(DBLessonFAQ.lesson_id == lesson['id'])
+                .group_by(canonical_expr)
+                .order_by(desc('count'))
+                .all()
+            )
             for faq in faqs:
                 rows.append({
                     'lesson_title': lesson['title'],
@@ -1320,7 +1601,6 @@ def export_faq_dashboard():
                     'question': faq[0],
                     'count': faq[1]
                 })
-        conn.close()
 
         # Create Word document
         doc = Document()
@@ -1608,6 +1888,10 @@ def finalize_lesson_version(lesson_id):
         # Update the new lesson with the final content in database
         new_lesson_model = LessonModel(new_lesson_id)
         new_lesson_model.update_lesson(content=draft_content)
+        # Copy RAG thread from the lesson being finalized so "Ask Question" can use the uploaded PDF
+        if lesson.get('rag_thread_id'):
+            new_lesson_model.update_lesson(rag_thread_id=lesson['rag_thread_id'])
+            logger.info("Copied rag_thread_id %s to finalized lesson %s", lesson['rag_thread_id'], new_lesson_id)
         
         # Delete FAISS index after storing in database
         try:
