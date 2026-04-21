@@ -25,6 +25,11 @@ from langgraph.graph import StateGraph, START, END
 from app.models.models import LessonModel
 from app.services.lesson_service import LessonService
 from app.utils.rag_service import groq_rate_limiter
+from app.utils.constants import (
+    is_stress_test_mode,
+    STRESS_TEST_MAX_TOKENS_CLASSIFIER,
+    STRESS_TEST_MAX_TOKENS_ANSWER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +141,10 @@ Student question: {question}
 
 Can this question be answered using ONLY the lesson content above? Reply with exactly YES or NO."""),
         ])
-        chain = prompt | lesson_service.student_service.llm | StrOutputParser()
+        llm = lesson_service.student_service.llm
+        if is_stress_test_mode():
+            llm = llm.bind(max_tokens=STRESS_TEST_MAX_TOKENS_CLASSIFIER)
+        chain = prompt | llm | StrOutputParser()
         # Truncate very long lesson content to avoid token limits; keep enough for classification
         content_snippet = (lesson_content or "")[:8000].strip() or "(No content)"
         reply = _invoke_with_groq_rate_limit(chain, {"lesson_content": content_snippet, "question": question})
@@ -270,6 +278,8 @@ Student question: {question}
 Answer in clear, professional English:"""
         )
         llm = lesson_service.student_service.llm  # reuse configured LLM
+        if is_stress_test_mode():
+            llm = llm.bind(max_tokens=STRESS_TEST_MAX_TOKENS_ANSWER)
         chain = rag_prompt | llm | StrOutputParser()
         answer = _invoke_with_groq_rate_limit(chain, {"context": context, "question": question})
         answer = _strip_reasoning(answer or "")

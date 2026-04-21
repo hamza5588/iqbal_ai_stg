@@ -1187,6 +1187,54 @@ def load_testing_dashboard():
     return render_template('admin/load_testing.html')
 
 
+# ==================== STRESS TEST MODE TOGGLE ====================
+
+STRESS_TEST_SETTING_KEY = 'stress_test_mode'
+
+
+@bp.route('/stress-test-mode', methods=['GET'])
+@login_required
+@admin_only
+def get_stress_test_mode():
+    """Return the current stress test mode state."""
+    try:
+        db = get_db()
+        row = db.query(SystemSettings).filter(SystemSettings.key == STRESS_TEST_SETTING_KEY).first()
+        enabled = (row.value.lower() == 'true') if row else False
+        return jsonify({'success': True, 'stress_test_mode': enabled})
+    except Exception as e:
+        logger.error(f"Error getting stress_test_mode: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/stress-test-mode', methods=['POST'])
+@login_required
+@admin_only
+def set_stress_test_mode():
+    """Enable or disable stress test mode (applies max_tokens caps to LLM calls)."""
+    try:
+        data = request.get_json() or {}
+        enabled = bool(data.get('enabled', False))
+        db = get_db()
+        row = db.query(SystemSettings).filter(SystemSettings.key == STRESS_TEST_SETTING_KEY).first()
+        if row:
+            row.value = 'true' if enabled else 'false'
+            row.updated_by = session.get('user_id')
+        else:
+            db.add(SystemSettings(
+                key=STRESS_TEST_SETTING_KEY,
+                value='true' if enabled else 'false',
+                description='When enabled, applies max_tokens caps to LLM calls to reduce Groq token usage during stress tests.',
+                updated_by=session.get('user_id'),
+            ))
+        db.commit()
+        logger.info("Stress test mode set to %s by user %s", enabled, session.get('user_id'))
+        return jsonify({'success': True, 'stress_test_mode': enabled})
+    except Exception as e:
+        logger.error(f"Error setting stress_test_mode: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ==================== LLM TELEMETRY ====================
 
 

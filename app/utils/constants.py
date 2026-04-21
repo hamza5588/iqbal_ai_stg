@@ -365,3 +365,30 @@ Avoid “all of the above” options to ensure critical thinking.
 # File upload settings
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'doc', 'docx'}
 MAX_FILE_SIZE = 100 * 1024 * 1024
+
+
+# ==================== STRESS TEST MODE ====================
+
+STRESS_TEST_SETTING_KEY = 'stress_test_mode'
+
+# max_tokens caps applied when stress test mode is ON
+STRESS_TEST_MAX_TOKENS_CLASSIFIER = 10    # YES/NO classifier
+STRESS_TEST_MAX_TOKENS_ANSWER = 800       # student answers & RAG answers
+STRESS_TEST_MAX_TOKENS_CANONICALIZE = 100  # background question canonicalization
+
+
+def is_stress_test_mode() -> bool:
+    """
+    Return True if the admin has enabled stress test mode via SystemSettings.
+
+    Hits the DB on every call (cheap single-row key lookup). Stress test mode
+    is expected to be toggled infrequently, so no caching is needed.
+    """
+    try:
+        from app.utils.db import get_db
+        from app.models.database_models import SystemSettings
+        db = get_db()
+        row = db.query(SystemSettings).filter(SystemSettings.key == STRESS_TEST_SETTING_KEY).first()
+        return (row.value.lower() == 'true') if row else False
+    except Exception:
+        return False
