@@ -142,8 +142,14 @@ Student question: {question}
 Can this question be answered using ONLY the lesson content above? Reply with exactly YES or NO."""),
         ])
         llm = lesson_service.student_service.llm
+        # Always disable reasoning/thinking for the classifier — it only needs YES or NO.
+        # reasoning_effort="none" tells Groq reasoning-capable models to skip the <think> pass.
+        # For models that don't support the param the existing except block catches the API error
+        # and returns False (→ safe default: route to RAG / confirmation).
+        bind_kwargs: Dict[str, Any] = {"reasoning_effort": "none"}
         if is_stress_test_mode():
-            llm = llm.bind(max_tokens=STRESS_TEST_MAX_TOKENS_CLASSIFIER)
+            bind_kwargs["max_tokens"] = STRESS_TEST_MAX_TOKENS_CLASSIFIER
+        llm = llm.bind(**bind_kwargs)
         chain = prompt | llm | StrOutputParser()
         # Truncate very long lesson content to avoid token limits; keep enough for classification
         content_snippet = (lesson_content or "")[:8000].strip() or "(No content)"
