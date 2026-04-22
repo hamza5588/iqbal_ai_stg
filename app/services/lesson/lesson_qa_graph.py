@@ -33,6 +33,11 @@ from app.utils.groq_rate_limit import (
     GroqRateLimitError,
     GroqBusyError,
 )
+from app.utils.constants import (
+    is_stress_test_mode,
+    STRESS_TEST_MAX_TOKENS_CLASSIFIER,
+    STRESS_TEST_MAX_TOKENS_ANSWER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -305,10 +310,9 @@ Student question: {question}
 Answer in clear, professional English:"""
         )
         llm = lesson_service.student_service.llm  # reuse configured LLM
-        # Cap answer tokens to reduce TPM usage; configurable via env.
-        answer_max_tokens = int(os.getenv("GROQ_ANSWER_MAX_TOKENS", "1024"))
-        llm_capped = llm.bind(max_tokens=answer_max_tokens)
-        chain = rag_prompt | llm_capped | StrOutputParser()
+        if is_stress_test_mode():
+            llm = llm.bind(max_tokens=STRESS_TEST_MAX_TOKENS_ANSWER)
+        chain = rag_prompt | llm | StrOutputParser()
         answer = _invoke_with_groq_rate_limit(chain, {"context": context, "question": question})
         answer = _strip_reasoning(answer or "")
         answer = answer.strip()

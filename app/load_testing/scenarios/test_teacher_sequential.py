@@ -102,20 +102,30 @@ async def run(
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('success'):
+                    # Celery/production returns task_id + processing; sync dev returns thread_id only.
+                    task_id = data.get('task_id')
                     thread_id = data.get('thread_id')
+                    ingest_conv = data.get("conversation_id")
+                    if ingest_conv is not None:
+                        conversation_id = ingest_conv
                     file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
                     summary.total_file_size_mb += file_size_mb
                     summary.successful_requests += 1
-                    
+
                     if not task_id:
-                        # Synchronous processing
+                        # In-process ingestion finished before HTTP response returned.
                         summary.ingestion_iterations += 1
                         summary.total_ingestion_time += upload_duration / 1000
-                        log_func(f"[{user.email}] Upload & Processing (Sync) success in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s ({file_size_mb}MB)")
-                        # Phase 13: Green summary
+                        log_func(
+                            f"[{user.email}] Upload & Processing (Sync) success in {upload_duration:.0f}ms - "
+                            f"Total Ingest Time: {upload_duration/1000:.1f}s ({file_size_mb}MB)"
+                        )
                         log_func(f"[{user.email}] Total File Processing Time: {upload_duration/1000:.1f}s (Complete)")
                     else:
-                        log_func(f"[{user.email}] Upload success in {upload_duration:.0f}ms")
+                        log_func(
+                            f"[{user.email}] Upload accepted in {upload_duration:.0f}ms; "
+                            f"async ingest task_id={task_id} (polling until ready)"
+                        )
                 else:
                     summary.failed_requests += 1
                     log_func(f"[{user.email}] Upload logic fail in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")

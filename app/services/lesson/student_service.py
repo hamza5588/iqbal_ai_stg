@@ -16,6 +16,11 @@ from app.utils.groq_rate_limit import (
     GroqRateLimitError,
     GroqBusyError,
 )
+from app.utils.constants import (
+    is_stress_test_mode,
+    STRESS_TEST_MAX_TOKENS_ANSWER,
+    STRESS_TEST_MAX_TOKENS_CANONICALIZE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -285,18 +290,19 @@ class StudentLessonService(BaseLessonService):
         try:
             prompt = ChatPromptTemplate.from_template("""
             You are a helpful teaching assistant. Answer the student's question based on the lesson content.
-            
+
             Lesson Title: {lesson_title}
             Lesson Content: {lesson_content}
-            
+
             Student Question: {question}
-            
+
             Provide a clear, educational answer that helps the student understand.
             Use information from the lesson content to support your answer.
             """)
-            
-            chain = prompt | self.llm | StrOutputParser()
-            
+
+            llm = self.llm.bind(max_tokens=STRESS_TEST_MAX_TOKENS_ANSWER) if is_stress_test_mode() else self.llm
+            chain = prompt | llm | StrOutputParser()
+
             answer = _invoke_with_groq_rate_limit(chain, {
                 "lesson_title": lesson_title,
                 "lesson_content": lesson_content,
@@ -327,16 +333,17 @@ class StudentLessonService(BaseLessonService):
             # Create prompt for question canonicalization
             prompt = ChatPromptTemplate.from_template("""
             Based on the lesson content, rephrase the student's question to be more specific and clear.
-            
+
             Lesson Content: {lesson_content}
             Student Question: {question}
-            
+
             Return a clearer, more specific version of the question that would be easier to answer based on the lesson content.
             If the question is already clear, return it as is.
             """)
-            
-            chain = prompt | self.llm | StrOutputParser()
-            
+
+            llm = self.llm.bind(max_tokens=STRESS_TEST_MAX_TOKENS_CANONICALIZE) if is_stress_test_mode() else self.llm
+            chain = prompt | llm | StrOutputParser()
+
             canonical_question = _invoke_with_groq_rate_limit(chain, {
                 "lesson_content": lesson_content,
                 "question": question
