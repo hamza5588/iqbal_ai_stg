@@ -1721,6 +1721,18 @@
       font-weight: 700;
     }
 
+    /* Dark theme: beat Tailwind / prose so preview headings stay bright on dark surfaces */
+    :is(html, body).dark #viewLessonCurrent :is(h1, h2, h3, h4, h5, h6),
+    .dark #viewLessonCurrent :is(h1, h2, h3, h4, h5, h6) {
+      color: #f8fafc !important;
+      font-weight: 700 !important;
+    }
+    :is(html, body).dark #viewLessonCurrent :is(h4, h5, h6),
+    .dark #viewLessonCurrent :is(h4, h5, h6) {
+      color: #e2e8f0 !important;
+      font-weight: 600 !important;
+    }
+
     @media (max-width: 1024px) {
       .view-lesson-grid {
         grid-template-columns: 1fr;
@@ -2373,6 +2385,16 @@
     .chat-message-content mjx-container[jax="CHTML"] {
       font-size: 1.02em;
     }
+
+    /* ── Dark mode: chat message content ── */
+    .dark .chat-message-content strong { color: #e2e8f0; }
+    .dark .chat-message-content em { color: #94a3b8; }
+    .dark .chat-message-content code {
+      background: #1e293b;
+      color: #f87171;
+    }
+    .dark .chat-message-content li::marker { color: #94a3b8; }
+    .dark .chat-message-content blockquote { color: #94a3b8; }
 
     /* Chat input button enhanced */
     .chat-input-button {

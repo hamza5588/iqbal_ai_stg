@@ -87,7 +87,54 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.config import RunnableConfig
 from langchain_openai import ChatOpenAI
 from app.utils.llm_factory import create_llm
+from app.utils.groq_rate_limit import (
+    parse_groq_error,
+    compute_retry_delay,
+    GroqRateLimitError,
+    GroqBusyError,
+)
 
+
+# ---------------------------------------------------------------------------
+# Shared LLM invoke wrapper with Groq rate-limit retry (teacher path)
+# ---------------------------------------------------------------------------
+
+def _invoke_llm_with_retry(llm, payload, *, max_retries: int = None):
+    """
+    Invoke llm.invoke(payload) with Groq rate-limit retry logic.
+
+    - TPM_RATE_LIMITED / TRANSIENT_SERVER_ERROR: retry up to max_retries times.
+    - RPD_EXHAUSTED: fail fast (daily quota, no point retrying soon).
+    - Other errors: re-raise immediately.
+    - Raises GroqRateLimitError when retries exhausted for a rate-limit case.
+    """
+    import os as _os
+    if max_retries is None:
+        max_retries = max(0, int(_os.getenv("GROQ_MAX_RETRIES", "3")))
+
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            return llm.invoke(payload)
+        except Exception as exc:
+            info = parse_groq_error(exc)
+            last_exc = exc
+            if info.kind in ("TPM_RATE_LIMITED", "TRANSIENT_SERVER_ERROR") and info.is_retryable:
+                if attempt < max_retries:
+                    delay = compute_retry_delay(info, attempt)
+                    teacher_logger.warning(
+                        "_invoke_llm_with_retry: %s (attempt %d/%d), retrying in %.1fs",
+                        info.kind, attempt + 1, max_retries, delay,
+                    )
+                    import time as _time
+                    _time.sleep(delay)
+                    continue
+                raise GroqRateLimitError(info) from exc
+            if info.kind == "RPD_EXHAUSTED":
+                raise GroqRateLimitError(info) from exc
+            raise
+    if last_exc:
+        raise last_exc
 
 
 class lesson_response(BaseModel):
@@ -595,14 +642,26 @@ Provide a detailed, comprehensive description that explicitly answers questions 
                     fallback_msg += " - Image description unavailable: model does not support multimodal requests]"
                     return fallback_msg
                 
-                # Check for connection errors that can be retried
-                is_connection_error = any(keyword in error_str.lower() for keyword in [
-                    'connection', 'refused', 'timeout', 'connect', 'network', '10061'
-                ])
-                
-                if attempt < max_retries - 1 and is_connection_error:
-                    wait_time = retry_delay * (attempt + 1)  # Exponential backoff
-                    teacher_logger.warning(f"Connection error on attempt {attempt + 1}/{max_retries}: {error_str[:200]}. Retrying in {wait_time}s...")
+                # Classify the error using the shared utility
+                _err_info = parse_groq_error(e)
+
+                if attempt < max_retries - 1 and _err_info.is_retryable:
+                    if _err_info.kind in ("TPM_RATE_LIMITED",):
+                        # Use header-based retry_after + jitter for rate limits
+                        wait_time = compute_retry_delay(_err_info, attempt)
+                        teacher_logger.warning(
+                            "Rate limit on image description attempt %d/%d (%s). Retrying in %.1fs...",
+                            attempt + 1, max_retries, _err_info.kind, wait_time,
+                        )
+                    else:
+                        # Exponential backoff + jitter for connection/transient errors
+                        import random as _random
+                        base = retry_delay * (2 ** attempt)
+                        wait_time = base + _random.uniform(0.0, base * 0.25)
+                        teacher_logger.warning(
+                            "Connection/transient error on attempt %d/%d: %.200s. Retrying in %.1fs...",
+                            attempt + 1, max_retries, error_str, wait_time,
+                        )
                     time.sleep(wait_time)
                     continue
                 else:
@@ -911,10 +970,10 @@ Provide a detailed, comprehensive description that explicitly answers questions 
             # Add current user query
             langchain_messages.append(HumanMessage(content=user_query))
             
-            # Step 7: Call LLM directly
+            # Step 7: Call LLM directly (with rate-limit retry)
             teacher_logger.info("Calling LLM...")
-            response = self.llm.invoke(langchain_messages)
-            
+            response = _invoke_llm_with_retry(self.llm, langchain_messages)
+
             # Extract response content
             if hasattr(response, 'content'):
                 response_text = response.content
@@ -922,16 +981,19 @@ Provide a detailed, comprehensive description that explicitly answers questions 
                 response_text = response
             else:
                 response_text = str(response)
-            
+
             teacher_logger.info(f"LLM response received: {len(response_text)} characters")
-            
+
             # Step 8: Update chat history
             chat_history.add_message(HumanMessage(content=user_query))
             chat_history.add_message(AIMessage(content=response_text))
             teacher_logger.info(f"Chat history updated for session: {session_id}")
-            
+
+        except (GroqRateLimitError, GroqBusyError):
+            # Propagate cleanly — route will return 429/503
+            raise
         except Exception as e:
-            teacher_logger.error(f"Interactive chat error: {str(e)}", exc_info=True)
+            teacher_logger.error("Interactive chat error: %s", e, exc_info=True)
             raise
         
         # Step 9: Check if complete lesson generated
@@ -1071,89 +1133,87 @@ Provide a detailed, comprehensive description that explicitly answers questions 
             try:
                 # Convert messages to LangChain message format
                 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-                langchain_messages = []
-                for msg in messages:
-                    role = msg.get("role", "user")
-                    content = msg.get("content", "")
-                    if role == "system":
-                        langchain_messages.append(SystemMessage(content=content))
-                    elif role == "user":
-                        langchain_messages.append(HumanMessage(content=content))
-                    elif role == "assistant":
-                        langchain_messages.append(AIMessage(content=content))
-                
+
+                def _build_lc_messages(msg_dicts):
+                    lc = []
+                    for msg in msg_dicts:
+                        role = msg.get("role", "user")
+                        content = msg.get("content", "")
+                        if role == "system":
+                            lc.append(SystemMessage(content=content))
+                        elif role == "user":
+                            lc.append(HumanMessage(content=content))
+                        elif role == "assistant":
+                            lc.append(AIMessage(content=content))
+                    return lc
+
+                langchain_messages = _build_lc_messages(messages)
+
                 # Stream the response
                 for chunk in self.llm.stream(langchain_messages):
-                    if hasattr(chunk, 'content'):
-                        chunk_text = chunk.content
-                    else:
-                        chunk_text = str(chunk)
-                    
+                    chunk_text = chunk.content if hasattr(chunk, 'content') else str(chunk)
                     if chunk_text:
                         response_text += chunk_text
-                        # Yield each chunk with is_complete=False
                         yield (chunk_text, False, "no")
-                
-                teacher_logger.info(f"LLM streaming completed: {len(response_text)} characters")
-                
+
+                teacher_logger.info("LLM streaming completed: %d characters", len(response_text))
+
             except Exception as e:
-                error_str = str(e)
-                is_token_error = (
-                    "413" in error_str or 
-                    "too large" in error_str.lower() or 
-                    "tokens per minute" in error_str.lower() or
-                    "rate_limit_exceeded" in error_str.lower() or
-                    "request too large" in error_str.lower()
-                )
-                
-                if is_token_error:
-                    teacher_logger.warning(f"Request too large, retrying with reduced context. Error: {error_str[:200]}")
-                    # Retry with minimal context
-                    context = self.format_context(docs, max_tokens=500)
-                    system_content = f"{base_system_prompt}\n\n### Knowledge Base Context:\n{context}"
+                info = parse_groq_error(e)
+
+                # ---- Rate limit (429): wait, do NOT reduce context ----
+                if info.kind in ("TPM_RATE_LIMITED",) and info.is_retryable:
+                    import time as _time
+                    delay = compute_retry_delay(info, attempt=0)
+                    teacher_logger.warning(
+                        "interactive_chat_stream: rate limit (%s), retrying non-streaming in %.1fs",
+                        info.kind, delay,
+                    )
+                    _time.sleep(delay)
+                    # Fallback to a single non-streaming invoke with retry wrapper
+                    try:
+                        response_obj = _invoke_llm_with_retry(self.llm, langchain_messages)
+                        fallback_text = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                        response_text = fallback_text
+                        yield (fallback_text, False, "no")
+                    except GroqRateLimitError:
+                        raise
+                    except Exception as retry_exc:
+                        teacher_logger.warning("Fallback invoke also failed: %s", retry_exc)
+                        raise
+
+                # ---- RPD (daily exhausted): fail fast ----
+                elif info.kind == "RPD_EXHAUSTED":
+                    raise GroqRateLimitError(info) from e
+
+                # ---- Context too large (413): reduce and retry stream ----
+                elif "413" in str(e) or "too large" in str(e).lower() or "request too large" in str(e).lower():
+                    teacher_logger.warning("Request too large, retrying stream with reduced context.")
+                    reduced_context = self.format_context(docs, max_tokens=500)
+                    system_content = f"{base_system_prompt}\n\n### Knowledge Base Context:\n{reduced_context}"
                     messages[0] = {"role": "system", "content": system_content}
-                    
                     if hasattr(chat_history, 'messages'):
-                        history_messages = list(chat_history.messages)
-                        if len(history_messages) > 4:
-                            history_messages = history_messages[-4:]
+                        history_messages = list(chat_history.messages)[-4:]
                         messages = [{"role": "system", "content": system_content}]
                         for msg in history_messages:
                             if hasattr(msg, 'type'):
                                 role = "user" if msg.type == "human" else "assistant"
-                                content = msg.content if hasattr(msg, 'content') else str(msg)
-                                content = self._truncate_text(content, 300)
+                                content = self._truncate_text(
+                                    msg.content if hasattr(msg, 'content') else str(msg), 300
+                                )
                                 messages.append({"role": role, "content": content})
                         messages.append({"role": "user", "content": enhanced_query})
-                    
-                    # Retry streaming with LangChain message format
                     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-                    langchain_messages_retry = []
-                    for msg in messages:
-                        role = msg.get("role", "user")
-                        content = msg.get("content", "")
-                        if role == "system":
-                            langchain_messages_retry.append(SystemMessage(content=content))
-                        elif role == "user":
-                            langchain_messages_retry.append(HumanMessage(content=content))
-                        elif role == "assistant":
-                            langchain_messages_retry.append(AIMessage(content=content))
-                    
+                    langchain_messages_retry = _build_lc_messages(messages)
                     response_text = ""
                     for chunk in self.llm.stream(langchain_messages_retry):
-                        if hasattr(chunk, 'content'):
-                            chunk_text = chunk.content
-                        else:
-                            chunk_text = str(chunk)
-                        
+                        chunk_text = chunk.content if hasattr(chunk, 'content') else str(chunk)
                         if chunk_text:
                             response_text += chunk_text
                             yield (chunk_text, False, "no")
+
                 else:
-                    # Re-raise if it's a different error
-                    error_msg = f"\n\n[Error: {str(e)}]"
-                    response_text += error_msg
-                    yield (error_msg, False, "no")
+                    # Unknown error — re-raise; outer handler will terminate the stream cleanly
                     raise
             
             # Step 10: Update chat history manually
@@ -1162,11 +1222,13 @@ Provide a detailed, comprehensive description that explicitly answers questions 
             chat_history.add_message(AIMessage(content=response_text))
             teacher_logger.info(f"Chat history updated for session: {session_id}")
             
+        except (GroqRateLimitError, GroqBusyError):
+            # Propagate cleanly — route generates a structured SSE error event
+            raise
         except Exception as e:
-            teacher_logger.error(f"Interactive chat streaming error: {str(e)}", exc_info=True)
-            # Yield error message
-            error_msg = f"\n\n[Error: {str(e)}]"
-            yield (error_msg, True, "no")
+            teacher_logger.error("Interactive chat streaming error: %s", e, exc_info=True)
+            # Yield a safe, provider-neutral error message (no raw exception text)
+            yield ("\n\n[An error occurred generating the response. Please try again.]", True, "no")
             return
         
         # Step 11: Check if complete lesson generated (after streaming completes)
@@ -1778,24 +1840,26 @@ REMEMBER: Document uploaded BEFORE chat. The context provided above is from the 
         teacher_logger.info(f"RAG prompt length: {len(rag_prompt)} characters")
         
         try:
-            # Use the RAG prompt directly with the LLM
-            response = self.llm.invoke(rag_prompt)
+            # Use the RAG prompt directly with the LLM (with rate-limit retry)
+            response = _invoke_llm_with_retry(self.llm, rag_prompt)
             teacher_logger.info("LLM response received")
-            
+
             # Extract content from AIMessage
             if hasattr(response, 'content'):
                 response_content = response.content
             else:
                 response_content = str(response)
-            
-            teacher_logger.info(f"Response content length: {len(response_content)} characters")
+
+            teacher_logger.info("Response content length: %d characters", len(response_content))
             teacher_logger.info("=== AI LESSON GENERATION WITH RAG COMPLETED ===")
-            
+
             return response_content
-                
+
+        except (GroqRateLimitError, GroqBusyError):
+            raise
         except Exception as e:
-            teacher_logger.error(f"Error in RAG lesson generation: {str(e)}")
-            return f"Error generating lesson: {str(e)}"
+            teacher_logger.error("Error in RAG lesson generation: %s", e, exc_info=True)
+            raise
 
 
         
@@ -1970,24 +2034,25 @@ Provide a detailed, comprehensive answer that directly addresses the user's ques
 Answer:"""
 
             teacher_logger.info("Invoking LLM for direct answer")
-            response = self.llm.invoke(answer_prompt)
-            
+            response = _invoke_llm_with_retry(self.llm, answer_prompt)
+
             # Extract content from AIMessage
             if hasattr(response, 'content'):
                 answer_text = response.content.strip()
             else:
                 answer_text = str(response).strip()
-            
-            teacher_logger.info(f"Direct answer generated successfully - length: {len(answer_text)}")
+
+            teacher_logger.info("Direct answer generated successfully - length: %d", len(answer_text))
             teacher_logger.info("=== DIRECT ANSWER GENERATION COMPLETED ===")
-            logger.info(f"Generated direct answer (length: {len(answer_text)})")
-            
+            logger.info("Generated direct answer (length: %d)", len(answer_text))
+
             return answer_text
-            
+
+        except (GroqRateLimitError, GroqBusyError):
+            raise
         except Exception as e:
-            teacher_logger.error(f"Direct answer generation failed: {str(e)}")
-            logger.error(f"Error generating direct answer: {str(e)}")
-            return f"I apologize, but I encountered an error while processing your question: {str(e)}"
+            teacher_logger.error("Direct answer generation failed: %s", e, exc_info=True)
+            raise
 
     def _create_fallback_lesson(self, text: str) -> Dict[str, Any]:
         """Create a fallback lesson when AI generation fails"""
@@ -2195,9 +2260,9 @@ Answer:"""
             # Create RAG prompt
             rag_prompt = rag_service.create_rag_prompt(user_prompt, relevant_chunks)
             
-            # Generate response using RAG
+            # Generate response using RAG (with rate-limit retry)
             teacher_logger.info("Generating RAG-based response")
-            response = self.llm.invoke(rag_prompt)
+            response = _invoke_llm_with_retry(self.llm, rag_prompt)
 
             response=response.content
             
@@ -2299,8 +2364,8 @@ Answer:"""
               if user say gave me two line answer gove the answer in two line
               if the user say give me detailed answer give the answer in detailed manner
             """
-            # Generate improved content using LLM
-            response = self.llm.invoke(prompt)
+            # Generate improved content using LLM (with rate-limit retry)
+            response = _invoke_llm_with_retry(self.llm, prompt)
             improved_content = response.content.strip()
 
             # Strip Groq reasoning/thinking blocks (<think>...</think>) - keep only the final answer
@@ -2391,9 +2456,9 @@ Answer:"""
             #combine
             rag_prompt = rag_service.create_rag_prompt(user_prompt, relevant_docs)
                 
-                # Generate response using RAG
+                # Generate response using RAG (with rate-limit retry)
             teacher_logger.info("Generating RAG-based response from original document")
-            response = self.llm.invoke(rag_prompt)
+            response = _invoke_llm_with_retry(self.llm, rag_prompt)
             response_content = response.content
             return response_content
             
@@ -2410,9 +2475,9 @@ Answer:"""
                 # Create RAG prompt with retrieved context
                 rag_prompt = rag_service.create_rag_prompt(user_prompt, relevant_chunks)
                 
-                # Generate response using RAG
+                # Generate response using RAG (with rate-limit retry)
                 teacher_logger.info("Generating RAG-based response from original document")
-                response = self.llm.invoke(rag_prompt)
+                response = _invoke_llm_with_retry(self.llm, rag_prompt)
                 
                 if hasattr(response, 'content'):
                     response_content = response.content
@@ -2481,7 +2546,7 @@ Answer:"""
                         f"User request: {user_prompt}\n\n"
                         f"Please return the revised lesson chunk."
                     )
-                    response = self.llm.invoke(edit_prompt)
+                    response = _invoke_llm_with_retry(self.llm, edit_prompt)
                     edited = response.content if hasattr(response, 'content') else str(response)
                     
                     # Check if the response is in JSON format and extract the actual content
@@ -2521,11 +2586,13 @@ User Request:
 
 Please provide an improved version of the lesson content that addresses the user's request. Return only the improved content."""
 
-            response = self.llm.invoke(edit_prompt)
+            response = _invoke_llm_with_retry(self.llm, edit_prompt)
             if hasattr(response, 'content'):
                 return response.content
             else:
                 return str(response)
+        except (GroqRateLimitError, GroqBusyError):
+            raise
         except Exception as e:
             logger.error(f"Error in simple lesson editing: {str(e)}")
             return lesson_text

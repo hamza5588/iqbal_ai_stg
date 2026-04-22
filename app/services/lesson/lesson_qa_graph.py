@@ -17,7 +17,9 @@ No interrupt/checkpoint: stateless, single endpoint. All user-facing answers in 
 from __future__ import annotations
 
 import logging
+import os
 import re
+import time
 from typing import Optional, TypedDict, Literal, Dict, Any
 
 from langgraph.graph import StateGraph, START, END
@@ -25,6 +27,12 @@ from langgraph.graph import StateGraph, START, END
 from app.models.models import LessonModel
 from app.services.lesson_service import LessonService
 from app.utils.rag_service import groq_rate_limiter
+from app.utils.groq_rate_limit import (
+    parse_groq_error,
+    compute_retry_delay,
+    GroqRateLimitError,
+    GroqBusyError,
+)
 from app.utils.constants import (
     is_stress_test_mode,
     STRESS_TEST_MAX_TOKENS_CLASSIFIER,
@@ -70,25 +78,49 @@ def _strip_reasoning(text: str) -> str:
 
 
 def _invoke_with_groq_rate_limit(chain, payload: Dict[str, Any]) -> str:
-    """Wrap chain.invoke with shared Groq limiter used in rag_service."""
-    groq_rate_limiter.wait_if_needed()
-    try:
-        response = chain.invoke(payload)
-        groq_rate_limiter.record_success()
-        return response
-    except Exception as exc:
-        groq_rate_limiter.release_slot()
-        error_text = str(exc).lower()
-        if (
-            "429" in error_text
-            or "413" in error_text
-            or "rate limit" in error_text
-            or "rate_limit" in error_text
-            or "tokens per minute" in error_text
-            or "tpm" in error_text
-        ):
-            groq_rate_limiter.record_429_error()
-        raise
+    """
+    Wrap chain.invoke with shared Groq limiter + header-aware retry (mirrors student_service).
+
+    Retry strategy:
+    - TPM_RATE_LIMITED / TRANSIENT_SERVER_ERROR: retry up to GROQ_MAX_RETRIES times.
+    - RPD_EXHAUSTED / PROVIDER_ERROR: fail fast.
+    - After retries exhausted for rate-limit: raise GroqRateLimitError (caught at route level).
+    """
+    max_retries = max(0, int(os.getenv("GROQ_MAX_RETRIES", "3")))
+    last_exc: Optional[Exception] = None
+
+    for attempt in range(max_retries + 1):
+        groq_rate_limiter.wait_if_needed()  # may raise GroqBusyError
+        try:
+            response = chain.invoke(payload)
+            groq_rate_limiter.record_success()
+            return response
+        except Exception as exc:
+            groq_rate_limiter.release_slot()
+            info = parse_groq_error(exc)
+            last_exc = exc
+
+            if info.kind in ("TPM_RATE_LIMITED", "TRANSIENT_SERVER_ERROR") and info.is_retryable:
+                groq_rate_limiter.record_429_error()
+                if attempt < max_retries:
+                    delay = compute_retry_delay(info, attempt)
+                    logger.warning(
+                        "lesson_qa_graph._invoke: %s (attempt %d/%d), retrying in %.1fs",
+                        info.kind, attempt + 1, max_retries, delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise GroqRateLimitError(info) from exc
+
+            if info.kind == "RPD_EXHAUSTED":
+                groq_rate_limiter.record_429_error()
+                raise GroqRateLimitError(info) from exc
+
+            raise
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("lesson_qa_graph._invoke_with_groq_rate_limit: unexpected exit")
 
 
 def load_lesson(state: LessonQAState) -> LessonQAState:
@@ -141,16 +173,14 @@ Student question: {question}
 
 Can this question be answered using ONLY the lesson content above? Reply with exactly YES or NO."""),
         ])
-        llm = lesson_service.student_service.llm
-        # Always disable reasoning/thinking for the classifier — it only needs YES or NO.
-        # reasoning_effort="none" tells Groq reasoning-capable models to skip the <think> pass.
-        # For models that don't support the param the existing except block catches the API error
-        # and returns False (→ safe default: route to RAG / confirmation).
-        bind_kwargs: Dict[str, Any] = {"reasoning_effort": "none"}
-        if is_stress_test_mode():
-            bind_kwargs["max_tokens"] = STRESS_TEST_MAX_TOKENS_CLASSIFIER
-        llm = llm.bind(**bind_kwargs)
-        chain = prompt | llm | StrOutputParser()
+        # Use a small token cap for YES/NO classifier — reduces TPM pressure significantly.
+        classifier_max_tokens = int(os.getenv("GROQ_CLASSIFIER_MAX_TOKENS", "10"))
+        # Force no reasoning for binary YES/NO classification to reduce TPM burn.
+        llm_for_classifier = lesson_service.student_service.llm.bind(
+            max_tokens=classifier_max_tokens,
+            reasoning_effort="none",
+        )
+        chain = prompt | llm_for_classifier | StrOutputParser()
         # Truncate very long lesson content to avoid token limits; keep enough for classification
         content_snippet = (lesson_content or "")[:8000].strip() or "(No content)"
         reply = _invoke_with_groq_rate_limit(chain, {"lesson_content": content_snippet, "question": question})
@@ -293,8 +323,11 @@ Answer in clear, professional English:"""
         if not answer:
             return "Your question is not covered in the lesson content."
         return answer
+    except (GroqRateLimitError, GroqBusyError):
+        # Propagate rate-limit/busy errors to the route — do NOT silently fall back.
+        raise
     except Exception as e:
-        logger.warning("Lesson RAG answer failed: %s", e)
+        logger.warning("Lesson RAG answer failed (non-rate-limit): %s", e)
         return "Your question is not covered in the lesson content."
 
 

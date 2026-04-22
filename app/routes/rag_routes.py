@@ -17,6 +17,7 @@ from app.utils.rag_service import (
     _get_stored_rag_system_template,
     _substitute_rag_system_placeholders,
 )
+from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
@@ -1236,18 +1237,36 @@ def chat():
         finally:
             user_lock.release()
 
+    except GroqRateLimitError as rl_exc:
+        logger.warning(
+            "RAG chat: Groq rate limit for user %s — %s retry_after=%ds",
+            session.get('user_id'), rl_exc.info.kind, rl_exc.info.retry_after,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
+    except GroqBusyError as busy_exc:
+        logger.warning("RAG chat: Groq semaphore busy for user %s — %s", session.get('user_id'), busy_exc)
+        return jsonify({
+            'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+            'code': 'SERVICE_AT_CAPACITY',
+            'retry_after': 10,
+        }), 503
     except Exception as e:
         # #region agent log
         try:
             if enable_debug_file_logs:
                 os.makedirs(_log_dir, exist_ok=True)
                 with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": type(e).__name__}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
         except Exception:
             pass
         # #endregion
-        logger.error(f"Error in RAG chat: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+        logger.error("Error in RAG chat: %s", e, exc_info=True)
+        # Do NOT leak raw provider error text to clients
+        return jsonify({'error': 'Failed to process chat. Please try again.', 'code': 'INTERNAL_ERROR'}), 500
 
 
 @bp.route('/ingest/cancel/<task_id>', methods=['POST'])
