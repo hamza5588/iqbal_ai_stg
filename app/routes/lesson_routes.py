@@ -16,6 +16,12 @@ import tempfile
 import threading
 import time
 import re
+from urllib.parse import urlparse
+
+try:
+    import redis
+except Exception:  # pragma: no cover - optional dependency fallback
+    redis = None
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +29,8 @@ _lesson_qa_user_locks = {}
 _lesson_qa_locks_lock = threading.Lock()
 _lesson_qa_user_rate = {}
 _lesson_qa_rate_lock = threading.Lock()
+_lesson_qa_redis_client = None
+_lesson_qa_redis_lock = threading.Lock()
 
 
 def _normalize_faq_question_text(question: str) -> str:
@@ -95,12 +103,90 @@ def _get_lesson_qa_user_lock(user_id: int) -> threading.Lock:
         return _lesson_qa_user_locks[user_id]
 
 
+def _get_lesson_qa_redis_client():
+    """
+    Best-effort Redis client for cross-worker lesson QA rate limiting.
+    Falls back to in-memory limiter if Redis is unavailable.
+    """
+    global _lesson_qa_redis_client
+    if _lesson_qa_redis_client is not None:
+        return _lesson_qa_redis_client
+    if redis is None:
+        return None
+
+    with _lesson_qa_redis_lock:
+        if _lesson_qa_redis_client is not None:
+            return _lesson_qa_redis_client
+        redis_url = (
+            os.getenv("LESSON_QA_RATE_LIMIT_REDIS_URL")
+            or os.getenv("CELERY_BROKER_URL")
+            or "redis://localhost:6379/0"
+        )
+        try:
+            parsed = urlparse(redis_url)
+            if parsed.scheme.startswith("redis"):
+                _lesson_qa_redis_client = redis.Redis.from_url(
+                    redis_url,
+                    socket_connect_timeout=1.0,
+                    socket_timeout=1.0,
+                    health_check_interval=30,
+                )
+                _lesson_qa_redis_client.ping()
+                logger.info("Lesson QA rate limiter: using Redis backend at %s", redis_url)
+            else:
+                logger.warning(
+                    "Lesson QA rate limiter: non-redis broker URL '%s'; falling back to in-memory.",
+                    redis_url,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Lesson QA rate limiter: Redis unavailable (%s); using in-memory fallback.",
+                exc,
+            )
+            _lesson_qa_redis_client = None
+    return _lesson_qa_redis_client
+
+
 def _check_and_record_lesson_qa_rate(user_id: int) -> tuple[bool, int]:
     """Per-user burst throttling for lesson Q&A requests."""
     max_requests = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_COUNT", "6"))
     window_seconds = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_WINDOW_SECONDS", "10"))
     now = time.time()
 
+    # Preferred path: Redis sorted-set sliding window (shared across workers).
+    redis_client = _get_lesson_qa_redis_client()
+    if redis_client is not None:
+        key = f"lesson_qa_rate:user:{int(user_id)}"
+        cutoff = now - window_seconds
+        now_ms = int(now * 1000)
+        unique_member = f"{now_ms}:{threading.get_ident()}"
+        try:
+            pipe = redis_client.pipeline()
+            pipe.zremrangebyscore(key, 0, cutoff)
+            pipe.zcard(key)
+            _, current_count = pipe.execute()
+            if int(current_count or 0) >= max_requests:
+                oldest_entries = redis_client.zrange(key, 0, 0, withscores=True)
+                if oldest_entries:
+                    oldest_score = float(oldest_entries[0][1])
+                    retry_after = max(1, int(window_seconds - (now - oldest_score)))
+                else:
+                    retry_after = window_seconds
+                return False, retry_after
+
+            pipe = redis_client.pipeline()
+            pipe.zadd(key, {unique_member: now})
+            pipe.expire(key, max(window_seconds + 2, 2 * window_seconds))
+            pipe.execute()
+            return True, 0
+        except Exception as exc:
+            # Safe fallback under Redis outages.
+            logger.warning(
+                "Lesson QA rate limiter Redis error (%s); falling back to in-memory for this request.",
+                exc,
+            )
+
+    # Fallback path: in-memory per-process limiter.
     with _lesson_qa_rate_lock:
         history = _lesson_qa_user_rate.get(user_id, [])
         cutoff = now - window_seconds

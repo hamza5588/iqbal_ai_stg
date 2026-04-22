@@ -175,7 +175,11 @@ Can this question be answered using ONLY the lesson content above? Reply with ex
         ])
         # Use a small token cap for YES/NO classifier — reduces TPM pressure significantly.
         classifier_max_tokens = int(os.getenv("GROQ_CLASSIFIER_MAX_TOKENS", "10"))
-        llm_for_classifier = lesson_service.student_service.llm.bind(max_tokens=classifier_max_tokens)
+        # Force no reasoning for binary YES/NO classification to reduce TPM burn.
+        llm_for_classifier = lesson_service.student_service.llm.bind(
+            max_tokens=classifier_max_tokens,
+            reasoning_effort="none",
+        )
         chain = prompt | llm_for_classifier | StrOutputParser()
         # Truncate very long lesson content to avoid token limits; keep enough for classification
         content_snippet = (lesson_content or "")[:8000].strip() or "(No content)"
