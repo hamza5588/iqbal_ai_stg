@@ -73,7 +73,50 @@ async def run(
 
                 if resp.status == 429:
                     summary.rate_limit_hits += 1
-                if resp.status == 200:
+                    try:
+                        rl_data = await resp.json()
+                    except Exception:
+                        rl_data = {}
+                    retry_after = rl_data.get('retry_after') or 15
+                    code = rl_data.get('code', 'RATE_LIMITED')
+                    log_func(
+                        f"[{user.email}] Message {i+1} RATE LIMITED ({code}) — "
+                        f"retry_after={retry_after}s, waiting before next message",
+                        level="WARNING",
+                    )
+                    # Record as rate_limited (not a crash/failure)
+                    summary.errors.append({
+                        "user": user.email,
+                        "error": f"rate_limited:{code}",
+                        "retry_after": retry_after,
+                        "message_index": i + 1,
+                    })
+                    # Respect the server's retry_after guidance
+                    wait = max(2, min(int(retry_after), 60))
+                    await asyncio.sleep(wait)
+                    continue  # Skip to next message; do not count as opaque failure
+
+                elif resp.status == 503:
+                    try:
+                        srv_data = await resp.json()
+                    except Exception:
+                        srv_data = {}
+                    retry_after = srv_data.get('retry_after') or 10
+                    log_func(
+                        f"[{user.email}] Message {i+1} SERVICE AT CAPACITY (503) — "
+                        f"retry_after={retry_after}s",
+                        level="WARNING",
+                    )
+                    summary.errors.append({
+                        "user": user.email,
+                        "error": "service_at_capacity",
+                        "retry_after": retry_after,
+                        "message_index": i + 1,
+                    })
+                    await asyncio.sleep(max(2, min(int(retry_after), 30)))
+                    continue
+
+                elif resp.status == 200:
                     data = await resp.json()
                     answer = data.get('answer', '')
                     if answer:
@@ -82,7 +125,7 @@ async def run(
                         summary.latency_trend.append(duration)
                         ans_snippet = answer[:50].replace('\n', ' ')
                         log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"")
-                        
+
                         # Add to transcript
                         chat_transcript.append({"role": "user", "content": question})
                         chat_transcript.append({"role": "bot", "content": answer, "latency": duration})
@@ -94,10 +137,10 @@ async def run(
                     log_func(f"[{user.email}] Message {i+1} HTTP {resp.status} in {duration:.1f}s", level="ERROR")
 
         except Exception as e:
-            log_func(f"[{user.email}] Message {i+1} exception: {str(e)}", level="ERROR")
-            summary.errors.append({"user": user.email, "error": str(e)})
+            log_func(f"[{user.email}] Message {i+1} exception: {type(e).__name__}", level="ERROR")
+            summary.errors.append({"user": user.email, "error": type(e).__name__, "message_index": i + 1})
 
-        await asyncio.sleep(2) # Prevent hammering/busy loop
+        await asyncio.sleep(2)  # Prevent hammering/busy loop
 
     total_duration = time.time() - scenario_start
     log_func(f"[{user.email}] Student Chat Complete — {total_messages} messages in {total_duration:.1f}s")

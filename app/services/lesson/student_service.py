@@ -2,12 +2,20 @@
 Student-focused lesson service for learning and Q&A
 """
 import logging
+import os
 import re
+import time
 from typing import Dict, List, Any, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from .base_service import BaseLessonService
 from app.utils.rag_service import groq_rate_limiter
+from app.utils.groq_rate_limit import (
+    parse_groq_error,
+    compute_retry_delay,
+    GroqRateLimitError,
+    GroqBusyError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,25 +28,55 @@ def _strip_reasoning(text: str) -> str:
 
 
 def _invoke_with_groq_rate_limit(chain, payload: Dict[str, Any]) -> str:
-    """Wrap chain.invoke with shared Groq limiter used in rag_service."""
-    groq_rate_limiter.wait_if_needed()
-    try:
-        response = chain.invoke(payload)
-        groq_rate_limiter.record_success()
-        return response
-    except Exception as exc:
-        groq_rate_limiter.release_slot()
-        error_text = str(exc).lower()
-        if (
-            "429" in error_text
-            or "413" in error_text
-            or "rate limit" in error_text
-            or "rate_limit" in error_text
-            or "tokens per minute" in error_text
-            or "tpm" in error_text
-        ):
-            groq_rate_limiter.record_429_error()
-        raise
+    """
+    Wrap chain.invoke with shared Groq limiter + header-aware retry.
+
+    Retry strategy:
+    - TPM_RATE_LIMITED: retry up to GROQ_MAX_RETRIES times using header-based wait.
+    - TRANSIENT_SERVER_ERROR: same.
+    - RPD_EXHAUSTED / PROVIDER_ERROR: fail fast (no retry).
+    - After all retries exhausted for a rate-limit: raise GroqRateLimitError.
+    """
+    max_retries = max(0, int(os.getenv("GROQ_MAX_RETRIES", "3")))
+    last_exc: Optional[Exception] = None
+
+    for attempt in range(max_retries + 1):
+        # May raise GroqBusyError — propagate directly to route
+        groq_rate_limiter.wait_if_needed()
+        try:
+            response = chain.invoke(payload)
+            groq_rate_limiter.record_success()
+            return response
+        except Exception as exc:
+            groq_rate_limiter.release_slot()
+            info = parse_groq_error(exc)
+            last_exc = exc
+
+            if info.kind in ("TPM_RATE_LIMITED", "TRANSIENT_SERVER_ERROR") and info.is_retryable:
+                groq_rate_limiter.record_429_error()
+                if attempt < max_retries:
+                    delay = compute_retry_delay(info, attempt)
+                    logger.warning(
+                        "_invoke_with_groq_rate_limit: %s (attempt %d/%d), "
+                        "retrying in %.1fs",
+                        info.kind, attempt + 1, max_retries, delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                # Retries exhausted for a known rate-limit condition
+                raise GroqRateLimitError(info) from exc
+
+            if info.kind in ("RPD_EXHAUSTED",):
+                groq_rate_limiter.record_429_error()
+                raise GroqRateLimitError(info) from exc
+
+            # Non-retryable provider error — re-raise as-is so caller gets the original
+            raise
+
+    # Should not be reachable, but satisfy type checkers
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("_invoke_with_groq_rate_limit: unexpected exit from retry loop")
 
 
 class StudentLessonService(BaseLessonService):
@@ -267,9 +305,13 @@ class StudentLessonService(BaseLessonService):
             answer = _strip_reasoning(answer)
             return answer
             
+        except (GroqRateLimitError, GroqBusyError):
+            # Re-raise so the route can return a proper 429/503 — do NOT turn into answer text.
+            raise
         except Exception as e:
-            logger.error(f"Error generating LLM answer: {str(e)}")
-            return f"I apologize, but I encountered an error while processing your question: {str(e)}"
+            logger.error("Error generating LLM answer: %s", e, exc_info=True)
+            # Re-raise; do not leak raw provider error messages as answer text.
+            raise
 
     def canonicalize_question(self, lesson_id: int, question: str) -> str:
         """Return a canonical phrasing for the question using semantic similarity"""

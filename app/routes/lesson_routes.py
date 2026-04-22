@@ -5,6 +5,7 @@ from app.services.lesson_service import LessonService
 from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 from app.utils.decorators import login_required, teacher_required, student_required
 from app.utils.db import get_db
+from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
 from sqlalchemy import func, or_, desc
@@ -1177,6 +1178,29 @@ def ask_lesson_question():
             'source': 'lesson_or_rag_graph',
             'confidence': 0.9,
         })
+    except GroqRateLimitError as rl_exc:
+        logger.warning(
+            "ask_lesson_question: Groq rate limit hit for user %s — %s retry_after=%ds",
+            user_id, rl_exc.info.kind, rl_exc.info.retry_after,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
+    except GroqBusyError as busy_exc:
+        logger.warning("ask_lesson_question: Groq semaphore busy for user %s — %s", user_id, busy_exc)
+        return jsonify({
+            'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+            'code': 'SERVICE_AT_CAPACITY',
+            'retry_after': 10,
+        }), 503
+    except Exception as exc:
+        logger.exception("ask_lesson_question: unexpected error for user %s lesson %s", user_id, lesson_id)
+        return jsonify({
+            'error': 'Failed to generate an answer. Please try again.',
+            'code': 'INTERNAL_ERROR',
+        }), 500
     finally:
         user_lock.release()
 
@@ -1974,9 +1998,26 @@ def interactive_chat(lesson_id):
             'lesson_id': lesson_id
         })
 
+    except GroqRateLimitError as rl_exc:
+        logger.warning(
+            "interactive_chat: Groq rate limit for lesson %s — %s retry_after=%ds",
+            lesson_id, rl_exc.info.kind, rl_exc.info.retry_after,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
+    except GroqBusyError as busy_exc:
+        logger.warning("interactive_chat: Groq semaphore busy for lesson %s — %s", lesson_id, busy_exc)
+        return jsonify({
+            'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+            'code': 'SERVICE_AT_CAPACITY',
+            'retry_after': 10,
+        }), 503
     except Exception as e:
-        logger.error(f"Error in interactive chat: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+        logger.error("Error in interactive chat lesson %s: %s", lesson_id, e, exc_info=True)
+        return jsonify({'error': 'Failed to process chat. Please try again.', 'code': 'INTERNAL_ERROR'}), 500
 
 @bp.route('/lesson/<int:lesson_id>/interactive_chat_stream', methods=['POST'])
 @teacher_required
@@ -2052,12 +2093,33 @@ def interactive_chat_stream(lesson_id):
                         
                         break
                 
-            except Exception as e:
-                logger.error(f"Error in streaming chat: {str(e)}", exc_info=True)
+            except GroqRateLimitError as _rl:
+                logger.warning("Streaming chat rate limit for lesson %s: %s", lesson_id, _rl.info.kind)
                 error_data = json.dumps({
-                    'error': str(e),
+                    'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+                    'code': _rl.info.kind,
+                    'retry_after': _rl.info.retry_after,
                     'is_complete': True,
-                    'complete_lesson': 'no'
+                    'complete_lesson': 'no',
+                })
+                yield f"data: {error_data}\n\n"
+            except GroqBusyError:
+                logger.warning("Streaming chat: Groq semaphore busy for lesson %s", lesson_id)
+                error_data = json.dumps({
+                    'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+                    'code': 'SERVICE_AT_CAPACITY',
+                    'retry_after': 10,
+                    'is_complete': True,
+                    'complete_lesson': 'no',
+                })
+                yield f"data: {error_data}\n\n"
+            except Exception as e:
+                logger.error("Error in streaming chat lesson %s: %s", lesson_id, e, exc_info=True)
+                error_data = json.dumps({
+                    'error': 'Failed to generate response. Please try again.',
+                    'code': 'INTERNAL_ERROR',
+                    'is_complete': True,
+                    'complete_lesson': 'no',
                 })
                 yield f"data: {error_data}\n\n"
         
@@ -2072,9 +2134,16 @@ def interactive_chat_stream(lesson_id):
             }
         )
 
+    except GroqRateLimitError as rl_exc:
+        logger.warning("Streaming chat route rate limit for lesson %s: %s", lesson_id, rl_exc.info.kind)
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
     except Exception as e:
-        logger.error(f"Error in streaming chat route: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to start streaming: {str(e)}'}), 500
+        logger.error("Error in streaming chat route lesson %s: %s", lesson_id, e, exc_info=True)
+        return jsonify({'error': 'Failed to start streaming. Please try again.', 'code': 'INTERNAL_ERROR'}), 500
 
 @bp.route('/lesson/<int:lesson_id>/clear_draft', methods=['DELETE'])
 @teacher_required
