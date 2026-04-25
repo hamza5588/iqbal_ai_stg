@@ -1713,24 +1713,75 @@
       font-weight: 500;
     }
 
-    /* Ensure lesson headings are high-contrast and readable */
-    #viewLessonCurrent h1,
-    #viewLessonCurrent h2,
-    #viewLessonCurrent h3 {
+    /* Ensure lesson headings are high-contrast and readable (white preview card) */
+    #viewLessonCurrent h1 {
       color: #0f172a;
       font-weight: 700;
     }
-
-    /* Dark theme: beat Tailwind / prose so preview headings stay bright on dark surfaces */
-    :is(html, body).dark #viewLessonCurrent :is(h1, h2, h3, h4, h5, h6),
-    .dark #viewLessonCurrent :is(h1, h2, h3, h4, h5, h6) {
-      color: #f8fafc !important;
-      font-weight: 700 !important;
+    #viewLessonCurrent h2 {
+      color: #1e293b;
+      font-weight: 700;
     }
-    :is(html, body).dark #viewLessonCurrent :is(h4, h5, h6),
-    .dark #viewLessonCurrent :is(h4, h5, h6) {
-      color: #e2e8f0 !important;
-      font-weight: 600 !important;
+    #viewLessonCurrent h3,
+    #viewLessonCurrent h4 {
+      color: #334155;
+      font-weight: 700;
+    }
+    #viewLessonCurrent h5,
+    #viewLessonCurrent h6 {
+      color: #475569;
+      font-weight: 700;
+    }
+
+    /* View lesson modal uses white preview cards — keep markdown dark-on-light when .dark is on */
+    .dark #viewLessonModal #viewLessonCurrent,
+    .dark #viewLessonModal #viewLessonDraft {
+      color: #0f172a;
+    }
+    .dark #viewLessonModal #viewLessonCurrent :where(p, li, span, dd, dt, td, th, label),
+    .dark #viewLessonModal #viewLessonDraft :where(p, li, span, dd, dt, td, th, label) {
+      color: #0f172a;
+    }
+    .dark #viewLessonModal #viewLessonCurrent h1,
+    .dark #viewLessonModal #viewLessonDraft h1 {
+      color: #0f172a;
+    }
+    .dark #viewLessonModal #viewLessonCurrent h2,
+    .dark #viewLessonModal #viewLessonDraft h2 {
+      color: #1e293b;
+    }
+    .dark #viewLessonModal #viewLessonCurrent h3,
+    .dark #viewLessonModal #viewLessonDraft h3 {
+      color: #334155;
+    }
+    .dark #viewLessonModal #viewLessonCurrent :where(h4, h5, h6),
+    .dark #viewLessonModal #viewLessonDraft :where(h4, h5, h6) {
+      color: #334155;
+    }
+    .dark #viewLessonModal #viewLessonCurrent strong,
+    .dark #viewLessonModal #viewLessonDraft strong {
+      color: #1e293b;
+    }
+    .dark #viewLessonModal #viewLessonCurrent em,
+    .dark #viewLessonModal #viewLessonDraft em {
+      color: #475569;
+    }
+    .dark #viewLessonModal #viewLessonCurrent code,
+    .dark #viewLessonModal #viewLessonDraft code {
+      background: #f1f5f9;
+      color: #dc2626;
+    }
+    .dark #viewLessonModal #viewLessonCurrent li::marker,
+    .dark #viewLessonModal #viewLessonDraft li::marker {
+      color: #0f172a;
+    }
+    .dark #viewLessonModal #viewLessonCurrent blockquote,
+    .dark #viewLessonModal #viewLessonDraft blockquote {
+      color: #64748b;
+    }
+    .dark #viewLessonModal #viewLessonCurrent a,
+    .dark #viewLessonModal #viewLessonDraft a {
+      color: #0ea5e9;
     }
 
     @media (max-width: 1024px) {
@@ -2386,15 +2437,37 @@
       font-size: 1.02em;
     }
 
-    /* ── Dark mode: chat message content ── */
-    .dark .chat-message-content strong { color: #e2e8f0; }
-    .dark .chat-message-content em { color: #94a3b8; }
-    .dark .chat-message-content code {
-      background: #1e293b;
-      color: #f87171;
+    /* ── Dark mode: chat bubbles — user = dark text on blue; assistant = dark text on white card ── */
+    .dark .chat-message.user .chat-message-content strong { color: #f8fafc; }
+    .dark .chat-message.user .chat-message-content em { color: #e2e8f0; }
+    .dark .chat-message.user .chat-message-content code {
+      background: rgba(15, 23, 42, 0.35);
+      color: #fecaca;
     }
-    .dark .chat-message-content li::marker { color: #94a3b8; }
-    .dark .chat-message-content blockquote { color: #94a3b8; }
+    .dark .chat-message.user .chat-message-content li::marker { color: #cbd5e1; }
+    .dark .chat-message.user .chat-message-content blockquote { color: #e2e8f0; }
+
+    .dark .chat-message.assistant .chat-message-content {
+      color: #0f172a;
+      background: #ffffff;
+      border-color: #e5e7eb;
+    }
+    .dark .chat-message.assistant .chat-message-content :where(p, li, span, dd, dt, td, th, label) {
+      color: #0f172a;
+    }
+    .dark .chat-message.assistant .chat-message-content h1 { color: #0f172a; }
+    .dark .chat-message.assistant .chat-message-content h2 { color: #1e293b; }
+    .dark .chat-message.assistant .chat-message-content h3 { color: #334155; }
+    .dark .chat-message.assistant .chat-message-content :where(h4, h5, h6) { color: #334155; }
+    .dark .chat-message.assistant .chat-message-content strong { color: #1e293b; }
+    .dark .chat-message.assistant .chat-message-content em { color: #475569; }
+    .dark .chat-message.assistant .chat-message-content code {
+      background: #f1f5f9;
+      color: #dc2626;
+    }
+    .dark .chat-message.assistant .chat-message-content li::marker { color: #0f172a; }
+    .dark .chat-message.assistant .chat-message-content blockquote { color: #64748b; }
+    .dark .chat-message.assistant .chat-message-content a { color: #0ea5e9; }
 
     /* Chat input button enhanced */
     .chat-input-button {
