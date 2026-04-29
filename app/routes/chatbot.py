@@ -37,6 +37,19 @@ def _validate_thread_id(thread_id: str, user_id: int) -> bool:
     return thread_id.startswith(expected_prefix)
 
 
+def _is_transient_db_connection_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    markers = (
+        "server closed the connection unexpectedly",
+        "consuming input failed",
+        "connection not open",
+        "connection reset by peer",
+        "ssl syserror: eof detected",
+        "terminating connection due to administrator command",
+    )
+    return any(marker in msg for marker in markers)
+
+
 @bp.route('/ingest', methods=['POST'])
 @login_required
 def ingest():
@@ -185,10 +198,24 @@ def chat():
         human_message = HumanMessage(content=message)
 
         # Invoke the chatbot - LangGraph returns the final state
-        state = chatbot.invoke(
-            {"messages": [human_message]},
-            config=config
-        )
+        try:
+            state = chatbot.invoke(
+                {"messages": [human_message]},
+                config=config
+            )
+        except Exception as invoke_err:
+            if not _is_transient_db_connection_error(invoke_err):
+                raise
+            logger.warning("Legacy RAG chat invoke transient DB error; retrying once: %s", invoke_err)
+            try:
+                from app.utils.db import reset_db_engine
+                reset_db_engine()
+            except Exception:
+                logger.warning("Failed to reset DB engine before legacy retry", exc_info=True)
+            state = chatbot.invoke(
+                {"messages": [human_message]},
+                config=config
+            )
 
         # Extract the last message from the state
         messages = state.get("messages", [])
@@ -213,7 +240,7 @@ def chat():
 
     except Exception as e:
         logger.error(f"Error in RAG chat: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+        return jsonify({'error': 'Failed to process chat. Please try again.'}), 500
 
 
 @bp.route('/thread/status/<thread_id>', methods=['GET'])

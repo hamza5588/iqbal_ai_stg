@@ -1849,6 +1849,40 @@
       box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 30px -26px rgba(15, 23, 42, 0.6);
     }
 
+    #expandedConversationSummaryModal {
+      display: none;
+    }
+
+    #expandedConversationSummaryModal:not(.hidden) {
+      display: flex;
+    }
+
+    .expanded-summary-panel {
+      width: min(100%, 98vw);
+      max-height: 98vh;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #d6e0ec;
+      border-radius: 1.35rem;
+      box-shadow: 0 36px 90px -36px rgba(15, 23, 42, 0.62);
+    }
+
+    .expanded-summary-content-wrap {
+      flex: 1;
+      overflow-y: auto;
+      background: linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+      padding: 1.1rem;
+    }
+
+    #expandedConversationSummaryContent {
+      min-height: 100%;
+      background: #ffffff;
+      border: 1px solid #d7deea;
+      border-radius: 1rem;
+      padding: 1.1rem 1.25rem 1.35rem;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 30px -26px rgba(15, 23, 42, 0.6);
+    }
+
     .view-lesson-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -2015,6 +2049,11 @@
       .expanded-lesson-panel {
         width: min(100%, 98vw);
         max-height: 95vh;
+      }
+
+      .expanded-summary-panel {
+        width: 99vw;
+        max-height: 98vh;
       }
 
       .expanded-lesson-content-wrap {
@@ -3909,6 +3948,14 @@
                   <h4 class="text-sm md:text-base font-semibold text-gray-900">Conversation Summary</h4>
                   <div class="flex items-center gap-2">
                     <button
+                      id="expandConversationSummaryBtn"
+                      onclick="openExpandedConversationSummary()"
+                      class="text-slate-600 hover:text-slate-900 transition-colors p-1 rounded"
+                      title="Expand summary"
+                      aria-label="Expand conversation summary">
+                      <i class="fas fa-expand text-xs"></i>
+                    </button>
+                    <button
                       id="refreshConversationSummaryBtn"
                       onclick="if(window.currentViewedLessonData) loadConversationSummaryForLesson(window.currentViewedLessonData, true);"
                       class="text-primary-600 hover:text-primary-800 transition-colors p-1 rounded"
@@ -3983,16 +4030,49 @@
               <h3 class="text-lg md:text-2xl font-semibold truncate">Expanded Lesson View</h3>
               <p class="text-slate-200 text-xs md:text-sm mt-0.5" id="expandedLessonPreviewSubtitle">Readable fullscreen preview</p>
             </div>
-            <button onclick="closeExpandedLessonPreview()"
-              class="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-white/15 hover:bg-white/25 transition-colors text-white"
-              aria-label="Close expanded lesson view">
-              <i class="fas fa-times text-base md:text-lg"></i>
-            </button>
+            <div class="flex items-center gap-2">
+              <button onclick="openExpandedConversationSummary()"
+                class="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-white/15 hover:bg-white/25 transition-colors text-white"
+                aria-label="Expand conversation summary">
+                <i class="fas fa-align-left text-sm md:text-base"></i>
+              </button>
+              <button onclick="closeExpandedLessonPreview()"
+                class="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-white/15 hover:bg-white/25 transition-colors text-white"
+                aria-label="Close expanded lesson view">
+                <i class="fas fa-times text-base md:text-lg"></i>
+              </button>
+            </div>
           </div>
         </div>
         <div class="expanded-lesson-content-wrap">
           <div id="expandedLessonPreviewContent" class="space-y-2">
             <p class="text-gray-500 italic">Lesson content will appear here...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="expandedConversationSummaryModal"
+      class="fixed inset-0 bg-slate-900/65 flex items-start md:items-center justify-center z-[10070] overflow-y-auto py-2 md:py-4 hidden"
+      onclick="closeExpandedConversationSummary()">
+      <div class="expanded-summary-panel bg-white rounded-2xl md:rounded-3xl w-full mx-2 md:mx-4 my-auto" onclick="event.stopPropagation()">
+        <div
+          class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white px-4 md:px-8 py-3 md:py-4 rounded-t-2xl md:rounded-t-3xl border-b border-slate-600/30">
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="text-lg md:text-2xl font-semibold truncate">Conversation Summary</h3>
+              <p class="text-slate-200 text-xs md:text-sm mt-0.5">Expanded summary view</p>
+            </div>
+            <button onclick="closeExpandedConversationSummary()"
+              class="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-white/15 hover:bg-white/25 transition-colors text-white"
+              aria-label="Close expanded summary">
+              <i class="fas fa-times text-base md:text-lg"></i>
+            </button>
+          </div>
+        </div>
+        <div class="expanded-summary-content-wrap">
+          <div id="expandedConversationSummaryContent" class="space-y-2">
+            <p class="text-gray-500 italic">No summary available yet.</p>
           </div>
         </div>
       </div>
@@ -6275,6 +6355,50 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         document.body.style.overflow = 'hidden';
       }
 
+      function syncExpandedConversationSummaryFromCurrent() {
+        const sourceEl = document.getElementById('viewLessonConversationSummaryContent');
+        const expandedEl = document.getElementById('expandedConversationSummaryContent');
+        if (!sourceEl || !expandedEl) return;
+        expandedEl.innerHTML = sourceEl.innerHTML || '<p class="text-gray-500 italic">No summary available yet.</p>';
+      }
+
+      function openExpandedConversationSummary() {
+        const modal = document.getElementById('expandedConversationSummaryModal');
+        if (!modal) return;
+        try {
+          if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+          }
+        } catch (e) {
+          console.warn('Unable to move expanded summary modal to body:', e);
+        }
+        syncExpandedConversationSummaryFromCurrent();
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+        modal.style.visibility = 'visible';
+        modal.style.opacity = '1';
+        modal.style.pointerEvents = 'auto';
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeExpandedConversationSummary() {
+        const modal = document.getElementById('expandedConversationSummaryModal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.style.display = '';
+        modal.style.visibility = '';
+        modal.style.opacity = '';
+        modal.style.pointerEvents = '';
+        const viewLessonModal = document.getElementById('viewLessonModal');
+        const expandedLessonModal = document.getElementById('expandedLessonPreviewModal');
+        if (
+          (!viewLessonModal || viewLessonModal.classList.contains('hidden')) &&
+          (!expandedLessonModal || expandedLessonModal.classList.contains('hidden'))
+        ) {
+          document.body.style.overflow = '';
+        }
+      }
+
       function closeExpandedLessonPreview() {
         const modal = document.getElementById('expandedLessonPreviewModal');
         if (!modal) return;
@@ -6338,21 +6462,25 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         if (!target) return;
         if (state === 'error') {
           target.innerHTML = '<p class="text-red-600">Failed to load summary</p>';
+          syncExpandedConversationSummaryFromCurrent();
           return;
         }
         if (!text) {
           target.innerHTML = '<p class="text-gray-500 italic">No summary available yet</p>';
+          syncExpandedConversationSummaryFromCurrent();
           return;
         }
         try {
           if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
             target.innerHTML = TeacherChatFormatter.formatChatResponse(String(text));
+            syncExpandedConversationSummaryFromCurrent();
             return;
           }
         } catch (e) { /* fall through to pre-wrap fallback */ }
         // Fallback: preserve newlines and bullets using pre-wrap
         const escaped = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         target.innerHTML = '<pre class="whitespace-pre-wrap font-sans text-xs md:text-sm text-gray-700 leading-relaxed m-0 p-0">' + escaped + '</pre>';
+        syncExpandedConversationSummaryFromCurrent();
       }
 
       function renderLessonSummaryText(lesson) {
@@ -6668,6 +6796,18 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               openExpandedLessonPreview();
             };
           }
+          const panel = document.querySelector('#viewLessonModal .view-lesson-modal-panel');
+          const panelIcon = document.getElementById('expandMainLessonModalIcon');
+          const panelBtn = document.getElementById('expandMainLessonModalBtn');
+          if (panel) panel.classList.add('is-maximized');
+          if (panelIcon) {
+            panelIcon.classList.remove('fa-expand');
+            panelIcon.classList.add('fa-compress');
+          }
+          if (panelBtn) {
+            panelBtn.title = 'Restore window size';
+            panelBtn.setAttribute('aria-label', panelBtn.title);
+          }
           
           // Step 5: Check what browser computed
           const computed = window.getComputedStyle(modal);
@@ -6710,6 +6850,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Close the view lesson modal
       function closeViewLessonModal() {
         closeExpandedLessonPreview();
+        closeExpandedConversationSummary();
         const panel = document.querySelector('#viewLessonModal .view-lesson-modal-panel');
         const icon = document.getElementById('expandMainLessonModalIcon');
         const btn = document.getElementById('expandMainLessonModalBtn');
@@ -9917,6 +10058,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         try {
           const viewLessonModal = document.getElementById('viewLessonModal');
           const expandedLessonPreviewModal = document.getElementById('expandedLessonPreviewModal');
+          const expandedConversationSummaryModal = document.getElementById('expandedConversationSummaryModal');
           const setPromptModal = document.getElementById('setPromptModal');
           const createLessonModal = document.getElementById('createLessonModal');
           const saveTemplateModal = document.getElementById('saveTemplateModal');
@@ -9928,6 +10070,7 @@ Align everything with the lesson objectives and do not invent missing informatio
             viewLessonModal.classList.remove('visible-modal');
           }
           if (expandedLessonPreviewModal) expandedLessonPreviewModal.classList.add('hidden');
+          if (expandedConversationSummaryModal) expandedConversationSummaryModal.classList.add('hidden');
           if (setPromptModal) setPromptModal.classList.add('hidden');
           if (createLessonModal) createLessonModal.classList.add('hidden');
           if (saveTemplateModal) saveTemplateModal.classList.add('hidden');
@@ -9951,6 +10094,8 @@ Align everything with the lesson objectives and do not invent missing informatio
       // Expose for inline onclick compatibility across environments.
       window.openExpandedLessonPreview = openExpandedLessonPreview;
       window.closeExpandedLessonPreview = closeExpandedLessonPreview;
+      window.openExpandedConversationSummary = openExpandedConversationSummary;
+      window.closeExpandedConversationSummary = closeExpandedConversationSummary;
       window.toggleMainLessonModalExpand = toggleMainLessonModalExpand;
 
       function deactivateAllTabs() {

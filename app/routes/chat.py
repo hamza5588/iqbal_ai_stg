@@ -420,8 +420,17 @@ def get_conversation_summary(conversation_id):
         if not conv:
             return jsonify({'error': 'Conversation not found or access denied'}), 404
 
+        lesson_cutoff = ConversationSummaryService.get_lesson_cutoff(
+            conversation_id=conversation_id,
+            lesson_id=lesson_id,
+            user_id=user_id,
+        )
         latest = ConversationSummaryService.get_latest_summary(conversation_id, lesson_id=lesson_id)
-        is_outdated = ConversationSummaryService.is_summary_outdated(conversation_id, latest)
+        is_outdated = ConversationSummaryService.is_summary_outdated(
+            conversation_id,
+            latest,
+            lesson_cutoff=lesson_cutoff,
+        )
         if not latest:
             return jsonify({
                 'success': True,
@@ -441,6 +450,8 @@ def get_conversation_summary(conversation_id):
             'last_message_timestamp': latest.last_message_timestamp.isoformat() if latest.last_message_timestamp else None,
             'is_outdated': is_outdated,
         })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
     except Exception as e:
         logger.error(f"Error retrieving summary: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to retrieve summary'}), 500

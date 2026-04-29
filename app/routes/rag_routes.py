@@ -82,6 +82,19 @@ def _check_and_record_user_chat_rate(user_id):
     return True, 0
 
 
+def _is_transient_db_connection_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    markers = (
+        "server closed the connection unexpectedly",
+        "consuming input failed",
+        "connection not open",
+        "connection reset by peer",
+        "ssl syserror: eof detected",
+        "terminating connection due to administrator command",
+    )
+    return any(marker in msg for marker in markers)
+
+
 def _get_ingest_tier(file_size_mb: float) -> dict:
     """
     Resolve ingest execution strategy by file size.
@@ -1184,10 +1197,30 @@ def chat():
             except Exception:
                 pass
             # #endregion
-            state = chatbot.invoke(
-                {"messages": [human_message]},
-                config=config
-            )
+            try:
+                state = chatbot.invoke(
+                    {"messages": [human_message]},
+                    config=config
+                )
+            except Exception as invoke_err:
+                if not _is_transient_db_connection_error(invoke_err):
+                    raise
+                logger.warning(
+                    "RAG chat invoke hit transient DB connection error; resetting engine and retrying once. "
+                    "thread_id=%s user_id=%s err=%s",
+                    thread_id,
+                    user_id,
+                    invoke_err,
+                )
+                try:
+                    from app.utils.db import reset_db_engine
+                    reset_db_engine()
+                except Exception:
+                    logger.warning("Failed to reset DB engine before retry", exc_info=True)
+                state = chatbot.invoke(
+                    {"messages": [human_message]},
+                    config=config
+                )
             # #region agent log
             _msgs = state.get("messages", [])
             try:
@@ -1232,10 +1265,30 @@ def chat():
                     "and provide a final direct answer from the uploaded document. "
                     "If document evidence is not found, say that clearly."
                 )
-                recovery_state = chatbot.invoke(
-                    {"messages": [HumanMessage(content=recovery_prompt)]},
-                    config=config
-                )
+                try:
+                    recovery_state = chatbot.invoke(
+                        {"messages": [HumanMessage(content=recovery_prompt)]},
+                        config=config
+                    )
+                except Exception as recovery_err:
+                    if not _is_transient_db_connection_error(recovery_err):
+                        raise
+                    logger.warning(
+                        "RAG recovery invoke hit transient DB connection error; resetting engine and retrying once. "
+                        "thread_id=%s user_id=%s err=%s",
+                        thread_id,
+                        user_id,
+                        recovery_err,
+                    )
+                    try:
+                        from app.utils.db import reset_db_engine
+                        reset_db_engine()
+                    except Exception:
+                        logger.warning("Failed to reset DB engine before recovery retry", exc_info=True)
+                    recovery_state = chatbot.invoke(
+                        {"messages": [HumanMessage(content=recovery_prompt)]},
+                        config=config
+                    )
                 response_content = _extract_and_sanitize_response(recovery_state)
 
             # Last-resort fallback to avoid blank frontend messages.
