@@ -1883,6 +1883,32 @@
       box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 30px -26px rgba(15, 23, 42, 0.6);
     }
 
+    /* Restore heading hierarchy inside summary containers — Tailwind preflight flattens them */
+    #viewLessonStructuredSummary h1,
+    #viewLessonConversationSummaryContent h1,
+    #expandedConversationSummaryContent h1 { font-size: 1.5rem; font-weight: 700; color: #0f172a; font-family: 'Poppins','Inter',sans-serif; margin: 0.75rem 0 0.4rem; }
+    #viewLessonStructuredSummary h2,
+    #viewLessonConversationSummaryContent h2,
+    #expandedConversationSummaryContent h2 { font-size: 1.2rem; font-weight: 700; color: #1e293b; font-family: 'Poppins','Inter',sans-serif; margin: 0.65rem 0 0.35rem; }
+    #viewLessonStructuredSummary h3,
+    #viewLessonConversationSummaryContent h3,
+    #expandedConversationSummaryContent h3 { font-size: 1.05rem; font-weight: 700; color: #334155; font-family: 'Poppins','Inter',sans-serif; margin: 0.5rem 0 0.3rem; }
+    #viewLessonStructuredSummary h4,
+    #viewLessonConversationSummaryContent h4,
+    #expandedConversationSummaryContent h4 { font-size: 0.97rem; font-weight: 700; color: #334155; }
+    #viewLessonStructuredSummary strong,
+    #viewLessonConversationSummaryContent strong,
+    #expandedConversationSummaryContent strong { font-weight: 700; color: #0f172a; }
+    #viewLessonStructuredSummary ul,
+    #viewLessonConversationSummaryContent ul,
+    #expandedConversationSummaryContent ul { list-style-type: disc; padding-left: 1.4rem; margin: 0.4rem 0; }
+    #viewLessonStructuredSummary ol,
+    #viewLessonConversationSummaryContent ol,
+    #expandedConversationSummaryContent ol { list-style-type: decimal; padding-left: 1.4rem; margin: 0.4rem 0; }
+    #viewLessonStructuredSummary li,
+    #viewLessonConversationSummaryContent li,
+    #expandedConversationSummaryContent li { display: list-item; margin-bottom: 0.2rem; }
+
     .view-lesson-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1947,25 +1973,88 @@
       font-weight: 500;
     }
 
-    /* Ensure lesson headings are high-contrast and readable (white preview card) */
-    #viewLessonCurrent h1 {
+    /* Ensure lesson headings are high-contrast and readable (white preview card).
+       Tailwind CDN preflight resets h1–h6 font-size to inherit (body size).
+       We must explicitly restore sizes here or all headings look identical. */
+    #viewLessonCurrent h1,
+    #expandedLessonPreviewContent h1 {
+      font-size: 1.75rem;
+      line-height: 1.25;
+      font-family: 'Poppins', 'Inter', sans-serif;
       color: #0f172a;
       font-weight: 700;
     }
-    #viewLessonCurrent h2 {
+    #viewLessonCurrent h2,
+    #expandedLessonPreviewContent h2 {
+      font-size: 1.375rem;
+      line-height: 1.3;
+      font-family: 'Poppins', 'Inter', sans-serif;
       color: #1e293b;
       font-weight: 700;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 0.35rem;
     }
     #viewLessonCurrent h3,
-    #viewLessonCurrent h4 {
+    #expandedLessonPreviewContent h3 {
+      font-size: 1.15rem;
+      line-height: 1.4;
+      font-family: 'Poppins', 'Inter', sans-serif;
+      color: #334155;
+      font-weight: 700;
+    }
+    #viewLessonCurrent h4,
+    #expandedLessonPreviewContent h4 {
+      font-size: 1.05rem;
+      line-height: 1.4;
       color: #334155;
       font-weight: 700;
     }
     #viewLessonCurrent h5,
-    #viewLessonCurrent h6 {
+    #viewLessonCurrent h6,
+    #expandedLessonPreviewContent h5,
+    #expandedLessonPreviewContent h6 {
+      font-size: 0.95rem;
       color: #475569;
       font-weight: 700;
     }
+    /* Also restore strong/em inside lesson preview since Tailwind can mute them */
+    #viewLessonCurrent strong,
+    #expandedLessonPreviewContent strong {
+      font-weight: 700;
+      color: #0f172a;
+    }
+    #viewLessonCurrent em,
+    #expandedLessonPreviewContent em {
+      font-style: italic;
+      color: #334155;
+    }
+    /* Restore list markers hidden by Tailwind preflight */
+    #viewLessonCurrent ul,
+    #expandedLessonPreviewContent ul {
+      list-style-type: disc;
+      padding-left: 1.5rem;
+    }
+    #viewLessonCurrent ol,
+    #expandedLessonPreviewContent ol {
+      list-style-type: decimal;
+      padding-left: 1.5rem;
+    }
+    #viewLessonCurrent li,
+    #expandedLessonPreviewContent li {
+      display: list-item;
+    }
+
+    /* Draft contenteditable div — apply same heading hierarchy so AI-rendered content looks correct */
+    #viewLessonDraft h1 { font-size: 1.75rem; line-height: 1.25; font-family: 'Poppins','Inter',sans-serif; color: #0f172a; font-weight: 700; }
+    #viewLessonDraft h2 { font-size: 1.375rem; line-height: 1.3; font-family: 'Poppins','Inter',sans-serif; color: #1e293b; font-weight: 700; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.3rem; }
+    #viewLessonDraft h3 { font-size: 1.15rem; line-height: 1.4; font-family: 'Poppins','Inter',sans-serif; color: #334155; font-weight: 700; }
+    #viewLessonDraft h4 { font-size: 1.05rem; color: #334155; font-weight: 700; }
+    #viewLessonDraft h5, #viewLessonDraft h6 { font-size: 0.95rem; color: #475569; font-weight: 700; }
+    #viewLessonDraft strong { font-weight: 700; color: #0f172a; }
+    #viewLessonDraft em { font-style: italic; color: #334155; }
+    #viewLessonDraft ul { list-style-type: disc; padding-left: 1.5rem; }
+    #viewLessonDraft ol { list-style-type: decimal; padding-left: 1.5rem; }
+    #viewLessonDraft li { display: list-item; }
 
     /* View lesson modal uses white preview cards — keep markdown dark-on-light when .dark is on */
     .dark #viewLessonModal #viewLessonCurrent,
@@ -6295,6 +6384,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const raw = (markdownText == null) ? '' : String(markdownText);
         if (!raw.trim()) {
           el.innerHTML = emptyHtml || '';
+          // Clear any previously stored markdown source
+          if (el.dataset) delete el.dataset.markdownSrc;
           return;
         }
 
@@ -6310,6 +6401,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           el.innerHTML = marked.parse(raw);
         } else {
           el.textContent = raw;
+        }
+
+        // For contenteditable elements, preserve the raw markdown source so save/finalize
+        // can persist the original markdown instead of the stripped innerText.
+        if (el.contentEditable === 'true' && el.dataset) {
+          el.dataset.markdownSrc = raw;
         }
 
         if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
@@ -6379,6 +6476,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         modal.style.opacity = '1';
         modal.style.pointerEvents = 'auto';
         document.body.style.overflow = 'hidden';
+        // Re-run math typesetting on the expanded copy in case the source had raw $...$ tokens
+        // (e.g. when the modal is opened before the summary finishes rendering).
+        const expandedEl = document.getElementById('expandedConversationSummaryContent');
+        if (expandedEl && typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+          TeacherChatFormatter.processRenderedContent(expandedEl);
+        }
       }
 
       function closeExpandedConversationSummary() {
@@ -6473,7 +6576,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         try {
           if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
             target.innerHTML = TeacherChatFormatter.formatChatResponse(String(text));
+            // processRenderedContent runs KaTeX/MathJax on $...$ tokens left in the HTML
+            // by formatChatResponse. Without this call the dollar signs appear literally.
+            if (TeacherChatFormatter.processRenderedContent) {
+              TeacherChatFormatter.processRenderedContent(target);
+            }
             syncExpandedConversationSummaryFromCurrent();
+            // Also run math typesetting on the expanded modal copy so it renders there too.
+            const expandedEl = document.getElementById('expandedConversationSummaryContent');
+            if (expandedEl && TeacherChatFormatter.processRenderedContent) {
+              TeacherChatFormatter.processRenderedContent(expandedEl);
+            }
             return;
           }
         } catch (e) { /* fall through to pre-wrap fallback */ }
@@ -6487,11 +6600,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const target = document.getElementById('viewLessonStructuredSummary');
         if (!target) return;
         const summary = (lesson && lesson.summary) ? String(lesson.summary).trim() : '';
-        if (!summary) {
-          target.innerHTML = '<p class="text-gray-500 italic">No lesson summary available</p>';
-          return;
-        }
-        target.textContent = summary;
+        renderLessonMarkdown(target, summary, '<p class="text-gray-500 italic">No lesson summary available</p>');
       }
 
       async function loadConversationSummaryForLesson(lesson, forceRefresh) {
@@ -6611,6 +6720,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             setFinalizeButtonVisible(false);
             draftTextarea.oninput = function () {
               setFinalizeButtonVisible(true);
+              // Manual edits invalidate the AI-rendered markdown source; clear it so
+              // save/finalize will read innerText (the user's edited plain text) instead.
+              if (draftTextarea.dataset) delete draftTextarea.dataset.markdownSrc;
             };
           }
 
@@ -6955,7 +7067,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         if (!lessonId) return;
 
         const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = draftEl ? (draftEl.innerText || '').trim() : '';
+        // Prefer the stored canonical markdown source (set by renderLessonMarkdown for AI-rendered
+        // content) over innerText, which strips markdown syntax from rendered HTML.
+        const draftContent = draftEl ? ((draftEl.dataset && draftEl.dataset.markdownSrc) || draftEl.innerText || '').trim() : '';
 
         try {
           const response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
@@ -6983,7 +7097,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         if (!lessonId) return;
 
         const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = (draftEl ? draftEl.innerText : '').trim();
+        // Prefer the stored canonical markdown source over innerText (which strips markdown syntax).
+        const draftContent = (draftEl ? ((draftEl.dataset && draftEl.dataset.markdownSrc) || draftEl.innerText) : '').trim();
         if (!draftContent) {
           showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
           return;
