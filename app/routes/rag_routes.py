@@ -21,6 +21,7 @@ from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
+from app.services.conversation_summary_service import ConversationSummaryService
 from app.tasks.ingest_tasks import ingest_pdf_task, extract_headings_task
 from langchain_core.messages import HumanMessage
 import logging
@@ -954,6 +955,84 @@ def chat():
             except (TypeError, ValueError):
                 conversation_id = None
 
+        # ── Summary intent: intercept BEFORE thread/document validation ──────────
+        # This allows "summarize" to work even when no PDF has been uploaded yet.
+        if ConversationSummaryService.is_summary_intent(message, user_id=user_id):
+            from app.models.models import ConversationModel
+            conversation_model = ConversationModel(user_id)
+            db_conversation_id = None
+            if conversation_id:
+                conv = conversation_model.get_conversation_by_id(conversation_id)
+                if conv:
+                    db_conversation_id = conversation_id
+            if not db_conversation_id and provided_thread_id:
+                conv_match = re.search(r'user_\d+_conv_(\d+)', provided_thread_id)
+                if conv_match:
+                    candidate_id = int(conv_match.group(1))
+                    if conversation_model.get_conversation_by_id(candidate_id):
+                        db_conversation_id = candidate_id
+            if not db_conversation_id:
+                db_conversation_id = conversation_model.create_conversation(
+                    title=message[:50] if len(message) > 50 else message
+                )
+
+            # Keep summarize command in chat history, then persist summary response.
+            try:
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=message,
+                    role='user',
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to save summarize intent message for conversation %s",
+                    db_conversation_id,
+                    exc_info=True,
+                )
+
+            try:
+                summary_result = ConversationSummaryService.generate_and_persist_summary(
+                    conversation_id=db_conversation_id,
+                    user_id=user_id,
+                    force=True,
+                )
+                summary_text = summary_result.get("summary") or "No summary available yet."
+            except Exception as summary_err:
+                logger.error(
+                    "Summary generation failed for conversation %s: %s",
+                    db_conversation_id,
+                    summary_err,
+                    exc_info=True,
+                )
+                return jsonify({
+                    'error': 'Failed to generate summary.',
+                    'code': 'SUMMARY_FAILED',
+                }), 500
+
+            try:
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=summary_text,
+                    role='bot',
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to save summary response message for conversation %s",
+                    db_conversation_id,
+                    exc_info=True,
+                )
+
+            resp_thread_id = provided_thread_id or None
+            return jsonify({
+                'success': True,
+                'message': summary_text,
+                'thread_id': resp_thread_id,
+                'conversation_id': db_conversation_id,
+                'has_document': thread_has_document(resp_thread_id) if resp_thread_id else False,
+                'summary_generated': True,
+            })
+        # ── End summary intent early-exit ─────────────────────────────────────────
+
         if provided_thread_id:
             thread_id = str(provided_thread_id).strip()
         elif conversation_id is not None:
@@ -1016,6 +1095,8 @@ def chat():
                     'code': 'NO_DOCUMENT',
                     'thread_id': thread_id
                 }), 400
+
+        # Summary intent was already handled above (before thread validation).
 
         try:
             from app.utils.llm_gateway import update_llm_telemetry_context
