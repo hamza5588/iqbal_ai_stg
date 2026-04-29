@@ -1,4 +1,4 @@
-"""Conversation summary service with context-safe map/reduce generation."""
+"""Conversation summary service with sequential chunked summary generation."""
 from __future__ import annotations
 
 import logging
@@ -6,27 +6,23 @@ import os
 import re
 import threading
 from datetime import datetime
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
 
-from app.models.database_models import ChatHistory, Conversation, ConversationSummary
+from app.models.database_models import ChatHistory, Conversation, ConversationSummary, Lesson
 from app.utils.db import get_db
 from app.utils.llm_factory import get_chat_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 SUMMARY_PROMPT = (
-    "You are summarizing a teacher-student lesson conversation. "
-    "Create a concise, structured summary of the conversation so far. Include:\n"
-    "- Main topic\n"
-    "- Key points discussed\n"
-    "- Decisions or conclusions\n"
-    "- Open questions\n"
-    "- Next steps\n\n"
-    "Do not invent information. Keep it clear and useful for a teacher reviewing the lesson."
+    "You are summarising a teacher-student lesson planning conversation. "
+    "Identify the main topics discussed and provide a detailed, structured summary "
+    "with one section per topic. Each section should synthesize what was covered, "
+    "including key decisions, points, and any questions. Avoid a question-and-answer "
+    "format and ensure the tone is neutral and professional."
 )
 
 SUMMARY_INTENT_PHRASES = {
@@ -35,12 +31,6 @@ SUMMARY_INTENT_PHRASES = {
     "summarize this",
     "what did we discuss",
 }
-SUMMARY_INTENT_CLASSIFIER_PROMPT = (
-    "Classify whether the user is explicitly asking for a conversation summary.\n"
-    "Return a classification with only YES or NO.\n"
-    "YES when the user is asking to summarize the discussion/chat/conversation.\n"
-    "NO for all other requests."
-)
 
 _SUMMARY_LOCKS: Dict[int, threading.Lock] = {}
 _SUMMARY_LOCKS_GUARD = threading.Lock()
@@ -107,15 +97,6 @@ def _invoke_summary_llm(text: str, user_id: int, max_output_tokens: Optional[int
     return str(content or "").strip()
 
 
-class SummaryIntentClassification(BaseModel):
-    """Structured classifier output for summary intent."""
-
-    intent: Literal["YES", "NO"] = Field(
-        ...,
-        description="YES when user asks for summary, otherwise NO.",
-    )
-
-
 class ConversationSummaryService:
     """Generate, retrieve, and maintain conversation summaries."""
 
@@ -123,38 +104,20 @@ class ConversationSummaryService:
     def is_summary_intent(message: str, user_id: Optional[int] = None) -> bool:
         normalized = re.sub(r"[^a-z0-9\s]", " ", (message or "").strip().lower())
         normalized = " ".join(normalized.split())
+        if not normalized:
+            return False
         if normalized in SUMMARY_INTENT_PHRASES:
             return True
-        return ConversationSummaryService._is_summary_intent_with_llm(
-            message=(message or "").strip(),
-            user_id=user_id,
-        )
-
-    @staticmethod
-    def _is_summary_intent_with_llm(message: str, user_id: Optional[int] = None) -> bool:
-        if not message:
-            return False
-        # Allow quick opt-out for environments that prefer strict static intent only.
-        if os.getenv("CONV_SUMMARY_ENABLE_LLM_INTENT", "true").lower() not in ("1", "true", "yes"):
-            return False
-        try:
-            llm = get_chat_model(
-                user_id=user_id,
-                temperature=0.0,
-                max_tokens=_safe_int_env("CONV_SUMMARY_INTENT_MAX_OUTPUT_TOKENS", 8),
-            )
-            structured_llm = llm.with_structured_output(SummaryIntentClassification)
-            response = structured_llm.invoke(
-                [
-                    SystemMessage(content=SUMMARY_INTENT_CLASSIFIER_PROMPT),
-                    HumanMessage(content=message),
-                ]
-            )
-            intent_value = str(getattr(response, "intent", "")).strip().upper()
-            return intent_value == "YES"
-        except Exception as exc:
-            logger.warning("LLM summary-intent classifier failed, defaulting to NO: %s", exc)
-            return False
+        words = normalized.split()
+        if "summary" in words or "summarize" in words or "summarise" in words:
+            return True
+        if (
+            "what" in words
+            and "discuss" in words
+            and ("we" in words or "did" in words)
+        ):
+            return True
+        return False
 
     @staticmethod
     def _get_conversation(conversation_id: int, user_id: int) -> Optional[Conversation]:
@@ -169,24 +132,64 @@ class ConversationSummaryService:
         return ConversationSummaryService._get_conversation(conversation_id, user_id)
 
     @staticmethod
-    def _get_ordered_messages(conversation_id: int) -> List[ChatHistory]:
-        db = get_db()
-        return (
-            db.query(ChatHistory)
-            .filter(ChatHistory.conversation_id == conversation_id)
-            .order_by(ChatHistory.created_at.asc(), ChatHistory.id.asc())
-            .all()
+    def get_lesson_cutoff(
+        conversation_id: int,
+        lesson_id: Optional[int],
+        user_id: int,
+    ) -> Optional[datetime]:
+        if lesson_id is None:
+            return None
+        lesson = ConversationSummaryService._get_lesson_for_summary(
+            conversation_id=conversation_id,
+            lesson_id=lesson_id,
+            user_id=user_id,
         )
+        if not lesson:
+            raise ValueError("Lesson not found or does not belong to this conversation")
+        return lesson.created_at
 
     @staticmethod
-    def _latest_message(conversation_id: int) -> Optional[ChatHistory]:
+    def _get_lesson_for_summary(
+        conversation_id: int,
+        lesson_id: int,
+        user_id: int,
+    ) -> Optional[Lesson]:
         db = get_db()
-        return (
-            db.query(ChatHistory)
-            .filter(ChatHistory.conversation_id == conversation_id)
-            .order_by(ChatHistory.created_at.desc(), ChatHistory.id.desc())
+        lesson = (
+            db.query(Lesson)
+            .filter(
+                Lesson.id == lesson_id,
+                Lesson.teacher_id == user_id,
+            )
             .first()
         )
+        if not lesson:
+            return None
+        if lesson.conversation_id and int(lesson.conversation_id) != int(conversation_id):
+            return None
+        return lesson
+
+    @staticmethod
+    def _get_ordered_messages(
+        conversation_id: int,
+        cutoff_timestamp: Optional[datetime] = None,
+    ) -> List[ChatHistory]:
+        db = get_db()
+        query = db.query(ChatHistory).filter(ChatHistory.conversation_id == conversation_id)
+        if cutoff_timestamp is not None:
+            query = query.filter(ChatHistory.created_at <= cutoff_timestamp)
+        return query.order_by(ChatHistory.created_at.asc(), ChatHistory.id.asc()).all()
+
+    @staticmethod
+    def _latest_message(
+        conversation_id: int,
+        cutoff_timestamp: Optional[datetime] = None,
+    ) -> Optional[ChatHistory]:
+        db = get_db()
+        query = db.query(ChatHistory).filter(ChatHistory.conversation_id == conversation_id)
+        if cutoff_timestamp is not None:
+            query = query.filter(ChatHistory.created_at <= cutoff_timestamp)
+        return query.order_by(ChatHistory.created_at.desc(), ChatHistory.id.desc()).first()
 
     @staticmethod
     def get_latest_summary(conversation_id: int, lesson_id: Optional[int] = None) -> Optional[ConversationSummary]:
@@ -201,11 +204,30 @@ class ConversationSummaryService:
         return query.order_by(ConversationSummary.generated_at.desc(), ConversationSummary.id.desc()).first()
 
     @staticmethod
-    def is_summary_outdated(conversation_id: int, latest_summary: Optional[ConversationSummary]) -> bool:
-        latest_message = ConversationSummaryService._latest_message(conversation_id)
+    def is_summary_outdated(
+        conversation_id: int,
+        latest_summary: Optional[ConversationSummary],
+        lesson_cutoff: Optional[datetime] = None,
+    ) -> bool:
+        latest_message = ConversationSummaryService._latest_message(
+            conversation_id,
+            cutoff_timestamp=lesson_cutoff,
+        )
         if not latest_message:
+            if (
+                lesson_cutoff is not None
+                and latest_summary is not None
+                and latest_summary.last_message_timestamp is not None
+            ):
+                return latest_summary.last_message_timestamp > lesson_cutoff
             return False
         if latest_summary is None:
+            return True
+        if (
+            lesson_cutoff is not None
+            and latest_summary.last_message_timestamp is not None
+            and latest_summary.last_message_timestamp > lesson_cutoff
+        ):
             return True
         if latest_summary.last_message_id is not None:
             return int(latest_message.id) > int(latest_summary.last_message_id)
@@ -341,8 +363,18 @@ class ConversationSummaryService:
             raise ValueError("Conversation not found or access denied")
 
         with _get_summary_lock(conversation_id):
+            lesson_cutoff = ConversationSummaryService.get_lesson_cutoff(
+                conversation_id=conversation_id,
+                lesson_id=lesson_id,
+                user_id=user_id,
+            )
+
             latest_summary = ConversationSummaryService.get_latest_summary(conversation_id, lesson_id)
-            is_outdated = ConversationSummaryService.is_summary_outdated(conversation_id, latest_summary)
+            is_outdated = ConversationSummaryService.is_summary_outdated(
+                conversation_id,
+                latest_summary,
+                lesson_cutoff=lesson_cutoff,
+            )
 
             if latest_summary and not force and not is_outdated:
                 return {
@@ -354,7 +386,10 @@ class ConversationSummaryService:
                     "was_regenerated": False,
                 }
 
-            messages = ConversationSummaryService._get_ordered_messages(conversation_id)
+            messages = ConversationSummaryService._get_ordered_messages(
+                conversation_id,
+                cutoff_timestamp=lesson_cutoff,
+            )
             latest_message = messages[-1] if messages else None
 
             if not messages:
@@ -376,15 +411,42 @@ class ConversationSummaryService:
                 summary_text = ConversationSummaryService._fallback_summary_from_messages(messages)
 
             generated_at = datetime.utcnow()
-            summary_row = ConversationSummary(
-                conversation_id=conversation_id,
-                lesson_id=lesson_id,
-                summary_text=summary_text,
-                generated_at=generated_at,
-                last_message_id=latest_message.id if latest_message else None,
-                last_message_timestamp=latest_message.created_at if latest_message else None,
-            )
-            db.add(summary_row)
+            summary_row: Optional[ConversationSummary] = None
+            if lesson_id is not None:
+                summary_row = (
+                    db.query(ConversationSummary)
+                    .filter(
+                        ConversationSummary.conversation_id == conversation_id,
+                        ConversationSummary.lesson_id == lesson_id,
+                    )
+                    .first()
+                )
+                if summary_row:
+                    summary_row.summary_text = summary_text
+                    summary_row.generated_at = generated_at
+                    summary_row.last_message_id = latest_message.id if latest_message else None
+                    summary_row.last_message_timestamp = latest_message.created_at if latest_message else None
+                else:
+                    summary_row = ConversationSummary(
+                        conversation_id=conversation_id,
+                        lesson_id=lesson_id,
+                        summary_text=summary_text,
+                        generated_at=generated_at,
+                        last_message_id=latest_message.id if latest_message else None,
+                        last_message_timestamp=latest_message.created_at if latest_message else None,
+                    )
+                    db.add(summary_row)
+            else:
+                summary_row = ConversationSummary(
+                    conversation_id=conversation_id,
+                    lesson_id=lesson_id,
+                    summary_text=summary_text,
+                    generated_at=generated_at,
+                    last_message_id=latest_message.id if latest_message else None,
+                    last_message_timestamp=latest_message.created_at if latest_message else None,
+                )
+                db.add(summary_row)
+
             try:
                 db.commit()
                 db.refresh(summary_row)

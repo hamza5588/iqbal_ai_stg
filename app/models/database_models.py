@@ -173,8 +173,6 @@ class ConversationSummary(Base):
         Index('idx_conversation_summaries_generated_at', 'generated_at'),
         Index('idx_conversation_summaries_last_message_id', 'last_message_id'),
         Index('idx_conversation_summaries_last_message_timestamp', 'last_message_timestamp'),
-        # Dedup guard for concurrent summary writes for same conversation coverage.
-        UniqueConstraint('conversation_id', 'last_message_id', name='uq_conversation_summary_last_message'),
     )
 
 

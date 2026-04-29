@@ -187,13 +187,46 @@ def ensure_conversation_summaries_table(conn, inspector):
             """
         )
     )
-    # Partial unique index allows multiple NULL coverage rows while deduping concrete coverage.
+    # Replace legacy uniqueness strategy with lesson-scoped uniqueness + generic dedupe.
+    conn.execute(text("ALTER TABLE conversation_summaries DROP CONSTRAINT IF EXISTS uq_conversation_summary_last_message"))
+    conn.execute(text("DROP INDEX IF EXISTS uq_conversation_summary_last_message"))
+
+    # Keep only the newest row per (conversation_id, lesson_id) before adding unique index.
+    conn.execute(
+        text(
+            """
+            DELETE FROM conversation_summaries older
+            USING conversation_summaries newer
+            WHERE older.lesson_id IS NOT NULL
+              AND newer.lesson_id IS NOT NULL
+              AND older.conversation_id = newer.conversation_id
+              AND older.lesson_id = newer.lesson_id
+              AND (
+                older.generated_at < newer.generated_at
+                OR (older.generated_at = newer.generated_at AND older.id < newer.id)
+              )
+            """
+        )
+    )
+
+    # One summary row per lesson scope.
+    conn.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_conversation_summary_conversation_lesson
+            ON conversation_summaries (conversation_id, lesson_id)
+            WHERE lesson_id IS NOT NULL
+            """
+        )
+    )
+
+    # Keep generic-summary dedupe for non-lesson rows only.
     conn.execute(
         text(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS uq_conversation_summary_last_message
             ON conversation_summaries (conversation_id, last_message_id)
-            WHERE last_message_id IS NOT NULL
+            WHERE lesson_id IS NULL AND last_message_id IS NOT NULL
             """
         )
     )

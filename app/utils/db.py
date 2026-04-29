@@ -13,6 +13,24 @@ _engine = None
 _engine_pid = None
 _session_factory = None
 
+
+def reset_db_engine():
+    """Dispose engine/session factory so next DB use recreates fresh connections."""
+    global _engine, _session_factory, _engine_pid
+    try:
+        if _session_factory is not None:
+            _session_factory.remove()
+    except Exception as ex:
+        logger.warning(f"Error removing scoped session during reset: {ex}")
+    try:
+        if _engine is not None:
+            _engine.dispose()
+    except Exception as ex:
+        logger.warning(f"Error disposing database engine during reset: {ex}")
+    _session_factory = None
+    _engine = None
+    _engine_pid = None
+
 def get_engine():
     """Get or create SQLAlchemy engine.
 
