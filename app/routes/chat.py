@@ -2,6 +2,7 @@
 from flask import Blueprint, redirect, request, session, jsonify, render_template, url_for, send_file
 from app.services import ChatService, PromptService
 from app.models.models import SurveyModel, LessonModel, ConversationModel
+from app.services.conversation_summary_service import ConversationSummaryService
 # from app.utils.decorators import login_required
 from app.utils.auth import login_required
 from app.utils.routes import get_default_route_by_role
@@ -399,6 +400,93 @@ def get_conversation(conversation_id):
     except Exception as e:
         logger.error(f"Error retrieving conversation: {str(e)}")
         return jsonify({'error': 'Failed to retrieve conversation'}), 500
+
+
+@bp.route('/api/conversations/<int:conversation_id>/summary', methods=['GET'])
+@login_required
+def get_conversation_summary(conversation_id):
+    """Return latest summary plus freshness metadata."""
+    try:
+        user_id = session['user_id']
+        lesson_id_raw = request.args.get('lesson_id')
+        lesson_id = None
+        if lesson_id_raw not in (None, ''):
+            try:
+                lesson_id = int(lesson_id_raw)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'Invalid lesson_id'}), 400
+
+        conv = ConversationSummaryService.get_conversation_for_user(conversation_id, user_id)
+        if not conv:
+            return jsonify({'error': 'Conversation not found or access denied'}), 404
+
+        latest = ConversationSummaryService.get_latest_summary(conversation_id, lesson_id=lesson_id)
+        is_outdated = ConversationSummaryService.is_summary_outdated(conversation_id, latest)
+        if not latest:
+            return jsonify({
+                'success': True,
+                'summary': None,
+                'generated_at': None,
+                'last_message_id': None,
+                'last_message_timestamp': None,
+                'is_outdated': True,
+                'message': 'No summary available yet',
+            })
+
+        return jsonify({
+            'success': True,
+            'summary': latest.summary_text,
+            'generated_at': latest.generated_at.isoformat() if latest.generated_at else None,
+            'last_message_id': latest.last_message_id,
+            'last_message_timestamp': latest.last_message_timestamp.isoformat() if latest.last_message_timestamp else None,
+            'is_outdated': is_outdated,
+        })
+    except Exception as e:
+        logger.error(f"Error retrieving summary: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to retrieve summary'}), 500
+
+
+@bp.route('/api/conversations/<int:conversation_id>/summary/regenerate', methods=['POST'])
+@login_required
+def regenerate_conversation_summary(conversation_id):
+    """Generate and store latest summary."""
+    try:
+        user_id = session['user_id']
+        data = request.get_json(silent=True) or {}
+        lesson_id = data.get('lesson_id')
+        if lesson_id in ('', None):
+            lesson_id = None
+        elif not isinstance(lesson_id, int):
+            try:
+                lesson_id = int(lesson_id)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'Invalid lesson_id'}), 400
+
+        force = bool(data.get('force', True))
+        result = ConversationSummaryService.generate_and_persist_summary(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            lesson_id=lesson_id,
+            force=force,
+        )
+        return jsonify({
+            'success': True,
+            'summary': result.get('summary'),
+            'generated_at': result.get('generated_at').isoformat() if result.get('generated_at') else None,
+            'last_message_id': result.get('last_message_id'),
+            'last_message_timestamp': (
+                result.get('last_message_timestamp').isoformat()
+                if result.get('last_message_timestamp')
+                else None
+            ),
+            'is_outdated': result.get('is_outdated', False),
+            'was_regenerated': result.get('was_regenerated', False),
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error regenerating summary: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to regenerate summary'}), 500
 
 @bp.route('/delete_conversation/<int:conversation_id>', methods=['DELETE'])
 @login_required

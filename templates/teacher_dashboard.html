@@ -3903,6 +3903,39 @@
                 </div>
               </div>
 
+              <!-- Conversation Summary -->
+              <div class="mb-3 md:mb-4 bg-white border border-gray-200 rounded-lg md:rounded-xl p-3 md:p-4 shadow-sm">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <h4 class="text-sm md:text-base font-semibold text-gray-900">Conversation Summary</h4>
+                  <div class="flex items-center gap-2">
+                    <button
+                      id="refreshConversationSummaryBtn"
+                      onclick="if(window.currentViewedLessonData) loadConversationSummaryForLesson(window.currentViewedLessonData, true);"
+                      class="text-primary-600 hover:text-primary-800 transition-colors p-1 rounded"
+                      title="Refresh summary"
+                      aria-label="Refresh conversation summary">
+                      <i class="fas fa-sync-alt text-xs"></i>
+                    </button>
+                    <div id="viewLessonConversationSummarySpinner" class="hidden text-primary-600" aria-live="polite">
+                      <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                  </div>
+                </div>
+                <div id="viewLessonConversationSummaryContent"
+                  class="max-h-48 overflow-y-auto text-xs md:text-sm text-gray-700 leading-relaxed">
+                  <p class="text-gray-500 italic">No summary available yet</p>
+                </div>
+              </div>
+
+              <!-- Lesson Summary -->
+              <div class="mb-3 md:mb-4 bg-white border border-gray-200 rounded-lg md:rounded-xl p-3 md:p-4 shadow-sm">
+                <h4 class="text-sm md:text-base font-semibold text-gray-900 mb-2">Lesson Summary</h4>
+                <div id="viewLessonStructuredSummary"
+                  class="max-h-32 overflow-y-auto text-xs md:text-sm text-gray-700 leading-relaxed">
+                  <p class="text-gray-500 italic">No lesson summary available</p>
+                </div>
+              </div>
+
               <!-- Version Selector -->
               <button id="versionDropdownBtn"
                 class="w-full p-2 md:p-3 bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-300 rounded-lg text-left text-xs md:text-sm font-bold text-emerald-800 hover:from-emerald-100 hover:to-emerald-200 transition-all shadow-sm hover:shadow-md flex items-center justify-between cursor-pointer">
@@ -3980,6 +4013,7 @@
       let ttsObjectUrl = null;
       let currentChatMenuId = null;
       let lessonCreationCompleted = false; // Flag to track if first lesson is created
+      let conversationSummaryRequestToken = 0;
 
       // ════════════════════════════════════════════════════════════════════════════════
       // 🔐 CHAT LIFECYCLE SYSTEM - CORE SPECIFICATION
@@ -6161,7 +6195,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             }),
             status: lesson.status || 'draft',
             isLatestVersion: isLatestVersion,
-            latestVersionNum: latestVersionNum
+            latestVersionNum: latestVersionNum,
+            // Fields required for conversation summary lookup
+            rag_thread_id: lesson.rag_thread_id || null,
+            conversation_id: lesson.conversation_id || null,
+            summary: lesson.summary || null,
           };
           await populateViewLessonModal(forModal);
           showViewLessonModal();
@@ -6280,6 +6318,107 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function extractConversationIdFromLesson(lesson) {
+        if (!lesson) return null;
+        if (lesson.conversation_id) return Number(lesson.conversation_id) || null;
+        const threadId = String(lesson.rag_thread_id || lesson.thread_id || '');
+        const match = threadId.match(/_conv_(\d+)/);
+        return match ? Number(match[1]) : null;
+      }
+
+      function setConversationSummaryLoading(isLoading) {
+        const spinner = document.getElementById('viewLessonConversationSummarySpinner');
+        const refreshBtn = document.getElementById('refreshConversationSummaryBtn');
+        if (spinner) spinner.classList.toggle('hidden', !isLoading);
+        if (refreshBtn) refreshBtn.classList.toggle('hidden', isLoading);
+      }
+
+      function renderConversationSummaryText(text, state) {
+        const target = document.getElementById('viewLessonConversationSummaryContent');
+        if (!target) return;
+        if (state === 'error') {
+          target.innerHTML = '<p class="text-red-600">Failed to load summary</p>';
+          return;
+        }
+        if (!text) {
+          target.innerHTML = '<p class="text-gray-500 italic">No summary available yet</p>';
+          return;
+        }
+        try {
+          if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
+            target.innerHTML = TeacherChatFormatter.formatChatResponse(String(text));
+            return;
+          }
+        } catch (e) { /* fall through to pre-wrap fallback */ }
+        // Fallback: preserve newlines and bullets using pre-wrap
+        const escaped = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        target.innerHTML = '<pre class="whitespace-pre-wrap font-sans text-xs md:text-sm text-gray-700 leading-relaxed m-0 p-0">' + escaped + '</pre>';
+      }
+
+      function renderLessonSummaryText(lesson) {
+        const target = document.getElementById('viewLessonStructuredSummary');
+        if (!target) return;
+        const summary = (lesson && lesson.summary) ? String(lesson.summary).trim() : '';
+        if (!summary) {
+          target.innerHTML = '<p class="text-gray-500 italic">No lesson summary available</p>';
+          return;
+        }
+        target.textContent = summary;
+      }
+
+      async function loadConversationSummaryForLesson(lesson, forceRefresh) {
+        const token = ++conversationSummaryRequestToken;
+        const conversationId = extractConversationIdFromLesson(lesson);
+        const lessonId = lesson && lesson.id ? Number(lesson.id) : null;
+        if (!conversationId) {
+          renderConversationSummaryText(null);
+          return;
+        }
+
+        try {
+          setConversationSummaryLoading(false);
+
+          // When forceRefresh is requested, skip the GET check and go straight to regenerate
+          if (!forceRefresh) {
+            const summaryResponse = await fetch(
+              `/api/conversations/${conversationId}/summary${lessonId ? `?lesson_id=${lessonId}` : ''}`,
+              { method: 'GET', credentials: 'include' }
+            );
+            const summaryData = await summaryResponse.json().catch(function () { return {}; });
+            if (token !== conversationSummaryRequestToken) return;
+            if (!summaryResponse.ok) throw new Error(summaryData.error || 'Failed to load summary');
+
+            const currentSummaryText = summaryData.summary || null;
+            if (!summaryData.is_outdated && currentSummaryText) {
+              renderConversationSummaryText(currentSummaryText);
+              return;
+            }
+            // Show stale summary (if any) while regenerating
+            renderConversationSummaryText(currentSummaryText);
+          }
+
+          setConversationSummaryLoading(true);
+          const regenerateResponse = await fetch(`/api/conversations/${conversationId}/summary/regenerate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ lesson_id: lessonId, force: true }),
+          });
+          const regenerateData = await regenerateResponse.json().catch(function () { return {}; });
+          if (token !== conversationSummaryRequestToken) return;
+          if (!regenerateResponse.ok) throw new Error(regenerateData.error || 'Failed to regenerate summary');
+          renderConversationSummaryText(regenerateData.summary || null);
+        } catch (error) {
+          if (token !== conversationSummaryRequestToken) return;
+          console.warn('Conversation summary load failed:', error);
+          renderConversationSummaryText(null, 'error');
+        } finally {
+          if (token === conversationSummaryRequestToken) {
+            setConversationSummaryLoading(false);
+          }
+        }
+      }
+
       // Populate the view lesson modal with data
       async function populateViewLessonModal(lesson) {
         try {
@@ -6287,6 +6426,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           // Store current lesson ID globally for button handlers
           window.currentViewLessonId = lesson.id;
+          window.currentViewedLessonData = lesson;
 
           // Populate metadata
           const titleEl = document.getElementById('viewLessonTitle');
@@ -6312,6 +6452,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const currentEl = document.getElementById('viewLessonCurrent');
           renderLessonMarkdown(currentEl, rawContent);
           syncExpandedLessonPreviewFromCurrent();
+          renderLessonSummaryText(lesson);
+          renderConversationSummaryText(null);
+          setConversationSummaryLoading(false);
+          loadConversationSummaryForLesson(lesson);
 
           // Load draft content from backend so edits persist across sessions
           const draftTextarea = document.getElementById('viewLessonDraft');
@@ -6580,6 +6724,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
         closeAllModals(); // Close all modals to ensure clean state
         window.currentViewLessonId = null;
+        window.currentViewedLessonData = null;
+        conversationSummaryRequestToken += 1;
+        setConversationSummaryLoading(false);
+        renderConversationSummaryText(null);
 
         // Only show chat input area if Chat tab is currently active
         const chatTabBtn = document.getElementById('chatTabBtn');
@@ -6785,6 +6933,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const currentEl = document.getElementById('viewLessonCurrent');
         if (currentEl) renderLessonMarkdown(currentEl, target.content || '');
         syncExpandedLessonPreviewFromCurrent();
+        renderLessonSummaryText(target);
 
         // Update version badge in header
         const versionEl = document.getElementById('viewLessonVersion');
@@ -9389,7 +9538,9 @@ To continue your learning journey:
               // Preserve PDF retrieval linkage for student Ask Question flow.
               // lesson_routes.create_lesson_simple accepts either rag_thread_id or thread_id.
               rag_thread_id: window.currentRAGThreadId || null,
-              thread_id: window.currentRAGThreadId || null
+              thread_id: window.currentRAGThreadId || null,
+              // Store the active conversation so the lesson view can load the conversation summary.
+              conversation_id: window.currentRAGConversationId || null
             })
           });
 

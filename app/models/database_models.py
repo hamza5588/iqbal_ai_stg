@@ -62,6 +62,7 @@ class Lesson(Base):
     content = Column(Text, nullable=False)
     file_name = Column(String(255), nullable=True)
     rag_thread_id = Column(String(255), nullable=True)  # RAG thread for PDF retrieval (student ask question)
+    conversation_id = Column(Integer, nullable=True)  # DB conversation linked to this lesson's chat session
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, 
                        server_default=func.now(), server_onupdate=func.now())
@@ -108,6 +109,7 @@ class Conversation(Base):
     user = relationship("User", back_populates="conversations")
     chat_history = relationship("ChatHistory", back_populates="conversation", 
                                cascade="all, delete-orphan")
+    summaries = relationship("ConversationSummary", back_populates="conversation", cascade="all, delete-orphan")
     
     __table_args__ = (
         Index('idx_conversations_user_id', 'user_id'),
@@ -131,6 +133,48 @@ class ChatHistory(Base):
     __table_args__ = (
         CheckConstraint("role IN ('user', 'bot')", name='check_chat_role'),
         Index('idx_chat_history_conversation_id', 'conversation_id'),
+    )
+
+
+class ConversationSummary(Base):
+    """Conversation summary model"""
+    __tablename__ = 'conversation_summaries'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(
+        Integer,
+        ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    lesson_id = Column(
+        Integer,
+        ForeignKey('lessons.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    summary_text = Column(Text, nullable=False)
+    generated_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False)
+    last_message_id = Column(Integer, nullable=True)
+    last_message_timestamp = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+        nullable=False,
+    )
+
+    conversation = relationship("Conversation", back_populates="summaries")
+
+    __table_args__ = (
+        Index('idx_conversation_summaries_conversation_id', 'conversation_id'),
+        Index('idx_conversation_summaries_lesson_id', 'lesson_id'),
+        Index('idx_conversation_summaries_generated_at', 'generated_at'),
+        Index('idx_conversation_summaries_last_message_id', 'last_message_id'),
+        Index('idx_conversation_summaries_last_message_timestamp', 'last_message_timestamp'),
+        # Dedup guard for concurrent summary writes for same conversation coverage.
+        UniqueConstraint('conversation_id', 'last_message_id', name='uq_conversation_summary_last_message'),
     )
 
 

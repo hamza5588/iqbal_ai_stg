@@ -497,7 +497,14 @@ def create_lesson_simple():
         grade_level = data.get('grade_level', 'General')
         summary = data.get('summary', '') or data.get('additional_notes', '')
         rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip() or None
-        
+        raw_conv_id = data.get('conversation_id')
+        lesson_conversation_id = None
+        if raw_conv_id is not None:
+            try:
+                lesson_conversation_id = int(raw_conv_id)
+            except (TypeError, ValueError):
+                lesson_conversation_id = None
+
         if not title:
             return jsonify({'error': 'Title is required'}), 400
         
@@ -519,7 +526,8 @@ def create_lesson_simple():
             focus_area=focus_area,
             is_public=True,
             status='finalized',
-            rag_thread_id=rag_thread_id
+            rag_thread_id=rag_thread_id,
+            conversation_id=lesson_conversation_id,
         )
         
         if not lesson_id:
