@@ -140,7 +140,7 @@ flowchart LR
 Set voice model paths via environment variables as needed:
 
 - `PIPER_EN_MODEL_PATH` (default: `piper_models/en_US-lessac-medium.onnx`)
-- `PIPER_UR_MODEL_PATH` (recommended for Urdu support)
-- `PIPER_HI_MODEL_PATH` (optional)
+- `PIPER_UR_MODEL_PATH` (default: `piper_models/ur_PK-fasih-medium.onnx`)
+- `PIPER_HI_MODEL_PATH` (default: `piper_models/hi_IN-rohan-medium.onnx`)
 
-Without an installed Urdu Piper model, Urdu TTS returns `VOICE_MODEL_MISSING` (safe failure).
+Install voices with `bash scripts/download_piper_models.sh` (see `docs/piper_models_setup.md`). Without local `.onnx` files, the app falls back to gTTS where possible.

@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import numpy as np
-import whisper
-from whisper.audio import load_audio
+from faster_whisper.audio import decode_audio
 from langdetect import detect
+
+from app.utils.faster_whisper_engine import transcribe_with_faster_whisper
 from piper import PiperVoice
 from gtts import gTTS
 try:
@@ -21,7 +22,6 @@ except Exception:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-_WHISPER_MODEL = None
 _PIPER_VOICES: Dict[str, PiperVoice] = {}
 
 SUPPORTED_STT_LANGS = {"auto", "en", "ur", "hi"}
@@ -97,14 +97,6 @@ def detect_tts_language(text: str, lang_hint: Optional[str] = None) -> str:
     return "en"
 
 
-def _get_whisper_model():
-    global _WHISPER_MODEL
-    if _WHISPER_MODEL is not None:
-        return _WHISPER_MODEL
-    _WHISPER_MODEL = whisper.load_model("base", device="cpu")
-    return _WHISPER_MODEL
-
-
 def _float32_to_pcm16_bytes(samples: np.ndarray) -> bytes:
     clipped = np.clip(samples, -1.0, 1.0)
     int16 = (clipped * 32767.0).astype(np.int16)
@@ -117,7 +109,7 @@ def _run_vad_gate(audio_path: str) -> Tuple[bool, dict]:
     Uses WebRTC VAD (mode=2) with conservative minimum speech constraints.
     """
     try:
-        audio = load_audio(audio_path)  # mono, 16k float32
+        audio = decode_audio(audio_path, sampling_rate=STT_SAMPLE_RATE)
     except Exception as exc:
         logger.warning("VAD precheck load failed, skipping strict gate: %s", exc)
         return True, {"vad_skipped": True}
@@ -198,22 +190,12 @@ def transcribe_audio_file(audio_path: str, language: Optional[str] = None) -> Tu
             "meta": vad_meta,
         }
 
-    try:
-        model = _get_whisper_model()
-        kwargs = {"verbose": False, "fp16": False}
-        if whisper_lang:
-            kwargs["language"] = whisper_lang
-        result = model.transcribe(audio_path, **kwargs)
-    except Exception as exc:
-        logger.exception("Whisper transcription failed: %s", exc)
-        return None, {"code": "STT_FAILED", "message": "Failed to transcribe audio"}
+    result, stt_err = transcribe_with_faster_whisper(audio_path, language=whisper_lang)
+    if stt_err:
+        return None, stt_err
 
     text = (result.get("text") or "").strip()
-    segments = result.get("segments") or []
-    avg_no_speech = 0.0
-    if segments:
-        probs = [float(seg.get("no_speech_prob", 0.0)) for seg in segments if isinstance(seg, dict)]
-        avg_no_speech = (sum(probs) / len(probs)) if probs else 0.0
+    avg_no_speech = float(result.get("avg_no_speech_prob") or 0.0)
 
     if not text or (avg_no_speech > 0.72 and len(text) < 3):
         return None, {"code": "NO_SPEECH", "message": "No clear speech detected. Please speak closer to the mic."}
@@ -227,12 +209,12 @@ def transcribe_audio_file(audio_path: str, language: Optional[str] = None) -> Tu
 
 
 def _voice_model_path_for_lang(lang: str) -> Optional[Path]:
+    # Default filenames match rhasspy/piper-voices on Hugging Face (see docs/piper_models_setup.md).
     configured = {
         "en": os.getenv("PIPER_EN_MODEL_PATH", "piper_models/en_US-lessac-medium.onnx"),
-        # Built-in defaults so env vars are optional.
-        "ur": os.getenv("PIPER_UR_MODEL_PATH", "piper_models/ur_PK-urdu-medium.onnx"),
-        "hi": os.getenv("PIPER_HI_MODEL_PATH", "piper_models/hi_IN-hindi-medium.onnx"),
-        "ur-Latn": os.getenv("PIPER_UR_MODEL_PATH", "piper_models/ur_PK-urdu-medium.onnx"),
+        "ur": os.getenv("PIPER_UR_MODEL_PATH", "piper_models/ur_PK-fasih-medium.onnx"),
+        "hi": os.getenv("PIPER_HI_MODEL_PATH", "piper_models/hi_IN-rohan-medium.onnx"),
+        "ur-Latn": os.getenv("PIPER_UR_MODEL_PATH", "piper_models/ur_PK-fasih-medium.onnx"),
     }
     model_path = configured.get(lang)
     if not model_path:

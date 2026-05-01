@@ -786,7 +786,7 @@ def get_user_info():
 
 def _speech_to_text_impl():
     """
-    Convert uploaded speech audio to text using local Whisper model.
+    Convert uploaded speech audio to text using local faster-whisper (CTranslate2).
     Supports optional language override: auto/en/ur/hi.
     """
     try:
