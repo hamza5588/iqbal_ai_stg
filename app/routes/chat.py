@@ -11,18 +11,13 @@ import logging
 from app.utils.db import get_db
 import time
 from functools import lru_cache
-from io import BytesIO
-from langdetect import detect
-from gtts import gTTS
 import os
 
-from openai import OpenAI
-import whisper
 import torch
+from app.services.voice_service import transcribe_audio_file, synthesize_text_to_wav, normalize_language
 
 import logging
 
-bp = Blueprint("stt", __name__)
 logger = logging.getLogger(__name__)
 
 # ✅ Whisper / PyTorch configuration (server-safe)
@@ -31,21 +26,6 @@ logger = logging.getLogger(__name__)
 # Disabling MKLDNN and forcing CPU+float32 keeps behavior correct while avoiding
 # those hardware-specific crashes.
 torch.backends.mkldnn.enabled = False  # avoid oneDNN primitive creation issues
-
-# Lazy-load Whisper on first STT request to avoid startup OOM (DefaultCPUAllocator: not enough memory)
-_whisper_model = None
-
-def _get_whisper_model():
-    """Load Whisper base model on first use; cache or return None if OOM."""
-    global _whisper_model
-    if _whisper_model is not None:
-        return _whisper_model
-    try:
-        _whisper_model = whisper.load_model("base", device="cpu")
-        return _whisper_model
-    except Exception as e:
-        logger.warning("Whisper model load failed (STT disabled): %s", e)
-        return None
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('chat', __name__)
@@ -59,16 +39,6 @@ def health_check():
     """Health check endpoint for container orchestration"""
     return jsonify({'status': 'healthy'}), 200
 
-
-def _get_openai_client():
-    """
-    Lazily create an OpenAI client for Whisper STT.
-    Expects OPENAI_API_KEY in environment.
-    """
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY environment variable is not set")
-    return OpenAI(api_key=api_key)
 
 @bp.route('/teacher-dashboard')
 @login_required
@@ -814,46 +784,41 @@ def get_user_info():
         logger.error(f"Error getting user info: {str(e)}")
         return jsonify({'error': 'Failed to get user info'}), 500
 
-@bp.route('/api/stt', methods=['POST'])
-@login_required
-def speech_to_text():
+def _speech_to_text_impl():
     """
-    Convert uploaded speech audio to text using local Whisper base model.
-
-    Expects multipart/form-data with field "audio".
-    Returns JSON: {"text": "..."} on success.
+    Convert uploaded speech audio to text using local Whisper model.
+    Supports optional language override: auto/en/ur/hi.
     """
     try:
         if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
+            return jsonify({'error': 'No audio file provided', 'code': 'AUDIO_REQUIRED'}), 400
 
         audio_file = request.files['audio']
         if audio_file.filename == '':
-            return jsonify({'error': 'Empty audio filename'}), 400
+            return jsonify({'error': 'Empty audio filename', 'code': 'AUDIO_REQUIRED'}), 400
 
         from tempfile import NamedTemporaryFile
-
-        model = _get_whisper_model()
-        if model is None:
-            return jsonify({'error': 'Speech-to-text unavailable (model could not be loaded)'}), 503
-
+        lang = normalize_language(request.form.get("language"), default="auto")
         tmp_path = None
         try:
             with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
                 audio_file.save(tmp.name)
                 tmp_path = tmp.name
 
-            result = model.transcribe(
-                tmp_path,
-                fp16=False,      # important if no GPU
-                language="en"    # optional but faster if known
-            )
+            result, error = transcribe_audio_file(tmp_path, language=lang)
+            if error:
+                status = 422 if error.get("code") == "NO_SPEECH" else 400
+                if error.get("code") in {"STT_FAILED"}:
+                    status = 500
+                return jsonify({'error': error.get("message"), 'code': error.get("code")}), status
 
-            text = result.get("text", "").strip()
-            if not text:
-                return jsonify({'error': 'Transcription failed'}), 500
-
-            return jsonify({'text': text})
+            return jsonify({
+                'text': result.get("text"),
+                'language': result.get("language"),
+                'meta': {
+                    'avg_no_speech_prob': result.get("avg_no_speech_prob"),
+                }
+            })
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 try:
@@ -863,7 +828,19 @@ def speech_to_text():
 
     except Exception as e:
         logger.error(f"Error in speech_to_text: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Failed to transcribe audio'}), 500
+        return jsonify({'error': 'Failed to transcribe audio', 'code': 'STT_EXCEPTION'}), 500
+
+
+@bp.route('/speech-to-text', methods=['POST'])
+@login_required
+def speech_to_text():
+    return _speech_to_text_impl()
+
+
+@bp.route('/api/stt', methods=['POST'])
+@login_required
+def speech_to_text_legacy():
+    return _speech_to_text_impl()
 
 # @bp.route('/api/stt', methods=['POST'])
 # @login_required
@@ -938,65 +915,46 @@ def chatbot_update():
 
 
 
-import re
-from io import BytesIO
-from flask import request, jsonify, send_file
-from gtts import gTTS
-from langdetect import detect
-
-def clean_text_for_tts(text: str) -> str:
-    """
-    Remove markdown and unwanted symbols so TTS only speaks readable text.
-    Keeps letters (including Urdu/Arabic), numbers, punctuation, and spaces.
-    """
-    # Remove markdown & special symbols
-    text = re.sub(r"[#*_~`>|=\[\]{}()^]", "", text)
-
-    # Remove multiple spaces
-    text = re.sub(r"\s+", " ", text)
-
-    return text.strip()
-
-@bp.route('/api/tts', methods=['POST'])
-@login_required
-def text_to_speech():
-    """
-    Convert text to speech using gTTS.
-    Cleans symbols before sending text to TTS.
-    """
+def _text_to_speech_impl():
     try:
         data = request.get_json() or {}
         text = (data.get('text') or '').strip()
+        language = normalize_language(data.get('language'), default='auto')
 
         if not text:
-            return jsonify({'error': 'Text is required'}), 400
+            return jsonify({'error': 'Text is required', 'code': 'TEXT_REQUIRED'}), 400
 
-        # ✅ Clean text before TTS
-        text = clean_text_for_tts(text)
+        audio_fp, meta_or_error = synthesize_text_to_wav(text=text, lang_hint=language)
+        if audio_fp is None:
+            code = meta_or_error.get("code") if isinstance(meta_or_error, dict) else "TTS_FAILED"
+            message = meta_or_error.get("message") if isinstance(meta_or_error, dict) else "Failed to generate speech"
+            status = 503 if code == "VOICE_MODEL_MISSING" else 500
+            return jsonify({'error': message, 'code': code, 'meta': meta_or_error}), status
 
-        # Detect language; fallback to English
-        try:
-            lang = detect(text)
-        except Exception as e:
-            logger.warning(f"Language detection failed, defaulting to 'en': {str(e)}")
-            lang = 'en'
-
-        # Generate speech
-        tts = gTTS(text=text, lang=lang)
-        audio_fp = BytesIO()
-        tts.write_to_fp(audio_fp)
-        audio_fp.seek(0)
-
+        audio_format = (meta_or_error or {}).get("format", "wav") if isinstance(meta_or_error, dict) else "wav"
+        mimetype = 'audio/mpeg' if audio_format == "mp3" else 'audio/wav'
+        download_name = 'tts.mp3' if audio_format == "mp3" else 'tts.wav'
         return send_file(
             audio_fp,
-            mimetype='audio/mpeg',
+            mimetype=mimetype,
             as_attachment=False,
-            download_name='tts.mp3'
+            download_name=download_name
         )
-
     except Exception as e:
         logger.error(f"Error in text_to_speech: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Failed to generate speech'}), 500
+        return jsonify({'error': 'Failed to generate speech', 'code': 'TTS_EXCEPTION'}), 500
+
+
+@bp.route('/text-to-speech', methods=['POST'])
+@login_required
+def text_to_speech():
+    return _text_to_speech_impl()
+
+
+@bp.route('/api/tts', methods=['POST'])
+@login_required
+def text_to_speech_legacy():
+    return _text_to_speech_impl()
 
 
 

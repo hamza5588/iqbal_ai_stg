@@ -3238,8 +3238,9 @@
           <div id="voiceStatus" class="voice-status rounded-lg p-3 mb-3 hidden bg-blue-50 border border-blue-200 animate-pulse">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-                <span class="text-sm text-primary-700 font-medium">Listening...</span>
+                <div id="voiceStatusDot" class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+                <div id="voiceSpinner" class="hidden w-4 h-4 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin"></div>
+                <span id="voiceStatusLabel" class="text-sm text-primary-700 font-medium">Listening...</span>
               </div>
               <button onclick="stopVoiceInput()" class="text-sm text-primary-600 hover:text-primary-800 font-medium">
                 Stop
@@ -3250,21 +3251,28 @@
 
           <!-- Modern Input Container - Mobile Optimized -->
           <div class="flex items-center gap-1 md:gap-3 flex-wrap md:flex-nowrap">
-            <!-- Mic/Speaker Icons (Left Outside) -->
+            <!-- Conversation Controls (Left Outside) -->
             <div class="flex items-center gap-2 flex-shrink-0">
-              <!-- Microphone Button -->
-              <button id="micBtn" onclick="toggleVoiceInput()"
-                class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100 touch-target"
-                title="Voice input" aria-label="Voice input">
-                <i class="fas fa-microphone text-lg md:text-xl"></i>
-              </button>
-
-              <!-- Speaker Button -->
+              <!-- Real-time Conversation Button -->
               <button id="speakerBtn" onclick="toggleTextToSpeech()"
                 class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100 touch-target"
-                title="Text to speech" aria-label="Text to speech">
-                <i class="fas fa-volume-up text-lg md:text-xl"></i>
+                title="Real-time conversation mode" aria-label="Real-time conversation mode">
+                <i class="fas fa-comments text-lg md:text-xl"></i>
               </button>
+
+              <select id="noiseMode"
+                class="text-xs md:text-sm min-w-[96px] border border-amber-200 rounded-xl px-2.5 py-1.5 md:px-3 md:py-2 bg-gradient-to-br from-white to-amber-50 text-amber-700 font-medium shadow-sm hover:shadow-md hover:border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-200"
+                title="Interruption sensitivity mode" aria-label="Interruption sensitivity mode">
+                <option value="quiet" selected>Quiet</option>
+                <option value="noisy">Noisy</option>
+              </select>
+
+              <select id="speechLanguage"
+                class="text-xs md:text-sm min-w-[110px] border border-primary-200 rounded-xl px-2.5 py-1.5 md:px-3 md:py-2 bg-gradient-to-br from-white to-primary-50 text-primary-700 font-medium shadow-sm hover:shadow-md hover:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-all duration-200"
+                title="Voice language" aria-label="Voice language">
+                <option value="en" selected>English</option>
+                <option value="ur">Urdu</option>
+              </select>
             </div>
 
             <!-- Main Input Area (Clean, Mobile-Friendly) -->
@@ -3486,9 +3494,30 @@
       let chatHistory = [];
       let currentChatId = null;
       let isListening = false;
-      let speechRecognition = null;
-      let speechSynthesis = null;
       let isTextToSpeechActive = false;
+      let isConversationModeActive = false;
+      let isVoiceTurnProcessing = false;
+      let mediaRecorder = null;
+      let audioChunks = [];
+      let mediaStream = null;
+      let ttsAudio = null;
+      let ttsObjectUrl = null;
+      let voiceAudioContext = null;
+      let voiceAnalyser = null;
+      let voiceSourceNode = null;
+      let voiceMonitorInterval = null;
+      let voiceSpeechDetected = false;
+      let voiceStrongSpeechDetected = false;
+      let voiceLastActivityTs = 0;
+      let voiceStartedTs = 0;
+      let bargeInStream = null;
+      let bargeInAudioContext = null;
+      let bargeInAnalyser = null;
+      let bargeInSource = null;
+      let bargeInInterval = null;
+      let isBargeInMonitoring = false;
+      let bargeInStartedTs = 0;
+      let manualInterruptTimer = null;
       let currentChatMenuId = null;
       let lessonCreationCompleted = false; // Flag to track if first lesson is created
       const STUDENT_ACTIVE_VIEW_KEY = 'Student_active_view';
@@ -3702,7 +3731,7 @@
 
       // Show Math Demo Tab with example formulas and ensure only the new content is typeset
       function showMathDemo() {
-        stopTextToSpeechSession();
+        stopTextToSpeechSession(true);
         deactivateAllTabs();
         const mathDemoTabBtn = document.getElementById('mathDemoTabBtn');
         if (mathDemoTabBtn) mathDemoTabBtn.classList.add('active-tab');
@@ -3776,46 +3805,24 @@
           updateSendButton();
         });
 
-        // Initialize speech recognition if available
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-          speechRecognition = new SpeechRecognition();
-          speechRecognition.continuous = false;
-          speechRecognition.interimResults = true;
-          speechRecognition.lang = 'en-US';
-
-          speechRecognition.onresult = function (event) {
-            const transcript = Array.from(event.results)
-              .map(result => result[0].transcript)
-              .join('');
-            document.getElementById('voiceText').textContent = transcript;
-            textarea.value = transcript;
-            updateSendButton();
-          };
-
-          speechRecognition.onend = function () {
-            if (isListening) {
-              speechRecognition.start();
-            } else {
-              document.getElementById('voiceStatus').classList.add('hidden');
-              document.getElementById('micBtn').innerHTML = '<i class="fas fa-microphone"></i>';
-              document.getElementById('micBtn').classList.remove('active');
-            }
-          };
-
-          speechRecognition.onerror = function (event) {
-            console.error('Speech recognition error:', event.error);
-            stopVoiceInput();
-            alert('Speech recognition error: ' + event.error);
-          };
-        } else {
-          document.getElementById('micBtn').disabled = true;
-          document.getElementById('micBtn').title = 'Speech recognition not supported';
-          document.getElementById('micBtn').innerHTML = '<i class="fas fa-microphone-slash"></i>';
+        // Backend STT/TTS with conversation mode
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          const speakerBtn = document.getElementById('speakerBtn');
+          if (speakerBtn) {
+            speakerBtn.disabled = true;
+            speakerBtn.title = 'Voice features are not supported in this browser';
+          }
         }
 
-        // Initialize speech synthesis
-        speechSynthesis = window.speechSynthesis;
+        const speakerBtn = document.getElementById('speakerBtn');
+        if (speakerBtn) {
+          speakerBtn.addEventListener('mousedown', startManualInterruptHold);
+          speakerBtn.addEventListener('mouseup', cancelManualInterruptHold);
+          speakerBtn.addEventListener('mouseleave', cancelManualInterruptHold);
+          speakerBtn.addEventListener('touchstart', startManualInterruptHold, { passive: true });
+          speakerBtn.addEventListener('touchend', cancelManualInterruptHold, { passive: true });
+          speakerBtn.addEventListener('touchcancel', cancelManualInterruptHold, { passive: true });
+        }
 
         // Close dropdowns when clicking outside
         document.addEventListener('click', function (event) {
@@ -4501,7 +4508,7 @@
       }
 
       async function showMyLessonsPage() {
-        stopTextToSpeechSession();
+        stopTextToSpeechSession(true);
         closeAllModals();
         window.currentLessonQAId = null;
         setStudentActiveView('lessons');
@@ -5749,8 +5756,10 @@
                 const answerHtml = formatRichContent(String(ans));
                 innerDiv.innerHTML = '<div class="prose prose-sm max-w-none">' + answerHtml + '</div><p class="text-xs text-gray-600 mt-1">' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</p>';
                 applyRenderedFormatting(innerDiv);
+                void resumeConversationAfterAssistantPlain(ans);
               }).catch(function() {
                 innerDiv.innerHTML = '<p class="text-red-600">Sorry, could not get an answer.</p>';
+                void resumeConversationAfterAssistantPlain('Sorry, could not get an answer.');
               });
             };
             noBtn.onclick = function() {
@@ -5767,6 +5776,10 @@
                 '<li>Give me a quick recap in simple words.</li>' +
                 '</ul>';
               messagesEl.scrollTop = messagesEl.scrollHeight;
+              void resumeConversationAfterAssistantPlain(
+                'No problem — we will continue with the lecture flow without using the teacher PDF. ' +
+                'Try asking about the main idea, one example from the lesson, or a short recap.'
+              );
             };
             messagesEl.scrollTop = messagesEl.scrollHeight;
           } else {
@@ -6398,76 +6411,386 @@
         }
       }
 
-      // Toggle voice input
+      function getSelectedSpeechLanguage() {
+        const selector = document.getElementById('speechLanguage');
+        return selector ? selector.value : 'en';
+      }
+
+      function getNoiseMode() {
+        const selector = document.getElementById('noiseMode');
+        return selector ? selector.value : 'quiet';
+      }
+
+      function showVoiceStatusMessage(message) {
+        const voiceStatus = document.getElementById('voiceStatus');
+        const voiceText = document.getElementById('voiceText');
+        const label = document.getElementById('voiceStatusLabel');
+        const dot = document.getElementById('voiceStatusDot');
+        const spinner = document.getElementById('voiceSpinner');
+        if (voiceStatus) voiceStatus.classList.remove('hidden');
+        if (label) label.textContent = 'Voice Assistant';
+        if (dot) dot.classList.add('hidden');
+        if (spinner) spinner.classList.remove('hidden');
+        if (voiceText) voiceText.textContent = message || '';
+      }
+
+      function hideVoiceStatusMessage() {
+        const voiceStatus = document.getElementById('voiceStatus');
+        const label = document.getElementById('voiceStatusLabel');
+        const dot = document.getElementById('voiceStatusDot');
+        const spinner = document.getElementById('voiceSpinner');
+        if (voiceStatus) voiceStatus.classList.add('hidden');
+        if (label) label.textContent = 'Listening...';
+        if (dot) dot.classList.remove('hidden');
+        if (spinner) spinner.classList.add('hidden');
+      }
+
+      function stopVoiceActivityMonitor() {
+        if (voiceMonitorInterval) {
+          clearInterval(voiceMonitorInterval);
+          voiceMonitorInterval = null;
+        }
+        if (voiceSourceNode) { try { voiceSourceNode.disconnect(); } catch (e) {} voiceSourceNode = null; }
+        if (voiceAnalyser) { try { voiceAnalyser.disconnect(); } catch (e) {} voiceAnalyser = null; }
+        if (voiceAudioContext) { try { voiceAudioContext.close(); } catch (e) {} voiceAudioContext = null; }
+        voiceSpeechDetected = false;
+        voiceStrongSpeechDetected = false;
+        voiceLastActivityTs = 0;
+        voiceStartedTs = 0;
+      }
+
+      async function ensureBargeInStream() {
+        if (bargeInStream && bargeInStream.active) return bargeInStream;
+        bargeInStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        return bargeInStream;
+      }
+
+      async function startBargeInMonitor() {
+        if (!isConversationModeActive || isBargeInMonitoring || isListening) return;
+        try {
+          await ensureBargeInStream();
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return;
+          bargeInAudioContext = new AudioContextClass();
+          bargeInSource = bargeInAudioContext.createMediaStreamSource(bargeInStream);
+          bargeInAnalyser = bargeInAudioContext.createAnalyser();
+          bargeInAnalyser.fftSize = 1024;
+          bargeInSource.connect(bargeInAnalyser);
+          const data = new Uint8Array(bargeInAnalyser.fftSize);
+          let consecutiveSpeechFrames = 0;
+          let noiseFloor = 0.008;
+          let warmupFrames = 0;
+          bargeInStartedTs = Date.now();
+          isBargeInMonitoring = true;
+          bargeInInterval = setInterval(function () {
+            if (!isConversationModeActive || !ttsAudio) {
+              stopBargeInMonitor(false);
+              return;
+            }
+            bargeInAnalyser.getByteTimeDomainData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i += 1) {
+              const sample = (data[i] - 128) / 128;
+              sum += sample * sample;
+            }
+            const rms = Math.sqrt(sum / data.length);
+            const now = Date.now();
+            const noiseMode = getNoiseMode();
+            if (warmupFrames < 10) {
+              noiseFloor = (noiseFloor * 0.85) + (rms * 0.15);
+              warmupFrames += 1;
+            }
+            const dynamicThreshold = noiseMode === 'noisy'
+              ? Math.max(0.034, noiseFloor * 3.3)
+              : Math.max(0.022, noiseFloor * 2.4);
+            const minFramesForInterrupt = noiseMode === 'noisy' ? 7 : 2;
+            const minElapsedSinceTtsStart = noiseMode === 'noisy' ? 500 : 120;
+            if ((now - bargeInStartedTs) < minElapsedSinceTtsStart) return;
+            if (rms >= dynamicThreshold) consecutiveSpeechFrames += 1; else consecutiveSpeechFrames = 0;
+            if (consecutiveSpeechFrames >= minFramesForInterrupt) {
+              const takeoverStream = bargeInStream;
+              bargeInStream = null;
+              stopTextToSpeechSession(false);
+              showVoiceStatusMessage('I heard you. Listening now...');
+              stopBargeInMonitor(false);
+              if (!isListening) beginVoiceListening(takeoverStream);
+            }
+          }, 80);
+        } catch (e) {
+          stopBargeInMonitor(false);
+        }
+      }
+
+      function stopBargeInMonitor(closeStream) {
+        if (bargeInInterval) { clearInterval(bargeInInterval); bargeInInterval = null; }
+        if (bargeInSource) { try { bargeInSource.disconnect(); } catch (e) {} bargeInSource = null; }
+        if (bargeInAnalyser) { try { bargeInAnalyser.disconnect(); } catch (e) {} bargeInAnalyser = null; }
+        if (bargeInAudioContext) { try { bargeInAudioContext.close(); } catch (e) {} bargeInAudioContext = null; }
+        if (closeStream === true && bargeInStream) {
+          try { bargeInStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+          bargeInStream = null;
+        }
+        isBargeInMonitoring = false;
+        bargeInStartedTs = 0;
+      }
+
+      function startVoiceActivityMonitor(stream) {
+        stopVoiceActivityMonitor();
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return;
+          voiceAudioContext = new AudioContextClass();
+          voiceSourceNode = voiceAudioContext.createMediaStreamSource(stream);
+          voiceAnalyser = voiceAudioContext.createAnalyser();
+          voiceAnalyser.fftSize = 1024;
+          voiceSourceNode.connect(voiceAnalyser);
+          const data = new Uint8Array(voiceAnalyser.fftSize);
+          voiceStartedTs = Date.now();
+          voiceLastActivityTs = voiceStartedTs;
+          voiceSpeechDetected = false;
+          voiceStrongSpeechDetected = false;
+          let noiseFloor = 0.008;
+          let warmupFrames = 0;
+          let consecutiveStrongFrames = 0;
+          voiceMonitorInterval = setInterval(function () {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+              stopVoiceActivityMonitor();
+              return;
+            }
+            voiceAnalyser.getByteTimeDomainData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i += 1) {
+              const sample = (data[i] - 128) / 128;
+              sum += sample * sample;
+            }
+            const rms = Math.sqrt(sum / data.length);
+            const now = Date.now();
+            if (warmupFrames < 12) {
+              noiseFloor = (noiseFloor * 0.85) + (rms * 0.15);
+              warmupFrames += 1;
+            }
+            const weakThreshold = Math.max(0.018, noiseFloor * 2.0);
+            const strongThreshold = Math.max(0.026, noiseFloor * 2.8);
+            if (rms >= weakThreshold) { voiceSpeechDetected = true; voiceLastActivityTs = now; }
+            if (rms >= strongThreshold) consecutiveStrongFrames += 1; else consecutiveStrongFrames = 0;
+            if (consecutiveStrongFrames >= 3) voiceStrongSpeechDetected = true;
+            if (voiceStrongSpeechDetected && voiceSpeechDetected && (now - voiceLastActivityTs) > 1200) {
+              try { mediaRecorder.stop(); } catch (e) {}
+              stopVoiceActivityMonitor();
+              return;
+            }
+            if ((now - voiceStartedTs) > 15000) {
+              try { mediaRecorder.stop(); } catch (e) {}
+              stopVoiceActivityMonitor();
+            }
+          }, 150);
+        } catch (e) {
+          console.warn('Voice activity monitor unavailable:', e);
+        }
+      }
+
+      async function beginVoiceListening(preAcquiredStream) {
+        const speakerBtn = document.getElementById('speakerBtn');
+        const voiceStatus = document.getElementById('voiceStatus');
+        const voiceText = document.getElementById('voiceText');
+        const voiceLabel = document.getElementById('voiceStatusLabel');
+        const voiceDot = document.getElementById('voiceStatusDot');
+        const voiceSpinner = document.getElementById('voiceSpinner');
+        const textarea = document.getElementById('messageInput');
+        if (isListening || sendMessageInProgress) return;
+        try {
+          mediaStream = preAcquiredStream || await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+          mediaRecorder = new MediaRecorder(mediaStream);
+          audioChunks = [];
+          mediaRecorder.ondataavailable = function (e) { if (e.data.size > 0) audioChunks.push(e.data); };
+          mediaRecorder.onstop = async function () {
+            stopVoiceActivityMonitor();
+            if (mediaStream) { mediaStream.getTracks().forEach(function (t) { t.stop(); }); mediaStream = null; }
+            if (audioChunks.length === 0) {
+              if (voiceStatus) voiceStatus.classList.add('hidden');
+              isListening = false;
+              return;
+            }
+            const blob = new Blob(audioChunks, { type: mimeType });
+            if (voiceText) voiceText.textContent = 'Transcribing...';
+            try {
+              const fd = new FormData();
+              fd.append('audio', blob, 'audio.webm');
+              fd.append('language', getSelectedSpeechLanguage());
+              const res = await fetch('/speech-to-text', { method: 'POST', credentials: 'include', body: fd });
+              const data = await res.json().catch(function () { return {}; });
+              if (res.ok && data.text) {
+                const text = (data.text || '').trim();
+                if (textarea) { textarea.value = text; updateSendButton(); }
+                if (voiceText) voiceText.textContent = text;
+                if (isConversationModeActive) await sendVoiceTurn(text);
+              } else {
+                if (voiceText) voiceText.textContent = data.error || 'Transcription failed';
+              }
+            } catch (err) {
+              if (voiceText) voiceText.textContent = 'Network error';
+            }
+            if (voiceStatus) voiceStatus.classList.add('hidden');
+            isListening = false;
+          };
+          mediaRecorder.start();
+          startVoiceActivityMonitor(mediaStream);
+          isListening = true;
+          if (voiceStatus) {
+            voiceStatus.classList.remove('hidden');
+            if (voiceLabel) voiceLabel.textContent = 'Listening...';
+            if (voiceDot) voiceDot.classList.remove('hidden');
+            if (voiceSpinner) voiceSpinner.classList.add('hidden');
+            if (voiceText) voiceText.textContent = 'Listening... I will auto-send when you stop speaking.';
+          }
+          if (speakerBtn && isConversationModeActive) {
+            speakerBtn.classList.add('active');
+            speakerBtn.innerHTML = '<i class="fas fa-circle-stop"></i>';
+          }
+        } catch (err) {
+          showToast('Microphone access denied or not available', 'error');
+        }
+      }
+
       function toggleVoiceInput() {
-        if (!speechRecognition) {
-          alert('Speech recognition is not supported in your browser.');
+        if (isConversationModeActive) stopTextToSpeechSession(false);
+        if (!isListening) beginVoiceListening();
+        else stopVoiceInput();
+      }
+
+      async function sendVoiceTurn(text) {
+        const clean = (text || '').trim();
+        if (!clean || clean.length < 2 || isVoiceTurnProcessing) return;
+        isVoiceTurnProcessing = true;
+        try {
+          const textarea = document.getElementById('messageInput');
+          if (textarea) { textarea.value = clean; updateSendButton(); }
+          await sendMessage();
+        } finally {
+          isVoiceTurnProcessing = false;
+        }
+      }
+
+      function stopVoiceInput() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        stopVoiceActivityMonitor();
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(function (t) { t.stop(); });
+          mediaStream = null;
+        }
+        if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+          isListening = false;
+          hideVoiceStatusMessage();
+        }
+      }
+
+      function stopTextToSpeechSession(manualOff) {
+        stopBargeInMonitor(manualOff === true);
+        if (ttsAudio) {
+          try { ttsAudio.pause(); ttsAudio.currentTime = 0; } catch (e) {}
+          ttsAudio = null;
+        }
+        if (ttsObjectUrl) { try { URL.revokeObjectURL(ttsObjectUrl); } catch (e) {} ttsObjectUrl = null; }
+        const speakerBtn = document.getElementById('speakerBtn');
+        if (manualOff === true) {
+          isTextToSpeechActive = false;
+          if (speakerBtn) { speakerBtn.classList.remove('active'); speakerBtn.innerHTML = '<i class="fas fa-comments"></i>'; }
+        } else if (isConversationModeActive) {
+          isTextToSpeechActive = true;
+          if (speakerBtn) { speakerBtn.classList.add('active'); speakerBtn.innerHTML = '<i class="fas fa-circle-stop"></i>'; }
+        }
+      }
+
+      async function playTextToSpeech(text) {
+        const plain = (text || '').replace(/<[^>]*>/g, '').trim();
+        if (!plain) return;
+        try {
+          showVoiceStatusMessage('AI response ready. Preparing voice...');
+          const res = await fetch('/text-to-speech', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ text: plain, language: getSelectedSpeechLanguage() })
+          });
+          if (!res.ok) return;
+          const blob = await res.blob();
+          if (!blob || !isTextToSpeechActive) return;
+          showVoiceStatusMessage('AI is speaking now...');
+          if (ttsObjectUrl) { try { URL.revokeObjectURL(ttsObjectUrl); } catch (e) {} ttsObjectUrl = null; }
+          ttsObjectUrl = URL.createObjectURL(blob);
+          ttsAudio = new Audio(ttsObjectUrl);
+          await startBargeInMonitor();
+          await new Promise(function (resolve) {
+            ttsAudio.onended = resolve;
+            ttsAudio.onerror = resolve;
+            ttsAudio.play().catch(resolve);
+          });
+        } catch (err) {
+          console.error('TTS error:', err);
+        } finally {
+          stopBargeInMonitor(false);
+          if (ttsObjectUrl) { try { URL.revokeObjectURL(ttsObjectUrl); } catch (e) {} ttsObjectUrl = null; }
+          ttsAudio = null;
+          if (!isConversationModeActive) hideVoiceStatusMessage();
+        }
+      }
+
+      /** Speak assistant plain text in conversation mode, then resume listening (shared by addAssistantMessage and RAG confirm flows). */
+      async function resumeConversationAfterAssistantPlain(rawText) {
+        if (!isConversationModeActive || !isTextToSpeechActive) return;
+        const plain = String(rawText || '').replace(/<[^>]*>/g, '').trim();
+        if (!plain) {
+          if (!isListening && !sendMessageInProgress) await beginVoiceListening();
           return;
         }
-
-        if (!isListening) {
-          speechRecognition.start();
-          isListening = true;
-          document.getElementById('voiceStatus').classList.remove('hidden');
-          document.getElementById('micBtn').innerHTML = '<i class="fas fa-microphone-slash"></i>';
-          document.getElementById('micBtn').classList.add('active');
-        } else {
-          stopVoiceInput();
-        }
-      }
-
-      // Stop voice input
-      function stopVoiceInput() {
-        if (speechRecognition && isListening) {
-          speechRecognition.stop();
-          isListening = false;
-        }
-      }
-
-      function stopTextToSpeechSession() {
-        if (window.speechSynthesis && speechSynthesis.speaking) {
-          speechSynthesis.cancel();
-        }
-        isTextToSpeechActive = false;
-        const speakerBtn = document.getElementById('speakerBtn');
-        if (speakerBtn) {
-          speakerBtn.classList.remove('active');
-          speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
-        }
-      }
-
-      // Toggle text-to-speech
-      function toggleTextToSpeech() {
-        const speakerBtn = document.getElementById('speakerBtn');
-
-        if (isTextToSpeechActive) {
-          stopTextToSpeechSession();
-        } else {
-          // Activate
-          speakerBtn.classList.add('active');
-          speakerBtn.innerHTML = '<i class="fas fa-volume-mute"></i>';
-
-          // Read last assistant message
-          const lastAssistantMessage = document.querySelector('.chat-message.assistant:last-child .chat-message-content');
-          if (lastAssistantMessage) {
-            const utterance = new SpeechSynthesisUtterance(lastAssistantMessage.textContent.replace(/<[^>]*>/g, ''));
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
-
-            utterance.onend = function () {
-              speakerBtn.classList.remove('active');
-              speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
-              isTextToSpeechActive = false;
-            };
-
-            speechSynthesis.speak(utterance);
-            isTextToSpeechActive = true;
-          } else {
-            alert('No AI messages to read aloud.');
-            speakerBtn.classList.remove('active');
-            speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        stopVoiceInput();
+        showVoiceStatusMessage('AI response received. Voice will start shortly...');
+        try {
+          await playTextToSpeech(plain);
+        } finally {
+          if (isConversationModeActive && !isListening && !sendMessageInProgress) {
+            await beginVoiceListening();
           }
+        }
+      }
+
+      async function toggleTextToSpeech() {
+        const speakerBtn = document.getElementById('speakerBtn');
+        if (isConversationModeActive) {
+          isConversationModeActive = false;
+          stopTextToSpeechSession(true);
+          stopVoiceInput();
+          showToast('Conversation mode off', 'info');
+          return;
+        }
+        isConversationModeActive = true;
+        isTextToSpeechActive = true;
+        if (speakerBtn) {
+          speakerBtn.classList.add('active');
+          speakerBtn.innerHTML = '<i class="fas fa-circle-stop"></i>';
+        }
+        showToast('Conversation mode on. Speak now.', 'success');
+        await beginVoiceListening();
+      }
+
+      function startManualInterruptHold() {
+        if (!isConversationModeActive || !ttsAudio || isListening) return;
+        if (manualInterruptTimer) clearTimeout(manualInterruptTimer);
+        manualInterruptTimer = setTimeout(function () {
+          manualInterruptTimer = null;
+          stopTextToSpeechSession(false);
+          showVoiceStatusMessage('Manual interrupt. Listening now...');
+          if (!isListening) beginVoiceListening();
+        }, 260);
+      }
+
+      function cancelManualInterruptHold() {
+        if (manualInterruptTimer) {
+          clearTimeout(manualInterruptTimer);
+          manualInterruptTimer = null;
         }
       }
       // Send Lesson Q&A message in main chat area (same ask_question API as modal, but using main chat bubbles)
@@ -6552,10 +6875,12 @@
                 applyRenderedFormatting(bubble);
                 appendMessageToChat(currentChatId, 'assistant', ans);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
+                void resumeConversationAfterAssistantPlain(ans);
               }).catch(function () {
                 const errMsg = 'Sorry, I couldn\'t process that question. Please try again.';
                 bubble.innerHTML = '<p class="text-red-600">' + errMsg + '</p>';
                 appendMessageToChat(currentChatId, 'assistant', errMsg);
+                void resumeConversationAfterAssistantPlain(errMsg);
               });
             };
 
@@ -6575,6 +6900,10 @@
                 '</ul>';
               appendMessageToChat(currentChatId, 'assistant', "No problem — we'll continue with the lecture flow without using the teacher PDF.");
               chatMessages.scrollTop = chatMessages.scrollHeight;
+              void resumeConversationAfterAssistantPlain(
+                "No problem — we'll continue with the lecture flow without using the teacher PDF. " +
+                'Try asking about the key concept, one worked example, or a three-point summary.'
+              );
             };
           } else if (response.ok && data && data.answer != null) {
             removeTypingIndicator();
@@ -6800,11 +7129,8 @@
         // Persist
         appendMessageToChat(currentChatId, 'assistant', message);
 
-        // Auto-read if text-to-speech is active
-        if (isTextToSpeechActive && speechSynthesis) {
-          const utterance = new SpeechSynthesisUtterance(message.replace(/<[^>]*>/g, ''));
-          speechSynthesis.speak(utterance);
-        }
+        // Real-time conversation mode: speak AI response then listen again
+        void resumeConversationAfterAssistantPlain(message);
       }
 
       // Generate AI response

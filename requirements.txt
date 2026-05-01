@@ -199,6 +199,8 @@ opentelemetry-semantic-conventions
 coloredlogs
 gTTS
 openai-whisper
+piper-tts
+webrtcvad
 
 langgraph
 langgraph-checkpoint
