@@ -57,6 +57,16 @@ def get_whisper_model():
         return None
 
 
+def warmup_whisper_model() -> bool:
+    """
+    Eagerly load faster-whisper into this process (Gunicorn worker / Flask process).
+
+    Safe to call multiple times; subsequent calls are no-ops once the model is cached.
+    Returns True if a model instance is available after the call.
+    """
+    return get_whisper_model() is not None
+
+
 def transcribe_with_faster_whisper(
     audio_path: str,
     language: Optional[str] = None,

@@ -10,3 +10,12 @@ from app.celery_app import celery
 # Create Flask app - this calls init_celery(app) when USE_CELERY_FOR_INGESTION is True,
 # which sets celery.Task = ContextTask so all tasks run with app.app_context().
 create_app()
+
+try:
+    from app.utils.ml_warmup import warmup_celery_embeddings_only
+
+    warmup_celery_embeddings_only()
+except Exception:
+    import logging
+
+    logging.getLogger(__name__).exception("Celery ML warmup failed")

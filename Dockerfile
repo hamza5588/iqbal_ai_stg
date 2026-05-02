@@ -30,6 +30,9 @@ ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV FLASK_DEBUG=0
 ENV PYTHONPATH=/app
+# Preload faster-whisper + RAG embeddings in each Gunicorn worker (see app.utils.ml_warmup).
+ENV WARMUP_ML_ON_START=true
+ENV WARMUP_CELERY_EMBEDDINGS=true
 
 EXPOSE 5000
 

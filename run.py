@@ -16,6 +16,17 @@ logging.basicConfig(
 
 app = create_app()
 
+# Eager-load Whisper + RAG embeddings once per Gunicorn worker (or dev server process).
+# See app.utils.ml_warmup for env flags (WARMUP_ML_ON_START, etc.).
+try:
+    from app.utils.ml_warmup import warmup_http_worker_models
+
+    warmup_http_worker_models()
+except Exception:
+    import logging as _logging
+
+    _logging.getLogger(__name__).exception("ML warmup at process start failed")
+
 if __name__ == '__main__':
     # Accept either:
     #   python run.py 5000

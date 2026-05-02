@@ -6,7 +6,7 @@ import unicodedata
 import wave
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from faster_whisper.audio import decode_audio
@@ -224,6 +224,21 @@ def _voice_model_path_for_lang(lang: str) -> Optional[Path]:
         app_root = Path(__file__).resolve().parents[2]
         path = app_root / model_path
     return path
+
+
+def warmup_piper_voice_languages(langs: Optional[List[str]] = None) -> None:
+    """
+    Preload Piper ONNX voices into memory for this process (optional HTTP worker startup).
+
+    Missing models are skipped with a warning (same as first TTS request).
+    """
+    want = langs or ["en"]
+    for lang in want:
+        try:
+            _get_piper_voice(lang)
+            logger.info("Piper voice preloaded for language '%s'", lang)
+        except Exception as exc:
+            logger.warning("Piper preload skipped for '%s': %s", lang, exc)
 
 
 def _get_piper_voice(lang: str) -> PiperVoice:
