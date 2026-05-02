@@ -77,3 +77,5 @@ nginx.conf
 
 # Piper TTS weights (~60+ MB each); download with scripts/download_piper_models.sh
 piper_models/*.onnx
+piper_models/hi_IN-rohan-medium.onnx.json
+piper_models/ur_PK-fasih-medium.onnx.json
