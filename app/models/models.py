@@ -161,8 +161,10 @@ class UserModel:
         return self.get_role() == 'student'
     
     def is_admin(self) -> bool:
-        """Check if user is an admin"""
-        return self.get_role() == 'admin'
+        """Admin or scoped super-admin roles (platform/district/school)."""
+        from app.rbac.roles import is_super_admin_role
+
+        return is_super_admin_role(self.get_role())
 
 
 class LessonModel:

@@ -3107,6 +3107,17 @@
         </button>
       </div>
 
+      <div class="px-4 mb-4">
+        <a href="/school/hub"
+          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-school w-5 text-indigo-500"></i>
+            <span class="font-medium sb-hide-when-collapsed">School hub</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-sm sb-hide-when-collapsed"></i>
+        </a>
+      </div>
+
       <!-- Chat History - Dynamically populated by renderChatSidebar() -->
       <div class="flex-1 p-4 overflow-y-auto custom-scrollbar" id="chatHistoryContainer">
         <!-- Empty containers that will be populated dynamically -->
@@ -3176,6 +3187,17 @@
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
         </button>
+      </div>
+
+      <div class="px-4 mb-4">
+        <a href="/school/hub" onclick="toggleMobileSidebar();"
+          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-school w-5 text-indigo-500"></i>
+            <span class="font-medium">School hub</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
+        </a>
       </div>
 
       <!-- Chat History -->
@@ -3824,6 +3846,13 @@
 
       // Initialize on page load
       document.addEventListener('DOMContentLoaded', async function () {
+        try {
+          var _sls = localStorage.getItem('studentLessonSource');
+          if (_sls === 'scoped' || _sls === 'all' || _sls === 'auto') {
+            studentLessonSource = _sls;
+          }
+        } catch (e) { /* ignore */ }
+
         // Hide loading overlay if it exists
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) {
@@ -4455,19 +4484,74 @@
 
       // Current page cache only (server-side pagination)
       let _studentLessonsCache = [];
+      let _studentLessonsFullList = null;
+      let studentLessonsClientMode = false;
+      let studentLessonSource = 'auto';
       let studentLessonsTotalPages = 1;
       let studentLessonsTotalCount = 0;
 
       async function fetchStudentLessonsPage(page, perPage, searchTerm) {
+        const pageNum = page || 1;
+        const per = perPage || lessonsPerPage;
+        const q = searchTerm;
+
+        studentLessonsClientMode = false;
+        _studentLessonsFullList = null;
+
+        const tryScoped = studentLessonSource === 'scoped' || studentLessonSource === 'auto';
+        const tryBrowse = studentLessonSource === 'all' || studentLessonSource === 'auto';
+
+        let scopedLessons = [];
+        if (tryScoped) {
+          try {
+            const r = await fetch('/api/school/student/scoped-lessons', {
+              method: 'GET',
+              credentials: 'include',
+              headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await r.json().catch(function () { return {}; });
+            if (r.ok && data && Array.isArray(data.lessons)) {
+              scopedLessons = data.lessons;
+            }
+          } catch (e) {
+            console.warn('scoped lessons fetch failed', e);
+          }
+        }
+
+        if (scopedLessons.length > 0 && (studentLessonSource === 'scoped' || studentLessonSource === 'auto')) {
+          _studentLessonsFullList = scopedLessons;
+          studentLessonsClientMode = true;
+          currentPage = Math.max(1, pageNum);
+          const filtered = getFilteredLessons(_studentLessonsFullList);
+          studentLessonsTotalCount = filtered.length;
+          studentLessonsTotalPages = Math.max(1, Math.ceil(filtered.length / per) || 1);
+          const start = (currentPage - 1) * per;
+          const slice = filtered.slice(start, start + per);
+          _studentLessonsCache = slice;
+          return {
+            lessons: slice,
+            total_pages: studentLessonsTotalPages,
+            total: studentLessonsTotalCount,
+            page: currentPage
+          };
+        }
+
+        if (!tryBrowse) {
+          _studentLessonsCache = [];
+          studentLessonsTotalPages = 1;
+          studentLessonsTotalCount = 0;
+          return { lessons: [], total_pages: 1, total: 0, page: 1 };
+        }
+
         const params = new URLSearchParams({
-          page: String(page || 1),
-          per_page: String(perPage || lessonsPerPage)
+          page: String(pageNum),
+          per_page: String(per)
         });
-        if (searchTerm) params.set('q', String(searchTerm).trim());
+        if (q) params.set('q', String(q).trim());
         const response = await fetch('/api/lessons/browse_lessons?' + params.toString(), { method: 'GET', credentials: 'include' });
-        const data = await response.json().catch(() => ({}));
+        const data = await response.json().catch(function () { return {}; });
         if (!response.ok || !data || data.success !== true) {
-          const msg = (data && (data.error || data.message)) || `Failed to load lessons (${response.status})`;
+          const msg = (data && (data.error || data.message)) || ('Failed to load lessons (' + response.status + ')');
           throw new Error(msg);
         }
         const lessons = Array.isArray(data.lessons) ? data.lessons : [];
@@ -4476,11 +4560,185 @@
         studentLessonsTotalCount = Number(data.total || lessons.length || 0);
         currentPage = Math.max(1, Number(data.page || currentPage));
         return {
-          lessons,
+          lessons: lessons,
           total_pages: studentLessonsTotalPages,
           total: studentLessonsTotalCount,
           page: currentPage
         };
+      }
+
+      function renderPagedLessonsFromFullList() {
+        if (!studentLessonsClientMode || !_studentLessonsFullList) {
+          showMyLessonsPage();
+          return;
+        }
+        const filtered = getFilteredLessons(_studentLessonsFullList);
+        studentLessonsTotalCount = filtered.length;
+        studentLessonsTotalPages = Math.max(1, Math.ceil(filtered.length / lessonsPerPage) || 1);
+        if (currentPage > studentLessonsTotalPages) {
+          currentPage = studentLessonsTotalPages;
+        }
+        const start = (currentPage - 1) * lessonsPerPage;
+        _studentLessonsCache = filtered.slice(start, start + lessonsPerPage);
+        renderLessonsTable(_studentLessonsCache);
+      }
+
+      function studentLessonsRefreshView() {
+        if (studentLessonsClientMode && _studentLessonsFullList) {
+          renderPagedLessonsFromFullList();
+        } else {
+          showMyLessonsPage();
+        }
+      }
+
+      function onStudentLessonSourceChange(val) {
+        studentLessonSource = val || 'auto';
+        try {
+          localStorage.setItem('studentLessonSource', studentLessonSource);
+        } catch (e) { /* ignore */ }
+        currentPage = 1;
+        showMyLessonsPage();
+      }
+
+      async function submitStudentRosterLink() {
+        const code = (document.getElementById('studentRosterSchoolCode') || {}).value || '';
+        const sec = parseInt((document.getElementById('studentRosterSectionId') || {}).value || '0', 10);
+        const roll = (document.getElementById('studentRosterRoll') || {}).value || '';
+        const fn = (document.getElementById('studentRosterFirst') || {}).value || '';
+        const ln = (document.getElementById('studentRosterLast') || {}).value || '';
+        const out = document.getElementById('studentRosterLinkStatus');
+        if (out) out.textContent = 'Linking…';
+        try {
+          const res = await fetch('/api/school/student/link-roster', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({
+              school_code: code,
+              class_section_id: sec,
+              roll_number: roll,
+              first_name: fn,
+              last_name: ln
+            })
+          });
+          const data = await res.json().catch(function () { return {}; });
+          if (!res.ok) throw new Error(data.error || data.message || res.statusText);
+          if (out) out.textContent = 'Linked. Refreshing your lessons…';
+          showToast('Class linked successfully', 'success', 3500);
+          currentPage = 1;
+          showMyLessonsPage();
+        } catch (e) {
+          if (out) out.textContent = e.message || 'Link failed';
+          showToast(e.message || 'Link failed', 'error', 5000);
+        }
+      }
+
+      async function loadStudentActiveQuizzes() {
+        const host = document.getElementById('studentActiveQuizzesHost');
+        if (!host) return;
+        host.innerHTML = '<p class="text-sm text-slate-500">Loading quizzes…</p>';
+        try {
+          const res = await fetch('/api/school/quiz-sessions/active', {
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          const data = await res.json().catch(function () { return {}; });
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          const items = Array.isArray(data.items) ? data.items : [];
+          if (!items.length) {
+            host.innerHTML = '<p class="text-sm text-slate-500">No active quizzes right now.</p>';
+            return;
+          }
+          host.innerHTML = items.map(function (it) {
+            const done = it.already_submitted ? ' (submitted)' : '';
+            return '<div class="flex flex-wrap items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-0">' +
+              '<span class="text-sm">Quiz #' + it.id + ' — lesson ' + it.lesson_id + done + '</span>' +
+              (!it.already_submitted
+                ? '<button type="button" class="text-xs px-2 py-1 rounded bg-primary-600 text-white" data-quiz-open="' + it.id + '">Open</button>'
+                : '') +
+              '</div>';
+          }).join('');
+          host.querySelectorAll('[data-quiz-open]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              openStudentQuizModal(parseInt(btn.getAttribute('data-quiz-open'), 10));
+            });
+          });
+        } catch (e) {
+          host.innerHTML = '<p class="text-sm text-red-600">' + (e.message || 'Failed to load quizzes') + '</p>';
+        }
+      }
+
+      function closeStudentQuizModal() {
+        const m = document.getElementById('studentSchoolQuizModal');
+        if (m) m.remove();
+      }
+
+      async function openStudentQuizModal(sessionId) {
+        closeStudentQuizModal();
+        const wrap = document.createElement('div');
+        wrap.id = 'studentSchoolQuizModal';
+        wrap.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4';
+        wrap.innerHTML = '<div class="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-4 shadow-2xl"><p class="text-sm text-slate-600">Loading…</p></div>';
+        wrap.addEventListener('click', function (ev) { if (ev.target === wrap) closeStudentQuizModal(); });
+        document.body.appendChild(wrap);
+        try {
+          const res = await fetch('/api/school/quiz-sessions/' + sessionId, {
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          const data = await res.json().catch(function () { return {}; });
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          const qs = Array.isArray(data.questions) ? data.questions : [];
+          const body = wrap.querySelector('div');
+          let html = '<div class="flex justify-between items-start gap-2 mb-3">' +
+            '<h3 class="text-lg font-bold text-slate-900">Class quiz</h3>' +
+            '<button type="button" class="text-slate-500 hover:text-slate-800" id="studentQuizCloseBtn">&times;</button></div>' +
+            '<form id="studentQuizForm" class="space-y-4">';
+          qs.forEach(function (q, idx) {
+            html += '<div class="border border-slate-200 rounded-lg p-3"><p class="text-sm font-medium text-slate-800 mb-2">' +
+              (idx + 1) + '. ' + (q.prompt || '') + '</p>';
+            (q.choices || []).forEach(function (c, ci) {
+              const id = 'qc_' + idx + '_' + ci;
+              html += '<label class="flex items-center gap-2 text-sm text-slate-700 mb-1 cursor-pointer">' +
+                '<input type="radio" name="q_' + idx + '" value="' + ci + '" class="student-quiz-choice" data-qindex="' + idx + '" />' +
+                '<span>' + String(c).replace(/</g, '&lt;') + '</span></label>';
+            });
+            html += '</div>';
+          });
+          html += '<button type="submit" class="w-full py-2 rounded-lg bg-primary-600 text-white font-semibold">Submit answers</button></form>';
+          body.innerHTML = html;
+          body.querySelector('#studentQuizCloseBtn').addEventListener('click', closeStudentQuizModal);
+          body.querySelector('#studentQuizForm').addEventListener('submit', async function (ev) {
+            ev.preventDefault();
+            const answers = qs.map(function (_q, idx) {
+              const sel = body.querySelector('input[name="q_' + idx + '"]:checked');
+              return sel ? parseInt(sel.value, 10) : -1;
+            });
+            if (answers.some(function (a) { return a < 0; })) {
+              showToast('Please answer every question.', 'warning', 3000);
+              return;
+            }
+            try {
+              const sr = await fetch('/api/school/quiz-sessions/' + sessionId + '/submit', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ answers: answers })
+              });
+              const sd = await sr.json().catch(function () { return {}; });
+              if (!sr.ok) throw new Error(sd.error || sr.statusText);
+              showToast('Score: ' + sd.score + ' / ' + sd.max, 'success', 5000);
+              closeStudentQuizModal();
+              loadStudentActiveQuizzes();
+            } catch (err) {
+              showToast(err.message || 'Submit failed', 'error', 4000);
+            }
+          });
+        } catch (e) {
+          wrap.querySelector('div').innerHTML = '<p class="text-red-600 text-sm">' + (e.message || 'Error') + '</p>';
+        }
       }
 
       // Validate MathJax rendering in content
@@ -4620,6 +4878,9 @@
         chatMessages.removeAttribute('data-active-thread-id');
         lessons = Array.isArray(lessons) ? lessons : [];
         const startIdx = (currentPage - 1) * lessonsPerPage;
+        const noLessonsMsg = (studentLessonsClientMode && studentLessonSource !== 'all')
+          ? 'No lessons published to your classes yet. Link your roster below or switch to All public courses.'
+          : 'No lessons available yet.';
 
         // Format lessons for display (API uses created_at/updated_at)
         const formattedLessons = lessons.map((lesson, index) => {
@@ -4663,9 +4924,38 @@
       <!-- Header with Background -->
       <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
         <div class="flex flex-col gap-4">
-          <div>
+          <div class="space-y-3">
             <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View Lessons</h1>
-            <p class="text-primary-100 text-sm md:text-base">Explore and learn from all available courses</p>
+            <div class="rounded-xl bg-white/10 p-3 md:p-4 backdrop-blur-sm text-left text-sm text-primary-50 space-y-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <label for="studentLessonSourceSelect" class="font-semibold text-primary-50">Show</label>
+                <select id="studentLessonSourceSelect" class="rounded-lg border border-white/30 bg-white/10 text-white text-sm px-2 py-1 min-w-[200px]">
+                  <option value="auto">My class first (recommended)</option>
+                  <option value="scoped">My classes only</option>
+                  <option value="all">All public courses</option>
+                </select>
+              </div>
+              <div class="border-t border-white/20 pt-3 grid md:grid-cols-2 gap-4">
+                <div>
+                  <p class="font-semibold text-primary-50 mb-2">Join my class</p>
+                  <div class="grid grid-cols-2 gap-2">
+                    <input id="studentRosterSchoolCode" class="rounded px-2 py-1 text-slate-900 text-xs" placeholder="School code" />
+                    <input id="studentRosterSectionId" class="rounded px-2 py-1 text-slate-900 text-xs" placeholder="Section ID" type="number" />
+                    <input id="studentRosterRoll" class="rounded px-2 py-1 text-slate-900 text-xs" placeholder="Roll no." />
+                    <input id="studentRosterFirst" class="rounded px-2 py-1 text-slate-900 text-xs" placeholder="First name" />
+                    <input id="studentRosterLast" class="rounded px-2 py-1 text-slate-900 text-xs col-span-2" placeholder="Last name" />
+                  </div>
+                  <button type="button" id="studentRosterLinkBtn" class="mt-2 w-full rounded-lg bg-white text-primary-700 font-semibold py-1.5 text-xs">Link my account</button>
+                  <p id="studentRosterLinkStatus" class="text-xs mt-1 text-primary-100"></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-primary-50 mb-2">Class quizzes</p>
+                  <button type="button" id="studentRefreshQuizzesBtn" class="w-full rounded-lg bg-white/20 text-white font-semibold py-1.5 text-xs mb-2">Refresh active quizzes</button>
+                  <div id="studentActiveQuizzesHost" class="max-h-36 overflow-y-auto text-xs text-primary-50 space-y-1"></div>
+                </div>
+              </div>
+            </div>
+            <p class="text-primary-100 text-sm md:text-base">Teachers publish to your class — those lectures show here first.</p>
           </div>
         </div>
       </div>
@@ -4725,7 +5015,7 @@
             `).join('') : `
               <tr>
                 <td colspan="7" class="py-10 text-center text-gray-500">
-                  No lessons available yet.
+                  ${noLessonsMsg}
                 </td>
               </tr>
             `}
@@ -4750,6 +5040,17 @@
         // Initialize pagination based on backend totals
         updatePagination();
 
+        const srcSel = document.getElementById('studentLessonSourceSelect');
+        if (srcSel) {
+          srcSel.value = studentLessonSource;
+          srcSel.onchange = function () { onStudentLessonSourceChange(srcSel.value); };
+        }
+        const rosterBtn = document.getElementById('studentRosterLinkBtn');
+        if (rosterBtn) rosterBtn.onclick = submitStudentRosterLink;
+        const qzBtn = document.getElementById('studentRefreshQuizzesBtn');
+        if (qzBtn) qzBtn.onclick = loadStudentActiveQuizzes;
+        loadStudentActiveQuizzes();
+
         // Always start lessons view at the top after render
         const chatAreaEl = document.getElementById('chatArea');
         const chatMessagesEl = document.getElementById('chatMessages');
@@ -4764,7 +5065,10 @@
 
       // Find lesson by ID
       function findLessonById(lessonId) {
-        const lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
+        const pool = getFilteredLessons(
+          Array.isArray(_studentLessonsFullList) ? _studentLessonsFullList : (_studentLessonsCache || [])
+        );
+        const lessons = Array.isArray(pool) ? pool : [];
         if (!lessonId) return -1;
         const needle = String(lessonId);
         return lessons.findIndex(lesson => String(lesson.id) === needle);
@@ -4806,7 +5110,6 @@
         } catch (err) {
           console.error('viewLesson error:', err);
           showToast(err.message || 'Failed to load lesson', 'error');
-          if (contentEl) contentEl.innerHTML = '<p class="text-red-500">Failed to load lesson. Please try again.</p>';
         }
       }
 
@@ -5954,7 +6257,8 @@
           const title = (lesson.title || '').toLowerCase();
           const subject = (lesson.subject || '').toLowerCase();
           const grade = (lesson.grade || '').toLowerCase();
-          return title.includes(term) || subject.includes(term) || grade.includes(term);
+          const teacher = (lesson.teacher_name || lesson.createdBy || '').toLowerCase();
+          return title.includes(term) || subject.includes(term) || grade.includes(term) || teacher.includes(term);
         });
       }
 
@@ -5971,14 +6275,14 @@
       function previousPage() {
         if (currentPage > 1) {
           currentPage--;
-          showMyLessonsPage();
+          studentLessonsRefreshView();
         }
       }
 
       function nextPage() {
         if (currentPage < Math.max(1, studentLessonsTotalPages)) {
           currentPage++;
-          showMyLessonsPage();
+          studentLessonsRefreshView();
         }
       }
 
@@ -5986,15 +6290,16 @@
       function filterLessons(searchTerm) {
         lessonSearchTerm = (searchTerm || '').trim().toLowerCase();
         currentPage = 1;
-        showMyLessonsPage();
+        studentLessonsRefreshView();
       }
 
       // Helper function for lesson actions
       function generateQuizFromLesson(lessonId) {
-        const index = findLessonById(lessonId);
-        let lessons = Array.isArray(_studentLessonsCache) ? _studentLessonsCache : [];
-        if (index !== -1 && lessons[index]) {
-          const lesson = lessons[index];
+        const pool = getFilteredLessons(
+          Array.isArray(_studentLessonsFullList) ? _studentLessonsFullList : (_studentLessonsCache || [])
+        );
+        const lesson = pool.find(function (l) { return String(l.id) === String(lessonId); });
+        if (lesson) {
           document.getElementById('messageInput').value = `Generate a quiz from the lesson: ${lesson.title}`;
           autoResizeTextarea(document.getElementById('messageInput'));
           updateSendButton();

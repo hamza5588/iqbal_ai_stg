@@ -17,16 +17,29 @@ def get_default_route_by_role(role: Optional[str]) -> str:
     agree on where an authenticated user should be sent.
 
     Roles:
-    - admin   -> /admin/
+    - admin, platform_admin, district_admin, school_admin -> /admin/
+    - principal, coordinator -> /school/hub (no create-school UI; super tools at /admin/school-operations)
     - teacher -> /teacher-dashboard
-    - student/other -> /student-dashboard
+    - student, parent, other -> /student-dashboard
     """
     normalized = (role or "").strip().lower()
 
-    if normalized == "admin":
+    if normalized in (
+        "admin",
+        "platform_admin",
+        "district_admin",
+        "school_admin",
+    ):
         return "/admin/"
     if normalized == "teacher":
         return "/teacher-dashboard"
+    if normalized in (
+        "principal",
+        "coordinator",
+    ):
+        return "/school/hub"
+    if normalized == "parent":
+        return "/school/hub"
 
     # Default for students and any unknown roles
     return "/student-dashboard"

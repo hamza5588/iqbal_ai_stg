@@ -42,7 +42,14 @@ class User(Base):
     llm_usage_events = relationship("LLMUsageEvent", back_populates="user")
 
     __table_args__ = (
-        CheckConstraint("role IN ('student', 'teacher', 'admin')", name='check_user_role'),
+        CheckConstraint(
+            "role IN ("
+            "'student', 'teacher', 'admin', "
+            "'principal', 'coordinator', 'school_admin', "
+            "'district_admin', 'platform_admin', 'parent'"
+            ")",
+            name='check_user_role',
+        ),
         CheckConstraint("subscription_tier IN ('free', 'pro', 'pro_plus')", name='check_subscription_tier'),
     )
 

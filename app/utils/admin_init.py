@@ -58,6 +58,10 @@ def create_default_admin():
                 if existing_user.role == 'admin':
                     logger.info(f"Admin account already exists: {username} ({email})")
                     logger.info(f"Admin can login with email: {existing_user.useremail}")
+                    logger.info(
+                        "School org console: sign in as this admin user, then open /admin/school-operations "
+                        "(create schools, subjects, rosters, quiz API checks)."
+                    )
                     return existing_user.id
                 
                 # Try next available username/email
@@ -84,6 +88,7 @@ def create_default_admin():
             
             logger.info(f"Default admin account created successfully (ID: {admin_id})")
             logger.info(f"Admin login credentials - Username: {username}, Email: {email}, Password: {password}")
+            logger.info("School org console after login: /admin/school-operations")
             return admin_id
             
         except (ValueError, Exception) as e:
@@ -108,6 +113,7 @@ def create_default_admin():
                     else:
                         logger.info(f"User already exists as admin (ID: {user_id})")
                     logger.info(f"Admin login credentials - Username: {username}, Email: {email}, Password: {password}")
+                    logger.info("School org console after login: /admin/school-operations")
                     return user_id
                 
                 # Insert new admin user (constraint should be updated by now)
@@ -127,6 +133,7 @@ def create_default_admin():
                     db.commit()
                     logger.info(f"Admin account created via direct SQL (ID: {admin_id})")
                     logger.info(f"Admin login credentials - Username: {username}, Email: {email}, Password: {password}")
+                    logger.info("School org console after login: /admin/school-operations")
                     return admin_id
                 else:
                     raise Exception("Failed to create admin user - no ID returned")

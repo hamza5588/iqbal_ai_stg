@@ -4,7 +4,7 @@ RBAC utility functions for checking permissions and roles
 from flask import session
 from typing import Optional
 
-from app.rbac.roles import Role
+from app.rbac.roles import Role, is_super_admin_role
 from app.rbac.permissions import Permissions, has_permission, get_ui_features_for_role
 
 
@@ -53,9 +53,9 @@ def is_teacher(user_id: Optional[int] = None) -> bool:
 
 
 def is_admin(user_id: Optional[int] = None) -> bool:
-    """Check if user is an admin"""
+    """True for global/school-chain admin roles (legacy admin + scoped admins)."""
     role = get_user_role(user_id)
-    return Role.from_string(role) == Role.ADMIN
+    return is_super_admin_role(role)
 
 
 def check_permission(permission: Permissions | str, user_id: Optional[int] = None) -> bool:
@@ -94,8 +94,7 @@ def can_access_lesson(lesson_id: int, user_id: Optional[int] = None) -> bool:
     role = get_user_role(user_id)
     role_enum = Role.from_string(role)
     
-    # Admin can access everything
-    if role_enum == Role.ADMIN:
+    if is_super_admin_role(role_enum):
         return True
     
     # Get lesson details
@@ -138,8 +137,7 @@ def can_manage_lesson(lesson_id: int, user_id: Optional[int] = None) -> bool:
     role = get_user_role(user_id)
     role_enum = Role.from_string(role)
     
-    # Admin can manage everything
-    if role_enum == Role.ADMIN:
+    if is_super_admin_role(role_enum):
         return True
     
     # Get lesson details

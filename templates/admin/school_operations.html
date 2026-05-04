@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School operations | IqbalAI Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" />
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="text-xs uppercase tracking-widest text-sky-400 font-semibold">IqbalAI · Admin</p>
+        <h1 class="text-xl font-bold text-white">School operations</h1>
+        <p class="text-sm text-slate-400">Create schools, subjects, sections, rosters, publish tests, quizzes</p>
+      </div>
+      <div class="flex gap-2 flex-wrap items-center">
+        <a href="/admin/" class="px-3 py-2 rounded-lg bg-sky-700 text-sm hover:bg-sky-600 font-medium">
+          <i class="fas fa-arrow-left mr-1"></i>Admin dashboard
+        </a>
+        <a href="/teacher-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Teacher</a>
+        <a href="/student-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Student</a>
+        <a href="/auth/logout" class="px-3 py-2 rounded-lg bg-red-900/80 text-sm hover:bg-red-800">Logout</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <section class="rounded-2xl border border-sky-900/50 bg-sky-950/30 p-6">
+      <h2 class="text-lg font-semibold text-sky-200 mb-2"><i class="fas fa-user-shield mr-2"></i>Super administrator access</h2>
+      <p class="text-sm text-slate-300 leading-relaxed">
+        This console is only for roles in the <strong>admin family</strong>:
+        <code class="text-sky-300">admin</code>,
+        <code class="text-sky-300">platform_admin</code>,
+        <code class="text-sky-300">district_admin</code>, or
+        <code class="text-sky-300">school_admin</code>.
+        On first startup the server creates a default <strong>admin</strong> account if none exists — open the application log for that run to copy the email and password (or reset the user in the database).
+      </p>
+      <p class="text-sm text-slate-400 mt-3">
+        <i class="fas fa-chalkboard-teacher mr-1 text-slate-500"></i>
+        Day-to-day teachers should use <a href="/teacher-dashboard" class="text-sky-400 hover:underline">Teacher dashboard</a>
+        → My Lessons (school icon or lesson view) to publish to their class sections.
+      </p>
+    </section>
+
+    <section id="ctx" class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <h2 class="text-lg font-semibold mb-2">Session</h2>
+      <pre id="ctx-pre" class="text-xs text-emerald-300 whitespace-pre-wrap overflow-x-auto">Loading…</pre>
+    </section>
+
+    <section class="grid md:grid-cols-2 gap-6">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+        <h2 class="text-lg font-semibold">Create school</h2>
+        <p class="text-xs text-slate-500">API: <code class="text-slate-400">POST /api/school/schools</code></p>
+        <label class="block text-sm text-slate-400">Name</label>
+        <input id="sc-name" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <label class="block text-sm text-slate-400">Code (unique)</label>
+        <input id="sc-code" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <button id="btn-create-school" type="button" class="w-full py-2 rounded-lg bg-sky-600 hover:bg-sky-500 font-medium">Create school</button>
+        <p id="sc-out" class="text-xs text-slate-400"></p>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+        <h2 class="text-lg font-semibold">Subject &amp; class section</h2>
+        <label class="block text-sm text-slate-400">School ID</label>
+        <input id="cid-school" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <label class="block text-sm text-slate-400">Subject name / short_code</label>
+        <div class="flex gap-2">
+          <input id="sub-name" placeholder="Physics" class="flex-1 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+          <input id="sub-code" placeholder="PHY" class="w-24 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        </div>
+        <button id="btn-subject" type="button" class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">Create subject</button>
+        <hr class="border-slate-800" />
+        <label class="block text-sm text-slate-400">Subject ID</label>
+        <input id="sec-subject" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <label class="block text-sm text-slate-400">Teacher user ID</label>
+        <input id="sec-teacher" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <div class="grid grid-cols-2 gap-2">
+          <input id="sec-grade" placeholder="8" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+          <input id="sec-letter" placeholder="A" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        </div>
+        <input id="sec-year" placeholder="2025-2026" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <button id="btn-section" type="button" class="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">Create class section</button>
+        <p id="coord-out" class="text-xs text-slate-400"></p>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Roster CSV import</h2>
+      <p class="text-sm text-slate-400">Header row must include roll (or roll_number), first (or first_name), last (or last_name).</p>
+      <label class="block text-sm text-slate-400">Class section ID</label>
+      <input id="rost-sec" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <textarea id="rost-csv" rows="6" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 font-mono text-sm"
+        placeholder="roll,first_name,last_name&#10;101,Ali,Khan"></textarea>
+      <button id="btn-roster" type="button" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 font-medium">Import roster</button>
+      <pre id="rost-out" class="text-xs text-amber-200 whitespace-pre-wrap"></pre>
+    </section>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Student — link roster + scoped lessons</h2>
+      <p class="text-xs text-slate-500">Useful when impersonating or helping a student verify enrollment.</p>
+      <input id="lnk-code" placeholder="School code" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <input id="lnk-sec" type="number" placeholder="Class section ID" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <div class="grid grid-cols-3 gap-2">
+        <input id="lnk-roll" placeholder="Roll" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="lnk-fn" placeholder="First" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="lnk-ln" placeholder="Last" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+      <button id="btn-link" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">Link roster</button>
+      <button id="btn-lessons" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Load scoped lessons</button>
+      <pre id="stu-out" class="text-xs text-emerald-200 whitespace-pre-wrap"></pre>
+    </section>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Publish &amp; quiz (API smoke tests)</h2>
+      <div class="grid md:grid-cols-2 gap-3">
+        <input id="pub-lesson" type="number" placeholder="Lesson ID" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="pub-sections" placeholder="Section IDs comma-separated" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+      <button id="btn-publish" type="button" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 font-medium">Publish to sections</button>
+      <hr class="border-slate-800" />
+      <div class="grid md:grid-cols-3 gap-3">
+        <input id="qz-lesson" type="number" placeholder="Lesson ID" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="qz-sec" type="number" placeholder="Class section ID" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <select id="qz-mode" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2">
+          <option value="device">device</option>
+          <option value="screen">screen</option>
+        </select>
+      </div>
+      <button id="btn-quiz" type="button" class="px-4 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 font-medium">Create AI quiz session</button>
+      <pre id="tea-out" class="text-xs text-cyan-200 whitespace-pre-wrap"></pre>
+    </section>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Active quiz sessions</h2>
+      <button id="btn-quiz-list" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Refresh</button>
+      <pre id="qz-list" class="text-xs text-pink-200 whitespace-pre-wrap"></pre>
+    </section>
+  </main>
+
+  <script>
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(opts.headers || {}) },
+        ...opts,
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    async function loadCtx() {
+      try {
+        const c = await api('/api/school/context');
+        document.getElementById('ctx-pre').textContent = JSON.stringify(c, null, 2);
+      } catch (e) {
+        document.getElementById('ctx-pre').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    document.getElementById('btn-create-school').onclick = async () => {
+      const el = document.getElementById('sc-out');
+      el.textContent = '…';
+      try {
+        const r = await api('/api/school/schools', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('sc-name').value,
+            code: document.getElementById('sc-code').value,
+          }),
+        });
+        el.textContent = JSON.stringify(r);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-subject').onclick = async () => {
+      const el = document.getElementById('coord-out');
+      try {
+        const sid = document.getElementById('cid-school').value;
+        const r = await api(`/api/school/schools/${sid}/subjects`, {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('sub-name').value,
+            short_code: document.getElementById('sub-code').value,
+          }),
+        });
+        el.textContent = 'Subject: ' + JSON.stringify(r);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-section').onclick = async () => {
+      const el = document.getElementById('coord-out');
+      try {
+        const r = await api('/api/school/class-sections', {
+          method: 'POST',
+          body: JSON.stringify({
+            school_id: +document.getElementById('cid-school').value,
+            subject_id: +document.getElementById('sec-subject').value,
+            teacher_user_id: +document.getElementById('sec-teacher').value,
+            grade_level: document.getElementById('sec-grade').value,
+            section: document.getElementById('sec-letter').value,
+            academic_year: document.getElementById('sec-year').value,
+          }),
+        });
+        el.textContent = 'Section: ' + JSON.stringify(r);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-roster').onclick = async () => {
+      const sec = document.getElementById('rost-sec').value;
+      const el = document.getElementById('rost-out');
+      try {
+        const res = await fetch(`/api/school/class-sections/${sec}/roster`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'text/csv', 'X-Requested-With': 'XMLHttpRequest' },
+          body: document.getElementById('rost-csv').value,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        el.textContent = JSON.stringify(data, null, 2);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-link').onclick = async () => {
+      const el = document.getElementById('stu-out');
+      try {
+        const r = await api('/api/school/student/link-roster', {
+          method: 'POST',
+          body: JSON.stringify({
+            school_code: document.getElementById('lnk-code').value,
+            class_section_id: +document.getElementById('lnk-sec').value,
+            roll_number: document.getElementById('lnk-roll').value,
+            first_name: document.getElementById('lnk-fn').value,
+            last_name: document.getElementById('lnk-ln').value,
+          }),
+        });
+        el.textContent = JSON.stringify(r, null, 2);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-lessons').onclick = async () => {
+      const el = document.getElementById('stu-out');
+      try {
+        const r = await api('/api/school/student/scoped-lessons');
+        el.textContent = JSON.stringify(r, null, 2);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-publish').onclick = async () => {
+      const el = document.getElementById('tea-out');
+      const lid = document.getElementById('pub-lesson').value;
+      const ids = document.getElementById('pub-sections').value.split(',').map(s => +s.trim()).filter(Boolean);
+      try {
+        const r = await api(`/api/school/lessons/${lid}/publish`, {
+          method: 'POST',
+          body: JSON.stringify({ class_section_ids: ids }),
+        });
+        el.textContent = JSON.stringify(r, null, 2);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-quiz').onclick = async () => {
+      const el = document.getElementById('tea-out');
+      try {
+        const r = await api('/api/school/quiz-sessions', {
+          method: 'POST',
+          body: JSON.stringify({
+            lesson_id: +document.getElementById('qz-lesson').value,
+            class_section_id: +document.getElementById('qz-sec').value,
+            delivery_mode: document.getElementById('qz-mode').value,
+            num_questions: 5,
+          }),
+        });
+        el.textContent = JSON.stringify(r, null, 2);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    document.getElementById('btn-quiz-list').onclick = async () => {
+      const el = document.getElementById('qz-list');
+      try {
+        const r = await api('/api/school/quiz-sessions/active');
+        el.textContent = JSON.stringify(r, null, 2);
+      } catch (e) { el.textContent = e.message; }
+    };
+
+    loadCtx();
+  </script>
+</body>
+</html>

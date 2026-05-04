@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School hub | IqbalAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" />
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="text-xs uppercase tracking-widest text-sky-400 font-semibold">IqbalAI</p>
+        <h1 class="text-xl font-bold text-white">School hub</h1>
+        <p class="text-sm text-slate-400">
+          {% if hub_mode == 'teacher' %}Teacher view — class context{% elif hub_mode == 'student' %}Student & parent — enrollment & lessons{% else %}Principal / coordinator — your schools{% endif %}
+        </p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <a href="/teacher-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Teacher</a>
+        <a href="/student-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Student</a>
+        {% if hub_mode != 'teacher' %}
+        <a href="/admin/" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Admin</a>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <section id="ctx" class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <h2 class="text-lg font-semibold mb-2">Session</h2>
+      <pre id="ctx-pre" class="text-xs text-emerald-300 whitespace-pre-wrap overflow-x-auto">Loading…</pre>
+    </section>
+
+    {% if hub_mode == 'teacher' %}
+    <section class="rounded-2xl border border-indigo-900/50 bg-indigo-950/40 p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-indigo-200"><i class="fas fa-circle-info mr-2"></i>Why you are here</h2>
+      <p class="text-sm text-slate-300 leading-relaxed">
+        This page used to show administrator tools to every role. Those tools are now on
+        <strong class="text-white">Admin → School operations</strong> (accounts with <code class="text-indigo-300">admin</code>,
+        <code class="text-indigo-300">platform_admin</code>, etc. only).
+      </p>
+      <p class="text-sm text-slate-300 leading-relaxed">
+        As a teacher, publish lessons to your class sections from the
+        <a href="/teacher-dashboard" class="text-sky-400 font-medium hover:underline">Teacher dashboard</a>:
+        open <strong>My Lessons</strong>, then use the <strong>school icon</strong> on a row or open a lesson and use <strong>Publish to my classes</strong>.
+      </p>
+      <p class="text-xs text-slate-500">The session box above shows your user id and whether you are assigned to any class sections (<code>teaching_class_section_ids</code>).</p>
+    </section>
+    {% elif hub_mode == 'student' %}
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Link your roster</h2>
+      <p class="text-sm text-slate-400">Match the name and roll your school gave you so published lessons appear in your dashboard.</p>
+      <input id="lnk-code" placeholder="School code" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <input id="lnk-sec" type="number" placeholder="Class section ID" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <div class="grid grid-cols-3 gap-2">
+        <input id="lnk-roll" placeholder="Roll" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="lnk-fn" placeholder="First" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="lnk-ln" placeholder="Last" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+      <button id="btn-link" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">Link roster</button>
+      <button id="btn-lessons" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Load scoped lessons</button>
+      <pre id="stu-out" class="text-xs text-emerald-200 whitespace-pre-wrap"></pre>
+    </section>
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Active quizzes</h2>
+      <button id="btn-quiz-list" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Refresh</button>
+      <pre id="qz-list" class="text-xs text-pink-200 whitespace-pre-wrap"></pre>
+    </section>
+    {% else %}
+    {# coordinator / principal #}
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Subject &amp; class section</h2>
+      <p class="text-sm text-slate-400">Only for schools you manage. School IDs appear in admin School operations or your district tools.</p>
+      <label class="block text-sm text-slate-400">School ID</label>
+      <input id="cid-school" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <label class="block text-sm text-slate-400">Subject name / short_code</label>
+      <div class="flex gap-2">
+        <input id="sub-name" placeholder="Physics" class="flex-1 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="sub-code" placeholder="PHY" class="w-24 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+      <button id="btn-subject" type="button" class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">Create subject</button>
+      <hr class="border-slate-800" />
+      <label class="block text-sm text-slate-400">Subject ID</label>
+      <input id="sec-subject" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <label class="block text-sm text-slate-400">Teacher user ID</label>
+      <input id="sec-teacher" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <div class="grid grid-cols-2 gap-2">
+        <input id="sec-grade" placeholder="8" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <input id="sec-letter" placeholder="A" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+      <input id="sec-year" placeholder="2025-2026" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <button id="btn-section" type="button" class="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">Create class section</button>
+      <p id="coord-out" class="text-xs text-slate-400"></p>
+    </section>
+    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+      <h2 class="text-lg font-semibold">Roster CSV import</h2>
+      <p class="text-sm text-slate-400">Header row must include roll (or roll_number), first (or first_name), last (or last_name).</p>
+      <label class="block text-sm text-slate-400">Class section ID</label>
+      <input id="rost-sec" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <textarea id="rost-csv" rows="6" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 font-mono text-sm"
+        placeholder="roll,first_name,last_name&#10;101,Ali,Khan"></textarea>
+      <button id="btn-roster" type="button" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 font-medium">Import roster</button>
+      <pre id="rost-out" class="text-xs text-amber-200 whitespace-pre-wrap"></pre>
+    </section>
+    {% endif %}
+  </main>
+
+  <script>
+    const HUB_MODE = {{ hub_mode | tojson }};
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(opts.headers || {}) },
+        ...opts,
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    async function loadCtx() {
+      try {
+        const c = await api('/api/school/context');
+        document.getElementById('ctx-pre').textContent = JSON.stringify(c, null, 2);
+      } catch (e) {
+        document.getElementById('ctx-pre').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    if (HUB_MODE === 'coordinator') {
+      document.getElementById('btn-subject').onclick = async () => {
+        const el = document.getElementById('coord-out');
+        try {
+          const sid = document.getElementById('cid-school').value;
+          const r = await api(`/api/school/schools/${sid}/subjects`, {
+            method: 'POST',
+            body: JSON.stringify({
+              name: document.getElementById('sub-name').value,
+              short_code: document.getElementById('sub-code').value,
+            }),
+          });
+          el.textContent = 'Subject: ' + JSON.stringify(r);
+        } catch (e) { el.textContent = e.message; }
+      };
+      document.getElementById('btn-section').onclick = async () => {
+        const el = document.getElementById('coord-out');
+        try {
+          const r = await api('/api/school/class-sections', {
+            method: 'POST',
+            body: JSON.stringify({
+              school_id: +document.getElementById('cid-school').value,
+              subject_id: +document.getElementById('sec-subject').value,
+              teacher_user_id: +document.getElementById('sec-teacher').value,
+              grade_level: document.getElementById('sec-grade').value,
+              section: document.getElementById('sec-letter').value,
+              academic_year: document.getElementById('sec-year').value,
+            }),
+          });
+          el.textContent = 'Section: ' + JSON.stringify(r);
+        } catch (e) { el.textContent = e.message; }
+      };
+      document.getElementById('btn-roster').onclick = async () => {
+        const sec = document.getElementById('rost-sec').value;
+        const el = document.getElementById('rost-out');
+        try {
+          const res = await fetch(`/api/school/class-sections/${sec}/roster`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'text/csv', 'X-Requested-With': 'XMLHttpRequest' },
+            body: document.getElementById('rost-csv').value,
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          el.textContent = JSON.stringify(data, null, 2);
+        } catch (e) { el.textContent = e.message; }
+      };
+    }
+
+    if (HUB_MODE === 'student') {
+      document.getElementById('btn-link').onclick = async () => {
+        const el = document.getElementById('stu-out');
+        try {
+          const r = await api('/api/school/student/link-roster', {
+            method: 'POST',
+            body: JSON.stringify({
+              school_code: document.getElementById('lnk-code').value,
+              class_section_id: +document.getElementById('lnk-sec').value,
+              roll_number: document.getElementById('lnk-roll').value,
+              first_name: document.getElementById('lnk-fn').value,
+              last_name: document.getElementById('lnk-ln').value,
+            }),
+          });
+          el.textContent = JSON.stringify(r, null, 2);
+        } catch (e) { el.textContent = e.message; }
+      };
+      document.getElementById('btn-lessons').onclick = async () => {
+        const el = document.getElementById('stu-out');
+        try {
+          const r = await api('/api/school/student/scoped-lessons');
+          el.textContent = JSON.stringify(r, null, 2);
+        } catch (e) { el.textContent = e.message; }
+      };
+      document.getElementById('btn-quiz-list').onclick = async () => {
+        const el = document.getElementById('qz-list');
+        try {
+          const r = await api('/api/school/quiz-sessions/active');
+          el.textContent = JSON.stringify(r, null, 2);
+        } catch (e) { el.textContent = e.message; }
+      };
+    }
+
+    loadCtx();
+  </script>
+</body>
+</html>

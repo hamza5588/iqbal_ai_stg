@@ -5,7 +5,7 @@ from functools import wraps
 from flask import session, redirect, url_for, request, jsonify
 import logging
 
-from app.rbac.roles import Role
+from app.rbac.roles import Role, is_super_admin_role
 from app.rbac.permissions import Permissions, has_permission
 
 logger = logging.getLogger(__name__)
@@ -88,8 +88,7 @@ def role_required(required_role: Role | str):
             
             user_role_enum = Role.from_string(user_role)
             
-            # Admin can access everything
-            if user_role_enum == Role.ADMIN:
+            if is_super_admin_role(user_role_enum):
                 return f(*args, **kwargs)
             
             # Check if user has required role
@@ -183,7 +182,7 @@ def admin_only(f):
         user_model = UserModel(session['user_id'])
         user_role = user_model.get_role()
         
-        if Role.from_string(user_role) != Role.ADMIN:
+        if not is_super_admin_role(user_role):
             logger.info(f"Non-admin user {session['user_id']} attempted to access admin-only route")
             if _wants_json():
                 return jsonify({'error': 'Admin access required'}), 403

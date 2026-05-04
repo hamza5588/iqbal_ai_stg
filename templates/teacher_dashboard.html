@@ -3299,6 +3299,17 @@
         </button>
       </div>
 
+      <div class="px-4 mb-4">
+        <a href="/school/hub" title="Class context &amp; coordinator info — publishing is in My Lessons"
+          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-school w-5 text-indigo-500"></i>
+            <span class="font-medium">School &amp; classes</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
+        </a>
+      </div>
+
       <!-- Action Buttons Row (match legacy chat: only Set Prompt/reset/history in chat area, so sidebar keeps a single Set Prompt entry) -->
       <div class="px-4 mb-4 space-y-2">
         <!-- Set Prompt button (opens simple RAG prompt modal like legacy chat.html) -->
@@ -3390,6 +3401,17 @@
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
         </button>
+      </div>
+
+      <div class="px-4 mb-4">
+        <a href="/school/hub" title="Class context &amp; coordinator info — publishing is in My Lessons" onclick="toggleMobileSidebar();"
+          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-school w-5 text-indigo-500"></i>
+            <span class="font-medium">School &amp; classes</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
+        </a>
       </div>
 
       <!-- Action Buttons Row -->
@@ -4157,6 +4179,29 @@
             </div>
           </div>
 
+          <!-- Publish to school class sections (students see scoped lessons) -->
+          <div class="mb-4 md:mb-6 rounded-xl md:rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4 md:p-5">
+            <div class="flex items-center gap-2 mb-2 md:mb-3">
+              <i class="fas fa-school text-indigo-600"></i>
+              <h3 class="text-base md:text-lg font-bold text-gray-900">Publish to my classes</h3>
+            </div>
+            <p class="text-xs md:text-sm text-gray-600 mb-3">Select the sections that should receive this lesson. Students enrolled there will see it under View Lessons (class-first).</p>
+            <div id="teacherPublishSectionsHost" class="max-h-40 md:max-h-48 overflow-y-auto border border-gray-200 rounded-lg bg-white p-2 mb-3 text-sm">
+              <p class="text-gray-500 text-sm">Open this lesson to load your class list.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <button type="button" onclick="publishLessonToSelectedSections()"
+                class="flex-1 bg-indigo-600 text-white py-2 md:py-2.5 px-4 rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-sm md:text-base">
+                <i class="fas fa-share-nodes mr-2"></i>Publish to selected
+              </button>
+              <button type="button" onclick="refreshTeacherPublishPanelInViewModal(true)"
+                class="sm:w-auto bg-white border border-indigo-300 text-indigo-800 py-2 md:py-2.5 px-4 rounded-lg font-semibold hover:bg-indigo-50 text-sm">
+                <i class="fas fa-rotate mr-1"></i>Reload list
+              </button>
+            </div>
+            <p id="teacherPublishStatus" class="text-xs text-gray-500 mt-2 min-h-[1rem]" aria-live="polite"></p>
+          </div>
+
           <!-- Action Buttons Footer (draft edits are in-column; no separate Edit CTA) -->
           <div class="border-t border-gray-200/90 pt-4 md:pt-6">
             <div class="flex flex-col md:flex-row gap-2 md:gap-3 lg:gap-4">
@@ -4173,6 +4218,51 @@
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick publish: My Lessons row → pick sections without opening full lesson modal -->
+    <div id="teacherQuickPublishModal"
+      class="fixed inset-0 bg-slate-900/55 z-[10062] hidden flex items-start md:items-center justify-center overflow-y-auto py-4 px-3"
+      onclick="closeQuickPublishModal()"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="teacherQuickPublishHeading">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg my-auto border border-indigo-100"
+        onclick="event.stopPropagation()">
+        <div class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-5 py-4 rounded-t-2xl flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h2 id="teacherQuickPublishHeading" class="text-lg font-bold truncate">Publish to my classes</h2>
+            <p id="teacherQuickPublishLessonTitle" class="text-sm text-indigo-100 truncate mt-1"></p>
+          </div>
+          <button type="button" onclick="closeQuickPublishModal()"
+            class="shrink-0 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+            aria-label="Close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="p-5">
+          <p class="text-sm text-gray-600 mb-3">Select class sections. Students enrolled there will see this lesson in scoped View Lessons.</p>
+          <div id="teacherQuickPublishSectionsHost"
+            class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50/80 p-2 mb-3 text-sm">
+            <p class="text-gray-500 text-sm py-2 text-center">Loading…</p>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <button type="button" onclick="publishQuickPublishLesson()"
+              class="flex-1 bg-indigo-600 text-white py-2.5 px-4 rounded-lg font-semibold hover:bg-indigo-700 text-sm">
+              <i class="fas fa-share-nodes mr-2"></i>Publish to selected
+            </button>
+            <button type="button" onclick="refreshTeacherQuickPublishPanel(true)"
+              class="sm:w-auto bg-white border border-indigo-300 text-indigo-800 py-2.5 px-4 rounded-lg font-semibold hover:bg-indigo-50 text-sm">
+              <i class="fas fa-rotate mr-1"></i>Reload
+            </button>
+          </div>
+          <p id="teacherQuickPublishStatus" class="text-xs text-gray-500 mt-2 min-h-[1rem]" aria-live="polite"></p>
+          <button type="button" onclick="closeQuickPublishModal()"
+            class="mt-4 w-full py-2 rounded-lg border border-gray-300 text-gray-800 font-medium hover:bg-gray-50 text-sm">
+            Cancel
+          </button>
         </div>
       </div>
     </div>
@@ -6351,6 +6441,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                     <button class="action-btn view-btn" title="View" onclick="viewLesson('${lesson.id}')">
                       <i class="fas fa-eye"></i>
                     </button>
+                    <button class="action-btn" style="background: #e0e7ff; color: #3730a3;" title="Publish to school classes" onclick="openQuickPublishModal('${lesson.id}')">
+                      <i class="fas fa-school"></i>
+                    </button>
                     <button class="action-btn edit-btn" title="Edit" onclick="editLesson('${lesson.id}')">
                       <i class="fas fa-edit"></i>
                     </button>
@@ -6742,6 +6835,212 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      window._teacherTeachingSectionsCache = null;
+      window._quickPublishLessonId = null;
+
+      async function loadTeacherTeachingSections(force) {
+        if (!force && window._teacherTeachingSectionsCache != null) {
+          return window._teacherTeachingSectionsCache;
+        }
+        const r = await fetch('/api/school/my-teaching-sections', {
+          method: 'GET',
+          credentials: 'include',
+          headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' }
+        });
+        const d = await r.json().catch(function () { return {}; });
+        if (!r.ok) {
+          const msg = (d && d.error) ? d.error : ('HTTP ' + r.status);
+          throw new Error(msg);
+        }
+        const list = Array.isArray(d.sections) ? d.sections : [];
+        window._teacherTeachingSectionsCache = list;
+        return list;
+      }
+
+      function setTeacherPublishStatusLine(msg, tone) {
+        const el = document.getElementById('teacherPublishStatus');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.className = 'text-xs mt-2 min-h-[1rem] '
+          + (tone === 'error' ? 'text-red-600' : tone === 'ok' ? 'text-emerald-700' : 'text-gray-500');
+      }
+
+      function setQuickPublishStatusLine(msg, tone) {
+        const el = document.getElementById('teacherQuickPublishStatus');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.className = 'text-xs mt-2 min-h-[1rem] '
+          + (tone === 'error' ? 'text-red-600' : tone === 'ok' ? 'text-emerald-700' : 'text-gray-500');
+      }
+
+      function buildTeachingSectionsCheckboxRowsHtml(secs) {
+        return secs.map(function (s) {
+          const main = s.display_name
+            ? escapeHtml(s.display_name)
+            : (escapeHtml(s.subject_name || 'Subject')
+              + ' — G' + escapeHtml(String(s.grade_level ?? '?'))
+              + ' Sec ' + escapeHtml(String(s.section ?? '?'))
+              + ' <span class="text-gray-500">(' + escapeHtml(String(s.school_code || '')) + ')</span>');
+          const ay = s.academic_year ? escapeHtml(String(s.academic_year)) : '';
+          const sid = parseInt(s.id, 10);
+          const idAttr = Number.isFinite(sid) ? sid : 0;
+          return '<label class="flex items-start gap-2 text-sm text-gray-800 py-2 px-1 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-indigo-50/60 rounded">'
+            + '<input type="checkbox" class="teacher-publish-section-cb mt-1 shrink-0" value="' + idAttr + '" />'
+            + '<span class="min-w-0">' + main + (ay ? '<br/><span class="text-xs text-gray-500">' + ay + '</span>' : '') + '</span></label>';
+        }).join('');
+      }
+
+      function collectCheckedSectionIdsFromHost(hostSelector) {
+        const ids = [];
+        document.querySelectorAll(hostSelector + ' .teacher-publish-section-cb:checked').forEach(function (b) {
+          const v = parseInt(b.value, 10);
+          if (v) ids.push(v);
+        });
+        return ids;
+      }
+
+      async function postLessonPublishApi(lessonId, classSectionIds) {
+        const r = await fetch('/api/school/lessons/' + encodeURIComponent(lessonId) + '/publish', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            Accept: 'application/json'
+          },
+          body: JSON.stringify({ class_section_ids: classSectionIds })
+        });
+        const d = await r.json().catch(function () { return {}; });
+        if (!r.ok) {
+          throw new Error((d && d.error) ? d.error : ('HTTP ' + r.status));
+        }
+        return (d.linked_sections != null) ? d.linked_sections : 0;
+      }
+
+      async function refreshTeacherPublishPanelInViewModal(force) {
+        const host = document.getElementById('teacherPublishSectionsHost');
+        if (!host) return;
+        setTeacherPublishStatusLine('', '');
+        host.innerHTML = '<p class="text-gray-500 text-sm py-2 text-center">Loading classes…</p>';
+        try {
+          const secs = await loadTeacherTeachingSections(!!force);
+          if (!secs.length) {
+            host.innerHTML = '<p class="text-sm text-gray-600">No class sections assigned to you yet. Ask your coordinator to assign you as teacher of a section in School hub.</p>';
+            return;
+          }
+          host.innerHTML = buildTeachingSectionsCheckboxRowsHtml(secs);
+        } catch (e) {
+          host.innerHTML = '<p class="text-sm text-red-600">Could not load your classes.</p>';
+          setTeacherPublishStatusLine(e.message || 'Error', 'error');
+        }
+      }
+
+      async function refreshTeacherQuickPublishPanel(force) {
+        const host = document.getElementById('teacherQuickPublishSectionsHost');
+        if (!host) return;
+        setQuickPublishStatusLine('', '');
+        host.innerHTML = '<p class="text-gray-500 text-sm py-2 text-center">Loading classes…</p>';
+        try {
+          const secs = await loadTeacherTeachingSections(!!force);
+          if (!secs.length) {
+            host.innerHTML = '<p class="text-sm text-gray-600">No class sections assigned to you yet. Ask your coordinator to assign you as teacher of a section in School hub.</p>';
+            return;
+          }
+          host.innerHTML = buildTeachingSectionsCheckboxRowsHtml(secs);
+        } catch (e) {
+          host.innerHTML = '<p class="text-sm text-red-600">Could not load your classes.</p>';
+          setQuickPublishStatusLine(e.message || 'Error', 'error');
+        }
+      }
+
+      function openQuickPublishModal(lessonId) {
+        if (!lessonId) {
+          showToast('No lesson ID', 'error');
+          return;
+        }
+        window._quickPublishLessonId = String(lessonId);
+        const lessons = window.availableLessons || [];
+        const found = lessons.find(function (l) { return String(l.id) === String(lessonId); });
+        const titleEl = document.getElementById('teacherQuickPublishLessonTitle');
+        if (titleEl) {
+          titleEl.textContent = found && found.title ? found.title : ('Lesson #' + lessonId);
+        }
+        const modal = document.getElementById('teacherQuickPublishModal');
+        if (modal) {
+          try {
+            document.body.appendChild(modal);
+          } catch (e) { /* already in body */ }
+          modal.classList.remove('hidden');
+          modal.style.display = 'flex';
+        }
+        void refreshTeacherQuickPublishPanel(false);
+      }
+
+      function closeQuickPublishModal() {
+        const modal = document.getElementById('teacherQuickPublishModal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.style.display = '';
+        }
+        window._quickPublishLessonId = null;
+      }
+
+      async function publishQuickPublishLesson() {
+        const lid = window._quickPublishLessonId;
+        if (!lid) {
+          showToast('No lesson selected', 'error');
+          return;
+        }
+        const ids = collectCheckedSectionIdsFromHost('#teacherQuickPublishSectionsHost');
+        if (!ids.length) {
+          showToast('Select at least one class section', 'warning');
+          return;
+        }
+        setQuickPublishStatusLine('Publishing…', '');
+        try {
+          const n = await postLessonPublishApi(lid, ids);
+          if (n === 0) {
+            showToast('Lesson was already published to the selected section(s).', 'info', 3500);
+            setQuickPublishStatusLine('No new links — those sections already had this lesson.', 'ok');
+          } else {
+            showToast('Published to ' + n + ' new class section(s)', 'success');
+            setQuickPublishStatusLine('Linked ' + n + ' new section(s).', 'ok');
+          }
+          window._teacherTeachingSectionsCache = null;
+        } catch (e) {
+          showToast(e.message || 'Publish failed', 'error');
+          setQuickPublishStatusLine(e.message || 'Publish failed', 'error');
+        }
+      }
+
+      async function publishLessonToSelectedSections() {
+        const lesson = window.currentViewedLessonData;
+        if (!lesson || !lesson.id) {
+          showToast('No lesson selected', 'error');
+          return;
+        }
+        const ids = collectCheckedSectionIdsFromHost('#teacherPublishSectionsHost');
+        if (!ids.length) {
+          showToast('Select at least one class section', 'warning');
+          return;
+        }
+        setTeacherPublishStatusLine('Publishing…', '');
+        try {
+          const n = await postLessonPublishApi(lesson.id, ids);
+          if (n === 0) {
+            showToast('Lesson was already published to the selected section(s).', 'info', 3500);
+            setTeacherPublishStatusLine('No new links — those sections already had this lesson.', 'ok');
+          } else {
+            showToast('Published to ' + n + ' new class section(s)', 'success');
+            setTeacherPublishStatusLine('Last publish: ' + n + ' new link(s).', 'ok');
+          }
+          window._teacherTeachingSectionsCache = null;
+        } catch (e) {
+          showToast(e.message || 'Publish failed', 'error');
+          setTeacherPublishStatusLine(e.message || 'Publish failed', 'error');
+        }
+      }
+
       // Populate the view lesson modal with data
       async function populateViewLessonModal(lesson) {
         try {
@@ -6920,6 +7219,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             }
           }
 
+          void refreshTeacherPublishPanelInViewModal(false);
+
           // Load saved templates
           loadSavedTemplatesIntoModal();
           console.log('✅ populateViewLessonModal completed successfully');
@@ -6945,6 +7246,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           if (createLessonModal) createLessonModal.classList.add('hidden');
           if (saveTemplateModal) saveTemplateModal.classList.add('hidden');
           if (testPromptModal) testPromptModal.classList.add('hidden');
+          const teacherQuickPublishModal = document.getElementById('teacherQuickPublishModal');
+          if (teacherQuickPublishModal) {
+            teacherQuickPublishModal.classList.add('hidden');
+            teacherQuickPublishModal.style.display = '';
+          }
+          window._quickPublishLessonId = null;
           console.log('✅ Closed other modals');
         } catch (e) {
           console.error('❌ Error closing other modals:', e);
@@ -7064,6 +7371,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         closeAllModals(); // Close all modals to ensure clean state
         window.currentViewLessonId = null;
         window.currentViewedLessonData = null;
+        window._teacherTeachingSectionsCache = null;
         conversationSummaryRequestToken += 1;
         setConversationSummaryLoading(false);
         renderConversationSummaryText(null);
@@ -10443,6 +10751,13 @@ Align everything with the lesson objectives and do not invent missing informatio
           const saveTemplateModal = document.getElementById('saveTemplateModal');
           const testPromptModal = document.getElementById('testPromptModal');
           const ragPromptModal = document.getElementById('ragPromptModal');
+          const teacherQuickPublishModal = document.getElementById('teacherQuickPublishModal');
+
+          if (teacherQuickPublishModal) {
+            teacherQuickPublishModal.classList.add('hidden');
+            teacherQuickPublishModal.style.display = '';
+          }
+          window._quickPublishLessonId = null;
 
           if (viewLessonModal) {
             viewLessonModal.classList.add('hidden');

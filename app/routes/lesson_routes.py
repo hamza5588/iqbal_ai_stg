@@ -17,6 +17,7 @@ import threading
 import time
 import re
 from urllib.parse import urlparse
+from typing import Optional
 
 try:
     import redis
@@ -24,6 +25,32 @@ except Exception:  # pragma: no cover - optional dependency fallback
     redis = None
 
 logger = logging.getLogger(__name__)
+
+
+def _user_can_read_lesson_row(lesson: dict, user_id, user_role: Optional[str]) -> bool:
+    """Teacher owner, public lesson, or student enrolled in a class section that has this lesson published."""
+    if not lesson:
+        return False
+    if lesson.get('teacher_id') == user_id:
+        return True
+    if lesson.get('is_public'):
+        return True
+    role = (user_role or 'student').strip().lower()
+    if role == 'student' and user_id:
+        try:
+            from app.services.school.student_lesson_access import (
+                student_may_view_lesson_via_school_placement,
+            )
+
+            lid = lesson.get('id')
+            if lid is None:
+                return False
+            return student_may_view_lesson_via_school_placement(get_db(), int(user_id), int(lid))
+        except Exception:
+            logger.exception("school-based lesson read check failed")
+            return False
+    return False
+
 
 _lesson_qa_user_locks = {}
 _lesson_qa_locks_lock = threading.Lock()
@@ -712,20 +739,16 @@ def get_lesson(lesson_id):
         # Check if user can access this lesson
         user_id = session.get('user_id')
         user_role = session.get('role', 'student')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-        
-        # Users can access their own lessons (regardless of role)
-        if lesson_teacher_id == user_id:
-            pass  # Allow access - user owns this lesson
-        # If lesson is public, allow access for anyone
-        elif is_public:
-            pass  # Allow access - lesson is public
-        # Otherwise deny access
-        else:
-            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+
+        if not _user_can_read_lesson_row(lesson, user_id, user_role):
+            logger.info(
+                "Access denied for user %s (role: %s) to lesson %s",
+                user_id,
+                user_role,
+                lesson_id,
+            )
             return jsonify({'error': 'Access denied'}), 403
-        
+
         return jsonify({
             'success': True,
             'lesson': lesson
@@ -746,20 +769,16 @@ def view_lesson(lesson_id):
         # Check if user can access this lesson
         user_role = session.get('role', 'student')
         user_id = session.get('user_id')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-        
-        # Users can access their own lessons (regardless of role)
-        if lesson_teacher_id == user_id:
-            pass  # Allow access - user owns this lesson
-        # If lesson is public, allow access for anyone
-        elif is_public:
-            pass  # Allow access - lesson is public
-        # Otherwise deny access
-        else:
-            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+
+        if not _user_can_read_lesson_row(lesson, user_id, user_role):
+            logger.info(
+                "Access denied (view) for user %s (role: %s) to lesson %s",
+                user_id,
+                user_role,
+                lesson_id,
+            )
             return jsonify({'error': 'Access denied'}), 403
-        
+
         # get_lesson_versions queries by (id == root_id OR parent_lesson_id == root_id).
         # All child versions store parent_lesson_id pointing to the ROOT lesson, so we
         # must resolve to the root before querying — otherwise only the clicked version
@@ -932,18 +951,14 @@ def download_lesson_ppt(lesson_id):
     # Check if user can access this lesson
     user_role = session.get('role', 'student')
     user_id = session.get('user_id')
-    lesson_teacher_id = lesson.get('teacher_id')
-    is_public = lesson.get('is_public', False)
-    
-    # Users can access their own lessons (regardless of role)
-    if lesson_teacher_id == user_id:
-        pass  # Allow access - user owns this lesson
-    # If lesson is public, allow access for anyone
-    elif is_public:
-        pass  # Allow access - lesson is public
-    # Otherwise deny access
-    else:
-        logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+
+    if not _user_can_read_lesson_row(lesson, user_id, user_role):
+        logger.info(
+            "Access denied (ppt) for user %s (role: %s) to lesson %s",
+            user_id,
+            user_role,
+            lesson_id,
+        )
         return jsonify({'error': 'Access denied'}), 403
 
     # Prepare lesson data for PPT generation
@@ -999,18 +1014,14 @@ def download_lesson_pdf(lesson_id):
         # Check if user can access this lesson
         user_role = session.get('role', 'student')
         user_id = session.get('user_id')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-        
-        # Users can access their own lessons (regardless of role)
-        if lesson_teacher_id == user_id:
-            pass  # Allow access - user owns this lesson
-        # If lesson is public, allow access for anyone
-        elif is_public:
-            pass  # Allow access - lesson is public
-        # Otherwise deny access
-        else:
-            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+
+        if not _user_can_read_lesson_row(lesson, user_id, user_role):
+            logger.info(
+                "Access denied (pdf) for user %s (role: %s) to lesson %s",
+                user_id,
+                user_role,
+                lesson_id,
+            )
             return jsonify({'error': 'Access denied'}), 403
 
         # Try to generate PDF using reportlab (preferred method)

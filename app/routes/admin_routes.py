@@ -127,6 +127,14 @@ def dashboard():
         }, error=str(e))
 
 
+@bp.route("/school-operations")
+@login_required
+@admin_only
+def school_operations():
+    """Dark-theme school org console (schools, rosters, publish/quiz API checks). Admin-family roles only."""
+    return render_template("admin/school_operations.html")
+
+
 # ==================== USER MANAGEMENT ====================
 
 @bp.route('/users', methods=['GET'])

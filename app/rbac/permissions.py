@@ -101,8 +101,47 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.CREATE_CONVERSATION,
         Permissions.VIEW_MY_CONVERSATIONS,
         Permissions.VIEW_ALL_CONVERSATIONS,
-    }
+    },
+    # School chain: global permissions today; route-level school scoping comes later.
+    Role.PLATFORM_ADMIN: set(),  # filled below
+    Role.DISTRICT_ADMIN: set(),
+    Role.SCHOOL_ADMIN: set(),
+    Role.PRINCIPAL: set(),
+    Role.COORDINATOR: set(),
+    Role.PARENT: {
+        Permissions.VIEW_MY_PROFILE,
+        Permissions.EDIT_MY_PROFILE,
+        Permissions.VIEW_LESSON,
+        Permissions.VIEW_MY_CONVERSATIONS,
+    },
 }
+
+_FULL_ADMIN = ROLE_PERMISSIONS[Role.ADMIN]
+ROLE_PERMISSIONS[Role.PLATFORM_ADMIN] = set(_FULL_ADMIN)
+ROLE_PERMISSIONS[Role.DISTRICT_ADMIN] = set(_FULL_ADMIN)
+ROLE_PERMISSIONS[Role.SCHOOL_ADMIN] = set(_FULL_ADMIN)
+
+_SCHOOL_OVERSIGHT = {
+    Permissions.VIEW_LESSON,
+    Permissions.VIEW_MY_LESSONS,
+    Permissions.VIEW_ALL_LESSONS,
+    Permissions.CREATE_LESSON,
+    Permissions.EDIT_MY_LESSON,
+    Permissions.DELETE_MY_LESSON,
+    Permissions.UPLOAD_PDF,
+    Permissions.VIEW_MY_DOCUMENTS,
+    Permissions.DELETE_MY_DOCUMENT,
+    Permissions.VIEW_MY_PROFILE,
+    Permissions.EDIT_MY_PROFILE,
+    Permissions.VIEW_TEACHER_RECORDS,
+    Permissions.VIEW_STUDENT_RECORDS,
+    Permissions.VIEW_ALL_RECORDS,
+    Permissions.CREATE_CONVERSATION,
+    Permissions.VIEW_MY_CONVERSATIONS,
+    Permissions.VIEW_ALL_CONVERSATIONS,
+}
+ROLE_PERMISSIONS[Role.PRINCIPAL] = set(_SCHOOL_OVERSIGHT)
+ROLE_PERMISSIONS[Role.COORDINATOR] = set(_SCHOOL_OVERSIGHT)
 
 
 def get_permissions_for_role(role: Role | str) -> Set[Permissions]:

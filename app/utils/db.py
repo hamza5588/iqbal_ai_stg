@@ -1,3 +1,4 @@
+import importlib
 import logging
 from flask import current_app, g
 from sqlalchemy import create_engine, event, text
@@ -248,6 +249,10 @@ def init_db(app):
         RAGChunk, RAGThread, RAGPrompt, Coupon, CouponRedemption, GlobalPrompt,
         SystemSettings, UserSettings
     )
+    # School hierarchy + learning delivery (roster, quiz sessions, lecture links).
+    # Use importlib so `import app.models...` does not rebind the name `app` (Flask app).
+    importlib.import_module("app.models.school_org_models")
+    importlib.import_module("app.models.school_learning_models")
     from app.load_testing.models import (
         TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog
     )
@@ -261,6 +266,29 @@ def init_db(app):
             # Create all tables
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables created/verified successfully")
+
+            # PostgreSQL: widen users.role CHECK constraint for school participant roles
+            try:
+                if engine.dialect.name == "postgresql":
+                    db_pg = get_db()
+                    insp_pg = inspect(engine)
+                    if "users" in insp_pg.get_table_names():
+                        db_pg.execute(text("ALTER TABLE users DROP CONSTRAINT IF EXISTS check_user_role"))
+                        db_pg.execute(
+                            text(
+                                "ALTER TABLE users ADD CONSTRAINT check_user_role CHECK (role IN ("
+                                "'student','teacher','admin','principal','coordinator','school_admin',"
+                                "'district_admin','platform_admin','parent'))"
+                            )
+                        )
+                        db_pg.commit()
+                        logger.info("PostgreSQL: users.check_user_role updated for school roles")
+            except Exception as pg_role_e:
+                logger.warning("PostgreSQL role constraint migration: %s", pg_role_e)
+                try:
+                    get_db().rollback()
+                except Exception:
+                    pass
             
             # Migration: Update existing lessons to have lesson_id if missing
             try:
