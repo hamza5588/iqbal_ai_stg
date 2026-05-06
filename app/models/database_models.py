@@ -32,6 +32,7 @@ class User(Base):
     
     # Relationships
     lessons = relationship("Lesson", back_populates="teacher", cascade="all, delete-orphan")
+    principal_of_schools = relationship("School", back_populates="principal_user")
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     survey_responses = relationship("SurveyResponse", back_populates="user", cascade="all, delete-orphan")
     user_prompts = relationship("UserPrompt", back_populates="user", cascade="all, delete-orphan")
@@ -90,6 +91,17 @@ class Lesson(Base):
     teacher = relationship("User", back_populates="lessons")
     parent_lesson = relationship("Lesson", remote_side=[id], foreign_keys=[parent_lesson_id])
     parent_version = relationship("Lesson", remote_side=[id], foreign_keys=[parent_version_id])
+    lecture_class_sections = relationship(
+        "LectureClassSection",
+        back_populates="lesson",
+        cascade="all, delete-orphan",
+    )
+    delivery_guidance = relationship(
+        "LessonDeliveryGuidance",
+        back_populates="lesson",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
     
     __table_args__ = (
         UniqueConstraint('lesson_id', 'version_number', name='idx_lesson_version_unique'),

@@ -4202,6 +4202,35 @@
             <p id="teacherPublishStatus" class="text-xs text-gray-500 mt-2 min-h-[1rem]" aria-live="polite"></p>
           </div>
 
+          <!-- Delivery Guidance (teacher-triggered only — never auto-generated) -->
+          <div class="mb-4 md:mb-6 rounded-xl md:rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 md:p-5">
+            <div class="flex items-center gap-2 mb-2 md:mb-3">
+              <i class="fas fa-chalkboard text-amber-600"></i>
+              <h3 class="text-base md:text-lg font-bold text-gray-900">Delivery guidance</h3>
+            </div>
+            <p class="text-xs md:text-sm text-gray-600 mb-3">Get AI-generated teaching tips, a technique demonstration, and real-world examples for this lesson. Click to generate — never auto-produced.</p>
+            <button type="button" id="requestDeliveryGuidanceBtn" onclick="requestDeliveryGuidance()"
+              class="w-full bg-amber-500 text-white py-2 md:py-2.5 px-4 rounded-lg font-semibold hover:bg-amber-600 transition-colors text-sm md:text-base flex items-center justify-center gap-2">
+              <i class="fas fa-wand-magic-sparkles"></i>
+              <span>Generate delivery guidance</span>
+            </button>
+            <div id="deliveryGuidancePanel" class="hidden mt-3 space-y-3 text-sm">
+              <div class="rounded-lg border border-amber-100 bg-amber-50/60 p-3">
+                <p class="font-semibold text-amber-800 mb-1"><i class="fas fa-lightbulb mr-1"></i>Delivery tips</p>
+                <div id="dgTips" class="text-gray-700 space-y-1"></div>
+              </div>
+              <div class="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+                <p class="font-semibold text-blue-800 mb-1"><i class="fas fa-flask mr-1"></i>Technique demonstration</p>
+                <p id="dgDemo" class="text-gray-700"></p>
+              </div>
+              <div class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                <p class="font-semibold text-emerald-800 mb-1"><i class="fas fa-globe mr-1"></i>Real-world examples</p>
+                <div id="dgExamples" class="text-gray-700 space-y-1"></div>
+              </div>
+            </div>
+            <p id="deliveryGuidanceStatus" class="text-xs text-gray-500 mt-2 min-h-[1rem]" aria-live="polite"></p>
+          </div>
+
           <!-- Action Buttons Footer (draft edits are in-column; no separate Edit CTA) -->
           <div class="border-t border-gray-200/90 pt-4 md:pt-6">
             <div class="flex flex-col md:flex-row gap-2 md:gap-3 lg:gap-4">
@@ -4261,6 +4290,80 @@
           <p id="teacherQuickPublishStatus" class="text-xs text-gray-500 mt-2 min-h-[1rem]" aria-live="polite"></p>
           <button type="button" onclick="closeQuickPublishModal()"
             class="mt-4 w-full py-2 rounded-lg border border-gray-300 text-gray-800 font-medium hover:bg-gray-50 text-sm">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quiz Studio: My Lessons row → create interactive quiz session -->
+    <div id="teacherQuizComposerModal"
+      class="fixed inset-0 bg-slate-900/55 z-[10063] hidden flex items-start md:items-center justify-center overflow-y-auto py-4 px-3"
+      onclick="closeQuizComposerModal()"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="teacherQuizComposerHeading">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-auto border border-violet-100"
+        onclick="event.stopPropagation()">
+        <div class="bg-gradient-to-r from-violet-600 via-indigo-600 to-sky-600 text-white px-5 py-4 rounded-t-2xl flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h2 id="teacherQuizComposerHeading" class="text-lg md:text-xl font-bold truncate">Quiz Studio</h2>
+            <p id="teacherQuizComposerLessonTitle" class="text-sm text-violet-100 truncate mt-1"></p>
+          </div>
+          <button type="button" onclick="closeQuizComposerModal()"
+            class="shrink-0 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+            aria-label="Close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-sm text-gray-600">Create an in-class quiz experience with a few taps. Choose section, mode, and number of questions.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="rounded-xl border border-violet-100 bg-violet-50/70 p-3">
+              <label for="teacherQuizClassSectionSelect" class="block text-xs font-semibold text-violet-800 mb-1">Class section</label>
+              <select id="teacherQuizClassSectionSelect"
+                class="w-full px-3 py-2.5 rounded-lg border border-violet-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-400">
+                <option value="">Select section</option>
+              </select>
+            </div>
+            <div class="rounded-xl border border-sky-100 bg-sky-50/70 p-3">
+              <label for="teacherQuizQuestionCount" class="block text-xs font-semibold text-sky-800 mb-1">Number of questions</label>
+              <input id="teacherQuizQuestionCount" type="number" min="3" max="20" value="5"
+                class="w-full px-3 py-2.5 rounded-lg border border-sky-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-400" />
+            </div>
+          </div>
+          <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
+            <p class="text-xs font-semibold text-indigo-800 mb-2">Delivery mode</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <button type="button" id="teacherQuizModeDeviceBtn"
+                onclick="setTeacherQuizDeliveryMode('device')"
+                class="teacher-quiz-mode-btn border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-800 text-sm rounded-lg px-3 py-2.5 font-semibold transition-colors">
+                <i class="fas fa-mobile-screen-button mr-2"></i>Device mode
+              </button>
+              <button type="button" id="teacherQuizModeScreenBtn"
+                onclick="setTeacherQuizDeliveryMode('screen')"
+                class="teacher-quiz-mode-btn border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-800 text-sm rounded-lg px-3 py-2.5 font-semibold transition-colors">
+                <i class="fas fa-display mr-2"></i>Screen / paper mode
+              </button>
+            </div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <p class="text-xs font-semibold text-gray-700 mb-1">Session preview</p>
+            <p id="teacherQuizSummaryLine" class="text-sm text-gray-700">Choose a section to preview your quiz setup.</p>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <button type="button" id="teacherCreateQuizBtn" onclick="createTeacherQuizSession()"
+              class="flex-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white py-2.5 px-4 rounded-lg font-semibold hover:from-violet-700 hover:to-indigo-700 text-sm shadow-sm">
+              <i class="fas fa-bolt mr-2"></i>Create Quiz Session
+            </button>
+            <button type="button" onclick="refreshTeacherQuizComposerSections(true)"
+              class="sm:w-auto bg-white border border-violet-300 text-violet-800 py-2.5 px-4 rounded-lg font-semibold hover:bg-violet-50 text-sm">
+              <i class="fas fa-rotate mr-1"></i>Reload
+            </button>
+          </div>
+          <p id="teacherQuizComposerStatus" class="text-xs text-gray-500 min-h-[1rem]" aria-live="polite"></p>
+          <button type="button" onclick="closeQuizComposerModal()"
+            class="w-full py-2 rounded-lg border border-gray-300 text-gray-800 font-medium hover:bg-gray-50 text-sm">
             Cancel
           </button>
         </div>
@@ -6444,6 +6547,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                     <button class="action-btn" style="background: #e0e7ff; color: #3730a3;" title="Publish to school classes" onclick="openQuickPublishModal('${lesson.id}')">
                       <i class="fas fa-school"></i>
                     </button>
+                    <button class="action-btn" style="background: #ede9fe; color: #6d28d9;" title="Create quiz session" onclick="openQuizComposerModal('${lesson.id}')">
+                      <i class="fas fa-wand-magic-sparkles"></i>
+                    </button>
                     <button class="action-btn edit-btn" title="Edit" onclick="editLesson('${lesson.id}')">
                       <i class="fas fa-edit"></i>
                     </button>
@@ -6837,6 +6943,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       window._teacherTeachingSectionsCache = null;
       window._quickPublishLessonId = null;
+      window._quizComposerLessonId = null;
+      window._quizComposerDeliveryMode = 'screen';
 
       async function loadTeacherTeachingSections(force) {
         if (!force && window._teacherTeachingSectionsCache != null) {
@@ -7013,6 +7121,229 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function setTeacherQuizComposerStatus(msg, tone) {
+        const el = document.getElementById('teacherQuizComposerStatus');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.className = 'text-xs min-h-[1rem] '
+          + (tone === 'error' ? 'text-red-600' : tone === 'ok' ? 'text-emerald-700' : 'text-gray-500');
+      }
+
+      function updateTeacherQuizSummaryLine() {
+        const summary = document.getElementById('teacherQuizSummaryLine');
+        if (!summary) return;
+        const secSelect = document.getElementById('teacherQuizClassSectionSelect');
+        const qCount = document.getElementById('teacherQuizQuestionCount');
+        const selectedOpt = secSelect && secSelect.selectedOptions ? secSelect.selectedOptions[0] : null;
+        const sectionLabel = selectedOpt && selectedOpt.value ? selectedOpt.textContent.trim() : 'no section selected';
+        const numQuestions = qCount ? Math.max(3, Math.min(20, parseInt(qCount.value || '5', 10) || 5)) : 5;
+        const modeLabel = window._quizComposerDeliveryMode === 'device' ? 'device mode' : 'screen/paper mode';
+        summary.textContent = 'Quiz will run in ' + modeLabel + ' with ' + numQuestions + ' questions for ' + sectionLabel + '.';
+      }
+
+      function setTeacherQuizDeliveryMode(mode) {
+        window._quizComposerDeliveryMode = (mode === 'device') ? 'device' : 'screen';
+        const btnDevice = document.getElementById('teacherQuizModeDeviceBtn');
+        const btnScreen = document.getElementById('teacherQuizModeScreenBtn');
+        if (btnDevice) {
+          btnDevice.classList.toggle('bg-indigo-600', window._quizComposerDeliveryMode === 'device');
+          btnDevice.classList.toggle('text-white', window._quizComposerDeliveryMode === 'device');
+          btnDevice.classList.toggle('border-indigo-600', window._quizComposerDeliveryMode === 'device');
+        }
+        if (btnScreen) {
+          btnScreen.classList.toggle('bg-indigo-600', window._quizComposerDeliveryMode === 'screen');
+          btnScreen.classList.toggle('text-white', window._quizComposerDeliveryMode === 'screen');
+          btnScreen.classList.toggle('border-indigo-600', window._quizComposerDeliveryMode === 'screen');
+        }
+        updateTeacherQuizSummaryLine();
+      }
+
+      async function refreshTeacherQuizComposerSections(force) {
+        const select = document.getElementById('teacherQuizClassSectionSelect');
+        if (!select) return;
+        setTeacherQuizComposerStatus('', '');
+        select.innerHTML = '<option value="">Loading sections…</option>';
+        try {
+          const secs = await loadTeacherTeachingSections(!!force);
+          if (!secs.length) {
+            select.innerHTML = '<option value="">No sections assigned</option>';
+            setTeacherQuizComposerStatus('No class sections assigned yet. Ask coordinator to assign one first.', 'error');
+            updateTeacherQuizSummaryLine();
+            return;
+          }
+          const options = ['<option value="">Select section</option>'].concat(
+            secs.map(function (s) {
+              const sid = parseInt(s.id, 10) || 0;
+              const label = (s.display_name && String(s.display_name).trim())
+                ? String(s.display_name).trim()
+                : ((s.subject_name || 'Subject') + ' — G' + String(s.grade_level || '?') + ' Sec ' + String(s.section || '?'));
+              return '<option value="' + sid + '">' + escapeHtml(label + ' (' + String(s.school_code || '') + ')') + '</option>';
+            })
+          );
+          select.innerHTML = options.join('');
+          updateTeacherQuizSummaryLine();
+        } catch (e) {
+          select.innerHTML = '<option value="">Could not load sections</option>';
+          setTeacherQuizComposerStatus(e.message || 'Failed to load sections', 'error');
+          updateTeacherQuizSummaryLine();
+        }
+      }
+
+      function openQuizComposerModal(lessonId) {
+        if (!lessonId) {
+          showToast('No lesson selected', 'error');
+          return;
+        }
+        window._quizComposerLessonId = String(lessonId);
+        const lessons = window.availableLessons || [];
+        const found = lessons.find(function (l) { return String(l.id) === String(lessonId); });
+        const titleEl = document.getElementById('teacherQuizComposerLessonTitle');
+        if (titleEl) {
+          titleEl.textContent = found && found.title ? found.title : ('Lesson #' + lessonId);
+        }
+        const qCount = document.getElementById('teacherQuizQuestionCount');
+        if (qCount) qCount.value = '5';
+        const select = document.getElementById('teacherQuizClassSectionSelect');
+        if (select) select.onchange = updateTeacherQuizSummaryLine;
+        if (qCount) qCount.oninput = updateTeacherQuizSummaryLine;
+        setTeacherQuizDeliveryMode('screen');
+        const modal = document.getElementById('teacherQuizComposerModal');
+        if (modal) {
+          try { document.body.appendChild(modal); } catch (_) {}
+          modal.classList.remove('hidden');
+          modal.style.display = 'flex';
+        }
+        void refreshTeacherQuizComposerSections(false);
+      }
+
+      function closeQuizComposerModal() {
+        const modal = document.getElementById('teacherQuizComposerModal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.style.display = '';
+        }
+        window._quizComposerLessonId = null;
+        setTeacherQuizComposerStatus('', '');
+      }
+
+      async function createTeacherQuizSession() {
+        if (!window._quizComposerLessonId) {
+          showToast('Open quiz studio from a lesson first', 'error');
+          return;
+        }
+        const select = document.getElementById('teacherQuizClassSectionSelect');
+        const qCountEl = document.getElementById('teacherQuizQuestionCount');
+        const createBtn = document.getElementById('teacherCreateQuizBtn');
+        const sectionId = select ? parseInt(select.value || '0', 10) : 0;
+        const numQuestions = qCountEl ? Math.max(3, Math.min(20, parseInt(qCountEl.value || '5', 10) || 5)) : 5;
+        if (!sectionId) {
+          setTeacherQuizComposerStatus('Please select a class section.', 'error');
+          showToast('Select a class section first', 'warning');
+          return;
+        }
+        const originalHtml = createBtn ? createBtn.innerHTML : '';
+        if (createBtn) {
+          createBtn.disabled = true;
+          createBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating…';
+        }
+        setTeacherQuizComposerStatus('Creating quiz session…', '');
+        try {
+          const r = await fetch('/api/quizzes', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              Accept: 'application/json'
+            },
+            body: JSON.stringify({
+              lesson_id: parseInt(window._quizComposerLessonId, 10),
+              class_section_id: sectionId,
+              delivery_mode: window._quizComposerDeliveryMode || 'screen',
+              num_questions: numQuestions
+            })
+          });
+          const d = await r.json().catch(function () { return {}; });
+          if (!r.ok) throw new Error((d && d.error) ? d.error : ('HTTP ' + r.status));
+          const qid = d && d.id ? d.id : null;
+          const okMsg = qid ? ('Quiz session #' + qid + ' created successfully.') : 'Quiz session created successfully.';
+          setTeacherQuizComposerStatus(okMsg, 'ok');
+          showToast(okMsg, 'success');
+        } catch (e) {
+          setTeacherQuizComposerStatus(e.message || 'Could not create quiz session', 'error');
+          showToast(e.message || 'Could not create quiz session', 'error');
+        } finally {
+          if (createBtn) {
+            createBtn.disabled = false;
+            createBtn.innerHTML = originalHtml || '<i class="fas fa-bolt mr-2"></i>Create Quiz Session';
+          }
+        }
+      }
+
+      // ── Delivery Guidance (teacher-triggered, never auto-generated) ──
+
+      function _renderDeliveryGuidancePayload(payload) {
+        const tips = payload.delivery_tips || [];
+        const demo = payload.technique_demo || payload.technique_demonstration || '';
+        const examples = payload.real_world_examples || [];
+        const tipsEl = document.getElementById('dgTips');
+        const demoEl = document.getElementById('dgDemo');
+        const exEl = document.getElementById('dgExamples');
+        const panel = document.getElementById('deliveryGuidancePanel');
+        if (tipsEl) tipsEl.innerHTML = tips.map(function (t, i) { return '<p class="text-xs text-gray-600"><span class="font-semibold">' + (i + 1) + '.</span> ' + escapeHtml(t) + '</p>'; }).join('') || '<p class="text-xs text-gray-500">No tips returned.</p>';
+        if (demoEl) demoEl.textContent = demo || 'No technique demonstration returned.';
+        if (exEl) exEl.innerHTML = examples.map(function (ex, i) { return '<p class="text-xs text-gray-600"><span class="font-semibold">' + (i + 1) + '.</span> ' + escapeHtml(typeof ex === 'string' ? ex : (ex.example || ex.text || JSON.stringify(ex))) + '</p>'; }).join('') || '<p class="text-xs text-gray-500">No examples returned.</p>';
+        if (panel) panel.classList.remove('hidden');
+      }
+
+      async function loadExistingDeliveryGuidance(lessonId) {
+        if (!lessonId) return;
+        try {
+          const r = await fetch('/api/lessons/' + encodeURIComponent(lessonId) + '/delivery-guidance', {
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          if (!r.ok) return;
+          const d = await r.json().catch(function () { return {}; });
+          if (d.exists && d.payload) {
+            _renderDeliveryGuidancePayload(d.payload);
+            const statusEl = document.getElementById('deliveryGuidanceStatus');
+            if (statusEl) statusEl.textContent = 'Previous guidance loaded. Click button to regenerate.';
+          }
+        } catch (_) { /* silent */ }
+      }
+
+      async function requestDeliveryGuidance() {
+        const lesson = window.currentViewedLessonData;
+        if (!lesson || !lesson.id) {
+          showToast('No lesson selected', 'error');
+          return;
+        }
+        const btn = document.getElementById('requestDeliveryGuidanceBtn');
+        const statusEl = document.getElementById('deliveryGuidanceStatus');
+        const panel = document.getElementById('deliveryGuidancePanel');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating…'; }
+        if (statusEl) statusEl.textContent = 'Requesting delivery guidance from AI…';
+        try {
+          const r = await fetch('/api/lessons/' + encodeURIComponent(lesson.id) + '/delivery-guidance', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' }
+          });
+          const d = await r.json().catch(function () { return {}; });
+          if (!r.ok) throw new Error((d && d.error) ? d.error : ('HTTP ' + r.status));
+          _renderDeliveryGuidancePayload(d.payload || d);
+          if (statusEl) statusEl.textContent = 'Guidance generated. Updated: ' + (d.updated_at ? new Date(d.updated_at).toLocaleString() : 'now');
+          showToast('Delivery guidance ready', 'success');
+        } catch (e) {
+          if (statusEl) statusEl.textContent = 'Error: ' + (e.message || 'Request failed');
+          showToast(e.message || 'Could not generate guidance', 'error');
+        } finally {
+          if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> <span>Generate delivery guidance</span>'; }
+        }
+      }
+
       async function publishLessonToSelectedSections() {
         const lesson = window.currentViewedLessonData;
         if (!lesson || !lesson.id) {
@@ -7049,6 +7380,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           // Store current lesson ID globally for button handlers
           window.currentViewLessonId = lesson.id;
           window.currentViewedLessonData = lesson;
+
+          // Reset delivery guidance panel (clear previous lesson's guidance)
+          const dgPanel = document.getElementById('deliveryGuidancePanel');
+          const dgStatus = document.getElementById('deliveryGuidanceStatus');
+          if (dgPanel) dgPanel.classList.add('hidden');
+          if (dgStatus) dgStatus.textContent = '';
+
+          // Load existing guidance silently (if previously generated)
+          loadExistingDeliveryGuidance(lesson.id);
 
           // Populate metadata
           const titleEl = document.getElementById('viewLessonTitle');
@@ -10752,12 +11092,18 @@ Align everything with the lesson objectives and do not invent missing informatio
           const testPromptModal = document.getElementById('testPromptModal');
           const ragPromptModal = document.getElementById('ragPromptModal');
           const teacherQuickPublishModal = document.getElementById('teacherQuickPublishModal');
+          const teacherQuizComposerModal = document.getElementById('teacherQuizComposerModal');
 
           if (teacherQuickPublishModal) {
             teacherQuickPublishModal.classList.add('hidden');
             teacherQuickPublishModal.style.display = '';
           }
           window._quickPublishLessonId = null;
+          if (teacherQuizComposerModal) {
+            teacherQuizComposerModal.classList.add('hidden');
+            teacherQuizComposerModal.style.display = '';
+          }
+          window._quizComposerLessonId = null;
 
           if (viewLessonModal) {
             viewLessonModal.classList.add('hidden');

@@ -18,9 +18,11 @@ def get_default_route_by_role(role: Optional[str]) -> str:
 
     Roles:
     - admin, platform_admin, district_admin, school_admin -> /admin/
-    - principal, coordinator -> /school/hub (no create-school UI; super tools at /admin/school-operations)
-    - teacher -> /teacher-dashboard
-    - student, parent, other -> /student-dashboard
+    - coordinator -> /school/coordinator-dashboard
+    - principal  -> /school/principal-dashboard
+    - teacher    -> /teacher-dashboard
+    - parent     -> /school/hub
+    - student, other -> /student-dashboard
     """
     normalized = (role or "").strip().lower()
 
@@ -33,11 +35,10 @@ def get_default_route_by_role(role: Optional[str]) -> str:
         return "/admin/"
     if normalized == "teacher":
         return "/teacher-dashboard"
-    if normalized in (
-        "principal",
-        "coordinator",
-    ):
-        return "/school/hub"
+    if normalized == "coordinator":
+        return "/school/coordinator-dashboard"
+    if normalized == "principal":
+        return "/school/principal-dashboard"
     if normalized == "parent":
         return "/school/hub"
 

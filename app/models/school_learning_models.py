@@ -36,6 +36,9 @@ class LectureClassSection(Base):
     )
     published_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
 
+    lesson = relationship("Lesson", back_populates="lecture_class_sections")
+    class_section = relationship("ClassSection", back_populates="lecture_links")
+
     __table_args__ = (
         Index("idx_lecture_class_sections_section", "class_section_id"),
     )
@@ -64,6 +67,8 @@ class QuizSession(Base):
     submissions = relationship(
         "QuizSubmission", back_populates="quiz_session", cascade="all, delete-orphan"
     )
+    lesson = relationship("Lesson", foreign_keys=[lesson_id])
+    class_section = relationship("ClassSection", foreign_keys=[class_section_id])
 
     __table_args__ = (
         CheckConstraint("delivery_mode IN ('device', 'screen')", name="check_quiz_delivery_mode"),
@@ -93,3 +98,23 @@ class QuizSubmission(Base):
         UniqueConstraint("quiz_session_id", "student_user_id", name="uq_quiz_submission_per_student"),
         Index("idx_quiz_submissions_student", "student_user_id"),
     )
+
+
+class LessonDeliveryGuidance(Base):
+    """
+    Teacher-triggered delivery guidance only (never auto-filled during lesson generation).
+    Stores structured JSON for API/export.
+    """
+
+    __tablename__ = "lesson_delivery_guidance"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    lesson_id = Column(Integer, ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    teacher_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
+
+    lesson = relationship("Lesson", back_populates="delivery_guidance")
+
+    __table_args__ = (Index("idx_delivery_guidance_teacher", "teacher_user_id"),)

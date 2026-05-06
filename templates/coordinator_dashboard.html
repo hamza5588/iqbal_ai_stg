@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coordinator Dashboard | Iqbal AI - Secure Learning Platform</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'], display: ['Poppins', 'Inter', 'sans-serif'] },
+          colors: {
+            primary: { 50:'#f0f9ff', 100:'#e0f2fe', 200:'#bae6fd', 300:'#7dd3fc', 400:'#38bdf8', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1', 800:'#075985', 900:'#0c4a6e' },
+            surface: { 50:'#fafafa', 100:'#f5f5f5', 900:'#171717' },
+            accent: { 500:'#ec4899', 600:'#db2777' }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    .toast { position:fixed; top:1.25rem; right:1.25rem; z-index:9999; padding:.75rem 1.25rem; border-radius:.75rem; font-size:.875rem; font-weight:600; color:#fff; box-shadow:0 4px 20px rgba(0,0,0,.15); transition:opacity .3s; }
+    .toast.success { background:#16a34a; }
+    .toast.error { background:#dc2626; }
+    .toast.info { background:#0284c7; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+    .mobile-sidebar { position: fixed; left: -100%; transition: left 0.3s ease; z-index: 50; width: 280px; height: 100vh; background: white; }
+    .mobile-sidebar.open { left: 0; }
+    .mobile-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    .mobile-overlay.open { opacity: 1; pointer-events: all; }
+    .input { width:100%; border-radius:0.5rem; border:1px solid #cbd5e1; padding:0.5rem 0.75rem; font-size:0.875rem; background:#fff; }
+    .input:focus { outline:none; box-shadow:0 0 0 2px rgba(14,165,233,0.35); border-color:#0ea5e9; }
+    .btn-primary { display:inline-flex; align-items:center; gap:0.5rem; background:#0284c7; color:white; font-weight:600; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; border:none; cursor:pointer; transition:background .15s; }
+    .btn-primary:hover { background:#0369a1; }
+    .btn-secondary { display:inline-flex; align-items:center; gap:0.5rem; background:#fff; color:#334155; font-weight:600; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; border:1px solid #cbd5e1; cursor:pointer; transition:background .15s; }
+    .btn-secondary:hover { background:#f8fafc; }
+    .badge { display:inline-flex; align-items:center; padding:0.125rem 0.625rem; border-radius:9999px; font-size:0.75rem; font-weight:500; }
+    .coop-table { width:100%; font-size:0.875rem; border-collapse:collapse; }
+    .coop-table thead th { padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+    .coop-table tbody td { padding:0.75rem 1rem; border-bottom:1px solid #f1f5f9; color:#334155; }
+    .coop-table tbody tr:hover td { background:rgba(248,250,252,0.85); }
+    .coop-table tbody tr:last-child td { border-bottom:none; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-surface-50 to-white font-sans text-surface-900 antialiased">
+
+  <div id="mobileOverlay" class="mobile-overlay" onclick="toggleMobileSidebar()"></div>
+
+  <div class="flex h-screen w-screen overflow-hidden">
+    <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex md:flex-col shrink-0">
+      <div class="p-4 border-b border-gray-200">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shrink-0">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-6 h-6" alt="Iqbal AI" />
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">Iqbal AI</p>
+            <p class="text-sm font-bold text-gray-900 truncate">Coordinator</p>
+          </div>
+        </div>
+      </div>
+      <p class="px-4 pt-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Workspace</p>
+      <nav class="p-4 pt-1 space-y-1 flex-1">
+        <button type="button" id="nav-sections" onclick="switchTab('sections')" class="w-full py-2.5 px-3 flex items-center justify-between rounded-lg text-sm font-semibold transition-all duration-200 text-left bg-primary-50 text-primary-800 ring-1 ring-primary-200">
+          <span class="flex items-center gap-3"><i class="fas fa-layer-group w-5 text-primary-600"></i>Class Sections</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </button>
+        <button type="button" id="nav-roster" onclick="switchTab('roster')" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all duration-200 text-left">
+          <span class="flex items-center gap-3"><i class="fas fa-list-ol w-5 text-indigo-500"></i>Roster</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </button>
+        <button type="button" id="nav-quiz" onclick="switchTab('quiz')" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all duration-200 text-left">
+          <span class="flex items-center gap-3"><i class="fas fa-chart-bar w-5 text-violet-500"></i>Quiz Results</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </button>
+        <button type="button" id="nav-setup" onclick="switchTab('setup')" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all duration-200 text-left">
+          <span class="flex items-center gap-3"><i class="fas fa-cog w-5 text-gray-500"></i>School Setup</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </button>
+        <div class="pt-3 mt-2 border-t border-gray-100 space-y-1">
+          <a href="/school/hub" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all duration-200">
+            <span class="flex items-center gap-3"><i class="fas fa-school w-5 text-indigo-500"></i>School &amp; classes</span>
+            <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+          </a>
+          <a href="/school/principal-dashboard" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all duration-200">
+            <span class="flex items-center gap-3"><i class="fas fa-user-tie w-5 text-violet-600"></i>Principal view</span>
+            <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+          </a>
+          <a href="/teacher-dashboard" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all duration-200">
+            <span class="flex items-center gap-3"><i class="fas fa-chalkboard-teacher w-5 text-primary-500"></i>Teacher dashboard</span>
+            <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+          </a>
+        </div>
+      </nav>
+      <div class="p-4 border-t border-gray-200">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xs font-bold shrink-0">C</div>
+            <p class="text-xs text-gray-500 truncate">Coordinator</p>
+          </div>
+          <a href="/logout" class="w-9 h-9 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors" title="Logout"><i class="fas fa-sign-out-alt"></i></a>
+        </div>
+      </div>
+    </aside>
+
+    <aside id="mobileSidebar" class="mobile-sidebar md:hidden flex flex-col border-r border-gray-200 overflow-y-auto">
+      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        <span class="font-bold text-gray-900">Menu</span>
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-700"><i class="fas fa-times text-lg"></i></button>
+      </div>
+      <nav class="p-4 space-y-1 flex-1">
+        <button type="button" id="mnav-sections" onclick="switchTab('sections'); toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-left text-gray-700 hover:bg-gray-100"><i class="fas fa-layer-group w-5 text-primary-500"></i>Class Sections</button>
+        <button type="button" id="mnav-roster" onclick="switchTab('roster'); toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-left text-gray-700 hover:bg-gray-100"><i class="fas fa-list-ol w-5 text-indigo-500"></i>Roster</button>
+        <button type="button" id="mnav-quiz" onclick="switchTab('quiz'); toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-left text-gray-700 hover:bg-gray-100"><i class="fas fa-chart-bar w-5 text-violet-500"></i>Quiz Results</button>
+        <button type="button" id="mnav-setup" onclick="switchTab('setup'); toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-left text-gray-700 hover:bg-gray-100"><i class="fas fa-cog w-5 text-gray-500"></i>School Setup</button>
+        <a href="/school/hub" onclick="toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"><i class="fas fa-school w-5 text-indigo-500"></i>School hub</a>
+        <a href="/school/principal-dashboard" onclick="toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"><i class="fas fa-user-tie w-5 text-violet-600"></i>Principal</a>
+        <a href="/teacher-dashboard" onclick="toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"><i class="fas fa-chalkboard-teacher w-5 text-primary-500"></i>Teacher</a>
+      </nav>
+      <div class="p-4 border-t border-gray-200">
+        <a href="/logout" class="w-full py-2.5 px-3 flex items-center justify-center gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm font-semibold"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div class="md:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-700"><i class="fas fa-bars text-xl"></i></button>
+        <h1 class="font-bold text-base text-gray-900 truncate">Coordinator</h1>
+        <span class="w-8"></span>
+      </div>
+      <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <div class="max-w-7xl mx-auto w-full px-4 py-6 space-y-6 pb-12">
+          <div>
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">School operations</p>
+            <h2 class="text-xl font-bold text-gray-900 font-display">Coordinator workspace</h2>
+            <p class="text-sm text-gray-500 mt-0.5">Same navigation pattern as the teacher dashboard — use the sidebar to switch tools.</p>
+          </div>
+          <div class="rounded-xl md:rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4 md:p-5">
+            <div class="flex items-start gap-3">
+              <div class="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0"><i class="fas fa-lightbulb text-indigo-600"></i></div>
+              <div>
+                <h3 class="text-sm font-bold text-gray-900">Teachers publish from My Lessons</h3>
+                <p class="text-xs md:text-sm text-gray-600 mt-1">Lesson publishing to class sections stays on the teacher dashboard. You manage subjects, rosters, and sections here.</p>
+              </div>
+            </div>
+          </div>
+
+    <div id="statsRow" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl p-4 text-white">
+        <p class="text-primary-100 text-xs font-medium uppercase tracking-wide mb-1">Schools</p>
+        <p id="statSchools" class="text-3xl font-bold">–</p>
+      </div>
+      <div class="bg-gradient-to-br from-violet-600 to-violet-800 rounded-xl p-4 text-white">
+        <p class="text-violet-100 text-xs font-medium uppercase tracking-wide mb-1">Class Sections</p>
+        <p id="statSections" class="text-3xl font-bold">–</p>
+      </div>
+      <div class="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-xl p-4 text-white">
+        <p class="text-emerald-100 text-xs font-medium uppercase tracking-wide mb-1">Roster Entries</p>
+        <p id="statRoster" class="text-3xl font-bold">–</p>
+      </div>
+      <div class="bg-gradient-to-br from-amber-500 to-amber-700 rounded-xl p-4 text-white">
+        <p class="text-amber-100 text-xs font-medium uppercase tracking-wide mb-1">Linked Students</p>
+        <p id="statLinked" class="text-3xl font-bold">–</p>
+      </div>
+    </div>
+
+    <!-- TAB: Class Sections -->
+    <section id="panel-sections" class="space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-base font-bold text-slate-900"><i class="fas fa-layer-group text-primary-600 mr-2"></i>My Class Sections</h2>
+          <button onclick="loadSections()" class="btn-secondary text-xs py-1.5"><i class="fas fa-rotate"></i> Refresh</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="coop-table">
+            <thead><tr>
+              <th>Section</th><th>Subject</th><th>Grade</th><th>Teacher</th><th>School</th><th>Year</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="sectionsBody">
+              <tr><td colspan="8" class="text-center text-slate-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Create Class Section -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900 mb-4"><i class="fas fa-plus-circle text-primary-600 mr-2"></i>Create Class Section</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">School ID</label>
+            <input id="cs-school-id" type="number" placeholder="1" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Subject ID</label>
+            <input id="cs-subject-id" type="number" placeholder="1" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Teacher User ID</label>
+            <input id="cs-teacher-id" type="number" placeholder="5" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Grade Level</label>
+            <input id="cs-grade" placeholder="8" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Section</label>
+            <input id="cs-section" placeholder="A" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Academic Year</label>
+            <input id="cs-year" placeholder="2025-2026" class="input" />
+          </div>
+          <div class="sm:col-span-2 lg:col-span-3">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Display Name (optional)</label>
+            <input id="cs-display" placeholder="Grade 8A – Physics" class="input" />
+          </div>
+        </div>
+        <button onclick="createClassSection()" class="btn-primary mt-4">
+          <i class="fas fa-plus"></i>Create Section
+        </button>
+        <p id="cs-status" class="text-xs mt-2 text-slate-500 min-h-[1.25rem]" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────── TAB: Roster ──────────────────────────────── -->
+    <section id="panel-roster" class="hidden space-y-4">
+      <!-- Roster Viewer -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-base font-bold text-slate-900"><i class="fas fa-list-ol text-primary-600 mr-2"></i>View Roster</h2>
+          <div class="flex gap-2 items-center flex-wrap">
+            <input id="view-section-id" type="number" placeholder="Section ID" class="input w-32" />
+            <button onclick="loadRoster()" class="btn-primary text-xs py-1.5"><i class="fas fa-search"></i> Load</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="coop-table">
+            <thead><tr>
+              <th>Roll</th><th>First Name</th><th>Last Name</th><th>Status</th><th>Student Linked</th>
+            </tr></thead>
+            <tbody id="rosterBody">
+              <tr><td colspan="5" class="text-center text-slate-400 py-8">Enter a class section ID and click Load</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="rosterPagination" class="px-5 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 hidden">
+          <span id="rosterCount"></span>
+        </div>
+      </div>
+
+      <!-- Add Single Roster Entry -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900 mb-4"><i class="fas fa-user-plus text-emerald-600 mr-2"></i>Add Roster Entry</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Class Section ID</label>
+            <input id="re-section" type="number" placeholder="1" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Roll Number</label>
+            <input id="re-roll" placeholder="101" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">First Name</label>
+            <input id="re-first" placeholder="Ali" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Last Name</label>
+            <input id="re-last" placeholder="Khan" class="input" />
+          </div>
+        </div>
+        <button onclick="addRosterEntry()" class="btn-primary mt-4">
+          <i class="fas fa-plus"></i>Add Entry
+        </button>
+        <p id="re-status" class="text-xs mt-2 text-slate-500 min-h-[1.25rem]" aria-live="polite"></p>
+      </div>
+
+      <!-- CSV Roster Import -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900 mb-2"><i class="fas fa-file-csv text-amber-600 mr-2"></i>CSV Roster Import</h3>
+        <p class="text-xs text-slate-500 mb-4">Header row must include <code class="bg-slate-100 px-1 rounded">roll</code> (or <code class="bg-slate-100 px-1 rounded">roll_number</code>), <code class="bg-slate-100 px-1 rounded">first_name</code>, <code class="bg-slate-100 px-1 rounded">last_name</code>.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Class Section ID</label>
+            <input id="csv-section" type="number" placeholder="1" class="input mb-2" />
+            <button onclick="importCSV()" class="btn-primary w-full justify-center">
+              <i class="fas fa-upload"></i>Import CSV
+            </button>
+            <p id="csv-status" class="text-xs mt-2 text-slate-500 min-h-[1.25rem]" aria-live="polite"></p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Paste CSV content</label>
+            <textarea id="csv-data" rows="7" class="input font-mono text-xs" placeholder="roll,first_name,last_name&#10;101,Ali,Khan&#10;102,Sara,Ahmed"></textarea>
+          </div>
+        </div>
+        <div id="csv-result" class="hidden mt-4 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm">
+          <p class="font-semibold text-emerald-800 mb-1"><i class="fas fa-check-circle mr-1"></i>Import Result</p>
+          <pre id="csv-result-text" class="text-xs text-emerald-700 whitespace-pre-wrap"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────── TAB: Quiz Results ──────────────────────────────── -->
+    <section id="panel-quiz" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-base font-bold text-slate-900"><i class="fas fa-chart-bar text-primary-600 mr-2"></i>Quiz Results by Class</h2>
+          <div class="flex gap-2 items-center flex-wrap">
+            <input id="qr-section-id" type="number" placeholder="Section ID" class="input w-32" />
+            <button onclick="loadClassQuizResults()" class="btn-primary text-xs py-1.5"><i class="fas fa-search"></i> Load</button>
+          </div>
+        </div>
+        <div id="quizResultsBody" class="p-5 text-sm text-slate-500">Enter a class section ID and click Load</div>
+      </div>
+
+      <!-- School-level aggregate -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-base font-bold text-slate-900"><i class="fas fa-school text-violet-600 mr-2"></i>School Quiz Summary</h2>
+          <div class="flex gap-2 items-center flex-wrap">
+            <input id="qr-school-id" type="number" placeholder="School ID" class="input w-28" />
+            <button onclick="loadSchoolQuizResults()" class="btn-primary text-xs py-1.5"><i class="fas fa-search"></i> Load</button>
+          </div>
+        </div>
+        <div id="schoolQuizBody" class="p-5 text-sm text-slate-500">Enter a school ID and click Load</div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────── TAB: School Setup ──────────────────────────────── -->
+    <section id="panel-setup" class="hidden space-y-4">
+
+      <!-- Create Subject -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900 mb-4"><i class="fas fa-book text-primary-600 mr-2"></i>Add Subject to School</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">School ID</label>
+            <input id="subj-school" type="number" placeholder="1" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Subject Name</label>
+            <input id="subj-name" placeholder="Physics" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Short Code</label>
+            <input id="subj-code" placeholder="PHY" class="input" />
+          </div>
+        </div>
+        <button onclick="createSubject()" class="btn-primary mt-4">
+          <i class="fas fa-plus"></i>Add Subject
+        </button>
+        <p id="subj-status" class="text-xs mt-2 text-slate-500 min-h-[1.25rem]" aria-live="polite"></p>
+      </div>
+
+      <!-- Assign Teacher -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900 mb-4"><i class="fas fa-chalkboard-teacher text-indigo-600 mr-2"></i>Assign Teacher to School</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">School ID</label>
+            <input id="ta-school" type="number" placeholder="1" class="input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Teacher User ID</label>
+            <input id="ta-teacher" type="number" placeholder="5" class="input" />
+          </div>
+        </div>
+        <button onclick="assignTeacher()" class="btn-primary mt-4">
+          <i class="fas fa-link"></i>Assign Teacher
+        </button>
+        <p id="ta-status" class="text-xs mt-2 text-slate-500 min-h-[1.25rem]" aria-live="polite"></p>
+      </div>
+
+      <!-- School Summary -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900 mb-4"><i class="fas fa-info-circle text-slate-500 mr-2"></i>School Summary</h3>
+        <div class="flex gap-2 items-center mb-4">
+          <input id="sum-school" type="number" placeholder="School ID" class="input w-36" />
+          <button onclick="loadSchoolSummary()" class="btn-secondary text-xs py-1.5"><i class="fas fa-search"></i> Load</button>
+        </div>
+        <pre id="sum-result" class="text-xs text-slate-600 bg-slate-50 rounded-lg p-3 whitespace-pre-wrap hidden"></pre>
+        <p id="sum-status" class="text-xs text-slate-500 min-h-[1.25rem]" aria-live="polite"></p>
+      </div>
+    </section>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    function toggleMobileSidebar() {
+      document.getElementById('mobileSidebar').classList.toggle('open');
+      document.getElementById('mobileOverlay').classList.toggle('open');
+    }
+    // ── Utilities ──
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showToast(msg, type = 'info', ms = 3500) {
+      const el = document.createElement('div');
+      el.className = 'toast ' + type;
+      el.textContent = msg;
+      document.getElementById('toastContainer').appendChild(el);
+      setTimeout(function () { el.style.opacity = '0'; setTimeout(function () { el.remove(); }, 350); }, ms);
+    }
+
+    function setStatus(id, msg, ok) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'text-xs mt-2 min-h-[1.25rem] ' + (ok ? 'text-emerald-600' : 'text-red-600');
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(opts.headers || {}) },
+        ...opts
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) throw new Error((data && data.error) ? data.error : res.statusText);
+      return data;
+    }
+
+    // ── Tabs (sidebar + mobile — same pattern as teacher dashboard) ──
+    const TABS = ['sections', 'roster', 'quiz', 'setup'];
+    var NAV_ON = 'w-full py-2.5 px-3 flex items-center justify-between rounded-lg text-sm font-semibold transition-all duration-200 text-left bg-primary-50 text-primary-800 ring-1 ring-primary-200';
+    var NAV_OFF = 'w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all duration-200 text-left';
+    var MNAV_ON = 'w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-semibold text-left bg-primary-50 text-primary-800 ring-1 ring-primary-200';
+    var MNAV_OFF = 'w-full py-2.5 px-3 flex items-center gap-3 rounded-lg text-sm font-medium text-left text-gray-700 hover:bg-gray-100';
+    function switchTab(name) {
+      TABS.forEach(function (t) {
+        document.getElementById('panel-' + t).classList.toggle('hidden', t !== name);
+        var nb = document.getElementById('nav-' + t);
+        if (nb) nb.className = t === name ? NAV_ON : NAV_OFF;
+        var mb = document.getElementById('mnav-' + t);
+        if (mb) mb.className = t === name ? MNAV_ON : MNAV_OFF;
+      });
+    }
+
+    // ── Stats ──
+    async function loadStats() {
+      try {
+        const d = await api('/api/school/schools');
+        const schools = d.schools || [];
+        document.getElementById('statSchools').textContent = schools.length;
+        let totalSections = 0, totalRoster = 0, totalLinked = 0;
+        schools.forEach(function (s) {
+          totalSections += (s.class_section_count || 0);
+          totalRoster += (s.roster_count || 0);
+          totalLinked += (s.linked_student_count || 0);
+        });
+        document.getElementById('statSections').textContent = totalSections;
+        document.getElementById('statRoster').textContent = totalRoster;
+        document.getElementById('statLinked').textContent = totalLinked;
+      } catch (e) {
+        console.warn('Stats load failed', e);
+      }
+    }
+
+    // ── Class Sections ──
+    async function loadSections() {
+      const tbody = document.getElementById('sectionsBody');
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 py-6"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>';
+      try {
+        const d = await api('/api/school/schools');
+        const schools = d.schools || [];
+        if (!schools.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 py-6">No schools assigned to you.</td></tr>';
+          return;
+        }
+        // Load sections for each school
+        const allSections = [];
+        for (const s of schools) {
+          try {
+            const sd = await api('/api/school/schools/' + s.id + '/summary');
+            // get sections
+          } catch (_) {}
+        }
+        // Use teacher sections endpoint instead
+        const sec = await api('/api/school/my-teaching-sections');
+        const secs = (sec.sections || []);
+        if (!secs.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 py-6">No class sections found for your schools.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = secs.map(function (s) {
+          const statusBadge = s.status === 'active'
+            ? '<span class="badge bg-emerald-100 text-emerald-700">active</span>'
+            : '<span class="badge bg-slate-100 text-slate-600">' + escHtml(s.status || 'unknown') + '</span>';
+          return '<tr>'
+            + '<td class="font-medium">' + escHtml(s.display_name || ('G' + s.grade_level + '-' + s.section)) + '</td>'
+            + '<td>' + escHtml(s.subject_name || '–') + '</td>'
+            + '<td>' + escHtml(s.grade_level || '–') + '</td>'
+            + '<td>ID: ' + escHtml(String(s.teacher_user_id || '–')) + '</td>'
+            + '<td>' + escHtml(s.school_name || '–') + '</td>'
+            + '<td>' + escHtml(s.academic_year || '–') + '</td>'
+            + '<td>' + statusBadge + '</td>'
+            + '<td><button class="btn-secondary text-xs py-1 px-2" onclick="setViewSection(' + s.id + ')"><i class="fas fa-list-ol mr-1"></i>Roster</button></td>'
+            + '</tr>';
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-red-500 py-6">' + escHtml(e.message) + '</td></tr>';
+      }
+    }
+
+    function closeMobileSidebar() {
+      document.getElementById('mobileSidebar').classList.remove('open');
+      document.getElementById('mobileOverlay').classList.remove('open');
+    }
+    function setViewSection(id) {
+      document.getElementById('view-section-id').value = id;
+      switchTab('roster');
+      loadRoster();
+      closeMobileSidebar();
+    }
+
+    async function createClassSection() {
+      const data = {
+        school_id: parseInt(document.getElementById('cs-school-id').value) || 0,
+        subject_id: parseInt(document.getElementById('cs-subject-id').value) || 0,
+        teacher_user_id: parseInt(document.getElementById('cs-teacher-id').value) || 0,
+        grade_level: document.getElementById('cs-grade').value.trim(),
+        section: document.getElementById('cs-section').value.trim(),
+        academic_year: document.getElementById('cs-year').value.trim(),
+        display_name: document.getElementById('cs-display').value.trim() || undefined
+      };
+      if (!data.school_id || !data.subject_id || !data.teacher_user_id || !data.grade_level || !data.section || !data.academic_year) {
+        setStatus('cs-status', 'All fields are required', false);
+        return;
+      }
+      setStatus('cs-status', 'Creating…', true);
+      try {
+        const r = await api('/api/class-sections', { method: 'POST', body: JSON.stringify(data) });
+        setStatus('cs-status', 'Created: Section ID ' + r.id, true);
+        showToast('Class section created (ID: ' + r.id + ')', 'success');
+        loadSections();
+      } catch (e) {
+        setStatus('cs-status', e.message, false);
+        showToast(e.message, 'error');
+      }
+    }
+
+    // ── Roster ──
+    async function loadRoster() {
+      const secId = parseInt(document.getElementById('view-section-id').value);
+      if (!secId) { showToast('Enter a section ID', 'error'); return; }
+      const tbody = document.getElementById('rosterBody');
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-6"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>';
+      try {
+        const d = await api('/api/class-sections/' + secId + '/roster');
+        const items = d.items || [];
+        const pagination = document.getElementById('rosterPagination');
+        const countEl = document.getElementById('rosterCount');
+        if (countEl) countEl.textContent = items.length + ' entries';
+        if (pagination) pagination.classList.remove('hidden');
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-6">No roster entries yet for this section.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = items.map(function (r) {
+          const statusBadge = r.status === 'linked'
+            ? '<span class="badge bg-emerald-100 text-emerald-700">linked</span>'
+            : r.status === 'withdrawn'
+              ? '<span class="badge bg-red-100 text-red-700">withdrawn</span>'
+              : '<span class="badge bg-amber-100 text-amber-700">expected</span>';
+          return '<tr>'
+            + '<td class="font-mono font-medium">' + escHtml(r.roll_number) + '</td>'
+            + '<td>' + escHtml(r.first_name) + '</td>'
+            + '<td>' + escHtml(r.last_name) + '</td>'
+            + '<td>' + statusBadge + '</td>'
+            + '<td class="text-slate-500">' + (r.linked_student_user_id ? 'User #' + r.linked_student_user_id : '–') + '</td>'
+            + '</tr>';
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-red-500 py-6">' + escHtml(e.message) + '</td></tr>';
+      }
+    }
+
+    async function addRosterEntry() {
+      const secId = parseInt(document.getElementById('re-section').value);
+      const roll = document.getElementById('re-roll').value.trim();
+      const first = document.getElementById('re-first').value.trim();
+      const last = document.getElementById('re-last').value.trim();
+      if (!secId || !roll || !first || !last) {
+        setStatus('re-status', 'All fields required', false);
+        return;
+      }
+      setStatus('re-status', 'Adding…', true);
+      try {
+        const r = await api('/api/class-sections/' + secId + '/roster', {
+          method: 'POST',
+          body: JSON.stringify({ roll_number: roll, first_name: first, last_name: last })
+        });
+        setStatus('re-status', 'Added: ' + r.first_name + ' ' + r.last_name + ' (roll ' + r.roll_number + ')', true);
+        showToast('Roster entry added', 'success');
+        document.getElementById('re-roll').value = '';
+        document.getElementById('re-first').value = '';
+        document.getElementById('re-last').value = '';
+        if (document.getElementById('view-section-id').value == secId) loadRoster();
+      } catch (e) {
+        setStatus('re-status', e.message, false);
+        showToast(e.message, 'error');
+      }
+    }
+
+    async function importCSV() {
+      const secId = parseInt(document.getElementById('csv-section').value);
+      const csvText = document.getElementById('csv-data').value.trim();
+      if (!secId || !csvText) {
+        setStatus('csv-status', 'Section ID and CSV data required', false);
+        return;
+      }
+      setStatus('csv-status', 'Importing…', true);
+      try {
+        const res = await fetch('/api/school/class-sections/' + secId + '/roster', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'text/csv', 'X-Requested-With': 'XMLHttpRequest' },
+          body: csvText
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error((data && data.error) ? data.error : res.statusText);
+        setStatus('csv-status', 'Import complete: ' + (data.inserted || 0) + ' added, ' + (data.skipped || 0) + ' skipped', true);
+        const result = document.getElementById('csv-result');
+        const resultText = document.getElementById('csv-result-text');
+        if (result) result.classList.remove('hidden');
+        if (resultText) resultText.textContent = JSON.stringify(data, null, 2);
+        showToast('CSV import complete', 'success');
+        document.getElementById('view-section-id').value = secId;
+        loadStats();
+      } catch (e) {
+        setStatus('csv-status', e.message, false);
+        showToast(e.message, 'error');
+      }
+    }
+
+    // ── Quiz Results ──
+    async function loadClassQuizResults() {
+      const secId = parseInt(document.getElementById('qr-section-id').value);
+      if (!secId) { showToast('Enter a section ID', 'error'); return; }
+      const host = document.getElementById('quizResultsBody');
+      host.innerHTML = '<p class="text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</p>';
+      try {
+        const d = await api('/api/coordinator/classes/' + secId + '/quiz-results');
+        const sessions = d.sessions || d.quizzes || [];
+        if (!sessions.length) {
+          host.innerHTML = '<p class="text-slate-400 text-sm">No quiz sessions found for this section.</p>';
+          return;
+        }
+        host.innerHTML = '<div class="overflow-x-auto"><table>'
+          + '<thead><tr><th>Quiz ID</th><th>Lesson</th><th>Avg Score</th><th>Submissions</th><th>Status</th><th>Created</th></tr></thead>'
+          + '<tbody>'
+          + sessions.map(function (s) {
+            const avg = (s.average_score != null) ? (s.average_score * 100).toFixed(1) + '%' : '–';
+            return '<tr>'
+              + '<td class="font-mono">#' + s.quiz_session_id + '</td>'
+              + '<td>' + escHtml(s.lesson_title || ('Lesson #' + s.lesson_id)) + '</td>'
+              + '<td class="font-semibold">' + avg + '</td>'
+              + '<td>' + (s.submission_count || 0) + '</td>'
+              + '<td><span class="badge ' + (s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600') + '">' + escHtml(s.status || '–') + '</span></td>'
+              + '<td class="text-slate-500 text-xs">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '–') + '</td>'
+              + '</tr>';
+          }).join('')
+          + '</tbody></table></div>';
+      } catch (e) {
+        host.innerHTML = '<p class="text-red-500 text-sm">' + escHtml(e.message) + '</p>';
+      }
+    }
+
+    async function loadSchoolQuizResults() {
+      const schoolId = parseInt(document.getElementById('qr-school-id').value);
+      if (!schoolId) { showToast('Enter a school ID', 'error'); return; }
+      const host = document.getElementById('schoolQuizBody');
+      host.innerHTML = '<p class="text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</p>';
+      try {
+        const d = await api('/api/coordinator/school/quiz-results?school_id=' + schoolId);
+        const bySubject = d.by_subject || [];
+        if (!bySubject.length) {
+          host.innerHTML = '<p class="text-slate-400 text-sm">No quiz data found for this school.</p>';
+          return;
+        }
+        host.innerHTML = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">'
+          + bySubject.map(function (s) {
+            const avg = (s.average_score != null) ? (s.average_score * 100).toFixed(1) + '%' : '–';
+            return '<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">'
+              + '<p class="font-semibold text-slate-800 text-sm truncate">' + escHtml(s.subject_name || 'Unknown') + '</p>'
+              + '<p class="text-2xl font-bold text-primary-600 mt-1">' + avg + '</p>'
+              + '<p class="text-xs text-slate-500">' + (s.quiz_count || 0) + ' quizzes · ' + (s.submission_count || 0) + ' submissions</p>'
+              + '</div>';
+          }).join('')
+          + '</div>';
+      } catch (e) {
+        host.innerHTML = '<p class="text-red-500 text-sm">' + escHtml(e.message) + '</p>';
+      }
+    }
+
+    // ── School Setup ──
+    async function createSubject() {
+      const schoolId = parseInt(document.getElementById('subj-school').value);
+      const name = document.getElementById('subj-name').value.trim();
+      const code = document.getElementById('subj-code').value.trim();
+      if (!schoolId || !name || !code) {
+        setStatus('subj-status', 'All fields required', false);
+        return;
+      }
+      setStatus('subj-status', 'Creating…', true);
+      try {
+        const r = await api('/api/school/schools/' + schoolId + '/subjects', {
+          method: 'POST',
+          body: JSON.stringify({ name, short_code: code })
+        });
+        setStatus('subj-status', 'Created: ' + r.name + ' (ID: ' + r.id + ')', true);
+        showToast('Subject created', 'success');
+      } catch (e) {
+        setStatus('subj-status', e.message, false);
+        showToast(e.message, 'error');
+      }
+    }
+
+    async function assignTeacher() {
+      const schoolId = parseInt(document.getElementById('ta-school').value);
+      const teacherId = parseInt(document.getElementById('ta-teacher').value);
+      if (!schoolId || !teacherId) {
+        setStatus('ta-status', 'Both fields required', false);
+        return;
+      }
+      setStatus('ta-status', 'Assigning…', true);
+      try {
+        await api('/api/school/schools/' + schoolId + '/teachers', {
+          method: 'POST',
+          body: JSON.stringify({ teacher_user_id: teacherId })
+        });
+        setStatus('ta-status', 'Teacher ' + teacherId + ' assigned to school ' + schoolId, true);
+        showToast('Teacher assigned', 'success');
+      } catch (e) {
+        setStatus('ta-status', e.message, false);
+        showToast(e.message, 'error');
+      }
+    }
+
+    async function loadSchoolSummary() {
+      const schoolId = parseInt(document.getElementById('sum-school').value);
+      if (!schoolId) { setStatus('sum-status', 'Enter a school ID', false); return; }
+      setStatus('sum-status', 'Loading…', true);
+      const pre = document.getElementById('sum-result');
+      if (pre) pre.classList.add('hidden');
+      try {
+        const d = await api('/api/school/schools/' + schoolId + '/summary');
+        if (pre) {
+          pre.textContent = JSON.stringify(d, null, 2);
+          pre.classList.remove('hidden');
+        }
+        setStatus('sum-status', '', true);
+      } catch (e) {
+        setStatus('sum-status', e.message, false);
+      }
+    }
+
+    // ── Init ──
+    loadStats();
+    loadSections();
+  </script>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Principal Dashboard | Iqbal AI - Secure Learning Platform</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'], display: ['Poppins', 'Inter', 'sans-serif'] },
+          colors: {
+            primary: { 50:'#f0f9ff', 100:'#e0f2fe', 200:'#bae6fd', 300:'#7dd3fc', 400:'#38bdf8', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1', 800:'#075985', 900:'#0c4a6e' },
+            surface: { 50:'#fafafa', 100:'#f5f5f5', 200:'#e5e5e5', 700:'#404040', 800:'#262626', 900:'#171717' },
+            accent: { 500:'#ec4899', 600:'#db2777' }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    .stat-card { transition: transform .15s, box-shadow .15s; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,.08); }
+    .toast { position:fixed; top:1.25rem; right:1.25rem; z-index:9999; padding:.75rem 1.25rem; border-radius:.75rem; font-size:.875rem; font-weight:600; color:#fff; box-shadow:0 4px 20px rgba(0,0,0,.15); }
+    .toast.success { background:#16a34a; }
+    .toast.error { background:#dc2626; }
+    @keyframes fadeInUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation: fadeInUp .5s ease-out forwards; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+    .mobile-sidebar { position: fixed; left: -100%; transition: left 0.3s ease; z-index: 50; width: 280px; height: 100vh; background: white; }
+    .mobile-sidebar.open { left: 0; }
+    .mobile-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    .mobile-overlay.open { opacity: 1; pointer-events: all; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-surface-50 to-white font-sans text-surface-900 antialiased">
+
+  <div id="mobileOverlay" class="mobile-overlay" onclick="toggleMobileSidebar()"></div>
+
+  <div class="flex h-screen w-screen overflow-hidden">
+    <!-- Desktop sidebar (matches teacher dashboard nav) -->
+    <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex md:flex-col shrink-0">
+      <div class="p-4 border-b border-gray-200">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shrink-0">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-6 h-6" alt="Iqbal AI" />
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">Iqbal AI</p>
+            <p class="text-sm font-bold text-gray-900 truncate">Principal</p>
+          </div>
+        </div>
+      </div>
+      <nav class="p-4 space-y-1 flex-1">
+        <button type="button" onclick="scrollToOverview()"
+          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 text-left">
+          <span class="flex items-center gap-3">
+            <i class="fas fa-gauge-high w-5 text-primary-500"></i>
+            <span class="font-medium text-sm">School overview</span>
+          </span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </button>
+        <a href="/school/hub" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <span class="flex items-center gap-3">
+            <i class="fas fa-school w-5 text-indigo-500"></i>
+            <span class="font-medium text-sm">School &amp; classes</span>
+          </span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+        <a href="/school/coordinator-dashboard" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <span class="flex items-center gap-3">
+            <i class="fas fa-sliders w-5 text-violet-500"></i>
+            <span class="font-medium text-sm">Coordinator tools</span>
+          </span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+        <button type="button" onclick="loadDashboard()"
+          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 text-left">
+          <span class="flex items-center gap-3">
+            <i class="fas fa-rotate w-5 text-gray-500"></i>
+            <span class="font-medium text-sm">Refresh metrics</span>
+          </span>
+        </button>
+      </nav>
+      <div class="p-4 border-t border-gray-200">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xs font-bold shrink-0">P</div>
+            <p class="text-xs text-gray-500 truncate">Principal view</p>
+          </div>
+          <a href="/logout" class="w-9 h-9 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors" title="Logout">
+            <i class="fas fa-sign-out-alt"></i>
+          </a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobile drawer -->
+    <aside id="mobileSidebar" class="mobile-sidebar md:hidden flex flex-col border-r border-gray-200 overflow-y-auto">
+      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        <span class="font-bold text-gray-900">Menu</span>
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-700"><i class="fas fa-times text-lg"></i></button>
+      </div>
+      <nav class="p-4 space-y-1 flex-1">
+        <button type="button" onclick="scrollToOverview(); toggleMobileSidebar();"
+          class="w-full py-2.5 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg text-left text-sm font-medium">
+          <i class="fas fa-gauge-high w-5 text-primary-500"></i> School overview
+        </button>
+        <a href="/school/hub" onclick="toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium">
+          <i class="fas fa-school w-5 text-indigo-500"></i> School &amp; classes
+        </a>
+        <a href="/school/coordinator-dashboard" onclick="toggleMobileSidebar();" class="w-full py-2.5 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg text-sm font-medium">
+          <i class="fas fa-sliders w-5 text-violet-500"></i> Coordinator tools
+        </a>
+        <button type="button" onclick="loadDashboard(); toggleMobileSidebar();"
+          class="w-full py-2.5 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg text-left text-sm font-medium">
+          <i class="fas fa-rotate w-5 text-gray-500"></i> Refresh metrics
+        </button>
+      </nav>
+      <div class="p-4 border-t border-gray-200">
+        <a href="/logout" class="w-full py-2.5 px-3 flex items-center justify-center gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm font-semibold">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+      </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div class="md:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-700"><i class="fas fa-bars text-xl"></i></button>
+        <h1 class="font-bold text-base text-gray-900 truncate">Principal</h1>
+        <button type="button" onclick="loadDashboard()" class="p-2 rounded-lg hover:bg-gray-100 text-primary-600" title="Refresh"><i class="fas fa-rotate"></i></button>
+      </div>
+
+      <div id="principalScroll" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <div class="max-w-7xl mx-auto w-full px-4 py-6 space-y-8 pb-10">
+
+          <div id="loadingState" class="py-16 text-center text-gray-400">
+            <i class="fas fa-spinner fa-spin text-3xl mb-3"></i>
+            <p class="text-sm">Loading school metrics…</p>
+          </div>
+
+          <div id="errorState" class="hidden py-16 text-center">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
+              <i class="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+            </div>
+            <p id="errorMsg" class="text-gray-600 text-sm"></p>
+            <button onclick="loadDashboard()" class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700">
+              <i class="fas fa-rotate"></i> Try again
+            </button>
+          </div>
+
+          <div id="dashContent" class="hidden space-y-8">
+            <div id="principal-overview" class="scroll-mt-4">
+              <p class="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Dashboard</p>
+              <h2 class="text-xl font-bold text-gray-900 font-display">School overview</h2>
+              <p class="text-sm text-gray-500 mt-0.5">High-level enrollment, teaching staff, and quiz performance.</p>
+            </div>
+
+            <div id="schoolSelector" class="hidden bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Viewing school</p>
+              <select id="schoolSelect" onchange="renderSchoolData()" class="w-full sm:w-auto rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"></select>
+            </div>
+
+            <div>
+              <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-4"><i class="fas fa-chart-pie mr-2 text-primary-600"></i>Key metrics</h3>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="stat-card bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl p-5 text-white fade-in">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <p class="text-primary-100 text-xs font-medium uppercase tracking-wide mb-2">Enrollment</p>
+                      <p id="kpiEnrollment" class="text-4xl font-bold">–</p>
+                      <p class="text-primary-200 text-xs mt-1">students linked</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <i class="fas fa-users text-lg"></i>
+                    </div>
+                  </div>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-violet-600 to-violet-800 rounded-2xl p-5 text-white fade-in" style="animation-delay:.07s">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <p class="text-violet-100 text-xs font-medium uppercase tracking-wide mb-2">Active Teachers</p>
+                      <p id="kpiTeachers" class="text-4xl font-bold">–</p>
+                      <p class="text-violet-200 text-xs mt-1">in this school</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <i class="fas fa-chalkboard-teacher text-lg"></i>
+                    </div>
+                  </div>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-5 text-white fade-in" style="animation-delay:.14s">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <p class="text-emerald-100 text-xs font-medium uppercase tracking-wide mb-2">Class Sections</p>
+                      <p id="kpiSections" class="text-4xl font-bold">–</p>
+                      <p class="text-emerald-200 text-xs mt-1">active sections</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <i class="fas fa-layer-group text-lg"></i>
+                    </div>
+                  </div>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-amber-500 to-amber-700 rounded-2xl p-5 text-white fade-in" style="animation-delay:.21s">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <p class="text-amber-100 text-xs font-medium uppercase tracking-wide mb-2">Roster Size</p>
+                      <p id="kpiRoster" class="text-4xl font-bold">–</p>
+                      <p class="text-amber-200 text-xs mt-1">total entries</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <i class="fas fa-list-ol text-lg"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-xl md:rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4 md:p-5">
+              <div class="flex items-start gap-3">
+                <div class="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+                  <i class="fas fa-lightbulb text-indigo-600"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-gray-900">Same flow as teachers</h3>
+                  <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                    Teachers publish lessons to class sections from <strong>My Lessons</strong> in the teacher dashboard.
+                    Use <strong>School &amp; classes</strong> for session context, and <strong>Coordinator tools</strong> for roster and setup.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 fade-in">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Enrollment Rate</p>
+                <div class="flex items-end gap-2 mt-2">
+                  <p id="kpiEnrollRate" class="text-3xl font-bold text-primary-600">–</p>
+                  <p class="text-gray-400 text-xs mb-1">students linked / roster</p>
+                </div>
+                <div class="mt-3 rounded-full bg-gray-100 h-2 overflow-hidden">
+                  <div id="enrollProgressBar" class="h-2 bg-primary-500 rounded-full transition-all duration-700" style="width:0%"></div>
+                </div>
+              </div>
+              <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 fade-in" style="animation-delay:.07s">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">School Info</p>
+                <p id="kpiSchoolName" class="text-lg font-bold text-gray-900 mt-2">–</p>
+                <p id="kpiSchoolCode" class="text-xs text-gray-500 mt-0.5">–</p>
+              </div>
+              <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 fade-in" style="animation-delay:.14s">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Platform Status</p>
+                <div class="flex items-center gap-2 mt-2">
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <p class="text-sm font-semibold text-emerald-700">Online</p>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">AI features active</p>
+                <p id="kpiLastUpdated" class="text-xs text-gray-400 mt-0.5">Last refreshed: –</p>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden fade-in">
+              <div class="px-5 py-4 border-b border-gray-100">
+                <h3 class="text-base font-bold text-gray-900"><i class="fas fa-chart-column text-primary-600 mr-2"></i>Quiz Performance by Subject</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Average scores across all quizzes per subject in your school</p>
+              </div>
+              <div id="subjectQuizPanel" class="p-5">
+                <p class="text-gray-400 text-sm text-center py-4">Loading subject performance…</p>
+              </div>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 fade-in">
+              <div class="flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                  <i class="fas fa-triangle-exclamation text-amber-600 text-sm"></i>
+                </div>
+                <div>
+                  <h3 class="font-bold text-amber-900 text-sm">At-Risk Students</h3>
+                  <p class="text-xs text-amber-700 mt-0.5">
+                    Student pass-probability tracking requires quiz data for at least 3 sessions per student.
+                    As quiz data accumulates, at-risk indicators will appear here automatically.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 fade-in">
+              <h3 class="text-base font-bold text-gray-900 mb-4"><i class="fas fa-clock-rotate-left text-gray-400 mr-2"></i>Recent Activity</h3>
+              <div id="recentActivity" class="space-y-3 text-sm text-gray-500">
+                <p class="text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    function toggleMobileSidebar() {
+      document.getElementById('mobileSidebar').classList.toggle('open');
+      document.getElementById('mobileOverlay').classList.toggle('open');
+    }
+    function scrollToOverview() {
+      var el = document.getElementById('principal-overview');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function showToast(msg, type, ms) {
+      ms = ms || 3500;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type || 'info');
+      el.textContent = msg;
+      document.getElementById('toastContainer').appendChild(el);
+      setTimeout(function () { el.remove(); }, ms);
+    }
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    async function api(path) {
+      const res = await fetch(path, {
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' }
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) throw new Error((data && data.error) ? data.error : res.statusText);
+      return data;
+    }
+    let _allSchools = [];
+    async function loadDashboard() {
+      document.getElementById('loadingState').classList.remove('hidden');
+      document.getElementById('dashContent').classList.add('hidden');
+      document.getElementById('errorState').classList.add('hidden');
+      try {
+        let metrics = null;
+        let schoolsData = null;
+        try { metrics = await api('/api/principal/dashboard'); } catch (principalErr) {}
+        try { schoolsData = await api('/api/school/schools'); } catch (_) {}
+        _allSchools = (schoolsData && schoolsData.schools) ? schoolsData.schools : [];
+        if (!metrics && !_allSchools.length) {
+          throw new Error('No school data accessible for your account.');
+        }
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('dashContent').classList.remove('hidden');
+        if (_allSchools.length > 1) {
+          const sel = document.getElementById('schoolSelect');
+          const host = document.getElementById('schoolSelector');
+          sel.innerHTML = _allSchools.map(function (s) {
+            return '<option value="' + s.id + '">' + escHtml(s.name || ('School #' + s.id)) + '</option>';
+          }).join('');
+          host.classList.remove('hidden');
+        }
+        const schoolData = metrics || (_allSchools.length ? _allSchools[0] : {});
+        renderKPIs(schoolData);
+        renderSubjectQuiz(schoolData);
+        renderRecentActivity(schoolData);
+        document.getElementById('kpiLastUpdated').textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
+      } catch (e) {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('errorState').classList.remove('hidden');
+        document.getElementById('errorMsg').textContent = e.message || 'Failed to load dashboard.';
+        showToast(e.message || 'Load failed', 'error');
+      }
+    }
+    function renderSchoolData() {
+      const sel = document.getElementById('schoolSelect');
+      const schoolId = parseInt(sel.value);
+      const school = _allSchools.find(function (s) { return s.id === schoolId; });
+      if (school) {
+        renderKPIs(school);
+        renderSubjectQuiz(school);
+      }
+    }
+    function renderKPIs(data) {
+      const enrollment = data.linked_student_count || data.enrollment_count || 0;
+      const teachers = data.active_teacher_count || data.teacher_count || 0;
+      const sections = data.class_section_count || 0;
+      const roster = data.roster_count || 0;
+      const enrollRate = roster > 0 ? Math.round((enrollment / roster) * 100) : 0;
+      document.getElementById('kpiEnrollment').textContent = enrollment;
+      document.getElementById('kpiTeachers').textContent = teachers;
+      document.getElementById('kpiSections').textContent = sections;
+      document.getElementById('kpiRoster').textContent = roster;
+      document.getElementById('kpiEnrollRate').textContent = enrollRate + '%';
+      document.getElementById('enrollProgressBar').style.width = enrollRate + '%';
+      document.getElementById('kpiSchoolName').textContent = data.name || data.school_name || 'Your School';
+      document.getElementById('kpiSchoolCode').textContent = data.code ? 'Code: ' + data.code : '';
+      if (data.schools) {
+        const schoolList = data.schools || [];
+        document.getElementById('kpiSchoolName').textContent = schoolList.length + ' school(s) managed';
+        const totalEnroll = schoolList.reduce(function (a, s) { return a + (s.linked_student_count || 0); }, 0);
+        const totalTeachers = schoolList.reduce(function (a, s) { return a + (s.active_teacher_count || 0); }, 0);
+        const totalSections = schoolList.reduce(function (a, s) { return a + (s.class_section_count || 0); }, 0);
+        const totalRoster = schoolList.reduce(function (a, s) { return a + (s.roster_count || 0); }, 0);
+        document.getElementById('kpiEnrollment').textContent = totalEnroll;
+        document.getElementById('kpiTeachers').textContent = totalTeachers;
+        document.getElementById('kpiSections').textContent = totalSections;
+        document.getElementById('kpiRoster').textContent = totalRoster;
+        const er = totalRoster > 0 ? Math.round((totalEnroll / totalRoster) * 100) : 0;
+        document.getElementById('kpiEnrollRate').textContent = er + '%';
+        document.getElementById('enrollProgressBar').style.width = er + '%';
+      }
+    }
+    function renderSubjectQuiz(data) {
+      const panel = document.getElementById('subjectQuizPanel');
+      const quizData = data.quiz_avg_by_subject || data.subject_quiz_averages || [];
+      if (!quizData.length) {
+        panel.innerHTML = '<p class="text-gray-400 text-sm text-center py-6"><i class="fas fa-chart-column mr-2 opacity-40"></i>No quiz data yet. Quiz results will appear here once teachers run quizzes.</p>';
+        return;
+      }
+      panel.innerHTML = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">'
+        + quizData.map(function (s) {
+          const score = (s.average_score != null) ? s.average_score : null;
+          const pct = score != null ? Math.round(score * 100) : null;
+          const color = pct == null ? 'text-gray-400' : pct >= 75 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-red-600';
+          const barColor = pct == null ? 'bg-gray-200' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500';
+          const label = pct != null ? pct + '%' : 'No data';
+          return '<div class="rounded-xl border border-gray-200 bg-gray-50 p-4 hover:border-primary-300 transition-colors">'
+            + '<p class="font-semibold text-gray-800 text-sm truncate mb-1">' + escHtml(s.subject_name || s.subject || 'Unknown') + '</p>'
+            + '<p class="text-3xl font-bold ' + color + ' mb-2">' + label + '</p>'
+            + '<div class="rounded-full bg-gray-200 h-1.5 overflow-hidden mb-1">'
+            + '<div class="h-1.5 ' + barColor + ' rounded-full" style="width:' + (pct || 0) + '%"></div>'
+            + '</div>'
+            + '<p class="text-xs text-gray-400">' + (s.quiz_count || 0) + ' quizzes · ' + (s.submission_count || 0) + ' submissions</p>'
+            + '</div>';
+        }).join('')
+        + '</div>';
+    }
+    function renderRecentActivity(data) {
+      const host = document.getElementById('recentActivity');
+      const items = [];
+      if (data.class_section_count > 0) {
+        items.push({ icon: 'layer-group', color: 'text-violet-500', text: data.class_section_count + ' active class sections in operation' });
+      }
+      if (data.linked_student_count > 0) {
+        items.push({ icon: 'user-check', color: 'text-emerald-500', text: data.linked_student_count + ' students successfully linked to their class sections' });
+      }
+      if (data.active_teacher_count > 0) {
+        items.push({ icon: 'chalkboard-teacher', color: 'text-primary-500', text: data.active_teacher_count + ' teachers actively assigned to sections' });
+      }
+      const quizData = data.quiz_avg_by_subject || [];
+      if (quizData.length > 0) {
+        const best = quizData.reduce(function (a, b) {
+          return ((a.average_score || 0) > (b.average_score || 0)) ? a : b;
+        });
+        if (best.average_score) {
+          items.push({ icon: 'trophy', color: 'text-amber-500', text: 'Highest quiz average: ' + (best.subject_name || 'Unknown') + ' at ' + Math.round(best.average_score * 100) + '%' });
+        }
+      }
+      if (!items.length) {
+        host.innerHTML = '<p class="text-gray-400 text-sm text-center py-4">No activity data yet. Data appears as teachers, students and coordinators use the platform.</p>';
+        return;
+      }
+      host.innerHTML = items.map(function (item) {
+        return '<div class="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">'
+          + '<div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">'
+          + '<i class="fas fa-' + item.icon + ' ' + item.color + ' text-sm"></i>'
+          + '</div>'
+          + '<p class="text-gray-700 text-sm">' + escHtml(item.text) + '</p>'
+          + '</div>';
+      }).join('');
+    }
+    loadDashboard();
+  </script>
+</body>
+</html>

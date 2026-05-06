@@ -28,12 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 def _user_can_read_lesson_row(lesson: dict, user_id, user_role: Optional[str]) -> bool:
-    """Teacher owner, public lesson, or student enrolled in a class section that has this lesson published."""
+    """Teacher owner, public lesson (non-students / legacy), or student via roster publish graph."""
     if not lesson:
         return False
     if lesson.get('teacher_id') == user_id:
-        return True
-    if lesson.get('is_public'):
         return True
     role = (user_role or 'student').strip().lower()
     if role == 'student' and user_id:
@@ -45,10 +43,26 @@ def _user_can_read_lesson_row(lesson: dict, user_id, user_role: Optional[str]) -
             lid = lesson.get('id')
             if lid is None:
                 return False
-            return student_may_view_lesson_via_school_placement(get_db(), int(user_id), int(lid))
+            if student_may_view_lesson_via_school_placement(get_db(), int(user_id), int(lid)):
+                return True
+            # Legacy students (no coordinator roster) may still read public lessons.
+            if lesson.get('is_public'):
+                from app.models.school_org_models import ClassEnrollment
+
+                db = get_db()
+                has_enrollment = (
+                    db.query(ClassEnrollment.id)
+                    .filter(ClassEnrollment.student_user_id == int(user_id))
+                    .first()
+                )
+                if not has_enrollment:
+                    return True
+            return False
         except Exception:
             logger.exception("school-based lesson read check failed")
             return False
+    if lesson.get('is_public'):
+        return True
     return False
 
 
@@ -680,13 +694,49 @@ def get_my_lessons():
 @bp.route('/browse_lessons', methods=['GET'])
 @student_required
 def browse_lessons():
-    """Browse public lessons for students with server-side pagination."""
+    """Students: roster-scoped published lessons when enrolled; otherwise legacy public catalog."""
     try:
+        from app.models.school_org_models import ClassEnrollment
+        from app.services.school import quiz_service as school_quiz_service
+
         grade_level = request.args.get('grade_level')
         focus_area = request.args.get('focus_area')
         page = request.args.get('page', default=1, type=int)
         per_page = request.args.get('per_page', default=10, type=int)
         search_term = (request.args.get('q') or '').strip() or None
+
+        db = get_db()
+        uid = int(session['user_id'])
+        has_enrollment = (
+            db.query(ClassEnrollment.id)
+            .filter(ClassEnrollment.student_user_id == uid, ClassEnrollment.status == "active")
+            .first()
+        )
+        if has_enrollment:
+            rows = school_quiz_service.list_student_scoped_lessons(db, student_user_id=uid)
+            if search_term:
+                st = search_term.lower()
+                rows = [r for r in rows if st in (r.get("title") or "").lower()]
+            if grade_level:
+                rows = [r for r in rows if (r.get("cohort_grade_level") or r.get("grade_level")) == grade_level]
+            if focus_area:
+                rows = [r for r in rows if (r.get("focus_area") or "") == focus_area]
+            total = len(rows)
+            page = max(1, int(page or 1))
+            per_page = max(1, min(100, int(per_page or 10)))
+            chunk = rows[(page - 1) * per_page : page * per_page]
+            total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+            return jsonify(
+                {
+                    "success": True,
+                    "lessons": chunk,
+                    "page": page,
+                    "per_page": per_page,
+                    "total": total,
+                    "total_pages": total_pages,
+                    "scoped": True,
+                }
+            )
 
         result = LessonModel.get_public_latest_lessons_paginated(
             grade_level=grade_level,
@@ -695,14 +745,8 @@ def browse_lessons():
             per_page=per_page,
             search_term=search_term,
         )
-        return jsonify({
-            'success': True,
-            'lessons': result['lessons'],
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'total_pages': result['total_pages'],
-        })
+        result["scoped"] = False
+        return jsonify({"success": True, **result})
     except Exception as e:
         logger.error(f"Error browsing lessons: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to browse lessons: {str(e)}'}), 500
@@ -714,15 +758,37 @@ def search_lessons():
     try:
         search_term = request.args.get('q', '')
         grade_level = request.args.get('grade_level')
-        
+
         if not search_term:
             return jsonify({'error': 'Search term is required'}), 400
-        
+
+        from app.models import UserModel
+        from app.models.school_org_models import ClassEnrollment
+        from app.services.school import quiz_service as school_quiz_service
+
+        um = UserModel(session["user_id"])
+        if um.is_student():
+            db = get_db()
+            uid = int(session["user_id"])
+            if (
+                db.query(ClassEnrollment.id)
+                .filter(ClassEnrollment.student_user_id == uid, ClassEnrollment.status == "active")
+                .first()
+            ):
+                rows = school_quiz_service.list_student_scoped_lessons(db, student_user_id=uid)
+                st = search_term.lower()
+                lessons = [
+                    r
+                    for r in rows
+                    if st in (r.get("title") or "").lower()
+                    or st in (r.get("subject_name") or "").lower()
+                ]
+                if grade_level:
+                    lessons = [r for r in lessons if (r.get("cohort_grade_level") or r.get("grade_level")) == grade_level]
+                return jsonify({"success": True, "lessons": lessons, "scoped": True})
+
         lessons = LessonModel.search_lessons(search_term, grade_level=grade_level)
-        return jsonify({
-            'success': True,
-            'lessons': lessons
-        })
+        return jsonify({"success": True, "lessons": lessons, "scoped": False})
     except Exception as e:
         logger.error(f"Error searching lessons: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to search lessons: {str(e)}'}), 500

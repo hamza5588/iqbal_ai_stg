@@ -38,6 +38,34 @@ def _json_error(exc: SchoolServiceError):
     return jsonify({"error": exc.message, "code": exc.code}), exc.http_status
 
 
+@school_ui_bp.route("/coordinator-dashboard")
+@login_required
+def coordinator_dashboard():
+    """Dedicated coordinator dashboard for roster and class section management."""
+    from flask import abort
+    db = get_db()
+    user = db.query(DBUser).filter(DBUser.id == int(session["user_id"])).first()
+    role = Role.from_string((user.role if user else "student") or "student")
+    allowed = {Role.COORDINATOR, Role.SCHOOL_ADMIN, Role.DISTRICT_ADMIN, Role.PLATFORM_ADMIN}
+    if role not in allowed and not is_super_admin_role(role):
+        abort(403)
+    return render_template("coordinator_dashboard.html")
+
+
+@school_ui_bp.route("/principal-dashboard")
+@login_required
+def principal_dashboard():
+    """Principal dashboard showing school-level aggregate metrics."""
+    from flask import abort
+    db = get_db()
+    user = db.query(DBUser).filter(DBUser.id == int(session["user_id"])).first()
+    role = Role.from_string((user.role if user else "student") or "student")
+    allowed = {Role.PRINCIPAL, Role.SCHOOL_ADMIN, Role.DISTRICT_ADMIN, Role.PLATFORM_ADMIN}
+    if role not in allowed and not is_super_admin_role(role):
+        abort(403)
+    return render_template("principal_dashboard.html")
+
+
 @school_ui_bp.route("/hub")
 @login_required
 def school_hub():
@@ -402,9 +430,20 @@ def api_publish_lesson(lesson_id: int):
     db = get_db()
     data = request.get_json(silent=True) or {}
     ids = data.get("class_section_ids") or []
+    from app.models.database_models import User as DBUser
+    from app.rbac.roles import Role, is_super_admin_role
+
+    u = db.query(DBUser).filter(DBUser.id == _uid()).first()
+    admin_override = bool(data.get("admin_override")) and is_super_admin_role(
+        Role.from_string(u.role if u else "student")
+    )
     try:
         n = quiz_service.publish_lesson_to_sections(
-            db, lesson_id=lesson_id, teacher_user_id=_uid(), class_section_ids=ids
+            db,
+            lesson_id=lesson_id,
+            teacher_user_id=_uid(),
+            class_section_ids=ids,
+            admin_override=admin_override,
         )
         return jsonify({"linked_sections": n})
     except SchoolServiceError as e:

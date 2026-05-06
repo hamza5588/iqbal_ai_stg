@@ -3,111 +3,209 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>School hub | IqbalAI</title>
+  <title>School hub | Iqbal AI - Secure Learning Platform</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'], display: ['Poppins', 'Inter', 'sans-serif'] },
+          colors: {
+            primary: { 50:'#f0f9ff', 100:'#e0f2fe', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1', 800:'#075985' },
+            surface: { 50:'#fafafa', 100:'#f5f5f5', 900:'#171717' },
+            accent: { 500:'#ec4899', 600:'#db2777' }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+    .mobile-sidebar { position: fixed; left: -100%; transition: left 0.3s ease; z-index: 50; width: 280px; height: 100vh; background: white; }
+    .mobile-sidebar.open { left: 0; }
+    .mobile-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    .mobile-overlay.open { opacity: 1; pointer-events: all; }
+    .hub-input { width:100%; border-radius:0.5rem; border:1px solid #e2e8f0; padding:0.5rem 0.75rem; font-size:0.875rem; background:#fff; }
+    .hub-input:focus { outline:none; box-shadow:0 0 0 2px rgba(14,165,233,0.35); border-color:#0ea5e9; }
+    .hub-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; font-weight:600; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; border:none; cursor:pointer; transition:opacity .15s, transform .1s; }
+    .hub-btn:active { transform: translateY(1px); }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <p class="text-xs uppercase tracking-widest text-sky-400 font-semibold">IqbalAI</p>
-        <h1 class="text-xl font-bold text-white">School hub</h1>
-        <p class="text-sm text-slate-400">
-          {% if hub_mode == 'teacher' %}Teacher view — class context{% elif hub_mode == 'student' %}Student & parent — enrollment & lessons{% else %}Principal / coordinator — your schools{% endif %}
-        </p>
+<body class="min-h-screen bg-gradient-to-b from-surface-50 to-white font-sans text-surface-900 antialiased">
+
+  <div id="mobileOverlay" class="mobile-overlay" onclick="toggleMobileSidebar()"></div>
+
+  <div class="flex h-screen w-screen overflow-hidden">
+    <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex md:flex-col shrink-0">
+      <div class="p-4 border-b border-gray-200">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0">
+            <i class="fas fa-school text-white text-sm"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">Iqbal AI</p>
+            <p class="text-sm font-bold text-gray-900 truncate">School hub</p>
+          </div>
+        </div>
       </div>
-      <div class="flex gap-2 flex-wrap">
-        <a href="/teacher-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Teacher</a>
-        <a href="/student-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Student</a>
-        {% if hub_mode != 'teacher' %}
-        <a href="/admin/" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Admin</a>
+      <p class="px-4 pt-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Navigate</p>
+      <nav class="p-4 pt-1 space-y-1 flex-1">
+        <a href="/teacher-dashboard" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 text-sm font-medium">
+          <span class="flex items-center gap-3"><i class="fas fa-chalkboard-teacher w-5 text-primary-500"></i>Teacher dashboard</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+        <a href="/student-dashboard" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 text-sm font-medium">
+          <span class="flex items-center gap-3"><i class="fas fa-graduation-cap w-5 text-emerald-500"></i>Student dashboard</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+        {% if hub_mode == 'coordinator' %}
+        <a href="/school/coordinator-dashboard" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 text-sm font-medium">
+          <span class="flex items-center gap-3"><i class="fas fa-sliders w-5 text-indigo-500"></i>Coordinator</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+        <a href="/school/principal-dashboard" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 text-sm font-medium">
+          <span class="flex items-center gap-3"><i class="fas fa-user-tie w-5 text-violet-600"></i>Principal</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
         {% endif %}
+        {% if hub_mode != 'teacher' %}
+        <a href="/admin/" class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 text-sm font-medium">
+          <span class="flex items-center gap-3"><i class="fas fa-shield-halved w-5 text-slate-500"></i>Admin</span>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+        {% endif %}
+      </nav>
+      <div class="p-4 border-t border-gray-200 text-xs text-gray-500 leading-relaxed">
+        {% if hub_mode == 'teacher' %}Teacher view{% elif hub_mode == 'student' %}Student &amp; parent{% else %}Coordinator / principal{% endif %}
       </div>
-    </div>
-  </header>
+    </aside>
 
-  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <section id="ctx" class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <h2 class="text-lg font-semibold mb-2">Session</h2>
-      <pre id="ctx-pre" class="text-xs text-emerald-300 whitespace-pre-wrap overflow-x-auto">Loading…</pre>
-    </section>
+    <aside id="mobileSidebar" class="mobile-sidebar md:hidden flex flex-col border-r border-gray-200 overflow-y-auto shrink-0">
+      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        <span class="font-bold text-gray-900">Menu</span>
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-lg hover:bg-gray-100"><i class="fas fa-times text-lg text-gray-700"></i></button>
+      </div>
+      <nav class="p-4 space-y-1 flex-1 text-sm font-medium">
+        <a href="/teacher-dashboard" onclick="toggleMobileSidebar();" class="block py-2.5 px-3 rounded-lg text-gray-700 hover:bg-gray-100"><i class="fas fa-chalkboard-teacher w-5 text-primary-500 mr-2"></i>Teacher</a>
+        <a href="/student-dashboard" onclick="toggleMobileSidebar();" class="block py-2.5 px-3 rounded-lg text-gray-700 hover:bg-gray-100"><i class="fas fa-graduation-cap w-5 text-emerald-500 mr-2"></i>Student</a>
+        {% if hub_mode == 'coordinator' %}
+        <a href="/school/coordinator-dashboard" onclick="toggleMobileSidebar();" class="block py-2.5 px-3 rounded-lg text-gray-700 hover:bg-gray-100"><i class="fas fa-sliders w-5 text-indigo-500 mr-2"></i>Coordinator</a>
+        <a href="/school/principal-dashboard" onclick="toggleMobileSidebar();" class="block py-2.5 px-3 rounded-lg text-gray-700 hover:bg-gray-100"><i class="fas fa-user-tie w-5 text-violet-600 mr-2"></i>Principal</a>
+        {% endif %}
+        {% if hub_mode != 'teacher' %}
+        <a href="/admin/" onclick="toggleMobileSidebar();" class="block py-2.5 px-3 rounded-lg text-gray-700 hover:bg-gray-100"><i class="fas fa-shield-halved w-5 text-slate-500 mr-2"></i>Admin</a>
+        {% endif %}
+      </nav>
+    </aside>
 
-    {% if hub_mode == 'teacher' %}
-    <section class="rounded-2xl border border-indigo-900/50 bg-indigo-950/40 p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-indigo-200"><i class="fas fa-circle-info mr-2"></i>Why you are here</h2>
-      <p class="text-sm text-slate-300 leading-relaxed">
-        This page used to show administrator tools to every role. Those tools are now on
-        <strong class="text-white">Admin → School operations</strong> (accounts with <code class="text-indigo-300">admin</code>,
-        <code class="text-indigo-300">platform_admin</code>, etc. only).
-      </p>
-      <p class="text-sm text-slate-300 leading-relaxed">
-        As a teacher, publish lessons to your class sections from the
-        <a href="/teacher-dashboard" class="text-sky-400 font-medium hover:underline">Teacher dashboard</a>:
-        open <strong>My Lessons</strong>, then use the <strong>school icon</strong> on a row or open a lesson and use <strong>Publish to my classes</strong>.
-      </p>
-      <p class="text-xs text-slate-500">The session box above shows your user id and whether you are assigned to any class sections (<code>teaching_class_section_ids</code>).</p>
-    </section>
-    {% elif hub_mode == 'student' %}
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Link your roster</h2>
-      <p class="text-sm text-slate-400">Match the name and roll your school gave you so published lessons appear in your dashboard.</p>
-      <input id="lnk-code" placeholder="School code" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <input id="lnk-sec" type="number" placeholder="Class section ID" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <div class="grid grid-cols-3 gap-2">
-        <input id="lnk-roll" placeholder="Roll" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="lnk-fn" placeholder="First" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="lnk-ln" placeholder="Last" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+    <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div class="md:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-700"><i class="fas fa-bars text-xl"></i></button>
+        <h1 class="font-bold text-base text-gray-900 truncate">School hub</h1>
+        <span class="w-8"></span>
       </div>
-      <button id="btn-link" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">Link roster</button>
-      <button id="btn-lessons" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Load scoped lessons</button>
-      <pre id="stu-out" class="text-xs text-emerald-200 whitespace-pre-wrap"></pre>
-    </section>
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Active quizzes</h2>
-      <button id="btn-quiz-list" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Refresh</button>
-      <pre id="qz-list" class="text-xs text-pink-200 whitespace-pre-wrap"></pre>
-    </section>
-    {% else %}
-    {# coordinator / principal #}
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Subject &amp; class section</h2>
-      <p class="text-sm text-slate-400">Only for schools you manage. School IDs appear in admin School operations or your district tools.</p>
-      <label class="block text-sm text-slate-400">School ID</label>
-      <input id="cid-school" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <label class="block text-sm text-slate-400">Subject name / short_code</label>
-      <div class="flex gap-2">
-        <input id="sub-name" placeholder="Physics" class="flex-1 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="sub-code" placeholder="PHY" class="w-24 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <div class="max-w-3xl mx-auto w-full px-4 py-8 space-y-6 pb-16">
+          <div>
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">Context</p>
+            <h2 class="text-xl font-bold text-gray-900 font-display">School hub</h2>
+            <p class="text-sm text-gray-600 mt-1">
+              {% if hub_mode == 'teacher' %}Teacher view — class context and coordinator info.{% elif hub_mode == 'student' %}Link your roster and load scoped lessons.{% else %}Principal / coordinator — subjects, sections, and roster import.{% endif %}
+            </p>
+          </div>
+
+          <section class="rounded-xl md:rounded-2xl border border-gray-200 bg-white shadow-sm p-5 md:p-6">
+            <h3 class="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><i class="fas fa-fingerprint text-primary-600"></i> Session</h3>
+            <pre id="ctx-pre" class="text-xs text-gray-700 whitespace-pre-wrap overflow-x-auto bg-gray-50 rounded-lg p-3 border border-gray-100">Loading…</pre>
+          </section>
+
+          {% if hub_mode == 'teacher' %}
+          <section class="rounded-xl md:rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-5 md:p-6 space-y-3">
+            <h3 class="text-base font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-circle-info text-indigo-600"></i> Why you are here</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">
+              Administrator tools are on <strong class="text-gray-900">Admin → School operations</strong> (for <code class="text-xs bg-white px-1 py-0.5 rounded border border-indigo-100">admin</code> and platform roles).
+            </p>
+            <p class="text-sm text-gray-600 leading-relaxed">
+              Publish lessons to class sections from the
+              <a href="/teacher-dashboard" class="text-primary-600 font-semibold hover:underline">Teacher dashboard</a>:
+              open <strong>My Lessons</strong>, then use the <strong>school icon</strong> on a row or open a lesson and use <strong>Publish to my classes</strong> — same layout as the sidebar link <strong>School &amp; classes</strong>.
+            </p>
+            <p class="text-xs text-gray-500">The session box shows your user id and <code class="text-xs bg-white px-1 rounded border">teaching_class_section_ids</code>.</p>
+          </section>
+          {% elif hub_mode == 'student' %}
+          <section class="rounded-xl md:rounded-2xl border border-gray-200 bg-white shadow-sm p-5 md:p-6 space-y-4">
+            <h3 class="text-base font-bold text-gray-900">Link your roster</h3>
+            <p class="text-sm text-gray-600">Match the name and roll your school gave you so published lessons appear in your dashboard.</p>
+            <input id="lnk-code" placeholder="School code" class="hub-input" />
+            <input id="lnk-sec" type="number" placeholder="Class section ID" class="hub-input" />
+            <div class="grid grid-cols-3 gap-2">
+              <input id="lnk-roll" placeholder="Roll" class="hub-input" />
+              <input id="lnk-fn" placeholder="First" class="hub-input" />
+              <input id="lnk-ln" placeholder="Last" class="hub-input" />
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="btn-link" type="button" class="hub-btn bg-emerald-600 hover:bg-emerald-700 text-white">Link roster</button>
+              <button id="btn-lessons" type="button" class="hub-btn bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-50">Load scoped lessons</button>
+            </div>
+            <pre id="stu-out" class="text-xs text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 border border-gray-100 min-h-[2rem]"></pre>
+          </section>
+          <section class="rounded-xl md:rounded-2xl border border-gray-200 bg-white shadow-sm p-5 md:p-6 space-y-3">
+            <h3 class="text-base font-bold text-gray-900">Active quizzes</h3>
+            <button id="btn-quiz-list" type="button" class="hub-btn bg-primary-600 hover:bg-primary-700 text-white">Refresh</button>
+            <pre id="qz-list" class="text-xs text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 border border-gray-100 min-h-[2rem]"></pre>
+          </section>
+          {% else %}
+          <section class="rounded-xl md:rounded-2xl border border-gray-200 bg-white shadow-sm p-5 md:p-6 space-y-4">
+            <h3 class="text-base font-bold text-gray-900">Subject &amp; class section</h3>
+            <p class="text-sm text-gray-600">Only for schools you manage.</p>
+            <label class="block text-xs font-semibold text-gray-600">School ID</label>
+            <input id="cid-school" type="number" class="hub-input" />
+            <label class="block text-xs font-semibold text-gray-600">Subject name / short_code</label>
+            <div class="flex gap-2">
+              <input id="sub-name" placeholder="Physics" class="hub-input flex-1" />
+              <input id="sub-code" placeholder="PHY" class="hub-input w-24" />
+            </div>
+            <button id="btn-subject" type="button" class="hub-btn w-full justify-center bg-indigo-600 hover:bg-indigo-700 text-white">Create subject</button>
+            <hr class="border-gray-100" />
+            <label class="block text-xs font-semibold text-gray-600">Subject ID</label>
+            <input id="sec-subject" type="number" class="hub-input" />
+            <label class="block text-xs font-semibold text-gray-600">Teacher user ID</label>
+            <input id="sec-teacher" type="number" class="hub-input" />
+            <div class="grid grid-cols-2 gap-2">
+              <input id="sec-grade" placeholder="8" class="hub-input" />
+              <input id="sec-letter" placeholder="A" class="hub-input" />
+            </div>
+            <input id="sec-year" placeholder="2025-2026" class="hub-input" />
+            <button id="btn-section" type="button" class="hub-btn w-full justify-center bg-violet-600 hover:bg-violet-700 text-white">Create class section</button>
+            <p id="coord-out" class="text-xs text-gray-500 min-h-[1.25rem]"></p>
+          </section>
+          <section class="rounded-xl md:rounded-2xl border border-gray-200 bg-white shadow-sm p-5 md:p-6 space-y-4">
+            <h3 class="text-base font-bold text-gray-900">Roster CSV import</h3>
+            <p class="text-sm text-gray-600">Header row must include roll (or roll_number), first (or first_name), last (or last_name).</p>
+            <label class="block text-xs font-semibold text-gray-600">Class section ID</label>
+            <input id="rost-sec" type="number" class="hub-input" />
+            <textarea id="rost-csv" rows="6" class="hub-input font-mono text-xs" placeholder="roll,first_name,last_name&#10;101,Ali,Khan"></textarea>
+            <button id="btn-roster" type="button" class="hub-btn bg-amber-500 hover:bg-amber-600 text-white">Import roster</button>
+            <pre id="rost-out" class="text-xs text-gray-700 whitespace-pre-wrap bg-amber-50 rounded-lg p-3 border border-amber-100 min-h-[2rem]"></pre>
+          </section>
+          {% endif %}
+        </div>
       </div>
-      <button id="btn-subject" type="button" class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">Create subject</button>
-      <hr class="border-slate-800" />
-      <label class="block text-sm text-slate-400">Subject ID</label>
-      <input id="sec-subject" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <label class="block text-sm text-slate-400">Teacher user ID</label>
-      <input id="sec-teacher" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <div class="grid grid-cols-2 gap-2">
-        <input id="sec-grade" placeholder="8" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="sec-letter" placeholder="A" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      </div>
-      <input id="sec-year" placeholder="2025-2026" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <button id="btn-section" type="button" class="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">Create class section</button>
-      <p id="coord-out" class="text-xs text-slate-400"></p>
-    </section>
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Roster CSV import</h2>
-      <p class="text-sm text-slate-400">Header row must include roll (or roll_number), first (or first_name), last (or last_name).</p>
-      <label class="block text-sm text-slate-400">Class section ID</label>
-      <input id="rost-sec" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <textarea id="rost-csv" rows="6" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 font-mono text-sm"
-        placeholder="roll,first_name,last_name&#10;101,Ali,Khan"></textarea>
-      <button id="btn-roster" type="button" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 font-medium">Import roster</button>
-      <pre id="rost-out" class="text-xs text-amber-200 whitespace-pre-wrap"></pre>
-    </section>
-    {% endif %}
-  </main>
+    </main>
+  </div>
 
   <script>
+    function toggleMobileSidebar() {
+      document.getElementById('mobileSidebar').classList.toggle('open');
+      document.getElementById('mobileOverlay').classList.toggle('open');
+    }
     const HUB_MODE = {{ hub_mode | tojson }};
 
     async function api(path, opts = {}) {

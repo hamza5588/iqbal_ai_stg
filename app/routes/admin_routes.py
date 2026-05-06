@@ -214,8 +214,13 @@ def create_user():
         if not username or not useremail or not password:
             return jsonify({'success': False, 'error': 'Username, email, and password are required'}), 400
         
-        if role not in ['student', 'teacher', 'admin']:
-            return jsonify({'success': False, 'error': 'Invalid role'}), 400
+        VALID_ROLES = [
+            'student', 'teacher', 'admin',
+            'coordinator', 'principal', 'school_admin',
+            'district_admin', 'platform_admin', 'parent'
+        ]
+        if role not in VALID_ROLES:
+            return jsonify({'success': False, 'error': f'Invalid role. Must be one of: {", ".join(VALID_ROLES)}'}), 400
         
         # Check if user already exists
         db = get_db()
@@ -300,7 +305,9 @@ def update_user(user_id):
         if 'password' in data and data['password']:
             user.password = data['password'].strip()
         if 'role' in data:
-            if data['role'] in ['student', 'teacher', 'admin']:
+            _valid = ['student', 'teacher', 'admin', 'coordinator', 'principal',
+                      'school_admin', 'district_admin', 'platform_admin', 'parent']
+            if data['role'] in _valid:
                 user.role = data['role']
         if 'class_standard' in data:
             user.class_standard = data['class_standard'].strip()

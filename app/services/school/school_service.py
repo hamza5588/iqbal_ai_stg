@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from sqlalchemy import Float as SAFloat, cast, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,9 +22,12 @@ from app.models.school_org_models import (
     SchoolSubject,
     TeacherSchoolAffiliation,
 )
-from app.services.school.access import can_coordinate_school, can_manage_school
 from app.rbac.roles import Role, is_super_admin_role
+from app.rbac.school_permissions import can_manage_roster
+from app.services.school.access import can_manage_school, teacher_affiliated_with_school
 from app.services.school.errors import SchoolServiceError
+
+logger = logging.getLogger(__name__)
 
 
 def _norm(s: Optional[str]) -> str:
@@ -31,6 +36,18 @@ def _norm(s: Optional[str]) -> str:
 
 def _norm_key(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def _actor_may_create_school(db: Session, actor_id: int) -> bool:
+    user = db.query(DBUser).filter(DBUser.id == actor_id).first()
+    if not user:
+        return False
+    r = Role.from_string(user.role or "student")
+    if is_super_admin_role(r):
+        return True
+    if r in (Role.PRINCIPAL, Role.DISTRICT_ADMIN, Role.PLATFORM_ADMIN):
+        return True
+    return False
 
 
 def create_district(db: Session, *, name: str, code: Optional[str], actor_id: int) -> District:
@@ -54,8 +71,8 @@ def create_school(
     actor_id: int,
 ) -> School:
     user = db.query(DBUser).filter(DBUser.id == actor_id).first()
-    if not user or not is_super_admin_role(Role.from_string(user.role or "student")):
-        raise SchoolServiceError("Only super administrators may create schools", "forbidden", 403)
+    if not user or not _actor_may_create_school(db, actor_id):
+        raise SchoolServiceError("Not allowed to create schools", "forbidden", 403)
     school = School(
         name=_norm(name)[:255],
         code=_norm(code)[:64],
@@ -86,6 +103,7 @@ def set_principal(db: Session, *, school_id: int, principal_user_id: Optional[in
 
 
 def add_coordinator(db: Session, *, school_id: int, coordinator_user_id: int, actor_id: int) -> None:
+    """Principal or scoped admins assign coordinators (not roster-only coordinators)."""
     if not can_manage_school(db, actor_id, school_id):
         raise SchoolServiceError("Not allowed to manage this school", "forbidden", 403)
     row = SchoolCoordinator(school_id=school_id, user_id=coordinator_user_id)
@@ -116,7 +134,7 @@ def upsert_subject(
     grade_band: Optional[str],
     actor_id: int,
 ) -> SchoolSubject:
-    if not can_coordinate_school(db, actor_id, school_id):
+    if not can_manage_roster(db, actor_id, school_id):
         raise SchoolServiceError("Not allowed to edit subjects for this school", "forbidden", 403)
     subj = SchoolSubject(
         school_id=school_id,
@@ -137,7 +155,7 @@ def upsert_subject(
 def add_teacher_affiliation(
     db: Session, *, school_id: int, teacher_user_id: int, actor_id: int
 ) -> TeacherSchoolAffiliation:
-    if not can_coordinate_school(db, actor_id, school_id):
+    if not can_manage_roster(db, actor_id, school_id):
         raise SchoolServiceError("Not allowed", "forbidden", 403)
     t = db.query(DBUser).filter(DBUser.id == teacher_user_id).first()
     if not t or Role.from_string(t.role or "student") != Role.TEACHER:
@@ -164,8 +182,14 @@ def create_class_section(
     display_name: Optional[str],
     actor_id: int,
 ) -> ClassSection:
-    if not can_coordinate_school(db, actor_id, school_id):
+    if not can_manage_roster(db, actor_id, school_id):
         raise SchoolServiceError("Not allowed", "forbidden", 403)
+    if not teacher_affiliated_with_school(db, teacher_user_id, school_id):
+        raise SchoolServiceError(
+            "Teacher must have an active affiliation with this school before class section creation",
+            "teacher_not_affiliated",
+            400,
+        )
     subj = db.query(SchoolSubject).filter(SchoolSubject.id == subject_id, SchoolSubject.school_id == school_id).first()
     if not subj:
         raise SchoolServiceError("Subject not found in this school", "not_found", 404)
@@ -224,7 +248,7 @@ def import_roster_csv(
     sec = db.query(ClassSection).filter(ClassSection.id == class_section_id).first()
     if not sec:
         raise SchoolServiceError("Class section not found", "not_found", 404)
-    if not can_coordinate_school(db, actor_id, sec.school_id):
+    if not can_manage_roster(db, actor_id, sec.school_id):
         raise SchoolServiceError("Not allowed to import roster for this class", "forbidden", 403)
 
     reader = csv.reader(io.StringIO(csv_text))
@@ -242,7 +266,7 @@ def import_roster_csv(
         if not parts or all(not _norm(p) for p in parts):
             continue
         try:
-            roll = _norm(parts[roll_i])[:64]
+            roll = normalize_roll_number(parts[roll_i])[:64]
             fn = _norm(parts[first_i])[:128]
             ln = _norm(parts[last_i])[:128]
         except IndexError:
@@ -309,9 +333,9 @@ def link_student_to_roster(
     if not sec:
         raise SchoolServiceError("Class section not in this school", "not_found", 404)
 
-    roll = _norm(roll_number)[:64]
-    fn = _norm(first_name).lower()
-    ln = _norm(last_name).lower()
+    roll = normalize_roll_number(roll_number)[:64]
+    fn_key = normalize_person_name_key(first_name)
+    ln_key = normalize_person_name_key(last_name)
 
     roster = (
         db.query(RosterEntry)
@@ -323,7 +347,7 @@ def link_student_to_roster(
     )
     if not roster:
         raise SchoolServiceError("No roster line matches this roll number in the class", "roster_mismatch", 400)
-    if roster.first_name.strip().lower() != fn or roster.last_name.strip().lower() != ln:
+    if normalize_person_name_key(roster.first_name) != fn_key or normalize_person_name_key(roster.last_name) != ln_key:
         raise SchoolServiceError(
             "Name does not match school roster — check spelling with your coordinator",
             "name_mismatch",
@@ -394,3 +418,186 @@ def school_summary(db: Session, school_id: int) -> Dict[str, Any]:
         "roster_rows": n_roster,
         "linked_students": n_linked,
     }
+
+
+def normalize_roll_number(roll: str) -> str:
+    """Normalize roll numbers for comparison (strip + uppercase)."""
+    return (roll or "").strip().upper()
+
+
+def normalize_person_name_key(name: str) -> str:
+    """Collapse whitespace and lowercase for roster name matching."""
+    return re.sub(r"\s+", " ", (name or "").strip().lower())
+
+
+def add_roster_entry(
+    db: Session,
+    *,
+    class_section_id: int,
+    first_name: str,
+    last_name: str,
+    roll_number: str,
+    actor_id: int,
+) -> RosterEntry:
+    """Insert a single roster row; roll number must be unique within the class section."""
+    sec = db.query(ClassSection).filter(ClassSection.id == class_section_id).first()
+    if not sec:
+        raise SchoolServiceError("Class section not found", "not_found", 404)
+    if not can_manage_roster(db, actor_id, sec.school_id):
+        raise SchoolServiceError("Not allowed", "forbidden", 403)
+    roll = normalize_roll_number(roll_number)
+    fn = _norm(first_name)[:128]
+    ln = _norm(last_name)[:128]
+    if not roll or not fn or not ln:
+        raise SchoolServiceError("first_name, last_name, and roll_number are required", "bad_request", 400)
+    row = RosterEntry(
+        class_section_id=class_section_id,
+        roll_number=roll,
+        first_name=fn,
+        last_name=ln,
+        status="expected",
+    )
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        logger.info("Duplicate roster roll for section %s: %s", class_section_id, roll)
+        raise SchoolServiceError(
+            "Roll number already exists for this class section",
+            "duplicate_roll",
+            409,
+        ) from e
+    db.refresh(row)
+    return row
+
+
+def bulk_add_roster_entries(
+    db: Session,
+    *,
+    class_section_id: int,
+    entries: Sequence[Dict[str, Any]],
+    actor_id: int,
+) -> Dict[str, Any]:
+    """
+    Bulk-insert roster rows from JSON payloads: each item needs
+    first_name, last_name, roll_number.
+    """
+    sec = db.query(ClassSection).filter(ClassSection.id == class_section_id).first()
+    if not sec:
+        raise SchoolServiceError("Class section not found", "not_found", 404)
+    if not can_manage_roster(db, actor_id, sec.school_id):
+        raise SchoolServiceError("Not allowed", "forbidden", 403)
+    created = 0
+    errors: List[str] = []
+    for i, item in enumerate(entries):
+        try:
+            add_roster_entry(
+                db,
+                class_section_id=class_section_id,
+                first_name=str(item.get("first_name", "")),
+                last_name=str(item.get("last_name", "")),
+                roll_number=str(item.get("roll_number", "")),
+                actor_id=actor_id,
+            )
+            created += 1
+        except SchoolServiceError as e:
+            errors.append(f"row {i}: {e.message}")
+    return {"created": created, "errors": errors}
+
+
+def list_roster_entries_for_class_section(
+    db: Session, *, class_section_id: int, actor_id: int
+) -> List[RosterEntry]:
+    sec = db.query(ClassSection).filter(ClassSection.id == class_section_id).first()
+    if not sec:
+        raise SchoolServiceError("Class section not found", "not_found", 404)
+    allowed = can_manage_roster(db, actor_id, sec.school_id) or sec.teacher_user_id == actor_id
+    if not allowed:
+        user = db.query(DBUser).filter(DBUser.id == actor_id).first()
+        if not user or not is_super_admin_role(Role.from_string(user.role or "student")):
+            raise SchoolServiceError("Not allowed", "forbidden", 403)
+    return (
+        db.query(RosterEntry)
+        .filter(RosterEntry.class_section_id == class_section_id)
+        .order_by(RosterEntry.roll_number)
+        .all()
+    )
+
+
+def update_roster_entry_status(
+    db: Session, *, roster_entry_id: int, new_status: str, actor_id: int
+) -> RosterEntry:
+    if new_status not in ("expected", "linked", "withdrawn"):
+        raise SchoolServiceError("Invalid status", "bad_request", 400)
+    row = db.query(RosterEntry).filter(RosterEntry.id == roster_entry_id).first()
+    if not row:
+        raise SchoolServiceError("Roster entry not found", "not_found", 404)
+    sec = db.query(ClassSection).filter(ClassSection.id == row.class_section_id).first()
+    if not sec or not can_manage_roster(db, actor_id, sec.school_id):
+        raise SchoolServiceError("Not allowed", "forbidden", 403)
+    row.status = new_status
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def principal_dashboard_metrics(db: Session, *, principal_user_id: int) -> Dict[str, Any]:
+    """
+    Aggregate metrics for schools where the user is the assigned principal.
+    Uses only real queries over existing tables (no synthetic at-risk scores).
+    """
+    from app.models.school_learning_models import QuizSession, QuizSubmission
+
+    school_rows = db.query(School).filter(School.principal_user_id == principal_user_id).all()
+    if not school_rows:
+        return {"schools": []}
+    out: List[Dict[str, Any]] = []
+    for school in school_rows:
+        sid = school.id
+        enrollment_count = (
+            db.query(ClassEnrollment)
+            .join(ClassSection, ClassSection.id == ClassEnrollment.class_section_id)
+            .filter(ClassSection.school_id == sid, ClassEnrollment.status == "active")
+            .count()
+        )
+        active_teachers = (
+            db.query(TeacherSchoolAffiliation.teacher_user_id)
+            .filter(TeacherSchoolAffiliation.school_id == sid, TeacherSchoolAffiliation.is_active.is_(True))
+            .count()
+        )
+        section_count = db.query(ClassSection).filter(ClassSection.school_id == sid).count()
+
+        ratio = cast(QuizSubmission.score, SAFloat) / cast(QuizSubmission.max_score, SAFloat)
+        rows = (
+            db.query(SchoolSubject.name, func.avg(ratio))
+            .select_from(QuizSubmission)
+            .join(QuizSession, QuizSession.id == QuizSubmission.quiz_session_id)
+            .join(ClassSection, ClassSection.id == QuizSession.class_section_id)
+            .join(SchoolSubject, SchoolSubject.id == ClassSection.subject_id)
+            .filter(
+                ClassSection.school_id == sid,
+                QuizSubmission.score.isnot(None),
+                QuizSubmission.max_score.isnot(None),
+                QuizSubmission.max_score > 0,
+            )
+            .group_by(SchoolSubject.id, SchoolSubject.name)
+            .all()
+        )
+        quiz_avg_by_subject = [
+            {"subject_name": name, "avg_score_ratio": float(avg) if avg is not None else None}
+            for name, avg in rows
+        ]
+        out.append(
+            {
+                "school_id": sid,
+                "school_name": school.name,
+                "school_code": school.code,
+                "enrollment_count": enrollment_count,
+                "active_teachers": active_teachers,
+                "class_section_count": section_count,
+                "quiz_avg_by_subject": quiz_avg_by_subject,
+                "at_risk": None,
+            }
+        )
+    return {"schools": out}

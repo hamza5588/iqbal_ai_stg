@@ -110,10 +110,21 @@ def can_access_lesson(lesson_id: int, user_id: Optional[int] = None) -> bool:
     if role_enum == Role.TEACHER and lesson.teacher_id == user_id:
         return True
     
-    # Students can access public lessons
-    if role_enum == Role.STUDENT and lesson.is_public:
-        return True
-    
+    if role_enum == Role.STUDENT:
+        from app.services.school.student_lesson_access import student_may_view_lesson_via_school_placement
+
+        if student_may_view_lesson_via_school_placement(db, int(user_id), int(lesson_id)):
+            return True
+        if lesson.is_public:
+            from app.models.school_org_models import ClassEnrollment
+
+            has_enrollment = (
+                db.query(ClassEnrollment.id).filter(ClassEnrollment.student_user_id == int(user_id)).first()
+            )
+            if not has_enrollment:
+                return True
+        return False
+
     return False
 
 

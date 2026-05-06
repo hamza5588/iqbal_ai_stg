@@ -58,6 +58,11 @@ class School(Base):
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
 
     district = relationship("District", back_populates="schools")
+    principal_user = relationship(
+        "User",
+        back_populates="principal_of_schools",
+        foreign_keys=[principal_user_id],
+    )
     coordinators = relationship("SchoolCoordinator", back_populates="school", cascade="all, delete-orphan")
     subjects = relationship("SchoolSubject", back_populates="school", cascade="all, delete-orphan")
     teacher_links = relationship("TeacherSchoolAffiliation", back_populates="school", cascade="all, delete-orphan")
@@ -142,6 +147,11 @@ class ClassSection(Base):
     subject = relationship("SchoolSubject", back_populates="class_sections")
     roster_entries = relationship("RosterEntry", back_populates="class_section", cascade="all, delete-orphan")
     enrollments = relationship("ClassEnrollment", back_populates="class_section", cascade="all, delete-orphan")
+    lecture_links = relationship(
+        "LectureClassSection",
+        back_populates="class_section",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         CheckConstraint("status IN ('active', 'archived')", name="check_class_section_status"),

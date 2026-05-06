@@ -54,6 +54,7 @@ pybase64
 
 # ---- Database / Cache ----
 SQLAlchemy
+alembic
 psycopg2-binary
 redis
 aiosqlite

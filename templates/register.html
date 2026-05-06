@@ -862,6 +862,61 @@
                 </div>
                 <div id="role-error" class="text-error-500 text-xs sm:text-sm mt-1 sm:mt-2 hidden">Please select your role</div>
               </div>
+
+              <div class="rounded-xl md:rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4 sm:p-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+                    <i class="fas fa-school text-indigo-600 text-sm"></i>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 text-sm">Principals &amp; coordinators</p>
+                    <p class="text-xs sm:text-sm text-gray-600 mt-1 leading-relaxed">
+                      School leadership accounts are created by your organization or platform admin. Self-registration here is for <strong class="text-gray-800">students</strong> and <strong class="text-gray-800">teachers</strong> only. After you sign in, use <strong>School hub</strong> and the coordinator or principal dashboards (same sidebar style as the teacher app) for roster and school metrics.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- School Roll-Number section (shown for student) -->
+              <div id="school-roll-section" class="hidden">
+                <div class="rounded-xl border border-primary-200 bg-primary-50 p-4 mb-2">
+                  <div class="flex items-start gap-3 mb-3">
+                    <div class="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <i class="fas fa-id-card text-primary-600 text-sm"></i>
+                    </div>
+                    <div>
+                      <p class="font-semibold text-primary-900 text-sm">School Enrollment (optional)</p>
+                      <p class="text-xs text-primary-700 mt-0.5">Enter your school code and roll number to link your account to your class sections. Your coordinator must have added you to the roster first.</p>
+                    </div>
+                  </div>
+                  <div class="space-y-3">
+                    <div>
+                      <label for="school_code" class="block text-surface-700 font-semibold mb-1 text-xs sm:text-sm">School Code</label>
+                      <input type="text" id="school_code" name="school_code" placeholder="e.g. IQBAL-SCH-001"
+                        class="w-full px-3 py-2 sm:px-4 sm:py-3 text-surface-900 bg-white rounded-lg border border-primary-200 focus:ring-2 focus:ring-primary-500 focus:outline-none text-sm" />
+                    </div>
+                    <div>
+                      <label for="roll_number" class="block text-surface-700 font-semibold mb-1 text-xs sm:text-sm">Roll Number</label>
+                      <input type="text" id="roll_number" name="roll_number" placeholder="e.g. 101"
+                        class="w-full px-3 py-2 sm:px-4 sm:py-3 text-surface-900 bg-white rounded-lg border border-primary-200 focus:ring-2 focus:ring-primary-500 focus:outline-none text-sm font-mono" />
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div>
+                        <label for="student_first_name" class="block text-surface-700 font-semibold mb-1 text-xs sm:text-sm">First Name (as on roster)</label>
+                        <input type="text" id="student_first_name" name="student_first_name" placeholder="Ali"
+                          class="w-full px-3 py-2 sm:px-4 sm:py-3 text-surface-900 bg-white rounded-lg border border-primary-200 focus:ring-2 focus:ring-primary-500 focus:outline-none text-sm" />
+                      </div>
+                      <div>
+                        <label for="student_last_name" class="block text-surface-700 font-semibold mb-1 text-xs sm:text-sm">Last Name (as on roster)</label>
+                        <input type="text" id="student_last_name" name="student_last_name" placeholder="Khan"
+                          class="w-full px-3 py-2 sm:px-4 sm:py-3 text-surface-900 bg-white rounded-lg border border-primary-200 focus:ring-2 focus:ring-primary-500 focus:outline-none text-sm" />
+                      </div>
+                    </div>
+                    <p class="text-xs text-primary-600"><i class="fas fa-info-circle mr-1"></i>Leave blank to register without school enrollment. You can link later from your dashboard.</p>
+                  </div>
+                </div>
+              </div>
+
               <!-- Class Standard (shown for student) -->
               <div id="class-standard-section" class="hidden">
                 <label for="class_standard" class="block text-surface-700 font-semibold mb-2 sm:mb-3 text-sm sm:text-base">Class Standard *</label>
@@ -1016,20 +1071,24 @@
   </div>
 
   <script>
-    // Same as old register.html: show class_standard for student role
+    // Show class_standard and school roll-number section for student role
     function handleRoleChange() {
       const role = document.getElementById('role');
       const classStandardSection = document.getElementById('class-standard-section');
+      const rollSection = document.getElementById('school-roll-section');
       if (!role || !classStandardSection) return;
       if (role.value === 'student') {
         classStandardSection.classList.remove('hidden');
         document.getElementById('class_standard').required = true;
+        if (rollSection) rollSection.classList.remove('hidden');
       } else if (role.value === 'teacher') {
         classStandardSection.classList.add('hidden');
         const classStandard = document.getElementById('class_standard');
         if (classStandard) { classStandard.required = false; classStandard.value = ''; }
+        if (rollSection) rollSection.classList.add('hidden');
       } else {
         classStandardSection.classList.add('hidden');
+        if (rollSection) rollSection.classList.add('hidden');
       }
     }
     // Initialize particles
@@ -1219,15 +1278,17 @@
       }
     });
     
-    // Complete registration form: normal POST to auth.register with useremail, username, password, role, medium, class_standard.
-    // Client-side validation for static fields (confirm password, terms) before allowing submit.
+    // Complete registration form.
+    // If role=student AND roll_number is filled, use the roll-number API for roster-linked registration.
+    // Otherwise normal POST to auth.register.
     const completeForm = document.getElementById('completeRegistrationForm');
     if (completeForm) {
-      completeForm.addEventListener('submit', function(e) {
+      completeForm.addEventListener('submit', async function(e) {
         const password = document.getElementById('password');
         const confirmPassword = document.getElementById('confirm-password');
         const terms = document.getElementById('terms');
         const confirmError = document.getElementById('confirm-password-error');
+
         if (confirmPassword && password && password.value !== confirmPassword.value) {
           e.preventDefault();
           if (confirmError) { confirmError.classList.remove('hidden'); confirmError.textContent = 'Passwords do not match'; }
@@ -1240,10 +1301,80 @@
           if (termsError) termsError.classList.remove('hidden');
           return false;
         }
-        const termsError = document.getElementById('terms-error');
-        if (termsError) termsError.classList.add('hidden');
         if (confirmError) confirmError.classList.add('hidden');
         if (confirmPassword) confirmPassword.classList.remove('!border-error-300');
+        const termsError = document.getElementById('terms-error');
+        if (termsError) termsError.classList.add('hidden');
+
+        // Check if student is using roll-number registration
+        const roleEl = document.getElementById('role');
+        const rollEl = document.getElementById('roll_number');
+        const schoolCodeEl = document.getElementById('school_code');
+        if (roleEl && roleEl.value === 'student' && rollEl && rollEl.value.trim()) {
+          e.preventDefault();
+          const submitBtn = document.getElementById('submit-btn');
+          const origHtml = submitBtn ? submitBtn.innerHTML : '';
+          if (submitBtn) submitBtn.innerHTML = '<span class="relative z-10 flex items-center justify-center"><i class="fas fa-spinner fa-spin mr-2"></i> Registering…</span>';
+
+          try {
+            const emailEl = document.getElementById('email');
+            const hiddenEmailEl = completeForm.querySelector('input[name="useremail"]');
+            const usernameEl = document.getElementById('username');
+            const classStdEl = document.getElementById('class_standard');
+            const mediumEl = document.getElementById('medium');
+            const firstEl = document.getElementById('student_first_name');
+            const lastEl = document.getElementById('student_last_name');
+            const resolvedEmail = emailEl && emailEl.value ? emailEl.value.trim() : (hiddenEmailEl ? hiddenEmailEl.value.trim() : '');
+            const resolvedUsername = usernameEl ? usernameEl.value.trim() : '';
+
+            const payload = {
+              email: resolvedEmail,
+              username: resolvedUsername || resolvedEmail,
+              password: password.value,
+              first_name: firstEl ? firstEl.value.trim() : '',
+              last_name: lastEl ? lastEl.value.trim() : '',
+              roll_number: rollEl.value.trim(),
+              school_code: schoolCodeEl ? schoolCodeEl.value.trim() : '',
+              class_standard: classStdEl ? classStdEl.value : '',
+              medium: mediumEl ? mediumEl.value : ''
+            };
+
+            const res = await fetch('/api/auth/student/register-with-roll-number', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+              body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(function() { return {}; });
+
+            if (res.ok) {
+              // Success — show confirmation and redirect to login
+              const msg = 'Account created and linked to ' + (data.enrolled_section_count || 0) + ' class section(s). Redirecting to login…';
+              const el = document.createElement('div');
+              el.className = 'fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4';
+              el.innerHTML = '<div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center"><div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-check-circle text-green-600 text-3xl"></i></div><h3 class="text-xl font-bold text-slate-900 mb-2">Registration Successful!</h3><p class="text-slate-600 text-sm mb-1">' + msg + '</p></div>';
+              document.body.appendChild(el);
+              setTimeout(function() { window.location.href = '/login'; }, 2500);
+            } else {
+              const errMsg = (data && data.error) ? data.error : 'Registration failed. Please check your details and try again.';
+              const errEl = document.getElementById('terms-error');
+              if (errEl) {
+                errEl.innerHTML = '<i class="fas fa-exclamation-circle mr-1"></i><span>' + errMsg + '</span>';
+                errEl.classList.remove('hidden');
+              }
+              if (submitBtn) submitBtn.innerHTML = origHtml;
+            }
+          } catch (err) {
+            const errEl = document.getElementById('terms-error');
+            if (errEl) {
+              errEl.innerHTML = '<i class="fas fa-exclamation-circle mr-1"></i><span>Network error. Please try again.</span>';
+              errEl.classList.remove('hidden');
+            }
+            if (submitBtn) submitBtn.innerHTML = origHtml;
+          }
+          return false;
+        }
+
+        // Normal registration (non-roll-number path) — let the form POST naturally
         return true;
       });
       const termsCheckbox = document.getElementById('terms');

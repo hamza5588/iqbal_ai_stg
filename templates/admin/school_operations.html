@@ -3,292 +3,1070 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>School operations | IqbalAI Admin</title>
+  <title>School Operations | IqbalAI Admin</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'], display: ['Poppins', 'Inter', 'sans-serif'] },
+          colors: {
+            iqbal: { primary: '#05B0FC', light: '#E0F9FF', dark: '#0369a1' }
+          }
+        }
+      }
+    };
+  </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    /* Plain CSS only — Tailwind CDN does not compile at-apply directives inside style blocks */
+    .sidebar-link {
+      display: flex; align-items: center; gap: 0.75rem; padding: 0.625rem 1rem; border-radius: 0.75rem;
+      color: #475569; font-size: 0.875rem; font-weight: 500; text-decoration: none; transition: background 0.15s, color 0.15s;
+    }
+    .sidebar-link:hover { background: #e0f9ff; color: #0369a1; }
+    .sidebar-link.active {
+      background: linear-gradient(90deg, #e0f9ff, #f0fdff); color: #0369a1;
+      box-shadow: inset 3px 0 0 0 #05B0FC;
+    }
+    .sidebar-link i { width: 1.1rem; text-align: center; flex-shrink: 0; }
+    .card {
+      background: #fff; border-radius: 1rem; border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .section-title { font-size: 1.125rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+    .form-label { display: block; font-size: 0.75rem; font-weight: 600; color: #475569; margin-bottom: 0.35rem; }
+    .form-input {
+      width: 100%; border-radius: 0.5rem; border: 1px solid #cbd5e1; padding: 0.625rem 0.75rem; font-size: 0.875rem; color: #0f172a;
+      background: #fff; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .form-input:focus { outline: none; border-color: #05B0FC; box-shadow: 0 0 0 3px rgba(5, 176, 252, 0.2); }
+    .btn-primary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      background: #05B0FC; color: #fff; font-weight: 600; font-size: 0.875rem; padding: 0.625rem 1.25rem; border-radius: 0.75rem; border: none; cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-primary:hover { background: #0369a1; }
+    .btn-primary:active { transform: translateY(1px); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      background: #fff; color: #334155; font-weight: 600; font-size: 0.875rem; padding: 0.625rem 1.25rem; border-radius: 0.75rem;
+      border: 1px solid #cbd5e1; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-secondary:hover { background: #f8fafc; }
+    .btn-sm { padding: 0.4rem 0.75rem !important; font-size: 0.75rem !important; }
+    .btn-success {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      background: #059669; color: #fff; font-weight: 600; font-size: 0.875rem; padding: 0.625rem 1.25rem; border-radius: 0.75rem; border: none; cursor: pointer;
+    }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { display: inline-flex; align-items: center; justify-content: center; background: #ef4444; color: #fff; font-weight: 600; font-size: 0.875rem; padding: 0.5rem 1rem; border-radius: 0.5rem; border: none; cursor: pointer; }
+    .btn-danger:hover { background: #dc2626; }
+    .rp { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem; border-radius: 9999px; font-size: 0.6875rem; font-weight: 600; white-space: nowrap; }
+    .rp-admin { background: #fee2e2; color: #991b1b; }
+    .rp-platform_admin { background: #ffedd5; color: #9a3412; }
+    .rp-district_admin { background: #fef3c7; color: #92400e; }
+    .rp-school_admin { background: #f3e8ff; color: #6b21a8; }
+    .rp-principal { background: #ede9fe; color: #5b21b6; }
+    .rp-coordinator { background: #e0e7ff; color: #3730a3; }
+    .rp-teacher { background: #d1fae5; color: #047857; }
+    .rp-student { background: #e0f2fe; color: #0369a1; }
+    .rp-parent { background: #f1f5f9; color: #475569; }
+    .rp-default { background: #f1f5f9; color: #64748b; }
+    .toast { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999; padding: 0.875rem 1.375rem; border-radius: 0.875rem; font-size: 0.875rem; font-weight: 600; color: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.15); max-width: 22rem; }
+    .toast.success { background: linear-gradient(135deg,#16a34a,#15803d); }
+    .toast.error { background: linear-gradient(135deg,#dc2626,#b91c1c); }
+    .toast.info { background: linear-gradient(135deg,#05B0FC,#0369a1); }
+    .ops-table { width: 100%; font-size: 0.875rem; border-collapse: collapse; }
+    .ops-table thead th {
+      padding: 0.875rem 1rem; text-align: left; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+      color: #64748b; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    }
+    .ops-table tbody td { padding: 0.875rem 1rem; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
+    .ops-table tbody tr:last-child td { border-bottom: none; }
+    .ops-table tbody tr:hover td { background: rgba(224, 249, 255, 0.45); }
+    .nav-panel { display: none; }
+    .nav-panel.active { display: block; }
+    #mobileSidebar { transform: translateX(-100%); transition: transform .3s ease; }
+    #mobileSidebar.open { transform: translateX(0); }
+    #sidebarOverlay { opacity: 0; pointer-events: none; transition: opacity .3s; }
+    #sidebarOverlay.open { opacity: 1; pointer-events: auto; }
+    details.role-details > summary { cursor: pointer; list-style: none; }
+    details.role-details > summary::-webkit-details-marker { display: none; }
+    details.role-details[open] > summary .details-chevron { transform: rotate(180deg); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <p class="text-xs uppercase tracking-widest text-sky-400 font-semibold">IqbalAI · Admin</p>
-        <h1 class="text-xl font-bold text-white">School operations</h1>
-        <p class="text-sm text-slate-400">Create schools, subjects, sections, rosters, publish tests, quizzes</p>
-      </div>
-      <div class="flex gap-2 flex-wrap items-center">
-        <a href="/admin/" class="px-3 py-2 rounded-lg bg-sky-700 text-sm hover:bg-sky-600 font-medium">
-          <i class="fas fa-arrow-left mr-1"></i>Admin dashboard
-        </a>
-        <a href="/teacher-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Teacher</a>
-        <a href="/student-dashboard" class="px-3 py-2 rounded-lg bg-slate-800 text-sm hover:bg-slate-700">Student</a>
-        <a href="/auth/logout" class="px-3 py-2 rounded-lg bg-red-900/80 text-sm hover:bg-red-800">Logout</a>
+<body class="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans text-slate-900 antialiased">
+
+  <!-- Top Navigation Bar -->
+  <nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+    <div class="px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Left: Logo + mobile menu -->
+        <div class="flex items-center gap-4">
+          <button onclick="toggleMobileSidebar()" class="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100">
+            <i class="fas fa-bars text-lg"></i>
+          </button>
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:linear-gradient(135deg,#05B0FC,#0369a1)">
+              <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-6 h-6" alt="IqbalAI" />
+            </div>
+            <div>
+              <p class="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">IqbalAI Platform</p>
+              <h1 class="text-base font-bold text-slate-900 leading-tight">School Operations</h1>
+            </div>
+          </div>
+        </div>
+        <!-- Right: nav links -->
+        <div class="flex items-center gap-2">
+          <a href="/admin/" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-colors">
+            <i class="fas fa-tachometer-alt text-[#05B0FC]"></i> Admin
+          </a>
+          <a href="/teacher-dashboard" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-colors">
+            <i class="fas fa-chalkboard-teacher text-emerald-500"></i> Teacher
+          </a>
+          <a href="/student-dashboard" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-colors">
+            <i class="fas fa-user-graduate text-violet-500"></i> Student
+          </a>
+          <a href="/auth/logout" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 text-xs font-semibold transition-colors">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </a>
+        </div>
       </div>
     </div>
-  </header>
+  </nav>
 
-  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <section class="rounded-2xl border border-sky-900/50 bg-sky-950/30 p-6">
-      <h2 class="text-lg font-semibold text-sky-200 mb-2"><i class="fas fa-user-shield mr-2"></i>Super administrator access</h2>
-      <p class="text-sm text-slate-300 leading-relaxed">
-        This console is only for roles in the <strong>admin family</strong>:
-        <code class="text-sky-300">admin</code>,
-        <code class="text-sky-300">platform_admin</code>,
-        <code class="text-sky-300">district_admin</code>, or
-        <code class="text-sky-300">school_admin</code>.
-        On first startup the server creates a default <strong>admin</strong> account if none exists — open the application log for that run to copy the email and password (or reset the user in the database).
-      </p>
-      <p class="text-sm text-slate-400 mt-3">
-        <i class="fas fa-chalkboard-teacher mr-1 text-slate-500"></i>
-        Day-to-day teachers should use <a href="/teacher-dashboard" class="text-sky-400 hover:underline">Teacher dashboard</a>
-        → My Lessons (school icon or lesson view) to publish to their class sections.
-      </p>
-    </section>
+  <!-- Mobile sidebar overlay -->
+  <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 z-40 lg:hidden" onclick="toggleMobileSidebar()"></div>
 
-    <section id="ctx" class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <h2 class="text-lg font-semibold mb-2">Session</h2>
-      <pre id="ctx-pre" class="text-xs text-emerald-300 whitespace-pre-wrap overflow-x-auto">Loading…</pre>
-    </section>
-
-    <section class="grid md:grid-cols-2 gap-6">
-      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-        <h2 class="text-lg font-semibold">Create school</h2>
-        <p class="text-xs text-slate-500">API: <code class="text-slate-400">POST /api/school/schools</code></p>
-        <label class="block text-sm text-slate-400">Name</label>
-        <input id="sc-name" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <label class="block text-sm text-slate-400">Code (unique)</label>
-        <input id="sc-code" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <button id="btn-create-school" type="button" class="w-full py-2 rounded-lg bg-sky-600 hover:bg-sky-500 font-medium">Create school</button>
-        <p id="sc-out" class="text-xs text-slate-400"></p>
+  <div class="flex">
+    <!-- Desktop Sidebar -->
+    <aside class="hidden lg:flex flex-col w-64 min-h-[calc(100vh-4rem)] bg-white border-r border-slate-200 shadow-sm sticky top-16 shrink-0">
+      <div class="p-4 space-y-1">
+        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-4 pb-1 pt-2">School Setup</p>
+        <a href="#" onclick="showPanel('roles'); return false;" id="nav-roles" class="sidebar-link active">
+          <i class="fas fa-user-shield text-red-500"></i> Role Management
+        </a>
+        <a href="#" onclick="showPanel('schools'); return false;" id="nav-schools" class="sidebar-link">
+          <i class="fas fa-school text-[#05B0FC]"></i> Schools
+        </a>
+        <a href="#" onclick="showPanel('subjects'); return false;" id="nav-subjects" class="sidebar-link">
+          <i class="fas fa-book text-indigo-500"></i> Subjects & Sections
+        </a>
+        <a href="#" onclick="showPanel('roster'); return false;" id="nav-roster" class="sidebar-link">
+          <i class="fas fa-list-ol text-amber-500"></i> Roster Import
+        </a>
+        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-4 pb-1 pt-4">Operations</p>
+        <a href="#" onclick="showPanel('publish'); return false;" id="nav-publish" class="sidebar-link">
+          <i class="fas fa-share-nodes text-emerald-500"></i> Publish Lessons
+        </a>
+        <a href="#" onclick="showPanel('quiz'); return false;" id="nav-quiz" class="sidebar-link">
+          <i class="fas fa-circle-question text-pink-500"></i> Quiz Sessions
+        </a>
+        <a href="#" onclick="showPanel('enroll'); return false;" id="nav-enroll" class="sidebar-link">
+          <i class="fas fa-id-card text-violet-500"></i> Student Enrollment
+        </a>
+        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-4 pb-1 pt-4">Platform</p>
+        <a href="/admin/" class="sidebar-link">
+          <i class="fas fa-tachometer-alt text-slate-400"></i> Admin Dashboard
+        </a>
+        <a href="/school/coordinator-dashboard" class="sidebar-link">
+          <i class="fas fa-people-roof text-indigo-400"></i> Coordinator View
+        </a>
+        <a href="/school/principal-dashboard" class="sidebar-link">
+          <i class="fas fa-chart-pie text-violet-400"></i> Principal View
+        </a>
       </div>
+    </aside>
 
-      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-        <h2 class="text-lg font-semibold">Subject &amp; class section</h2>
-        <label class="block text-sm text-slate-400">School ID</label>
-        <input id="cid-school" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <label class="block text-sm text-slate-400">Subject name / short_code</label>
-        <div class="flex gap-2">
-          <input id="sub-name" placeholder="Physics" class="flex-1 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-          <input id="sub-code" placeholder="PHY" class="w-24 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+    <!-- Mobile Sidebar -->
+    <div id="mobileSidebar" class="fixed top-0 left-0 h-full w-64 bg-white z-50 border-r border-slate-200 shadow-xl lg:hidden overflow-y-auto">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <span class="font-bold text-slate-900">Menu</span>
+        <button onclick="toggleMobileSidebar()" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-4 space-y-1">
+        <a href="#" onclick="showPanel('roles'); toggleMobileSidebar(); return false;" class="sidebar-link"><i class="fas fa-user-shield text-red-500"></i> Role Management</a>
+        <a href="#" onclick="showPanel('schools'); toggleMobileSidebar(); return false;" class="sidebar-link"><i class="fas fa-school text-[#05B0FC]"></i> Schools</a>
+        <a href="#" onclick="showPanel('subjects'); toggleMobileSidebar(); return false;" class="sidebar-link"><i class="fas fa-book text-indigo-500"></i> Subjects & Sections</a>
+        <a href="#" onclick="showPanel('roster'); toggleMobileSidebar(); return false;" class="sidebar-link"><i class="fas fa-list-ol text-amber-500"></i> Roster Import</a>
+        <a href="#" onclick="showPanel('publish'); toggleMobileSidebar(); return false;" class="sidebar-link"><i class="fas fa-share-nodes text-emerald-500"></i> Publish Lessons</a>
+        <a href="#" onclick="showPanel('quiz'); toggleMobileSidebar(); return false;" class="sidebar-link"><i class="fas fa-circle-question text-pink-500"></i> Quiz Sessions</a>
+        <a href="#" onclick="showPanel('enroll'); toggleMobileSidebar(); return false;" class="sidebar-link"><i class="fas fa-id-card text-violet-500"></i> Student Enrollment</a>
+      </div>
+    </div>
+
+    <!-- ─── Main Content (centered on wide screens — matches teacher app) ─── -->
+    <main class="flex-1 min-w-0">
+      <div class="max-w-6xl mx-auto w-full p-4 lg:p-8 space-y-6">
+
+      <!-- Session context (compact) -->
+      <div class="card p-4 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+            <i class="fas fa-user-shield text-red-600"></i>
+          </div>
+          <div>
+            <p class="text-xs text-slate-500 font-medium">Logged in as</p>
+            <p class="text-sm font-bold text-slate-900" id="sessionUser">Loading…</p>
+          </div>
         </div>
-        <button id="btn-subject" type="button" class="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">Create subject</button>
-        <hr class="border-slate-800" />
-        <label class="block text-sm text-slate-400">Subject ID</label>
-        <input id="sec-subject" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <label class="block text-sm text-slate-400">Teacher user ID</label>
-        <input id="sec-teacher" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <div class="grid grid-cols-2 gap-2">
-          <input id="sec-grade" placeholder="8" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-          <input id="sec-letter" placeholder="A" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <div class="text-right hidden sm:block">
+          <p class="text-xs text-slate-400">Role</p>
+          <span id="sessionRole" class="rp rp-default text-xs">–</span>
         </div>
-        <input id="sec-year" placeholder="2025-2026" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <button id="btn-section" type="button" class="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">Create class section</button>
-        <p id="coord-out" class="text-xs text-slate-400"></p>
       </div>
-    </section>
 
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Roster CSV import</h2>
-      <p class="text-sm text-slate-400">Header row must include roll (or roll_number), first (or first_name), last (or last_name).</p>
-      <label class="block text-sm text-slate-400">Class section ID</label>
-      <input id="rost-sec" type="number" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <textarea id="rost-csv" rows="6" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 font-mono text-sm"
-        placeholder="roll,first_name,last_name&#10;101,Ali,Khan"></textarea>
-      <button id="btn-roster" type="button" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 font-medium">Import roster</button>
-      <pre id="rost-out" class="text-xs text-amber-200 whitespace-pre-wrap"></pre>
-    </section>
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL: Role Management -->
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <div id="panel-roles" class="nav-panel active space-y-6">
 
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Student — link roster + scoped lessons</h2>
-      <p class="text-xs text-slate-500">Useful when impersonating or helping a student verify enrollment.</p>
-      <input id="lnk-code" placeholder="School code" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <input id="lnk-sec" type="number" placeholder="Class section ID" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      <div class="grid grid-cols-3 gap-2">
-        <input id="lnk-roll" placeholder="Roll" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="lnk-fn" placeholder="First" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="lnk-ln" placeholder="Last" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+        <!-- Role reference (collapsed by default to save space) -->
+        <details class="role-details card border border-sky-200 bg-sky-50/80 overflow-hidden rounded-2xl">
+          <summary class="px-4 py-3 sm:px-5 flex items-center justify-between gap-3 font-semibold text-sky-900 text-sm hover:bg-sky-100/50 transition-colors">
+            <span class="flex items-center gap-2"><i class="fas fa-layer-group text-sky-600"></i> Role hierarchy &amp; who can use this page</span>
+            <i class="fas fa-chevron-down text-sky-600 text-xs transition-transform details-chevron"></i>
+          </summary>
+          <div class="px-4 pb-4 pt-0 sm:px-5 border-t border-sky-100">
+            <div class="flex flex-wrap gap-2 pt-3">
+              <span class="rp rp-platform_admin"><i class="fas fa-crown"></i> platform_admin</span>
+              <span class="rp rp-district_admin"><i class="fas fa-building"></i> district_admin</span>
+              <span class="rp rp-school_admin"><i class="fas fa-school"></i> school_admin</span>
+              <span class="rp rp-principal"><i class="fas fa-user-tie"></i> principal</span>
+              <span class="rp rp-coordinator"><i class="fas fa-people-roof"></i> coordinator</span>
+              <span class="rp rp-teacher"><i class="fas fa-chalkboard-teacher"></i> teacher</span>
+              <span class="rp rp-student"><i class="fas fa-user-graduate"></i> student</span>
+            </div>
+            <p class="text-xs text-sky-900/80 mt-3 leading-relaxed">Only <strong>admin</strong> or <strong>platform_admin</strong> should use School Operations to create accounts. Coordinators and principals sign in at <strong class="font-mono">/login</strong> like everyone else.</p>
+          </div>
+        </details>
+
+        <!-- Create user form -->
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+            <h2 class="section-title"><i class="fas fa-user-plus text-[#05B0FC]"></i> Create User Account</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Create coordinator, principal, teacher, or any role account</p>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+              <div class="md:col-span-1">
+                <label class="form-label" for="cu-username">Full name / username *</label>
+                <input id="cu-username" placeholder="ali_coordinator" class="form-input" autocomplete="username" />
+              </div>
+              <div class="md:col-span-1">
+                <label class="form-label" for="cu-email">Email *</label>
+                <input id="cu-email" type="email" placeholder="ali@school.edu.pk" class="form-input" autocomplete="email" />
+              </div>
+              <div class="md:col-span-1">
+                <label class="form-label" for="cu-password">Password *</label>
+                <input id="cu-password" type="password" placeholder="••••••••" class="form-input" autocomplete="new-password" />
+              </div>
+              <div class="md:col-span-1">
+                <label class="form-label" for="cu-role">Role *</label>
+                <select id="cu-role" class="form-input" onchange="updateRoleHint()">
+                  <option value="">Select role…</option>
+                  <optgroup label="School Staff">
+                    <option value="coordinator">Coordinator — manages rosters & sections</option>
+                    <option value="principal">Principal — school analytics & oversight</option>
+                    <option value="teacher">Teacher — creates lessons, runs quizzes</option>
+                  </optgroup>
+                  <optgroup label="Admin Family">
+                    <option value="school_admin">School Admin — school-level super user</option>
+                    <option value="district_admin">District Admin — manages multiple schools</option>
+                    <option value="platform_admin">Platform Admin — full platform access</option>
+                    <option value="admin">Admin — legacy admin role</option>
+                  </optgroup>
+                  <optgroup label="Other">
+                    <option value="student">Student — view lessons, take quizzes</option>
+                    <option value="parent">Parent — read-only access</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div id="roleHint" class="hidden md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 leading-relaxed"></div>
+              <div class="md:col-span-2 flex flex-col-reverse sm:flex-row sm:items-center gap-3 pt-1">
+                <button type="button" onclick="clearCreateForm()" class="btn-secondary w-full sm:w-auto min-w-[8rem]">
+                  <i class="fas fa-rotate-left"></i> Clear
+                </button>
+                <button type="button" onclick="createUser()" class="btn-primary w-full sm:w-auto min-w-[12rem]">
+                  <i class="fas fa-user-plus"></i> Create account
+                </button>
+              </div>
+            </div>
+            <p id="cu-status" class="text-xs mt-3 min-h-[1.25rem]"></p>
+          </div>
+        </div>
+
+        <!-- Users table -->
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 class="section-title"><i class="fas fa-users text-slate-400"></i> All users</h2>
+            <div class="flex gap-2 items-center shrink-0">
+              <label class="sr-only" for="filterRole">Filter by role</label>
+              <select id="filterRole" onchange="loadUsers()" class="form-input py-2 text-xs w-full sm:w-40">
+                <option value="">All roles</option>
+                <option value="coordinator">Coordinator</option>
+                <option value="principal">Principal</option>
+                <option value="teacher">Teacher</option>
+                <option value="student">Student</option>
+                <option value="admin">Admin</option>
+                <option value="school_admin">School Admin</option>
+                <option value="district_admin">District Admin</option>
+                <option value="platform_admin">Platform Admin</option>
+              </select>
+              <button type="button" onclick="loadUsers()" class="btn-secondary py-2 px-3 text-xs shrink-0" title="Refresh list"><i class="fas fa-rotate"></i></button>
+            </div>
+          </div>
+          <div class="overflow-x-auto rounded-b-2xl">
+            <table class="ops-table">
+              <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th class="text-right w-28">Actions</th></tr></thead>
+              <tbody id="usersTableBody">
+                <tr><td colspan="5" class="text-center text-slate-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="px-6 py-3 border-t border-slate-100">
+            <p id="userCount" class="text-xs text-slate-400"></p>
+          </div>
+        </div>
+
+        <!-- Assign coordinator/principal to school -->
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100">
+            <h2 class="section-title"><i class="fas fa-link text-indigo-500"></i> Assign Staff to School</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Assign an existing coordinator or principal to a school</p>
+          </div>
+          <div class="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label class="form-label">School ID</label>
+              <input id="assign-school" type="number" placeholder="1" class="form-input" />
+            </div>
+            <div>
+              <label class="form-label">User ID</label>
+              <input id="assign-user" type="number" placeholder="5" class="form-input" />
+            </div>
+            <div>
+              <label class="form-label">Assign as</label>
+              <select id="assign-role" class="form-input">
+                <option value="coordinator">Coordinator</option>
+                <option value="principal">Principal</option>
+                <option value="teacher">Teacher</option>
+              </select>
+            </div>
+          </div>
+          <div class="px-6 pb-5">
+            <button onclick="assignStaff()" class="btn-primary">
+              <i class="fas fa-link"></i> Assign to School
+            </button>
+            <p id="assign-status" class="text-xs mt-2 text-slate-500 min-h-[1.25rem]"></p>
+          </div>
+        </div>
       </div>
-      <button id="btn-link" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">Link roster</button>
-      <button id="btn-lessons" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Load scoped lessons</button>
-      <pre id="stu-out" class="text-xs text-emerald-200 whitespace-pre-wrap"></pre>
-    </section>
 
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Publish &amp; quiz (API smoke tests)</h2>
-      <div class="grid md:grid-cols-2 gap-3">
-        <input id="pub-lesson" type="number" placeholder="Lesson ID" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="pub-sections" placeholder="Section IDs comma-separated" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-      </div>
-      <button id="btn-publish" type="button" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 font-medium">Publish to sections</button>
-      <hr class="border-slate-800" />
-      <div class="grid md:grid-cols-3 gap-3">
-        <input id="qz-lesson" type="number" placeholder="Lesson ID" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <input id="qz-sec" type="number" placeholder="Class section ID" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
-        <select id="qz-mode" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2">
-          <option value="device">device</option>
-          <option value="screen">screen</option>
-        </select>
-      </div>
-      <button id="btn-quiz" type="button" class="px-4 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 font-medium">Create AI quiz session</button>
-      <pre id="tea-out" class="text-xs text-cyan-200 whitespace-pre-wrap"></pre>
-    </section>
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL: Schools -->
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <div id="panel-schools" class="nav-panel space-y-6">
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-white">
+            <h2 class="section-title"><i class="fas fa-school text-[#05B0FC]"></i> Create School</h2>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">School Name *</label>
+                <input id="sc-name" placeholder="Iqbal Model School" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Unique Code *</label>
+                <input id="sc-code" placeholder="IQBAL-SCH-001" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">District ID (optional)</label>
+                <input id="sc-district" type="number" placeholder="Leave blank if none" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Principal User ID (optional)</label>
+                <input id="sc-principal" type="number" placeholder="Assign later if needed" class="form-input" />
+              </div>
+            </div>
+            <button onclick="createSchool()" class="btn-primary">
+              <i class="fas fa-plus"></i> Create School
+            </button>
+            <p id="sc-out" class="text-xs text-slate-500 min-h-[1.25rem]"></p>
+          </div>
+        </div>
 
-    <section class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Active quiz sessions</h2>
-      <button id="btn-quiz-list" type="button" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium">Refresh</button>
-      <pre id="qz-list" class="text-xs text-pink-200 whitespace-pre-wrap"></pre>
-    </section>
-  </main>
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="section-title"><i class="fas fa-list text-slate-400"></i> All Schools</h2>
+            <button type="button" onclick="loadSchools()" class="btn-secondary btn-sm"><i class="fas fa-rotate"></i> Refresh</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="ops-table">
+              <thead><tr><th>ID</th><th>Name</th><th>Code</th><th>Teachers</th><th>Sections</th><th>Students</th></tr></thead>
+              <tbody id="schoolsBody">
+                <tr><td colspan="6" class="text-center text-slate-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL: Subjects & Sections -->
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <div id="panel-subjects" class="nav-panel space-y-6">
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-white">
+            <h2 class="section-title"><i class="fas fa-book text-indigo-500"></i> Add Subject</h2>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="form-label">School ID *</label>
+                <input id="sub-school" type="number" placeholder="1" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Subject Name *</label>
+                <input id="sub-name" placeholder="Physics" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Short Code *</label>
+                <input id="sub-code" placeholder="PHY" class="form-input" />
+              </div>
+            </div>
+            <button onclick="createSubject()" class="btn-primary">
+              <i class="fas fa-plus"></i> Add Subject
+            </button>
+            <p id="sub-out" class="text-xs text-slate-500 min-h-[1.25rem]"></p>
+          </div>
+        </div>
+
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-white">
+            <h2 class="section-title"><i class="fas fa-layer-group text-violet-500"></i> Create Class Section</h2>
+            <p class="text-xs text-slate-500 mt-0.5">A class section ties a teacher to a subject, grade, and group of students</p>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="form-label">School ID *</label>
+                <input id="cid-school" type="number" placeholder="1" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Subject ID *</label>
+                <input id="sec-subject" type="number" placeholder="1" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Teacher User ID *</label>
+                <input id="sec-teacher" type="number" placeholder="5" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Grade Level *</label>
+                <input id="sec-grade" placeholder="8" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Section *</label>
+                <input id="sec-letter" placeholder="A" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Academic Year *</label>
+                <input id="sec-year" placeholder="2025-2026" class="form-input" />
+              </div>
+              <div class="col-span-2 sm:col-span-3">
+                <label class="form-label">Display Name (optional)</label>
+                <input id="sec-display" placeholder="Grade 8A – Physics" class="form-input" />
+              </div>
+            </div>
+            <button onclick="createSection()" class="btn-primary">
+              <i class="fas fa-plus"></i> Create Class Section
+            </button>
+            <p id="sec-out" class="text-xs text-slate-500 min-h-[1.25rem]"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL: Roster Import -->
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <div id="panel-roster" class="nav-panel space-y-6">
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-white">
+            <h2 class="section-title"><i class="fas fa-file-csv text-amber-500"></i> CSV Roster Import</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Header row must include <code class="bg-slate-100 px-1 rounded text-xs">roll</code>, <code class="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code class="bg-slate-100 px-1 rounded text-xs">last_name</code></p>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">Class Section ID *</label>
+                <input id="rost-sec" type="number" placeholder="3" class="form-input" />
+                <button onclick="importRoster()" class="btn-success mt-3 w-full">
+                  <i class="fas fa-upload"></i> Import CSV
+                </button>
+                <p id="rost-out" class="text-xs mt-2 text-slate-500 min-h-[1.25rem]"></p>
+              </div>
+              <div>
+                <label class="form-label">CSV Content</label>
+                <textarea id="rost-csv" rows="8" class="form-input font-mono text-xs resize-none" placeholder="roll,first_name,last_name&#10;101,Ali,Khan&#10;102,Sara,Ahmed&#10;103,Bilal,Hussain"></textarea>
+              </div>
+            </div>
+            <div id="rost-result" class="hidden rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <p class="font-semibold text-emerald-800 text-sm mb-1"><i class="fas fa-check-circle mr-2"></i>Import Result</p>
+              <pre id="rost-result-text" class="text-xs text-emerald-700 whitespace-pre-wrap"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL: Publish Lessons -->
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <div id="panel-publish" class="nav-panel space-y-6">
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white">
+            <h2 class="section-title"><i class="fas fa-share-nodes text-emerald-500"></i> Publish Lesson to Sections</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Admin override: publish any lesson to any class sections</p>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">Lesson ID *</label>
+                <input id="pub-lesson" type="number" placeholder="1" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Class Section IDs (comma-separated) *</label>
+                <input id="pub-sections" placeholder="3, 4, 5" class="form-input" />
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="pub-admin-override" checked class="w-4 h-4 text-[#05B0FC] rounded" />
+              <label for="pub-admin-override" class="text-xs text-slate-600 font-medium">Admin override (bypass teacher ownership check)</label>
+            </div>
+            <button onclick="publishLesson()" class="btn-primary">
+              <i class="fas fa-share-nodes"></i> Publish to Sections
+            </button>
+            <p id="pub-out" class="text-xs text-slate-500 min-h-[1.25rem]"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL: Quiz Sessions -->
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <div id="panel-quiz" class="nav-panel space-y-6">
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-pink-50 to-white">
+            <h2 class="section-title"><i class="fas fa-circle-question text-pink-500"></i> Create Quiz Session</h2>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="form-label">Lesson ID *</label>
+                <input id="qz-lesson" type="number" placeholder="1" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Class Section ID *</label>
+                <input id="qz-sec" type="number" placeholder="3" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Delivery Mode</label>
+                <select id="qz-mode" class="form-input">
+                  <option value="device">Device — students answer on phone/laptop</option>
+                  <option value="screen">Screen — teacher shows on projector / paper</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label">Number of Questions</label>
+                <input id="qz-count" type="number" placeholder="5" value="5" min="1" max="20" class="form-input" />
+              </div>
+            </div>
+            <button onclick="createQuiz()" class="btn-primary">
+              <i class="fas fa-circle-question"></i> Create AI Quiz Session
+            </button>
+            <p id="qz-out" class="text-xs text-slate-500 min-h-[1.25rem]"></p>
+          </div>
+        </div>
+
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="section-title"><i class="fas fa-clock text-slate-400"></i> Active Quiz Sessions</h2>
+            <button type="button" onclick="loadActiveQuizzes()" class="btn-secondary btn-sm"><i class="fas fa-rotate"></i> Refresh</button>
+          </div>
+          <div id="activeQuizList" class="p-5 text-sm text-slate-400">Click Refresh to load active sessions</div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <!-- PANEL: Student Enrollment -->
+      <!-- ══════════════════════════════════════════════════════════════ -->
+      <div id="panel-enroll" class="nav-panel space-y-6">
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-white">
+            <h2 class="section-title"><i class="fas fa-id-card text-violet-500"></i> Link Student to Roster</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Admin tool — manually link an existing student account to their roster entry</p>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">School Code *</label>
+                <input id="lnk-code" placeholder="IQBAL-SCH-001" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Class Section ID *</label>
+                <input id="lnk-sec" type="number" placeholder="3" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Roll Number *</label>
+                <input id="lnk-roll" placeholder="101" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">First Name</label>
+                <input id="lnk-fn" placeholder="Ali" class="form-input" />
+              </div>
+              <div>
+                <label class="form-label">Last Name</label>
+                <input id="lnk-ln" placeholder="Khan" class="form-input" />
+              </div>
+            </div>
+            <div class="flex gap-3">
+              <button onclick="linkRoster()" class="btn-primary flex-1 sm:flex-none">
+                <i class="fas fa-link"></i> Link to Roster
+              </button>
+              <button onclick="loadScopedLessons()" class="btn-secondary">
+                <i class="fas fa-book"></i> Check Scoped Lessons
+              </button>
+            </div>
+            <pre id="stu-out" class="hidden text-xs rounded-xl border border-slate-200 bg-slate-50 p-4 whitespace-pre-wrap text-slate-600 max-h-64 overflow-y-auto"></pre>
+          </div>
+        </div>
+      </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastContainer" aria-live="polite"></div>
+
+  <!-- Edit Role Modal -->
+  <div id="editRoleModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4" onclick="closeEditModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onclick="event.stopPropagation()">
+      <h3 class="font-bold text-slate-900 mb-4"><i class="fas fa-user-edit mr-2 text-[#05B0FC]"></i>Change Role</h3>
+      <input type="hidden" id="edit-user-id" />
+      <p id="edit-user-label" class="text-sm text-slate-600 mb-3"></p>
+      <label class="form-label">New Role</label>
+      <select id="edit-role-select" class="form-input mb-4">
+        <option value="student">Student</option>
+        <option value="teacher">Teacher</option>
+        <option value="coordinator">Coordinator</option>
+        <option value="principal">Principal</option>
+        <option value="school_admin">School Admin</option>
+        <option value="district_admin">District Admin</option>
+        <option value="platform_admin">Platform Admin</option>
+        <option value="admin">Admin</option>
+        <option value="parent">Parent</option>
+      </select>
+      <div class="flex gap-3">
+        <button onclick="saveRoleChange()" class="btn-primary flex-1"><i class="fas fa-save"></i> Save</button>
+        <button onclick="closeEditModal()" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <script>
+    // ─── Utilities ───────────────────────────────────────────────────────────────
+    function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function showToast(msg, type = 'info', ms = 3500) {
+      const el = document.createElement('div');
+      el.className = 'toast ' + type;
+      el.innerHTML = '<i class="fas fa-' + (type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle') + ' mr-2"></i>' + escH(msg);
+      document.getElementById('toastContainer').appendChild(el);
+      setTimeout(function() { el.style.opacity = '0'; el.style.transform = 'translateX(100%)'; el.style.transition = '.3s'; setTimeout(function() { el.remove(); }, 350); }, ms);
+    }
+
+    function setStatus(id, msg, ok) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'text-xs mt-2 min-h-[1.25rem] font-medium ' + (ok === true ? 'text-emerald-600' : ok === false ? 'text-red-600' : 'text-slate-500');
+    }
+
     async function api(path, opts = {}) {
       const res = await fetch(path, {
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...(opts.headers || {}) },
-        ...opts,
+        ...opts
       });
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch { data = { raw: text }; }
-      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (!res.ok) throw new Error((data && (data.error || data.message)) || res.statusText);
       return data;
     }
 
-    async function loadCtx() {
+    // ─── Navigation ──────────────────────────────────────────────────────────────
+    const PANELS = ['roles', 'schools', 'subjects', 'roster', 'publish', 'quiz', 'enroll'];
+
+    function showPanel(name) {
+      PANELS.forEach(function(p) {
+        const panel = document.getElementById('panel-' + p);
+        const nav = document.getElementById('nav-' + p);
+        if (panel) panel.classList.toggle('active', p === name);
+        if (nav) nav.classList.toggle('active', p === name);
+      });
+      if (name === 'schools') loadSchools();
+      if (name === 'roles') loadUsers();
+    }
+
+    function toggleMobileSidebar() {
+      document.getElementById('mobileSidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    // ─── Session ─────────────────────────────────────────────────────────────────
+    async function loadSession() {
       try {
         const c = await api('/api/school/context');
-        document.getElementById('ctx-pre').textContent = JSON.stringify(c, null, 2);
+        const user = c.user || {};
+        document.getElementById('sessionUser').textContent = 'User #' + (user.id || '?');
+        const roleEl = document.getElementById('sessionRole');
+        if (roleEl) { roleEl.textContent = user.role || 'unknown'; roleEl.className = getRoleBadgeClass(user.role); }
       } catch (e) {
-        document.getElementById('ctx-pre').textContent = 'Error: ' + e.message;
+        document.getElementById('sessionUser').textContent = 'Could not load session';
       }
     }
 
-    document.getElementById('btn-create-school').onclick = async () => {
-      const el = document.getElementById('sc-out');
-      el.textContent = '…';
+    function getRoleBadgeClass(role) {
+      const map = {
+        admin: 'rp rp-admin', platform_admin: 'rp rp-platform_admin',
+        district_admin: 'rp rp-district_admin', school_admin: 'rp rp-school_admin',
+        principal: 'rp rp-principal', coordinator: 'rp rp-coordinator',
+        teacher: 'rp rp-teacher', student: 'rp rp-student',
+        parent: 'rp rp-parent'
+      };
+      return map[role] || 'rp rp-default';
+    }
+
+    // ─── Role Management ─────────────────────────────────────────────────────────
+    const ROLE_HINTS = {
+      coordinator: '👤 <strong>Coordinator</strong>: Manages class sections, uploads rosters, oversees teacher schedules. Assigned to a specific school.',
+      principal: '🏫 <strong>Principal</strong>: Sees school-level dashboards and aggregate metrics. No operational access to individual records.',
+      teacher: '📚 <strong>Teacher</strong>: Creates lessons, publishes to class sections, runs quizzes. Gets delivery guidance.',
+      school_admin: '⚙️ <strong>School Admin</strong>: Full admin powers within one school. Can create sections, manage staff.',
+      district_admin: '🏙️ <strong>District Admin</strong>: Manages multiple schools within a district.',
+      platform_admin: '🔑 <strong>Platform Admin</strong>: Full platform access. Can see everything.',
+      admin: '🔐 <strong>Admin</strong>: Legacy admin role with full access.',
+      student: '🎓 <strong>Student</strong>: Views lessons assigned to their class, takes quizzes. Linked via roll number.',
+      parent: '👨‍👩‍👧 <strong>Parent</strong>: Read-only access to their child\'s progress.'
+    };
+
+    function updateRoleHint() {
+      const role = document.getElementById('cu-role').value;
+      const hint = document.getElementById('roleHint');
+      if (role && ROLE_HINTS[role]) {
+        hint.innerHTML = '<i class="fas fa-info-circle mr-2 text-[#05B0FC]"></i>' + ROLE_HINTS[role];
+        hint.classList.remove('hidden');
+      } else {
+        hint.classList.add('hidden');
+      }
+    }
+
+    async function createUser() {
+      const username = document.getElementById('cu-username').value.trim();
+      const email = document.getElementById('cu-email').value.trim();
+      const password = document.getElementById('cu-password').value;
+      const role = document.getElementById('cu-role').value;
+      if (!username || !email || !password || !role) {
+        setStatus('cu-status', 'All fields are required', false);
+        return;
+      }
+      setStatus('cu-status', 'Creating…', null);
+      try {
+        const r = await api('/admin/users', {
+          method: 'POST',
+          body: JSON.stringify({ username, useremail: email, password, role })
+        });
+        const uid = r.user_id || r.id || '?';
+        setStatus('cu-status', '✓ Account created. User ID: ' + uid, true);
+        showToast(role.charAt(0).toUpperCase() + role.slice(1) + ' account created (ID: ' + uid + ')', 'success');
+        clearCreateForm();
+        loadUsers();
+      } catch (e) {
+        setStatus('cu-status', e.message, false);
+        showToast(e.message, 'error');
+      }
+    }
+
+    function clearCreateForm() {
+      ['cu-username','cu-email','cu-password'].forEach(function(id) { document.getElementById(id).value = ''; });
+      document.getElementById('cu-role').value = '';
+      document.getElementById('roleHint').classList.add('hidden');
+      setStatus('cu-status', '', null);
+    }
+
+    async function loadUsers() {
+      const tbody = document.getElementById('usersTableBody');
+      const filterRole = document.getElementById('filterRole').value;
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>';
+      try {
+        const params = new URLSearchParams({ page: 1, per_page: 100 });
+        if (filterRole) params.set('role', filterRole);
+        const d = await api('/admin/users?' + params.toString());
+        const users = d.users || d.data || [];
+        document.getElementById('userCount').textContent = users.length + ' users shown';
+        if (!users.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-8">No users found</td></tr>';
+          return;
+        }
+        tbody.innerHTML = users.map(function(u) {
+          const badge = '<span class="' + getRoleBadgeClass(u.role) + '">' + escH(u.role || '–') + '</span>';
+          return '<tr>'
+            + '<td class="font-mono text-slate-500 text-xs">#' + u.id + '</td>'
+            + '<td class="font-semibold">' + escH(u.username || '–') + '</td>'
+            + '<td class="text-slate-500">' + escH(u.useremail || u.email || '–') + '</td>'
+            + '<td>' + badge + '</td>'
+            + '<td class="text-right"><button type="button" onclick="openEditModal(' + u.id + ',\'' + escH(u.username || '') + '\',\'' + escH(u.role || '') + '\')" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-sky-50 hover:border-[#05B0FC] hover:text-[#0369a1] transition-colors font-medium" title="Change role"><i class="fas fa-edit mr-1 opacity-70"></i>Role</button></td>'
+            + '</tr>';
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-red-500 py-8">' + escH(e.message) + '</td></tr>';
+      }
+    }
+
+    let _editUserId = null;
+    function openEditModal(userId, username, currentRole) {
+      _editUserId = userId;
+      document.getElementById('edit-user-id').value = userId;
+      document.getElementById('edit-user-label').textContent = 'Changing role for: ' + username + ' (#' + userId + ')';
+      document.getElementById('edit-role-select').value = currentRole;
+      document.getElementById('editRoleModal').classList.remove('hidden');
+    }
+    function closeEditModal() {
+      document.getElementById('editRoleModal').classList.add('hidden');
+      _editUserId = null;
+    }
+    async function saveRoleChange() {
+      if (!_editUserId) return;
+      const newRole = document.getElementById('edit-role-select').value;
+      try {
+        await api('/admin/users/' + _editUserId, { method: 'PUT', body: JSON.stringify({ role: newRole }) });
+        showToast('Role updated to ' + newRole, 'success');
+        closeEditModal();
+        loadUsers();
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
+    }
+
+    async function assignStaff() {
+      const schoolId = parseInt(document.getElementById('assign-school').value);
+      const userId = parseInt(document.getElementById('assign-user').value);
+      const role = document.getElementById('assign-role').value;
+      if (!schoolId || !userId) { setStatus('assign-status', 'School ID and User ID required', false); return; }
+      setStatus('assign-status', 'Assigning…', null);
+      try {
+        if (role === 'coordinator') {
+          await api('/api/school/schools/' + schoolId + '/coordinators', { method: 'POST', body: JSON.stringify({ user_id: userId }) });
+        } else if (role === 'principal') {
+          await api('/api/school/schools/' + schoolId + '/principal', { method: 'PATCH', body: JSON.stringify({ principal_user_id: userId }) });
+        } else if (role === 'teacher') {
+          await api('/api/school/schools/' + schoolId + '/teachers', { method: 'POST', body: JSON.stringify({ teacher_user_id: userId }) });
+        }
+        setStatus('assign-status', '✓ User #' + userId + ' assigned as ' + role + ' to school #' + schoolId, true);
+        showToast('Assigned successfully', 'success');
+      } catch (e) {
+        setStatus('assign-status', e.message, false);
+        showToast(e.message, 'error');
+      }
+    }
+
+    // ─── Schools ─────────────────────────────────────────────────────────────────
+    async function createSchool() {
+      const name = document.getElementById('sc-name').value.trim();
+      const code = document.getElementById('sc-code').value.trim();
+      const districtId = parseInt(document.getElementById('sc-district').value) || null;
+      const principalId = parseInt(document.getElementById('sc-principal').value) || null;
+      if (!name || !code) { setStatus('sc-out', 'Name and code are required', false); return; }
+      setStatus('sc-out', 'Creating…', null);
       try {
         const r = await api('/api/school/schools', {
           method: 'POST',
-          body: JSON.stringify({
-            name: document.getElementById('sc-name').value,
-            code: document.getElementById('sc-code').value,
-          }),
+          body: JSON.stringify({ name, code, district_id: districtId, principal_user_id: principalId })
         });
-        el.textContent = JSON.stringify(r);
-      } catch (e) { el.textContent = e.message; }
-    };
+        setStatus('sc-out', '✓ School created. ID: ' + r.id + ', Code: ' + r.code, true);
+        showToast('School "' + r.name + '" created (ID: ' + r.id + ')', 'success');
+        document.getElementById('sc-name').value = '';
+        document.getElementById('sc-code').value = '';
+        loadSchools();
+      } catch (e) { setStatus('sc-out', e.message, false); showToast(e.message, 'error'); }
+    }
 
-    document.getElementById('btn-subject').onclick = async () => {
-      const el = document.getElementById('coord-out');
+    async function loadSchools() {
+      const tbody = document.getElementById('schoolsBody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-slate-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>';
       try {
-        const sid = document.getElementById('cid-school').value;
-        const r = await api(`/api/school/schools/${sid}/subjects`, {
-          method: 'POST',
-          body: JSON.stringify({
-            name: document.getElementById('sub-name').value,
-            short_code: document.getElementById('sub-code').value,
-          }),
-        });
-        el.textContent = 'Subject: ' + JSON.stringify(r);
-      } catch (e) { el.textContent = e.message; }
-    };
+        const d = await api('/api/school/schools');
+        const schools = d.schools || [];
+        if (!schools.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-slate-400 py-8">No schools yet</td></tr>'; return; }
+        tbody.innerHTML = schools.map(function(s) {
+          return '<tr>'
+            + '<td class="font-mono text-xs text-slate-500">#' + s.id + '</td>'
+            + '<td class="font-semibold">' + escH(s.name || '–') + '</td>'
+            + '<td><code class="text-xs bg-slate-100 px-1.5 py-0.5 rounded">' + escH(s.code || '–') + '</code></td>'
+            + '<td class="text-center">' + (s.active_teacher_count || 0) + '</td>'
+            + '<td class="text-center">' + (s.class_section_count || 0) + '</td>'
+            + '<td class="text-center">' + (s.linked_student_count || 0) + '</td>'
+            + '</tr>';
+        }).join('');
+      } catch (e) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-red-500 py-8">' + escH(e.message) + '</td></tr>'; }
+    }
 
-    document.getElementById('btn-section').onclick = async () => {
-      const el = document.getElementById('coord-out');
+    // ─── Subjects & Sections ─────────────────────────────────────────────────────
+    async function createSubject() {
+      const schoolId = parseInt(document.getElementById('sub-school').value);
+      const name = document.getElementById('sub-name').value.trim();
+      const code = document.getElementById('sub-code').value.trim();
+      if (!schoolId || !name || !code) { setStatus('sub-out', 'All fields required', false); return; }
+      setStatus('sub-out', 'Creating…', null);
       try {
-        const r = await api('/api/school/class-sections', {
-          method: 'POST',
-          body: JSON.stringify({
-            school_id: +document.getElementById('cid-school').value,
-            subject_id: +document.getElementById('sec-subject').value,
-            teacher_user_id: +document.getElementById('sec-teacher').value,
-            grade_level: document.getElementById('sec-grade').value,
-            section: document.getElementById('sec-letter').value,
-            academic_year: document.getElementById('sec-year').value,
-          }),
-        });
-        el.textContent = 'Section: ' + JSON.stringify(r);
-      } catch (e) { el.textContent = e.message; }
-    };
+        const r = await api('/api/school/schools/' + schoolId + '/subjects', { method: 'POST', body: JSON.stringify({ name, short_code: code }) });
+        setStatus('sub-out', '✓ Subject created. ID: ' + r.id, true);
+        showToast('Subject "' + r.name + '" created (ID: ' + r.id + ')', 'success');
+      } catch (e) { setStatus('sub-out', e.message, false); showToast(e.message, 'error'); }
+    }
 
-    document.getElementById('btn-roster').onclick = async () => {
-      const sec = document.getElementById('rost-sec').value;
-      const el = document.getElementById('rost-out');
+    async function createSection() {
+      const data = {
+        school_id: parseInt(document.getElementById('cid-school').value) || 0,
+        subject_id: parseInt(document.getElementById('sec-subject').value) || 0,
+        teacher_user_id: parseInt(document.getElementById('sec-teacher').value) || 0,
+        grade_level: document.getElementById('sec-grade').value.trim(),
+        section: document.getElementById('sec-letter').value.trim(),
+        academic_year: document.getElementById('sec-year').value.trim(),
+        display_name: document.getElementById('sec-display').value.trim() || undefined
+      };
+      if (!data.school_id || !data.subject_id || !data.teacher_user_id || !data.grade_level || !data.section || !data.academic_year) {
+        setStatus('sec-out', 'All required fields must be filled', false); return;
+      }
+      setStatus('sec-out', 'Creating…', null);
       try {
-        const res = await fetch(`/api/school/class-sections/${sec}/roster`, {
-          method: 'POST',
-          credentials: 'same-origin',
+        const r = await api('/api/school/class-sections', { method: 'POST', body: JSON.stringify(data) });
+        setStatus('sec-out', '✓ Section created. ID: ' + r.id + ' — ' + (r.display_name || 'Grade ' + r.grade_level + ' Sec ' + r.section), true);
+        showToast('Class section created (ID: ' + r.id + ')', 'success');
+      } catch (e) { setStatus('sec-out', e.message, false); showToast(e.message, 'error'); }
+    }
+
+    // ─── Roster ──────────────────────────────────────────────────────────────────
+    async function importRoster() {
+      const secId = parseInt(document.getElementById('rost-sec').value);
+      const csv = document.getElementById('rost-csv').value.trim();
+      if (!secId || !csv) { setStatus('rost-out', 'Section ID and CSV required', false); return; }
+      setStatus('rost-out', 'Importing…', null);
+      try {
+        const res = await fetch('/api/school/class-sections/' + secId + '/roster', {
+          method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'text/csv', 'X-Requested-With': 'XMLHttpRequest' },
-          body: document.getElementById('rost-csv').value,
+          body: csv
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || res.statusText);
-        el.textContent = JSON.stringify(data, null, 2);
-      } catch (e) { el.textContent = e.message; }
-    };
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || res.statusText);
+        setStatus('rost-out', '✓ Done: ' + (d.inserted || 0) + ' added, ' + (d.skipped || 0) + ' skipped', true);
+        showToast('CSV imported: ' + (d.inserted || 0) + ' entries added', 'success');
+        const resultBox = document.getElementById('rost-result');
+        document.getElementById('rost-result-text').textContent = JSON.stringify(d, null, 2);
+        resultBox.classList.remove('hidden');
+      } catch (e) { setStatus('rost-out', e.message, false); showToast(e.message, 'error'); }
+    }
 
-    document.getElementById('btn-link').onclick = async () => {
-      const el = document.getElementById('stu-out');
+    // ─── Publish ─────────────────────────────────────────────────────────────────
+    async function publishLesson() {
+      const lid = document.getElementById('pub-lesson').value;
+      const ids = document.getElementById('pub-sections').value.split(',').map(function(s) { return parseInt(s.trim()); }).filter(Boolean);
+      const override = document.getElementById('pub-admin-override').checked;
+      if (!lid || !ids.length) { setStatus('pub-out', 'Lesson ID and section IDs required', false); return; }
+      setStatus('pub-out', 'Publishing…', null);
+      try {
+        const r = await api('/api/school/lessons/' + lid + '/publish', { method: 'POST', body: JSON.stringify({ class_section_ids: ids, admin_override: override }) });
+        setStatus('pub-out', '✓ Published to ' + (r.linked_sections || 0) + ' new section(s)', true);
+        showToast('Published to ' + (r.linked_sections || 0) + ' section(s)', 'success');
+      } catch (e) { setStatus('pub-out', e.message, false); showToast(e.message, 'error'); }
+    }
+
+    // ─── Quiz ────────────────────────────────────────────────────────────────────
+    async function createQuiz() {
+      const data = {
+        lesson_id: parseInt(document.getElementById('qz-lesson').value) || 0,
+        class_section_id: parseInt(document.getElementById('qz-sec').value) || 0,
+        delivery_mode: document.getElementById('qz-mode').value,
+        num_questions: parseInt(document.getElementById('qz-count').value) || 5
+      };
+      if (!data.lesson_id || !data.class_section_id) { setStatus('qz-out', 'Lesson ID and section ID required', false); return; }
+      setStatus('qz-out', 'Creating quiz session…', null);
+      try {
+        const r = await api('/api/school/quiz-sessions', { method: 'POST', body: JSON.stringify(data) });
+        setStatus('qz-out', '✓ Quiz session created. ID: ' + r.id + ', Mode: ' + data.delivery_mode, true);
+        showToast('Quiz session #' + r.id + ' created', 'success');
+      } catch (e) { setStatus('qz-out', e.message, false); showToast(e.message, 'error'); }
+    }
+
+    async function loadActiveQuizzes() {
+      const host = document.getElementById('activeQuizList');
+      host.innerHTML = '<p class="text-slate-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</p>';
+      try {
+        const d = await api('/api/school/quiz-sessions/active');
+        const items = d.items || [];
+        if (!items.length) { host.innerHTML = '<p class="text-slate-400 text-sm">No active quiz sessions right now</p>'; return; }
+        host.innerHTML = '<div class="overflow-x-auto"><table>'
+          + '<thead><tr><th>ID</th><th>Lesson</th><th>Section</th><th>Mode</th><th>Status</th></tr></thead>'
+          + '<tbody>' + items.map(function(q) {
+            return '<tr><td class="font-mono text-xs">#' + q.id + '</td>'
+              + '<td>' + escH(q.lesson_title || 'Lesson #' + q.lesson_id) + '</td>'
+              + '<td>Section #' + q.class_section_id + '</td>'
+              + '<td><span class="badge ' + (q.delivery_mode === 'device' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700') + '">' + q.delivery_mode + '</span></td>'
+              + '<td><span class="badge bg-green-100 text-green-700">' + (q.status || 'active') + '</span></td></tr>';
+          }).join('') + '</tbody></table></div>';
+      } catch (e) { host.innerHTML = '<p class="text-red-500 text-sm">' + escH(e.message) + '</p>'; }
+    }
+
+    // ─── Enrollment ──────────────────────────────────────────────────────────────
+    async function linkRoster() {
+      const out = document.getElementById('stu-out');
       try {
         const r = await api('/api/school/student/link-roster', {
           method: 'POST',
           body: JSON.stringify({
-            school_code: document.getElementById('lnk-code').value,
-            class_section_id: +document.getElementById('lnk-sec').value,
-            roll_number: document.getElementById('lnk-roll').value,
-            first_name: document.getElementById('lnk-fn').value,
-            last_name: document.getElementById('lnk-ln').value,
-          }),
+            school_code: document.getElementById('lnk-code').value.trim(),
+            class_section_id: parseInt(document.getElementById('lnk-sec').value) || 0,
+            roll_number: document.getElementById('lnk-roll').value.trim(),
+            first_name: document.getElementById('lnk-fn').value.trim(),
+            last_name: document.getElementById('lnk-ln').value.trim()
+          })
         });
-        el.textContent = JSON.stringify(r, null, 2);
-      } catch (e) { el.textContent = e.message; }
-    };
+        out.textContent = JSON.stringify(r, null, 2);
+        out.classList.remove('hidden');
+        showToast('Roster linked successfully', 'success');
+      } catch (e) { out.textContent = 'Error: ' + e.message; out.classList.remove('hidden'); showToast(e.message, 'error'); }
+    }
 
-    document.getElementById('btn-lessons').onclick = async () => {
-      const el = document.getElementById('stu-out');
+    async function loadScopedLessons() {
+      const out = document.getElementById('stu-out');
       try {
         const r = await api('/api/school/student/scoped-lessons');
-        el.textContent = JSON.stringify(r, null, 2);
-      } catch (e) { el.textContent = e.message; }
-    };
+        out.textContent = JSON.stringify(r, null, 2);
+        out.classList.remove('hidden');
+      } catch (e) { out.textContent = 'Error: ' + e.message; out.classList.remove('hidden'); }
+    }
 
-    document.getElementById('btn-publish').onclick = async () => {
-      const el = document.getElementById('tea-out');
-      const lid = document.getElementById('pub-lesson').value;
-      const ids = document.getElementById('pub-sections').value.split(',').map(s => +s.trim()).filter(Boolean);
-      try {
-        const r = await api(`/api/school/lessons/${lid}/publish`, {
-          method: 'POST',
-          body: JSON.stringify({ class_section_ids: ids }),
-        });
-        el.textContent = JSON.stringify(r, null, 2);
-      } catch (e) { el.textContent = e.message; }
-    };
-
-    document.getElementById('btn-quiz').onclick = async () => {
-      const el = document.getElementById('tea-out');
-      try {
-        const r = await api('/api/school/quiz-sessions', {
-          method: 'POST',
-          body: JSON.stringify({
-            lesson_id: +document.getElementById('qz-lesson').value,
-            class_section_id: +document.getElementById('qz-sec').value,
-            delivery_mode: document.getElementById('qz-mode').value,
-            num_questions: 5,
-          }),
-        });
-        el.textContent = JSON.stringify(r, null, 2);
-      } catch (e) { el.textContent = e.message; }
-    };
-
-    document.getElementById('btn-quiz-list').onclick = async () => {
-      const el = document.getElementById('qz-list');
-      try {
-        const r = await api('/api/school/quiz-sessions/active');
-        el.textContent = JSON.stringify(r, null, 2);
-      } catch (e) { el.textContent = e.message; }
-    };
-
-    loadCtx();
+    // ─── Init ────────────────────────────────────────────────────────────────────
+    loadSession();
+    loadUsers();
   </script>
 </body>
 </html>

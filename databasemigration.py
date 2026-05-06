@@ -232,6 +232,36 @@ def ensure_conversation_summaries_table(conn, inspector):
     )
 
 
+def ensure_users_role_constraint(conn, inspector):
+    """
+    Ensure users.role check constraint matches the current RBAC role set.
+
+    Some deployments still have an older check_user_role without newer roles
+    (for example 'coordinator'), which causes signup/update failures.
+    """
+    if not inspector.has_table("users"):
+        logger.info("Table users does not exist, skipping users.role constraint check.")
+        return
+
+    expected_expr = (
+        "role IN ("
+        "'student', 'teacher', 'admin', "
+        "'principal', 'coordinator', 'school_admin', "
+        "'district_admin', 'platform_admin', 'parent'"
+        ")"
+    )
+
+    logger.info("Ensuring users.check_user_role includes coordinator and newer RBAC roles ...")
+    # Safe and idempotent for PostgreSQL.
+    conn.execute(text("ALTER TABLE users DROP CONSTRAINT IF EXISTS check_user_role"))
+    conn.execute(
+        text(
+            f"ALTER TABLE users ADD CONSTRAINT check_user_role "
+            f"CHECK ({expected_expr})"
+        )
+    )
+
+
 def main():
     logger.info("Connecting to database: %s", Config.SQLALCHEMY_DATABASE_URI)
     engine = create_engine(
@@ -250,6 +280,8 @@ def main():
         ensure_conversation_summaries_table(conn, inspector)
         inspector = inspect(engine)
         ensure_lessons_conversation_id_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_users_role_constraint(conn, inspector)
 
     logger.info("Migration completed successfully.")
 

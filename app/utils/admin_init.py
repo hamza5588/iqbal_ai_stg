@@ -22,16 +22,21 @@ def create_default_admin():
     try:
         db = get_db()
         
-        # First, ensure the database constraint allows 'admin' role
+        # First, ensure the database constraint matches the full RBAC role set.
+        # Older startup logic narrowed this constraint and broke coordinator/principal creation.
         try:
             # Try to update the constraint if it exists (PostgreSQL)
             db.execute(text("""
                 ALTER TABLE users DROP CONSTRAINT IF EXISTS check_user_role;
                 ALTER TABLE users ADD CONSTRAINT check_user_role 
-                CHECK (role IN ('student', 'teacher', 'admin'));
+                CHECK (role IN (
+                    'student', 'teacher', 'admin',
+                    'principal', 'coordinator', 'school_admin',
+                    'district_admin', 'platform_admin', 'parent'
+                ));
             """))
             db.commit()
-            logger.info("Updated check_user_role constraint to include 'admin'")
+            logger.info("Updated check_user_role constraint to match full RBAC roles")
         except Exception as constraint_error:
             # Constraint update might fail if it doesn't exist or is different
             # This is okay, we'll try to create the user anyway

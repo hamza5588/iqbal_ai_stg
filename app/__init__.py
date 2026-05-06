@@ -280,6 +280,16 @@ def create_app():
     from app.routes.admin_routes import bp as admin_bp
     from app.routes.load_test_routes import bp as load_test_bp
     from app.routes.school_routes import school_api_bp, school_ui_bp
+    from app.routes.canonical_api import (
+        api_coordinator_bp,
+        api_lesson_ext_bp,
+        api_principal_bp,
+        api_quizzes_bp,
+        api_schools_bp,
+        api_student_bp,
+        api_teacher_bp,
+        auth_api_bp,
+    )
 
     # Register blueprints with appropriate prefixes
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -295,6 +305,14 @@ def create_app():
     app.register_blueprint(load_test_bp, url_prefix='/api/load-test')
     app.register_blueprint(school_ui_bp)
     app.register_blueprint(school_api_bp)
+    app.register_blueprint(api_schools_bp)
+    app.register_blueprint(api_lesson_ext_bp)
+    app.register_blueprint(api_teacher_bp)
+    app.register_blueprint(api_student_bp)
+    app.register_blueprint(api_quizzes_bp)
+    app.register_blueprint(api_coordinator_bp)
+    app.register_blueprint(api_principal_bp)
+    app.register_blueprint(auth_api_bp)
     
     # Serve teacher dashboard static assets (css, js, assets from teacherfrontend)
     from flask import send_from_directory
