@@ -290,6 +290,8 @@ def create_app():
     app.register_blueprint(subscription_bp, url_prefix='/subscription')
     app.register_blueprint(admin_bp)
     app.register_blueprint(load_test_bp, url_prefix='/api/load-test')
+    from app.routes.consultant_routes import bp as consultant_bp
+    app.register_blueprint(consultant_bp, url_prefix='/api/consultant')
     
     # Serve teacher dashboard static assets (css, js, assets from teacherfrontend)
     from flask import send_from_directory
