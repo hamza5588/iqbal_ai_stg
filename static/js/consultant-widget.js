@@ -35,6 +35,8 @@
     // Transcript streaming
     pendingAsstDiv:  null,
     pendingAsstText: '',
+    // Tool calling (search_document)
+    pendingToolCall: null,   // { call_id, name, argsRaw }
   };
 
   /* ── Build widget DOM ─────────────────────────────────────────────────── */
@@ -405,6 +407,16 @@
     const stopBtn  = document.getElementById('c-btn-stop');
     const ringEl   = document.getElementById('c-voice-ring');
 
+    /* ── Guard: browsers block mediaDevices on plain HTTP (non-localhost) ── */
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      statusEl.textContent = 'Voice requires HTTPS. See instructions below.';
+      statusEl.className = 'consultant-voice-status error';
+      // Show inline help
+      var helpEl = document.getElementById('c-https-help');
+      if (helpEl) helpEl.style.display = '';
+      return;
+    }
+
     statusEl.textContent = 'Requesting session…';
     statusEl.className = 'consultant-voice-status';
     startBtn.disabled = true;
@@ -446,6 +458,9 @@
 
       /* 4 ── Microphone ───────────────────────────────────────────────── */
       statusEl.textContent = 'Accessing microphone…';
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Microphone access requires a secure connection (HTTPS). Please access this page over HTTPS.');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       S.localStream = stream;
       stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
@@ -534,13 +549,14 @@
   }
 
   function _cleanupVoiceResources() {
-    S.voiceActive = false;
-    S.voiceMuted  = false;
+    S.voiceActive    = false;
+    S.voiceMuted     = false;
     if (S.peerConn)    { try { S.peerConn.close(); }   catch (_) {} S.peerConn = null; }
     if (S.localStream) { S.localStream.getTracks().forEach(function (t) { t.stop(); }); S.localStream = null; }
-    S.dataChannel    = null;
+    S.dataChannel     = null;
     S.pendingAsstDiv  = null;
     S.pendingAsstText = '';
+    S.pendingToolCall = null;
   }
 
   function toggleMute() {
@@ -554,26 +570,267 @@
       : '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg> Mute';
   }
 
+  /* ─────────────────────────────────────────────────────────────────────
+   * TOOL ROUTING INSTRUCTIONS
+   * --------------------------
+   * The OpenAI model picks the correct tool automatically based on these
+   * rules (enforced by the system prompt sent at session creation):
+   *
+   *  User asks about…                 → Tool called
+   *  ─────────────────────────────────────────────────────────────────
+   *  Page content / "what's on page N" → get_page        (page: N)
+   *  Headings / sections / TOC         → list_headings   (no args)
+   *  Word count / how many words       → count_words     (optional page/range)
+   *  General topic / keyword search    → search_document (query: "…")
+   *  Arithmetic / calculations         → calculator      (a, b, op)
+   * ───────────────────────────────────────────────────────────────── */
+
+  /* ── Consultant console logger ────────────────────────────────────────── */
+
+  var _LOG_PREFIX = '[ConsultantVoice]';
+
+  function _log(level, section, msg, payload) {
+    var ts = new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
+    var badge = '%c' + _LOG_PREFIX + ' [' + ts + '] [' + section + ']';
+    var styles = {
+      info:    'color:#4a9eff;font-weight:bold',
+      success: 'color:#22c55e;font-weight:bold',
+      warn:    'color:#f59e0b;font-weight:bold',
+      error:   'color:#ef4444;font-weight:bold',
+      tool:    'color:#a855f7;font-weight:bold',
+      result:  'color:#10b981;font-weight:bold',
+    };
+    var style = styles[level] || styles.info;
+    if (payload !== undefined) {
+      console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](
+        badge + ' ' + msg, style, payload
+      );
+    } else {
+      console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](
+        badge + ' ' + msg, style
+      );
+    }
+  }
+
   /* ── OpenAI Realtime event handler ───────────────────────────────────── */
 
   function handleRealtimeEvent(evt) {
     switch (evt.type) {
+
+      /* ── User speech transcription ──────────────────────────────────── */
       case 'conversation.item.input_audio_transcription.completed':
+        _log('info', 'TRANSCRIPT', 'User speech transcribed: "' + (evt.transcript || '') + '"');
         addVoiceEntry('user', evt.transcript || '');
         break;
+
+      /* ── Assistant audio transcript streaming ───────────────────────── */
       case 'response.audio_transcript.delta':
         appendVoiceDelta(evt.delta || '');
         break;
+
       case 'response.audio_transcript.done':
+        _log('info', 'TRANSCRIPT', 'Assistant response complete.');
         S.pendingAsstDiv  = null;
         S.pendingAsstText = '';
         break;
-      case 'error':
-        addVoiceEntry('error', 'OpenAI error: ' + (evt.error && evt.error.message ? evt.error.message : JSON.stringify(evt.error)));
+
+      /* ── Tool call: model decided to invoke a tool ───────────────────── */
+      case 'response.output_item.added':
+        if (evt.item && evt.item.type === 'function_call') {
+          S.pendingToolCall = {
+            call_id:  evt.item.call_id,
+            name:     evt.item.name,
+            argsRaw:  '',
+          };
+
+          // ── Log which tool was chosen and WHY (routing rule) ──────────
+          var toolRouteReason = {
+            search_document: 'Model chose search_document → general content query OR "which page is X on?" (result includes [Page N] labels)',
+            get_page:        'Model chose get_page        → user mentioned a specific page number (e.g. "page 5")',
+            list_headings:   'Model chose list_headings   → user asked about headings/sections/chapters/TOC/structure explicitly',
+            count_words:     'Model chose count_words     → user asked about word count / how many words',
+            calculator:      'Model chose calculator      → user asked for arithmetic',
+          };
+          var reason = toolRouteReason[evt.item.name] || ('Model chose ' + evt.item.name);
+
+          _log('tool', 'TOOL SELECTED', '─────────────────────────────────────────');
+          _log('tool', 'TOOL SELECTED', reason);
+          _log('tool', 'TOOL SELECTED', 'call_id : ' + evt.item.call_id);
+          _log('tool', 'TOOL SELECTED', '─────────────────────────────────────────');
+          console.groupCollapsed(_LOG_PREFIX + ' [TOOL] Awaiting arguments for: ' + evt.item.name);
+        }
         break;
+
+      case 'response.function_call_arguments.delta':
+        // Accumulate streaming JSON arguments (silently — logged at .done)
+        if (S.pendingToolCall) {
+          S.pendingToolCall.argsRaw += (evt.delta || '');
+        }
+        break;
+
+      case 'response.function_call_arguments.done':
+        // Arguments complete — parse, log, execute
+        if (S.pendingToolCall) {
+          var tc = S.pendingToolCall;
+          S.pendingToolCall = null;
+
+          var parsedArgs = {};
+          try { parsedArgs = JSON.parse(tc.argsRaw || '{}'); } catch (_) {}
+
+          console.groupEnd(); // close "Awaiting arguments" group
+          _log('tool', 'TOOL ARGS', 'Tool: ' + tc.name + '  |  Raw args: ' + tc.argsRaw);
+          _log('tool', 'TOOL ARGS', 'Parsed args →', parsedArgs);
+
+          // ── Log the instruction that governs this call ─────────────────
+          var toolInstructions = {
+            search_document: [
+              'INSTRUCTION: search_document',
+              '  Triggered by:',
+              '    • "which page is X on?" / "where is X in the document?"',
+              '    • general content questions: "what does it say about X", "explain X"',
+              '  Backend: _retrieve_with_pages() → hybrid_search() → returns text WITH [Page N] labels',
+              '  ✔ Result includes source page numbers so model can answer "which page" correctly.',
+              '  ✘ Root cause fixed: model no longer guesses page numbers with get_page.',
+            ].join('\n'),
+            get_page: [
+              'INSTRUCTION: get_page',
+              '  Triggered by: user says "page N" explicitly (e.g. "what is on page 7")',
+              '  NOT triggered by: "which page is X on?" — that uses search_document.',
+              '  Backend: get_page_tool(page=N, thread_id) → query_chunks_by_page()',
+            ].join('\n'),
+            list_headings: [
+              'INSTRUCTION: list_headings',
+              '  Triggered ONLY when user says heading/section/chapter/topic/outline/TOC/structure.',
+              '  "how many" ALONE does not trigger this — the structural keyword must be present.',
+              '  ✘ Root cause fixed: "how many is not present" no longer triggers list_headings.',
+              '  Backend: list_topics_whole_doc_tool(thread_id) → RAGHeading table',
+              '  Result format: "The document has N section heading(s). LIST OF HEADINGS: ..."',
+              '  ✘ Root cause fixed: no longer says "126 units" — says "N section heading(s)".',
+            ].join('\n'),
+            count_words: [
+              'INSTRUCTION: count_words',
+              '  Triggered by: "how many words", "word count", "how long is the document".',
+              '  Backend: count_pdf_words_tool(thread_id, page?, start_page?, end_page?)',
+            ].join('\n'),
+            calculator: [
+              'INSTRUCTION: calculator',
+              '  Triggered by: explicit arithmetic (add/subtract/multiply/divide).',
+              '  Backend: calculator(first_num, second_num, operation)',
+              '  No document access required.',
+            ].join('\n'),
+          };
+          var instr = toolInstructions[tc.name] || ('INSTRUCTION: ' + tc.name + ' (no description)');
+          _log('info', 'TOOL INSTRUCTION', instr);
+
+          _executeToolCall(tc.call_id, tc.name, tc.argsRaw);
+        }
+        break;
+
+      case 'error':
+        var errMsg = evt.error && evt.error.message ? evt.error.message : JSON.stringify(evt.error);
+        _log('error', 'OPENAI ERROR', errMsg, evt.error);
+        addVoiceEntry('error', 'OpenAI error: ' + errMsg);
+        break;
+
       default:
+        // Log any unhandled event types at verbose level
+        if (evt.type && !evt.type.startsWith('response.audio')) {
+          _log('info', 'EVENT', evt.type, evt);
+        }
         break;
     }
+  }
+
+  /* ── Execute any voice tool call via /api/consultant/tool ────────────── */
+
+  async function _executeToolCall(callId, toolName, argsRaw) {
+    var args = {};
+    try { args = JSON.parse(argsRaw || '{}'); } catch (_) {}
+
+    var t0 = performance.now();
+
+    // Status labels shown in the transcript UI
+    var labels = {
+      search_document: 'Searching document…',
+      get_page:        'Fetching page ' + (args.page || '') + '…',
+      list_headings:   'Listing headings…',
+      count_words:     'Counting words…',
+      calculator:      'Calculating…',
+    };
+    var statusLabel = labels[toolName] || ('Running ' + toolName + '…');
+
+    // Update or add the system transcript entry
+    var container = document.getElementById('c-transcript');
+    var lastSys = container ? container.querySelector('.transcript-entry.system:last-child') : null;
+    if (lastSys) {
+      var sp = lastSys.querySelector('.transcript-text');
+      if (sp) sp.textContent = statusLabel;
+    } else {
+      addVoiceEntry('system', statusLabel);
+    }
+
+    _log('tool', 'TOOL CALL', '══ START ══  ' + toolName);
+    _log('tool', 'TOOL CALL', 'POST /api/consultant/tool', {
+      tool_name: toolName,
+      thread_id: S.threadId || null,
+      args:      args,
+    });
+
+    var resultText = 'Tool execution failed.';
+    var httpStatus = null;
+
+    try {
+      var resp = await fetch('/api/consultant/tool', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool_name: toolName,
+          thread_id: S.threadId || null,
+          args:      args,
+        }),
+      });
+
+      httpStatus = resp.status;
+      var data = await resp.json();
+      var elapsed = (performance.now() - t0).toFixed(0);
+
+      _log('info', 'TOOL CALL', 'HTTP ' + httpStatus + '  (' + elapsed + 'ms)', data);
+
+      if (data.success && data.result) {
+        resultText = data.result;
+        _log('result', 'TOOL RESULT', '══ RESULT ══  ' + toolName + '  (' + elapsed + 'ms)');
+        _log('result', 'TOOL RESULT', resultText);
+      } else if (data.error) {
+        resultText = 'Error: ' + data.error;
+        _log('error', 'TOOL RESULT', 'Tool returned error → ' + data.error);
+      }
+
+    } catch (err) {
+      var elapsed2 = (performance.now() - t0).toFixed(0);
+      resultText = 'Network error: ' + err.message;
+      _log('error', 'TOOL CALL', 'Fetch failed (' + elapsed2 + 'ms) → ' + err.message);
+    }
+
+    // ── Send result back to OpenAI so the model can speak the answer ──────
+    if (S.dataChannel && S.dataChannel.readyState === 'open') {
+      var outputPayload = {
+        type: 'conversation.item.create',
+        item: {
+          type:    'function_call_output',
+          call_id: callId,
+          output:  resultText,
+        },
+      };
+      _log('info', 'DATA CHANNEL', 'Sending function_call_output to OpenAI', outputPayload.item);
+      S.dataChannel.send(JSON.stringify(outputPayload));
+
+      _log('info', 'DATA CHANNEL', 'Sending response.create → model will now speak');
+      S.dataChannel.send(JSON.stringify({ type: 'response.create' }));
+    } else {
+      _log('warn', 'DATA CHANNEL', 'Data channel not open — cannot send tool result back to OpenAI');
+    }
+
+    _log('tool', 'TOOL CALL', '══ END ══  ' + toolName);
   }
 
   function addVoiceEntry(role, text) {
