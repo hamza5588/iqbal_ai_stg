@@ -47,16 +47,20 @@ class Config:
     DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://myuser:mypassword@localhost:5432/mydatabase')    
     # SQLAlchemy configuration
     if DATABASE_URL.startswith('sqlite'):
-        # Resolve to absolute path and create parent dir so SQLite can open the file
-        _db_path = DATABASE_URL.replace('sqlite:///', '').replace('sqlite:////', '')
-        if not os.path.isabs(_db_path):
-            _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            _db_path = os.path.join(_project_root, _db_path)
-        _db_dir = os.path.dirname(_db_path)
-        if _db_dir and not os.path.isdir(_db_dir):
-            os.makedirs(_db_dir, exist_ok=True)
-        # Use three slashes for absolute path (Windows: sqlite:///C:/path; Unix: sqlite:////path)
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.normpath(_db_path).replace('\\', '/')
+        # Pass through in-memory URLs unchanged
+        if ':memory:' in DATABASE_URL:
+            SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+        else:
+            # Resolve to absolute path and create parent dir so SQLite can open the file
+            _db_path = DATABASE_URL.replace('sqlite:///', '').replace('sqlite:////', '')
+            if not os.path.isabs(_db_path):
+                _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                _db_path = os.path.join(_project_root, _db_path)
+            _db_dir = os.path.dirname(_db_path)
+            if _db_dir and not os.path.isdir(_db_dir):
+                os.makedirs(_db_dir, exist_ok=True)
+            # Use three slashes for absolute path (Windows: sqlite:///C:/path; Unix: sqlite:////path)
+            SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.normpath(_db_path).replace('\\', '/')
     else:
         SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -118,7 +122,10 @@ class Config:
     GROQ_MAX_TOKENS = int(os.getenv('GROQ_MAX_TOKENS', '1024'))
     GROQ_TIMEOUT = int(os.getenv('GROQ_TIMEOUT', '60'))
     
-    # vLLM Configuration
+    # Google Calendar OAuth — encrypted refresh tokens stored per user (see UserCalendarConnection)
+    GOOGLE_CALENDAR_CLIENT_ID = os.getenv('GOOGLE_CALENDAR_CLIENT_ID', '')
+    GOOGLE_CALENDAR_CLIENT_SECRET = os.getenv('GOOGLE_CALENDAR_CLIENT_SECRET', '')
+    GOOGLE_CALENDAR_REDIRECT_URI = os.getenv('GOOGLE_CALENDAR_REDIRECT_URI', '')
     VLLM_API_BASE = os.getenv('VLLM_API_BASE', 'http://69.28.92.113:8000/v1')
     VLLM_MODEL = os.getenv('VLLM_MODEL', 'Qwen/Qwen2.5-14B-Instruct')
     VLLM_TEMPERATURE = float(os.getenv('VLLM_TEMPERATURE', '0.5'))

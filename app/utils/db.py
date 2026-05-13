@@ -66,8 +66,12 @@ def get_engine():
         
         # SQLite-specific optimizations
         if db_url.startswith('sqlite'):
+            # StaticPool does not accept pool_size/max_overflow — strip them
+            engine_options.pop('pool_size', None)
+            engine_options.pop('max_overflow', None)
+            engine_options.pop('pool_pre_ping', None)
             # Use StaticPool for in-memory, QueuePool otherwise
-            if 'sqlite:///:memory:' in db_url:
+            if ':memory:' in db_url:
                 engine_options['poolclass'] = StaticPool
                 engine_options['connect_args'] = {'check_same_thread': False}
             else:
@@ -253,6 +257,12 @@ def init_db(app):
     # Use importlib so `import app.models...` does not rebind the name `app` (Flask app).
     importlib.import_module("app.models.school_org_models")
     importlib.import_module("app.models.school_learning_models")
+    # Phase 1 syllabus / exam types (FK targets for phase3)
+    importlib.import_module("app.models.phase1_models")
+    # Phase 3 student learning
+    importlib.import_module("app.models.phase3_models")
+    # Phase 4 intelligence, groups, VA
+    importlib.import_module("app.models.phase4_models")
     from app.load_testing.models import (
         TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog
     )
@@ -339,6 +349,76 @@ def init_db(app):
                 logger.warning(f"Load testing migration warning: {str(e)}")
                 db.rollback()
             
+            # Migration: Phase 1 user columns (must run before any ORM query on User that
+            # selects these attributes). create_all does not ALTER existing tables.
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "users" in inspector.get_table_names():
+                    user_cols = {c["name"] for c in inspector.get_columns("users")}
+                    dialect = engine.dialect.name
+                    stmts = []
+                    added_names = []
+                    if "is_active" not in user_cols:
+                        if dialect == "sqlite":
+                            stmts.append(
+                                "ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"
+                            )
+                        else:
+                            stmts.append(
+                                "ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true"
+                            )
+                        added_names.append("is_active")
+                    if "preferred_language" not in user_cols:
+                        if dialect == "sqlite":
+                            stmts.append(
+                                "ALTER TABLE users ADD COLUMN preferred_language VARCHAR(10) NOT NULL DEFAULT 'en'"
+                            )
+                        else:
+                            stmts.append(
+                                "ALTER TABLE users ADD COLUMN preferred_language VARCHAR(10) NOT NULL DEFAULT 'en'"
+                            )
+                        added_names.append("preferred_language")
+                    if "personality_id" not in user_cols:
+                        stmts.append(
+                            "ALTER TABLE users ADD COLUMN personality_id INTEGER"
+                        )
+                        added_names.append("personality_id")
+                    if "suspended_at" not in user_cols:
+                        if dialect == "sqlite":
+                            stmts.append(
+                                "ALTER TABLE users ADD COLUMN suspended_at DATETIME"
+                            )
+                        else:
+                            stmts.append(
+                                "ALTER TABLE users ADD COLUMN suspended_at TIMESTAMP"
+                            )
+                        added_names.append("suspended_at")
+                    if "suspended_by_id" not in user_cols:
+                        stmts.append(
+                            "ALTER TABLE users ADD COLUMN suspended_by_id INTEGER"
+                        )
+                        added_names.append("suspended_by_id")
+                    if "terms_accepted_version" not in user_cols:
+                        stmts.append(
+                            "ALTER TABLE users ADD COLUMN terms_accepted_version VARCHAR(32)"
+                        )
+                        added_names.append("terms_accepted_version")
+                    for sql in stmts:
+                        db.execute(text(sql))
+                    if stmts:
+                        db.commit()
+                        logger.info(
+                            "Added missing Phase 1 columns on users: %s",
+                            added_names,
+                        )
+            except Exception as e:
+                logger.warning("Phase 1 users column migration warning: %s", e)
+                try:
+                    get_db().rollback()
+                except Exception:
+                    pass
+            
             # Migration: Add subscription fields to existing users
             try:
                 db = get_db()
@@ -380,6 +460,68 @@ def init_db(app):
                 logger.warning(f"Subscription migration warning: {str(e)}")
                 db.rollback()
             
+            # Migration: Phase 3 student_owned_uploads OCR text column
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "student_owned_uploads" in inspector.get_table_names():
+                    cols = {c["name"] for c in inspector.get_columns("student_owned_uploads")}
+                    if "ocr_extracted_text" not in cols:
+                        logger.info("Adding ocr_extracted_text column to student_owned_uploads...")
+                        db.execute(text("ALTER TABLE student_owned_uploads ADD COLUMN ocr_extracted_text TEXT"))
+                        db.commit()
+                        logger.info("ocr_extracted_text column added successfully")
+            except Exception as e:
+                logger.warning("student_owned_uploads OCR migration warning: %s", str(e))
+                try:
+                    get_db().rollback()
+                except Exception:
+                    pass
+
+            # Migration: Phase 3 calendar sync metadata + reminder dedupe state
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "user_calendar_connections" in inspector.get_table_names():
+                    cols = {c["name"] for c in inspector.get_columns("user_calendar_connections")}
+                    if "sync_meta_json" not in cols:
+                        logger.info("Adding sync_meta_json to user_calendar_connections...")
+                        db.execute(
+                            text("ALTER TABLE user_calendar_connections ADD COLUMN sync_meta_json TEXT")
+                        )
+                        db.commit()
+                if "student_learning_preferences" in inspector.get_table_names():
+                    cols = {c["name"] for c in inspector.get_columns("student_learning_preferences")}
+                    if "reminder_state_json" not in cols:
+                        logger.info("Adding reminder_state_json to student_learning_preferences...")
+                        db.execute(
+                            text(
+                                "ALTER TABLE student_learning_preferences ADD COLUMN reminder_state_json TEXT"
+                            )
+                        )
+                        db.commit()
+            except Exception as e:
+                logger.warning("Phase 3 reminder/calendar column migration warning: %s", e)
+                try:
+                    get_db().rollback()
+                except Exception:
+                    pass
+
+            # Phase 4: allow extended notification types (drop legacy CHECK on Postgres)
+            try:
+                dbn = get_db()
+                if engine.dialect.name == "postgresql":
+                    dbn.execute(
+                        text("ALTER TABLE notifications DROP CONSTRAINT IF EXISTS check_notification_type")
+                    )
+                    dbn.commit()
+            except Exception as nchk_e:
+                logger.warning("notifications type constraint migration: %s", nchk_e)
+                try:
+                    get_db().rollback()
+                except Exception:
+                    pass
+
             # Run RAG migration (add new columns, create rag_chunks table)
             try:
                 import sys

@@ -185,7 +185,9 @@ psutil
 # ---- Cloud / Integrations ----
 google-auth
 google-auth-oauthlib
+google-api-python-client
 googleapis-common-protos
+caldav
 kubernetes
 posthog
 stripe
@@ -209,5 +211,17 @@ langgraph-checkpoint-sqlite
 langgraph-checkpoint-postgres
 langgraph-prebuilt
 langgraph-sdk
+# ---- Phase 3 document OCR (Kreuzberg + Tesseract) ----
+kreuzberg>=4.9.0
+pytesseract
+
+## Notes:
+## - Install system Tesseract (e.g. `brew install tesseract` / `apt install tesseract-ocr`).
+## - Kreuzberg uses Tesseract as OCR backend for scanned PDFs/images.
+
+# ---- Realtime (Phase 4 group notes / presence) ----
+flask-socketio>=5.3.0
+python-socketio>=5.11.0
+
 # ---- Dev / CI ----
 pytest

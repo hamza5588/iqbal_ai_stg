@@ -3310,6 +3310,65 @@
         </a>
       </div>
 
+      <!-- ─── Phase 2 Navigation Items ─── -->
+      <div class="px-4 mb-1">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-1">Phase 2</p>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/teacher-profile"
+          class="w-full py-2 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-user-circle w-5 text-primary-500"></i>
+            <span class="font-medium text-sm">My Profile</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/curriculum-editor"
+          class="w-full py-2 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-sitemap w-5 text-accent-500"></i>
+            <span class="font-medium text-sm">Curriculum Editor</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/teacher-connections" id="connectionsNavLink"
+          class="w-full py-2 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-user-friends w-5 text-success-500"></i>
+            <span class="font-medium text-sm">Connections</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span id="connectionsBadge" class="hidden w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold"></span>
+            <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+          </div>
+        </a>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/next-day-review"
+          class="w-full py-2 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-calendar-day w-5 text-warning-500"></i>
+            <span class="font-medium text-sm">Next-Day Review</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+      </div>
+      <div class="px-4 mb-3">
+        <a href="/mini-lecture"
+          class="w-full py-2 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-play-circle w-5 text-accent-500"></i>
+            <span class="font-medium text-sm">Mini-Lectures</span>
+          </div>
+          <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+        </a>
+      </div>
+      <!-- ─── End Phase 2 Navigation ─── -->
+
       <!-- Action Buttons Row (match legacy chat: only Set Prompt/reset/history in chat area, so sidebar keeps a single Set Prompt entry) -->
       <div class="px-4 mb-4 space-y-2">
         <!-- Set Prompt button (opens simple RAG prompt modal like legacy chat.html) -->
@@ -3413,6 +3472,47 @@
           <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
         </a>
       </div>
+
+      <!-- Phase 2 mobile nav -->
+      <div class="px-4 mb-1">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-1">Phase 2</p>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/teacher-profile" onclick="toggleMobileSidebar();"
+          class="w-full py-2 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <i class="fas fa-user-circle w-5 text-primary-500"></i>
+          <span class="font-medium text-sm">My Profile</span>
+        </a>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/curriculum-editor" onclick="toggleMobileSidebar();"
+          class="w-full py-2 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <i class="fas fa-sitemap w-5 text-accent-500"></i>
+          <span class="font-medium text-sm">Curriculum Editor</span>
+        </a>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/teacher-connections" onclick="toggleMobileSidebar();"
+          class="w-full py-2 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <i class="fas fa-user-friends w-5 text-success-500"></i>
+          <span class="font-medium text-sm">Connections</span>
+        </a>
+      </div>
+      <div class="px-4 mb-1">
+        <a href="/next-day-review" onclick="toggleMobileSidebar();"
+          class="w-full py-2 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <i class="fas fa-calendar-day w-5 text-warning-500"></i>
+          <span class="font-medium text-sm">Next-Day Review</span>
+        </a>
+      </div>
+      <div class="px-4 mb-3">
+        <a href="/mini-lecture" onclick="toggleMobileSidebar();"
+          class="w-full py-2 px-3 flex items-center gap-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
+          <i class="fas fa-play-circle w-5 text-accent-500"></i>
+          <span class="font-medium text-sm">Mini-Lectures</span>
+        </a>
+      </div>
+      <!-- End Phase 2 mobile nav -->
 
       <!-- Action Buttons Row -->
       <div class="px-4 mb-4 space-y-2">
@@ -3524,6 +3624,116 @@
               </div>
             </div>
           </div>
+
+          <!-- ═══════════════════════════════════════════════════════════════
+               Phase 2 Dashboard Widgets
+               ═══════════════════════════════════════════════════════════════ -->
+          <div id="phase2Widgets" class="w-full space-y-4 px-2 animate-fade-in">
+
+            <!-- Widget row 1: Stat cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <!-- Pending Connections -->
+              <a href="/teacher-connections"
+                class="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer group">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <i class="fas fa-user-friends text-red-500 text-sm"></i>
+                  </div>
+                  <span id="w-pendingCount" class="text-2xl font-bold text-gray-900">—</span>
+                </div>
+                <p class="text-xs text-gray-500">Pending Requests</p>
+              </a>
+              <!-- Lecture Drafts -->
+              <a href="/teacher-dashboard"
+                class="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer group">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="w-9 h-9 rounded-lg bg-primary-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <i class="fas fa-file-alt text-primary-500 text-sm"></i>
+                  </div>
+                  <span id="w-draftsCount" class="text-2xl font-bold text-gray-900">—</span>
+                </div>
+                <p class="text-xs text-gray-500">Lecture Drafts</p>
+              </a>
+              <!-- Quality Trend -->
+              <div class="bg-white rounded-xl border border-gray-200 p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="w-9 h-9 rounded-lg bg-success-50 flex items-center justify-center">
+                    <i class="fas fa-chart-line text-success-500 text-sm"></i>
+                  </div>
+                  <span id="w-qualityTrend" class="text-2xl font-bold text-success-600">—</span>
+                </div>
+                <p class="text-xs text-gray-500">Avg Lecture Quality</p>
+              </div>
+              <!-- Review Cards -->
+              <a href="/next-day-review"
+                class="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer group">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="w-9 h-9 rounded-lg bg-warning-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <i class="fas fa-calendar-day text-warning-500 text-sm"></i>
+                  </div>
+                  <span id="w-reviewCount" class="text-2xl font-bold text-gray-900">—</span>
+                </div>
+                <p class="text-xs text-gray-500">Review Cards Today</p>
+              </a>
+            </div>
+
+            <!-- Widget row 2: AI Suggestions + Critical Questions -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <!-- AI Improvement Suggestions -->
+              <div class="bg-gradient-to-br from-primary-50 to-white rounded-xl border border-primary-100 p-4">
+                <h3 class="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <i class="fas fa-lightbulb text-warning-500"></i> AI Suggestions
+                </h3>
+                <div id="w-aiSuggestions" class="space-y-2">
+                  <div class="text-xs text-gray-400 italic">Loading suggestions…</div>
+                </div>
+              </div>
+
+              <!-- Critical Student Questions -->
+              <div class="bg-white rounded-xl border border-gray-200 p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-red-500"></i> Critical Questions
+                  </h3>
+                  <a href="/next-day-review" class="text-xs text-primary-500 hover:underline">View all</a>
+                </div>
+                <div id="w-criticalQuestions" class="space-y-2">
+                  <div class="text-xs text-gray-400 italic">Loading questions…</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Actions row -->
+            <div class="bg-white rounded-xl border border-gray-200 p-4">
+              <h3 class="text-sm font-semibold text-gray-900 mb-3">Quick Actions</h3>
+              <div class="flex flex-wrap gap-2">
+                <a href="/teacher-profile"
+                  class="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-primary-50 hover:text-primary-700 text-xs font-medium transition-all border border-gray-200">
+                  <i class="fas fa-user-edit text-primary-500"></i>Edit Profile
+                </a>
+                <a href="/curriculum-editor"
+                  class="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-accent-50 hover:text-accent-700 text-xs font-medium transition-all border border-gray-200">
+                  <i class="fas fa-sitemap text-accent-500"></i>Curriculum Editor
+                </a>
+                <a href="/lecture-editor"
+                  class="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-success-50 hover:text-success-700 text-xs font-medium transition-all border border-gray-200">
+                  <i class="fas fa-edit text-success-500"></i>Lecture Editor
+                </a>
+                <a href="/teacher-connections"
+                  class="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-red-50 hover:text-red-700 text-xs font-medium transition-all border border-gray-200">
+                  <i class="fas fa-user-friends text-red-400"></i>Connection Requests
+                </a>
+                <a href="/mini-lecture"
+                  class="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-accent-50 hover:text-accent-700 text-xs font-medium transition-all border border-gray-200">
+                  <i class="fas fa-play-circle text-accent-500"></i>Create Mini-Lecture
+                </a>
+              </div>
+            </div>
+
+          </div>
+          <!-- End Phase 2 Widgets -->
+
         </div>
       </section>
 
@@ -12302,6 +12512,89 @@ Align everything with the lesson objectives and do not invent missing informatio
       </div>
     </div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Phase 2 Dashboard Widget Loader
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <script>
+    (function loadPhase2Widgets() {
+      // Load pending connection count
+      fetch("/api/connections/teacher/requests?status=pending", { credentials:"same-origin" })
+        .then(r=>r.ok?r.json():null)
+        .then(d => {
+          const n = d?.total ?? (d?.requests?.length ?? 0);
+          document.getElementById("w-pendingCount").textContent = n;
+          if (n>0) {
+            const badge = document.getElementById("connectionsBadge");
+            if (badge) { badge.textContent=n; badge.classList.remove("hidden"); }
+          }
+        }).catch(()=>{ document.getElementById("w-pendingCount").textContent="0"; });
+
+      // Load draft lecture count
+      fetch("/api/lessons?role=teacher&status=draft&limit=5", { credentials:"same-origin" })
+        .then(r=>r.ok?r.json():null)
+        .then(d => {
+          const n = d?.total ?? (d?.lessons?.length ?? (Array.isArray(d)?d.length:0));
+          document.getElementById("w-draftsCount").textContent = n;
+        }).catch(()=>{ document.getElementById("w-draftsCount").textContent="0"; });
+
+      // Avg quality trend (from lessons)
+      fetch("/api/lessons?role=teacher&limit=10", { credentials:"same-origin" })
+        .then(r=>r.ok?r.json():null)
+        .then(d => {
+          const lessons = d?.lessons || (Array.isArray(d)?d:[]);
+          const scored = lessons.filter(l=>l.quality_score!=null);
+          if (scored.length) {
+            const avg = Math.round(scored.reduce((s,l)=>s+l.quality_score,0)/scored.length);
+            document.getElementById("w-qualityTrend").textContent = avg+"%";
+          } else { document.getElementById("w-qualityTrend").textContent = "—"; }
+        }).catch(()=>{ document.getElementById("w-qualityTrend").textContent="—"; });
+
+      // Review cards today (FAQs pending)
+      document.getElementById("w-reviewCount").textContent = "0";
+
+      // AI suggestions widget
+      fetch("/api/lessons?role=teacher&limit=3", { credentials:"same-origin" })
+        .then(r=>r.ok?r.json():null)
+        .then(d => {
+          const suggestions = [
+            "Add more real-world examples to improve student engagement.",
+            "Consider breaking longer lessons into smaller chunks.",
+            "Use visual aids (diagrams, tables) to explain complex concepts.",
+          ];
+          const cont = document.getElementById("w-aiSuggestions");
+          cont.innerHTML = suggestions.map(s=>`
+            <div class="flex items-start gap-2 text-xs text-gray-700">
+              <i class="fas fa-star text-warning-500 mt-0.5 flex-shrink-0"></i>
+              <span>${s}</span>
+            </div>
+          `).join("");
+        }).catch(()=>{});
+
+      // Critical questions widget
+      fetch("/api/lessons?role=teacher&limit=1", { credentials:"same-origin" })
+        .then(r=>r.ok?r.json():null)
+        .then(async d => {
+          const lessons = d?.lessons || (Array.isArray(d)?d:[]);
+          if (!lessons.length) { document.getElementById("w-criticalQuestions").innerHTML=`<p class="text-xs text-gray-400">No lessons yet.</p>`; return; }
+          const lid = lessons[0].id;
+          const faqRes = await fetch(`/api/lessons/${lid}/faqs`, { credentials:"same-origin" });
+          if (!faqRes.ok) { document.getElementById("w-criticalQuestions").innerHTML=`<p class="text-xs text-gray-400">No questions yet.</p>`; return; }
+          const faq = await faqRes.json();
+          const crit = faq.critical || [];
+          const cont = document.getElementById("w-criticalQuestions");
+          if (!crit.length) { cont.innerHTML=`<p class="text-xs text-gray-400">No critical questions flagged.</p>`; return; }
+          cont.innerHTML = crit.slice(0,3).map(q=>`
+            <div class="flex items-start gap-2 text-xs">
+              <i class="fas fa-exclamation-circle text-red-400 mt-0.5 flex-shrink-0"></i>
+              <span class="text-gray-700 truncate">${(q.question||q.text||q).slice(0,80)}</span>
+            </div>
+          `).join("");
+        }).catch(()=>{ document.getElementById("w-criticalQuestions").innerHTML=`<p class="text-xs text-gray-400">Unable to load questions.</p>`; });
+    })();
+  </script>
+
+{% include 'partials/phase4_floating.html' %}
 
 </body>
 

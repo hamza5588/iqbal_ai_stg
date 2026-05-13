@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Next-Day Review | Iqbal AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/markdown-styles.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode:"class",
+      theme:{ extend:{
+        fontFamily:{ sans:["Inter","system-ui","sans-serif"], display:["Poppins","Inter","sans-serif"] },
+        colors:{
+          primary:{50:"#f0f9ff",100:"#e0f2fe",200:"#bae6fd",500:"#0ea5e9",600:"#0284c7",700:"#0369a1"},
+          accent: {50:"#fdf2f8",500:"#ec4899",600:"#db2777"},
+          success:{50:"#f0fdf4",100:"#dcfce7",500:"#22c55e",600:"#16a34a"},
+          error:  {50:"#fef2f2",100:"#fee2e2",500:"#ef4444"},
+          warning:{50:"#fffbeb",100:"#fef3c7",500:"#f59e0b"},
+        },
+      }},
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing:antialiased; }
+    .card { background:white; border-radius:1rem; border:1px solid #e5e7eb; padding:1.25rem; }
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:9999px; font-size:.7rem; font-weight:600; }
+    .badge-critical { background:#fee2e2; color:#991b1b; }
+    .badge-common   { background:#fef3c7; color:#92400e; }
+    .badge-info     { background:#e0f2fe; color:#0369a1; }
+    .question-row { padding:.75rem; border-radius:.75rem; background:#f8fafc; border:1px solid #e2e8f0; display:flex; align-items:start; gap:.75rem; }
+    .question-row.critical { border-left:3px solid #ef4444; background:#fef2f2; }
+    .toast { position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999; padding:.85rem 1.25rem; border-radius:.75rem; font-size:.875rem; font-weight:500; display:flex; align-items:center; gap:.5rem; box-shadow:0 8px 24px rgba(0,0,0,.15); transform:translateY(100px); opacity:0; transition:all .3s; }
+    .toast.show { transform:translateY(0); opacity:1; }
+    .toast.info   { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+    .toast.error   { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    .skeleton { background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:200px 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
+    @keyframes shimmer{0%{background-position:-200px 0}100%{background-position:calc(200px + 100%) 0}}
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/teacher-dashboard" class="text-gray-500 hover:text-primary-600 transition-colors"><i class="fas fa-arrow-left"></i></a>
+        <h1 class="text-lg font-semibold text-gray-900 font-display">Next-Day Review</h1>
+      </div>
+      <!-- Lesson picker -->
+      <select id="lessonPicker" onchange="loadReviewData()" class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+        <option value="">Select a lesson…</option>
+      </select>
+    </div>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-4 py-8" id="mainContent">
+
+    <!-- Empty state -->
+    <div id="selectPrompt" class="text-center py-24 text-gray-400">
+      <i class="fas fa-calendar-day text-5xl mb-4 opacity-30"></i>
+      <p class="text-lg font-medium">Select a lesson to review</p>
+      <p class="text-sm mt-1">Choose a recently taught lesson from the dropdown above.</p>
+    </div>
+
+    <!-- Loading skeleton -->
+    <div id="loadingSkeleton" class="hidden space-y-4">
+      <div class="card"><div class="skeleton h-6 mb-3 w-1/3"></div><div class="skeleton h-4 mb-2"></div><div class="skeleton h-4 w-4/5"></div></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="card"><div class="skeleton h-6 mb-3 w-1/2"></div><div class="skeleton h-4 mb-2"></div><div class="skeleton h-4"></div></div>
+        <div class="card"><div class="skeleton h-6 mb-3 w-1/2"></div><div class="skeleton h-4 mb-2"></div><div class="skeleton h-4"></div></div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="reviewContent" class="hidden space-y-6">
+
+      <!-- AI Summary -->
+      <div class="card">
+        <h2 class="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <i class="fas fa-brain text-primary-500"></i> AI Summary
+        </h2>
+        <div id="aiSummary" class="markdown-content prose max-w-none text-sm text-gray-700"></div>
+      </div>
+
+      <!-- Questions row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Most Asked Questions -->
+        <div class="card">
+          <h2 class="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <i class="fas fa-question-circle text-warning-500"></i> Most Asked Questions
+          </h2>
+          <div id="mostAskedList" class="space-y-2">
+            <p class="text-sm text-gray-400">No questions yet.</p>
+          </div>
+        </div>
+
+        <!-- Critical Questions -->
+        <div class="card">
+          <h2 class="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <i class="fas fa-exclamation-triangle text-error-500"></i> Critical Questions
+          </h2>
+          <div id="criticalList" class="space-y-2">
+            <p class="text-sm text-gray-400">No critical questions flagged.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mini-Lecture Preview -->
+      <div class="card" id="miniLecturePreviewCard">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <i class="fas fa-play-circle text-accent-500"></i> Mini-Lecture Preview
+          </h2>
+          <button onclick="openMiniLecture()" id="openMiniBtn"
+            class="px-3 py-1.5 text-sm bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors font-medium hidden">
+            <i class="fas fa-edit mr-1"></i>Edit
+          </button>
+        </div>
+        <div id="miniLecturePreview" class="text-sm text-gray-500 italic">No mini-lecture created yet.</div>
+      </div>
+
+      <!-- Reflective Prompt -->
+      <div class="card bg-gradient-to-br from-primary-50 to-white border-primary-100">
+        <h2 class="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
+          <i class="fas fa-lightbulb text-warning-500"></i> Reflective Prompt
+        </h2>
+        <p id="reflectPrompt" class="text-sm text-gray-700 mb-3 italic"></p>
+        <textarea id="reflectResponse" rows="3" placeholder="Write your reflection here…"
+          class="w-full px-4 py-2.5 border border-primary-200 rounded-xl text-sm focus:outline-none focus:border-primary-400 bg-white resize-none"></textarea>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-wrap gap-3 pb-8">
+        <button onclick="saveReflection()"
+          class="px-5 py-2.5 border border-primary-200 text-primary-700 bg-white rounded-xl font-medium text-sm hover:bg-primary-50 transition-all">
+          <i class="fas fa-save mr-1.5"></i>Save reflection
+        </button>
+        <button onclick="goToMiniLecture()"
+          class="px-5 py-2.5 bg-gradient-to-r from-accent-500 to-accent-600 text-white rounded-xl font-medium text-sm hover:shadow-md transition-all">
+          <i class="fas fa-play-circle mr-1.5"></i>Create Mini-Lecture
+        </button>
+        <button onclick="goToEditLecture()"
+          class="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-medium text-sm hover:shadow-md transition-all">
+          <i class="fas fa-edit mr-1.5"></i>Edit Original Lecture
+        </button>
+        <button onclick="openGroupStudyModal()"
+          class="px-5 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-all">
+          <i class="fas fa-users mr-1.5"></i>Schedule Group Study
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <div id="gsModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 shadow-xl border border-gray-100">
+      <h3 class="font-semibold text-gray-900 mb-3">Schedule group study</h3>
+      <p class="text-xs text-gray-500 mb-3">Creates a session linked to the selected lesson; enrolled students can RSVP.</p>
+      <label class="block text-sm text-gray-700 mb-1">Title</label>
+      <input id="gsTitle" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3" placeholder="Review session" />
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Starts</label>
+          <input id="gsStart" type="datetime-local" class="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Ends</label>
+          <input id="gsEnd" type="datetime-local" class="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm" />
+        </div>
+      </div>
+      <label class="block text-sm text-gray-700 mb-1">Max students</label>
+      <input id="gsMax" type="number" min="1" max="50" value="8" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3" />
+      <label class="block text-sm text-gray-700 mb-1">Notes (optional)</label>
+      <textarea id="gsNotes" rows="2" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-4"></textarea>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeGroupStudyModal()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg">Cancel</button>
+        <button type="button" onclick="submitGroupStudy()" class="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let currentLessonId = null;
+    const REFLECTIVE_PROMPTS = [
+      "What parts of the lesson seemed to confuse students the most, and how will you address that next time?",
+      "Which teaching strategy worked best today? How can you apply it to future lessons?",
+      "Were there any questions that surprised you? What do they reveal about student understanding?",
+      "How would you change the pace or depth of this lesson if you taught it again?",
+      "What connections did students make that you didn't anticipate?",
+    ];
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadLessonList();
+      document.getElementById("reflectPrompt").textContent = REFLECTIVE_PROMPTS[Math.floor(Math.random()*REFLECTIVE_PROMPTS.length)];
+    });
+
+    async function loadLessonList() {
+      try {
+        const res = await fetch("/api/lessons?role=teacher&limit=20", { credentials:"same-origin" });
+        if (!res.ok) return;
+        const d = await res.json();
+        const picker = document.getElementById("lessonPicker");
+        (d.lessons || d).forEach(l => {
+          const opt = document.createElement("option");
+          opt.value = l.id;
+          opt.textContent = l.title || `Lesson #${l.id}`;
+          picker.appendChild(opt);
+        });
+      } catch (_) {}
+    }
+
+    async function loadReviewData() {
+      const id = document.getElementById("lessonPicker").value;
+      if (!id) return;
+      currentLessonId = id;
+
+      document.getElementById("selectPrompt").classList.add("hidden");
+      document.getElementById("reviewContent").classList.add("hidden");
+      document.getElementById("loadingSkeleton").classList.remove("hidden");
+
+      try {
+        const [reviewRes, faqRes, miniRes] = await Promise.all([
+          fetch(`/api/lessons/${id}/next-day-review`, { credentials:"same-origin" }),
+          fetch(`/api/lessons/${id}/faqs`,            { credentials:"same-origin" }),
+          fetch(`/api/lessons/${id}/mini-lecture`,    { credentials:"same-origin" }),
+        ]);
+
+        const review = reviewRes.ok ? await reviewRes.json() : {};
+        const faqs   = faqRes.ok   ? await faqRes.json()   : {};
+        const mini   = miniRes.ok  ? await miniRes.json()  : null;
+
+        renderReview(review, faqs, mini);
+      } catch (_) {
+        renderReview({}, {}, null); // show with empty data
+      } finally {
+        document.getElementById("loadingSkeleton").classList.add("hidden");
+        document.getElementById("reviewContent").classList.remove("hidden");
+      }
+    }
+
+    function renderReview(review, faqs, mini) {
+      // AI Summary
+      const summary = review.summary || review.ai_summary || "_No summary available yet. The AI will generate one after students interact with this lesson._";
+      document.getElementById("aiSummary").innerHTML = DOMPurify.sanitize(marked.parse(summary));
+
+      // Most asked questions
+      const mostAsked = faqs.most_asked || faqs.faqs || [];
+      const maList = document.getElementById("mostAskedList");
+      if (mostAsked.length) {
+        maList.innerHTML = mostAsked.map(q => `
+          <div class="question-row">
+            <i class="fas fa-question-circle text-warning-500 mt-0.5 flex-shrink-0"></i>
+            <div class="flex-1">
+              <p class="text-sm text-gray-800">${escHtml(q.question || q.text || q)}</p>
+              <p class="text-xs text-gray-400 mt-0.5">${q.count || 1} student${(q.count||1)>1?"s":""} asked this</p>
+            </div>
+            <span class="badge badge-common">${q.count || 1}×</span>
+          </div>
+        `).join("");
+      }
+
+      // Critical questions
+      const critical = faqs.critical || review.critical_questions || [];
+      const crList = document.getElementById("criticalList");
+      if (critical.length) {
+        crList.innerHTML = critical.map(q => `
+          <div class="question-row critical">
+            <i class="fas fa-exclamation-circle text-error-500 mt-0.5 flex-shrink-0"></i>
+            <div class="flex-1">
+              <p class="text-sm text-gray-800 font-medium">${escHtml(q.question || q.text || q)}</p>
+              ${q.student_name ? `<p class="text-xs text-gray-400 mt-0.5">From: ${escHtml(q.student_name)}</p>` : ""}
+            </div>
+            <span class="badge badge-critical">Critical</span>
+          </div>
+        `).join("");
+      }
+
+      // Mini-lecture preview
+      if (mini && mini.content) {
+        document.getElementById("miniLecturePreview").innerHTML = DOMPurify.sanitize(marked.parse(mini.content.slice(0,500) + (mini.content.length>500?"…":"")));
+        document.getElementById("openMiniBtn").classList.remove("hidden");
+      }
+    }
+
+    async function saveReflection() {
+      if (!currentLessonId) { showToast("Select a lesson first.", "error"); return; }
+      const aiEl = document.getElementById("aiSummary");
+      const ai_summary = (aiEl.innerText || aiEl.textContent || "").trim().slice(0, 8000);
+      const reflection_prompt = (document.getElementById("reflectPrompt").textContent || "").trim();
+      const reflection_response = document.getElementById("reflectResponse").value.trim();
+      try {
+        const res = await fetch("/api/phase3/teacher/review", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lesson_id: parseInt(currentLessonId, 10),
+            ai_summary: ai_summary || null,
+            reflection_prompt,
+            reflection_response,
+          }),
+        });
+        if (res.ok) showToast("Reflection saved.", "success");
+        else {
+          const d = await res.json().catch(() => ({}));
+          showToast(d.error || "Save failed.", "error");
+        }
+      } catch (_) {
+        showToast("Network error.", "error");
+      }
+    }
+
+    function goToMiniLecture() {
+      window.location.href = `/mini-lecture${currentLessonId ? "/" + currentLessonId : ""}`;
+    }
+    function openMiniLecture() { goToMiniLecture(); }
+    function goToEditLecture() {
+      window.location.href = `/lecture-editor${currentLessonId ? "/" + currentLessonId : ""}`;
+    }
+    function openGroupStudyModal() {
+      if (!currentLessonId) { showToast("Select a lesson first.", "error"); return; }
+      document.getElementById("gsModal").classList.remove("hidden");
+    }
+    function closeGroupStudyModal() {
+      document.getElementById("gsModal").classList.add("hidden");
+    }
+    async function submitGroupStudy() {
+      if (!currentLessonId) { showToast("Select a lesson first.", "error"); return; }
+      const title = document.getElementById("gsTitle").value.trim() || "Group study";
+      const starts_at = document.getElementById("gsStart").value;
+      const ends_at = document.getElementById("gsEnd").value;
+      if (!starts_at || !ends_at) { showToast("Start and end times are required.", "error"); return; }
+      try {
+        const res = await fetch("/api/phase3/teacher/group-study/slots", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lesson_id: parseInt(currentLessonId, 10),
+            title,
+            starts_at,
+            ends_at,
+            max_students: parseInt(document.getElementById("gsMax").value, 10) || 8,
+            notes: document.getElementById("gsNotes").value.trim() || null,
+          }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || res.statusText);
+        closeGroupStudyModal();
+        showToast("Group study session scheduled.", "success");
+      } catch (e) {
+        showToast(e.message || "Failed to schedule.", "error");
+      }
+    }
+    function escHtml(s) { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function showToast(msg, type="success") {
+      const t=document.getElementById("toast");
+      t.className=`toast ${type}`;
+      t.innerHTML=`<i class="fas fa-${type==="success"?"check-circle":type==="info"?"info-circle":"exclamation-circle"}"></i> ${msg}`;
+      t.classList.add("show");
+      setTimeout(()=>t.classList.remove("show"),3500);
+    }
+  </script>
+</body>
+</html>

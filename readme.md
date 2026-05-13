@@ -11,6 +11,7 @@ Comprehensive project documentation is available:
 - **[DEVELOPER_QUICK_START.md](DEVELOPER_QUICK_START.md)** - Quick start guide for developers
 - **[docs/User_Guide.md](docs/User_Guide.md)** - User guide for end users
 - **[app/rbac/README.md](app/rbac/README.md)** - Role-Based Access Control documentation
+- **[docs/PHASE3.md](docs/PHASE3.md)** - Phase 3 student learning APIs, calendar sync, Celery reminders, group study, setup
 
 ## 🚀 Quick Start
 

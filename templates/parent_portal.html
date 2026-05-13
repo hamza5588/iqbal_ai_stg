@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parent Portal | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        primary: { 50:'#f0f9ff', 100:'#e0f2fe', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1' },
+        accent:  { 500:'#ec4899' }
+      }}}
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .child-card { transition: transform .2s, box-shadow .2s; }
+    .child-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(14,165,233,.12); }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed top-4 right-4 z-50 min-w-[280px] bg-white rounded-xl shadow-xl border-l-4 p-4 flex items-center gap-3">
+  <i id="toast-icon" class="fas fa-check-circle text-green-500 text-lg"></i>
+  <p id="toast-msg" class="text-sm font-medium text-gray-800 flex-1"></p>
+  <button onclick="document.getElementById('toast').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xs"></i></button>
+</div>
+
+<!-- Modal -->
+<div id="modal-backdrop" class="hidden fixed inset-0 bg-black/50 z-40" onclick="closeModal()"></div>
+<div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="modal-title" class="text-lg font-bold text-gray-900"></h3>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Nav -->
+<nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+  <div class="max-w-3xl mx-auto px-4 flex items-center justify-between h-14">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-500 to-primary-500 flex items-center justify-center">
+        <i class="fas fa-user-group text-white text-xs"></i>
+      </div>
+      <span class="font-bold text-gray-900">Parent Portal</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/school/notifications" class="relative text-gray-400 hover:text-primary-600">
+        <i class="fas fa-bell text-lg"></i>
+        <span id="notif-badge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center"></span>
+      </a>
+      <a href="/auth/logout" class="text-sm text-red-500 hover:text-red-700 font-medium"><i class="fas fa-sign-out-alt mr-1"></i>Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="max-w-3xl mx-auto px-4 py-6">
+
+  <!-- Header + Link button -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h2 class="text-xl font-bold text-gray-900">My Children</h2>
+      <p class="text-sm text-gray-500 mt-0.5">Monitor your children's learning progress</p>
+    </div>
+    <button onclick="openLinkModal()" class="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+      <i class="fas fa-link mr-2"></i>Link a Child
+    </button>
+  </div>
+
+  <!-- Children grid -->
+  <div id="children-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+    <div class="col-span-full text-center py-10 text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
+  </div>
+
+  <!-- Pending link requests (seen from student perspective) -->
+  <div>
+    <h3 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+      <i class="fas fa-clock text-yellow-500"></i> Pending Link Requests
+      <span id="pending-count" class="hidden bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full px-2 py-0.5"></span>
+    </h3>
+    <div id="pending-list" class="space-y-2">
+      <div class="text-sm text-gray-400 text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showToast(msg, type='success') {
+  const icons = { success:'fa-check-circle text-green-500', error:'fa-exclamation-circle text-red-500', info:'fa-info-circle text-blue-500', warning:'fa-exclamation-triangle text-yellow-500' };
+  document.getElementById('toast-icon').className = `fas ${icons[type]||icons.info} text-lg`;
+  document.getElementById('toast-msg').textContent = msg;
+  const t = document.getElementById('toast');
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), 4000);
+}
+
+function openModal(title, html) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal').classList.remove('hidden');
+  document.getElementById('modal-backdrop').classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  document.getElementById('modal-backdrop').classList.add('hidden');
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(path, { credentials:'same-origin', headers:{'Content-Type':'application/json',...(opts.headers||{})}, ...opts });
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = { raw:text }; }
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// ── Children ──────────────────────────────────────────────────────────────────
+async function loadChildren() {
+  const grid = document.getElementById('children-grid');
+  try {
+    const data = await api('/api/parent/children');
+    const children = data.children || [];
+    if (!children.length) {
+      grid.innerHTML = `
+        <div class="col-span-full bg-white rounded-xl border border-dashed border-gray-200 p-10 text-center">
+          <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3"><i class="fas fa-child text-gray-300 text-xl"></i></div>
+          <p class="text-gray-500 font-medium text-sm">No linked children yet</p>
+          <p class="text-xs text-gray-400 mt-1">Click "Link a Child" to send a request to your child's account</p>
+        </div>`;
+      return;
+    }
+    grid.innerHTML = children.map(c => `
+      <div class="child-card bg-white rounded-xl border border-gray-200 p-5">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-400 to-accent-500 flex items-center justify-center shrink-0">
+            <i class="fas fa-user-graduate text-white"></i>
+          </div>
+          <div>
+            <p class="font-semibold text-gray-900">${c.username}</p>
+            <p class="text-xs text-gray-400">${c.useremail || ''}</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs mb-4">
+          <div class="bg-gray-50 rounded-lg p-2.5">
+            <p class="text-gray-400">Grade</p>
+            <p class="font-semibold text-gray-700">${c.class_standard || '—'}</p>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-2.5">
+            <p class="text-gray-400">Medium</p>
+            <p class="font-semibold text-gray-700">${c.medium || '—'}</p>
+          </div>
+        </div>
+        <button onclick="viewChildSummary(${c.id})" class="w-full text-sm text-primary-600 border border-primary-200 rounded-lg py-2 hover:bg-primary-50 transition-colors font-medium">
+          <i class="fas fa-eye mr-1"></i>View Summary
+        </button>
+      </div>`).join('');
+  } catch(e) { grid.innerHTML = `<div class="col-span-full text-center py-8 text-red-400 text-sm">${e.message}</div>`; }
+}
+
+async function viewChildSummary(studentId) {
+  openModal('Loading…', '<div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin text-2xl"></i></div>');
+  try {
+    const data = await api(`/api/parent/children/${studentId}/summary`);
+    const s = data.student || data;
+    document.getElementById('modal-title').textContent = s.username + "'s Summary";
+    document.getElementById('modal-body').innerHTML = `
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-2xl font-bold text-primary-600">${data.enrollments_count ?? '—'}</p>
+            <p class="text-xs text-gray-500 mt-0.5">Enrollments</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-2xl font-bold text-purple-600">${data.conversations_count ?? '—'}</p>
+            <p class="text-xs text-gray-500 mt-0.5">AI Sessions</p>
+          </div>
+        </div>
+        <div class="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
+          <i class="fas fa-lock mr-1"></i>Detailed conversation content is private to protect student privacy.
+        </div>
+        <button onclick="closeModal()" class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Close</button>
+      </div>`;
+  } catch(e) {
+    document.getElementById('modal-body').innerHTML = `<div class="text-red-400 text-sm text-center py-4">${e.message}</div>`;
+  }
+}
+
+// ── Link Request ──────────────────────────────────────────────────────────────
+function openLinkModal() {
+  openModal('Link a Child', `
+    <p class="text-sm text-gray-500 mb-4">Enter your child's student ID. They will receive a notification to approve the link.</p>
+    <form onsubmit="submitLinkRequest(event)" class="space-y-4">
+      <div>
+        <label class="text-xs font-medium text-gray-600 mb-1 block">Child's Student ID</label>
+        <input name="student_id" type="number" required placeholder="e.g. 42" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+      </div>
+      <div class="flex gap-3 pt-1">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">Send Request</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+async function submitLinkRequest(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await api('/api/parent/link-request', { method:'POST', body: JSON.stringify({ student_id: parseInt(fd.get('student_id')) }) });
+    showToast('Link request sent! Waiting for child approval.','success');
+    closeModal();
+    loadPendingRequests();
+  } catch(ex) { showToast(ex.message,'error'); }
+}
+
+// ── Pending Requests (from child's perspective when logged in as parent) ──────
+async function loadPendingRequests() {
+  const list = document.getElementById('pending-list');
+  try {
+    const data = await api('/api/parent/link-requests');
+    const requests = data.requests || [];
+    const count = document.getElementById('pending-count');
+    if (requests.length) { count.textContent = requests.length; count.classList.remove('hidden'); }
+    else { count.classList.add('hidden'); }
+
+    if (!requests.length) { list.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No pending link requests</p>`; return; }
+    list.innerHTML = requests.map(r => `
+      <div class="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-medium text-gray-800">Parent request from User #${r.parent_id}</p>
+          <p class="text-xs text-gray-400 mt-0.5">Status: <span class="font-medium ${r.status==='pending'?'text-yellow-600':'text-gray-500'}">${r.status}</span></p>
+        </div>
+        ${r.status === 'pending' ? `
+        <div class="flex gap-2 shrink-0">
+          <button onclick="resolveLink(${r.id}, true)" class="bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-green-600 font-medium"><i class="fas fa-check mr-1"></i>Approve</button>
+          <button onclick="resolveLink(${r.id}, false)" class="bg-gray-200 text-gray-600 text-xs px-3 py-1.5 rounded-lg hover:bg-gray-300 font-medium"><i class="fas fa-times mr-1"></i>Reject</button>
+        </div>` : ''}
+      </div>`).join('');
+  } catch(e) { list.innerHTML = `<p class="text-sm text-red-400 text-center py-4">${e.message}</p>`; }
+}
+
+async function resolveLink(linkId, approved) {
+  try {
+    await api(`/api/parent/link-requests/${linkId}/${approved?'approve':'reject'}`, { method:'POST' });
+    showToast(approved ? 'Link approved!' : 'Link rejected', approved ? 'success' : 'info');
+    loadPendingRequests();
+    if (approved) loadChildren();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+// ── Notification badge ─────────────────────────────────────────────────────────
+async function loadNotifBadge() {
+  try {
+    const data = await fetch('/api/notifications/count', { credentials:'same-origin' }).then(r=>r.json());
+    const badge = document.getElementById('notif-badge');
+    if (data.count > 0) { badge.textContent = data.count > 9 ? '9+' : data.count; badge.classList.remove('hidden'); }
+  } catch {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadChildren();
+  loadPendingRequests();
+  loadNotifBadge();
+});
+</script>
+</body>
+</html>

@@ -66,6 +66,33 @@ def principal_dashboard():
     return render_template("principal_dashboard.html")
 
 
+@school_ui_bp.route("/notifications")
+@login_required
+def notifications_page():
+    """Notification center — all roles."""
+    return render_template("notifications.html")
+
+
+@school_ui_bp.route("/student/settings")
+@login_required
+def student_settings():
+    """Student personal settings: personality, language, terms, data export."""
+    return render_template("student_settings.html")
+
+
+@school_ui_bp.route("/parent/portal")
+@login_required
+def parent_portal():
+    """Parent portal: child linking and monitoring."""
+    db = get_db()
+    user = db.query(DBUser).filter(DBUser.id == int(session["user_id"])).first()
+    role = Role.from_string((user.role if user else "student") or "student")
+    if role not in (Role.PARENT,) and not is_super_admin_role(role):
+        from flask import abort
+        abort(403)
+    return render_template("parent_portal.html")
+
+
 @school_ui_bp.route("/hub")
 @login_required
 def school_hub():
@@ -562,3 +589,56 @@ def api_roster_ai_hints():
     except Exception as e:
         logger.exception("roster AI hints failed")
         return jsonify({"error": "ai_unavailable", "detail": str(e)}), 503
+
+
+
+# ==================== WAITLIST ENDPOINTS (Phase 1) ====================
+
+@school_api_bp.route("/class-sections/<int:section_id>/enroll", methods=["POST"])
+@login_required
+def api_enroll_or_waitlist(section_id):
+    """Enroll a student or add to waitlist if section is full."""
+    from app.services.waitlist_service import enroll_or_waitlist
+    from app.services.school.errors import SchoolServiceError
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+    student_id = data.get("student_user_id", _uid())
+    try:
+        result = enroll_or_waitlist(db, student_id=student_id, class_section_id=section_id)
+        db.commit()
+        return jsonify(result)
+    except SchoolServiceError as exc:
+        return jsonify({"error": exc.message, "code": exc.code}), exc.http_status
+
+
+@school_api_bp.route("/class-sections/<int:section_id>/waitlist", methods=["GET"])
+@login_required
+def api_get_waitlist(section_id):
+    """Get the waitlist for a class section."""
+    from app.services.waitlist_service import get_waitlist
+    db = get_db()
+    entries = get_waitlist(db, class_section_id=section_id)
+    return jsonify([
+        {
+            "id": e.id,
+            "student_user_id": e.student_user_id,
+            "position": e.position,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in entries
+    ])
+
+
+@school_api_bp.route("/class-sections/<int:section_id>/waitlist/<int:student_id>", methods=["DELETE"])
+@login_required
+def api_remove_from_waitlist(section_id, student_id):
+    """Remove a student from the waitlist."""
+    from app.services.waitlist_service import remove_from_waitlist
+    from app.services.school.errors import SchoolServiceError
+    db = get_db()
+    try:
+        remove_from_waitlist(db, student_id=student_id, class_section_id=section_id)
+        db.commit()
+        return jsonify({"ok": True})
+    except SchoolServiceError as exc:
+        return jsonify({"error": exc.message, "code": exc.code}), exc.http_status

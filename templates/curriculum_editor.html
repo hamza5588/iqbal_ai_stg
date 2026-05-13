@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Curriculum Editor | Iqbal AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: { extend: {
+        fontFamily: { sans:["Inter","system-ui","sans-serif"], display:["Poppins","Inter","sans-serif"] },
+        colors: {
+          primary:  {50:"#f0f9ff",100:"#e0f2fe",200:"#bae6fd",400:"#38bdf8",500:"#0ea5e9",600:"#0284c7",700:"#0369a1"},
+          accent:   {50:"#fdf2f8",400:"#f472b6",500:"#ec4899",600:"#db2777"},
+          success:  {50:"#f0fdf4",500:"#22c55e",600:"#16a34a"},
+          error:    {50:"#fef2f2",500:"#ef4444"},
+          warning:  {50:"#fffbeb",500:"#f59e0b"},
+        },
+      }},
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <!-- PDF.js for in-browser text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing:antialiased; }
+    .glass-morphism { background:rgba(255,255,255,0.7); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.3); }
+    .drop-zone { border:2px dashed #cbd5e1; border-radius:1rem; transition:all .2s; }
+    .drop-zone.dragover { border-color:#0ea5e9; background:#f0f9ff; }
+    .tree-node { list-style:none; }
+    .tree-node .node-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; background:white; border:1px solid #e5e7eb; margin-bottom:4px; cursor:grab; transition:box-shadow .15s; }
+    .tree-node .node-bar:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .tree-node .node-bar.dragging { opacity:.4; }
+    .tree-children { margin-left:28px; padding-left:12px; border-left:2px solid #e5e7eb; }
+    .expand-btn { width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:4px; background:#f1f5f9; border:none; cursor:pointer; color:#64748b; flex-shrink:0; }
+    .badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:9999px; font-size:0.7rem; font-weight:600; }
+    .badge-chapter { background:#e0f2fe; color:#0369a1; }
+    .badge-topic   { background:#fce7f3; color:#be185d; }
+    .badge-subtopic{ background:#f0fdf4; color:#15803d; }
+    .toast { position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999; padding:.85rem 1.25rem; border-radius:.75rem; font-size:.875rem; font-weight:500; display:flex; align-items:center; gap:.5rem; box-shadow:0 8px 24px rgba(0,0,0,.15); transform:translateY(100px); opacity:0; transition:all .3s; }
+    .toast.show { transform:translateY(0); opacity:1; }
+    .toast.success { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+    .toast.error   { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    input:focus, select:focus { outline:none; border-color:#0ea5e9; box-shadow:0 0 0 3px rgba(14,165,233,.15); }
+    #uploadProgress { transition: width .3s ease; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+  <!-- Nav -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/teacher-dashboard" class="text-gray-500 hover:text-primary-600 transition-colors"><i class="fas fa-arrow-left"></i></a>
+        <h1 class="text-lg font-semibold text-gray-900 font-display">Curriculum Editor</h1>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="saveCurriculum()" id="saveBtn"
+          class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-medium text-sm hover:shadow-md transition-all disabled:opacity-50">
+          <i class="fas fa-save mr-1.5"></i>Save Curriculum
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- Upload Card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h2 class="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+        <i class="fas fa-upload text-primary-500"></i> Upload Curriculum PDF
+      </h2>
+      <p class="text-sm text-gray-500 mb-4">Upload a PDF and we'll parse chapters, topics, and subtopics for you to review and edit.</p>
+
+      <!-- Meta -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Subject <span class="text-red-500">*</span></label>
+          <input id="currSubject" type="text" placeholder="e.g. Physics"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm transition-all" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Grade Level <span class="text-red-500">*</span></label>
+          <select id="currGrade" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm transition-all bg-white">
+            <option value="">Select grade</option>
+            <option>Grade 6</option><option>Grade 7</option><option>Grade 8</option>
+            <option>Grade 9</option><option>Grade 10</option><option>Grade 11</option>
+            <option>Grade 12</option><option>O-Level</option><option>A-Level</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Curriculum Year</label>
+          <input id="currYear" type="text" placeholder="e.g. 2024-25"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm transition-all" />
+        </div>
+      </div>
+
+      <!-- Drop zone -->
+      <div id="dropZone" class="drop-zone p-10 text-center cursor-pointer"
+        onclick="document.getElementById('pdfInput').click()"
+        ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <i class="fas fa-file-pdf text-4xl text-gray-300 mb-3"></i>
+        <p class="text-gray-600 font-medium">Drop PDF here or <span class="text-primary-600 underline">click to browse</span></p>
+        <p class="text-sm text-gray-400 mt-1">Supports PDF up to 40 MB</p>
+        <input type="file" id="pdfInput" class="hidden" accept=".pdf" onchange="handleFile(event)" />
+      </div>
+
+      <!-- Progress -->
+      <div id="progressWrap" class="hidden mt-4">
+        <div class="flex items-center justify-between text-sm text-gray-600 mb-1">
+          <span id="progressLabel">Parsing PDF…</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div id="uploadProgress" class="h-2 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- File info -->
+      <div id="fileInfo" class="hidden mt-3 flex items-center gap-3 p-3 bg-primary-50 rounded-lg">
+        <i class="fas fa-file-pdf text-primary-500 text-xl"></i>
+        <div class="flex-1 min-w-0">
+          <p id="fileName" class="text-sm font-medium text-gray-900 truncate"></p>
+          <p id="fileSize" class="text-xs text-gray-500"></p>
+        </div>
+        <button onclick="clearFile()" class="text-gray-400 hover:text-red-500 transition-colors"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+
+    <!-- Topic Tree Editor -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <i class="fas fa-sitemap text-accent-500"></i> Chapter / Topic Tree
+        </h2>
+        <div class="flex gap-2">
+          <button onclick="addChapter()"
+            class="px-3 py-1.5 text-sm bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors font-medium">
+            <i class="fas fa-plus mr-1"></i>Add Chapter
+          </button>
+          <button onclick="collapseAll()"
+            class="px-3 py-1.5 text-sm bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+            <i class="fas fa-compress-arrows-alt mr-1"></i>Collapse All
+          </button>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div id="emptyTree" class="py-12 text-center text-gray-400">
+        <i class="fas fa-sitemap text-4xl mb-3 opacity-30"></i>
+        <p class="font-medium">No curriculum loaded yet</p>
+        <p class="text-sm mt-1">Upload a PDF above or add chapters manually.</p>
+      </div>
+
+      <!-- Tree -->
+      <ul id="treeRoot" class="space-y-1 hidden"></ul>
+    </div>
+
+  </main>
+
+  <!-- Add/Edit Node Modal -->
+  <div id="nodeModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div class="p-6">
+        <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 mb-4">Edit Node</h3>
+        <input id="nodeTitle" type="text" placeholder="Title…"
+          class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm mb-3 transition-all" />
+        <textarea id="nodeDesc" rows="2" placeholder="Description (optional)…"
+          class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm mb-4 transition-all resize-none"></textarea>
+        <div class="flex gap-2">
+          <button onclick="saveNodeModal()"
+            class="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-medium text-sm hover:shadow transition-all">
+            Save
+          </button>
+          <button onclick="closeNodeModal()"
+            class="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-all">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // -----------------------------------------------------------------------
+    // State
+    // -----------------------------------------------------------------------
+    let curriculum = [];  // [{id, title, desc, topics:[{id,title,desc,subtopics:[...]}]}]
+    let _nodeModalCb = null;
+    let _idCounter = 1;
+
+    function uid() { return _idCounter++; }
+
+    // -----------------------------------------------------------------------
+    // Drag & drop upload
+    // -----------------------------------------------------------------------
+    function onDragOver(e) { e.preventDefault(); document.getElementById("dropZone").classList.add("dragover"); }
+    function onDragLeave()  { document.getElementById("dropZone").classList.remove("dragover"); }
+    function onDrop(e)      { e.preventDefault(); onDragLeave(); const f = e.dataTransfer.files[0]; if (f) processFile(f); }
+    function handleFile(e)  { const f = e.target.files[0]; if (f) processFile(f); }
+
+    function clearFile() {
+      document.getElementById("fileInfo").classList.add("hidden");
+      document.getElementById("pdfInput").value = "";
+    }
+
+    async function processFile(file) {
+      if (!file.type.includes("pdf")) { showToast("Please upload a PDF file.", "error"); return; }
+      if (file.size > 40 * 1024 * 1024) { showToast("File too large (max 40 MB).", "error"); return; }
+
+      document.getElementById("fileInfo").classList.remove("hidden");
+      document.getElementById("fileName").textContent = file.name;
+      document.getElementById("fileSize").textContent = (file.size / 1024 / 1024).toFixed(2) + " MB";
+      document.getElementById("dropZone").classList.remove("dragover");
+
+      showProgress("Extracting text from PDF…", 10);
+
+      try {
+        // Try server-side parsing first
+        const form = new FormData();
+        form.append("file", file);
+        form.append("subject", document.getElementById("currSubject").value);
+        form.append("grade",   document.getElementById("currGrade").value);
+
+        showProgress("Sending to server for parsing…", 30);
+        const res = await fetch("/api/syllabus/parse-pdf", { method:"POST", body:form, credentials:"same-origin" });
+        showProgress("Processing…", 60);
+
+        if (res.ok) {
+          const data = await res.json();
+          curriculum = data.chapters || [];
+          showProgress("Done!", 100);
+          setTimeout(() => hideProgress(), 600);
+          renderTree();
+          showToast("Curriculum parsed successfully!", "success");
+        } else {
+          // Fallback: parse headings from PDF.js locally
+          showProgress("Extracting headings locally…", 50);
+          await parsePdfLocally(file);
+        }
+      } catch (err) {
+        await parsePdfLocally(file);
+      }
+    }
+
+    async function parsePdfLocally(file) {
+      try {
+        const ab = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+        const chapters = [];
+        let currentChapter = null;
+        let currentTopic   = null;
+
+        for (let p = 1; p <= Math.min(pdf.numPages, 50); p++) {
+          showProgress("Reading page " + p + "…", 50 + Math.round((p / Math.min(pdf.numPages,50)) * 45));
+          const page = await pdf.getPage(p);
+          const content = await page.getTextContent();
+          const lines = [];
+          let lastY = null;
+          content.items.forEach(item => {
+            if (lastY !== null && Math.abs(item.transform[5] - lastY) > 2) lines.push("");
+            lines.push(item.str);
+            lastY = item.transform[5];
+          });
+
+          lines.join("\n").split("\n").forEach(line => {
+            const t = line.trim();
+            if (!t) return;
+            // Heuristic: chapter headings (all caps or starts with Chapter/Unit)
+            if (/^(chapter|unit|module)\s+\d+/i.test(t) || (t.length < 60 && t === t.toUpperCase() && t.length > 3)) {
+              currentChapter = { id:uid(), title:t, desc:"", topics:[] };
+              chapters.push(currentChapter);
+              currentTopic = null;
+            } else if (currentChapter && /^\d+\.\d*\s/.test(t)) {
+              currentTopic = { id:uid(), title:t, desc:"", subtopics:[] };
+              currentChapter.topics.push(currentTopic);
+            } else if (currentTopic && /^\d+\.\d+\.\d+\s/.test(t)) {
+              currentTopic.subtopics.push({ id:uid(), title:t, desc:"" });
+            }
+          });
+        }
+
+        curriculum = chapters.length ? chapters : [{ id:uid(), title:"Chapter 1", desc:"", topics:[] }];
+        showProgress("Done!", 100);
+        setTimeout(() => hideProgress(), 600);
+        renderTree();
+        showToast("PDF parsed locally. Please review and edit the tree.", "success");
+      } catch (err) {
+        hideProgress();
+        showToast("Could not parse PDF. Add chapters manually.", "error");
+      }
+    }
+
+    function showProgress(label, pct) {
+      document.getElementById("progressWrap").classList.remove("hidden");
+      document.getElementById("progressLabel").textContent = label;
+      document.getElementById("progressPct").textContent = pct + "%";
+      document.getElementById("uploadProgress").style.width = pct + "%";
+    }
+    function hideProgress() { document.getElementById("progressWrap").classList.add("hidden"); }
+
+    // -----------------------------------------------------------------------
+    // Tree rendering
+    // -----------------------------------------------------------------------
+    function renderTree() {
+      const root = document.getElementById("treeRoot");
+      const empty = document.getElementById("emptyTree");
+      root.innerHTML = "";
+      if (!curriculum.length) { root.classList.add("hidden"); empty.classList.remove("hidden"); return; }
+      root.classList.remove("hidden"); empty.classList.add("hidden");
+      curriculum.forEach((ch, ci) => root.appendChild(buildChapterNode(ch, ci)));
+    }
+
+    function buildChapterNode(ch, ci) {
+      const li = document.createElement("li");
+      li.className = "tree-node";
+      li.dataset.id = ch.id;
+
+      const bar = document.createElement("div");
+      bar.className = "node-bar";
+      bar.innerHTML = `
+        <button class="expand-btn" onclick="toggleExpand(this)"><i class="fas fa-chevron-down text-xs"></i></button>
+        <span class="badge badge-chapter">Chapter</span>
+        <span class="flex-1 text-sm font-medium text-gray-900 truncate">${escHtml(ch.title)}</span>
+        <div class="flex items-center gap-1 ml-auto">
+          <button onclick="editNode(${ch.id},'chapter')" class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-primary-500"><i class="fas fa-edit text-xs"></i></button>
+          <button onclick="addTopic(${ch.id})" class="w-7 h-7 flex items-center justify-center rounded hover:bg-primary-50 text-gray-400 hover:text-primary-500"><i class="fas fa-plus text-xs"></i></button>
+          <button onclick="moveNode(${ch.id},'up')" class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400"><i class="fas fa-arrow-up text-xs"></i></button>
+          <button onclick="moveNode(${ch.id},'down')" class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400"><i class="fas fa-arrow-down text-xs"></i></button>
+          <button onclick="deleteNode(${ch.id},'chapter')" class="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><i class="fas fa-trash text-xs"></i></button>
+        </div>
+      `;
+      li.appendChild(bar);
+
+      if (ch.topics && ch.topics.length) {
+        const ul = document.createElement("ul");
+        ul.className = "tree-children mt-1 space-y-1";
+        ch.topics.forEach(tp => ul.appendChild(buildTopicNode(ch.id, tp)));
+        li.appendChild(ul);
+      }
+      return li;
+    }
+
+    function buildTopicNode(chId, tp) {
+      const li = document.createElement("li");
+      li.className = "tree-node";
+      const bar = document.createElement("div");
+      bar.className = "node-bar";
+      bar.innerHTML = `
+        <button class="expand-btn" onclick="toggleExpand(this)"><i class="fas fa-chevron-down text-xs"></i></button>
+        <span class="badge badge-topic">Topic</span>
+        <span class="flex-1 text-sm text-gray-800 truncate">${escHtml(tp.title)}</span>
+        <div class="flex items-center gap-1 ml-auto">
+          <button onclick="editNode(${tp.id},'topic')" class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-primary-500"><i class="fas fa-edit text-xs"></i></button>
+          <button onclick="addSubtopic(${chId},${tp.id})" class="w-7 h-7 flex items-center justify-center rounded hover:bg-primary-50 text-gray-400 hover:text-primary-500"><i class="fas fa-plus text-xs"></i></button>
+          <button onclick="deleteNode(${tp.id},'topic',${chId})" class="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><i class="fas fa-trash text-xs"></i></button>
+        </div>
+      `;
+      li.appendChild(bar);
+      if (tp.subtopics && tp.subtopics.length) {
+        const ul = document.createElement("ul");
+        ul.className = "tree-children mt-1 space-y-1";
+        tp.subtopics.forEach(st => ul.appendChild(buildSubtopicNode(chId, tp.id, st)));
+        li.appendChild(ul);
+      }
+      return li;
+    }
+
+    function buildSubtopicNode(chId, tpId, st) {
+      const li = document.createElement("li");
+      li.className = "tree-node";
+      const bar = document.createElement("div");
+      bar.className = "node-bar";
+      bar.innerHTML = `
+        <div class="w-5"></div>
+        <span class="badge badge-subtopic">Subtopic</span>
+        <span class="flex-1 text-sm text-gray-700 truncate">${escHtml(st.title)}</span>
+        <div class="flex items-center gap-1 ml-auto">
+          <button onclick="editNode(${st.id},'subtopic')" class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-primary-500"><i class="fas fa-edit text-xs"></i></button>
+          <button onclick="deleteNode(${st.id},'subtopic',${chId},${tpId})" class="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><i class="fas fa-trash text-xs"></i></button>
+        </div>
+      `;
+      li.appendChild(bar);
+      return li;
+    }
+
+    function toggleExpand(btn) {
+      const li = btn.closest(".tree-node");
+      const children = li.querySelector(".tree-children");
+      if (!children) return;
+      const hidden = children.classList.toggle("hidden");
+      btn.innerHTML = `<i class="fas fa-chevron-${hidden ? "right" : "down"} text-xs"></i>`;
+    }
+
+    function collapseAll() {
+      document.querySelectorAll(".tree-children").forEach(ul => {
+        ul.classList.add("hidden");
+        const btn = ul.parentElement?.querySelector(".expand-btn");
+        if (btn) btn.innerHTML = `<i class="fas fa-chevron-right text-xs"></i>`;
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // CRUD operations
+    // -----------------------------------------------------------------------
+    function addChapter() {
+      openNodeModal("Add Chapter", "", "", (title, desc) => {
+        curriculum.push({ id:uid(), title, desc, topics:[] });
+        renderTree();
+      });
+    }
+
+    function addTopic(chId) {
+      openNodeModal("Add Topic", "", "", (title, desc) => {
+        const ch = curriculum.find(c => c.id === chId);
+        if (ch) { ch.topics.push({ id:uid(), title, desc, subtopics:[] }); renderTree(); }
+      });
+    }
+
+    function addSubtopic(chId, tpId) {
+      openNodeModal("Add Subtopic", "", "", (title, desc) => {
+        const ch = curriculum.find(c => c.id === chId);
+        const tp = ch?.topics.find(t => t.id === tpId);
+        if (tp) { tp.subtopics.push({ id:uid(), title, desc }); renderTree(); }
+      });
+    }
+
+    function editNode(id, type) {
+      const node = findNode(id);
+      if (!node) return;
+      openNodeModal("Edit " + capitalize(type), node.title, node.desc, (title, desc) => {
+        node.title = title; node.desc = desc; renderTree();
+      });
+    }
+
+    function deleteNode(id, type, parentId, grandId) {
+      if (!confirm("Delete this " + type + "?")) return;
+      if (type === "chapter") { curriculum = curriculum.filter(c => c.id !== id); }
+      else if (type === "topic") {
+        const ch = curriculum.find(c => c.id === parentId);
+        if (ch) ch.topics = ch.topics.filter(t => t.id !== id);
+      } else {
+        const ch = curriculum.find(c => c.id === parentId);
+        const tp = ch?.topics.find(t => t.id === grandId);
+        if (tp) tp.subtopics = tp.subtopics.filter(s => s.id !== id);
+      }
+      renderTree();
+    }
+
+    function moveNode(id, dir) {
+      const idx = curriculum.findIndex(c => c.id === id);
+      if (idx < 0) return;
+      const swapIdx = dir === "up" ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= curriculum.length) return;
+      [curriculum[idx], curriculum[swapIdx]] = [curriculum[swapIdx], curriculum[idx]];
+      renderTree();
+    }
+
+    function findNode(id) {
+      for (const ch of curriculum) {
+        if (ch.id === id) return ch;
+        for (const tp of (ch.topics||[])) {
+          if (tp.id === id) return tp;
+          for (const st of (tp.subtopics||[])) { if (st.id === id) return st; }
+        }
+      }
+      return null;
+    }
+
+    // -----------------------------------------------------------------------
+    // Modal
+    // -----------------------------------------------------------------------
+    function openNodeModal(title, currentTitle, currentDesc, cb) {
+      document.getElementById("modalTitle").textContent = title;
+      document.getElementById("nodeTitle").value = currentTitle;
+      document.getElementById("nodeDesc").value  = currentDesc;
+      _nodeModalCb = cb;
+      document.getElementById("nodeModal").classList.remove("hidden");
+      setTimeout(() => document.getElementById("nodeTitle").focus(), 50);
+    }
+
+    function saveNodeModal() {
+      const title = document.getElementById("nodeTitle").value.trim();
+      if (!title) { showToast("Title is required.", "error"); return; }
+      const desc  = document.getElementById("nodeDesc").value.trim();
+      closeNodeModal();
+      if (_nodeModalCb) _nodeModalCb(title, desc);
+    }
+
+    function closeNodeModal() {
+      document.getElementById("nodeModal").classList.add("hidden");
+      _nodeModalCb = null;
+    }
+
+    document.getElementById("nodeModal").addEventListener("click", e => { if (e.target === document.getElementById("nodeModal")) closeNodeModal(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") closeNodeModal(); if (e.key === "Enter" && !document.getElementById("nodeModal").classList.contains("hidden")) saveNodeModal(); });
+
+    // -----------------------------------------------------------------------
+    // Save curriculum
+    // -----------------------------------------------------------------------
+    async function saveCurriculum() {
+      const subject = document.getElementById("currSubject").value.trim();
+      const grade   = document.getElementById("currGrade").value;
+      if (!subject || !grade) { showToast("Please enter subject and grade before saving.", "error"); return; }
+
+      const btn = document.getElementById("saveBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1.5"></i>Saving…';
+
+      try {
+        const res = await fetch("/api/syllabus/curriculum", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ subject, grade, year: document.getElementById("currYear").value.trim(), chapters: curriculum }),
+        });
+        if (res.ok) { showToast("Curriculum saved!", "success"); }
+        else { const d = await res.json().catch(()=>({})); showToast(d.error || "Save failed.", "error"); }
+      } catch (_) { showToast("Network error.", "error"); }
+      finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save mr-1.5"></i>Save Curriculum'; }
+    }
+
+    // -----------------------------------------------------------------------
+    // Utils
+    // -----------------------------------------------------------------------
+    function escHtml(s) { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : ""; }
+
+    function showToast(msg, type="success") {
+      const t = document.getElementById("toast");
+      t.className = `toast ${type}`;
+      t.innerHTML = `<i class="fas fa-${type==="success"?"check-circle":"exclamation-circle"}"></i> ${msg}`;
+      t.classList.add("show");
+      setTimeout(()=>t.classList.remove("show"), 3500);
+    }
+
+    // Load existing on open
+    async function loadExisting() {
+      try {
+        const res = await fetch("/api/syllabus/curriculum?mine=true", { credentials:"same-origin" });
+        if (!res.ok) return;
+        const d = await res.json();
+        if (d.chapters?.length) { curriculum = d.chapters; renderTree(); }
+      } catch (_) {}
+    }
+    loadExisting();
+  </script>
+</body>
+</html>

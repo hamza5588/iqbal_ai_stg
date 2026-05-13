@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Settings | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        primary: { 50:'#f0f9ff', 100:'#e0f2fe', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1' },
+        accent:  { 500:'#ec4899', 600:'#db2777' }
+      }}}
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .personality-card { cursor: pointer; transition: all .2s; }
+    .personality-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(14,165,233,.15); }
+    .personality-card.selected { ring: 2px; outline: 2.5px solid #0ea5e9; outline-offset: 2px; }
+    .section-card { background: white; border-radius: 1rem; border: 1px solid #e2e8f0; padding: 1.5rem; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed top-4 right-4 z-50 min-w-[280px] bg-white rounded-xl shadow-xl border-l-4 p-4 flex items-center gap-3">
+  <i id="toast-icon" class="fas fa-check-circle text-green-500 text-lg"></i>
+  <p id="toast-msg" class="text-sm font-medium text-gray-800 flex-1"></p>
+  <button onclick="document.getElementById('toast').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xs"></i></button>
+</div>
+
+<!-- Nav -->
+<nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+  <div class="max-w-2xl mx-auto px-4 flex items-center justify-between h-14">
+    <div class="flex items-center gap-3">
+      <button onclick="history.back()" class="text-gray-400 hover:text-gray-600 mr-1"><i class="fas fa-arrow-left"></i></button>
+      <span class="font-bold text-gray-900">My Settings</span>
+    </div>
+    <a href="/auth/logout" class="text-sm text-red-500 hover:text-red-700 font-medium"><i class="fas fa-sign-out-alt mr-1"></i>Logout</a>
+  </div>
+</nav>
+
+<div class="max-w-2xl mx-auto px-4 py-6 space-y-5">
+
+  <!-- Terms of Service -->
+  <div class="section-card">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center"><i class="fas fa-file-contract text-blue-600 text-sm"></i></div>
+      <div>
+        <h3 class="font-semibold text-gray-900">Terms of Service</h3>
+        <p class="text-xs text-gray-500">Legal agreement for platform usage</p>
+      </div>
+    </div>
+    <div id="terms-status" class="flex items-center gap-2 text-sm text-gray-500">
+      <i class="fas fa-spinner fa-spin"></i> Checking status…
+    </div>
+    <div id="terms-accept-section" class="hidden mt-3">
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 mb-3">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        You must accept the Terms of Service to continue using the platform.
+      </div>
+      <button onclick="acceptTerms()" class="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+        <i class="fas fa-signature mr-2"></i>Accept Terms of Service
+      </button>
+    </div>
+  </div>
+
+  <!-- Language Preference -->
+  <div class="section-card">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-green-100 flex items-center justify-center"><i class="fas fa-language text-green-600 text-sm"></i></div>
+      <div>
+        <h3 class="font-semibold text-gray-900">Language Preference</h3>
+        <p class="text-xs text-gray-500">AI responses will use your selected language</p>
+      </div>
+    </div>
+    <div class="flex gap-3 flex-wrap">
+      <button onclick="setLanguage('en')" id="lang-en" class="lang-btn flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all">
+        <span class="text-lg">🇺🇸</span> English
+      </button>
+      <button onclick="setLanguage('ur')" id="lang-ur" class="lang-btn flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all">
+        <span class="text-lg">🇵🇰</span> اردو
+      </button>
+      <button onclick="setLanguage('hi')" id="lang-hi" class="lang-btn flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all">
+        <span class="text-lg">🇮🇳</span> हिंदी
+      </button>
+    </div>
+  </div>
+
+  <!-- AI Personality -->
+  <div class="section-card">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center"><i class="fas fa-robot text-purple-600 text-sm"></i></div>
+      <div>
+        <h3 class="font-semibold text-gray-900">AI Teaching Style</h3>
+        <p class="text-xs text-gray-500">Choose how Iqbal AI teaches you</p>
+      </div>
+    </div>
+    <div id="personalities-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div class="col-span-full text-center py-4 text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
+    </div>
+    <button onclick="savePersonality()" class="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
+      <i class="fas fa-save mr-2"></i>Save Teaching Style
+    </button>
+  </div>
+
+  <!-- Data Export -->
+  <div class="section-card">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-download text-teal-600 text-sm"></i></div>
+      <div>
+        <h3 class="font-semibold text-gray-900">Export My Data</h3>
+        <p class="text-xs text-gray-500">Download a ZIP with your profile, conversations and enrollments</p>
+      </div>
+    </div>
+    <button onclick="exportData()" id="export-btn" class="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors">
+      <i class="fas fa-file-zipper mr-2"></i>Download My Data
+    </button>
+  </div>
+
+  <!-- Delete Account -->
+  <div class="section-card border-red-100">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-user-slash text-red-600 text-sm"></i></div>
+      <div>
+        <h3 class="font-semibold text-gray-900">Delete My Account</h3>
+        <p class="text-xs text-gray-500">Permanently anonymize your personal data. This cannot be undone.</p>
+      </div>
+    </div>
+    <div class="bg-red-50 border border-red-100 rounded-lg p-3 text-xs text-red-700 mb-3">
+      <i class="fas fa-triangle-exclamation mr-1"></i>
+      Your username and email will be replaced with anonymous identifiers. Your learning activity will be preserved in anonymized form.
+    </div>
+    <button onclick="confirmDelete()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
+      <i class="fas fa-trash-alt mr-2"></i>Delete My Account
+    </button>
+  </div>
+
+</div>
+
+<!-- Terms Modal -->
+<div id="terms-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+    <div class="p-6 border-b border-gray-100">
+      <h3 class="text-lg font-bold text-gray-900">Terms of Service</h3>
+      <p class="text-sm text-gray-500 mt-1">Please read and accept to continue</p>
+    </div>
+    <div id="terms-content" class="p-6 max-h-60 overflow-y-auto text-sm text-gray-700 leading-relaxed space-y-3">
+      Loading…
+    </div>
+    <div class="p-6 border-t border-gray-100 flex gap-3">
+      <button onclick="submitAcceptTerms()" class="flex-1 bg-primary-600 text-white py-2.5 rounded-lg font-medium text-sm hover:bg-primary-700">
+        <i class="fas fa-signature mr-2"></i>I Accept the Terms
+      </button>
+      <button onclick="document.getElementById('terms-modal').classList.add('hidden')" class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-medium text-sm hover:bg-gray-200">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _selectedPersonality = null;
+let _myUserId = null;
+
+const PERSONALITY_COLORS = ['from-blue-400 to-blue-600','from-purple-400 to-purple-600','from-pink-400 to-pink-600','from-teal-400 to-teal-600','from-orange-400 to-orange-600','from-green-400 to-green-600'];
+const PERSONALITY_ICONS  = { friendly_tutor:'fa-smile', strict_examiner:'fa-graduation-cap', storytelling_guide:'fa-book-open', exam_coach:'fa-bullseye', socratic_mentor:'fa-question-circle', concise_explainer:'fa-bolt' };
+
+function showToast(msg, type='success') {
+  const icons = { success:'fa-check-circle text-green-500', error:'fa-exclamation-circle text-red-500', info:'fa-info-circle text-blue-500' };
+  document.getElementById('toast-icon').className = `fas ${icons[type]||icons.info} text-lg`;
+  document.getElementById('toast-msg').textContent = msg;
+  const t = document.getElementById('toast');
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), 4000);
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(path, { credentials:'same-origin', headers:{'Content-Type':'application/json',...(opts.headers||{})}, ...opts });
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// ── Terms ─────────────────────────────────────────────────────────────────────
+async function checkTermsStatus() {
+  try {
+    const data = await api('/api/terms/status');
+    const el = document.getElementById('terms-status');
+    if (data.has_accepted) {
+      el.innerHTML = `<i class="fas fa-check-circle text-green-500 mr-1"></i><span class="text-green-700 font-medium">Accepted</span> <span class="text-gray-400">— version ${data.accepted_version||'1.0'}</span>`;
+    } else {
+      el.innerHTML = `<i class="fas fa-times-circle text-red-400 mr-1"></i><span class="text-red-600 font-medium">Not accepted</span>`;
+      document.getElementById('terms-accept-section').classList.remove('hidden');
+    }
+  } catch { document.getElementById('terms-status').textContent = 'Unable to check status.'; }
+}
+
+async function acceptTerms() {
+  try {
+    const data = await api('/api/terms/current');
+    document.getElementById('terms-content').innerHTML = `
+      <p class="font-semibold">Version ${data.version}</p>
+      <p>${data.disclaimer || 'By using Iqbal AI you agree to our terms and conditions for educational data processing.'}</p>
+      <p class="text-xs text-gray-400 mt-4">Your acceptance will be recorded with your current IP address and timestamp.</p>`;
+    document.getElementById('terms-modal').classList.remove('hidden');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function submitAcceptTerms() {
+  try {
+    await api('/api/terms/accept', { method:'POST' });
+    document.getElementById('terms-modal').classList.add('hidden');
+    showToast('Terms accepted!', 'success');
+    checkTermsStatus();
+    document.getElementById('terms-accept-section').classList.add('hidden');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ── Language ──────────────────────────────────────────────────────────────────
+function highlightLang(lang) {
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.className = `lang-btn flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${b.id === 'lang-' + lang ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`;
+  });
+}
+
+async function setLanguage(lang) {
+  try {
+    await api('/api/i18n/preference', { method:'POST', body: JSON.stringify({ lang_code: lang }) });
+    highlightLang(lang);
+    showToast('Language preference saved', 'success');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ── Personality ───────────────────────────────────────────────────────────────
+async function loadPersonalities() {
+  const grid = document.getElementById('personalities-grid');
+  try {
+    const data = await api('/admin/personalities');
+    const personalities = (data.personalities || []).filter(p => p.is_active !== false);
+    if (!personalities.length) { grid.innerHTML = `<div class="col-span-full text-sm text-gray-400">No personalities available.</div>`; return; }
+    grid.innerHTML = personalities.map((p, i) => `
+      <div class="personality-card rounded-xl border-2 border-gray-200 p-3 text-center" onclick="selectPersonality(${p.id}, this)" data-id="${p.id}">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br ${PERSONALITY_COLORS[i%PERSONALITY_COLORS.length]} flex items-center justify-center mx-auto mb-2">
+          <i class="fas ${PERSONALITY_ICONS[p.slug]||'fa-robot'} text-white text-sm"></i>
+        </div>
+        <p class="text-xs font-semibold text-gray-800 leading-tight">${p.name}</p>
+        ${p.is_default ? '<span class="text-[10px] text-primary-500 font-medium">Default</span>' : ''}
+      </div>`).join('');
+  } catch(e) { grid.innerHTML = `<div class="col-span-full text-sm text-red-400">${e.message}</div>`; }
+}
+
+function selectPersonality(id, el) {
+  _selectedPersonality = id;
+  document.querySelectorAll('.personality-card').forEach(c => { c.classList.remove('selected'); c.style.outline = ''; });
+  el.classList.add('selected');
+  el.style.outline = '2.5px solid #0ea5e9';
+  el.style.outlineOffset = '2px';
+}
+
+async function savePersonality() {
+  if (!_selectedPersonality) { showToast('Select a personality first','info'); return; }
+  if (!_myUserId) { showToast('Unable to determine user ID','error'); return; }
+  try {
+    await api(`/api/student/${_myUserId}/personality`, { method:'POST', body: JSON.stringify({ personality_id: _selectedPersonality }) });
+    showToast('Teaching style saved!', 'success');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+async function exportData() {
+  if (!_myUserId) { showToast('Unable to determine user ID','error'); return; }
+  const btn = document.getElementById('export-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Preparing…';
+  try {
+    const res = await fetch(`/api/student/${_myUserId}/export`, { credentials:'same-origin' });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Export failed'); }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'my_data.zip'; a.click();
+    URL.revokeObjectURL(url);
+    showToast('Export downloaded!','success');
+  } catch(e) { showToast(e.message,'error'); }
+  finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-file-zipper mr-2"></i>Download My Data'; }
+}
+
+// ── Delete Account ────────────────────────────────────────────────────────────
+async function confirmDelete() {
+  const confirmText = prompt('Type DELETE to confirm permanent account deletion:');
+  if (confirmText !== 'DELETE') { showToast('Cancelled','info'); return; }
+  if (!_myUserId) { showToast('Unable to determine user ID','error'); return; }
+  try {
+    await api(`/api/student/${_myUserId}/account`, { method:'DELETE' });
+    showToast('Account deleted. Redirecting…','success');
+    setTimeout(() => window.location.href = '/auth/logout', 2000);
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  // Get current user info
+  try {
+    const data = await api('/api/student/me');
+    _myUserId = data.id;
+    highlightLang(data.preferred_language || 'en');
+    _selectedPersonality = data.personality_id || null;
+  } catch { /* not critical */ }
+
+  checkTermsStatus();
+  loadPersonalities();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

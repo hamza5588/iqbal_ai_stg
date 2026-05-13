@@ -588,6 +588,41 @@ def principal_dashboard_metrics(db: Session, *, principal_user_id: int) -> Dict[
             {"subject_name": name, "avg_score_ratio": float(avg) if avg is not None else None}
             for name, avg in rows
         ]
+        at_risk = None
+        try:
+            from app.models.phase4_models import StudentIntelligenceSnapshot
+
+            in_school = {
+                r[0]
+                for r in db.query(ClassEnrollment.student_user_id)
+                .join(ClassSection, ClassSection.id == ClassEnrollment.class_section_id)
+                .filter(ClassSection.school_id == sid, ClassEnrollment.status == "active")
+                .distinct()
+                .all()
+            }
+            if not in_school:
+                at_risk = 0
+            else:
+                snaps = (
+                    db.query(StudentIntelligenceSnapshot)
+                    .filter(StudentIntelligenceSnapshot.student_user_id.in_(list(in_school)))
+                    .order_by(
+                        StudentIntelligenceSnapshot.student_user_id,
+                        StudentIntelligenceSnapshot.computed_at.desc(),
+                    )
+                    .all()
+                )
+                latest: Dict[int, Any] = {}
+                for s in snaps:
+                    if s.student_user_id not in latest:
+                        latest[s.student_user_id] = s
+                at_risk = sum(
+                    1
+                    for s in latest.values()
+                    if s.pass_probability is not None and float(s.pass_probability) < 0.45
+                )
+        except Exception:
+            at_risk = None
         out.append(
             {
                 "school_id": sid,
@@ -597,7 +632,7 @@ def principal_dashboard_metrics(db: Session, *, principal_user_id: int) -> Dict[
                 "active_teachers": active_teachers,
                 "class_section_count": section_count,
                 "quiz_avg_by_subject": quiz_avg_by_subject,
-                "at_risk": None,
+                "at_risk": at_risk,
             }
         )
     return {"schools": out}

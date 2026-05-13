@@ -135,6 +135,22 @@ def school_operations():
     return render_template("admin/school_operations.html")
 
 
+@bp.route("/platform-management")
+@login_required
+@admin_only
+def phase1_panel():
+    """Phase 1 platform management: personalities, content library, syllabus, user admin, archival."""
+    return render_template("admin/phase1_panel.html")
+
+
+@bp.route("/question-bank")
+@login_required
+@admin_only
+def question_bank_admin():
+    """Phase 3 question bank admin UI (CRUD via /api/phase3/question-bank/items)."""
+    return render_template("admin/question_bank.html")
+
+
 # ==================== USER MANAGEMENT ====================
 
 @bp.route('/users', methods=['GET'])
@@ -241,6 +257,21 @@ def create_user():
             groq_api_key='',
             role=role
         )
+
+        icloud_id = (data.get("icloud_apple_id") or data.get("apple_id") or "").strip()
+        icloud_pw = (data.get("icloud_app_password") or data.get("apple_app_password") or "").strip()
+        if icloud_id and icloud_pw:
+            try:
+                from app.services.calendar_connection_service import save_apple_caldav_credentials
+
+                save_apple_caldav_credentials(
+                    db,
+                    user_id=user_id,
+                    apple_id=icloud_id,
+                    app_specific_password=icloud_pw,
+                )
+            except Exception as exc:
+                logger.warning("Admin user create: Apple calendar credentials not saved: %s", exc)
         
         return jsonify({
             'success': True,
@@ -1560,4 +1591,84 @@ def llm_telemetry_export_csv():
     except Exception as e:
         logger.error(f"llm export: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==================== AI PERSONALITIES (Phase 1) ====================
+
+@bp.route('/personalities', methods=['GET'])
+@login_required
+@admin_only
+def list_personalities():
+    """List all AI teaching personalities."""
+    import app.services.personality_service as ps
+    db = get_db()
+    personalities = ps.list_personalities(db, active_only=False)
+    return jsonify([
+        {
+            'id': p.id,
+            'name': p.name,
+            'slug': p.slug,
+            'description': p.description,
+            'is_default': p.is_default,
+            'is_active': p.is_active,
+        }
+        for p in personalities
+    ])
+
+
+@bp.route('/personalities', methods=['POST'])
+@login_required
+@admin_only
+def create_personality():
+    """Create a new AI teaching personality."""
+    import app.services.personality_service as ps
+    from app.services.school.errors import SchoolServiceError
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+    try:
+        p = ps.create_personality(
+            db,
+            name=data.get('name', ''),
+            slug=data.get('slug', ''),
+            description=data.get('description'),
+            system_prompt_modifier=data.get('system_prompt_modifier', ''),
+            is_default=data.get('is_default', False),
+        )
+        db.commit()
+        return jsonify({'id': p.id, 'name': p.name, 'slug': p.slug}), 201
+    except SchoolServiceError as exc:
+        return jsonify({'error': exc.message, 'code': exc.code}), exc.http_status
+
+
+@bp.route('/personalities/<int:personality_id>', methods=['PUT'])
+@login_required
+@admin_only
+def update_personality(personality_id):
+    """Update an AI teaching personality."""
+    import app.services.personality_service as ps
+    from app.services.school.errors import SchoolServiceError
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+    try:
+        p = ps.update_personality(db, personality_id=personality_id, **data)
+        db.commit()
+        return jsonify({'id': p.id, 'name': p.name, 'slug': p.slug, 'is_active': p.is_active})
+    except SchoolServiceError as exc:
+        return jsonify({'error': exc.message, 'code': exc.code}), exc.http_status
+
+
+@bp.route('/personalities/<int:personality_id>', methods=['DELETE'])
+@login_required
+@admin_only
+def delete_personality(personality_id):
+    """Soft-delete an AI teaching personality."""
+    import app.services.personality_service as ps
+    from app.services.school.errors import SchoolServiceError
+    db = get_db()
+    try:
+        ps.delete_personality(db, personality_id=personality_id)
+        db.commit()
+        return jsonify({'ok': True})
+    except SchoolServiceError as exc:
+        return jsonify({'error': exc.message, 'code': exc.code}), exc.http_status
 

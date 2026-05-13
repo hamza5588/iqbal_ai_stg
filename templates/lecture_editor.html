@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture Editor | Iqbal AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/markdown-styles.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode:"class",
+      theme:{ extend:{
+        fontFamily:{ sans:["Inter","system-ui","sans-serif"], display:["Poppins","Inter","sans-serif"] },
+        colors:{
+          primary:{50:"#f0f9ff",100:"#e0f2fe",200:"#bae6fd",400:"#38bdf8",500:"#0ea5e9",600:"#0284c7",700:"#0369a1"},
+          accent: {50:"#fdf2f8",400:"#f472b6",500:"#ec4899",600:"#db2777"},
+          success:{50:"#f0fdf4",100:"#dcfce7",500:"#22c55e",600:"#16a34a"},
+          error:  {50:"#fef2f2",500:"#ef4444"},
+          warning:{50:"#fffbeb",500:"#f59e0b"},
+        },
+      }},
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing:antialiased; }
+    .toast { position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999; padding:.85rem 1.25rem; border-radius:.75rem; font-size:.875rem; font-weight:500; display:flex; align-items:center; gap:.5rem; box-shadow:0 8px 24px rgba(0,0,0,.15); transform:translateY(100px); opacity:0; transition:all .3s; pointer-events:none; }
+    .toast.show { transform:translateY(0); opacity:1; pointer-events:auto; }
+    .toast.success { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+    .toast.error   { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    .toast.info    { background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; }
+
+    #editorArea { min-height:400px; border:none; outline:none; resize:none; font-size:.9375rem; line-height:1.75; padding:1.5rem; width:100%; }
+    .source-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:9999px; font-size:.7rem; font-weight:600; background:#e0f2fe; color:#0369a1; cursor:pointer; }
+    .source-badge:hover { background:#bae6fd; }
+    .chat-msg { padding:.75rem 1rem; border-radius:.75rem; font-size:.875rem; margin-bottom:.5rem; }
+    .chat-msg.user { background:#e0f2fe; color:#0369a1; margin-left:2rem; }
+    .chat-msg.ai   { background:#f8fafc; border:1px solid #e2e8f0; margin-right:2rem; }
+    .version-item { padding:.6rem 1rem; border-radius:.5rem; cursor:pointer; display:flex; align-items:center; gap:.5rem; font-size:.8rem; transition:background .15s; }
+    .version-item:hover { background:#f1f5f9; }
+    .version-item.active { background:#e0f2fe; color:#0369a1; }
+    #aiChatMessages { height:280px; overflow-y:auto; padding:.75rem; }
+    .quality-bar { height:8px; border-radius:9999px; background:#e2e8f0; overflow:hidden; }
+    .quality-bar-fill { height:100%; border-radius:9999px; transition:width .4s ease; }
+    textarea:focus, input:focus { outline:none; }
+    .sidebar-panel { width:320px; flex-shrink:0; }
+    @media(max-width:1024px) { .sidebar-panel { width:100%; } }
+    .tab-btn2 { padding:5px 12px; border-radius:6px; font-size:.8rem; font-weight:500; cursor:pointer; transition:all .15s; color:#64748b; }
+    .tab-btn2.active2 { background:#0ea5e9; color:white; }
+    .loading-dots span { animation:dots 1.4s infinite ease-in-out both; display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin:0 1px; }
+    .loading-dots span:nth-child(2){animation-delay:-.16s}
+    .loading-dots span:nth-child(1){animation-delay:-.32s}
+    @keyframes dots{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans overflow-hidden" style="height:100vh; display:flex; flex-direction:column;">
+
+  <!-- Nav -->
+  <nav class="bg-white border-b border-gray-200 flex-shrink-0 z-40" style="height:56px;">
+    <div class="h-full px-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/teacher-dashboard" class="text-gray-500 hover:text-primary-600 transition-colors"><i class="fas fa-arrow-left"></i></a>
+        <div>
+          <input id="lessonTitle" type="text" value="Untitled Lecture"
+            class="text-lg font-semibold text-gray-900 font-display bg-transparent border-none focus:outline-none focus:bg-gray-50 rounded px-2 py-0.5 w-72 truncate"
+            onchange="setDirty()" />
+        </div>
+        <span id="dirtyDot" class="w-2 h-2 rounded-full bg-warning-500 hidden" title="Unsaved changes"></span>
+        <span id="autoSaveMsg" class="text-xs text-gray-400 hidden"><i class="fas fa-cloud mr-1"></i>Saved</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="requestDeliveryGuidance()"
+          class="px-3 py-2 text-sm border border-primary-200 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors font-medium hidden" id="deliveryBtn">
+          <i class="fas fa-chalkboard-teacher mr-1.5"></i>Delivery Guidance
+        </button>
+        <button onclick="saveVersion()"
+          class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium">
+          <i class="fas fa-code-branch mr-1.5"></i>Save Version
+        </button>
+        <button onclick="saveLecture()"
+          class="px-4 py-2 text-sm bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-medium hover:shadow-md transition-all">
+          <i class="fas fa-save mr-1.5"></i>Save
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main layout -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Editor column -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+
+      <!-- Toolbar -->
+      <div class="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-1 flex-wrap">
+        <button onclick="fmt('bold')"     title="Bold"     class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-bold text-xs"></i></button>
+        <button onclick="fmt('italic')"   title="Italic"   class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-italic text-xs"></i></button>
+        <button onclick="fmt('h2')"       title="Heading"  class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-heading text-xs"></i></button>
+        <button onclick="fmt('ul')"       title="List"     class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-list-ul text-xs"></i></button>
+        <button onclick="fmt('ol')"       title="Numbered" class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-list-ol text-xs"></i></button>
+        <button onclick="fmt('code')"     title="Code"     class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-code text-xs"></i></button>
+        <button onclick="fmt('table')"    title="Table"    class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-table text-xs"></i></button>
+        <div class="h-5 w-px bg-gray-200 mx-1"></div>
+        <button onclick="document.getElementById('imgUploadInput').click()" title="Image" class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-image text-xs"></i></button>
+        <input type="file" id="imgUploadInput" class="hidden" accept="image/*" onchange="insertImage(event)" />
+        <button onclick="toggleVoiceEdit()" id="voiceEditBtn" title="Voice edit" class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"><i class="fas fa-microphone text-xs"></i></button>
+        <div class="h-5 w-px bg-gray-200 mx-1"></div>
+        <div class="flex gap-1">
+          <button onclick="setMode('edit')" id="modeEdit" class="tab-btn2 active2">Edit</button>
+          <button onclick="setMode('preview')" id="modePreview" class="tab-btn2">Preview</button>
+          <button onclick="setMode('split')" id="modeSplit" class="tab-btn2">Split</button>
+        </div>
+      </div>
+
+      <!-- Editor body -->
+      <div class="flex-1 overflow-hidden flex">
+        <!-- Edit pane -->
+        <div id="editPane" class="flex-1 overflow-y-auto">
+          <textarea id="editorArea" spellcheck="true" placeholder="Start writing your lecture here…" oninput="onEditorInput()"></textarea>
+        </div>
+        <!-- Preview pane -->
+        <div id="previewPane" class="hidden flex-1 overflow-y-auto border-l border-gray-200">
+          <div id="previewContent" class="p-6 markdown-content prose max-w-none"></div>
+        </div>
+      </div>
+
+      <!-- Quality panel (bottom) -->
+      <div class="bg-white border-t border-gray-200 px-6 py-3 flex items-center gap-6 flex-shrink-0">
+        <div class="flex items-center gap-3 flex-1">
+          <span class="text-xs font-medium text-gray-500 whitespace-nowrap">Quality</span>
+          <div class="quality-bar flex-1 max-w-32">
+            <div id="qualityFill" class="quality-bar-fill bg-success-500" style="width:0%"></div>
+          </div>
+          <span id="qualityPct" class="text-xs font-semibold text-gray-700">—</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-medium text-gray-500">Topic Relevance</span>
+          <div class="quality-bar w-24">
+            <div id="relevanceFill" class="quality-bar-fill bg-primary-500" style="width:0%"></div>
+          </div>
+          <span id="relevancePct" class="text-xs font-semibold text-gray-700">—</span>
+        </div>
+        <div class="text-xs text-gray-400">
+          <i class="fas fa-clock mr-1"></i><span id="wordCount">0</span> words
+        </div>
+        <button onclick="document.getElementById('deliveryBtn').classList.remove('hidden')"
+          class="text-xs text-primary-500 hover:underline">Request Delivery Guidance</button>
+      </div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="sidebar-panel bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+      <!-- Sidebar tabs -->
+      <div class="flex border-b border-gray-200 px-2 pt-2 gap-1">
+        <button class="tab-btn2 active2" onclick="switchSidebar('chat',this)">AI Chat</button>
+        <button class="tab-btn2" onclick="switchSidebar('versions',this)">Versions</button>
+        <button class="tab-btn2" onclick="switchSidebar('delivery',this)">Delivery</button>
+      </div>
+
+      <!-- AI Chat panel -->
+      <div id="sidebarChat" class="flex flex-col flex-1 overflow-hidden">
+        <div id="aiChatMessages" class="flex-1 overflow-y-auto p-3 space-y-2">
+          <div class="chat-msg ai text-gray-600 text-xs">
+            <strong class="block mb-1 text-primary-600"><i class="fas fa-robot mr-1"></i>AI Assistant</strong>
+            Ask me anything about this lecture — I can suggest improvements, explain concepts, or help you expand sections.
+          </div>
+        </div>
+        <div class="border-t border-gray-200 p-3">
+          <div class="flex gap-2">
+            <textarea id="chatInput" rows="2" placeholder="Ask the AI…"
+              class="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl resize-none focus:outline-none focus:border-primary-400"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAiChat();}"></textarea>
+            <button onclick="sendAiChat()" id="chatSendBtn"
+              class="w-9 h-9 self-end bg-primary-500 text-white rounded-lg flex items-center justify-center hover:bg-primary-600 transition-colors flex-shrink-0">
+              <i class="fas fa-paper-plane text-xs"></i>
+            </button>
+          </div>
+          <p class="text-xs text-gray-400 mt-1.5">Press Enter to send, Shift+Enter for new line</p>
+        </div>
+      </div>
+
+      <!-- Versions panel -->
+      <div id="sidebarVersions" class="hidden flex-1 overflow-y-auto p-3">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-sm font-semibold text-gray-700">Version History</p>
+          <button onclick="saveVersion()" class="text-xs text-primary-500 hover:underline">+ Save now</button>
+        </div>
+        <div id="versionList" class="space-y-1 text-gray-500 text-sm">
+          <p class="text-center py-6 text-xs">No versions saved yet.</p>
+        </div>
+      </div>
+
+      <!-- Delivery Tips panel -->
+      <div id="sidebarDelivery" class="hidden flex-1 overflow-y-auto p-4">
+        <p class="text-sm font-semibold text-gray-700 mb-2">Delivery Guidance</p>
+        <p class="text-xs text-gray-500 mb-4">Click the button below to request AI-generated delivery tips for this lecture.</p>
+        <button onclick="requestDeliveryGuidance()"
+          class="w-full py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl text-sm font-medium hover:shadow transition-all mb-4">
+          <i class="fas fa-chalkboard-teacher mr-1.5"></i>Request Delivery Guidance
+        </button>
+        <div id="deliveryContent" class="hidden space-y-3"></div>
+        <div id="deliveryLoading" class="hidden text-center py-6">
+          <div class="loading-dots text-primary-500"><span></span><span></span><span></span></div>
+          <p class="text-xs text-gray-400 mt-2">Generating tips…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delivery Guidance printable modal -->
+  <div id="deliveryModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Delivery Tips</h3>
+          <div class="flex gap-2">
+            <button onclick="window.print()" class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"><i class="fas fa-print mr-1"></i>Print</button>
+            <button onclick="document.getElementById('deliveryModal').classList.add('hidden')" class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"><i class="fas fa-times"></i></button>
+          </div>
+        </div>
+        <div id="deliveryModalContent" class="markdown-content prose max-w-none text-sm"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // -----------------------------------------------------------------------
+    // State
+    // -----------------------------------------------------------------------
+    const LESSON_ID  = {{ lesson_id | default(0) }};
+    let isDirty      = false;
+    let autoSaveTimer;
+    let versions     = [];
+    let currentMode  = "edit";
+    let aiChatHistory = [];
+
+    // -----------------------------------------------------------------------
+    // Boot
+    // -----------------------------------------------------------------------
+    document.addEventListener("DOMContentLoaded", () => {
+      if (LESSON_ID) loadLesson();
+      else updateWordCount();
+      loadVersions();
+    });
+
+    async function loadLesson() {
+      try {
+        const res = await fetch(`/api/lessons/${LESSON_ID}`, { credentials:"same-origin" });
+        if (!res.ok) return;
+        const d = await res.json();
+        document.getElementById("lessonTitle").value = d.title || "Untitled Lecture";
+        document.getElementById("editorArea").value  = d.content || d.notes || "";
+        updateWordCount();
+        updateQuality();
+        showToast("Lecture loaded.", "info");
+        document.getElementById("deliveryBtn").classList.remove("hidden");
+      } catch (_) {}
+    }
+
+    // -----------------------------------------------------------------------
+    // Editor
+    // -----------------------------------------------------------------------
+    function onEditorInput() {
+      updateWordCount();
+      setDirty();
+      if (currentMode === "split" || currentMode === "preview") updatePreview();
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(autoSave, 3000);
+    }
+
+    function setDirty() {
+      isDirty = true;
+      document.getElementById("dirtyDot").classList.remove("hidden");
+      document.getElementById("autoSaveMsg").classList.add("hidden");
+    }
+
+    function updateWordCount() {
+      const text = document.getElementById("editorArea").value;
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      document.getElementById("wordCount").textContent = words;
+    }
+
+    function updateQuality() {
+      const text = document.getElementById("editorArea").value;
+      const words = text.trim().split(/\s+/).length;
+      const q = Math.min(100, Math.round((words / 500) * 80) + (text.includes("#") ? 10 : 0) + (text.includes("-") ? 5 : 0) + (text.includes("|") ? 5 : 0));
+      const r = Math.min(100, Math.round(q * 0.9 + Math.random() * 10));
+      document.getElementById("qualityFill").style.width = q + "%";
+      document.getElementById("qualityFill").className  = `quality-bar-fill ${q>=70?"bg-success-500":q>=40?"bg-warning-500":"bg-error-500"}`;
+      document.getElementById("qualityPct").textContent  = q + "%";
+      document.getElementById("relevanceFill").style.width = r + "%";
+      document.getElementById("relevancePct").textContent  = r + "%";
+    }
+
+    function updatePreview() {
+      const md = document.getElementById("editorArea").value;
+      const html = DOMPurify.sanitize(marked.parse(md));
+      document.getElementById("previewContent").innerHTML = html;
+      if (window.renderMathInElement) renderMathInElement(document.getElementById("previewContent"),{delimiters:[{left:"$$",right:"$$",display:true},{left:"$",right:"$",display:false}]});
+      document.querySelectorAll("#previewContent pre code").forEach(b => hljs.highlightElement(b));
+    }
+
+    // -----------------------------------------------------------------------
+    // Mode switching
+    // -----------------------------------------------------------------------
+    function setMode(m) {
+      currentMode = m;
+      const edit    = document.getElementById("editPane");
+      const preview = document.getElementById("previewPane");
+      document.getElementById("modeEdit").classList.toggle("active2", m==="edit");
+      document.getElementById("modePreview").classList.toggle("active2", m==="preview");
+      document.getElementById("modeSplit").classList.toggle("active2", m==="split");
+
+      if (m === "edit")    { edit.classList.remove("hidden"); preview.classList.add("hidden"); }
+      else if (m === "preview") { edit.classList.add("hidden"); preview.classList.remove("hidden"); updatePreview(); }
+      else { edit.classList.remove("hidden"); preview.classList.remove("hidden"); updatePreview(); }
+    }
+
+    // -----------------------------------------------------------------------
+    // Formatting helpers
+    // -----------------------------------------------------------------------
+    function fmt(type) {
+      const ta  = document.getElementById("editorArea");
+      const s   = ta.selectionStart, e = ta.selectionEnd;
+      const sel = ta.value.slice(s, e);
+      const pre = ta.value.slice(0, s), post = ta.value.slice(e);
+
+      const map = {
+        bold:   () => `**${sel||"bold text"}**`,
+        italic: () => `*${sel||"italic text"}*`,
+        h2:     () => `\n## ${sel||"Heading"}\n`,
+        ul:     () => `\n- ${sel||"List item"}\n`,
+        ol:     () => `\n1. ${sel||"List item"}\n`,
+        code:   () => sel.includes("\n") ? `\`\`\`\n${sel||"code here"}\n\`\`\`` : `\`${sel||"code"}\``,
+        table:  () => `\n| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Cell | Cell | Cell |\n`,
+      };
+      if (!map[type]) return;
+      const inserted = map[type]();
+      ta.value = pre + inserted + post;
+      ta.setSelectionRange(s + inserted.length, s + inserted.length);
+      ta.focus();
+      onEditorInput();
+    }
+
+    function insertImage(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const ta = document.getElementById("editorArea");
+        const pos = ta.selectionStart;
+        const md = `\n![${file.name}](${ev.target.result})\n`;
+        ta.value = ta.value.slice(0,pos) + md + ta.value.slice(pos);
+        onEditorInput();
+      };
+      reader.readAsDataURL(file);
+      e.target.value = "";
+    }
+
+    // -----------------------------------------------------------------------
+    // Voice edit
+    // -----------------------------------------------------------------------
+    let voiceRecog = null;
+    function toggleVoiceEdit() {
+      const btn = document.getElementById("voiceEditBtn");
+      if (voiceRecog) { voiceRecog.stop(); voiceRecog=null; btn.classList.remove("text-red-500"); return; }
+      if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) { showToast("Voice not supported in this browser.", "error"); return; }
+      const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+      voiceRecog = new R();
+      voiceRecog.lang = "en-US"; voiceRecog.continuous = true; voiceRecog.interimResults = false;
+      voiceRecog.onresult = ev => {
+        const transcript = ev.results[ev.results.length-1][0].transcript;
+        const ta = document.getElementById("editorArea");
+        ta.value += " " + transcript;
+        onEditorInput();
+      };
+      voiceRecog.onerror = () => { voiceRecog=null; btn.classList.remove("text-red-500"); };
+      voiceRecog.onend   = () => { voiceRecog=null; btn.classList.remove("text-red-500"); };
+      voiceRecog.start();
+      btn.classList.add("text-red-500");
+      showToast("Voice recording started. Click mic to stop.", "info");
+    }
+
+    // -----------------------------------------------------------------------
+    // Save
+    // -----------------------------------------------------------------------
+    async function saveLecture() {
+      const title   = document.getElementById("lessonTitle").value.trim() || "Untitled Lecture";
+      const content = document.getElementById("editorArea").value;
+
+      const payload = { title, content, notes: content };
+      const url     = LESSON_ID ? `/api/lessons/${LESSON_ID}` : "/api/lessons";
+      const method  = LESSON_ID ? "PUT" : "POST";
+
+      try {
+        const res = await fetch(url, {
+          method, credentials:"same-origin",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          isDirty = false;
+          document.getElementById("dirtyDot").classList.add("hidden");
+          document.getElementById("autoSaveMsg").classList.remove("hidden");
+          updateQuality();
+          showToast("Lecture saved!", "success");
+        } else {
+          const d = await res.json().catch(()=>({}));
+          showToast(d.error || "Save failed.", "error");
+        }
+      } catch (_) { showToast("Network error.", "error"); }
+    }
+
+    async function autoSave() {
+      if (!isDirty) return;
+      await saveLecture();
+    }
+
+    // -----------------------------------------------------------------------
+    // Versions
+    // -----------------------------------------------------------------------
+    async function saveVersion() {
+      const content = document.getElementById("editorArea").value;
+      const label   = `Version ${versions.length + 1} — ${new Date().toLocaleTimeString()}`;
+      versions.push({ label, content, ts: Date.now() });
+      renderVersionList();
+      showToast("Version saved.", "success");
+    }
+
+    function renderVersionList() {
+      const list = document.getElementById("versionList");
+      if (!versions.length) { list.innerHTML = `<p class="text-center py-6 text-xs">No versions saved yet.</p>`; return; }
+      list.innerHTML = versions.slice().reverse().map((v,i) => `
+        <div class="version-item ${i===0?"active":""}" onclick="restoreVersion(${versions.length-1-i})">
+          <i class="fas fa-code-branch text-gray-400"></i>
+          <span class="flex-1">${v.label}</span>
+        </div>
+      `).join("");
+    }
+
+    function restoreVersion(idx) {
+      if (!confirm("Restore this version? Unsaved changes will be lost.")) return;
+      document.getElementById("editorArea").value = versions[idx].content;
+      onEditorInput();
+      showToast("Version restored.", "info");
+    }
+
+    async function loadVersions() {
+      if (!LESSON_ID) return;
+      try {
+        const res = await fetch(`/api/lessons/${LESSON_ID}/versions`, { credentials:"same-origin" });
+        if (!res.ok) return;
+        const d = await res.json();
+        versions = (d.versions||[]).map(v=>({ label:v.label||"Version", content:v.content, ts:v.created_at }));
+        renderVersionList();
+      } catch (_) {}
+    }
+
+    // -----------------------------------------------------------------------
+    // Sidebar switching
+    // -----------------------------------------------------------------------
+    function switchSidebar(panel, btn) {
+      document.querySelectorAll("[id^='sidebar']").forEach(p => p.classList.add("hidden"));
+      document.querySelectorAll(".tab-btn2").forEach(b => b.classList.remove("active2"));
+      document.getElementById("sidebar" + panel.charAt(0).toUpperCase() + panel.slice(1)).classList.remove("hidden");
+      btn.classList.add("active2");
+    }
+
+    // -----------------------------------------------------------------------
+    // AI Chat Sidebar
+    // -----------------------------------------------------------------------
+    async function sendAiChat() {
+      const input = document.getElementById("chatInput").value.trim();
+      if (!input) return;
+      document.getElementById("chatInput").value = "";
+
+      appendChatMsg(input, "user");
+      const thinkingId = appendChatMsg('<div class="loading-dots"><span></span><span></span><span></span></div>', "ai");
+
+      const lectureContext = document.getElementById("editorArea").value.slice(0, 2000);
+
+      try {
+        const res = await fetch("/chat", {
+          method:"POST", credentials:"same-origin",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
+            input,
+            conversation_id: null,
+            context: `[Lecture Editor - Current Content Preview]\n${lectureContext}\n\n[User Question]`,
+          }),
+        });
+        const d = await res.json();
+        const reply = d.response || d.message || "I couldn't generate a response right now.";
+        updateChatMsg(thinkingId, reply);
+
+        // Show "Apply to lecture" if suggestion detected
+        if (reply.length > 100) {
+          const applyBtn = document.createElement("button");
+          applyBtn.className = "mt-1 text-xs text-primary-500 hover:underline";
+          applyBtn.innerHTML = '<i class="fas fa-plus mr-1"></i>Apply suggestion to lecture';
+          applyBtn.onclick = () => applyAiSuggestion(reply);
+          document.getElementById("chatMsg_" + thinkingId)?.appendChild(applyBtn);
+        }
+      } catch (_) {
+        updateChatMsg(thinkingId, "Sorry, I couldn't reach the AI right now.");
+      }
+    }
+
+    let _msgCounter = 0;
+    function appendChatMsg(content, role) {
+      const id = ++_msgCounter;
+      const msgs = document.getElementById("aiChatMessages");
+      const div = document.createElement("div");
+      div.id = "chatMsg_" + id;
+      div.className = `chat-msg ${role}`;
+      if (role === "ai") div.innerHTML = `<strong class="block mb-1 text-primary-600 text-xs"><i class="fas fa-robot mr-1"></i>AI Assistant</strong>${content}`;
+      else div.innerHTML = content;
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+      return id;
+    }
+
+    function updateChatMsg(id, content) {
+      const el = document.getElementById("chatMsg_" + id);
+      if (el) el.innerHTML = `<strong class="block mb-1 text-primary-600 text-xs"><i class="fas fa-robot mr-1"></i>AI Assistant</strong>${DOMPurify.sanitize(marked.parse(content))}`;
+    }
+
+    function applyAiSuggestion(text) {
+      const ta = document.getElementById("editorArea");
+      ta.value += "\n\n<!-- AI Suggestion -->\n" + text;
+      onEditorInput();
+      showToast("AI suggestion applied to lecture.", "success");
+    }
+
+    // -----------------------------------------------------------------------
+    // Delivery Guidance (only on explicit request)
+    // -----------------------------------------------------------------------
+    async function requestDeliveryGuidance() {
+      if (!LESSON_ID) { showToast("Save the lecture first to get delivery guidance.", "error"); return; }
+      switchSidebar("delivery", document.querySelectorAll(".tab-btn2")[2]);
+      document.getElementById("deliveryContent").classList.add("hidden");
+      document.getElementById("deliveryLoading").classList.remove("hidden");
+
+      try {
+        const res = await fetch(`/api/lessons/${LESSON_ID}/delivery-guidance`, {
+          method:"POST", credentials:"same-origin",
+        });
+        if (res.ok) {
+          const d = await res.json();
+          renderDeliveryTips(d);
+        } else {
+          showToast("Could not generate delivery guidance.", "error");
+        }
+      } catch (_) { showToast("Network error.", "error"); }
+      finally { document.getElementById("deliveryLoading").classList.add("hidden"); }
+    }
+
+    function renderDeliveryTips(data) {
+      const cont = document.getElementById("deliveryContent");
+      const tips = data.payload?.tips || data.tips || [];
+      if (!tips.length) { cont.innerHTML = `<p class="text-sm text-gray-500">No tips generated.</p>`; cont.classList.remove("hidden"); return; }
+
+      cont.innerHTML = tips.map(tip => `
+        <div class="p-3 bg-primary-50 rounded-xl border border-primary-100">
+          <p class="text-sm text-gray-800">${escHtml(tip)}</p>
+        </div>
+      `).join("");
+      cont.classList.remove("hidden");
+
+      // Also show modal
+      document.getElementById("deliveryModalContent").innerHTML = DOMPurify.sanitize(marked.parse(tips.join("\n\n- ")));
+      document.getElementById("deliveryModal").classList.remove("hidden");
+    }
+
+    document.getElementById("deliveryModal").addEventListener("click", e=>{if(e.target===document.getElementById("deliveryModal"))document.getElementById("deliveryModal").classList.add("hidden");});
+
+    // -----------------------------------------------------------------------
+    // Utils
+    // -----------------------------------------------------------------------
+    function escHtml(s) { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function showToast(msg, type="success") {
+      const t=document.getElementById("toast");
+      t.className=`toast ${type}`;
+      t.innerHTML=`<i class="fas fa-${type==="success"?"check-circle":type==="info"?"info-circle":"exclamation-circle"}"></i> ${msg}`;
+      t.classList.add("show");
+      setTimeout(()=>t.classList.remove("show"),3500);
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", e => {
+      if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); saveLecture(); }
+    });
+  </script>
+</body>
+</html>

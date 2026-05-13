@@ -1058,7 +1058,10 @@ from functools import lru_cache
 import os
 
 import torch
-from app.services.voice_service import transcribe_audio_file, synthesize_text_to_wav, normalize_language
+try:
+    from app.services.voice_service import transcribe_audio_file, synthesize_text_to_wav, normalize_language
+except ImportError:
+    transcribe_audio_file = synthesize_text_to_wav = normalize_language = None  # type: ignore[assignment]
 
 import logging
 

@@ -361,8 +361,26 @@ class ChatService:
             
             # Enhance system prompt with document context
             enhanced_prompt = self._system_prompt
+
+            # Phase 1: prepend AI personality modifier and language instruction
+            try:
+                from app.utils.db import get_db as _get_db
+                from app.models.database_models import User as _DBUser
+                import app.services.personality_service as _ps
+                import app.services.i18n_service as _i18n
+                _db = _get_db()
+                _user = _db.query(_DBUser).filter_by(id=self.user_id).first()
+                if _user:
+                    _personality_mod = _ps.get_system_prompt_modifier(_db, user=_user)
+                    _lang_mod = _i18n.get_ai_language_context(_user.preferred_language)
+                    _prefix = "\n".join(filter(None, [_personality_mod, _lang_mod]))
+                    if _prefix:
+                        enhanced_prompt = _prefix + "\n\n" + enhanced_prompt
+            except Exception:
+                pass  # Personality/language injection is non-blocking
+
             if document_context:
-                enhanced_prompt = f"{self._system_prompt}\n\nDocument Context:\n{document_context}\n\nWhen answering questions, prioritize information from the provided documents. If the answer is not in the documents, clearly state that and provide a general explanation based on your knowledge."
+                enhanced_prompt = f"{enhanced_prompt}\n\nDocument Context:\n{document_context}\n\nWhen answering questions, prioritize information from the provided documents. If the answer is not in the documents, clearly state that and provide a general explanation based on your knowledge."
             
             # Generate response
             response = self.chat_model.generate_response(

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Group study | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <a href="/student-learning" class="text-sm text-sky-600 hover:underline">← Learning hub</a>
+    <h1 class="text-2xl font-bold text-slate-800 mt-2">Group study sessions</h1>
+    <p class="text-slate-600 text-sm mb-4">Sessions your teachers scheduled for your sections.</p>
+    <div id="slots" class="space-y-3"></div>
+  </div>
+  <script>
+    function load() {
+      fetch("/api/phase3/group-study/slots", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => {
+          const el = document.getElementById("slots");
+          const items = d.items || [];
+          if (!items.length) { el.innerHTML = '<p class="text-slate-500 text-sm">No upcoming sessions.</p>'; return; }
+          el.innerHTML = items.map(s => `
+            <div class="p-4 bg-white rounded-xl border border-slate-200 flex flex-wrap justify-between gap-2">
+              <div>
+                <p class="font-medium text-slate-800">${escapeHtml(s.title)}</p>
+                <p class="text-xs text-slate-500">${s.starts_at} → ${s.ends_at}</p>
+                <p class="text-xs text-slate-500">RSVPs: ${s.rsvp_count}/${s.max_students}</p>
+              </div>
+              <div class="flex gap-2">
+                ${s.my_rsvp === "confirmed"
+                  ? `<button data-id="${s.id}" class="cancel px-3 py-1.5 border rounded-lg text-sm">Leave</button>`
+                  : `<button data-id="${s.id}" class="join px-3 py-1.5 bg-sky-600 text-white rounded-lg text-sm">RSVP</button>`}
+              </div>
+            </div>`).join("");
+          document.querySelectorAll(".join").forEach(b => {
+            b.onclick = () => rsvp(b.dataset.id, "POST");
+          });
+          document.querySelectorAll(".cancel").forEach(b => {
+            b.onclick = () => rsvp(b.dataset.id, "DELETE");
+          });
+        });
+    }
+    function escapeHtml(s) {
+      const t = document.createElement("div"); t.textContent = s || ""; return t.innerHTML;
+    }
+    function rsvp(id, method) {
+      fetch(`/api/phase3/group-study/slots/${id}/rsvp`, { method, credentials: "same-origin" })
+        .then(() => load());
+    }
+    load();
+  </script>
+</body>
+</html>

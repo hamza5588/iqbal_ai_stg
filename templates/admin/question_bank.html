@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Question bank | Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 p-6">
+  <h1 class="text-xl font-bold mb-2">Question bank</h1>
+  <p class="text-sm text-slate-600 mb-4">Uses <code>/api/phase3/question-bank/items</code> — admin session required.</p>
+
+  <div id="list" class="space-y-2 text-sm font-mono bg-white border rounded p-3 min-h-[120px] mb-8">Loading…</div>
+
+  <h2 class="font-semibold">Create one</h2>
+  <form id="f" class="mt-2 grid gap-2 max-w-lg">
+    <input name="stem" class="border p-2 rounded" placeholder="Question stem" required />
+    <input name="difficulty" type="number" min="1" max="5" value="3" class="border p-2 rounded" />
+    <select name="bloom_level" class="border p-2 rounded">
+      <option>remember</option>
+      <option selected>understand</option>
+      <option>apply</option>
+      <option>analyse</option>
+      <option>evaluate</option>
+      <option>create</option>
+    </select>
+    <button class="bg-sky-600 text-white py-2 rounded">Save</button>
+  </form>
+
+  <h2 class="mt-8 font-semibold">Bulk CSV import</h2>
+  <p class="text-xs text-slate-600 mb-2">Header row required: <code>stem,difficulty,bloom_level,syllabus_topic_id,tags</code> (tags pipe-separated). POSTs to <code>/api/phase3/question-bank/items/bulk</code>.</p>
+  <textarea id="bulkcsv" rows="8" class="w-full max-w-3xl border rounded p-2 font-mono text-xs" placeholder='stem,difficulty,bloom_level,syllabus_topic_id,tags
+"What is 2+2?",3,understand,,math|arithmetic'></textarea>
+  <button type="button" id="bulkbtn" class="mt-2 px-4 py-2 bg-indigo-600 text-white rounded text-sm">Import CSV</button>
+  <pre id="bulkout" class="mt-4 text-xs bg-slate-900 text-green-400 p-3 rounded max-h-64 overflow-auto"></pre>
+
+  <script>
+    function load() {
+      fetch("/api/phase3/question-bank/items", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById("list").textContent = JSON.stringify(d.items || d, null, 2);
+        })
+        .catch(e => { document.getElementById("list").textContent = String(e); });
+    }
+    load();
+    document.getElementById("f").onsubmit = function(ev) {
+      ev.preventDefault();
+      const fd = new FormData(ev.target);
+      fetch("/api/phase3/question-bank/items", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stem: fd.get("stem"),
+          difficulty: parseInt(fd.get("difficulty"), 10),
+          bloom_level: fd.get("bloom_level"),
+        }),
+      }).then(load);
+    };
+    document.getElementById("bulkbtn").onclick = () => {
+      const csv = document.getElementById("bulkcsv").value;
+      fetch("/api/phase3/question-bank/items/bulk", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "text/csv; charset=utf-8" },
+        body: csv,
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById("bulkout").textContent = JSON.stringify(d, null, 2);
+          load();
+        })
+        .catch(e => { document.getElementById("bulkout").textContent = String(e); });
+    };
+  </script>
+</body>
+</html>

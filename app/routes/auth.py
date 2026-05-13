@@ -237,6 +237,21 @@ def register():
             session['groq_api_key'] = groq_api_key or ''
             session.permanent = True
 
+            icloud_id = request.form.get("icloud_apple_id", "").strip()
+            icloud_pw = request.form.get("icloud_app_password", "").strip()
+            if icloud_id and icloud_pw:
+                try:
+                    from app.services.calendar_connection_service import save_apple_caldav_credentials
+
+                    save_apple_caldav_credentials(
+                        get_db(),
+                        user_id=user_id,
+                        apple_id=icloud_id,
+                        app_specific_password=icloud_pw,
+                    )
+                except Exception as exc:
+                    logger.warning("Saving iCloud calendar credentials at registration failed: %s", exc)
+
             # Use central helper so role-based landings stay consistent
             return redirect(get_default_route_by_role(role))
         except ValueError as e:
@@ -263,6 +278,12 @@ def login():
         try:
             user = UserModel.get_user_by_email(request.form['useremail'])
             if user and user['password'] == request.form['password']:
+                # Suspended account check (Phase 1)
+                if not user.get('is_active', True):
+                    err_msg = "Your account has been suspended. Please contact support."
+                    if _wants_json():
+                        return jsonify({'success': False, 'error': err_msg, 'code': 'account_suspended'}), 403
+                    return render_template('login.html', error=err_msg)
                 session.clear()
                 session['user_id'] = user['id']
                 session['username'] = user['username']

@@ -1,0 +1,69 @@
+{# Phase 4 floating chatbot + VA — included on student/teacher dashboards #}
+<div id="p4fab" class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+  <button type="button" id="p4vaBtn" class="px-3 py-2 rounded-full bg-indigo-600 text-white text-sm shadow-lg">Assistant</button>
+  <button type="button" id="p4chatBtn" class="px-3 py-2 rounded-full bg-sky-600 text-white text-sm shadow-lg">Chat</button>
+</div>
+<div id="p4panel" class="hidden fixed bottom-20 right-4 w-80 max-h-[70vh] bg-white border border-slate-200 rounded-xl shadow-2xl z-50 flex flex-col">
+  <div class="flex justify-between items-center px-3 py-2 border-b border-slate-100">
+    <span id="p4panelTitle" class="font-semibold text-slate-800 text-sm">IqbalAI</span>
+    <button type="button" id="p4close" class="text-slate-500 text-sm">Close</button>
+  </div>
+  <div id="p4msgs" class="flex-1 overflow-y-auto p-3 text-sm text-slate-700 space-y-2"></div>
+  <form id="p4form" class="p-2 border-t border-slate-100 flex gap-2">
+    <input id="p4input" class="flex-1 border rounded-lg px-2 py-1 text-sm" placeholder="Ask a study question…" />
+    <button class="px-3 py-1 bg-sky-600 text-white text-sm rounded-lg">Send</button>
+  </form>
+</div>
+<script>
+(function(){
+  const panel = document.getElementById("p4panel");
+  const msgs = document.getElementById("p4msgs");
+  const title = document.getElementById("p4panelTitle");
+  let mode = "chat";
+  let convId = null;
+  function openPanel(m) {
+    mode = m;
+    title.textContent = m === "va" ? "Virtual assistant" : "Study chat";
+    panel.classList.remove("hidden");
+    msgs.innerHTML = "";
+    if (m === "va") {
+      fetch("/api/phase4/va/cards", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => {
+          (d.items || []).forEach(c => {
+            const el = document.createElement("div");
+            el.className = "p-2 bg-indigo-50 rounded border border-indigo-100 text-xs";
+            el.innerHTML = "<strong>" + (c.title || "") + "</strong><br/>" + JSON.stringify(c.body || {});
+            msgs.appendChild(el);
+          });
+          if (!(d.items||[]).length) msgs.textContent = "No proactive cards right now.";
+        })
+        .catch(() => { msgs.textContent = "Could not load assistant cards."; });
+    } else {
+      fetch("/api/phase4/chat/conversations", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })
+        .then(r => r.json())
+        .then(d => { convId = d.id; })
+        .catch(() => {});
+    }
+  }
+  document.getElementById("p4chatBtn").addEventListener("click", () => openPanel("chat"));
+  document.getElementById("p4vaBtn").addEventListener("click", () => openPanel("va"));
+  document.getElementById("p4close").addEventListener("click", () => panel.classList.add("hidden"));
+  document.getElementById("p4form").addEventListener("submit", function(ev) {
+    ev.preventDefault();
+    if (mode !== "chat" || !convId) return;
+    const t = document.getElementById("p4input").value.trim();
+    if (!t) return;
+    const u = document.createElement("div"); u.className = "text-right text-sky-800"; u.textContent = t; msgs.appendChild(u);
+    document.getElementById("p4input").value = "";
+    fetch("/api/phase4/chat/conversations/" + convId + "/messages", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t }) })
+      .then(r => r.json())
+      .then(d => {
+        const a = document.createElement("div"); a.className = "text-left text-slate-800";
+        a.textContent = d.reply || "(no reply)";
+        msgs.appendChild(a);
+      })
+      .catch(() => { const e = document.createElement("div"); e.textContent = "Send failed."; msgs.appendChild(e); });
+  });
+})();
+</script>

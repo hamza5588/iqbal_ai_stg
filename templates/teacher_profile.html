@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Profile | Iqbal AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Inter","system-ui","-apple-system","sans-serif"], display: ["Poppins","Inter","sans-serif"] },
+          colors: {
+            primary:  { 50:"#f0f9ff",100:"#e0f2fe",200:"#bae6fd",300:"#7dd3fc",400:"#38bdf8",500:"#0ea5e9",600:"#0284c7",700:"#0369a1",800:"#075985",900:"#0c4a6e" },
+            secondary:{ 50:"#f8fafc",100:"#f1f5f9",200:"#e2e8f0",300:"#cbd5e1",400:"#94a3b8",500:"#64748b",600:"#475569",700:"#334155",800:"#1e293b",900:"#0f172a" },
+            accent:   { 50:"#fdf2f8",100:"#fce7f3",200:"#fbcfe8",300:"#f9a8d4",400:"#f472b6",500:"#ec4899",600:"#db2777",700:"#be185d",800:"#9d174d",900:"#831843" },
+            success:  { 50:"#f0fdf4",500:"#22c55e",600:"#16a34a" },
+            warning:  { 50:"#fffbeb",500:"#f59e0b" },
+            error:    { 50:"#fef2f2",500:"#ef4444",600:"#dc2626" },
+          },
+        },
+      },
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    .glass-morphism { background: rgba(255,255,255,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 8px 32px rgba(0,0,0,0.05); }
+    .gradient-text { background: linear-gradient(135deg,#0ea5e9,#ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .tag-chip { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:9999px; background:#e0f2fe; color:#0369a1; font-size:0.75rem; font-weight:500; }
+    .tag-chip button { background:none; border:none; cursor:pointer; color:#0369a1; padding:0 2px; line-height:1; }
+    .toast { position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999; padding:0.85rem 1.25rem; border-radius:0.75rem; font-size:0.875rem; font-weight:500; display:flex; align-items:center; gap:0.5rem; box-shadow:0 8px 24px rgba(0,0,0,0.15); transform:translateY(100px); opacity:0; transition:all 0.3s ease; }
+    .toast.show { transform:translateY(0); opacity:1; }
+    .toast.success { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+    .toast.error   { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:#0ea5e9; box-shadow:0 0 0 3px rgba(14,165,233,0.15); }
+    .subject-btn { padding:6px 14px; border-radius:9999px; border:1.5px solid #cbd5e1; font-size:0.8rem; cursor:pointer; transition:all .2s; background:white; color:#475569; }
+    .subject-btn.selected { background:#0ea5e9; color:white; border-color:#0ea5e9; }
+    .grade-btn { padding:6px 12px; border-radius:8px; border:1.5px solid #cbd5e1; font-size:0.8rem; cursor:pointer; transition:all .2s; background:white; color:#475569; }
+    .grade-btn.selected { background:#ec4899; color:white; border-color:#ec4899; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+  <!-- Top Nav -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/teacher-dashboard" class="text-gray-500 hover:text-primary-600 transition-colors">
+          <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="text-lg font-semibold text-gray-900 font-display">Teacher Profile</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="saveStatus" class="text-sm text-gray-400 hidden"><i class="fas fa-circle-notch fa-spin mr-1"></i>Saving…</span>
+        <button onclick="saveProfile()" id="saveBtn"
+          class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-medium text-sm hover:shadow-md transition-all">
+          <i class="fas fa-save mr-1.5"></i>Save Profile
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- Avatar + Name Card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+        <!-- Avatar -->
+        <div class="relative">
+          <div id="avatarCircle"
+            class="w-24 h-24 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-3xl font-bold cursor-pointer"
+            onclick="document.getElementById('avatarInput').click()">
+            <span id="avatarInitials">?</span>
+          </div>
+          <div class="absolute -bottom-1 -right-1 w-7 h-7 bg-primary-500 rounded-full flex items-center justify-center cursor-pointer shadow"
+            onclick="document.getElementById('avatarInput').click()">
+            <i class="fas fa-camera text-white text-xs"></i>
+          </div>
+          <input type="file" id="avatarInput" class="hidden" accept="image/*" onchange="previewAvatar(event)" />
+        </div>
+        <!-- Name fields -->
+        <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">First Name <span class="text-error-500">*</span></label>
+            <input id="firstName" type="text" placeholder="e.g. Ali"
+              class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Last Name <span class="text-error-500">*</span></label>
+            <input id="lastName" type="text" placeholder="e.g. Ahmed"
+              class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bio / Short Introduction</label>
+            <textarea id="bio" rows="2" placeholder="Tell students a bit about yourself…"
+              class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all resize-none"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact & Location -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h2 class="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <i class="fas fa-map-marker-alt text-primary-500"></i> Contact &amp; Location
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
+          <input id="city" type="text" placeholder="e.g. Lahore"
+            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Province</label>
+          <select id="province" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all bg-white">
+            <option value="">Select province</option>
+            <option>Punjab</option>
+            <option>Sindh</option>
+            <option>Khyber Pakhtunkhwa</option>
+            <option>Balochistan</option>
+            <option>Gilgit-Baltistan</option>
+            <option>Azad Kashmir</option>
+            <option>Islamabad Capital Territory</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Phone (optional)</label>
+          <input id="phone" type="tel" placeholder="+92 300 0000000"
+            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Availability</label>
+          <select id="availability" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all bg-white">
+            <option value="">Select availability</option>
+            <option value="full_time">Full-time</option>
+            <option value="part_time">Part-time</option>
+            <option value="weekends">Weekends only</option>
+            <option value="evenings">Evenings only</option>
+            <option value="flexible">Flexible</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subjects -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h2 class="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+        <i class="fas fa-book text-primary-500"></i> Subjects Taught
+      </h2>
+      <p class="text-sm text-gray-500 mb-4">Select all subjects you teach.</p>
+      <div id="subjectBtns" class="flex flex-wrap gap-2">
+        <!-- populated by JS -->
+      </div>
+      <div class="mt-3 flex items-center gap-2">
+        <input id="customSubject" type="text" placeholder="Add custom subject…"
+          class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex-1 max-w-xs transition-all" />
+        <button onclick="addCustomSubject()"
+          class="px-3 py-2 bg-primary-50 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors">
+          <i class="fas fa-plus mr-1"></i>Add
+        </button>
+      </div>
+    </div>
+
+    <!-- Grades -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h2 class="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+        <i class="fas fa-graduation-cap text-accent-500"></i> Grade Levels
+      </h2>
+      <p class="text-sm text-gray-500 mb-4">Select the grades you teach.</p>
+      <div id="gradeBtns" class="flex flex-wrap gap-2">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- Experience & Qualifications -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h2 class="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <i class="fas fa-award text-warning-500"></i> Experience &amp; Qualifications
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Years of Teaching Experience</label>
+          <input id="yearsExp" type="number" min="0" max="50" placeholder="e.g. 5"
+            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Highest Qualification</label>
+          <select id="qualification" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all bg-white">
+            <option value="">Select qualification</option>
+            <option>Matric</option>
+            <option>Intermediate / FSc</option>
+            <option>Bachelor's (BA/BSc/BEd)</option>
+            <option>Master's (MA/MSc/MEd)</option>
+            <option>MPhil</option>
+            <option>PhD</option>
+          </select>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Teaching Approach / Methodology</label>
+          <textarea id="methodology" rows="2" placeholder="Describe your teaching style…"
+            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all resize-none"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Visibility -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h2 class="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <i class="fas fa-eye text-primary-500"></i> Profile Visibility
+      </h2>
+      <div class="space-y-3">
+        <label class="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" id="visibleToStudents" class="w-4 h-4 rounded text-primary-500" checked />
+          <span class="text-sm text-gray-700">Visible to students in teacher discovery</span>
+        </label>
+        <label class="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" id="acceptConnections" class="w-4 h-4 rounded text-primary-500" checked />
+          <span class="text-sm text-gray-700">Accept new connection requests</span>
+        </label>
+        <label class="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" id="benchmarkingOpt" class="w-4 h-4 rounded text-primary-500" checked />
+          <span class="text-sm text-gray-700">Participate in anonymised teacher benchmarking</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Save button (bottom) -->
+    <div class="flex justify-end pb-8">
+      <button onclick="saveProfile()"
+        class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold shadow hover:shadow-lg transition-all">
+        <i class="fas fa-save mr-2"></i>Save Profile
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // -----------------------------------------------------------------------
+    // Constants
+    // -----------------------------------------------------------------------
+    const SUBJECTS = [
+      "Mathematics","Physics","Chemistry","Biology","English","Urdu",
+      "Islamiat","Pakistan Studies","Computer Science","History","Geography",
+      "Economics","Accounting","Statistics","General Science",
+    ];
+    const GRADES = ["1","2","3","4","5","6","7","8","9","10","11","12","O-Level","A-Level"];
+
+    const selectedSubjects = new Set();
+    const selectedGrades   = new Set();
+
+    // -----------------------------------------------------------------------
+    // Init
+    // -----------------------------------------------------------------------
+    document.addEventListener("DOMContentLoaded", () => {
+      renderSubjects();
+      renderGrades();
+      loadProfile();
+    });
+
+    function renderSubjects() {
+      const cont = document.getElementById("subjectBtns");
+      cont.innerHTML = "";
+      SUBJECTS.forEach(s => {
+        const btn = document.createElement("button");
+        btn.className = "subject-btn" + (selectedSubjects.has(s) ? " selected" : "");
+        btn.textContent = s;
+        btn.onclick = () => toggleSubject(s, btn);
+        cont.appendChild(btn);
+      });
+    }
+
+    function renderGrades() {
+      const cont = document.getElementById("gradeBtns");
+      cont.innerHTML = "";
+      GRADES.forEach(g => {
+        const btn = document.createElement("button");
+        btn.className = "grade-btn" + (selectedGrades.has(g) ? " selected" : "");
+        btn.textContent = "Grade " + g;
+        btn.onclick = () => toggleGrade(g, btn);
+        cont.appendChild(btn);
+      });
+    }
+
+    function toggleSubject(s, btn) {
+      if (selectedSubjects.has(s)) { selectedSubjects.delete(s); btn.classList.remove("selected"); }
+      else { selectedSubjects.add(s); btn.classList.add("selected"); }
+    }
+
+    function toggleGrade(g, btn) {
+      if (selectedGrades.has(g)) { selectedGrades.delete(g); btn.classList.remove("selected"); }
+      else { selectedGrades.add(g); btn.classList.add("selected"); }
+    }
+
+    function addCustomSubject() {
+      const inp = document.getElementById("customSubject");
+      const val = inp.value.trim();
+      if (!val) return;
+      if (!SUBJECTS.includes(val)) { SUBJECTS.push(val); selectedSubjects.add(val); renderSubjects(); }
+      else { selectedSubjects.add(val); renderSubjects(); }
+      inp.value = "";
+    }
+
+    // -----------------------------------------------------------------------
+    // Avatar preview
+    // -----------------------------------------------------------------------
+    function previewAvatar(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const circle = document.getElementById("avatarCircle");
+        circle.innerHTML = `<img src="${ev.target.result}" class="w-full h-full object-cover rounded-full" />`;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // -----------------------------------------------------------------------
+    // Load profile from API
+    // -----------------------------------------------------------------------
+    async function loadProfile() {
+      try {
+        const res = await fetch("/api/teacher/profile", { credentials: "same-origin" });
+        if (!res.ok) return;
+        const d = await res.json();
+        const p = d.profile || d;
+
+        document.getElementById("firstName").value   = p.first_name  || "";
+        document.getElementById("lastName").value    = p.last_name   || "";
+        document.getElementById("bio").value          = p.bio         || "";
+        document.getElementById("city").value         = p.city        || "";
+        document.getElementById("province").value     = p.province    || "";
+        document.getElementById("phone").value        = p.phone       || "";
+        document.getElementById("availability").value = p.availability || "";
+        document.getElementById("yearsExp").value     = p.years_experience != null ? p.years_experience : "";
+        document.getElementById("qualification").value = p.qualification || "";
+        document.getElementById("methodology").value  = p.methodology  || "";
+        document.getElementById("visibleToStudents").checked  = p.visible_to_students !== false;
+        document.getElementById("acceptConnections").checked  = p.accept_connections !== false;
+        document.getElementById("benchmarkingOpt").checked   = p.benchmarking_opt_in !== false;
+
+        // Update initials
+        const initials = ((p.first_name || "")[0] || "?").toUpperCase();
+        document.getElementById("avatarInitials").textContent = initials;
+
+        // Subjects / grades
+        (p.subjects || []).forEach(s => selectedSubjects.add(s));
+        (p.grades   || []).forEach(g => selectedGrades.add(g));
+        renderSubjects();
+        renderGrades();
+      } catch (_) { /* profile may not exist yet */ }
+    }
+
+    // -----------------------------------------------------------------------
+    // Save profile
+    // -----------------------------------------------------------------------
+    async function saveProfile() {
+      const btn = document.getElementById("saveBtn");
+      const status = document.getElementById("saveStatus");
+
+      // Validate required fields
+      const firstName = document.getElementById("firstName").value.trim();
+      const lastName  = document.getElementById("lastName").value.trim();
+      if (!firstName || !lastName) {
+        showToast("Please fill in your first and last name.", "error");
+        return;
+      }
+
+      btn.disabled = true;
+      status.classList.remove("hidden");
+
+      const payload = {
+        first_name:         firstName,
+        last_name:          lastName,
+        bio:                document.getElementById("bio").value.trim(),
+        city:               document.getElementById("city").value.trim(),
+        province:           document.getElementById("province").value,
+        phone:              document.getElementById("phone").value.trim(),
+        availability:       document.getElementById("availability").value,
+        years_experience:   parseInt(document.getElementById("yearsExp").value) || 0,
+        qualification:      document.getElementById("qualification").value,
+        methodology:        document.getElementById("methodology").value.trim(),
+        subjects:           [...selectedSubjects],
+        grades:             [...selectedGrades],
+        visible_to_students: document.getElementById("visibleToStudents").checked,
+        accept_connections:  document.getElementById("acceptConnections").checked,
+        benchmarking_opt_in: document.getElementById("benchmarkingOpt").checked,
+      };
+
+      try {
+        const res = await fetch("/api/teacher/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          showToast("Profile saved successfully!", "success");
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showToast(err.error || "Failed to save profile.", "error");
+        }
+      } catch (_) {
+        showToast("Network error. Please try again.", "error");
+      } finally {
+        btn.disabled = false;
+        status.classList.add("hidden");
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Toast
+    // -----------------------------------------------------------------------
+    function showToast(msg, type = "success") {
+      const t = document.getElementById("toast");
+      t.className = `toast ${type}`;
+      t.innerHTML = `<i class="fas fa-${type === "success" ? "check-circle" : "exclamation-circle"}"></i> ${msg}`;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 3500);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "terms.title": "شرائط و ضوابط",
+  "terms.accept_button": "میں قبول کرتا/کرتی ہوں",
+  "terms.disclaimer.pass_probability": "AI سے تیار کردہ پاس ہونے کے امکانات صرف اشارہ ہیں اور امتحانی نتائج کی ضمانت نہیں دیتے۔ اصل نتائج اس پلیٹ فارم سے باہر بہت سے عوامل پر منحصر ہیں۔",
+  "terms.must_accept": "پلیٹ فارم استعمال کرنے سے پہلے آپ کو شرائط و ضوابط قبول کرنے ہوں گے۔",
+
+  "notifications.suspension.title": "آپ کا اکاؤنٹ معطل کر دیا گیا ہے",
+  "notifications.suspension.message": "آپ کا اکاؤنٹ ایک منتظم نے عارضی طور پر معطل کر دیا ہے۔ اگر آپ کو لگتا ہے یہ غلطی ہے تو سپورٹ سے رابطہ کریں۔",
+  "notifications.reactivation.title": "آپ کا اکاؤنٹ دوبارہ فعال کر دیا گیا ہے",
+  "notifications.reactivation.message": "آپ کا اکاؤنٹ دوبارہ فعال کر دیا گیا ہے۔ آپ اب IqbalAI میں لاگ ان کر سکتے ہیں۔",
+  "notifications.teacher_suspended.title": "استاد کا اکاؤنٹ عارضی طور پر دستیاب نہیں",
+  "notifications.teacher_suspended.message": "آپ کا ایک استاد عارضی طور پر دستیاب نہیں ہے۔ آپ کا اسکول انتظامیہ مزید معلومات فراہم کرے گی۔",
+
+  "parent.link.pending": "لنک کی درخواست طالب علم کی منظوری کے انتظار میں ہے۔",
+  "parent.link.approved": "والدین کا لنک منظور کر لیا گیا ہے۔",
+  "parent.link.rejected": "والدین کا لنک مسترد کر دیا گیا ہے۔",
+  "parent.link.request_sent": "آپ کی لنک کی درخواست طالب علم کو بھیج دی گئی ہے۔",
+  "parent.link.new_request": "ایک والدین اکاؤنٹ نے آپ کے اکاؤنٹ سے لنک کرنے کی درخواست کی ہے۔",
+
+  "waitlist.added": "آپ کو ویٹ لسٹ میں شامل کر دیا گیا ہے۔",
+  "waitlist.promoted": "ایک جگہ خالی ہو گئی اور آپ کو ویٹ لسٹ سے داخل کر لیا گیا ہے۔",
+  "waitlist.position": "ویٹ لسٹ میں آپ کی موجودہ پوزیشن {position} ہے۔",
+
+  "auth.account_suspended": "آپ کا اکاؤنٹ معطل کر دیا گیا ہے۔ براہ کرم سپورٹ سے رابطہ کریں۔",
+
+  "errors.not_found": "مطلوبہ وسیلہ نہیں ملا۔",
+  "errors.forbidden": "آپ کے پاس یہ عمل کرنے کی اجازت نہیں ہے۔",
+  "errors.validation": "براہ کرم اپنا ان پٹ چیک کریں اور دوبارہ کوشش کریں۔",
+  "errors.server": "ایک غیر متوقع خرابی پیش آئی۔ دوبارہ کوشش کریں۔",
+
+  "syllabus.exam_type": "امتحان کی قسم",
+  "syllabus.chapter": "باب",
+  "syllabus.topic": "موضوع",
+  "syllabus.sub_topic": "ذیلی موضوع",
+
+  "content_library.title": "مواد کی لائبریری",
+  "content_library.upload": "کتاب اپ لوڈ کریں",
+  "content_library.no_books": "اس مضمون اور جماعت کے لیے کوئی کتاب دستیاب نہیں۔",
+
+  "personalities.friendly_tutor": "دوستانہ ٹیوٹر",
+  "personalities.strict_examiner": "سخت امتحان لینے والا",
+  "personalities.storytelling_guide": "کہانی سنانے والا رہنما",
+  "personalities.exam_coach": "امتحانی کوچ",
+  "personalities.socratic_mentor": "سقراطی رہنما",
+  "personalities.concise_explainer": "مختصر وضاحت کار"
+}

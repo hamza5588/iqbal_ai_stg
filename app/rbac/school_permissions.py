@@ -158,3 +158,53 @@ def teacher_may_publish_to_sections(
 def lesson_owned_by_teacher(db: Session, lesson_id: int, teacher_user_id: int) -> bool:
     les = db.query(DBLesson).filter(DBLesson.id == lesson_id).first()
     return bool(les and les.teacher_id == teacher_user_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Cross-school isolation guard
+# ---------------------------------------------------------------------------
+
+def assert_same_school_scope(db: Session, actor_id: int, target_user_id: int) -> None:
+    """
+    Verify that a school_admin / principal / coordinator can only manage users
+    who are affiliated with one of their schools.
+
+    For super-admin roles (platform_admin, district_admin, admin) this is a no-op.
+    Raises SchoolServiceError(403) if the actor does not share a school with the target.
+    """
+    from app.models.database_models import User as DBUser
+    from app.services.school.errors import SchoolServiceError
+
+    actor = db.query(DBUser).filter_by(id=actor_id).first()
+    if not actor:
+        raise SchoolServiceError("Actor not found", "not_found", 404)
+
+    # Super-admins bypass school-scope restriction
+    from app.rbac.roles import SUPER_ADMIN_ROLES
+    if actor.role in SUPER_ADMIN_ROLES:
+        return
+
+    # Gather the actor's affiliated school IDs
+    actor_school_ids = set(user_manageable_school_ids(db, actor_id).school_ids)
+    if not actor_school_ids:
+        raise SchoolServiceError("Actor has no school affiliation", "forbidden", 403)
+
+    # Gather the target's affiliated school IDs
+    target_school_ids = set(user_manageable_school_ids(db, target_user_id).school_ids)
+    # Also check teacher affiliation and enrollment
+    from app.models.school_org_models import TeacherSchoolAffiliation, ClassEnrollment, ClassSection
+    teacher_aff = db.query(TeacherSchoolAffiliation).filter_by(teacher_user_id=target_user_id).all()
+    for ta in teacher_aff:
+        target_school_ids.add(ta.school_id)
+    enrolled = db.query(ClassEnrollment).filter_by(student_user_id=target_user_id).all()
+    for e in enrolled:
+        sec = db.query(ClassSection).filter_by(id=e.class_section_id).first()
+        if sec:
+            target_school_ids.add(sec.school_id)
+
+    if not actor_school_ids.intersection(target_school_ids):
+        raise SchoolServiceError(
+            "Actor cannot manage users outside their school scope",
+            "forbidden",
+            403,
+        )

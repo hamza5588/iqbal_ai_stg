@@ -42,6 +42,36 @@ class User(Base):
     rag_threads = relationship("RAGThread", back_populates="user", cascade="all, delete-orphan")
     llm_usage_events = relationship("LLMUsageEvent", back_populates="user")
 
+    # Phase 1 fields
+    is_active = Column(Boolean, nullable=False, default=True, server_default="1")
+    preferred_language = Column(String(10), nullable=False, default="en", server_default="en")
+    personality_id = Column(Integer, ForeignKey("ai_personalities.id", ondelete="SET NULL"), nullable=True)
+    suspended_at = Column(DateTime, nullable=True)
+    suspended_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    terms_accepted_version = Column(String(32), nullable=True)
+
+    # Phase 1 relationships (resolved lazily via string refs to phase1_models.py)
+    personality = relationship("AIPersonality", foreign_keys="User.personality_id")
+    notifications = relationship(
+        "Notification",
+        foreign_keys="Notification.recipient_id",
+        back_populates="recipient",
+        cascade="all, delete-orphan",
+    )
+    terms_acceptances = relationship("TermsAcceptance", back_populates="user", cascade="all, delete-orphan")
+    parent_links = relationship(
+        "ParentStudentLink",
+        foreign_keys="ParentStudentLink.parent_id",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+    )
+    child_links = relationship(
+        "ParentStudentLink",
+        foreign_keys="ParentStudentLink.student_id",
+        back_populates="student",
+        cascade="all, delete-orphan",
+    )
+
     __table_args__ = (
         CheckConstraint(
             "role IN ("

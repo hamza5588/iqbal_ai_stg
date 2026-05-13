@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Learning preferences | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-lg mx-auto px-4 py-8">
+    <a href="/student-learning" class="text-sm text-sky-600 hover:underline">← Learning hub</a>
+    <h1 class="text-2xl font-bold text-slate-800 mt-2">Preferences</h1>
+    <div class="mt-4 space-y-3 bg-white p-4 rounded-xl border border-slate-200">
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" id="allowTeacher" /> Allow teachers to view self-study activity
+      </label>
+      <div class="text-sm">
+        <p class="font-medium text-slate-700">Reminder channels</p>
+        <label class="flex items-center gap-2 mt-1"><input type="checkbox" id="chEmail" /> Email digest (today’s plan blocks)</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="chSms" /> SMS (needs Twilio env)</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="chPush" /> Push (stub / future)</label>
+      </div>
+      <label class="block text-sm">Daily goal (minutes)
+        <input id="goal" type="number" class="mt-1 w-full border rounded-lg px-3 py-2" />
+      </label>
+      <button id="save" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm">Save</button>
+      <p id="msg" class="text-sm text-slate-600"></p>
+    </div>
+  </div>
+  <script>
+    fetch("/api/phase3/preferences", { credentials: "same-origin" })
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("allowTeacher").checked = !!d.allow_teacher_view_self_study;
+        const ch = d.reminder_channels || {};
+        document.getElementById("chEmail").checked = !!ch.email;
+        document.getElementById("chSms").checked = !!ch.sms;
+        document.getElementById("chPush").checked = !!ch.push;
+        if (d.daily_goal_minutes != null) document.getElementById("goal").value = d.daily_goal_minutes;
+      });
+    document.getElementById("save").onclick = () => {
+      const body = {
+        allow_teacher_view_self_study: document.getElementById("allowTeacher").checked,
+        reminder_channels: {
+          email: document.getElementById("chEmail").checked,
+          sms: document.getElementById("chSms").checked,
+          push: document.getElementById("chPush").checked,
+        },
+        daily_goal_minutes: document.getElementById("goal").value ? parseInt(document.getElementById("goal").value, 10) : null,
+      };
+      fetch("/api/phase3/preferences", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then(r => {
+          document.getElementById("msg").textContent = r.ok ? "Saved." : "Save failed.";
+        });
+    };
+  </script>
+</body>
+</html>

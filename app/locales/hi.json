@@ -1,0 +1,46 @@
+{
+  "terms.title": "सेवा की शर्तें",
+  "terms.accept_button": "मैं स्वीकार करता/करती हूं",
+  "terms.disclaimer.pass_probability": "AI द्वारा उत्पन्न पास होने की संभावनाएं केवल संकेतात्मक हैं और परीक्षा परिणामों की गारंटी नहीं देतीं। वास्तविक परिणाम इस प्लेटफॉर्म से बाहर कई कारकों पर निर्भर करते हैं।",
+  "terms.must_accept": "प्लेटफॉर्म का उपयोग करने से पहले आपको सेवा की शर्तें स्वीकार करनी होंगी।",
+
+  "notifications.suspension.title": "आपका खाता निलंबित कर दिया गया है",
+  "notifications.suspension.message": "आपका खाता एक प्रशासक द्वारा अस्थायी रूप से निलंबित कर दिया गया है। यदि आपको लगता है यह गलती है तो सहायता से संपर्क करें।",
+  "notifications.reactivation.title": "आपका खाता पुनः सक्रिय कर दिया गया है",
+  "notifications.reactivation.message": "आपका खाता पुनः सक्रिय कर दिया गया है। आप अब IqbalAI में लॉग इन कर सकते हैं।",
+  "notifications.teacher_suspended.title": "शिक्षक का खाता अस्थायी रूप से अनुपलब्ध है",
+  "notifications.teacher_suspended.message": "आपके एक शिक्षक अस्थायी रूप से अनुपलब्ध हैं। आपका स्कूल प्रशासन आगे की जानकारी प्रदान करेगा।",
+
+  "parent.link.pending": "लिंक अनुरोध छात्र की स्वीकृति की प्रतीक्षा में है।",
+  "parent.link.approved": "अभिभावक लिंक स्वीकृत कर लिया गया है।",
+  "parent.link.rejected": "अभिभावक लिंक अस्वीकार कर दिया गया है।",
+  "parent.link.request_sent": "आपका लिंक अनुरोध छात्र को भेज दिया गया है।",
+  "parent.link.new_request": "एक अभिभावक खाते ने आपके खाते से लिंक करने का अनुरोध किया है।",
+
+  "waitlist.added": "आपको प्रतीक्षा सूची में जोड़ दिया गया है।",
+  "waitlist.promoted": "एक जगह खाली हुई और आपको प्रतीक्षा सूची से नामांकित कर दिया गया है।",
+  "waitlist.position": "प्रतीक्षा सूची में आपकी वर्तमान स्थिति {position} है।",
+
+  "auth.account_suspended": "आपका खाता निलंबित कर दिया गया है। कृपया सहायता से संपर्क करें।",
+
+  "errors.not_found": "अनुरोधित संसाधन नहीं मिला।",
+  "errors.forbidden": "आपके पास यह क्रिया करने की अनुमति नहीं है।",
+  "errors.validation": "कृपया अपना इनपुट जांचें और पुनः प्रयास करें।",
+  "errors.server": "एक अप्रत्याशित त्रुटि हुई। कृपया पुनः प्रयास करें।",
+
+  "syllabus.exam_type": "परीक्षा का प्रकार",
+  "syllabus.chapter": "अध्याय",
+  "syllabus.topic": "विषय",
+  "syllabus.sub_topic": "उप-विषय",
+
+  "content_library.title": "सामग्री पुस्तकालय",
+  "content_library.upload": "पुस्तक अपलोड करें",
+  "content_library.no_books": "इस विषय और कक्षा के लिए कोई पुस्तक उपलब्ध नहीं है।",
+
+  "personalities.friendly_tutor": "मित्रवत शिक्षक",
+  "personalities.strict_examiner": "कठोर परीक्षक",
+  "personalities.storytelling_guide": "कहानी सुनाने वाला मार्गदर्शक",
+  "personalities.exam_coach": "परीक्षा कोच",
+  "personalities.socratic_mentor": "सुकराती गुरु",
+  "personalities.concise_explainer": "संक्षिप्त व्याख्याकार"
+}

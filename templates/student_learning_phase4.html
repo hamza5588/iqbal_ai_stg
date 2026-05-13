@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Intelligence | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <a href="/student-learning" class="text-sm text-sky-600 hover:underline">&larr; Back to learning hub</a>
+    <h1 class="text-2xl font-bold text-slate-800 mt-4 mb-2">AI intelligence</h1>
+    <p id="disc" class="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4"></p>
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button type="button" id="btnSnap" class="px-4 py-2 bg-sky-600 text-white text-sm rounded-lg">Refresh snapshot</button>
+      <button type="button" id="btnRec" class="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg">Start recovery</button>
+    </div>
+    <pre id="out" class="text-xs bg-slate-900 text-green-400 p-4 rounded-xl overflow-auto max-h-[60vh]">Loading…</pre>
+  </div>
+  {% include 'partials/phase4_floating.html' %}
+  <script>
+    const disc = document.getElementById("disc");
+    const out = document.getElementById("out");
+    function load() {
+      fetch("/api/phase4/intelligence/latest", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => {
+          disc.textContent = d.prediction_disclaimer || "";
+          out.textContent = JSON.stringify(d, null, 2);
+        })
+        .catch(() => { out.textContent = "Failed to load."; });
+    }
+    load();
+    document.getElementById("btnSnap").addEventListener("click", () => {
+      fetch("/api/phase4/intelligence/snapshot", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })
+        .then(r => r.json())
+        .then(d => { disc.textContent = d.prediction_disclaimer || disc.textContent; out.textContent = JSON.stringify(d, null, 2); })
+        .catch(() => { out.textContent = "Failed."; });
+    });
+    document.getElementById("btnRec").addEventListener("click", () => {
+      fetch("/api/phase4/recovery/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })
+        .then(r => r.json())
+        .then(d => { alert("Recovery session " + d.id + " — step " + d.current_step); })
+        .catch(() => alert("Could not start recovery"));
+    });
+  </script>
+</body>
+</html>

@@ -60,7 +60,10 @@ except ImportError:
         logger.warning("HuggingFace embeddings not available. Install langchain-huggingface or langchain-community.")
 from app.utils.llm_factory import create_llm, get_chat_model
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.checkpoint.postgres import PostgresSaver
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+except ImportError:
+    PostgresSaver = None  # type: ignore[assignment,misc]
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode

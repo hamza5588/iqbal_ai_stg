@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My uploads | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <a href="/student-learning" class="text-sm text-sky-600 hover:underline">← Learning hub</a>
+    <h1 class="text-2xl font-bold text-slate-800 mt-2">Uploads</h1>
+    <form id="up" class="mt-4 p-4 bg-white rounded-xl border border-slate-200 flex flex-wrap gap-2 items-end">
+      <input type="file" name="file" required class="text-sm" />
+      <select name="category" class="border rounded-lg px-2 py-2 text-sm">
+        <option value="content_book">Content book</option>
+        <option value="prep_book">Prep book</option>
+      </select>
+      <button type="submit" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm">Upload</button>
+    </form>
+    <pre id="list" class="mt-4 text-xs bg-slate-900 text-green-400 p-3 rounded-lg overflow-auto max-h-96"></pre>
+  </div>
+  <script>
+    function load() {
+      fetch("/api/phase3/uploads", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => { document.getElementById("list").textContent = JSON.stringify(d.items || [], null, 2); });
+    }
+    document.getElementById("up").onsubmit = (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target);
+      fetch("/api/phase3/uploads", { method: "POST", credentials: "same-origin", body: fd })
+        .then(() => { ev.target.reset(); load(); });
+    };
+    load();
+  </script>
+</body>
+</html>

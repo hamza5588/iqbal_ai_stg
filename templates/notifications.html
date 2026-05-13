@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notifications | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        primary: { 50:'#f0f9ff', 100:'#e0f2fe', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1' },
+        accent: { 500:'#ec4899' }
+      }}}
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .notif-item { transition: background .15s; }
+    .notif-item.unread { border-left: 3px solid #0ea5e9; background: #f0f9ff; }
+    .notif-item.read   { border-left: 3px solid transparent; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Nav -->
+<nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+  <div class="max-w-3xl mx-auto px-4 flex items-center justify-between h-14">
+    <div class="flex items-center gap-3">
+      <button onclick="history.back()" class="text-gray-400 hover:text-gray-600 mr-1"><i class="fas fa-arrow-left"></i></button>
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-400 to-primary-500 flex items-center justify-center">
+        <i class="fas fa-bell text-white text-xs"></i>
+      </div>
+      <span class="font-bold text-gray-900">Notifications</span>
+      <span id="unread-badge" class="hidden bg-primary-500 text-white text-xs font-bold rounded-full px-2 py-0.5"></span>
+    </div>
+    <button onclick="markAllRead()" class="text-sm text-primary-600 hover:text-primary-700 font-medium">
+      <i class="fas fa-check-double mr-1"></i>Mark all read
+    </button>
+  </div>
+</nav>
+
+<div class="max-w-3xl mx-auto px-4 py-6">
+
+  <!-- Filter tabs -->
+  <div class="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 mb-5 w-fit">
+    <button id="filter-all" onclick="setFilter('all')" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-primary-500 text-white">All</button>
+    <button id="filter-unread" onclick="setFilter('unread')" class="px-4 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">Unread</button>
+  </div>
+
+  <!-- List -->
+  <div id="notif-list" class="space-y-2">
+    <div class="text-center py-12 text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="hidden text-center py-16">
+    <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+      <i class="fas fa-bell-slash text-gray-300 text-2xl"></i>
+    </div>
+    <p class="text-gray-500 font-medium">All caught up!</p>
+    <p class="text-sm text-gray-400 mt-1">No notifications to show</p>
+  </div>
+
+  <!-- Load more -->
+  <div class="text-center mt-4">
+    <button id="load-more-btn" onclick="loadMore()" class="hidden text-sm text-primary-600 hover:text-primary-700 font-medium py-2 px-4 rounded-lg hover:bg-primary-50 transition-colors">
+      Load more
+    </button>
+  </div>
+</div>
+
+<script>
+const ICONS = { info:'fa-info-circle text-blue-500', success:'fa-check-circle text-green-500', warning:'fa-exclamation-triangle text-yellow-500', alert:'fa-exclamation-circle text-red-500', system:'fa-cog text-gray-500', parent_link:'fa-link text-purple-500', waitlist:'fa-list-ol text-teal-500', suspension:'fa-ban text-red-500', reactivation:'fa-circle-play text-green-500' };
+
+let _page = 1, _filter = 'all', _hasMore = false;
+
+function setFilter(f) {
+  _filter = f;
+  _page   = 1;
+  document.querySelectorAll('[id^=filter-]').forEach(b => {
+    b.className = 'px-4 py-1.5 rounded-lg text-sm font-medium ' + (b.id === 'filter-' + f ? 'bg-primary-500 text-white' : 'text-gray-600 hover:bg-gray-100');
+  });
+  loadNotifications(true);
+}
+
+async function loadNotifications(reset=false) {
+  if (reset) { _page = 1; document.getElementById('notif-list').innerHTML = '<div class="text-center py-8 text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>'; }
+  const params = new URLSearchParams({ page: _page, per_page: 20, unread_only: _filter === 'unread' });
+  try {
+    const res  = await fetch('/api/notifications/?' + params, { credentials:'same-origin' });
+    const data = await res.json();
+    const list = document.getElementById('notif-list');
+    const items = data.notifications || [];
+    _hasMore = data.has_more || false;
+
+    if (reset) list.innerHTML = '';
+
+    if (!items.length && reset) {
+      document.getElementById('empty-state').classList.remove('hidden');
+      document.getElementById('load-more-btn').classList.add('hidden');
+      return;
+    }
+    document.getElementById('empty-state').classList.add('hidden');
+
+    items.forEach(n => {
+      const iconClass = ICONS[n.type] || ICONS.info;
+      const timeStr = n.created_at ? timeAgo(new Date(n.created_at)) : '';
+      const el = document.createElement('div');
+      el.className = `notif-item ${n.is_read ? 'read' : 'unread'} bg-white rounded-xl p-4 flex gap-4 cursor-pointer hover:bg-gray-50`;
+      el.onclick = () => markRead(n.id, el, n.action_link);
+      el.innerHTML = `
+        <div class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+          <i class="fas ${iconClass} text-sm"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start justify-between gap-2">
+            <p class="text-sm font-semibold text-gray-900 leading-tight">${n.title}</p>
+            <span class="text-xs text-gray-400 shrink-0 mt-0.5">${timeStr}</span>
+          </div>
+          <p class="text-sm text-gray-600 mt-0.5 leading-relaxed">${n.message}</p>
+          ${n.action_link ? `<a href="${n.action_link}" class="text-xs text-primary-600 font-medium mt-1 inline-block hover:underline" onclick="event.stopPropagation()">View <i class="fas fa-arrow-right ml-0.5 text-[10px]"></i></a>` : ''}
+        </div>
+        ${!n.is_read ? '<div class="w-2 h-2 rounded-full bg-primary-500 shrink-0 mt-2"></div>' : ''}`;
+      list.appendChild(el);
+    });
+
+    document.getElementById('load-more-btn').classList.toggle('hidden', !_hasMore);
+    loadUnreadCount();
+  } catch(e) {
+    document.getElementById('notif-list').innerHTML = `<div class="text-center py-8 text-red-400 text-sm">${e.message}</div>`;
+  }
+}
+
+function loadMore() { _page++; loadNotifications(false); }
+
+async function markRead(id, el, link) {
+  if (!el.classList.contains('unread')) { if (link) window.location.href = link; return; }
+  try {
+    await fetch(`/api/notifications/${id}/read`, { method:'POST', credentials:'same-origin' });
+    el.classList.replace('unread','read');
+    const dot = el.querySelector('.bg-primary-500.rounded-full');
+    if (dot) dot.remove();
+    loadUnreadCount();
+    if (link) setTimeout(() => window.location.href = link, 200);
+  } catch {}
+}
+
+async function markAllRead() {
+  try {
+    await fetch('/api/notifications/read-all', { method:'POST', credentials:'same-origin' });
+    document.querySelectorAll('.notif-item.unread').forEach(el => {
+      el.classList.replace('unread','read');
+      const dot = el.querySelector('.bg-primary-500.rounded-full');
+      if (dot) dot.remove();
+    });
+    loadUnreadCount();
+  } catch(e) { alert(e.message); }
+}
+
+async function loadUnreadCount() {
+  try {
+    const res = await fetch('/api/notifications/count', { credentials:'same-origin' });
+    const data = await res.json();
+    const badge = document.getElementById('unread-badge');
+    if (data.count > 0) { badge.textContent = data.count; badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+  } catch {}
+}
+
+function timeAgo(date) {
+  const diff = (Date.now() - date) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+document.addEventListener('DOMContentLoaded', () => loadNotifications(true));
+</script>
+</body>
+</html>

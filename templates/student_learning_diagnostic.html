@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diagnostic | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <a href="/student-learning" class="text-sm text-sky-600 hover:underline">← Learning hub</a>
+    <h1 class="text-2xl font-bold text-slate-800 mt-2">Adaptive diagnostic</h1>
+    <p class="text-slate-600 text-sm mb-4">Questions from the bank; difficulty adapts per answer.</p>
+    <pre id="profile" class="text-xs bg-slate-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-32"></pre>
+    <div id="qbox" class="p-4 bg-white rounded-xl border border-slate-200 mb-4 hidden">
+      <p id="stem" class="text-slate-800 font-medium mb-3"></p>
+      <div class="flex gap-2">
+        <button id="wrong" class="px-3 py-1.5 bg-rose-100 text-rose-800 rounded text-sm">Incorrect</button>
+        <button id="right" class="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded text-sm">Correct</button>
+      </div>
+    </div>
+    <p id="status" class="text-sm text-slate-500"></p>
+  </div>
+  <script>
+    let idx = 0, diff = 3;
+    fetch("/api/phase3/diagnostic/profile", { credentials: "same-origin" })
+      .then(r => r.json())
+      .then(d => { document.getElementById("profile").textContent = JSON.stringify(d, null, 2); })
+      .catch(() => {});
+
+    function next(lastCorrect) {
+      fetch("/api/phase3/diagnostic/session", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index: idx, current_difficulty: diff, last_answer_correct: lastCorrect }),
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (d.done) {
+            document.getElementById("status").textContent = d.message || "Done.";
+            document.getElementById("qbox").classList.add("hidden");
+            return;
+          }
+          idx = (d.index || 0) + 1;
+          diff = d.current_difficulty || diff;
+          document.getElementById("qbox").classList.remove("hidden");
+          document.getElementById("stem").textContent = d.question.stem || "";
+          document.getElementById("status").textContent = `Difficulty band: ${diff}`;
+        });
+    }
+    document.getElementById("wrong").onclick = () => next(false);
+    document.getElementById("right").onclick = () => next(true);
+    next(null);
+  </script>
+</body>
+</html>

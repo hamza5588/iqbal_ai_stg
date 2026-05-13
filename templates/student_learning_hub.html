@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Learning | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold text-slate-800 mb-2">Student learning</h1>
+    <p class="text-slate-600 mb-6">Study plans, lecture reader, flashcards, and calendar connections.</p>
+
+    {% set qp = request.args.get('calendar_error') %}
+    {% if qp %}
+    <div class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">{{ qp }}</div>
+    {% endif %}
+
+    <div class="grid sm:grid-cols-2 gap-4 mb-6">
+      <a href="/student-dashboard" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-sky-400">
+        <span class="font-medium"><i class="fas fa-home text-sky-500"></i> Dashboard</span>
+        <p class="text-sm text-slate-500 mt-1">Lessons and assignments.</p>
+      </a>
+      <a href="/student-learning/flashcards" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-purple-400">
+        <span class="font-medium"><i class="fas fa-clone text-purple-500"></i> Flashcards</span>
+        <p class="text-sm text-slate-500 mt-1">SRS review queue.</p>
+      </a>
+      <a href="/student-learning/diagnostic" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-amber-400">
+        <span class="font-medium"><i class="fas fa-stethoscope text-amber-500"></i> Diagnostic</span>
+        <p class="text-sm text-slate-500 mt-1">Adaptive question bank practice.</p>
+      </a>
+      <a href="/student-learning/preferences" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-slate-500">
+        <span class="font-medium"><i class="fas fa-sliders-h text-slate-600"></i> Preferences</span>
+        <p class="text-sm text-slate-500 mt-1">Reminders & privacy.</p>
+      </a>
+      <a href="/student-learning/adherence" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-teal-400">
+        <span class="font-medium"><i class="fas fa-chart-line text-teal-500"></i> Adherence</span>
+        <p class="text-sm text-slate-500 mt-1">Log study minutes vs plan.</p>
+      </a>
+      <a href="/student-learning/exam-targets" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-rose-400">
+        <span class="font-medium"><i class="fas fa-bullseye text-rose-500"></i> Exam targets</span>
+        <p class="text-sm text-slate-500 mt-1">Countdown dates.</p>
+      </a>
+      <a href="/student-learning/uploads" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-indigo-400">
+        <span class="font-medium"><i class="fas fa-file-upload text-indigo-500"></i> Uploads</span>
+        <p class="text-sm text-slate-500 mt-1">Prep & content PDFs.</p>
+      </a>
+      <a href="/student-learning/group-study" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-pink-400">
+        <span class="font-medium"><i class="fas fa-users text-pink-500"></i> Group study</span>
+        <p class="text-sm text-slate-500 mt-1">RSVP to teacher sessions.</p>
+      </a>
+      <a href="/student-learning/phase4-intelligence" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-cyan-400">
+        <span class="font-medium"><i class="fas fa-brain text-cyan-600"></i> AI intelligence</span>
+        <p class="text-sm text-slate-500 mt-1">Pass probability, exam confidence, two-future view.</p>
+      </a>
+      <a href="/student-learning/phase4-practice" class="block p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-lime-500">
+        <span class="font-medium"><i class="fas fa-stopwatch text-lime-600"></i> Timed practice</span>
+        <p class="text-sm text-slate-500 mt-1">Queue, timer, confidence, similar questions.</p>
+      </a>
+    </div>
+
+    <div class="p-4 bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
+      <h2 class="font-semibold text-slate-800 mb-2"><i class="fas fa-sync text-emerald-600 mr-2"></i>Push plan to calendars</h2>
+      <p class="text-sm text-slate-600 mb-3">Uses connected Google / Apple credentials to mirror your latest study plan days.</p>
+      <button type="button" id="sync-cal" class="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">Sync now</button>
+      <span id="sync-msg" class="ml-2 text-sm text-slate-600"></span>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-4 mb-6">
+      <div class="p-4 bg-white rounded-xl border border-slate-200">
+        <span class="font-medium"><i class="fas fa-layer-group text-purple-500"></i> Study summary</span>
+        <pre id="dash" class="text-xs mt-2 bg-slate-900 text-green-400 p-3 rounded-lg overflow-auto max-h-48">Loading…</pre>
+      </div>
+    </div>
+
+    <div class="p-4 bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
+      <h2 class="font-semibold text-slate-800 mb-2"><i class="fas fa-calendar-alt text-sky-600 mr-2"></i>Calendars</h2>
+      <p class="text-sm text-slate-600 mb-3">Connect once; credentials are stored encrypted. ICS export: <code class="text-xs bg-slate-100 px-1 rounded">GET /api/phase3/calendar/export.ics</code>. Two-way sync: <code class="text-xs bg-slate-100 px-1 rounded">POST /api/phase3/calendar/sync</code> or use <strong>Sync now</strong> above.</p>
+      <div class="flex flex-wrap gap-2 mb-4">
+        <a href="{{ url_for('calendar_oauth.google_calendar_start') }}" class="inline-flex items-center px-4 py-2 rounded-lg bg-white border border-slate-300 text-sm font-medium hover:bg-slate-50">
+          <i class="fab fa-google text-red-500 mr-2"></i> Connect Google Calendar
+        </a>
+      </div>
+      <div id="cal-status" class="text-xs text-slate-500 mb-4">Loading calendar status…</div>
+
+      <div class="border-t border-slate-100 pt-4 mt-2">
+        <p class="text-sm font-medium text-slate-700 mb-2">Apple / iCloud (CalDAV)</p>
+        <p class="text-xs text-slate-500 mb-2">Use an app-specific password from Apple ID settings.</p>
+        <div class="grid sm:grid-cols-2 gap-2 mb-2">
+          <input id="apple_id" type="email" placeholder="you@icloud.com" class="border rounded-lg px-3 py-2 text-sm w-full" />
+          <input id="apple_pw" type="password" placeholder="app-specific password" class="border rounded-lg px-3 py-2 text-sm w-full" autocomplete="new-password" />
+        </div>
+        <button type="button" id="apple-save" class="px-4 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-700">Save Apple calendar</button>
+        <span id="apple-msg" class="ml-2 text-sm text-slate-600"></span>
+      </div>
+    </div>
+
+    <p class="text-sm text-slate-500">Reader: open <code class="text-xs bg-slate-100 px-1 rounded">/lecture-reader/&lt;lesson_id&gt;</code> from your dashboard.</p>
+  </div>
+  <script>
+    fetch("/api/phase3/dashboard-summary", { credentials: "same-origin" })
+      .then(r => r.json())
+      .then(d => { document.getElementById("dash").textContent = JSON.stringify(d, null, 2); })
+      .catch(() => { document.getElementById("dash").textContent = "Could not load dashboard summary."; });
+
+    function refreshCal() {
+      fetch("/api/calendar/connections", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => {
+          const el = document.getElementById("cal-status");
+          const c = d.connections || [];
+          if (!c.length) { el.textContent = "No calendars linked yet."; return; }
+          el.innerHTML = c.map(x => `<span class="inline-block mr-3 mb-1"><i class="fas fa-check text-green-600"></i> ${x.provider}${x.account_hint ? " (" + x.account_hint + ")" : ""}</span>`).join(" ");
+        })
+        .catch(() => { document.getElementById("cal-status").textContent = "Could not load calendar status."; });
+    }
+    refreshCal();
+
+    document.getElementById("sync-cal").addEventListener("click", () => {
+      const msg = document.getElementById("sync-msg");
+      msg.textContent = "Syncing…";
+      fetch("/api/phase3/calendar/sync", { method: "POST", credentials: "same-origin" })
+        .then(async r => {
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || JSON.stringify(j));
+          msg.textContent = "Done — check Google / Apple calendar.";
+        })
+        .catch(e => { msg.textContent = e.message || "Sync failed"; });
+    });
+
+    document.getElementById("apple-save").addEventListener("click", () => {
+      const apple_id = document.getElementById("apple_id").value.trim();
+      const app_password = document.getElementById("apple_pw").value;
+      const msg = document.getElementById("apple-msg");
+      msg.textContent = "";
+      fetch("/api/calendar/connections/apple", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apple_id, app_password }),
+      })
+        .then(async r => {
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || r.statusText);
+          msg.textContent = "Saved.";
+          document.getElementById("apple_pw").value = "";
+          refreshCal();
+        })
+        .catch(e => { msg.textContent = e.message || "Failed"; });
+    });
+  </script>
+</body>
+</html>

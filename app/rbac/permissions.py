@@ -44,7 +44,18 @@ class Permissions(str, Enum):
     CREATE_CONVERSATION = "create_conversation"  # Create conversations (all roles)
     VIEW_MY_CONVERSATIONS = "view_my_conversations"  # View own conversations (all roles)
     VIEW_ALL_CONVERSATIONS = "view_all_conversations"  # View all conversations (admin)
-    
+
+    # Phase 1 permissions
+    INVITE_USER = "invite_user"  # Invite/create lower-role users
+    SUSPEND_USER = "suspend_user"  # Suspend and reactivate user accounts
+    VIEW_CONTENT_LIBRARY = "view_content_library"  # Browse content library books
+    MANAGE_CONTENT_LIBRARY = "manage_content_library"  # Upload/edit/delete content books
+    MANAGE_SYLLABUS = "manage_syllabus"  # CRUD exam syllabus tree
+    MANAGE_PERSONALITIES = "manage_personalities"  # CRUD AI teaching personalities
+    VIEW_NOTIFICATIONS = "view_notifications"  # View own notification inbox
+    MANAGE_PARENT_LINKS = "manage_parent_links"  # Approve/reject parent-student links
+    EXPORT_STUDENT_DATA = "export_student_data"  # Export own student data
+
     def __str__(self):
         return self.value
 
@@ -57,6 +68,10 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.EDIT_MY_PROFILE,
         Permissions.CREATE_CONVERSATION,
         Permissions.VIEW_MY_CONVERSATIONS,
+        Permissions.VIEW_CONTENT_LIBRARY,
+        Permissions.VIEW_NOTIFICATIONS,
+        Permissions.MANAGE_PARENT_LINKS,
+        Permissions.EXPORT_STUDENT_DATA,
     },
     
     Role.TEACHER: {
@@ -101,6 +116,16 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.CREATE_CONVERSATION,
         Permissions.VIEW_MY_CONVERSATIONS,
         Permissions.VIEW_ALL_CONVERSATIONS,
+        # Phase 1
+        Permissions.INVITE_USER,
+        Permissions.SUSPEND_USER,
+        Permissions.VIEW_CONTENT_LIBRARY,
+        Permissions.MANAGE_CONTENT_LIBRARY,
+        Permissions.MANAGE_SYLLABUS,
+        Permissions.MANAGE_PERSONALITIES,
+        Permissions.VIEW_NOTIFICATIONS,
+        Permissions.MANAGE_PARENT_LINKS,
+        Permissions.EXPORT_STUDENT_DATA,
     },
     # School chain: global permissions today; route-level school scoping comes later.
     Role.PLATFORM_ADMIN: set(),  # filled below
@@ -113,6 +138,8 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.EDIT_MY_PROFILE,
         Permissions.VIEW_LESSON,
         Permissions.VIEW_MY_CONVERSATIONS,
+        Permissions.VIEW_NOTIFICATIONS,
+        Permissions.MANAGE_PARENT_LINKS,
     },
 }
 
@@ -139,6 +166,9 @@ _SCHOOL_OVERSIGHT = {
     Permissions.CREATE_CONVERSATION,
     Permissions.VIEW_MY_CONVERSATIONS,
     Permissions.VIEW_ALL_CONVERSATIONS,
+    # Phase 1
+    Permissions.VIEW_CONTENT_LIBRARY,
+    Permissions.VIEW_NOTIFICATIONS,
 }
 ROLE_PERMISSIONS[Role.PRINCIPAL] = set(_SCHOOL_OVERSIGHT)
 ROLE_PERMISSIONS[Role.COORDINATOR] = set(_SCHOOL_OVERSIGHT)

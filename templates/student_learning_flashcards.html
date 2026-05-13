@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flashcards | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <a href="/student-learning" class="text-sm text-sky-600 hover:underline">← Learning hub</a>
+    <h1 class="text-2xl font-bold text-slate-800 mt-2">Flashcards</h1>
+    <p class="text-slate-600 text-sm mb-4">SRS-style review from <code class="text-xs bg-slate-100 px-1 rounded">/api/phase3/flashcards</code>.</p>
+    <div id="list" class="space-y-3"></div>
+    <div class="mt-8 p-4 bg-white rounded-xl border border-slate-200">
+      <h2 class="font-semibold text-slate-800 mb-2">Add card</h2>
+      <input id="front" class="w-full border rounded-lg px-3 py-2 mb-2 text-sm" placeholder="Front" />
+      <textarea id="back" class="w-full border rounded-lg px-3 py-2 mb-2 text-sm" rows="2" placeholder="Back"></textarea>
+      <button id="add" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm">Save</button>
+    </div>
+  </div>
+  <script>
+    function load() {
+      fetch("/api/phase3/flashcards", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => {
+          const el = document.getElementById("list");
+          const items = d.items || [];
+          if (!items.length) { el.innerHTML = '<p class="text-slate-500 text-sm">No flashcards yet.</p>'; return; }
+          el.innerHTML = items.map(c => `
+            <div class="p-3 bg-white rounded-lg border border-slate-200">
+              <p class="font-medium text-slate-800">${escapeHtml(c.front)}</p>
+              <p class="text-sm text-slate-600 mt-1">${escapeHtml(c.back)}</p>
+              <button data-id="${c.id}" class="mt-2 text-xs text-sky-600 review-btn">Mark reviewed (quality 4)</button>
+            </div>`).join("");
+          document.querySelectorAll(".review-btn").forEach(btn => {
+            btn.onclick = () => {
+              fetch(`/api/phase3/flashcards/${btn.dataset.id}/review`, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ quality: 4 }),
+              }).then(() => load());
+            };
+          });
+        });
+    }
+    function escapeHtml(s) {
+      const t = document.createElement("div"); t.textContent = s || ""; return t.innerHTML;
+    }
+    document.getElementById("add").onclick = () => {
+      const front = document.getElementById("front").value.trim();
+      const back = document.getElementById("back").value.trim();
+      if (!front || !back) return;
+      fetch("/api/phase3/flashcards", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ front, back }),
+      }).then(() => { document.getElementById("front").value = ""; document.getElementById("back").value = ""; load(); });
+    };
+    load();
+  </script>
+</body>
+</html>

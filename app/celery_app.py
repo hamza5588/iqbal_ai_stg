@@ -4,6 +4,8 @@ Celery application initialization for background task processing.
 from celery import Celery
 from app.config import Config
 
+from celery.schedules import crontab
+
 # Create Celery instance
 # NOTE: The "include" argument ensures the worker imports our task modules
 # so that tasks like "app.tasks.ingest_tasks.ingest_pdf_task" are registered.
@@ -14,6 +16,9 @@ celery = Celery(
     include=[
         'app.tasks.ingest_tasks',
         'app.tasks.load_test_tasks',
+        'app.tasks.phase3_tasks',
+        'app.tasks.reminder_tasks',
+        'app.tasks.phase4_tasks',
     ],
 )
 
@@ -34,6 +39,25 @@ celery.conf.update(
     # Default queue for non-ingest tasks; ingest tasks explicitly use "ingest"
     task_default_queue="default",
 )
+
+celery.conf.beat_schedule = {
+    "phase3-study-reminders": {
+        "task": "phase3.study_plan_reminders",
+        "schedule": crontab(minute="*/30"),
+    },
+    "phase4-nightly-intelligence": {
+        "task": "phase4.nightly_intelligence_batch",
+        "schedule": crontab(hour=2, minute=5),
+    },
+    "phase4-weekly-pedagogy": {
+        "task": "phase4.weekly_pedagogy_scan",
+        "schedule": crontab(hour=3, minute=15, day_of_week="sun"),
+    },
+    "phase4-teacher-group-suggestions": {
+        "task": "phase4.teacher_group_suggestions_scan",
+        "schedule": crontab(hour=4, minute=10, day_of_week="mon"),
+    },
+}
 
 def init_celery(app):
     """

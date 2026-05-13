@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connection Requests | Iqbal AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode:"class",
+      theme:{ extend:{
+        fontFamily:{ sans:["Inter","system-ui","sans-serif"], display:["Poppins","Inter","sans-serif"] },
+        colors:{
+          primary:{50:"#f0f9ff",100:"#e0f2fe",500:"#0ea5e9",600:"#0284c7"},
+          accent: {500:"#ec4899"},
+          success:{50:"#f0fdf4",100:"#dcfce7",500:"#22c55e",600:"#16a34a"},
+          error:  {50:"#fef2f2",100:"#fee2e2",500:"#ef4444",600:"#dc2626"},
+          warning:{50:"#fffbeb",500:"#f59e0b"},
+        },
+      }},
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing:antialiased; }
+    .status-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:9999px; font-size:.75rem; font-weight:600; }
+    .status-pending  { background:#fef3c7; color:#92400e; }
+    .status-accepted { background:#d1fae5; color:#065f46; }
+    .status-rejected { background:#fee2e2; color:#991b1b; }
+    .toast { position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999; padding:.85rem 1.25rem; border-radius:.75rem; font-size:.875rem; font-weight:500; display:flex; align-items:center; gap:.5rem; box-shadow:0 8px 24px rgba(0,0,0,.15); transform:translateY(100px); opacity:0; transition:all .3s; }
+    .toast.show { transform:translateY(0); opacity:1; }
+    .toast.success { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+    .toast.error   { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    input:focus, textarea:focus { outline:none; border-color:#0ea5e9; box-shadow:0 0 0 3px rgba(14,165,233,.15); }
+    .tab-btn { padding:8px 18px; border-radius:9999px; font-size:.875rem; font-weight:500; cursor:pointer; transition:all .2s; color:#64748b; border:1.5px solid transparent; }
+    .tab-btn.active { background:#0ea5e9; color:white; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-4xl mx-auto px-4 h-14 flex items-center gap-3">
+      <a href="/teacher-dashboard" class="text-gray-500 hover:text-primary-600 transition-colors"><i class="fas fa-arrow-left"></i></a>
+      <h1 class="text-lg font-semibold text-gray-900 font-display">Student Connection Requests</h1>
+      <span id="pendingBadge" class="hidden ml-2 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold"></span>
+    </div>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-4 py-8">
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-6">
+      <button class="tab-btn active" onclick="switchTab('pending', this)">Pending</button>
+      <button class="tab-btn" onclick="switchTab('accepted', this)">Accepted</button>
+      <button class="tab-btn" onclick="switchTab('rejected', this)">Rejected</button>
+      <button class="tab-btn" onclick="switchTab('all', this)">All</button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingState" class="text-center py-16 text-gray-400">
+      <i class="fas fa-circle-notch fa-spin text-3xl mb-3 text-primary-400"></i>
+      <p>Loading requests…</p>
+    </div>
+
+    <!-- Empty -->
+    <div id="emptyState" class="hidden text-center py-16 text-gray-400">
+      <i class="fas fa-inbox text-5xl mb-4 opacity-30"></i>
+      <p class="text-lg font-medium" id="emptyMsg">No pending requests</p>
+    </div>
+
+    <!-- List -->
+    <div id="requestList" class="hidden space-y-4"></div>
+  </main>
+
+  <!-- Reject Modal -->
+  <div id="rejectModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div class="p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-3">Reject Request</h3>
+        <p class="text-sm text-gray-600 mb-3">You can optionally provide a reason so the student understands.</p>
+        <textarea id="rejectReason" rows="3" placeholder="Reason for rejection (optional)…"
+          class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm mb-4 resize-none"></textarea>
+        <div class="flex gap-2">
+          <button onclick="confirmReject()"
+            class="flex-1 py-2.5 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600 transition-all">
+            Reject Request
+          </button>
+          <button onclick="document.getElementById('rejectModal').classList.add('hidden')"
+            class="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let allRequests  = [];
+    let currentTab   = "pending";
+    let _rejectId    = null;
+
+    document.addEventListener("DOMContentLoaded", loadRequests);
+
+    async function loadRequests() {
+      try {
+        const res = await fetch("/api/connections/teacher/requests", { credentials:"same-origin" });
+        if (!res.ok) throw new Error();
+        const d = await res.json();
+        allRequests = d.requests || [];
+        updatePendingBadge();
+        renderRequests();
+      } catch (_) { allRequests = []; renderRequests(); }
+    }
+
+    function updatePendingBadge() {
+      const n = allRequests.filter(r=>r.status==="pending").length;
+      const badge = document.getElementById("pendingBadge");
+      if (n > 0) { badge.textContent = n; badge.classList.remove("hidden"); }
+      else badge.classList.add("hidden");
+    }
+
+    function switchTab(tab, btn) {
+      currentTab = tab;
+      document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      renderRequests();
+    }
+
+    function renderRequests() {
+      document.getElementById("loadingState").classList.add("hidden");
+      const filtered = currentTab==="all" ? allRequests : allRequests.filter(r=>r.status===currentTab);
+      const list = document.getElementById("requestList");
+      const empty = document.getElementById("emptyState");
+
+      if (!filtered.length) {
+        list.classList.add("hidden");
+        empty.classList.remove("hidden");
+        document.getElementById("emptyMsg").textContent = `No ${currentTab === "all" ? "" : currentTab+" "}requests`;
+        return;
+      }
+      empty.classList.add("hidden");
+      list.classList.remove("hidden");
+      list.innerHTML = filtered.map(r => requestCardHtml(r)).join("");
+    }
+
+    function requestCardHtml(r) {
+      const statusClass = { pending:"status-pending", accepted:"status-accepted", rejected:"status-rejected" }[r.status] || "";
+      const statusLabel = { pending:"Pending", accepted:"Accepted", rejected:"Rejected" }[r.status] || r.status;
+      const statusIcon  = { pending:"clock", accepted:"check-circle", rejected:"times-circle" }[r.status] || "circle";
+      const initials = ((r.student_first_name||"?")[0]+(r.student_last_name||"?")[0]).toUpperCase();
+
+      return `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-success-500 to-primary-500 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
+              ${initials}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <p class="font-semibold text-gray-900">${escHtml(r.student_first_name||"")} ${escHtml(r.student_last_name||"")}</p>
+                <span class="status-badge ${statusClass}"><i class="fas fa-${statusIcon}"></i>${statusLabel}</span>
+              </div>
+              <p class="text-sm text-gray-500 mt-0.5">Wants to study: <span class="font-medium text-gray-700">${escHtml(r.subject||"")}</span></p>
+              ${r.message ? `<p class="text-sm text-gray-600 mt-2 italic">"${escHtml(r.message)}"</p>` : ""}
+              ${r.rejection_reason && r.status==="rejected" ? `<p class="text-xs text-red-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Reason: ${escHtml(r.rejection_reason)}</p>` : ""}
+              <p class="text-xs text-gray-400 mt-2">${formatDate(r.created_at)}</p>
+            </div>
+          </div>
+          ${r.status==="pending" ? `
+            <div class="mt-4 flex gap-2 justify-end">
+              <button onclick="acceptRequest(${r.id}, this)"
+                class="px-5 py-2 bg-success-500 text-white rounded-lg text-sm font-medium hover:bg-success-600 transition-colors">
+                <i class="fas fa-check mr-1.5"></i>Accept
+              </button>
+              <button onclick="openRejectModal(${r.id})"
+                class="px-5 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">
+                <i class="fas fa-times mr-1.5"></i>Reject
+              </button>
+            </div>` : ""}
+        </div>
+      `;
+    }
+
+    async function acceptRequest(id, btn) {
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/connections/teacher/request/${id}/accept`, {
+          method:"POST", credentials:"same-origin",
+        });
+        if (res.ok) { showToast("Request accepted!"); const r=allRequests.find(x=>x.id===id); if(r) r.status="accepted"; updatePendingBadge(); renderRequests(); }
+        else { const d=await res.json().catch(()=>({})); showToast(d.error||"Failed.", "error"); btn.disabled=false; }
+      } catch (_) { showToast("Network error.", "error"); btn.disabled=false; }
+    }
+
+    function openRejectModal(id) { _rejectId=id; document.getElementById("rejectReason").value=""; document.getElementById("rejectModal").classList.remove("hidden"); }
+
+    async function confirmReject() {
+      const reason = document.getElementById("rejectReason").value.trim();
+      document.getElementById("rejectModal").classList.add("hidden");
+      try {
+        const res = await fetch(`/api/connections/teacher/request/${_rejectId}/reject`, {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          credentials:"same-origin",
+          body: JSON.stringify({ reason }),
+        });
+        if (res.ok) {
+          showToast("Request rejected.");
+          const r = allRequests.find(x=>x.id===_rejectId);
+          if (r) { r.status="rejected"; r.rejection_reason=reason; }
+          updatePendingBadge(); renderRequests();
+        } else { const d=await res.json().catch(()=>({})); showToast(d.error||"Failed.", "error"); }
+      } catch (_) { showToast("Network error.", "error"); }
+    }
+
+    document.getElementById("rejectModal").addEventListener("click", e=>{if(e.target===document.getElementById("rejectModal"))document.getElementById("rejectModal").classList.add("hidden");});
+
+    function formatDate(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return d.toLocaleDateString("en-PK",{year:"numeric",month:"short",day:"numeric"});
+    }
+    function escHtml(s) { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function showToast(msg, type="success") {
+      const t=document.getElementById("toast");
+      t.className=`toast ${type}`;
+      t.innerHTML=`<i class="fas fa-${type==="success"?"check-circle":"exclamation-circle"}"></i> ${msg}`;
+      t.classList.add("show");
+      setTimeout(()=>t.classList.remove("show"),3500);
+    }
+  </script>
+</body>
+</html>

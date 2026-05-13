@@ -1,0 +1,48 @@
+{
+  "terms.title": "Terms of Service",
+  "terms.accept_button": "I Accept",
+  "terms.disclaimer.pass_probability": "AI-generated pass probability estimates are indicative only and do not guarantee exam results. Actual outcomes depend on many factors outside this platform.",
+  "terms.must_accept": "You must accept the Terms of Service before using the platform.",
+
+  "notifications.suspension.title": "Your Account Has Been Suspended",
+  "notifications.suspension.message": "Your account has been temporarily suspended by an administrator. Please contact support if you believe this is an error.",
+  "notifications.reactivation.title": "Your Account Has Been Reactivated",
+  "notifications.reactivation.message": "Your account has been reactivated. You can now log in to IqbalAI.",
+  "notifications.teacher_suspended.title": "Teacher Account Temporarily Unavailable",
+  "notifications.teacher_suspended.message": "One of your teachers is temporarily unavailable. Your school administration will provide further information.",
+
+  "parent.link.pending": "Link request is pending student approval.",
+  "parent.link.approved": "Parent link has been approved.",
+  "parent.link.rejected": "Parent link has been rejected.",
+  "parent.link.request_sent": "Your link request has been sent to the student.",
+  "parent.link.new_request": "A parent account has requested to link with your account.",
+
+  "waitlist.added": "You have been added to the waitlist.",
+  "waitlist.promoted": "A spot has opened and you have been enrolled from the waitlist.",
+  "waitlist.position": "Your current waitlist position is {position}.",
+
+  "auth.account_suspended": "Your account has been suspended. Please contact support.",
+  "auth.login_success": "Login successful.",
+  "auth.logout_success": "You have been logged out.",
+
+  "errors.not_found": "The requested resource was not found.",
+  "errors.forbidden": "You do not have permission to perform this action.",
+  "errors.validation": "Please check your input and try again.",
+  "errors.server": "An unexpected error occurred. Please try again later.",
+
+  "syllabus.exam_type": "Exam Type",
+  "syllabus.chapter": "Chapter",
+  "syllabus.topic": "Topic",
+  "syllabus.sub_topic": "Sub-Topic",
+
+  "content_library.title": "Content Library",
+  "content_library.upload": "Upload Book",
+  "content_library.no_books": "No books available for this subject and grade.",
+
+  "personalities.friendly_tutor": "Friendly Tutor",
+  "personalities.strict_examiner": "Strict Examiner",
+  "personalities.storytelling_guide": "Storytelling Guide",
+  "personalities.exam_coach": "Exam Coach",
+  "personalities.socratic_mentor": "Socratic Mentor",
+  "personalities.concise_explainer": "Concise Explainer"
+}

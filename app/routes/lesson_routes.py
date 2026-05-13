@@ -27,6 +27,42 @@ except Exception:  # pragma: no cover - optional dependency fallback
 logger = logging.getLogger(__name__)
 
 
+def _phase3_capture_background(
+    app_obj,
+    *,
+    lesson_id: int,
+    user_id: int,
+    question: str,
+    chat_history_id: int,
+    learning_mode: str,
+    source_context,
+    session_key: Optional[str],
+    api_key: Optional[str],
+) -> None:
+    """Persist Phase 3 student question row without blocking the HTTP response."""
+    try:
+        with app_obj.app_context():
+            from app.services.phase3.capture_service import record_student_question
+            from app.utils.db import get_db as _get_db
+
+            db = _get_db()
+            mode = learning_mode if learning_mode in ("lecture", "self_study") else "lecture"
+            ctx = source_context if isinstance(source_context, dict) else {}
+            record_student_question(
+                db,
+                student_user_id=int(user_id),
+                lesson_id=int(lesson_id),
+                question_text=question,
+                mode=mode,
+                source_context=ctx,
+                lesson_chat_history_id=int(chat_history_id),
+                llm_api_key=api_key or None,
+                session_key=session_key,
+            )
+    except Exception as exc:
+        logger.warning("Phase 3 question capture failed: %s", exc, exc_info=True)
+
+
 def _user_can_read_lesson_row(lesson: dict, user_id, user_role: Optional[str]) -> bool:
     """Teacher owner, public lesson (non-students / legacy), or student via roster publish graph."""
     if not lesson:
@@ -36,20 +72,30 @@ def _user_can_read_lesson_row(lesson: dict, user_id, user_role: Optional[str]) -
     role = (user_role or 'student').strip().lower()
     if role == 'student' and user_id:
         try:
+            from app.models.phase3_models import MiniLectureTarget
             from app.services.school.student_lesson_access import (
                 student_may_view_lesson_via_school_placement,
             )
 
+            db = get_db()
             lid = lesson.get('id')
             if lid is None:
                 return False
+            target_ids = [
+                r[0]
+                for r in db.query(MiniLectureTarget.student_user_id)
+                .filter(MiniLectureTarget.mini_lesson_id == int(lid))
+                .all()
+            ]
+            if target_ids:
+                return int(user_id) in set(target_ids)
+
             if student_may_view_lesson_via_school_placement(get_db(), int(user_id), int(lid)):
                 return True
             # Legacy students (no coordinator roster) may still read public lessons.
             if lesson.get('is_public'):
                 from app.models.school_org_models import ClassEnrollment
 
-                db = get_db()
                 has_enrollment = (
                     db.query(ClassEnrollment.id)
                     .filter(ClassEnrollment.student_user_id == int(user_id))
@@ -1282,6 +1328,9 @@ def ask_lesson_question():
     lesson_id = data.get('lesson_id')
     question = (data.get('question') or '').strip()
     allow_rag = data.get('allow_rag', False)
+    learning_mode = (data.get('learning_mode') or 'lecture').strip()
+    source_context = data.get('source_context')
+    session_key = data.get('session_key')
     if not lesson_id or not question:
         return jsonify({'error': 'lesson_id and question are required'}), 400
 
@@ -1340,6 +1389,23 @@ def ask_lesson_question():
             daemon=True,
         )
         bg_thread.start()
+
+        phase3_thread = threading.Thread(
+            target=_phase3_capture_background,
+            kwargs={
+                "app_obj": app_obj,
+                "lesson_id": int(lesson_id),
+                "user_id": int(user_id),
+                "question": question,
+                "chat_history_id": int(chat_history_id),
+                "learning_mode": learning_mode,
+                "source_context": source_context,
+                "session_key": session_key,
+                "api_key": api_key,
+            },
+            daemon=True,
+        )
+        phase3_thread.start()
 
         return jsonify({
             'status': 'completed',
@@ -1585,6 +1651,7 @@ def create_ai_lesson_version(lesson_id):
         return jsonify({'error': f'Failed to create AI lesson version: {str(e)}'}), 500
 
 @bp.route('/faqs/<int:lesson_id>', methods=['GET'])
+@bp.route('/<int:lesson_id>/faqs', methods=['GET'])
 @teacher_required
 def get_lesson_faqs(lesson_id):
     try:
@@ -1677,6 +1744,79 @@ def get_lesson_faqs(lesson_id):
     except Exception as e:
         logger.error(f"Error getting lesson FAQs: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to load lesson FAQs'}), 500
+
+
+@bp.route('/<int:lesson_id>/next-day-review', methods=['GET'])
+@teacher_required
+def get_next_day_review(lesson_id):
+    """Phase 3 aggregate for teacher next-day review UI."""
+    try:
+        lesson = LessonModel.get_lesson_by_id(lesson_id)
+        if not lesson:
+            return jsonify({'error': 'Lesson not found'}), 404
+        if lesson.get('teacher_id') != session['user_id']:
+            return jsonify({'error': 'Access denied'}), 403
+        from app.services.phase3.review_service import next_day_review_payload
+
+        db = get_db()
+        payload = next_day_review_payload(db, lesson_id=lesson_id)
+        return jsonify(
+            {
+                'summary': payload.get('summary'),
+                'critical_questions': payload.get('critical_questions'),
+                'phase3_question_count': payload.get('phase3_question_count'),
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error next-day-review: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to load review'}), 500
+
+
+@bp.route('/<int:lesson_id>/mini-lecture', methods=['GET'])
+@teacher_required
+def get_mini_lecture_json(lesson_id):
+    """Return child lesson used as mini-lecture for this parent lesson."""
+    try:
+        lesson = LessonModel.get_lesson_by_id(lesson_id)
+        if not lesson:
+            return jsonify({'error': 'Lesson not found'}), 404
+        if lesson.get('teacher_id') != session['user_id']:
+            return jsonify({'error': 'Access denied'}), 403
+        db = get_db()
+        mini = (
+            db.query(DBLesson)
+            .filter(DBLesson.parent_lesson_id == lesson_id)
+            .order_by(DBLesson.id.desc())
+            .first()
+        )
+        if not mini:
+            return jsonify(
+                {
+                    "content": None,
+                    "mini_lesson_id": None,
+                    "title": None,
+                    "target_student_ids": [],
+                }
+            )
+        from app.models.phase3_models import MiniLectureTarget
+
+        tids = [
+            r[0]
+            for r in db.query(MiniLectureTarget.student_user_id)
+            .filter(MiniLectureTarget.mini_lesson_id == mini.id)
+            .all()
+        ]
+        return jsonify(
+            {
+                "content": mini.content or "",
+                "mini_lesson_id": mini.id,
+                "title": mini.title,
+                "target_student_ids": tids,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error mini-lecture fetch: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to load mini-lecture'}), 500
 
 @bp.route('/faqs_count/<int:lesson_id>', methods=['GET'])
 @login_required

@@ -980,6 +980,29 @@
                 </div>
               </div>
               
+              <!-- Optional calendar (Apple CalDAV). Google: connect after signup via Student Learning Hub. -->
+              <div class="space-y-3 sm:space-y-4 p-4 rounded-xl border border-surface-200 bg-surface-50">
+                <p class="text-sm font-semibold text-surface-800">Calendar (optional)</p>
+                <p class="text-xs text-surface-500 leading-relaxed">
+                  <strong>Apple / iCloud:</strong> create an
+                  <a href="https://support.apple.com/en-us/HT204397" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">app-specific password</a>
+                  and enter it below (stored encrypted).
+                  <strong>Google Calendar:</strong> after you create your account, open <em>Student Learning</em> and click &quot;Connect Google Calendar&quot; (OAuth).
+                </p>
+                <div>
+                  <label for="icloud_apple_id" class="block text-surface-700 text-xs font-medium mb-1">iCloud Apple ID (email)</label>
+                  <input type="email" id="icloud_apple_id" name="icloud_apple_id" autocomplete="off"
+                    class="w-full px-3 py-2 sm:py-2.5 border border-surface-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="you@icloud.com" />
+                </div>
+                <div>
+                  <label for="icloud_app_password" class="block text-surface-700 text-xs font-medium mb-1">App-specific password</label>
+                  <input type="password" id="icloud_app_password" name="icloud_app_password" autocomplete="new-password"
+                    class="w-full px-3 py-2 sm:py-2.5 border border-surface-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="xxxx-xxxx-xxxx-xxxx" />
+                </div>
+              </div>
+
               <!-- Terms & Conditions (static – client-side only; backend does not use) -->
               <div class="space-y-3 sm:space-y-4">
                 <div class="flex items-start">

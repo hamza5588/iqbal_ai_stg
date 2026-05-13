@@ -142,11 +142,18 @@ class ClassSection(Base):
     display_name = Column(String(255), nullable=True)
     status = Column(String(32), nullable=False, default="active", server_default="active")
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    max_capacity = Column(Integer, nullable=True)
+    co_teacher_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     school = relationship("School", back_populates="class_sections")
     subject = relationship("SchoolSubject", back_populates="class_sections")
     roster_entries = relationship("RosterEntry", back_populates="class_section", cascade="all, delete-orphan")
     enrollments = relationship("ClassEnrollment", back_populates="class_section", cascade="all, delete-orphan")
+    waitlist_entries = relationship(
+        "EnrollmentWaitlist",
+        back_populates="class_section",
+        cascade="all, delete-orphan",
+    )
     lecture_links = relationship(
         "LectureClassSection",
         back_populates="class_section",

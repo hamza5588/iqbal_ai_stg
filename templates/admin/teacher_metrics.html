@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Metrics | Iqbal AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode:"class",
+      theme:{ extend:{
+        fontFamily:{ sans:["Inter","system-ui","sans-serif"], display:["Poppins","Inter","sans-serif"] },
+        colors:{
+          primary:{50:"#f0f9ff",100:"#e0f2fe",200:"#bae6fd",500:"#0ea5e9",600:"#0284c7",700:"#0369a1"},
+          accent: {50:"#fdf2f8",500:"#ec4899"},
+          success:{50:"#f0fdf4",500:"#22c55e",600:"#16a34a"},
+          error:  {50:"#fef2f2",500:"#ef4444"},
+          warning:{50:"#fffbeb",500:"#f59e0b"},
+        },
+      }},
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { -webkit-font-smoothing:antialiased; }
+    th { cursor:pointer; user-select:none; white-space:nowrap; }
+    th:hover { background:#f0f9ff; }
+    th .sort-icon { opacity:.4; font-size:.7rem; margin-left:4px; }
+    th.asc  .sort-icon:after { content:"▲"; opacity:1; }
+    th.desc .sort-icon:after { content:"▼"; opacity:1; }
+    th .sort-icon:after { content:"▼"; }
+    .score-bar { height:6px; border-radius:9999px; background:#e2e8f0; overflow:hidden; width:60px; display:inline-block; vertical-align:middle; }
+    .score-bar-fill { height:100%; border-radius:9999px; }
+    .badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:9999px; font-size:.7rem; font-weight:600; }
+    .badge-top { background:#d1fae5; color:#065f46; }
+    .badge-mid { background:#fef3c7; color:#92400e; }
+    .badge-low { background:#fee2e2; color:#991b1b; }
+    .toast { position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999; padding:.85rem 1.25rem; border-radius:.75rem; font-size:.875rem; font-weight:500; display:flex; align-items:center; gap:.5rem; box-shadow:0 8px 24px rgba(0,0,0,.15); transform:translateY(100px); opacity:0; transition:all .3s; }
+    .toast.show { transform:translateY(0); opacity:1; }
+    .toast.success { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+    .toast.error   { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    input:focus, select:focus { outline:none; border-color:#0ea5e9; box-shadow:0 0 0 3px rgba(14,165,233,.15); }
+    .skeleton { background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:200px 100%; animation:shimmer 1.5s infinite; border-radius:4px; }
+    @keyframes shimmer{0%{background-position:-200px 0}100%{background-position:calc(200px + 100%) 0}}
+    .benchmarking-card { background:linear-gradient(135deg,#f0f9ff,#fdf2f8); border:1px solid #bae6fd; border-radius:1rem; padding:1.25rem; }
+    .rank-bar { height:28px; border-radius:6px; background:linear-gradient(90deg,#0ea5e9,#ec4899); display:flex; align-items:center; padding-left:8px; font-size:.75rem; color:white; font-weight:600; min-width:32px; transition:width .4s ease; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+  <!-- Nav -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="px-4 h-14 flex items-center justify-between max-w-7xl mx-auto">
+      <div class="flex items-center gap-3">
+        <a href="/admin/" class="text-gray-500 hover:text-primary-600 transition-colors"><i class="fas fa-arrow-left"></i></a>
+        <h1 class="text-lg font-semibold text-gray-900 font-display">Teacher Metrics</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="exportCsv()"
+          class="px-3 py-2 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 font-medium">
+          <i class="fas fa-download mr-1.5"></i>Export CSV
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-7xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- KPI cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 mb-1">Total Teachers</p>
+        <p id="kpiTotal" class="text-2xl font-bold text-gray-900">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 mb-1">Avg Quality Score</p>
+        <p id="kpiAvgQuality" class="text-2xl font-bold text-primary-600">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 mb-1">Avg Student Score</p>
+        <p id="kpiAvgStudentScore" class="text-2xl font-bold text-success-600">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 mb-1">Active This Week</p>
+        <p id="kpiActive" class="text-2xl font-bold text-accent-500">—</p>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Subject</label>
+          <select id="filterSubj" onchange="applyFilters()" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+            <option value="">All subjects</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Grade</label>
+          <select id="filterGrade" onchange="applyFilters()" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+            <option value="">All grades</option>
+            <option>6</option><option>7</option><option>8</option><option>9</option>
+            <option>10</option><option>11</option><option>12</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Search</label>
+          <input id="filterSearch" type="text" placeholder="Teacher name…"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" oninput="applyFilters()" />
+        </div>
+        <div class="flex items-end">
+          <button onclick="resetFilters()" class="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 w-full">
+            <i class="fas fa-undo mr-1"></i>Reset
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs" onclick="sortBy('name')">
+                Teacher <span class="sort-icon"></span>
+              </th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs" onclick="sortBy('subject')">
+                Subject <span class="sort-icon"></span>
+              </th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs" onclick="sortBy('grade')">
+                Grade <span class="sort-icon"></span>
+              </th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs" onclick="sortBy('lecture_quality')">
+                Lecture Quality <span class="sort-icon"></span>
+              </th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs" onclick="sortBy('student_score')">
+                Avg Student Score <span class="sort-icon"></span>
+              </th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs" onclick="sortBy('lessons_count')">
+                Lessons <span class="sort-icon"></span>
+              </th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs" onclick="sortBy('response_rate')">
+                Response Rate <span class="sort-icon"></span>
+              </th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-700 text-xs">Tier</th>
+            </tr>
+          </thead>
+          <tbody id="metricsTableBody">
+            <!-- Skeleton -->
+            <tr><td colspan="8" class="px-4 py-4"><div class="skeleton h-5"></div></td></tr>
+            <tr><td colspan="8" class="px-4 py-4"><div class="skeleton h-5"></div></td></tr>
+            <tr><td colspan="8" class="px-4 py-4"><div class="skeleton h-5"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="tableEmpty" class="hidden text-center py-12 text-gray-400">
+        <i class="fas fa-filter text-3xl mb-2 opacity-30"></i>
+        <p>No teachers match the current filters.</p>
+      </div>
+    </div>
+
+    <!-- Benchmarking Section -->
+    <div class="benchmarking-card">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <i class="fas fa-chart-bar text-primary-500"></i> Anonymised Benchmarking
+        </h2>
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+          <span>Opt-out</span>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="benchmarkOptOut" class="sr-only peer" />
+            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
+          </label>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mb-4">
+        Relative ranking is anonymous. Names of other teachers are never shown.
+        This helps you understand where there are opportunities to grow.
+      </p>
+      <div id="benchmarkPanel" class="space-y-3">
+        <!-- populated by JS -->
+      </div>
+      <p id="benchmarkOptOutMsg" class="hidden text-sm text-gray-500 py-4 text-center">
+        Benchmarking is currently hidden. You can re-enable it using the toggle above.
+      </p>
+    </div>
+
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let allData   = [];
+    let filtered  = [];
+    let sortField = "name";
+    let sortDir   = "asc";
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadMetrics();
+      document.getElementById("benchmarkOptOut").addEventListener("change", toggleBenchmark);
+    });
+
+    async function loadMetrics() {
+      try {
+        const res = await fetch("/api/admin/teacher-metrics", { credentials:"same-origin" });
+        if (!res.ok) throw new Error();
+        const d = await res.json();
+        allData = d.teachers || [];
+        populateSubjectFilter();
+        applyFilters();
+        updateKPIs();
+        renderBenchmarking();
+      } catch (_) {
+        allData = getDemoData();
+        populateSubjectFilter();
+        applyFilters();
+        updateKPIs();
+        renderBenchmarking();
+      }
+    }
+
+    function populateSubjectFilter() {
+      const subjects = [...new Set(allData.map(t=>t.subject||"").filter(Boolean))];
+      const sel = document.getElementById("filterSubj");
+      subjects.forEach(s => { const o=document.createElement("option"); o.value=s; o.textContent=s; sel.appendChild(o); });
+    }
+
+    function updateKPIs() {
+      document.getElementById("kpiTotal").textContent = allData.length;
+      const avgQ = allData.length ? Math.round(allData.reduce((s,t)=>s+(t.lecture_quality||0),0)/allData.length) : 0;
+      document.getElementById("kpiAvgQuality").textContent = avgQ + "%";
+      const avgS = allData.length ? Math.round(allData.reduce((s,t)=>s+(t.student_score||0),0)/allData.length) : 0;
+      document.getElementById("kpiAvgStudentScore").textContent = avgS + "%";
+      const active = allData.filter(t=>t.active_this_week).length;
+      document.getElementById("kpiActive").textContent = active;
+    }
+
+    function applyFilters() {
+      const subj  = document.getElementById("filterSubj").value;
+      const grade = document.getElementById("filterGrade").value;
+      const q     = document.getElementById("filterSearch").value.toLowerCase();
+
+      filtered = allData.filter(t => {
+        if (subj  && t.subject !== subj) return false;
+        if (grade && t.grade   !== grade) return false;
+        if (q && !(`${t.first_name} ${t.last_name}`.toLowerCase().includes(q))) return false;
+        return true;
+      });
+
+      applySortAndRender();
+    }
+
+    function resetFilters() {
+      document.getElementById("filterSubj").value  = "";
+      document.getElementById("filterGrade").value = "";
+      document.getElementById("filterSearch").value = "";
+      applyFilters();
+    }
+
+    function sortBy(field) {
+      const ths = document.querySelectorAll("th");
+      ths.forEach(th => { th.classList.remove("asc","desc"); });
+      if (sortField === field) sortDir = sortDir==="asc" ? "desc" : "asc";
+      else { sortField=field; sortDir="asc"; }
+
+      const th = [...ths].find(t=>t.onclick?.toString().includes(`'${field}'`));
+      if (th) th.classList.add(sortDir);
+      applySortAndRender();
+    }
+
+    function applySortAndRender() {
+      const dir = sortDir==="asc" ? 1 : -1;
+      filtered.sort((a,b) => {
+        const av = a[sortField]||"", bv = b[sortField]||"";
+        if (sortField==="name") return dir*(`${a.first_name} ${a.last_name}`).localeCompare(`${b.first_name} ${b.last_name}`);
+        return typeof av==="number" ? dir*(av-bv) : dir*String(av).localeCompare(String(bv));
+      });
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("metricsTableBody");
+      const empty = document.getElementById("tableEmpty");
+
+      if (!filtered.length) {
+        tbody.innerHTML = "";
+        empty.classList.remove("hidden");
+        return;
+      }
+      empty.classList.add("hidden");
+
+      tbody.innerHTML = filtered.map(t => {
+        const q  = t.lecture_quality  || 0;
+        const ss = t.student_score    || 0;
+        const rr = t.response_rate    || 0;
+        const tier = q>=75&&ss>=70 ? "top" : q>=50&&ss>=50 ? "mid" : "low";
+        const tierLabel = { top:"Top Performer", mid:"Growing", low:"Needs Support" }[tier];
+        const tierClass = { top:"badge-top", mid:"badge-mid", low:"badge-low" }[tier];
+        const barColor  = { top:"#22c55e", mid:"#f59e0b", low:"#ef4444" }[tier];
+
+        return `
+          <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  ${((t.first_name||"?")[0]+(t.last_name||"?")[0]).toUpperCase()}
+                </div>
+                <div>
+                  <p class="font-medium text-gray-900 text-sm">${escHtml(t.first_name)} ${escHtml(t.last_name)}</p>
+                  <p class="text-xs text-gray-400">${escHtml(t.city||"")}${t.province?", "+escHtml(t.province):""}</p>
+                </div>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-700">${escHtml(t.subject||"—")}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${escHtml(t.grade||"—")}</td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                <div class="score-bar"><div class="score-bar-fill" style="width:${q}%;background:${barColor}"></div></div>
+                <span class="text-xs font-medium text-gray-700">${q}%</span>
+              </div>
+            </td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                <div class="score-bar"><div class="score-bar-fill" style="width:${ss}%;background:#0ea5e9"></div></div>
+                <span class="text-xs font-medium text-gray-700">${ss}%</span>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-sm text-center text-gray-700">${t.lessons_count||0}</td>
+            <td class="px-4 py-3 text-sm text-center text-gray-700">${rr}%</td>
+            <td class="px-4 py-3"><span class="badge ${tierClass}">${tierLabel}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    // -----------------------------------------------------------------------
+    // Benchmarking (anonymised)
+    // -----------------------------------------------------------------------
+    function renderBenchmarking() {
+      const panel = document.getElementById("benchmarkPanel");
+      if (!allData.length) { panel.innerHTML = `<p class="text-sm text-gray-400">No data yet.</p>`; return; }
+
+      const dims = [
+        { key:"lecture_quality",  label:"Lecture Quality",    color:"#0ea5e9" },
+        { key:"student_score",    label:"Student Outcomes",   color:"#22c55e" },
+        { key:"response_rate",    label:"Response Rate",      color:"#f59e0b" },
+        { key:"lessons_count",    label:"Lesson Productivity",color:"#ec4899", max:50 },
+      ];
+
+      const selfIdx = 0; // In a real system this would be the current user's position
+      const avg = {};
+      dims.forEach(d => { avg[d.key] = Math.round(allData.reduce((s,t)=>s+(t[d.key]||0),0)/allData.length); });
+
+      panel.innerHTML = `
+        <p class="text-xs text-gray-500 mb-2"><strong>Your scores</strong> vs platform average (% of peers above / below you)</p>
+        ${dims.map(d => {
+          const self = allData[selfIdx]?.[d.key] || 0;
+          const max  = d.max || 100;
+          const pct  = Math.min(100, Math.round((self/max)*100));
+          const avgPct = Math.min(100, Math.round((avg[d.key]/max)*100));
+          const above = Math.round(allData.filter(t=>(t[d.key]||0)<self).length/allData.length*100);
+          return `
+            <div>
+              <div class="flex items-center justify-between text-xs mb-1">
+                <span class="font-medium text-gray-700">${d.label}</span>
+                <span class="text-gray-400">You're above <strong class="text-gray-700">${above}%</strong> of peers</span>
+              </div>
+              <div class="relative h-7 bg-gray-100 rounded-lg overflow-hidden">
+                <div class="rank-bar" style="width:${pct}%;background:${d.color}">${self}${d.max?"":'%'}</div>
+                <div class="absolute top-0 bottom-0 border-l-2 border-dashed border-gray-400 flex items-center" style="left:${avgPct}%">
+                  <span class="absolute left-1 text-xs text-gray-400 whitespace-nowrap">avg</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("")}
+        <p class="text-xs text-gray-400 mt-2 italic">Other teachers' names and exact scores are never shown.</p>
+      `;
+    }
+
+    function toggleBenchmark() {
+      const optOut = document.getElementById("benchmarkOptOut").checked;
+      document.getElementById("benchmarkPanel").classList.toggle("hidden", optOut);
+      document.getElementById("benchmarkOptOutMsg").classList.toggle("hidden", !optOut);
+    }
+
+    // -----------------------------------------------------------------------
+    // CSV Export
+    // -----------------------------------------------------------------------
+    function exportCsv() {
+      if (!filtered.length) { showToast("No data to export.", "error"); return; }
+      const headers = ["Name","Subject","Grade","Lecture Quality %","Avg Student Score %","Lessons","Response Rate %","Tier"];
+      const rows = filtered.map(t => {
+        const q  = t.lecture_quality||0, ss=t.student_score||0;
+        const tier = q>=75&&ss>=70?"Top Performer":q>=50&&ss>=50?"Growing":"Needs Support";
+        return [
+          `${t.first_name} ${t.last_name}`, t.subject||"", t.grade||"",
+          q, ss, t.lessons_count||0, t.response_rate||0, tier,
+        ];
+      });
+      const csv = [headers, ...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], {type:"text/csv"});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a"); a.href=url; a.download="teacher_metrics.csv"; a.click();
+      URL.revokeObjectURL(url);
+      showToast("Exported successfully.", "success");
+    }
+
+    // -----------------------------------------------------------------------
+    // Demo data
+    // -----------------------------------------------------------------------
+    function getDemoData() {
+      return [
+        { id:1, first_name:"Sara",   last_name:"Ahmed",    subject:"Mathematics", grade:"10", lecture_quality:82, student_score:75, lessons_count:24, response_rate:91, active_this_week:true, city:"Lahore",    province:"Punjab" },
+        { id:2, first_name:"Ali",    last_name:"Raza",     subject:"Physics",     grade:"11", lecture_quality:67, student_score:60, lessons_count:15, response_rate:78, active_this_week:true, city:"Karachi",   province:"Sindh"  },
+        { id:3, first_name:"Ayesha", last_name:"Khan",     subject:"Chemistry",   grade:"12", lecture_quality:91, student_score:88, lessons_count:32, response_rate:95, active_this_week:true, city:"Islamabad", province:"ICT"    },
+        { id:4, first_name:"Omar",   last_name:"Sheikh",   subject:"Computer Science", grade:"9", lecture_quality:55, student_score:50, lessons_count:8, response_rate:62, active_this_week:false, city:"Peshawar", province:"KPK"   },
+        { id:5, first_name:"Fatima", last_name:"Malik",    subject:"English",     grade:"8",  lecture_quality:73, student_score:70, lessons_count:19, response_rate:84, active_this_week:true, city:"Multan",    province:"Punjab" },
+        { id:6, first_name:"Hassan", last_name:"Siddiqui", subject:"Mathematics", grade:"12", lecture_quality:88, student_score:82, lessons_count:28, response_rate:90, active_this_week:true, city:"Hyderabad", province:"Sindh"  },
+      ];
+    }
+
+    function escHtml(s) { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function showToast(msg, type="success") {
+      const t=document.getElementById("toast");
+      t.className=`toast ${type}`;
+      t.innerHTML=`<i class="fas fa-${type==="success"?"check-circle":"exclamation-circle"}"></i> ${msg}`;
+      t.classList.add("show");
+      setTimeout(()=>t.classList.remove("show"),3500);
+    }
+  </script>
+</body>
+</html>

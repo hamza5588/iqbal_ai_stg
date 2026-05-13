@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Platform Management | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#f0f9ff', 100:'#e0f2fe', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1', 800:'#075985' },
+            accent: { 500:'#ec4899', 600:'#db2777' }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .sidebar-item { transition: all .2s; }
+    .sidebar-item:hover { background: linear-gradient(90deg, rgba(14,165,233,.1) 0%, transparent 100%); }
+    .sidebar-item.active { background: linear-gradient(90deg, rgba(14,165,233,.18) 0%, transparent 100%); border-left: 3px solid #0ea5e9; color: #0369a1; font-weight: 600; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    input, select, textarea { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed top-4 right-4 z-50 min-w-[300px] max-w-sm bg-white rounded-xl shadow-xl border-l-4 p-4 flex items-start gap-3 transition-all">
+  <i id="toast-icon" class="fas fa-info-circle text-lg mt-0.5"></i>
+  <div class="flex-1">
+    <p id="toast-msg" class="text-sm font-medium text-gray-800"></p>
+  </div>
+  <button onclick="hideToast()" class="text-gray-400 hover:text-gray-600 ml-2"><i class="fas fa-times text-xs"></i></button>
+</div>
+
+<!-- Modal backdrop -->
+<div id="modal-backdrop" class="hidden fixed inset-0 bg-black/50 z-40" onclick="closeModal()"></div>
+
+<!-- Modals -->
+<div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="modal-title" class="text-lg font-bold text-gray-900"></h3>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Top Nav -->
+<nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+  <div class="px-6 flex items-center justify-between h-14">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+        <i class="fas fa-shield-alt text-white text-xs"></i>
+      </div>
+      <span class="font-bold text-gray-900 font-display">Platform Management</span>
+      <span class="text-gray-300 mx-2">|</span>
+      <span class="text-sm text-gray-500">Iqbal AI Admin</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/admin/dashboard" class="text-sm text-gray-500 hover:text-primary-600 transition-colors"><i class="fas fa-arrow-left mr-1"></i>Admin Dashboard</a>
+      <a href="/auth/logout" class="bg-red-500 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-red-600 transition-colors"><i class="fas fa-sign-out-alt mr-1"></i>Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="flex h-[calc(100vh-56px)]">
+
+  <!-- Sidebar -->
+  <aside class="w-60 bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+    <p class="px-4 pt-4 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Management</p>
+    <nav class="p-3 space-y-0.5">
+      <button onclick="switchTab('users')" id="tab-btn-users" class="sidebar-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-user-plus w-4 text-primary-500"></i>User Admin
+      </button>
+      <button onclick="switchTab('personalities')" id="tab-btn-personalities" class="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-robot w-4 text-purple-500"></i>AI Personalities
+      </button>
+      <button onclick="switchTab('subjects')" id="tab-btn-subjects" class="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-book-open w-4 text-green-500"></i>Platform Subjects
+      </button>
+      <button onclick="switchTab('library')" id="tab-btn-library" class="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-photo-film w-4 text-orange-500"></i>Content Library
+      </button>
+      <button onclick="switchTab('syllabus')" id="tab-btn-syllabus" class="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-sitemap w-4 text-teal-500"></i>Syllabus Engine
+      </button>
+      <button onclick="switchTab('archival')" id="tab-btn-archival" class="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-archive w-4 text-yellow-600"></i>Archival & Rollover
+      </button>
+      <button onclick="switchTab('notifications')" id="tab-btn-notifications" class="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-bell w-4 text-pink-500"></i>Broadcast Notifications
+      </button>
+      <button onclick="switchTab('auditlog')" id="tab-btn-auditlog" class="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700">
+        <i class="fas fa-list-check w-4 text-gray-500"></i>Audit Log
+      </button>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 overflow-y-auto custom-scrollbar p-6">
+
+    <!-- ============ USER ADMIN ============ -->
+    <div id="tab-users" class="tab-panel active">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">User Administration</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Invite, suspend and reactivate platform users</p>
+        </div>
+        <button onclick="openInviteModal()" class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+          <i class="fas fa-user-plus mr-2"></i>Invite User
+        </button>
+      </div>
+
+      <!-- Search + Filter -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[180px]">
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Search</label>
+          <input id="user-search" type="text" placeholder="Username or email…" oninput="loadUsers()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Role</label>
+          <select id="user-role-filter" onchange="loadUsers()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+            <option value="">All roles</option>
+            <option value="platform_admin">Platform Admin</option>
+            <option value="district_admin">District Admin</option>
+            <option value="school_admin">School Admin</option>
+            <option value="principal">Principal</option>
+            <option value="coordinator">Coordinator</option>
+            <option value="teacher">Teacher</option>
+            <option value="student">Student</option>
+            <option value="parent">Parent</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Status</label>
+          <select id="user-status-filter" onchange="loadUsers()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-100">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody" class="bg-white divide-y divide-gray-100">
+              <tr><td colspan="4" class="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ AI PERSONALITIES ============ -->
+    <div id="tab-personalities" class="tab-panel">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">AI Teaching Personalities</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Define how Iqbal AI presents itself to students</p>
+        </div>
+        <button onclick="openPersonalityModal()" class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+          <i class="fas fa-plus mr-2"></i>New Personality
+        </button>
+      </div>
+      <div id="personalities-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="col-span-full text-center py-10 text-gray-400 text-sm">Loading…</div>
+      </div>
+    </div>
+
+    <!-- ============ PLATFORM SUBJECTS ============ -->
+    <div id="tab-subjects" class="tab-panel">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">Platform Subjects</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Subject catalog used across all schools</p>
+        </div>
+        <button onclick="openSubjectModal()" class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+          <i class="fas fa-plus mr-2"></i>Add Subject
+        </button>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-100">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Name</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Short Code</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="subjects-tbody" class="divide-y divide-gray-100">
+            <tr><td colspan="3" class="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============ CONTENT LIBRARY ============ -->
+    <div id="tab-library" class="tab-panel">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">Content Library</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Upload and manage curriculum books</p>
+        </div>
+        <button onclick="openUploadModal()" class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+          <i class="fas fa-upload mr-2"></i>Upload Book
+        </button>
+      </div>
+      <!-- Filters -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Subject</label>
+          <select id="lib-subject-filter" onchange="loadBooks()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+            <option value="">All subjects</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Grade</label>
+          <select id="lib-grade-filter" onchange="loadBooks()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+            <option value="">All grades</option>
+            <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+            <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+            <option>11</option><option>12</option>
+          </select>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-100">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Grade</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Subject</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="books-tbody" class="divide-y divide-gray-100">
+            <tr><td colspan="4" class="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============ SYLLABUS ENGINE ============ -->
+    <div id="tab-syllabus" class="tab-panel">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">Syllabus Engine</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Manage exam types, chapters, topics and sub-topics</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Exam Types -->
+        <div class="bg-white rounded-xl border border-gray-200">
+          <div class="flex items-center justify-between p-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-800 text-sm">Exam Types</h3>
+            <button onclick="openExamTypeModal()" class="text-primary-600 hover:text-primary-700 text-xs font-medium"><i class="fas fa-plus mr-1"></i>Add</button>
+          </div>
+          <ul id="exam-types-list" class="divide-y divide-gray-100 max-h-64 overflow-y-auto custom-scrollbar">
+            <li class="px-4 py-3 text-sm text-gray-400">Loading…</li>
+          </ul>
+        </div>
+        <!-- Chapters -->
+        <div class="bg-white rounded-xl border border-gray-200">
+          <div class="flex items-center justify-between p-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-800 text-sm">Chapters</h3>
+            <button onclick="openChapterModal()" class="text-primary-600 hover:text-primary-700 text-xs font-medium"><i class="fas fa-plus mr-1"></i>Add</button>
+          </div>
+          <ul id="chapters-list" class="divide-y divide-gray-100 max-h-64 overflow-y-auto custom-scrollbar">
+            <li class="px-4 py-3 text-sm text-gray-400">Select an exam type →</li>
+          </ul>
+        </div>
+        <!-- Topics -->
+        <div class="bg-white rounded-xl border border-gray-200">
+          <div class="flex items-center justify-between p-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-800 text-sm">Topics</h3>
+            <button onclick="openTopicModal()" class="text-primary-600 hover:text-primary-700 text-xs font-medium"><i class="fas fa-plus mr-1"></i>Add</button>
+          </div>
+          <ul id="topics-list" class="divide-y divide-gray-100 max-h-64 overflow-y-auto custom-scrollbar">
+            <li class="px-4 py-3 text-sm text-gray-400">Select a chapter →</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ARCHIVAL ============ -->
+    <div id="tab-archival" class="tab-panel">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold text-gray-900">Archival & Year Rollover</h2>
+        <p class="text-sm text-gray-500 mt-0.5">Archive class sections, roll over academic years, archive schools</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Archive Section -->
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 class="font-semibold text-gray-800 mb-1">Archive Class Section</h3>
+          <p class="text-xs text-gray-500 mb-4">Mark a class section as archived. This notifies all enrolled students and the teacher.</p>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs font-medium text-gray-600 mb-1 block">Class Section ID</label>
+              <input id="archive-section-id" type="number" placeholder="e.g. 42" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+            </div>
+            <button onclick="archiveSection()" class="w-full bg-yellow-500 text-white py-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition-colors">
+              <i class="fas fa-archive mr-2"></i>Archive Section
+            </button>
+          </div>
+        </div>
+        <!-- Year Rollover -->
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 class="font-semibold text-gray-800 mb-1">Academic Year Rollover</h3>
+          <p class="text-xs text-gray-500 mb-4">Clone all active sections to a new academic year (no enrollments copied).</p>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs font-medium text-gray-600 mb-1 block">School ID</label>
+              <input id="rollover-school-id" type="number" placeholder="e.g. 1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+            </div>
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="text-xs font-medium text-gray-600 mb-1 block">From Year</label>
+                <input id="rollover-from" type="text" placeholder="2025" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+              </div>
+              <div class="flex-1">
+                <label class="text-xs font-medium text-gray-600 mb-1 block">To Year</label>
+                <input id="rollover-to" type="text" placeholder="2026" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+              </div>
+            </div>
+            <button onclick="rolloverYear()" class="w-full bg-teal-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors">
+              <i class="fas fa-rotate mr-2"></i>Run Rollover
+            </button>
+          </div>
+        </div>
+        <!-- Archive School -->
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 class="font-semibold text-gray-800 mb-1">Archive Entire School</h3>
+          <p class="text-xs text-gray-500 mb-4">Cascades to all active class sections within the school.</p>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs font-medium text-gray-600 mb-1 block">School ID</label>
+              <input id="archive-school-id" type="number" placeholder="e.g. 1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+            </div>
+            <button onclick="archiveSchool()" class="w-full bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
+              <i class="fas fa-building-circle-xmark mr-2"></i>Archive School
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ BROADCAST NOTIFICATIONS ============ -->
+    <div id="tab-notifications" class="tab-panel">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold text-gray-900">Broadcast Notifications</h2>
+        <p class="text-sm text-gray-500 mt-0.5">Send a notification to one or many users</p>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+          <div>
+            <label class="text-xs font-medium text-gray-600 mb-1 block">Recipient User ID <span class="text-gray-400">(single user)</span></label>
+            <input id="notif-recipient" type="number" placeholder="Leave blank to use role broadcast" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-gray-600 mb-1 block">Type</label>
+            <select id="notif-type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+              <option value="info">Info</option>
+              <option value="success">Success</option>
+              <option value="warning">Warning</option>
+              <option value="alert">Alert</option>
+              <option value="system">System</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-gray-600 mb-1 block">Title</label>
+            <input id="notif-title" type="text" placeholder="Notification title" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-gray-600 mb-1 block">Message</label>
+            <textarea id="notif-message" rows="4" placeholder="Notification body…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"></textarea>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-gray-600 mb-1 block">Action URL <span class="text-gray-400">(optional)</span></label>
+            <input id="notif-link" type="text" placeholder="/notifications" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+          </div>
+          <button onclick="sendNotification()" class="w-full bg-primary-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-primary-700 transition-colors">
+            <i class="fas fa-paper-plane mr-2"></i>Send Notification
+          </button>
+        </div>
+        <div class="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-5 flex flex-col items-center justify-center text-center">
+          <i class="fas fa-bell text-gray-300 text-4xl mb-3"></i>
+          <p class="text-sm text-gray-500">Enter a recipient ID to send to one user.<br>Leave blank to broadcast (feature coming soon).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ AUDIT LOG ============ -->
+    <div id="tab-auditlog" class="tab-panel">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold text-gray-900">Admin Creation Audit Log</h2>
+        <p class="text-sm text-gray-500 mt-0.5">Every user creation event by admin-family roles</p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-100">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Created</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">By</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">User ID</th>
+              <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Role Assigned</th>
+            </tr>
+          </thead>
+          <tbody id="auditlog-tbody" class="divide-y divide-gray-100">
+            <tr><td colspan="4" class="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function showToast(msg, type='info') {
+  const t = document.getElementById('toast');
+  const colors = { success:'border-green-500 text-green-600', error:'border-red-500 text-red-600', warning:'border-yellow-500 text-yellow-600', info:'border-blue-500 text-blue-600' };
+  const icons  = { success:'fa-check-circle', error:'fa-exclamation-circle', warning:'fa-exclamation-triangle', info:'fa-info-circle' };
+  document.getElementById('toast-msg').textContent = msg;
+  document.getElementById('toast-icon').className = `fas ${icons[type]||icons.info} text-lg mt-0.5 ${colors[type]||colors.info}`.split(' ')[0] + ` fas ${icons[type]||icons.info}`;
+  t.className = t.className.replace(/border-\w+-500/,'') + ' ' + (colors[type]||colors.info).split(' ')[0];
+  t.classList.remove('hidden');
+  setTimeout(hideToast, 4000);
+}
+function hideToast() { document.getElementById('toast').classList.add('hidden'); }
+
+function badge(text, color='gray') {
+  const map = { green:'bg-green-100 text-green-800', red:'bg-red-100 text-red-800', yellow:'bg-yellow-100 text-yellow-700', blue:'bg-blue-100 text-blue-800', purple:'bg-purple-100 text-purple-800', gray:'bg-gray-100 text-gray-700' };
+  return `<span class="px-2 py-0.5 text-xs font-semibold rounded-full ${map[color]||map.gray}">${text}</span>`;
+}
+
+function roleColor(role) {
+  const m = { platform_admin:'blue', district_admin:'blue', school_admin:'purple', principal:'purple', coordinator:'teal', teacher:'green', student:'gray', parent:'yellow' };
+  return m[role]||'gray';
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(path, { credentials:'same-origin', headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest',...(opts.headers||{})}, ...opts });
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = {raw:text}; }
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// ─── Tab switching ─────────────────────────────────────────────────────────────
+const LOADERS = { users: loadUsers, personalities: loadPersonalities, subjects: loadSubjects, library: loadBooks, syllabus: loadExamTypes, auditlog: loadAuditLog };
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('[id^=tab-btn-]').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('tab-btn-' + tab).classList.add('active');
+  if (LOADERS[tab]) LOADERS[tab]();
+}
+
+// ─── Modal helpers ─────────────────────────────────────────────────────────────
+function openModal(title, html) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal').classList.remove('hidden');
+  document.getElementById('modal-backdrop').classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  document.getElementById('modal-backdrop').classList.add('hidden');
+}
+
+// ─── USERS ─────────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const search = document.getElementById('user-search')?.value || '';
+  const role   = document.getElementById('user-role-filter')?.value || '';
+  const status = document.getElementById('user-status-filter')?.value || '';
+  const tbody  = document.getElementById('users-tbody');
+  tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>`;
+  try {
+    const params = new URLSearchParams({ role, search, per_page: 50 });
+    const data = await api(`/admin/users?${params}`);
+    const users = data.users || [];
+    if (!users.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-400 text-sm">No users found</td></tr>`; return; }
+    tbody.innerHTML = users.filter(u => {
+      if (status === 'active' && !u.is_active) return false;
+      if (status === 'suspended' && u.is_active !== false) return false;
+      return true;
+    }).map(u => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-5 py-3">
+          <div class="text-sm font-medium text-gray-900">${u.username}</div>
+          <div class="text-xs text-gray-400">${u.useremail || u.email || ''}</div>
+        </td>
+        <td class="px-5 py-3">${badge(u.role, roleColor(u.role))}</td>
+        <td class="px-5 py-3">${u.is_active === false ? badge('Suspended','red') : badge('Active','green')}</td>
+        <td class="px-5 py-3 flex gap-2 flex-wrap">
+          ${u.is_active === false
+            ? `<button onclick="reactivateUser(${u.id})" class="text-green-600 hover:text-green-800 text-xs font-medium"><i class="fas fa-circle-play mr-1"></i>Reactivate</button>`
+            : `<button onclick="suspendUser(${u.id})" class="text-red-500 hover:text-red-700 text-xs font-medium"><i class="fas fa-ban mr-1"></i>Suspend</button>`}
+        </td>
+      </tr>`).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-red-400 text-sm">${e.message}</td></tr>`; }
+}
+
+async function suspendUser(id) {
+  if (!confirm('Suspend this user? They will be notified.')) return;
+  try {
+    await api(`/api/admin/users/${id}/suspend`, { method:'POST' });
+    showToast('User suspended', 'success');
+    loadUsers();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function reactivateUser(id) {
+  try {
+    await api(`/api/admin/users/${id}/reactivate`, { method:'POST' });
+    showToast('User reactivated', 'success');
+    loadUsers();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function openInviteModal() {
+  openModal('Invite New User', `
+    <form onsubmit="submitInvite(event)" class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Username</label>
+        <input name="username" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Email</label>
+        <input name="email" type="email" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Role</label>
+        <select name="role" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+          <option value="school_admin">School Admin</option>
+          <option value="district_admin">District Admin</option>
+          <option value="principal">Principal</option>
+          <option value="coordinator">Coordinator</option>
+          <option value="teacher">Teacher</option>
+        </select></div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">Send Invite</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+async function submitInvite(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await api('/api/admin/users/invite', { method:'POST', body: JSON.stringify(Object.fromEntries(fd)) });
+    showToast('Invite sent!', 'success');
+    closeModal();
+    loadUsers();
+  } catch(err) { showToast(err.message, 'error'); }
+}
+
+// ─── PERSONALITIES ────────────────────────────────────────────────────────────
+const personalityIcons = { friendly_tutor:'fa-smile', strict_examiner:'fa-graduation-cap', storytelling_guide:'fa-book-open', exam_coach:'fa-bullseye', socratic_mentor:'fa-question-circle', concise_explainer:'fa-bolt' };
+const personalityColors = ['from-blue-400 to-blue-600','from-purple-400 to-purple-600','from-pink-400 to-pink-600','from-teal-400 to-teal-600','from-orange-400 to-orange-600','from-green-400 to-green-600'];
+
+async function loadPersonalities() {
+  const grid = document.getElementById('personalities-grid');
+  try {
+    const data = await api('/admin/personalities');
+    const personalities = data.personalities || [];
+    if (!personalities.length) { grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-400 text-sm">No personalities yet. Create one!</div>`; return; }
+    grid.innerHTML = personalities.map((p, i) => `
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+        <div class="h-2 bg-gradient-to-r ${personalityColors[i%personalityColors.length]}"></div>
+        <div class="p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br ${personalityColors[i%personalityColors.length]} flex items-center justify-center">
+              <i class="fas ${personalityIcons[p.slug]||'fa-robot'} text-white text-sm"></i>
+            </div>
+            <div class="flex gap-1">
+              ${p.is_default ? badge('Default','blue') : ''}
+              ${!p.is_active ? badge('Inactive','gray') : ''}
+            </div>
+          </div>
+          <h4 class="font-semibold text-gray-900 text-sm mb-1">${p.name}</h4>
+          <p class="text-xs text-gray-500 mb-3 line-clamp-2">${p.description||'—'}</p>
+          <div class="flex gap-2">
+            <button onclick="editPersonality(${p.id},'${p.name}','${(p.description||'').replace(/'/g,"\\'")}','${(p.system_prompt_modifier||'').replace(/'/g,"\\'")}',${p.is_default})" class="flex-1 text-xs text-primary-600 border border-primary-200 rounded-lg py-1.5 hover:bg-primary-50 transition-colors font-medium">
+              <i class="fas fa-edit mr-1"></i>Edit
+            </button>
+            <button onclick="deletePersonality(${p.id})" class="text-xs text-red-400 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch(e) { grid.innerHTML = `<div class="col-span-full text-center py-10 text-red-400 text-sm">${e.message}</div>`; }
+}
+
+function openPersonalityModal(id=null, name='', desc='', prompt='', isDefault=false) {
+  openModal(id ? 'Edit Personality' : 'New Personality', `
+    <form onsubmit="submitPersonality(event,${id})" class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Name</label>
+        <input name="name" value="${name}" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Slug <span class="text-gray-400">(unique identifier)</span></label>
+        <input name="slug" value="" placeholder="e.g. friendly_tutor" ${id?'disabled':''} class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50" /></div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Description</label>
+        <textarea name="description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none">${desc}</textarea></div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">System Prompt Modifier</label>
+        <textarea name="system_prompt_modifier" rows="3" placeholder="Injected into AI system prompt…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none">${prompt}</textarea></div>
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        <input type="checkbox" name="is_default" ${isDefault?'checked':''} class="rounded text-primary-600" />
+        Set as default personality
+      </label>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">${id?'Save Changes':'Create'}</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+function editPersonality(id, name, desc, prompt, isDefault) { openPersonalityModal(id, name, desc, prompt, isDefault); }
+
+async function submitPersonality(e, id) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = { name: fd.get('name'), description: fd.get('description'), system_prompt_modifier: fd.get('system_prompt_modifier'), is_default: fd.get('is_default') === 'on' };
+  if (!id) body.slug = fd.get('slug');
+  try {
+    await api(id ? `/admin/personalities/${id}` : '/admin/personalities', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) });
+    showToast(id ? 'Personality updated' : 'Personality created', 'success');
+    closeModal(); loadPersonalities();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deletePersonality(id) {
+  if (!confirm('Delete this personality?')) return;
+  try { await api(`/admin/personalities/${id}`, { method:'DELETE' }); showToast('Deleted', 'success'); loadPersonalities(); }
+  catch(e) { showToast(e.message, 'error'); }
+}
+
+// ─── SUBJECTS ─────────────────────────────────────────────────────────────────
+async function loadSubjects() {
+  const tbody = document.getElementById('subjects-tbody');
+  try {
+    const data = await api('/api/admin/platform/subjects');
+    const subjects = data.subjects || [];
+    window._subjects = subjects; // cache for dropdowns
+    if (!subjects.length) { tbody.innerHTML = `<tr><td colspan="3" class="text-center py-8 text-gray-400 text-sm">No subjects yet.</td></tr>`; return; }
+    tbody.innerHTML = subjects.map(s => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-5 py-3 text-sm font-medium text-gray-900">${s.name}</td>
+        <td class="px-5 py-3"><code class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">${s.short_code}</code></td>
+        <td class="px-5 py-3">
+          <button onclick="deleteSubject(${s.id})" class="text-red-400 hover:text-red-600 text-xs"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="3" class="text-center py-6 text-red-400 text-sm">${e.message}</td></tr>`; }
+}
+
+function openSubjectModal() {
+  openModal('Add Platform Subject', `
+    <form onsubmit="submitSubject(event)" class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Subject Name</label>
+        <input name="name" required placeholder="e.g. Mathematics" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Short Code</label>
+        <input name="short_code" required placeholder="e.g. MATH" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">Create</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+async function submitSubject(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await api('/api/admin/platform/subjects', { method:'POST', body: JSON.stringify({ name: fd.get('name'), short_code: fd.get('short_code') }) });
+    showToast('Subject created', 'success'); closeModal(); loadSubjects();
+  } catch(ex) { showToast(ex.message, 'error'); }
+}
+
+async function deleteSubject(id) {
+  if (!confirm('Delete this subject?')) return;
+  try { await api(`/api/admin/platform/subjects/${id}`, { method:'DELETE' }); showToast('Deleted','success'); loadSubjects(); }
+  catch(e) { showToast(e.message,'error'); }
+}
+
+// ─── BOOKS ────────────────────────────────────────────────────────────────────
+async function loadBooks() {
+  const tbody = document.getElementById('books-tbody');
+  const subject = document.getElementById('lib-subject-filter')?.value || '';
+  const grade   = document.getElementById('lib-grade-filter')?.value || '';
+  const params  = new URLSearchParams();
+  if (subject) params.set('platform_subject_id', subject);
+  if (grade)   params.set('grade', grade);
+  try {
+    const data = await api('/api/content/books?' + params);
+    const books = data.books || [];
+    if (!books.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-400 text-sm">No books found.</td></tr>`; return; }
+    tbody.innerHTML = books.map(b => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-5 py-3 text-sm font-medium text-gray-900">${b.title}</td>
+        <td class="px-5 py-3">${badge('Grade ' + (b.grade||'—'), 'blue')}</td>
+        <td class="px-5 py-3 text-sm text-gray-500">${b.platform_subject_name || b.platform_subject_id || '—'}</td>
+        <td class="px-5 py-3">
+          <button onclick="deleteBook(${b.id})" class="text-red-400 hover:text-red-600 text-xs"><i class="fas fa-trash mr-1"></i>Remove</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-red-400 text-sm">${e.message}</td></tr>`; }
+}
+
+function openUploadModal() {
+  const subjectOptions = (window._subjects || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  openModal('Upload Content Book', `
+    <form onsubmit="submitBook(event)" class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Title</label>
+        <input name="title" required placeholder="e.g. Grade 8 Mathematics" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div class="flex gap-3">
+        <div class="flex-1"><label class="text-xs font-medium text-gray-600 mb-1 block">Grade</label>
+          <input name="grade" required placeholder="8" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+        <div class="flex-1"><label class="text-xs font-medium text-gray-600 mb-1 block">Subject</label>
+          <select name="platform_subject_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+            <option value="">None</option>${subjectOptions}
+          </select></div>
+      </div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">File</label>
+        <input name="file" type="file" accept=".pdf,.doc,.docx" required class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" /></div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">Upload</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+async function submitBook(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const file = fd.get('file');
+  // Upload via multipart
+  const uploadFd = new FormData();
+  uploadFd.append('title', fd.get('title'));
+  uploadFd.append('grade', fd.get('grade'));
+  if (fd.get('platform_subject_id')) uploadFd.append('platform_subject_id', fd.get('platform_subject_id'));
+  uploadFd.append('file', file);
+  try {
+    const res = await fetch('/api/content/books', { method:'POST', credentials:'same-origin', body: uploadFd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    showToast('Book uploaded!', 'success'); closeModal(); loadBooks();
+  } catch(ex) { showToast(ex.message, 'error'); }
+}
+
+async function deleteBook(id) {
+  if (!confirm('Remove this book?')) return;
+  try { await api(`/api/content/books/${id}`, { method:'DELETE' }); showToast('Removed','success'); loadBooks(); }
+  catch(e) { showToast(e.message,'error'); }
+}
+
+// ─── SYLLABUS ─────────────────────────────────────────────────────────────────
+let _selectedExamType = null, _selectedChapter = null;
+
+async function loadExamTypes() {
+  const list = document.getElementById('exam-types-list');
+  try {
+    const data = await api('/api/syllabus/exam-types');
+    const types = data.exam_types || [];
+    if (!types.length) { list.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400">No exam types yet.</li>`; return; }
+    list.innerHTML = types.map(t => `
+      <li class="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 ${_selectedExamType===t.id?'bg-primary-50':''}" onclick="selectExamType(${t.id})">
+        <span class="text-sm font-medium text-gray-800">${t.name}</span>
+        <code class="text-xs text-gray-400">${t.code}</code>
+      </li>`).join('');
+  } catch(e) { list.innerHTML = `<li class="px-4 py-3 text-sm text-red-400">${e.message}</li>`; }
+}
+
+function selectExamType(id) { _selectedExamType = id; loadExamTypes(); loadChapters(); }
+
+async function loadChapters() {
+  if (!_selectedExamType) return;
+  const list = document.getElementById('chapters-list');
+  list.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</li>`;
+  try {
+    const data = await api(`/api/syllabus/chapters?exam_type_id=${_selectedExamType}`);
+    const chapters = data.chapters || [];
+    if (!chapters.length) { list.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400">No chapters yet.</li>`; return; }
+    list.innerHTML = chapters.map(c => `
+      <li class="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 ${_selectedChapter===c.id?'bg-primary-50':''}" onclick="selectChapter(${c.id})">
+        <span class="text-sm text-gray-800"><span class="text-gray-400 mr-1">Ch.${c.chapter_number}</span>${c.title}</span>
+      </li>`).join('');
+  } catch(e) { list.innerHTML = `<li class="px-4 py-3 text-sm text-red-400">${e.message}</li>`; }
+}
+
+function selectChapter(id) { _selectedChapter = id; loadChapters(); loadTopics(); }
+
+async function loadTopics() {
+  if (!_selectedChapter) return;
+  const list = document.getElementById('topics-list');
+  list.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</li>`;
+  try {
+    const data = await api(`/api/syllabus/topics?chapter_id=${_selectedChapter}`);
+    const topics = data.topics || [];
+    if (!topics.length) { list.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400">No topics yet.</li>`; return; }
+    list.innerHTML = topics.map(t => `
+      <li class="px-4 py-3 hover:bg-gray-50">
+        <div class="text-sm font-medium text-gray-800">${t.title}</div>
+        ${(t.sub_topics||[]).map(st=>`<div class="text-xs text-gray-400 ml-3 mt-0.5">↳ ${st.title}</div>`).join('')}
+      </li>`).join('');
+  } catch(e) { list.innerHTML = `<li class="px-4 py-3 text-sm text-red-400">${e.message}</li>`; }
+}
+
+function openExamTypeModal() {
+  openModal('Add Exam Type', `
+    <form onsubmit="submitExamType(event)" class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Name</label>
+        <input name="name" required placeholder="e.g. Board Exam" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Code</label>
+        <input name="code" required placeholder="e.g. BOARD_2025" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">Create</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+async function submitExamType(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await api('/api/syllabus/exam-types', { method:'POST', body: JSON.stringify({ name: fd.get('name'), code: fd.get('code') }) });
+    showToast('Exam type created','success'); closeModal(); loadExamTypes();
+  } catch(ex) { showToast(ex.message,'error'); }
+}
+
+function openChapterModal() {
+  if (!_selectedExamType) { showToast('Select an exam type first','warning'); return; }
+  const subjectOptions = (window._subjects||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  openModal('Add Chapter', `
+    <form onsubmit="submitChapter(event)" class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Title</label>
+        <input name="title" required placeholder="e.g. Chapter 1: Algebra" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div class="flex gap-3">
+        <div class="flex-1"><label class="text-xs font-medium text-gray-600 mb-1 block">Chapter #</label>
+          <input name="chapter_number" type="number" required placeholder="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+        <div class="flex-1"><label class="text-xs font-medium text-gray-600 mb-1 block">Grade</label>
+          <input name="grade" required placeholder="8" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      </div>
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Subject</label>
+        <select name="platform_subject_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
+          <option value="">None</option>${subjectOptions}</select></div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">Create</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+async function submitChapter(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await api('/api/syllabus/chapters', { method:'POST', body: JSON.stringify({ exam_type_id: _selectedExamType, platform_subject_id: fd.get('platform_subject_id')||null, title: fd.get('title'), chapter_number: parseInt(fd.get('chapter_number')), grade: fd.get('grade') }) });
+    showToast('Chapter created','success'); closeModal(); loadChapters();
+  } catch(ex) { showToast(ex.message,'error'); }
+}
+
+function openTopicModal() {
+  if (!_selectedChapter) { showToast('Select a chapter first','warning'); return; }
+  openModal('Add Topic', `
+    <form onsubmit="submitTopic(event)" class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-600 mb-1 block">Topic Title</label>
+        <input name="title" required placeholder="e.g. Linear Equations" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-primary-700">Create</button>
+        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>`);
+}
+
+async function submitTopic(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await api('/api/syllabus/topics', { method:'POST', body: JSON.stringify({ chapter_id: _selectedChapter, title: fd.get('title') }) });
+    showToast('Topic created','success'); closeModal(); loadTopics();
+  } catch(ex) { showToast(ex.message,'error'); }
+}
+
+// ─── ARCHIVAL ─────────────────────────────────────────────────────────────────
+async function archiveSection() {
+  const id = document.getElementById('archive-section-id').value;
+  if (!id) { showToast('Enter a section ID','warning'); return; }
+  if (!confirm(`Archive class section #${id}?`)) return;
+  try {
+    const r = await api(`/api/admin/archival/class-sections/${id}/archive`, { method:'POST' });
+    showToast('Section archived','success');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function rolloverYear() {
+  const school = document.getElementById('rollover-school-id').value;
+  const from   = document.getElementById('rollover-from').value;
+  const to     = document.getElementById('rollover-to').value;
+  if (!school || !from || !to) { showToast('Fill all fields','warning'); return; }
+  if (!confirm(`Roll over school #${school} from ${from} → ${to}?`)) return;
+  try {
+    const r = await api(`/api/admin/archival/schools/${school}/rollover`, { method:'POST', body: JSON.stringify({ from_year: from, to_year: to }) });
+    showToast(`Rollover done. ${r.sections_created||0} section(s) created.`, 'success');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function archiveSchool() {
+  const id = document.getElementById('archive-school-id').value;
+  if (!id) { showToast('Enter a school ID','warning'); return; }
+  if (!confirm(`Archive ENTIRE school #${id}? This will cascade to all active sections.`)) return;
+  try {
+    await api(`/api/admin/archival/schools/${id}/archive`, { method:'POST' });
+    showToast('School archived','success');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+async function sendNotification() {
+  const recipient = document.getElementById('notif-recipient').value;
+  const title     = document.getElementById('notif-title').value.trim();
+  const message   = document.getElementById('notif-message').value.trim();
+  const type      = document.getElementById('notif-type').value;
+  const link      = document.getElementById('notif-link').value.trim();
+  if (!title || !message) { showToast('Title and message are required','warning'); return; }
+  if (!recipient) { showToast('Enter a recipient user ID','warning'); return; }
+  try {
+    await api('/api/notifications/admin/send', { method:'POST', body: JSON.stringify({ recipient_id: parseInt(recipient), title, message, type, action_link: link||null }) });
+    showToast('Notification sent!','success');
+    document.getElementById('notif-title').value='';
+    document.getElementById('notif-message').value='';
+    document.getElementById('notif-recipient').value='';
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+async function loadAuditLog() {
+  const tbody = document.getElementById('auditlog-tbody');
+  try {
+    const data = await api('/api/admin/users/creation-log');
+    const logs = data.logs || [];
+    if (!logs.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-400 text-sm">No creation events yet.</td></tr>`; return; }
+    tbody.innerHTML = logs.map(l => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-5 py-3 text-xs text-gray-500">${l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
+        <td class="px-5 py-3 text-sm text-gray-700">ID #${l.creator_id}</td>
+        <td class="px-5 py-3 text-sm text-gray-700">ID #${l.created_user_id}</td>
+        <td class="px-5 py-3">${badge(l.role_assigned, roleColor(l.role_assigned))}</td>
+      </tr>`).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-red-400 text-sm">${e.message}</td></tr>`; }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadUsers();
+  loadSubjects(); // preload subjects for dropdowns
+});
+</script>
+</body>
+</html>

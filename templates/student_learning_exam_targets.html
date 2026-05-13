@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exam targets | Iqbal AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-lg mx-auto px-4 py-8">
+    <a href="/student-learning" class="text-sm text-sky-600 hover:underline">← Learning hub</a>
+    <h1 class="text-2xl font-bold text-slate-800 mt-2">Exam targets</h1>
+    <div class="mt-4 bg-white p-4 rounded-xl border border-slate-200 space-y-2">
+      <label class="block text-sm">Exam date
+        <input id="exam_date" type="date" class="mt-1 w-full border rounded-lg px-3 py-2" />
+      </label>
+      <label class="block text-sm">Label (optional)
+        <input id="label" class="mt-1 w-full border rounded-lg px-3 py-2" placeholder="e.g. Final AP Calc" />
+      </label>
+      <label class="block text-sm">Exam type id (optional)
+        <input id="exam_type_id" type="number" class="mt-1 w-full border rounded-lg px-3 py-2" />
+      </label>
+      <button id="add" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm">Add target</button>
+      <p id="msg" class="text-sm text-slate-600"></p>
+    </div>
+    <pre id="list" class="mt-4 text-xs bg-slate-900 text-green-400 p-3 rounded-lg overflow-auto max-h-48"></pre>
+  </div>
+  <script>
+    function load() {
+      fetch("/api/phase3/exam-targets", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(d => { document.getElementById("list").textContent = JSON.stringify(d.items || [], null, 2); });
+    }
+    document.getElementById("add").onclick = () => {
+      const exam_date = document.getElementById("exam_date").value;
+      if (!exam_date) { document.getElementById("msg").textContent = "Pick a date."; return; }
+      const payload = { exam_date, label: document.getElementById("label").value || null };
+      const et = document.getElementById("exam_type_id").value;
+      if (et) payload.exam_type_id = parseInt(et, 10);
+      fetch("/api/phase3/exam-target", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(r => {
+          document.getElementById("msg").textContent = r.ok ? "Saved." : "Failed.";
+          load();
+        });
+    };
+    load();
+  </script>
+</body>
+</html>

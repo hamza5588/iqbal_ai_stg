@@ -24,8 +24,10 @@ from app.services.school.serializers import (
     school_to_dict,
 )
 from app.services.student_registration_service import register_student_with_roll_number
+from app.services.phase3.teacher_roster_service import list_teacher_students
 from app.utils.auth import login_required
 from app.utils.db import get_db
+from app.utils.decorators import teacher_required
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +306,16 @@ def get_teacher_sections():
         d["subject_name"] = subj.name
         out.append(d)
     return jsonify({"sections": out})
+
+
+@api_teacher_bp.route("/students", methods=["GET"])
+@login_required
+@teacher_required
+def get_teacher_students():
+    """Students enrolled in this teacher's active class sections (for mini-lecture targeting)."""
+    db = get_db()
+    students = list_teacher_students(db, teacher_user_id=_uid())
+    return jsonify({"students": students})
 
 
 # --- Quizzes ---
