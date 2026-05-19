@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from flask_mail import Message
 from app import mail
 from app.config import Config
+from app.utils.openai_realtime import create_realtime_client_secret
 from app.utils.routes import get_default_route_by_role
 import os
 
@@ -375,12 +376,7 @@ def get_session():
                 'error': 'OpenAI API key not found in session'
             }), 401
 
-        url = "https://api.openai.com/v1/realtime/sessions"
-        
-        payload = {
-            "model": "gpt-4o-realtime-preview-2024-12-17",
-            "modalities": ["audio", "text"],
-            "instructions": """Mr. Potter's Teaching Philosophy and Methodology
+        potter_instructions = """Mr. Potter's Teaching Philosophy and Methodology
 
        
 
@@ -477,21 +473,19 @@ def get_session():
 
 
 """
-        }
-        
-        headers = {
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
-        }
 
-        response = requests.post(url, json=payload, headers=headers)
-        
+        response = create_realtime_client_secret(
+            api_key,
+            potter_instructions,
+            model=os.getenv("OPENAI_POTTER_REALTIME_MODEL", "gpt-realtime"),
+        )
+
         if response.status_code != 200:
             return jsonify({
                 'error': 'Failed to get session token'
             }), response.status_code
 
-        return response.json()
+        return jsonify(response.json())
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Network error getting session token: {str(e)}")

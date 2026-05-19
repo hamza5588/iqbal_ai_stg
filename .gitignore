@@ -74,3 +74,7 @@ verify_ingestion_pipeline_status.py
 docker-compose.yml
 new_ngnix.conf
 nginx.conf
+
+# Piper TTS model weights (large binaries — download locally, do not commit)
+piper_models/
+*.onnx

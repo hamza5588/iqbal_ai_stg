@@ -45,7 +45,6 @@ certifi
 oauthlib
 requests
 requests-oauthlib
-requests-toolbelt
 charset-normalizer
 idna
 pycparser
