@@ -421,7 +421,7 @@ def _sanitize_user_facing_response(text: Any) -> str:
         return text
 
     normalized = text.replace("\r\n", "\n").strip()
-    # Groq / Qwen: strip leaked reasoning tags (see also rag_routes._strip_internal_reasoning_from_response)
+    # Groq / GPT-OSS: strip leaked reasoning tags (see also rag_routes._strip_internal_reasoning_from_response)
     normalized = re.sub(
         r"<think>[\s\S]*?</think>|<redacted_thinking>[\s\S]*?</redacted_thinking>",
         "",

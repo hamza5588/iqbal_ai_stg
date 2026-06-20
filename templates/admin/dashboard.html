@@ -264,7 +264,7 @@
                         <span class="font-mono text-xs">/api/rag/chat</span> (PDF upload conversations). User-level RAG
                         prompts from the API are still prepended above this block when set.</p>
                     <div id="rag-prompt-limits-box" class="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 hidden">
-                        <p class="font-semibold text-slate-800 mb-2">Token budget (Groq / Qwen-class models)</p>
+                        <p class="font-semibold text-slate-800 mb-2">Token budget (Groq / GPT-OSS models)</p>
                         <p class="text-xs text-slate-600 mb-2" id="rag-prompt-limits-doc"></p>
                         <ul class="list-disc list-inside text-xs space-y-1" id="rag-prompt-limits-list"></ul>
                         <p class="text-xs text-slate-600 mt-2">Each field below is capped so the rest of the context can hold
@@ -498,8 +498,8 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">Default Model</label>
                             <select id="groq-default-model"
                                 class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#05B0FC] focus:border-transparent">
-                                <optgroup label="Qwen Models">
-                                    <option value="qwen/qwen3-32b">qwen3-32b</option>
+                                <optgroup label="GPT-OSS Models">
+                                    <option value="openai/gpt-oss-120b">GPT-OSS 120B</option>
                                 </optgroup>
                                 <optgroup label="Llama Models">
                                     <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile</option>
@@ -515,7 +515,7 @@
                             <input type="checkbox" id="groq-allow-user-selection"
                                 class="mr-2 text-[#05B0FC] focus:ring-[#05B0FC]">
                             <label for="groq-allow-user-selection" class="text-sm text-gray-700">
-                                Allow users to select their own Groq model (Qwen or Llama)
+                                Allow users to select their own Groq model (GPT-OSS or Llama)
                             </label>
                         </div>
                     </div>

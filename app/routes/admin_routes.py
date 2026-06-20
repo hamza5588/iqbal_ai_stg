@@ -49,7 +49,7 @@ def get_rag_admin_system_prompt_limits() -> dict:
     """
     Token budget for admin-edited RAG system bodies.
 
-    Groq model docs (e.g. qwen/qwen3-32b) list CONTEXT WINDOW 131,072 — same model limit on free vs paid;
+    Groq model docs (e.g. openai/gpt-oss-120b) list CONTEXT WINDOW 131,072 — same model limit on free vs paid;
     paid tiers mainly increase throughput (TPM/RPM), not context size.
 
     We reserve space for: completion, multi-turn history + tool messages, user custom RAG prompt (~300 words),
@@ -70,8 +70,8 @@ def get_rag_admin_system_prompt_limits() -> dict:
         "reserved_misc_tokens": reserved_misc,
         "max_system_body_tokens_estimated": max_body,
         "doc_note": (
-            "Based on Groq model context limits (e.g. Qwen 3 32B: 131,072 tokens — "
-            "see console.groq.com/docs/model/qwen3-32b). Paid plan increases rate limits, not context window."
+            "Based on Groq model context limits (e.g. GPT-OSS 120B: 131,072 tokens — "
+            "see console.groq.com/docs/model/openai-gpt-oss-120b). Paid plan increases rate limits, not context window."
         ),
     }
 
@@ -939,13 +939,13 @@ def get_llm_settings():
             'groq_api_key_masked': mask_api_key(settings_dict.get('groq_api_key', '')) if settings_dict.get('groq_api_key') else None,
             'openai_api_key_set': bool(settings_dict.get('openai_api_key')),
             'openai_api_key_masked': mask_api_key(settings_dict.get('openai_api_key', '')) if settings_dict.get('openai_api_key') else None,
-            'groq_default_model': settings_dict.get('groq_default_model', 'llama-3.3-70b-versatile'),
+            'groq_default_model': settings_dict.get('groq_default_model', 'openai/gpt-oss-120b'),
             'openai_default_model': settings_dict.get('openai_default_model', 'gpt-4o-mini'),
             'groq_allow_user_model_selection': settings_dict.get('groq_allow_user_model_selection', 'false').lower() == 'true',
             'openai_allow_user_model_selection': settings_dict.get('openai_allow_user_model_selection', 'false').lower() == 'true',
             'available_models': {
                 'groq': {
-                    'qwen': GROQ_MODELS['qwen'],
+                    'gpt_oss': GROQ_MODELS['gpt_oss'],
                     'llama': GROQ_MODELS['llama']
                 },
                 'openai': OPENAI_MODELS
@@ -1083,7 +1083,7 @@ def get_user_model():
         # Get available models for current provider
         if active_provider == 'GROQ':
             available_models = {
-                'qwen': GROQ_MODELS['qwen'],
+                'gpt_oss': GROQ_MODELS['gpt_oss'],
                 'llama': GROQ_MODELS['llama']
             }
         else:
