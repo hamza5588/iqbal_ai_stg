@@ -200,6 +200,34 @@
                         </div>
                     </form>
                 </div>
+
+                <!-- Stress Test Mode Toggle -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-2">Stress Test Mode</h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        When <strong>ON</strong>, the server applies strict <code>max_tokens</code> caps to every LLM
+                        call during student Q&amp;A to reduce Groq token consumption during load tests:<br>
+                        &bull; <strong>YES/NO classifier</strong> — 10 tokens &nbsp;
+                        &bull; <strong>Student/RAG answer</strong> — 800 tokens &nbsp;
+                        &bull; <strong>Canonicalize question</strong> — 100 tokens<br>
+                        <span class="text-red-600 font-medium">Turn OFF before returning to normal production traffic.</span>
+                    </p>
+                    <div class="flex items-center gap-4">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="stress-test-toggle" class="sr-only peer"
+                                onchange="setStressTestMode(this.checked)">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2
+                                        peer-focus:ring-[#05B0FC] rounded-full peer
+                                        peer-checked:after:translate-x-full peer-checked:after:border-white
+                                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                        after:bg-white after:border-gray-300 after:border after:rounded-full
+                                        after:h-5 after:w-5 after:transition-all
+                                        peer-checked:bg-[#05B0FC]"></div>
+                        </label>
+                        <span id="stress-test-label" class="text-sm font-medium text-gray-700">Loading…</span>
+                        <span id="stress-test-saving" class="text-xs text-gray-400 hidden">Saving…</span>
+                    </div>
+                </div>
             </div>
 
             <!-- TESTS TAB -->
@@ -568,7 +596,59 @@
             loadMessageCSVs();
             loadLessons();
             loadResults();
+            loadStressTestMode();
         });
+
+        // ---- Stress Test Mode helpers ----
+        async function loadStressTestMode() {
+            try {
+                const res = await fetch('/admin/stress-test-mode');
+                const data = await res.json();
+                const enabled = data.stress_test_mode === true;
+                document.getElementById('stress-test-toggle').checked = enabled;
+                updateStressTestLabel(enabled);
+            } catch (e) {
+                document.getElementById('stress-test-label').textContent = 'Failed to load';
+            }
+        }
+
+        async function setStressTestMode(enabled) {
+            const saving = document.getElementById('stress-test-saving');
+            const label = document.getElementById('stress-test-label');
+            saving.classList.remove('hidden');
+            label.textContent = 'Saving…';
+            try {
+                const res = await fetch('/admin/stress-test-mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    updateStressTestLabel(data.stress_test_mode);
+                } else {
+                    label.textContent = 'Error: ' + (data.error || 'unknown');
+                    // Revert toggle
+                    document.getElementById('stress-test-toggle').checked = !enabled;
+                }
+            } catch (e) {
+                label.textContent = 'Network error';
+                document.getElementById('stress-test-toggle').checked = !enabled;
+            } finally {
+                saving.classList.add('hidden');
+            }
+        }
+
+        function updateStressTestLabel(enabled) {
+            const label = document.getElementById('stress-test-label');
+            if (enabled) {
+                label.textContent = 'ON — max_tokens caps active';
+                label.className = 'text-sm font-medium text-green-700';
+            } else {
+                label.textContent = 'OFF — normal token limits';
+                label.className = 'text-sm font-medium text-gray-500';
+            }
+        }
 
         function updateEnvBadge(url) {
             const badge = document.getElementById('current-env-badge');

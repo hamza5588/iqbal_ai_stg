@@ -17,9 +17,11 @@ from app.utils.rag_service import (
     _get_stored_rag_system_template,
     _substitute_rag_system_placeholders,
 )
+from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
+from app.services.conversation_summary_service import ConversationSummaryService
 from app.tasks.ingest_tasks import ingest_pdf_task, extract_headings_task
 from langchain_core.messages import HumanMessage
 import logging
@@ -78,6 +80,19 @@ def _check_and_record_user_chat_rate(user_id):
         history.append(now)
         _user_chat_rate[user_id] = history
     return True, 0
+
+
+def _is_transient_db_connection_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    markers = (
+        "server closed the connection unexpectedly",
+        "consuming input failed",
+        "connection not open",
+        "connection reset by peer",
+        "ssl syserror: eof detected",
+        "terminating connection due to administrator command",
+    )
+    return any(marker in msg for marker in markers)
 
 
 def _get_ingest_tier(file_size_mb: float) -> dict:
@@ -953,6 +968,84 @@ def chat():
             except (TypeError, ValueError):
                 conversation_id = None
 
+        # ── Summary intent: intercept BEFORE thread/document validation ──────────
+        # This allows "summarize" to work even when no PDF has been uploaded yet.
+        if ConversationSummaryService.is_summary_intent(message, user_id=user_id):
+            from app.models.models import ConversationModel
+            conversation_model = ConversationModel(user_id)
+            db_conversation_id = None
+            if conversation_id:
+                conv = conversation_model.get_conversation_by_id(conversation_id)
+                if conv:
+                    db_conversation_id = conversation_id
+            if not db_conversation_id and provided_thread_id:
+                conv_match = re.search(r'user_\d+_conv_(\d+)', provided_thread_id)
+                if conv_match:
+                    candidate_id = int(conv_match.group(1))
+                    if conversation_model.get_conversation_by_id(candidate_id):
+                        db_conversation_id = candidate_id
+            if not db_conversation_id:
+                db_conversation_id = conversation_model.create_conversation(
+                    title=message[:50] if len(message) > 50 else message
+                )
+
+            # Keep summarize command in chat history, then persist summary response.
+            try:
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=message,
+                    role='user',
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to save summarize intent message for conversation %s",
+                    db_conversation_id,
+                    exc_info=True,
+                )
+
+            try:
+                summary_result = ConversationSummaryService.generate_and_persist_summary(
+                    conversation_id=db_conversation_id,
+                    user_id=user_id,
+                    force=True,
+                )
+                summary_text = summary_result.get("summary") or "No summary available yet."
+            except Exception as summary_err:
+                logger.error(
+                    "Summary generation failed for conversation %s: %s",
+                    db_conversation_id,
+                    summary_err,
+                    exc_info=True,
+                )
+                return jsonify({
+                    'error': 'Failed to generate summary.',
+                    'code': 'SUMMARY_FAILED',
+                }), 500
+
+            try:
+                conversation_model.save_message(
+                    conversation_id=db_conversation_id,
+                    message=summary_text,
+                    role='bot',
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to save summary response message for conversation %s",
+                    db_conversation_id,
+                    exc_info=True,
+                )
+
+            resp_thread_id = provided_thread_id or None
+            return jsonify({
+                'success': True,
+                'message': summary_text,
+                'thread_id': resp_thread_id,
+                'conversation_id': db_conversation_id,
+                'has_document': thread_has_document(resp_thread_id) if resp_thread_id else False,
+                'summary_generated': True,
+            })
+        # ── End summary intent early-exit ─────────────────────────────────────────
+
         if provided_thread_id:
             thread_id = str(provided_thread_id).strip()
         elif conversation_id is not None:
@@ -1015,6 +1108,8 @@ def chat():
                     'code': 'NO_DOCUMENT',
                     'thread_id': thread_id
                 }), 400
+
+        # Summary intent was already handled above (before thread validation).
 
         try:
             from app.utils.llm_gateway import update_llm_telemetry_context
@@ -1102,10 +1197,30 @@ def chat():
             except Exception:
                 pass
             # #endregion
-            state = chatbot.invoke(
-                {"messages": [human_message]},
-                config=config
-            )
+            try:
+                state = chatbot.invoke(
+                    {"messages": [human_message]},
+                    config=config
+                )
+            except Exception as invoke_err:
+                if not _is_transient_db_connection_error(invoke_err):
+                    raise
+                logger.warning(
+                    "RAG chat invoke hit transient DB connection error; resetting engine and retrying once. "
+                    "thread_id=%s user_id=%s err=%s",
+                    thread_id,
+                    user_id,
+                    invoke_err,
+                )
+                try:
+                    from app.utils.db import reset_db_engine
+                    reset_db_engine()
+                except Exception:
+                    logger.warning("Failed to reset DB engine before retry", exc_info=True)
+                state = chatbot.invoke(
+                    {"messages": [human_message]},
+                    config=config
+                )
             # #region agent log
             _msgs = state.get("messages", [])
             try:
@@ -1150,10 +1265,30 @@ def chat():
                     "and provide a final direct answer from the uploaded document. "
                     "If document evidence is not found, say that clearly."
                 )
-                recovery_state = chatbot.invoke(
-                    {"messages": [HumanMessage(content=recovery_prompt)]},
-                    config=config
-                )
+                try:
+                    recovery_state = chatbot.invoke(
+                        {"messages": [HumanMessage(content=recovery_prompt)]},
+                        config=config
+                    )
+                except Exception as recovery_err:
+                    if not _is_transient_db_connection_error(recovery_err):
+                        raise
+                    logger.warning(
+                        "RAG recovery invoke hit transient DB connection error; resetting engine and retrying once. "
+                        "thread_id=%s user_id=%s err=%s",
+                        thread_id,
+                        user_id,
+                        recovery_err,
+                    )
+                    try:
+                        from app.utils.db import reset_db_engine
+                        reset_db_engine()
+                    except Exception:
+                        logger.warning("Failed to reset DB engine before recovery retry", exc_info=True)
+                    recovery_state = chatbot.invoke(
+                        {"messages": [HumanMessage(content=recovery_prompt)]},
+                        config=config
+                    )
                 response_content = _extract_and_sanitize_response(recovery_state)
 
             # Last-resort fallback to avoid blank frontend messages.
@@ -1236,18 +1371,36 @@ def chat():
         finally:
             user_lock.release()
 
+    except GroqRateLimitError as rl_exc:
+        logger.warning(
+            "RAG chat: Groq rate limit for user %s — %s retry_after=%ds",
+            session.get('user_id'), rl_exc.info.kind, rl_exc.info.retry_after,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
+    except GroqBusyError as busy_exc:
+        logger.warning("RAG chat: Groq semaphore busy for user %s — %s", session.get('user_id'), busy_exc)
+        return jsonify({
+            'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+            'code': 'SERVICE_AT_CAPACITY',
+            'retry_after': 10,
+        }), 503
     except Exception as e:
         # #region agent log
         try:
             if enable_debug_file_logs:
                 os.makedirs(_log_dir, exist_ok=True)
                 with open(_log_path, 'a', encoding='utf-8') as _f:
-                    _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": str(e)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+                    _f.write(_json.dumps({"location": "rag_routes.py:chat:exception", "message": "chat exception", "data": {"error": type(e).__name__}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
         except Exception:
             pass
         # #endregion
-        logger.error(f"Error in RAG chat: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+        logger.error("Error in RAG chat: %s", e, exc_info=True)
+        # Do NOT leak raw provider error text to clients
+        return jsonify({'error': 'Failed to process chat. Please try again.', 'code': 'INTERNAL_ERROR'}), 500
 
 
 @bp.route('/ingest/cancel/<task_id>', methods=['POST'])

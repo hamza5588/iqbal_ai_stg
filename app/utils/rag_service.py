@@ -72,7 +72,10 @@ load_dotenv()
 # Bounded concurrency for Groq API calls (replaces global 3s serialization)
 # -------------------
 import time
+import random
 from threading import Lock, Semaphore
+from app.utils.groq_rate_limit import GroqBusyError
+
 
 def _groq_max_concurrent():
     """Max concurrent Groq requests. Env GROQ_MAX_CONCURRENT_REQUESTS (default 4)."""
@@ -86,52 +89,87 @@ def _groq_max_concurrent():
 class GroqRateLimiter:
     """
     Bounded-concurrency limiter for Groq API to avoid 429s without serializing all users.
-    Allows N concurrent requests (default 4); after 429s we apply short backoff before acquire.
+
+    Improvements over the original:
+    - Jitter on backoff sleep (prevents thundering herd when many threads wake simultaneously).
+    - Requires N consecutive successes before resetting the 429 streak (avoids premature reset).
+    - Semaphore acquire has a configurable timeout; raises GroqBusyError when exceeded.
     """
     _instance = None
     _lock = Lock()
+
+    # Env-tunable knobs (read once at class level for performance)
+    _SEMAPHORE_ACQUIRE_TIMEOUT: float = float(os.getenv("GROQ_SEMAPHORE_TIMEOUT_SECONDS", "30"))
+    _SUCCESS_STREAK_TO_RESET: int = max(1, int(os.getenv("GROQ_SUCCESS_STREAK_TO_RESET", "3")))
 
     def __new__(cls):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super(GroqRateLimiter, cls).__new__(cls)
-                    cls._instance._semaphore = Semaphore(_groq_max_concurrent())
-                    cls._instance.consecutive_429_count = 0
+                    inst = super(GroqRateLimiter, cls).__new__(cls)
+                    inst._semaphore = Semaphore(_groq_max_concurrent())
+                    inst.consecutive_429_count = 0
+                    inst._success_streak = 0
+                    cls._instance = inst
         return cls._instance
 
-    def wait_if_needed(self):
-        """Acquire a slot for a Groq request; back off briefly if we've seen recent 429s."""
+    def wait_if_needed(self) -> None:
+        """
+        Back off if recent 429s have been recorded, then acquire a concurrency slot.
+        Raises GroqBusyError if the semaphore cannot be acquired within the timeout.
+        """
         if self.consecutive_429_count > 0:
             backoff = min(2.0 * self.consecutive_429_count, 10.0)
+            # Add ±25 % jitter to spread retries across threads
+            jitter = random.uniform(0.0, backoff * 0.25)
+            total_wait = backoff + jitter
             logger.warning(
-                "Rate limiter: backoff %.1fs before next Groq request (recent 429s: %s)",
-                backoff,
-                self.consecutive_429_count,
+                "Rate limiter: backoff %.1fs (jitter +%.1fs) before next Groq request "
+                "(consecutive 429s: %d)",
+                backoff, jitter, self.consecutive_429_count,
             )
-            time.sleep(backoff)
-        self._semaphore.acquire()
+            time.sleep(total_wait)
 
-    def record_429_error(self):
-        """Record a 429 error so next callers back off briefly."""
+        acquired = self._semaphore.acquire(blocking=True, timeout=self._SEMAPHORE_ACQUIRE_TIMEOUT)
+        if not acquired:
+            raise GroqBusyError(
+                f"Groq semaphore timed out after {self._SEMAPHORE_ACQUIRE_TIMEOUT:.0f}s — "
+                "system is temporarily at capacity."
+            )
+
+    def record_429_error(self) -> None:
+        """Record a 429 so subsequent callers apply backoff."""
         with self._lock:
             self.consecutive_429_count += 1
-            logger.warning(f"Recorded 429 error. Consecutive count: {self.consecutive_429_count}")
+            self._success_streak = 0
+            logger.warning("Recorded 429 error. Consecutive count: %d", self.consecutive_429_count)
 
-    def record_success(self):
-        """Release the slot and reset 429 count on success."""
+    def record_success(self) -> None:
+        """
+        Release the concurrency slot.
+        Resets the 429 streak only after N consecutive successes to avoid premature reset.
+        """
         self._semaphore.release()
         with self._lock:
-            if self.consecutive_429_count > 0:
-                logger.info("Resetting 429 error count after successful request")
-            self.consecutive_429_count = 0
+            self._success_streak += 1
+            if (
+                self.consecutive_429_count > 0
+                and self._success_streak >= self._SUCCESS_STREAK_TO_RESET
+            ):
+                logger.info(
+                    "Resetting 429 count after %d consecutive successes (was %d)",
+                    self._success_streak, self.consecutive_429_count,
+                )
+                self.consecutive_429_count = 0
+                self._success_streak = 0
 
-    def release_slot(self):
-        """Release the semaphore slot without recording success (use in finally after wait_if_needed)."""
+    def release_slot(self) -> None:
+        """Release the semaphore slot without recording success (call in exception handlers)."""
         try:
             self._semaphore.release()
         except ValueError:
             pass  # already released or never acquired
+
 
 groq_rate_limiter = GroqRateLimiter()
 
@@ -383,7 +421,7 @@ def _sanitize_user_facing_response(text: Any) -> str:
         return text
 
     normalized = text.replace("\r\n", "\n").strip()
-    # Groq / Qwen: strip leaked reasoning tags (see also rag_routes._strip_internal_reasoning_from_response)
+    # Groq / GPT-OSS: strip leaked reasoning tags (see also rag_routes._strip_internal_reasoning_from_response)
     normalized = re.sub(
         r"<think>[\s\S]*?</think>|<redacted_thinking>[\s\S]*?</redacted_thinking>",
         "",

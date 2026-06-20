@@ -192,7 +192,8 @@ class LessonModel:
                      focus_area: str, grade_level: str, content: str, file_name: str = None,
                      is_public: bool = True, parent_lesson_id: int = None, draft_content: str = None,
                      lesson_id: str = None, version_number: int = 1, parent_version_id: int = None,
-                     original_content: str = None, status: str = "finalized", rag_thread_id: str = None) -> int:
+                     original_content: str = None, status: str = "finalized", rag_thread_id: str = None,
+                     conversation_id: int = None) -> int:
         """Create a new lesson in the database"""
         try:
             logger.info(f"Saving lesson to database with title: '{title}'")
@@ -243,6 +244,7 @@ class LessonModel:
                         original_content=original_content,
                         status=status,
                         rag_thread_id=rag_thread_id,
+                        conversation_id=conversation_id,
                     )
                     db.add(lesson)
                     db.commit()

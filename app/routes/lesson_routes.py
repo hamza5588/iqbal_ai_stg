@@ -5,6 +5,7 @@ from app.services.lesson_service import LessonService
 from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 from app.utils.decorators import login_required, teacher_required, student_required
 from app.utils.db import get_db
+from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
 from sqlalchemy import func, or_, desc
@@ -15,6 +16,12 @@ import tempfile
 import threading
 import time
 import re
+from urllib.parse import urlparse
+
+try:
+    import redis
+except Exception:  # pragma: no cover - optional dependency fallback
+    redis = None
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +29,8 @@ _lesson_qa_user_locks = {}
 _lesson_qa_locks_lock = threading.Lock()
 _lesson_qa_user_rate = {}
 _lesson_qa_rate_lock = threading.Lock()
+_lesson_qa_redis_client = None
+_lesson_qa_redis_lock = threading.Lock()
 
 
 def _normalize_faq_question_text(question: str) -> str:
@@ -94,12 +103,90 @@ def _get_lesson_qa_user_lock(user_id: int) -> threading.Lock:
         return _lesson_qa_user_locks[user_id]
 
 
+def _get_lesson_qa_redis_client():
+    """
+    Best-effort Redis client for cross-worker lesson QA rate limiting.
+    Falls back to in-memory limiter if Redis is unavailable.
+    """
+    global _lesson_qa_redis_client
+    if _lesson_qa_redis_client is not None:
+        return _lesson_qa_redis_client
+    if redis is None:
+        return None
+
+    with _lesson_qa_redis_lock:
+        if _lesson_qa_redis_client is not None:
+            return _lesson_qa_redis_client
+        redis_url = (
+            os.getenv("LESSON_QA_RATE_LIMIT_REDIS_URL")
+            or os.getenv("CELERY_BROKER_URL")
+            or "redis://localhost:6379/0"
+        )
+        try:
+            parsed = urlparse(redis_url)
+            if parsed.scheme.startswith("redis"):
+                _lesson_qa_redis_client = redis.Redis.from_url(
+                    redis_url,
+                    socket_connect_timeout=1.0,
+                    socket_timeout=1.0,
+                    health_check_interval=30,
+                )
+                _lesson_qa_redis_client.ping()
+                logger.info("Lesson QA rate limiter: using Redis backend at %s", redis_url)
+            else:
+                logger.warning(
+                    "Lesson QA rate limiter: non-redis broker URL '%s'; falling back to in-memory.",
+                    redis_url,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Lesson QA rate limiter: Redis unavailable (%s); using in-memory fallback.",
+                exc,
+            )
+            _lesson_qa_redis_client = None
+    return _lesson_qa_redis_client
+
+
 def _check_and_record_lesson_qa_rate(user_id: int) -> tuple[bool, int]:
     """Per-user burst throttling for lesson Q&A requests."""
     max_requests = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_COUNT", "6"))
     window_seconds = int(os.getenv("LESSON_QA_USER_RATE_LIMIT_WINDOW_SECONDS", "10"))
     now = time.time()
 
+    # Preferred path: Redis sorted-set sliding window (shared across workers).
+    redis_client = _get_lesson_qa_redis_client()
+    if redis_client is not None:
+        key = f"lesson_qa_rate:user:{int(user_id)}"
+        cutoff = now - window_seconds
+        now_ms = int(now * 1000)
+        unique_member = f"{now_ms}:{threading.get_ident()}"
+        try:
+            pipe = redis_client.pipeline()
+            pipe.zremrangebyscore(key, 0, cutoff)
+            pipe.zcard(key)
+            _, current_count = pipe.execute()
+            if int(current_count or 0) >= max_requests:
+                oldest_entries = redis_client.zrange(key, 0, 0, withscores=True)
+                if oldest_entries:
+                    oldest_score = float(oldest_entries[0][1])
+                    retry_after = max(1, int(window_seconds - (now - oldest_score)))
+                else:
+                    retry_after = window_seconds
+                return False, retry_after
+
+            pipe = redis_client.pipeline()
+            pipe.zadd(key, {unique_member: now})
+            pipe.expire(key, max(window_seconds + 2, 2 * window_seconds))
+            pipe.execute()
+            return True, 0
+        except Exception as exc:
+            # Safe fallback under Redis outages.
+            logger.warning(
+                "Lesson QA rate limiter Redis error (%s); falling back to in-memory for this request.",
+                exc,
+            )
+
+    # Fallback path: in-memory per-process limiter.
     with _lesson_qa_rate_lock:
         history = _lesson_qa_user_rate.get(user_id, [])
         cutoff = now - window_seconds
@@ -410,7 +497,14 @@ def create_lesson_simple():
         grade_level = data.get('grade_level', 'General')
         summary = data.get('summary', '') or data.get('additional_notes', '')
         rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip() or None
-        
+        raw_conv_id = data.get('conversation_id')
+        lesson_conversation_id = None
+        if raw_conv_id is not None:
+            try:
+                lesson_conversation_id = int(raw_conv_id)
+            except (TypeError, ValueError):
+                lesson_conversation_id = None
+
         if not title:
             return jsonify({'error': 'Title is required'}), 400
         
@@ -432,7 +526,8 @@ def create_lesson_simple():
             focus_area=focus_area,
             is_public=True,
             status='finalized',
-            rag_thread_id=rag_thread_id
+            rag_thread_id=rag_thread_id,
+            conversation_id=lesson_conversation_id,
         )
         
         if not lesson_id:
@@ -1177,6 +1272,29 @@ def ask_lesson_question():
             'source': 'lesson_or_rag_graph',
             'confidence': 0.9,
         })
+    except GroqRateLimitError as rl_exc:
+        logger.warning(
+            "ask_lesson_question: Groq rate limit hit for user %s — %s retry_after=%ds",
+            user_id, rl_exc.info.kind, rl_exc.info.retry_after,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
+    except GroqBusyError as busy_exc:
+        logger.warning("ask_lesson_question: Groq semaphore busy for user %s — %s", user_id, busy_exc)
+        return jsonify({
+            'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+            'code': 'SERVICE_AT_CAPACITY',
+            'retry_after': 10,
+        }), 503
+    except Exception as exc:
+        logger.exception("ask_lesson_question: unexpected error for user %s lesson %s", user_id, lesson_id)
+        return jsonify({
+            'error': 'Failed to generate an answer. Please try again.',
+            'code': 'INTERNAL_ERROR',
+        }), 500
     finally:
         user_lock.release()
 
@@ -1974,9 +2092,26 @@ def interactive_chat(lesson_id):
             'lesson_id': lesson_id
         })
 
+    except GroqRateLimitError as rl_exc:
+        logger.warning(
+            "interactive_chat: Groq rate limit for lesson %s — %s retry_after=%ds",
+            lesson_id, rl_exc.info.kind, rl_exc.info.retry_after,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
+    except GroqBusyError as busy_exc:
+        logger.warning("interactive_chat: Groq semaphore busy for lesson %s — %s", lesson_id, busy_exc)
+        return jsonify({
+            'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+            'code': 'SERVICE_AT_CAPACITY',
+            'retry_after': 10,
+        }), 503
     except Exception as e:
-        logger.error(f"Error in interactive chat: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to process chat: {str(e)}'}), 500
+        logger.error("Error in interactive chat lesson %s: %s", lesson_id, e, exc_info=True)
+        return jsonify({'error': 'Failed to process chat. Please try again.', 'code': 'INTERNAL_ERROR'}), 500
 
 @bp.route('/lesson/<int:lesson_id>/interactive_chat_stream', methods=['POST'])
 @teacher_required
@@ -2052,12 +2187,33 @@ def interactive_chat_stream(lesson_id):
                         
                         break
                 
-            except Exception as e:
-                logger.error(f"Error in streaming chat: {str(e)}", exc_info=True)
+            except GroqRateLimitError as _rl:
+                logger.warning("Streaming chat rate limit for lesson %s: %s", lesson_id, _rl.info.kind)
                 error_data = json.dumps({
-                    'error': str(e),
+                    'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+                    'code': _rl.info.kind,
+                    'retry_after': _rl.info.retry_after,
                     'is_complete': True,
-                    'complete_lesson': 'no'
+                    'complete_lesson': 'no',
+                })
+                yield f"data: {error_data}\n\n"
+            except GroqBusyError:
+                logger.warning("Streaming chat: Groq semaphore busy for lesson %s", lesson_id)
+                error_data = json.dumps({
+                    'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+                    'code': 'SERVICE_AT_CAPACITY',
+                    'retry_after': 10,
+                    'is_complete': True,
+                    'complete_lesson': 'no',
+                })
+                yield f"data: {error_data}\n\n"
+            except Exception as e:
+                logger.error("Error in streaming chat lesson %s: %s", lesson_id, e, exc_info=True)
+                error_data = json.dumps({
+                    'error': 'Failed to generate response. Please try again.',
+                    'code': 'INTERNAL_ERROR',
+                    'is_complete': True,
+                    'complete_lesson': 'no',
                 })
                 yield f"data: {error_data}\n\n"
         
@@ -2072,9 +2228,16 @@ def interactive_chat_stream(lesson_id):
             }
         )
 
+    except GroqRateLimitError as rl_exc:
+        logger.warning("Streaming chat route rate limit for lesson %s: %s", lesson_id, rl_exc.info.kind)
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
     except Exception as e:
-        logger.error(f"Error in streaming chat route: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to start streaming: {str(e)}'}), 500
+        logger.error("Error in streaming chat route lesson %s: %s", lesson_id, e, exc_info=True)
+        return jsonify({'error': 'Failed to start streaming. Please try again.', 'code': 'INTERNAL_ERROR'}), 500
 
 @bp.route('/lesson/<int:lesson_id>/clear_draft', methods=['DELETE'])
 @teacher_required

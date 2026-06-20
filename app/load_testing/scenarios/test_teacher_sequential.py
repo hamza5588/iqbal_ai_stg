@@ -102,20 +102,30 @@ async def run(
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('success'):
+                    # Celery/production returns task_id + processing; sync dev returns thread_id only.
+                    task_id = data.get('task_id')
                     thread_id = data.get('thread_id')
+                    ingest_conv = data.get("conversation_id")
+                    if ingest_conv is not None:
+                        conversation_id = ingest_conv
                     file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
                     summary.total_file_size_mb += file_size_mb
                     summary.successful_requests += 1
-                    
+
                     if not task_id:
-                        # Synchronous processing
+                        # In-process ingestion finished before HTTP response returned.
                         summary.ingestion_iterations += 1
                         summary.total_ingestion_time += upload_duration / 1000
-                        log_func(f"[{user.email}] Upload & Processing (Sync) success in {upload_duration:.0f}ms - Total Ingest Time: {upload_duration/1000:.1f}s ({file_size_mb}MB)")
-                        # Phase 13: Green summary
+                        log_func(
+                            f"[{user.email}] Upload & Processing (Sync) success in {upload_duration:.0f}ms - "
+                            f"Total Ingest Time: {upload_duration/1000:.1f}s ({file_size_mb}MB)"
+                        )
                         log_func(f"[{user.email}] Total File Processing Time: {upload_duration/1000:.1f}s (Complete)")
                     else:
-                        log_func(f"[{user.email}] Upload success in {upload_duration:.0f}ms")
+                        log_func(
+                            f"[{user.email}] Upload accepted in {upload_duration:.0f}ms; "
+                            f"async ingest task_id={task_id} (polling until ready)"
+                        )
                 else:
                     summary.failed_requests += 1
                     log_func(f"[{user.email}] Upload logic fail in {upload_duration:.0f}ms: {data.get('error')}", level="ERROR")
@@ -198,10 +208,53 @@ async def run(
             start_req = time.time()
             async with session.post(chat_url, json=payload, headers={"Content-Type": "application/json"}) as resp:
                 duration = time.time() - start_req
-                summary.total_requests += 1 # Each chat message is an Action
+                summary.total_requests += 1  # Each chat message is an Action
+
                 if resp.status == 429:
                     summary.rate_limit_hits += 1
-                if resp.status == 200:
+                    try:
+                        rl_data = await resp.json()
+                    except Exception:
+                        rl_data = {}
+                    retry_after = rl_data.get('retry_after') or 15
+                    code = rl_data.get('code', 'RATE_LIMITED')
+                    log_func(
+                        f"[{user.email}] Chat {i+1} RATE LIMITED ({code}) — "
+                        f"retry_after={retry_after}s, waiting before next message",
+                        level="WARNING",
+                    )
+                    # Record as rate_limited event (not an opaque crash)
+                    summary.errors.append({
+                        "user": user.email,
+                        "error": f"rate_limited:{code}",
+                        "retry_after": retry_after,
+                        "message_index": i + 1,
+                    })
+                    wait = max(2, min(int(retry_after), 60))
+                    await asyncio.sleep(wait)
+                    continue  # move to next message
+
+                elif resp.status == 503:
+                    try:
+                        srv_data = await resp.json()
+                    except Exception:
+                        srv_data = {}
+                    retry_after = srv_data.get('retry_after') or 10
+                    log_func(
+                        f"[{user.email}] Chat {i+1} SERVICE AT CAPACITY (503) — "
+                        f"retry_after={retry_after}s",
+                        level="WARNING",
+                    )
+                    summary.errors.append({
+                        "user": user.email,
+                        "error": "service_at_capacity",
+                        "retry_after": retry_after,
+                        "message_index": i + 1,
+                    })
+                    await asyncio.sleep(max(2, min(int(retry_after), 30)))
+                    continue
+
+                elif resp.status == 200:
                     data = await resp.json()
                     if data.get('success'):
                         summary.messages_sent += 1
@@ -210,7 +263,7 @@ async def run(
                         ans_text = data.get('answer') or data.get('message') or ""
                         ans_snippet = ans_text[:50].replace('\n', ' ')
                         log_func(f"[{user.email}] Response {i+1} received in {duration:.1f}s: \"{ans_snippet}...\"")
-                        
+
                         # Add to transcript
                         chat_transcript.append({"role": "user", "content": msg})
                         chat_transcript.append({"role": "bot", "content": ans_text, "latency": duration})
@@ -220,8 +273,8 @@ async def run(
                 else:
                     summary.failed_requests += 1
                     log_func(f"[{user.email}] Chat {i+1} HTTP error {resp.status} in {duration:.1f}s", level="ERROR")
-            
-            await asyncio.sleep(0.5) 
+
+            await asyncio.sleep(0.5)
 
         total_user_duration = time.time() - scenario_start
         log_func(f"[{user.email}] Sequential Test Complete. Total Duration: {total_user_duration:.1f}s")

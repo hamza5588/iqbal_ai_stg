@@ -1798,18 +1798,20 @@
       color: #1e293b;
     }
 
-    /* Student lesson lecture formatting (long-form readability + equation stability) */
+    /* ── Student lesson lecture formatting ── */
     .lesson-content-formatted {
-      max-width: 74ch;
+      max-width: min(74ch, 100%);
       margin: 0 auto;
       font-size: clamp(1rem, 0.96rem + 0.2vw, 1.08rem);
-      line-height: 1.72;
+      line-height: 1.75;
       color: #1f2937;
       letter-spacing: 0.005em;
+      /* Prefer wrapping at word boundaries; long tokens still break when needed */
       word-break: normal;
       overflow-wrap: anywhere;
     }
 
+    /* ── Headings ── */
     .lesson-content-formatted h1,
     .lesson-content-formatted h2,
     .lesson-content-formatted h3,
@@ -1819,93 +1821,177 @@
       color: #0f172a;
       line-height: 1.3;
       letter-spacing: -0.01em;
-      margin-top: 1.1em;
-      margin-bottom: 0.45em;
+      margin-top: 1.6em;
+      margin-bottom: 0.5em;
+      font-variant-numeric: lining-nums;
     }
+    /* First heading after the start has no extra top margin */
+    .lesson-content-formatted > h1:first-child,
+    .lesson-content-formatted > h2:first-child,
+    .lesson-content-formatted > h3:first-child { margin-top: 0; }
 
-    .lesson-content-formatted h1 { font-size: clamp(1.55rem, 1.35rem + 0.6vw, 1.9rem); font-weight: 800; }
-    .lesson-content-formatted h2 { font-size: clamp(1.35rem, 1.2rem + 0.5vw, 1.6rem); font-weight: 750; }
-    .lesson-content-formatted h3 { font-size: clamp(1.16rem, 1.08rem + 0.35vw, 1.3rem); font-weight: 700; }
-    .lesson-content-formatted h4,
+    .lesson-content-formatted h1 { font-size: clamp(1.55rem, 1.35rem + 0.6vw, 1.9rem);  font-weight: 800; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.25em; }
+    .lesson-content-formatted h2 { font-size: clamp(1.3rem,  1.15rem + 0.5vw, 1.55rem); font-weight: 700; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.2em; }
+    .lesson-content-formatted h3 { font-size: clamp(1.12rem, 1.04rem + 0.35vw, 1.28rem); font-weight: 700; }
+    .lesson-content-formatted h4 { font-size: 1.06rem; font-weight: 700; color: #334155; }
     .lesson-content-formatted h5,
-    .lesson-content-formatted h6 { font-size: 1.05rem; font-weight: 700; }
+    .lesson-content-formatted h6 { font-size: 1rem; font-weight: 600; color: #475569; }
 
+    /* ── Paragraphs ── */
     .lesson-content-formatted p {
-      margin: 0.52em 0;
+      margin: 0.6em 0;
     }
 
+    /* ── Lists — proper indentation and spacing ── */
     .lesson-content-formatted ul,
     .lesson-content-formatted ol {
-      margin: 0.65em 0 0.85em 0;
-      padding-left: 1.3rem;
+      margin: 0.7em 0 0.9em 0;
+      padding-left: 1.75rem;
+      list-style-position: outside;
     }
-
+    .lesson-content-formatted ol {
+      padding-left: 2rem;
+    }
     .lesson-content-formatted li {
-      margin: 0.28em 0;
-      line-height: 1.62;
+      margin: 0.32em 0;
+      line-height: 1.65;
+      padding-left: 0.35rem;
     }
+    .lesson-content-formatted li::marker {
+      font-weight: 600;
+      color: #475569;
+    }
+    /* Nested lists — tighter spacing and additional indent */
+    .lesson-content-formatted li > ul,
+    .lesson-content-formatted li > ol {
+      margin: 0.2em 0 0.3em 0;
+      padding-left: 1.4rem;
+    }
+    .lesson-content-formatted li > ul > li,
+    .lesson-content-formatted li > ol > li {
+      margin: 0.18em 0;
+      font-size: 0.97em;
+    }
+    /* Unordered list marker style */
+    .lesson-content-formatted ul { list-style-type: disc; }
+    .lesson-content-formatted ul ul { list-style-type: circle; }
+    .lesson-content-formatted ul ul ul { list-style-type: square; }
 
+    /* ── Tables ── */
     .lesson-content-formatted table {
       width: 100%;
       border-collapse: collapse;
-      margin: 0.9em 0;
-      font-size: 0.96em;
+      margin: 1em 0;
+      font-size: 0.95em;
       display: block;
       overflow-x: auto;
-      white-space: nowrap;
+      -webkit-overflow-scrolling: touch;
     }
-
     .lesson-content-formatted th,
     .lesson-content-formatted td {
-      border: 1px solid #e5e7eb;
-      padding: 0.52rem 0.72rem;
+      border: 1px solid #e2e8f0;
+      padding: 0.5rem 0.75rem;
       text-align: left;
       vertical-align: top;
+      white-space: normal;
+      min-width: 5rem;
     }
-
     .lesson-content-formatted th {
-      background: #f8fafc;
+      background: #f0f9ff;
       font-weight: 700;
+      color: #0369a1;
+      white-space: nowrap;
+    }
+    .lesson-content-formatted tr:nth-child(even) td {
+      background: #f8fafc;
     }
 
+    /* ── Code ── */
     .lesson-content-formatted pre {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 0.5rem;
-      padding: 0.75rem;
+      padding: 0.85rem 1rem;
+      margin: 0.8em 0;
+      font-size: 0.9em;
+      line-height: 1.6;
     }
-
     .lesson-content-formatted code {
-      font-size: 0.92em;
+      font-size: 0.91em;
+      background: #f1f5f9;
+      padding: 0.1em 0.3em;
+      border-radius: 0.25em;
+    }
+    .lesson-content-formatted pre code {
+      background: transparent;
+      padding: 0;
     }
 
+    /* ── Block-quotes ── */
+    .lesson-content-formatted blockquote {
+      border-left: 3px solid #0ea5e9;
+      margin: 0.8em 0;
+      padding: 0.5em 1em;
+      background: #f0f9ff;
+      border-radius: 0 0.375rem 0.375rem 0;
+      color: #0c4a6e;
+    }
+
+    /* ── Math / equation blocks ── */
     .lesson-content-formatted mjx-container[display="true"],
     .lesson-content-formatted .katex-display,
     .chat-message-content mjx-container[display="true"],
     .chat-message-content .katex-display {
       overflow-x: auto;
       overflow-y: hidden;
-      margin: 0.75rem 0;
-      padding-bottom: 0.12rem;
+      -webkit-overflow-scrolling: touch;
+      margin: 0.9rem 0;
+      padding: 0.35rem 0.5rem 0.2rem;
+      display: block;
+      text-align: center;
+      max-width: 100%;
+      box-sizing: border-box;
     }
-
+    /* Paragraphs that contain only display math stay readable on narrow screens */
+    .lesson-content-formatted p:has(mjx-container[display="true"]),
+    .lesson-content-formatted p:has(.katex-display) {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    /* Inline math — prevent line-wrapping inside symbols */
+    .lesson-content-formatted mjx-container:not([display="true"]),
+    .lesson-content-formatted .katex:not(.katex-display) {
+      display: inline-block;
+      vertical-align: middle;
+    }
     .lesson-content-formatted mjx-container[jax="CHTML"] {
-      font-size: 1.02em;
+      font-size: 1.04em;
     }
 
+    /* ── Horizontal rules ── */
+    .lesson-content-formatted hr {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 1.5em 0;
+    }
+
+    /* ── Mobile adjustments ── */
     @media (max-width: 768px) {
       #viewLessonModal .lesson-content-formatted,
       #lessonQAContent .lesson-content-formatted {
         font-size: 0.99rem !important;
-        line-height: 1.68 !important;
+        line-height: 1.7 !important;
+        padding: 0 0.25rem;
       }
-
-      #viewLessonModal .lesson-content-formatted h1 { font-size: 1.36rem !important; }
-      #viewLessonModal .lesson-content-formatted h2 { font-size: 1.2rem !important; }
-      #viewLessonModal .lesson-content-formatted h3 { font-size: 1.08rem !important; }
+      #viewLessonModal .lesson-content-formatted h1 { font-size: 1.34rem !important; }
+      #viewLessonModal .lesson-content-formatted h2 { font-size: 1.18rem !important; }
+      #viewLessonModal .lesson-content-formatted h3 { font-size: 1.06rem !important; }
       #viewLessonModal .lesson-content-formatted p,
       #viewLessonModal .lesson-content-formatted li { font-size: 0.98rem !important; }
+      .lesson-content-formatted ul,
+      .lesson-content-formatted ol { padding-left: 1.3rem; }
     }
 
     @media (max-width: 480px) {
@@ -1914,6 +2000,149 @@
         max-width: 100%;
         font-size: 0.96rem !important;
       }
+    }
+
+    /* ── Dark mode: lesson content ── */
+    .dark .lesson-content-formatted {
+      color: #e2e8f0;
+    }
+    /*
+     * Headings must beat Tailwind Typography (.prose :where(h1)…) which otherwise
+     * keeps light-theme heading colors or low-contrast grays on dark surfaces.
+     */
+    :is(html, body).dark .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6),
+    .dark .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6),
+    :is(html, body).dark #viewLessonCurrent .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6),
+    .dark #viewLessonCurrent .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6),
+    :is(html, body).dark #lessonQAContent .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6),
+    .dark #lessonQAContent .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6) {
+      color: #f8fafc !important;
+      font-weight: 700 !important;
+      letter-spacing: -0.02em;
+    }
+    :is(html, body).dark .lesson-content-formatted h4,
+    .dark .lesson-content-formatted h4,
+    :is(html, body).dark #viewLessonCurrent .lesson-content-formatted h4,
+    .dark #viewLessonCurrent .lesson-content-formatted h4,
+    :is(html, body).dark #lessonQAContent .lesson-content-formatted h4,
+    .dark #lessonQAContent .lesson-content-formatted h4 {
+      color: #f1f5f9 !important;
+      font-weight: 600 !important;
+    }
+    :is(html, body).dark .lesson-content-formatted h5,
+    :is(html, body).dark .lesson-content-formatted h6,
+    .dark .lesson-content-formatted h5,
+    .dark .lesson-content-formatted h6,
+    :is(html, body).dark #viewLessonCurrent .lesson-content-formatted h5,
+    :is(html, body).dark #viewLessonCurrent .lesson-content-formatted h6,
+    .dark #viewLessonCurrent .lesson-content-formatted h5,
+    .dark #viewLessonCurrent .lesson-content-formatted h6,
+    :is(html, body).dark #lessonQAContent .lesson-content-formatted h5,
+    :is(html, body).dark #lessonQAContent .lesson-content-formatted h6,
+    .dark #lessonQAContent .lesson-content-formatted h5,
+    .dark #lessonQAContent .lesson-content-formatted h6 {
+      color: #e2e8f0 !important;
+      font-weight: 600 !important;
+    }
+    .dark .lesson-content-formatted h1 { border-bottom-color: #334155; }
+    .dark .lesson-content-formatted h2 { border-bottom-color: #1e293b; }
+    .dark .lesson-content-formatted th,
+    .dark .lesson-content-formatted td { border-color: #334155; }
+    .dark .lesson-content-formatted th {
+      background: #0f172a;
+      color: #38bdf8;
+    }
+    .dark .lesson-content-formatted tr:nth-child(even) td { background: #1e293b; }
+    .dark .lesson-content-formatted pre {
+      background: #0f172a;
+      border-color: #334155;
+      color: #e2e8f0;
+    }
+    .dark .lesson-content-formatted code {
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    .dark .lesson-content-formatted blockquote {
+      background: #0c1a2e;
+      color: #7dd3fc;
+    }
+    .dark .lesson-content-formatted hr { border-top-color: #334155; }
+
+    /* View lesson modal: white card — undo dark-surface lesson colors inside #viewLessonModal only */
+    .dark #viewLessonModal .lesson-content-formatted {
+      color: #1f2937;
+    }
+    .dark #viewLessonModal .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6) {
+      color: #0f172a !important;
+      font-weight: 700 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted h4 {
+      color: #334155 !important;
+      font-weight: 700 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted h5,
+    .dark #viewLessonModal .lesson-content-formatted h6 {
+      color: #475569 !important;
+      font-weight: 600 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted li::marker {
+      color: #475569 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted th,
+    .dark #viewLessonModal .lesson-content-formatted td {
+      border-color: #e2e8f0 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted th {
+      background: #f8fafc !important;
+      color: #0f172a !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted tr:nth-child(even) td {
+      background: #f8fafc !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted pre {
+      background: #f1f5f9 !important;
+      border-color: #e2e8f0 !important;
+      color: #334155 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted code {
+      background: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted blockquote {
+      background: #f0f9ff !important;
+      color: #334155 !important;
+      border-left-color: #0ea5e9 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted hr {
+      border-top-color: #e2e8f0 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted h1 {
+      border-bottom-color: #e2e8f0 !important;
+    }
+    .dark #viewLessonModal .lesson-content-formatted h2 {
+      border-bottom-color: #f1f5f9 !important;
+    }
+    /* Outer #viewLessonCurrent may use Tailwind Typography (.prose); force light-surface theme vars */
+    .dark #viewLessonModal #viewLessonCurrent.prose,
+    .dark #viewLessonModal #viewLessonCurrent .prose {
+      --tw-prose-body: #0f172a;
+      --tw-prose-headings: #0f172a;
+      --tw-prose-lead: #334155;
+      --tw-prose-links: #0284c7;
+      --tw-prose-bold: #0f172a;
+      --tw-prose-counters: #475569;
+      --tw-prose-bullets: #475569;
+      --tw-prose-hr: #e2e8f0;
+      --tw-prose-quotes: #334155;
+      --tw-prose-quote-borders: #0ea5e9;
+      --tw-prose-captions: #64748b;
+      --tw-prose-kbd: #0f172a;
+      --tw-prose-kbd-shadows: rgba(15, 23, 42, 0.12);
+      --tw-prose-code: #0f172a;
+      --tw-prose-pre-code: #e2e8f0;
+      --tw-prose-pre-bg: #1e293b;
+      --tw-prose-th-borders: #e2e8f0;
+      --tw-prose-td-borders: #e2e8f0;
     }
 
     .view-lesson-actions-row {
@@ -2399,6 +2628,29 @@
     .chat-message-content a:hover {
       color: #0284c7;
     }
+
+    /* Dark mode: assistant bubble stays white — match foreground to card (same issue as teacher dashboard) */
+    .dark .chat-message.assistant .chat-message-content {
+      color: #0f172a;
+      background: #ffffff;
+      border-color: #e5e7eb;
+    }
+    .dark .chat-message.assistant .chat-message-content :where(p, li, span, dd, dt, td, th, label) {
+      color: #0f172a;
+    }
+    .dark .chat-message.assistant .chat-message-content h1 { color: #0f172a; }
+    .dark .chat-message.assistant .chat-message-content h2 { color: #1e293b; }
+    .dark .chat-message.assistant .chat-message-content h3 { color: #334155; }
+    .dark .chat-message.assistant .chat-message-content :where(h4, h5, h6) { color: #334155; }
+    .dark .chat-message.assistant .chat-message-content strong { color: #1e293b; }
+    .dark .chat-message.assistant .chat-message-content em { color: #475569; }
+    .dark .chat-message.assistant .chat-message-content code {
+      background: #f1f5f9;
+      color: #dc2626;
+    }
+    .dark .chat-message.assistant .chat-message-content li::marker { color: #0f172a; }
+    .dark .chat-message.assistant .chat-message-content blockquote { color: #64748b; }
+    .dark .chat-message.assistant .chat-message-content a { color: #0ea5e9; }
 
     /* Chat input button enhanced */
     .chat-input-button {
@@ -4513,66 +4765,127 @@
       function normalizeLessonPlainTextToMarkdown(content) {
         const raw = String(content || '').replace(/\r\n/g, '\n');
         const sourceLines = raw.split('\n');
-        const lines = [];
 
-        function isEquationFragment(line) {
+        // --- Constants ---
+        // Lines already structured as markdown or already carrying math markup
+        const ALREADY_MD     = /^(\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|\|)|\s*```)/;
+        const HAS_MATH_DELIM = /\$\$?|\\\(|\\\[/;
+        // Non-standard Unicode bullet characters → normalise to "- "
+        const BULLET_VARIANT = /^[•·▪▸▹◦‣⁃]\s*/;
+        // Single Greek / math symbol alone on a line → always a fragment
+        const SINGLE_GREEK   = /^[α-ωΑ-ΩμσλδφψθξηζΦΨΩ∑∏√∫∂∇∞]$/u;
+        // Single Latin letter or digit alone on a line (variable name)
+        const SINGLE_VAR     = /^[a-zA-Z0-9]$/;
+        // Characters that mark a line as math-like (guard heading promotion)
+        const MATH_SYM_GUARD = /[=×÷°²³½¼¾^_]|[α-ωΑ-ΩΦΨ∑∏√∫∂∇∞]|\b[a-zA-Z]\s*[+\-*/^]\s*[a-zA-Z0-9]/u;
+        // Looks like a numeric / symbolic list (not a section title)
+        const LOOKS_LIKE_NUM_OR_SYM_LIST = /^(\d+|[α-ωΑ-Ω])[\s.)]*$/u;
+
+        function isEquationFragment(line, allowDigitOnly) {
           const t = (line || '').trim();
-          if (!t || t.length > 18) return false;
+          if (!t) return false;
+          if (HAS_MATH_DELIM.test(t)) return false;
+          if (ALREADY_MD.test(t)) return false;
+          // Avoid starting a run on a lone digit (prevents "1" / "2" / "3" steps merging into math)
+          if (/^\d$/.test(t) && !allowDigitOnly) return false;
+          if (SINGLE_GREEK.test(t)) return true;
+          if (SINGLE_VAR.test(t)) {
+            if (!allowDigitOnly && /^[a-z]$/.test(t)) return false;
+            return true;
+          }
+          if (t.length > 22) return false;
           if (/[:;]/.test(t)) return false;
-          if (/^(\s{0,3}(#{1,6}\s|[-*]\s|\d+\.\s|>\s|\|)|\s*```)/.test(t)) return false;
-          const words = t.split(/\s+/).filter(Boolean);
-          if (words.length > 3) return false;
           if (/[.!?]/.test(t) && /[a-z]{3,}/i.test(t)) return false;
-          return /[=+\-*/×÷^()°Δα-ωΑ-ΩA-Za-z0-9]/.test(t);
+          const words = t.split(/\s+/).filter(Boolean);
+          if (words.length > 4) return false;
+          return /[=+\-*/×÷^()°Δα-ωΑ-ΩΦΨ²³½¼¾\d]/.test(t);
         }
 
+        function mergeEquationRun(run) {
+          const joined = run.join(' ');
+          const hasEquals = run.some(s => s.includes('='));
+          const allVeryShort = run.every(s => s.length <= 3);
+          const mostlySymbols = run.every(s => /^[\d.a-zA-Zα-ωΑ-ΩΦΨ+\-*/^()°²³½¼¾_=]+$/u.test(s));
+          if (hasEquals || run.length >= 3 || (run.length >= 2 && allVeryShort && mostlySymbols)) {
+            return '$$' + joined + '$$';
+          }
+          return run.map(s => '$' + s + '$').join(' ');
+        }
+
+        // --- Pass 1: detect and merge equation-fragment runs ---
+        const lines = [];
         for (let i = 0; i < sourceLines.length; i++) {
-          const current = (sourceLines[i] || '').trim();
-          if (isEquationFragment(current)) {
-            let j = i;
-            const run = [];
-            while (j < sourceLines.length && isEquationFragment(sourceLines[j])) {
+          const t = (sourceLines[i] || '').trim();
+          if (isEquationFragment(t, false)) {
+            const run = [t];
+            let j = i + 1;
+            while (j < sourceLines.length && isEquationFragment((sourceLines[j] || '').trim(), true)) {
               run.push((sourceLines[j] || '').trim());
-              j += 1;
+              j++;
             }
-            if (run.length >= 4) {
-              lines.push(run.join(' '));
+            if (run.length >= 2) {
+              lines.push(mergeEquationRun(run));
               i = j - 1;
+              continue;
+            }
+            if (SINGLE_GREEK.test(t) || (SINGLE_VAR.test(t) && /[0-9]/.test(t))) {
+              lines.push('$' + t + '$');
               continue;
             }
           }
           lines.push(sourceLines[i] || '');
         }
 
+        // --- Pass 2: heading promotion + bullet / list normalisation ---
         const out = [];
-        const alreadyMarkdown = /^(\s{0,3}(#{1,6}\s|[-*]\s|\d+\.\s|>\s|\|)|\s*```)/;
         const shortHeadingLike = /^[A-Z][A-Za-z0-9,&()\-/'\s]{2,90}$/;
 
         for (let i = 0; i < lines.length; i++) {
-          const original = lines[i] || '';
-          const line = original.trim();
+          let original = lines[i] || '';
+          let line = original.trim();
 
-          if (!line) {
-            out.push('');
-            continue;
-          }
+          if (!line) { out.push(''); continue; }
 
-          if (alreadyMarkdown.test(line)) {
+          if (ALREADY_MD.test(line) || HAS_MATH_DELIM.test(line)) {
             out.push(original);
             continue;
           }
 
-          const words = line.split(/\s+/).filter(Boolean).length;
-          const next = (lines[i + 1] || '').trim();
-
-          // Convert plain section titles into markdown headings for consistent rendering.
-          if (line.endsWith(':') && words <= 10 && line.length <= 80) {
-            out.push(`### ${line.slice(0, -1).trim()}`);
+          // "1) item" / "1. item" → GFM ordered list
+          const ord = line.match(/^(\d{1,3})[\.)]\s+(.+)$/);
+          if (ord && !HAS_MATH_DELIM.test(line)) {
+            out.push(ord[1] + '. ' + ord[2].trim());
             continue;
           }
 
-          if (shortHeadingLike.test(line) && words <= 8 && next) {
-            out.push(`## ${line}`);
+          // Indented plain bullets → markdown list with preserved indent (2 spaces per level)
+          const indBullet = original.match(/^(\s{2,})([-*+•·▪▸▹◦‣⁃])\s+(\S.*)$/);
+          if (indBullet) {
+            const depth = Math.min(8, Math.floor(indBullet[1].length / 2));
+            const body = indBullet[3].trim();
+            out.push('  '.repeat(depth) + '- ' + body);
+            continue;
+          }
+
+          if (BULLET_VARIANT.test(line)) {
+            out.push('- ' + line.replace(BULLET_VARIANT, '').trim());
+            continue;
+          }
+
+          const words = line.split(/\s+/).filter(Boolean).length;
+          const next  = (lines[i + 1] || '').trim();
+
+          if (line.endsWith(':') && words <= 10 && line.length <= 80 &&
+              !MATH_SYM_GUARD.test(line) && !LOOKS_LIKE_NUM_OR_SYM_LIST.test(line)) {
+            out.push('### ' + line.slice(0, -1).trim());
+            continue;
+          }
+
+          const titleLike = shortHeadingLike.test(line) && words <= 8 && next &&
+            !MATH_SYM_GUARD.test(line) && !LOOKS_LIKE_NUM_OR_SYM_LIST.test(line) &&
+            !/^[\d\s+*/^\-=().]+$/u.test(line);
+          if (titleLike) {
+            out.push('## ' + line);
             continue;
           }
 

@@ -190,6 +190,8 @@ def create_app():
     app = Flask(__name__, 
                 template_folder=template_dir,
                 static_folder=static_dir)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 
     
@@ -357,4 +359,7 @@ def create_app():
         print("Celery disabled for ingestion (USE_CELERY_FOR_INGESTION=false). PDF ingestion will run in-process.")
 
     return app
+
+
+
 

@@ -2091,19 +2091,19 @@
                     // Populate models based on provider
                     if (data.active_provider === 'GROQ') {
                         // Groq models - group by type
-                        if (data.available_models.qwen && data.available_models.qwen.length > 0) {
-                            const qwenGroup = document.createElement('optgroup');
-                            qwenGroup.label = 'Qwen Models';
-                            data.available_models.qwen.forEach(model => {
+                        if (data.available_models.gpt_oss && data.available_models.gpt_oss.length > 0) {
+                            const gptOssGroup = document.createElement('optgroup');
+                            gptOssGroup.label = 'GPT-OSS Models';
+                            data.available_models.gpt_oss.forEach(model => {
                                 const option = document.createElement('option');
                                 option.value = model.id;
                                 option.textContent = model.name;
                                 if (data.selected_model === model.id) {
                                     option.selected = true;
                                 }
-                                qwenGroup.appendChild(option);
+                                gptOssGroup.appendChild(option);
                             });
-                            modelSelect.appendChild(qwenGroup);
+                            modelSelect.appendChild(gptOssGroup);
                         }
                         
                         if (data.available_models.llama && data.available_models.llama.length > 0) {

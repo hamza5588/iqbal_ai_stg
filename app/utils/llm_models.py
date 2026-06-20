@@ -5,11 +5,8 @@ Defines allowed models per provider for UI dropdowns and server-side validation
 
 # Groq Models
 GROQ_MODELS = {
-    "qwen": [
-        {"id": "qwen2.5-72b-instruct", "name": "Qwen 2.5 72B Instruct"},
-        {"id": "qwen2.5-32b-instruct", "name": "Qwen 2.5 32B Instruct"},
-        {"id": "qwen2.5-14b-instruct", "name": "Qwen 2.5 14B Instruct"},
-        {"id": "qwen2.5-7b-instruct", "name": "Qwen 2.5 7B Instruct"},
+    "gpt_oss": [
+        {"id": "openai/gpt-oss-120b", "name": "GPT-OSS 120B"},
     ],
     "llama": [
         {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B Versatile"},
@@ -51,7 +48,7 @@ def is_valid_model_for_provider(model_id: str, provider: str) -> bool:
 def get_default_model_for_provider(provider: str) -> str:
     """Get default model ID for a provider"""
     if provider.upper() == "GROQ":
-        return "llama-3.3-70b-versatile"
+        return "openai/gpt-oss-120b"
     elif provider.upper() == "OPENAI":
         return "gpt-4o-mini"
     return "gpt-4o-mini"

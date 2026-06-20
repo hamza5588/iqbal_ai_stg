@@ -400,22 +400,7 @@ em {
 
 /* Dark Mode Support */
 @media (prefers-color-scheme: dark) {
-  .chat-message-content.markdown-content h1 {
-    color: #f1f5f9;
-  }
-  .chat-message-content.markdown-content h2 {
-    color: #e2e8f0;
-    border-bottom-color: #334155;
-  }
-  .chat-message-content.markdown-content h3 {
-    color: #cbd5e1;
-  }
-  .chat-message-content.markdown-content li {
-    color: #e2e8f0;
-  }
-  .markdown-content li::marker {
-    color: #e2e8f0;
-  }
+  /* Note: assistant chat bubbles stay white — do not set light text on .chat-message-content.markdown-content here */
 
   .markdown-h1 {
     color: #f1f5f9;
@@ -464,5 +449,62 @@ em {
 
   em {
     color: #cbd5e1;
+  }
+
+  /*
+   * Lesson view modal (#viewLessonModal) always uses white preview panels.
+   * Revert OS-dark global strong/em (above) and keep semantic headings/body dark-on-light.
+   */
+  #viewLessonModal #viewLessonCurrent,
+  #viewLessonModal #viewLessonDraft {
+    color: #0f172a;
+  }
+  #viewLessonModal #viewLessonCurrent :is(h1, h2, h3, h4, h5, h6),
+  #viewLessonModal #viewLessonDraft :is(h1, h2, h3, h4, h5, h6) {
+    color: #0f172a;
+  }
+  #viewLessonModal #viewLessonCurrent h2,
+  #viewLessonModal #viewLessonDraft h2 {
+    color: #1e293b;
+  }
+  #viewLessonModal #viewLessonCurrent h3,
+  #viewLessonModal #viewLessonDraft h3 {
+    color: #334155;
+  }
+  #viewLessonModal #viewLessonCurrent :is(h4, h5, h6),
+  #viewLessonModal #viewLessonDraft :is(h4, h5, h6) {
+    color: #334155;
+  }
+  #viewLessonModal #viewLessonCurrent :where(p, li, span, dd, dt, td, th),
+  #viewLessonModal #viewLessonDraft :where(p, li, span, dd, dt, td, th) {
+    color: #0f172a;
+  }
+  #viewLessonModal #viewLessonCurrent strong,
+  #viewLessonModal #viewLessonDraft strong,
+  #viewLessonModal .lesson-content-formatted strong {
+    color: #1e293b !important;
+  }
+  #viewLessonModal #viewLessonCurrent em,
+  #viewLessonModal #viewLessonDraft em,
+  #viewLessonModal .lesson-content-formatted em {
+    color: #475569 !important;
+  }
+  #viewLessonModal #viewLessonCurrent code,
+  #viewLessonModal #viewLessonDraft code,
+  #viewLessonModal .lesson-content-formatted code {
+    background-color: #f1f5f9 !important;
+    color: #dc2626 !important;
+    border-color: #e2e8f0;
+  }
+  #viewLessonModal #viewLessonCurrent li::marker,
+  #viewLessonModal #viewLessonDraft li::marker,
+  #viewLessonModal .lesson-content-formatted li::marker {
+    color: #0f172a !important;
+  }
+  #viewLessonModal .lesson-content-formatted {
+    color: #1f2937;
+  }
+  #viewLessonModal .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6) {
+    color: #0f172a !important;
   }
 }

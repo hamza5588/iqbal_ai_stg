@@ -202,7 +202,7 @@ def create_llm(
             
         For Groq:
             GROQ_API_KEY: Your Groq API key (required if LLM_PROVIDER='groq')
-            GROQ_MODEL: Model name (default: 'llama-3.3-70b-versatile')
+            GROQ_MODEL: Model name (default: 'openai/gpt-oss-120b')
             GROQ_TEMPERATURE: Temperature (default: 0.7)
             GROQ_MAX_TOKENS: Max tokens (default: 1024)
             GROQ_TIMEOUT: Timeout in seconds (default: 60)
@@ -309,7 +309,7 @@ def create_llm(
                 "Please set GROQ_API_KEY in your environment or provide it via api_key parameter."
             )
         
-        model = model_name or os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+        model = model_name or os.getenv('GROQ_MODEL', 'openai/gpt-oss-120b')
         temp = temperature if temperature is not None else float(os.getenv('GROQ_TEMPERATURE', '0.5'))
         max_toks = max_tokens if max_tokens is not None else int(os.getenv('GROQ_MAX_TOKENS', '1024'))
         time_out = timeout if timeout is not None else int(os.getenv('GROQ_TIMEOUT', '60'))
