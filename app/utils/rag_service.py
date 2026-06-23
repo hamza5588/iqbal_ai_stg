@@ -58,7 +58,7 @@ except ImportError:
     except ImportError:
         HUGGINGFACE_EMBEDDINGS_AVAILABLE = False
         logger.warning("HuggingFace embeddings not available. Install langchain-huggingface or langchain-community.")
-from app.utils.llm_factory import create_llm, get_chat_model
+from app.utils.llm_factory import create_llm, get_chat_model, normalize_messages_for_groq_harmony
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import START, END, StateGraph
@@ -3137,6 +3137,8 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
             HumanMessage(content=revision_human),
         ]
         regen_messages = _trim_messages_for_token_budget(regen_messages, max_input_tokens=max_input_tokens)
+        if provider == "groq":
+            regen_messages = normalize_messages_for_groq_harmony(regen_messages)
         try:
             if provider == "groq":
                 groq_rate_limiter.wait_if_needed()
@@ -3876,6 +3878,8 @@ def _chat_invoke_llm_with_retry(
         if mode_flags[0]:
             max_input_tokens = int(os.getenv("RAG_SHORT_MODE_MAX_INPUT_TOKENS", "1200"))
         messages = _trim_messages_for_token_budget(messages, max_input_tokens=max_input_tokens)
+        if provider == "groq":
+            messages = normalize_messages_for_groq_harmony(messages)
 
         try:
             if provider == "groq":

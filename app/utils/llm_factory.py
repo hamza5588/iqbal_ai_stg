@@ -4,7 +4,8 @@ Supports OpenAI, Groq, and vLLM providers based on admin/user settings
 """
 import os
 import logging
-from typing import Optional
+from typing import List, Optional
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from app.config import Config
 from app.utils.llm_models import (
@@ -16,6 +17,58 @@ from app.utils.encryption import decrypt_api_key
 from app.utils.llm_gateway import wrap_llm_with_telemetry
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_messages_for_groq_harmony(messages: List[BaseMessage]) -> List[BaseMessage]:
+    """
+    GPT-OSS on Groq uses the Harmony response format. Harmony requires every tool-role
+    message to include a tool name when rendering the prompt. langchain-groq only
+    forwards ToolMessage.name if it is duplicated into additional_kwargs, so ensure
+    that before each Groq invoke when tool results are in the conversation history.
+    """
+    if not messages:
+        return messages
+
+    tool_call_id_to_name: dict[str, str] = {}
+    for msg in messages:
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            for tc in msg.tool_calls:
+                if not isinstance(tc, dict):
+                    continue
+                tc_id = tc.get("id")
+                tc_name = tc.get("name")
+                if tc_id and tc_name:
+                    tool_call_id_to_name[tc_id] = tc_name
+
+    normalized: List[BaseMessage] = []
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            normalized.append(msg)
+            continue
+
+        name = getattr(msg, "name", None) or (msg.additional_kwargs or {}).get("name")
+        if not name and msg.tool_call_id:
+            name = tool_call_id_to_name.get(msg.tool_call_id)
+        if not name:
+            normalized.append(msg)
+            continue
+
+        extra = dict(msg.additional_kwargs or {})
+        if extra.get("name") == name and getattr(msg, "name", None) == name:
+            normalized.append(msg)
+            continue
+
+        extra["name"] = name
+        normalized.append(
+            ToolMessage(
+                content=msg.content,
+                tool_call_id=msg.tool_call_id,
+                name=name,
+                additional_kwargs=extra,
+            )
+        )
+    return normalized
+
 
 # Try to import ChatGroq, but don't fail if it's not installed
 try:
