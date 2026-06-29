@@ -539,3 +539,90 @@ class LLMUsageEvent(Base):
         Index('idx_llm_usage_traffic_created', 'traffic_source', 'created_at'),
     )
 
+
+class EmbedClient(Base):
+    """B2B embed widget client (website owner configuration)."""
+    __tablename__ = 'embed_clients'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_slug = Column(String(64), nullable=False, unique=True, index=True)
+    secret_key_hash = Column(String(255), nullable=False)
+    owner_email = Column(String(255), nullable=False)
+    owner_name = Column(String(255), nullable=True)
+    allowed_origins = Column(Text, nullable=True)
+    rag_thread_id = Column(String(255), nullable=True, index=True)
+    service_user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    system_prompt = Column(Text, nullable=True)
+    active = Column(Boolean, default=True, server_default='1')
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+                       server_default=func.now(), server_onupdate=func.now())
+
+    service_user = relationship("User")
+    conversations = relationship("EmbedConversation", back_populates="client", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_embed_clients_active', 'active'),
+    )
+
+
+class EmbedConversation(Base):
+    """One chat session per website visitor."""
+    __tablename__ = 'embed_conversations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(Integer, ForeignKey('embed_clients.id', ondelete='CASCADE'), nullable=False, index=True)
+    visitor_id = Column(String(128), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default='active', server_default='active')
+    visitor_email = Column(String(255), nullable=True)
+    visitor_phone = Column(String(64), nullable=True)
+    needs_attention = Column(Boolean, default=False, server_default='0')
+    escalated_at = Column(DateTime, nullable=True)
+    escalation_email_sent = Column(Boolean, default=False, server_default='0')
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+                       server_default=func.now(), server_onupdate=func.now())
+
+    client = relationship("EmbedClient", back_populates="conversations")
+    messages = relationship("EmbedMessage", back_populates="conversation", cascade="all, delete-orphan")
+    callback_requests = relationship("EmbedCallbackRequest", back_populates="conversation", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_embed_conv_client_visitor', 'client_id', 'visitor_id'),
+        CheckConstraint("status IN ('active', 'closed')", name='check_embed_conv_status'),
+    )
+
+
+class EmbedMessage(Base):
+    """Messages within an embed conversation."""
+    __tablename__ = 'embed_messages'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(Integer, ForeignKey('embed_conversations.id', ondelete='CASCADE'), nullable=False, index=True)
+    role = Column(String(32), nullable=False)
+    content = Column(Text, nullable=False)
+    channel = Column(String(16), nullable=False, default='text', server_default='text')
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    conversation = relationship("EmbedConversation", back_populates="messages")
+
+    __table_args__ = (
+        Index('idx_embed_msg_conversation', 'conversation_id', 'created_at'),
+        CheckConstraint("role IN ('user', 'assistant', 'system')", name='check_embed_msg_role'),
+        CheckConstraint("channel IN ('text', 'voice')", name='check_embed_msg_channel'),
+    )
+
+
+class EmbedCallbackRequest(Base):
+    """Explicit callback requests from embed visitors."""
+    __tablename__ = 'embed_callback_requests'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(Integer, ForeignKey('embed_conversations.id', ondelete='CASCADE'), nullable=False, index=True)
+    email = Column(String(255), nullable=True)
+    phone = Column(String(64), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    conversation = relationship("EmbedConversation", back_populates="callback_requests")
+

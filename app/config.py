@@ -194,3 +194,16 @@ class Config:
     # Control embedding batch parallelism defaults.
     # NOTE: Actual effective default is also enforced in `app/utils/rag_service.py`.
     RAG_EMBED_PARALLEL_BATCHES_LOAD_TEST_DEFAULT = int(os.getenv('RAG_EMBED_PARALLEL_BATCHES_LOAD_TEST_DEFAULT', '1'))
+
+    _allowed_origins_raw = os.getenv('ALLOWED_ORIGINS', '')
+    if _allowed_origins_raw.strip():
+        ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins_raw.split(',') if o.strip()]
+    else:
+        ALLOWED_ORIGINS = [
+            'http://localhost:3000', 'http://localhost:8080', 'http://localhost:5000',
+            'http://localhost:5002', 'http://127.0.0.1:3000', 'http://127.0.0.1:8080',
+            'http://127.0.0.1:5000', 'http://127.0.0.1:5002',
+        ]
+    EMBED_CLIENT_KEYS = os.getenv('EMBED_CLIENT_KEYS', '')
+    EMBED_RATE_LIMIT_PER_HOUR = int(os.getenv('EMBED_RATE_LIMIT_PER_HOUR', '60'))
+    EMBED_DEFAULT_OWNER_EMAIL = os.getenv('EMBED_DEFAULT_OWNER_EMAIL', '')

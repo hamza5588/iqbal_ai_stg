@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Embed Demo | Iqbal AI</title>
+</head>
+<body style="font-family:system-ui;padding:40px">
+  <h1>Embed widget demo</h1>
+  <p>Simulates a client website. Open the Consultant button (bottom-right).</p>
+  <script src="{{ url_for('static', filename='js/consultant-embed.js') }}"></script>
+  <script>
+    IqbalConsultant.init({
+      apiBase: window.location.origin,
+      clientKey: "{{ embed_client_key }}"
+    });
+  </script>
+</body>
+</html>

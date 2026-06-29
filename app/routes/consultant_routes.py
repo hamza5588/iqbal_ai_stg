@@ -25,6 +25,7 @@ SQL dump.  This means:
   • The same embedding model and vector backend (Milvus / Chroma) are used.
 """
 
+import json
 import logging
 import os
 import uuid
@@ -33,9 +34,28 @@ from datetime import datetime
 import requests
 from flask import Blueprint, jsonify, request, session
 
-from app.models.database_models import RAGChunk, RAGThread
+from app.models.database_models import EmbedConversation, RAGChunk, RAGThread
 from app.utils.auth import login_required
 from app.utils.db import get_db
+from app.utils.embed_auth import validate_embed_request
+from app.services.embed_service import (
+    add_message,
+    build_embed_system_prompt,
+    client_has_document,
+    create_callback_request,
+    extract_contact_info,
+    extract_contact_from_messages,
+    get_client_document_filename,
+    get_message_history_for_llm,
+    get_messages,
+    get_or_create_conversation,
+    is_valid_visitor_id,
+    list_conversations_for_client,
+    make_visitor_id,
+    mark_escalation,
+    strip_escalate_marker,
+)
+from app.services.embed_email_service import send_escalation_email, send_export_email
 from app.utils.rag_service import (
     MARKDOWN_EXPORTS_DIR,
     _get_retriever,
@@ -242,12 +262,21 @@ def _save_thread(user_id: int, thread_id: str, filename: str, result: dict | Non
         db.rollback()
 
 
-def _get_openai_key() -> str:
+def _get_openai_key(*, for_realtime: bool = False) -> str:
     """
-    Return the OpenAI API key from (in priority order):
-    1. SystemSettings table (encrypted)
-    2. OPENAI_API_KEY environment variable
+    Return the OpenAI API key.
+
+    For Realtime voice, honour OPENAI_REALTIME_USE_ENV_KEY=true and prefer .env
+    over the Admin DB key (DB key may be a different account without Realtime quota).
     """
+    env_key = (os.getenv("OPENAI_API_KEY") or "").strip().strip('"').strip("'")
+    use_env_first = for_realtime and os.getenv("OPENAI_REALTIME_USE_ENV_KEY", "true").lower() in (
+        "1", "true", "yes",
+    )
+
+    if use_env_first and env_key:
+        return env_key
+
     try:
         from app.models.database_models import SystemSettings
         from app.utils.encryption import decrypt_api_key
@@ -258,7 +287,25 @@ def _get_openai_key() -> str:
             return decrypt_api_key(setting.value)
     except Exception:
         pass
-    return os.getenv("OPENAI_API_KEY", "")
+    return env_key
+
+
+def _openai_key_source(*, for_realtime: bool = False) -> str:
+    env_key = (os.getenv("OPENAI_API_KEY") or "").strip().strip('"').strip("'")
+    use_env_first = for_realtime and os.getenv("OPENAI_REALTIME_USE_ENV_KEY", "true").lower() in (
+        "1", "true", "yes",
+    )
+    if use_env_first and env_key:
+        return "env"
+    try:
+        from app.models.database_models import SystemSettings
+        db = get_db()
+        setting = db.query(SystemSettings).filter_by(key="openai_api_key").first()
+        if setting and setting.value:
+            return "database"
+    except Exception:
+        pass
+    return "env" if env_key else "none"
 
 
 # ---------------------------------------------------------------------------
@@ -837,6 +884,148 @@ def _build_voice_tools(has_document: bool) -> list:
     return doc_tools + [calculator_tool]
 
 
+def _realtime_model() -> str:
+    return os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
+
+
+def _realtime_voice() -> str:
+    return os.getenv("OPENAI_REALTIME_VOICE", "marin")
+
+
+def _build_realtime_session_config(instructions: str, tools: list | None = None) -> dict:
+    session_cfg: dict = {
+        "type": "realtime",
+        "model": _realtime_model(),
+        "instructions": instructions,
+        "audio": {
+            "input": {
+                "transcription": {"model": "whisper-1"},
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.5,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 600,
+                },
+            },
+            "output": {"voice": _realtime_voice()},
+        },
+    }
+    if tools:
+        session_cfg["tools"] = tools
+        session_cfg["tool_choice"] = "auto"
+    return session_cfg
+
+
+def _embed_voice_instructions(client) -> tuple[str, bool]:
+    thread_id = client.rag_thread_id
+    user_id = client.service_user_id
+    has_doc_context = client_has_document(client)
+    doc_filename = get_client_document_filename(client)
+    if has_doc_context and thread_id and user_id:
+        instructions = (
+            f"{build_embed_system_prompt(client)}\n\n"
+            f"=== DOCUMENT LOADED: '{doc_filename}' ===\n"
+            "Use the search_document tool to answer questions about the document.\n"
+            "If you cannot help, ask for email or phone so a human can follow up."
+        )
+    else:
+        instructions = build_embed_system_prompt(client)
+    return instructions, has_doc_context
+
+
+def _build_realtime_multipart_body(sdp: str, session_cfg: dict) -> tuple[str, bytes]:
+    """Build multipart/form-data body for OpenAI /v1/realtime/calls."""
+    boundary = f"----OpenAIFormBoundary{uuid.uuid4().hex}"
+    session_json = json.dumps(session_cfg)
+    chunks: list[bytes] = []
+    for name, value, content_type in (
+        ("sdp", sdp, "application/sdp"),
+        ("session", session_json, "application/json"),
+    ):
+        chunks.append(f"--{boundary}\r\n".encode())
+        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n'.encode())
+        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode())
+        chunks.append(value.encode("utf-8"))
+        chunks.append(b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode())
+    return f"multipart/form-data; boundary={boundary}", b"".join(chunks)
+
+
+def _exchange_realtime_sdp(
+    openai_key: str,
+    sdp: str,
+    instructions: str,
+    tools: list | None = None,
+) -> tuple[str | None, int, str, dict]:
+    """
+    Complete WebRTC handshake via OpenAI GA /v1/realtime/calls.
+    Returns (sdp_answer, http_status, error_detail, extra_headers).
+    """
+    session_cfg = _build_realtime_session_config(instructions, tools=tools)
+    content_type, body = _build_realtime_multipart_body(sdp, session_cfg)
+    resp = requests.post(
+        "https://api.openai.com/v1/realtime/calls",
+        headers={
+            "Authorization": f"Bearer {openai_key}",
+            "Content-Type": content_type,
+        },
+        data=body,
+        timeout=30,
+    )
+    if resp.status_code == 429:
+        retry_after = resp.headers.get("Retry-After", "60")
+        return None, 429, (
+            f"OpenAI voice rate limit reached. Please wait {retry_after} seconds and try again."
+        ), {"retry_after": int(retry_after) if str(retry_after).isdigit() else 60}
+    if resp.status_code == 401:
+        return None, 401, resp.text[:500], {}
+    if resp.status_code not in (200, 201):
+        return None, resp.status_code, resp.text[:500], {}
+    answer = resp.text or ""
+    if "v=0" not in answer:
+        return None, resp.status_code, "Invalid SDP answer from OpenAI", {}
+    return answer, 200, "", {}
+
+
+def _create_openai_realtime_client_secret(
+    openai_key: str,
+    instructions: str,
+    tools: list | None = None,
+) -> tuple[dict | None, int, str]:
+    """
+    Create an ephemeral Realtime token via OpenAI GA endpoint.
+
+    OpenAI retired POST /v1/realtime/sessions; use /v1/realtime/client_secrets.
+    Returns (normalized_response_dict, http_status, error_detail).
+    """
+    session_cfg = _build_realtime_session_config(instructions, tools=tools)
+
+    resp = requests.post(
+        "https://api.openai.com/v1/realtime/client_secrets",
+        headers={
+            "Authorization": f"Bearer {openai_key}",
+            "Content-Type": "application/json",
+        },
+        json={"session": session_cfg},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        return None, resp.status_code, resp.text[:500]
+
+    data = resp.json()
+    sess = data.get("session") or {}
+    audio_out = (sess.get("audio") or {}).get("output") or {}
+    return {
+        "client_secret": {
+            "value": data.get("value"),
+            "expires_at": data.get("expires_at"),
+        },
+        "session_id": sess.get("id"),
+        "model": sess.get("model") or _realtime_model(),
+        "voice": audio_out.get("voice") or _realtime_voice(),
+    }, 200, ""
+
+
 @bp.route("/voice/session", methods=["POST"])
 @login_required
 def voice_session():
@@ -925,7 +1114,7 @@ def voice_session():
             instructions = _BASE_SYSTEM_PROMPT
 
         # OpenAI API key is required for Realtime
-        openai_key = _get_openai_key()
+        openai_key = _get_openai_key(for_realtime=True)
         if not openai_key:
             return jsonify(
                 {
@@ -937,60 +1126,31 @@ def voice_session():
                 }
             ), 503
 
-        # Build session payload — include tools when document is present
-        session_payload: dict = {
-            "model": "gpt-4o-mini-realtime-preview-2024-12-17",
-            "voice": "alloy",
-            "instructions": instructions,
-            "modalities": ["audio", "text"],
-            "input_audio_transcription": {"model": "whisper-1"},
-            "turn_detection": {
-                "type": "server_vad",
-                "threshold": 0.5,
-                "prefix_padding_ms": 300,
-                "silence_duration_ms": 600,
-            },
-        }
-
+        # Create ephemeral session via OpenAI Realtime GA endpoint
         tools = _build_voice_tools(has_doc_context)
-        if tools:
-            session_payload["tools"] = tools
-            session_payload["tool_choice"] = "auto"
-
-        # Create ephemeral session via OpenAI Realtime REST endpoint
-        resp = requests.post(
-            "https://api.openai.com/v1/realtime/sessions",
-            headers={
-                "Authorization": f"Bearer {openai_key}",
-                "Content-Type": "application/json",
-            },
-            json=session_payload,
-            timeout=30,
+        sess_payload, status_code, detail = _create_openai_realtime_client_secret(
+            openai_key, instructions, tools=tools or None,
         )
 
-        if resp.status_code != 200:
+        if status_code != 200 or not sess_payload:
             logger.error(
                 "OpenAI Realtime session failed: %s %s",
-                resp.status_code,
-                resp.text[:300],
+                status_code,
+                detail[:300],
             )
             return jsonify(
                 {
                     "error": "Failed to create voice session with OpenAI.",
                     "code": "OPENAI_SESSION_FAILED",
-                    "detail": resp.text[:200],
+                    "detail": detail[:200],
                 }
             ), 502
 
-        sess_data = resp.json()
         return jsonify(
             {
                 "success": True,
-                "client_secret": sess_data.get("client_secret"),
-                "session_id": sess_data.get("id"),
-                "model": sess_data.get("model"),
-                "voice": sess_data.get("voice"),
                 "has_doc_context": has_doc_context,
+                **sess_payload,
             }
         )
 
@@ -1034,3 +1194,400 @@ def thread_status(thread_id: str):
     except Exception as exc:
         logger.error("Consultant /thread/status error: %s", exc)
         return jsonify({"error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Public embed API (external client websites — no login)
+# ---------------------------------------------------------------------------
+
+def _run_embed_chat(client, conversation, message: str) -> tuple[str, bool, int]:
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+    from app.utils.llm_factory import get_chat_model
+
+    use_rag = client_has_document(client)
+    doc_ctx = ""
+    filename = ""
+    chunks_used = 0
+    if use_rag and client.rag_thread_id and client.service_user_id:
+        doc_ctx = _retrieve_relevant_chunks(client.rag_thread_id, client.service_user_id, message)
+        filename = get_client_document_filename(client) or "document"
+        if doc_ctx:
+            chunks_used = doc_ctx.count("\n\n") + 1
+
+    system_content = build_embed_system_prompt(client, doc_ctx, filename)
+    history = get_message_history_for_llm(conversation.id)
+    llm = get_chat_model(
+        user_id=client.service_user_id,
+        max_tokens=_CONSULTANT_MAX_TOKENS,
+        temperature=0.5,
+        timeout=120,
+    )
+    messages = [SystemMessage(content=system_content)]
+    for item in history:
+        role, content = item.get("role"), item.get("content", "")
+        if not content:
+            continue
+        if role == "assistant":
+            messages.append(AIMessage(content=content))
+        else:
+            messages.append(HumanMessage(content=content))
+    messages.append(HumanMessage(content=message))
+    ai_msg = llm.invoke(messages)
+    text = ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
+    return text, use_rag, chunks_used
+
+
+def _maybe_escalate_and_email(client, conversation, user_message: str, ai_flag: bool) -> None:
+    messages = get_messages(conversation.id)
+    email, phone = extract_contact_info(user_message)
+    if not email and not phone:
+        email, phone = extract_contact_from_messages(messages)
+
+    if ai_flag or email or phone:
+        mark_escalation(conversation, email=email, phone=phone)
+
+    # Wait until the visitor shares email or phone before notifying the owner.
+    if not (email or phone):
+        return
+
+    db = get_db()
+    conv = db.query(EmbedConversation).filter_by(id=conversation.id).first()
+    if not conv or conv.escalation_email_sent:
+        return
+    if send_escalation_email(client, conv, messages):
+        conv.escalation_email_sent = True
+        db.commit()
+
+
+def _dispatch_embed_tool(client, tool_name: str, args: dict) -> str:
+    """Run voice tool using embed client's document (server-side thread_id)."""
+    user_id = client.service_user_id
+    thread_id = client.rag_thread_id
+    if not thread_id or not user_id:
+        return "No document configured for this client."
+
+    if tool_name == "search_document":
+        query = (args.get("query") or "").strip()
+        if not query:
+            return "Missing search query."
+        doc_ctx, page_nums = _retrieve_with_pages(thread_id, user_id, query)
+        if not doc_ctx:
+            return "No relevant content found."
+        if page_nums:
+            return doc_ctx + f"\n\n[SOURCE PAGES: {', '.join(str(p) for p in page_nums)}]"
+        return doc_ctx
+
+    if tool_name == "get_page":
+        from app.utils.rag_service import get_page_tool
+        page = args.get("page")
+        if page is None:
+            return "Missing page number."
+        raw = get_page_tool.invoke({"page": int(page), "thread_id": thread_id})
+        if raw.get("error"):
+            return raw["error"]
+        parts = raw.get("content") or []
+        return "\n\n".join(parts) if parts else "No content on that page."
+
+    if tool_name == "list_headings":
+        from app.utils.rag_service import list_topics_whole_doc_tool
+        raw = list_topics_whole_doc_tool.invoke({"thread_id": thread_id})
+        if raw.get("error"):
+            return raw["error"]
+        topics = raw.get("topics") or []
+        return "\n".join(f"- {t}" for t in topics) if topics else "No headings found."
+
+    if tool_name == "count_words":
+        from app.utils.rag_service import count_words_tool
+        raw = count_words_tool.invoke({
+            "thread_id": thread_id,
+            "page": args.get("page"),
+            "page_end": args.get("page_end"),
+        })
+        return raw.get("result") or raw.get("error") or "Could not count words."
+
+    if tool_name == "calculator":
+        from app.utils.rag_service import calculator_tool
+        raw = calculator_tool.invoke({
+            "first_num": args.get("first_num"),
+            "second_num": args.get("second_num"),
+            "operation": args.get("operation"),
+        })
+        return raw.get("result") or raw.get("error") or "Calculation failed."
+
+    return f"Unknown tool: {tool_name}"
+
+
+@bp.route("/public/session", methods=["POST"])
+def public_session():
+    client, err = validate_embed_request()
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    visitor_id = (data.get("visitor_id") or "").strip()
+    conversation_id = data.get("conversation_id")
+    if visitor_id and not is_valid_visitor_id(visitor_id, client.client_slug):
+        visitor_id = make_visitor_id(client.client_slug)
+    elif not visitor_id:
+        visitor_id = make_visitor_id(client.client_slug)
+    conversation = get_or_create_conversation(
+        client, visitor_id,
+        conversation_id=int(conversation_id) if conversation_id else None,
+    )
+    return jsonify({
+        "success": True,
+        "visitor_id": visitor_id,
+        "conversation_id": conversation.id,
+    })
+
+
+@bp.route("/public/chat", methods=["POST"])
+def public_chat():
+    client, err = validate_embed_request()
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    message = (data.get("message") or "").strip()
+    visitor_id = (data.get("visitor_id") or "").strip()
+    conversation_id = data.get("conversation_id")
+    if not message:
+        return jsonify({"error": "message is required"}), 400
+    if not visitor_id or not is_valid_visitor_id(visitor_id, client.client_slug):
+        return jsonify({"error": "Invalid or missing visitor_id"}), 400
+
+    conversation = get_or_create_conversation(
+        client, visitor_id,
+        conversation_id=int(conversation_id) if conversation_id else None,
+    )
+    add_message(conversation.id, "user", message, channel="text")
+    try:
+        response_text, used_rag, chunks_used = _run_embed_chat(client, conversation, message)
+        response_text, ai_escalate = strip_escalate_marker(response_text)
+        add_message(conversation.id, "assistant", response_text, channel="text")
+        _maybe_escalate_and_email(client, conversation, message, ai_escalate)
+        return jsonify({
+            "success": True,
+            "message": response_text,
+            "visitor_id": visitor_id,
+            "conversation_id": conversation.id,
+            "used_rag": used_rag,
+            "chunks_used": chunks_used,
+        })
+    except Exception as exc:
+        logger.error("Consultant /public/chat error: %s", exc, exc_info=True)
+        return jsonify({"error": f"Chat failed: {exc}"}), 500
+
+
+@bp.route("/public/callback", methods=["POST"])
+def public_callback():
+    client, err = validate_embed_request()
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    visitor_id = (data.get("visitor_id") or "").strip()
+    conversation_id = data.get("conversation_id")
+    notes = (data.get("notes") or "").strip() or None
+    email = (data.get("email") or "").strip() or None
+    phone = (data.get("phone") or "").strip() or None
+    if not visitor_id or not is_valid_visitor_id(visitor_id, client.client_slug):
+        return jsonify({"error": "Invalid visitor_id"}), 400
+    conversation = get_or_create_conversation(
+        client, visitor_id,
+        conversation_id=int(conversation_id) if conversation_id else None,
+    )
+    if not email and not phone:
+        email, phone = extract_contact_info(notes or "")
+    create_callback_request(conversation.id, email=email, phone=phone, notes=notes)
+    mark_escalation(conversation, email=email, phone=phone)
+    db = get_db()
+    conv = db.query(EmbedConversation).filter_by(id=conversation.id).first()
+    if conv and not conv.escalation_email_sent:
+        if send_escalation_email(client, conv, get_messages(conversation.id), reason="Callback requested"):
+            conv.escalation_email_sent = True
+            db.commit()
+    return jsonify({"success": True, "conversation_id": conversation.id})
+
+
+@bp.route("/public/export-chats", methods=["POST"])
+def public_export_chats():
+    client, err = validate_embed_request()
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    from_dt = to_dt = None
+    if data.get("from_date"):
+        try:
+            from_dt = datetime.fromisoformat(str(data["from_date"]).replace("Z", "+00:00"))
+        except ValueError:
+            return jsonify({"error": "Invalid from_date"}), 400
+    if data.get("to_date"):
+        try:
+            to_dt = datetime.fromisoformat(str(data["to_date"]).replace("Z", "+00:00"))
+        except ValueError:
+            return jsonify({"error": "Invalid to_date"}), 400
+    conversations = list_conversations_for_client(client.id, from_dt, to_dt)
+    if not send_export_email(client, conversations, from_dt, to_dt):
+        return jsonify({"error": "Failed to send export email"}), 500
+    return jsonify({
+        "success": True,
+        "conversations_count": len(conversations),
+        "sent_to": client.owner_email,
+    })
+
+
+@bp.route("/public/voice/session", methods=["POST"])
+def public_voice_session():
+    """Create OpenAI Realtime ephemeral token (legacy; prefer /public/voice/connect)."""
+    client, err = validate_embed_request()
+    if err:
+        return err
+
+    instructions, has_doc_context = _embed_voice_instructions(client)
+
+    openai_key = _get_openai_key(for_realtime=True)
+    if not openai_key:
+        return jsonify({"error": "OpenAI API key not configured", "code": "OPENAI_KEY_MISSING"}), 503
+
+    tools = _build_voice_tools(has_doc_context) if has_doc_context else None
+    sess_payload, status_code, detail = _create_openai_realtime_client_secret(
+        openai_key, instructions, tools=tools,
+    )
+    if status_code != 200 or not sess_payload:
+        logger.error("Embed voice session failed: %s %s", status_code, detail[:300])
+        return jsonify({
+            "error": "Failed to create voice session",
+            "code": "OPENAI_SESSION_FAILED",
+            "detail": detail[:200],
+        }), 502
+
+    return jsonify({
+        "success": True,
+        "has_doc_context": has_doc_context,
+        **sess_payload,
+    })
+
+
+@bp.route("/public/voice/health", methods=["GET"])
+def public_voice_health():
+    """Check OpenAI Realtime API key and quota (no SDP). Requires X-Client-Key."""
+    client, err = validate_embed_request()
+    if err:
+        return err
+
+    openai_key = _get_openai_key(for_realtime=True)
+    key_source = _openai_key_source(for_realtime=True)
+    model = _realtime_model()
+
+    if not openai_key:
+        return jsonify({
+            "ok": False,
+            "code": "OPENAI_KEY_MISSING",
+            "key_source": key_source,
+            "message": "No OpenAI API key configured for voice",
+        }), 503
+
+    resp = requests.post(
+        "https://api.openai.com/v1/realtime/client_secrets",
+        headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+        json={"session": {"type": "realtime", "model": model}},
+        timeout=20,
+    )
+
+    if resp.status_code == 200:
+        return jsonify({
+            "ok": True,
+            "code": "OPENAI_OK",
+            "key_source": key_source,
+            "model": model,
+            "message": "OpenAI API key is valid and Realtime is available",
+        })
+
+    detail = resp.text[:300]
+    code = "OPENAI_ERROR"
+    if resp.status_code == 401:
+        code = "OPENAI_KEY_INVALID"
+    elif resp.status_code == 429:
+        code = "OPENAI_RATE_LIMITED"
+
+    return jsonify({
+        "ok": False,
+        "code": code,
+        "openai_status": resp.status_code,
+        "key_source": key_source,
+        "model": model,
+        "message": detail,
+        "retry_after": int(resp.headers.get("Retry-After", 60)),
+    }), resp.status_code if resp.status_code in (401, 429) else 502
+
+
+@bp.route("/public/voice/connect", methods=["POST"])
+def public_voice_connect():
+    """WebRTC SDP exchange proxied server-side (one OpenAI call, avoids browser 429s)."""
+    client, err = validate_embed_request()
+    if err:
+        return err
+
+    data = request.get_json(force=True, silent=True) or {}
+    sdp = data.get("sdp") or ""
+    if not sdp or "v=0" not in sdp:
+        return jsonify({"error": "Valid SDP offer is required"}), 400
+
+    openai_key = _get_openai_key(for_realtime=True)
+    if not openai_key:
+        return jsonify({"error": "OpenAI API key not configured", "code": "OPENAI_KEY_MISSING"}), 503
+
+    instructions, has_doc_context = _embed_voice_instructions(client)
+    tools = _build_voice_tools(has_doc_context) if has_doc_context else None
+
+    answer, status_code, detail, extra = _exchange_realtime_sdp(
+        openai_key, sdp, instructions, tools=tools,
+    )
+    if status_code == 429:
+        logger.warning(
+            "OpenAI realtime rate limit (key_source=%s model=%s)",
+            _openai_key_source(for_realtime=True),
+            _realtime_model(),
+        )
+        return jsonify({
+            "error": detail,
+            "code": "OPENAI_RATE_LIMITED",
+            "source": "openai",
+            "key_source": _openai_key_source(for_realtime=True),
+            "retry_after": extra.get("retry_after", 60),
+        }), 429
+    if status_code == 401:
+        return jsonify({
+            "error": "OpenAI API key is invalid or expired",
+            "code": "OPENAI_KEY_INVALID",
+            "key_source": _openai_key_source(for_realtime=True),
+            "detail": detail[:200],
+        }), 401
+    if status_code != 200 or not answer:
+        logger.error("Embed voice connect failed: %s %s", status_code, detail[:300])
+        return jsonify({
+            "error": "Failed to connect voice session",
+            "code": "OPENAI_CONNECT_FAILED",
+            "detail": detail[:200],
+        }), 502
+
+    return jsonify({
+        "success": True,
+        "sdp": answer,
+        "has_doc_context": has_doc_context,
+        "model": _realtime_model(),
+        "voice": _realtime_voice(),
+    })
+
+
+@bp.route("/public/tool", methods=["POST"])
+def public_tool_call():
+    """Voice tool dispatcher for embed widget (no thread_id from browser)."""
+    client, err = validate_embed_request()
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    tool_name = (data.get("tool_name") or "").strip()
+    args = data.get("args") or {}
+    if not tool_name:
+        return jsonify({"error": "tool_name is required"}), 400
+    result_text = _dispatch_embed_tool(client, tool_name, args)
+    return jsonify({"success": True, "result": result_text})

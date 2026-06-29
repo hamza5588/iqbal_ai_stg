@@ -228,7 +228,8 @@ def init_db(app):
         UserPrompt, UserDocument, UserTokenUsage, TokenResetHistory,
         LessonFAQ, LessonChatHistory, EmailVerificationToken, PasswordResetToken,
         RAGChunk, RAGThread, RAGPrompt, Coupon, CouponRedemption, GlobalPrompt,
-        SystemSettings, UserSettings
+        SystemSettings, UserSettings, EmbedClient, EmbedConversation, EmbedMessage,
+        EmbedCallbackRequest
     )
     from app.load_testing.models import (
         TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog

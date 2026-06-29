@@ -1498,3 +1498,67 @@ def llm_telemetry_export_csv():
         logger.error(f"llm export: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@bp.route('/embed-clients', methods=['GET'])
+@login_required
+@admin_only
+def list_embed_clients_admin():
+    from app.services.embed_service import list_embed_clients, parse_allowed_origins
+    clients = list_embed_clients()
+    return jsonify({'success': True, 'clients': [{
+        'id': c.id, 'client_slug': c.client_slug, 'owner_email': c.owner_email,
+        'rag_thread_id': c.rag_thread_id, 'service_user_id': c.service_user_id,
+        'allowed_origins': parse_allowed_origins(c.allowed_origins), 'active': c.active,
+    } for c in clients]})
+
+
+@bp.route('/embed-clients', methods=['POST'])
+@login_required
+@admin_only
+def create_embed_client_admin():
+    from app.services.embed_service import create_embed_client
+    data = request.get_json(force=True) or {}
+    slug = (data.get('client_slug') or '').strip()
+    email = (data.get('owner_email') or '').strip()
+    if not slug or not email:
+        return jsonify({'success': False, 'error': 'client_slug and owner_email required'}), 400
+    client, secret = create_embed_client(
+        client_slug=slug, owner_email=email,
+        owner_name=data.get('owner_name'),
+        allowed_origins=data.get('allowed_origins') or [],
+        rag_thread_id=data.get('rag_thread_id'),
+        service_user_id=data.get('service_user_id'),
+        system_prompt=data.get('system_prompt'),
+        secret=data.get('secret'),
+    )
+    return jsonify({'success': True, 'client_id': client.id, 'client_key': secret})
+
+
+@bp.route('/embed-clients/<int:client_id>', methods=['PUT'])
+@login_required
+@admin_only
+def update_embed_client_admin(client_id):
+    from app.services.embed_service import update_embed_client
+    data = request.get_json(force=True) or {}
+    fields = {k: data[k] for k in ('owner_email', 'owner_name', 'allowed_origins', 'rag_thread_id',
+                                   'service_user_id', 'system_prompt', 'active') if k in data}
+    client = update_embed_client(client_id, **fields)
+    if not client:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    return jsonify({'success': True})
+
+
+@bp.route('/embed-clients/<int:client_id>/export', methods=['POST'])
+@login_required
+@admin_only
+def admin_export_embed_chats(client_id):
+    from app.services.embed_service import get_client_by_id, list_conversations_for_client
+    from app.services.embed_email_service import send_export_email
+    client = get_client_by_id(client_id)
+    if not client:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    convs = list_conversations_for_client(client.id)
+    if not send_export_email(client, convs):
+        return jsonify({'success': False, 'error': 'Email failed'}), 500
+    return jsonify({'success': True, 'sent_to': client.owner_email, 'count': len(convs)})
+

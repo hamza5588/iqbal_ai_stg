@@ -193,22 +193,23 @@ def create_app():
 
 
     
-    # Configure CORS - FIXED VERSION
+    from app.config import Config as AppConfig
+    cors_origins = list(AppConfig.ALLOWED_ORIGINS)
     CORS(app,
          resources={
              r"/api/*": {
-                 "origins": ["http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080"],  # Specify your frontend URLs
+                 "origins": cors_origins,
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-                 "supports_credentials": True,  # This was missing!
-                 "expose_headers": ["Content-Type", "Authorization"]
+                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "X-Client-Key"],
+                 "supports_credentials": True,
+                 "expose_headers": ["Content-Type", "Authorization", "Retry-After"],
              },
              r"/auth/*": {
-                 "origins": ["http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080"],
+                 "origins": cors_origins,
                  "supports_credentials": True,
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
-             }
+                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "X-Client-Key"],
+             },
          },
          supports_credentials=True)
     
@@ -251,6 +252,12 @@ def create_app():
             # Create default admin account if it doesn't exist
             from app.utils.admin_init import create_default_admin
             create_default_admin()
+
+            try:
+                from app.utils.embed_auth import sync_embed_clients_from_env
+                sync_embed_clients_from_env()
+            except Exception as embed_sync_exc:
+                print(f"Embed client env sync skipped: {embed_sync_exc}")
 
             # Initialize Lesson Q&A LangGraph (Postgres checkpointer setup + compile).
             # This MUST run once on startup so that:

@@ -396,6 +396,21 @@
     if (el) el.remove();
   }
 
+  async function exchangeRealtimeSdp(ephemeralKey, sdp) {
+    const fd = new FormData();
+    fd.set('sdp', sdp);
+    const sdpResp = await fetch('https://api.openai.com/v1/realtime/calls', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + ephemeralKey },
+      body: fd,
+    });
+    if (!sdpResp.ok) {
+      const errText = await sdpResp.text();
+      throw new Error('OpenAI voice connection failed (' + sdpResp.status + '): ' + (errText || 'Bad Request').slice(0, 200));
+    }
+    return sdpResp.text();
+  }
+
   /* ── Voice: WebRTC + OpenAI Realtime ─────────────────────────────────── */
 
   async function startVoice() {
@@ -439,7 +454,6 @@
       }
 
       const ephemeralKey = sessData.client_secret.value;
-      const model = sessData.model || 'gpt-4o-mini-realtime-preview-2024-12-17';
 
       /* 2 ── Audio element ────────────────────────────────────────────── */
       if (!S.audioEl) {
@@ -492,26 +506,11 @@
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      /* 7 ── Exchange SDP with OpenAI ─────────────────────────────────── */
+      /* 7 ── Exchange SDP with OpenAI (GA endpoint) ───────────────────── */
       statusEl.textContent = 'Connecting to voice AI…';
-      const sdpResp = await fetch(
-        'https://api.openai.com/v1/realtime?model=' + encodeURIComponent(model),
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + ephemeralKey,
-            'Content-Type':  'application/sdp',
-          },
-          body: offer.sdp,
-        }
-      );
-
-      if (!sdpResp.ok) {
-        throw new Error('OpenAI Realtime SDP exchange failed (' + sdpResp.status + ')');
-      }
+      const answerSdp = await exchangeRealtimeSdp(ephemeralKey, offer.sdp);
 
       /* 8 ── Set remote description ───────────────────────────────────── */
-      const answerSdp = await sdpResp.text();
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
     } catch (err) {

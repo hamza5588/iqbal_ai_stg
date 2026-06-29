@@ -93,6 +93,15 @@ def index():
     return redirect(get_default_route_by_role(session.get('role')))
 
 
+@bp.route('/embed/demo')
+def embed_demo():
+    from app.utils.embed_auth import get_first_client_key
+    pair = get_first_client_key()
+    if not pair:
+        return "Set EMBED_CLIENT_KEYS in .env first.", 503
+    return render_template('embed_demo.html', embed_client_key=pair[1])
+
+
 @bp.route('/student-dashboard')
 @login_required
 def student_dashboard():
