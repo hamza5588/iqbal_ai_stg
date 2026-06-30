@@ -501,6 +501,28 @@ def _wants_json():
     )
 
 
+def _get_reset_token(db, email):
+    return db.query(DBPasswordResetToken).filter(
+        and_(
+            DBPasswordResetToken.email == email,
+            DBPasswordResetToken.used == False
+        )
+    ).first()
+
+
+def _validate_reset_otp(db, email, otp):
+    reset_token = _get_reset_token(db, email)
+    if not reset_token:
+        return None, 'Invalid or expired OTP'
+    if datetime.utcnow() > reset_token.expires_at:
+        reset_token.used = True
+        db.commit()
+        return None, 'OTP has expired'
+    if reset_token.otp != otp:
+        return None, 'Invalid OTP'
+    return reset_token, None
+
+
 @bp.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'GET' and 'user_id' in session:
@@ -563,6 +585,22 @@ If you didn't request this password reset, please ignore this email.'''
             
     return render_template('forgot_password.html')
 
+
+@bp.route('/verify_reset_otp', methods=['POST'])
+def verify_reset_otp():
+    try:
+        email = request.form['useremail']
+        otp = request.form['otp']
+        db = get_db()
+        _, error = _validate_reset_otp(db, email, otp)
+        if error:
+            return jsonify({'success': False, 'error': error}), 400
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"OTP verification error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to verify OTP'}), 500
+
+
 @bp.route('/reset_password', methods=['GET', 'POST'])
 def reset_password():
     if request.method == 'POST':
@@ -578,33 +616,12 @@ def reset_password():
                     return jsonify({'success': False, 'error': 'Passwords do not match'}), 400
                 return render_template('reset_password.html', email=email, error="Passwords do not match")
             
-            # Check if OTP exists and is valid
             db = get_db()
-            reset_token = db.query(DBPasswordResetToken).filter(
-                and_(
-                    DBPasswordResetToken.email == email,
-                    DBPasswordResetToken.used == False
-                )
-            ).first()
-            
-            if not reset_token:
+            reset_token, error = _validate_reset_otp(db, email, otp)
+            if error:
                 if _wants_json():
-                    return jsonify({'success': False, 'error': 'Invalid or expired OTP'}), 400
-                return render_template('reset_password.html', email=email, error="Invalid or expired OTP")
-            
-            # Check if expired
-            if datetime.utcnow() > reset_token.expires_at:
-                reset_token.used = True
-                db.commit()
-                if _wants_json():
-                    return jsonify({'success': False, 'error': 'OTP has expired'}), 400
-                return render_template('reset_password.html', email=email, error="OTP has expired")
-            
-            # Verify OTP
-            if reset_token.otp != otp:
-                if _wants_json():
-                    return jsonify({'success': False, 'error': 'Invalid OTP'}), 400
-                return render_template('reset_password.html', email=email, error="Invalid OTP")
+                    return jsonify({'success': False, 'error': error}), 400
+                return render_template('reset_password.html', email=email, error=error)
             
             # Update password in database
             from app.models.database_models import User as DBUser
