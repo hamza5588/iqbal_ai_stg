@@ -912,7 +912,7 @@ def get_llm_settings():
     """Get all LLM settings (admin only)"""
     try:
         from app.utils.encryption import mask_api_key
-        from app.utils.llm_models import GROQ_MODELS, OPENAI_MODELS
+        from app.utils.llm_models import get_groq_available_models, OPENAI_MODELS
         
         db = get_db()
         
@@ -944,10 +944,7 @@ def get_llm_settings():
             'groq_allow_user_model_selection': settings_dict.get('groq_allow_user_model_selection', 'false').lower() == 'true',
             'openai_allow_user_model_selection': settings_dict.get('openai_allow_user_model_selection', 'false').lower() == 'true',
             'available_models': {
-                'groq': {
-                    'gpt_oss': GROQ_MODELS['gpt_oss'],
-                    'llama': GROQ_MODELS['llama']
-                },
+                'groq': get_groq_available_models(),
                 'openai': OPENAI_MODELS
             }
         }
@@ -1049,7 +1046,7 @@ def get_user_model():
     try:
         from app.utils.db import get_db
         from app.models.database_models import SystemSettings, UserSettings
-        from app.utils.llm_models import GROQ_MODELS, OPENAI_MODELS
+        from app.utils.llm_models import get_groq_available_models, OPENAI_MODELS
         
         user_id = session.get('user_id')
         if not user_id:
@@ -1082,10 +1079,7 @@ def get_user_model():
         
         # Get available models for current provider
         if active_provider == 'GROQ':
-            available_models = {
-                'gpt_oss': GROQ_MODELS['gpt_oss'],
-                'llama': GROQ_MODELS['llama']
-            }
+            available_models = get_groq_available_models()
         else:
             available_models = OPENAI_MODELS
         
