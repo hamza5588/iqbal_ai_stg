@@ -2120,6 +2120,21 @@
                             });
                             modelSelect.appendChild(llamaGroup);
                         }
+
+                        if (data.available_models.qwen && data.available_models.qwen.length > 0) {
+                            const qwenGroup = document.createElement('optgroup');
+                            qwenGroup.label = 'Qwen Models';
+                            data.available_models.qwen.forEach(model => {
+                                const option = document.createElement('option');
+                                option.value = model.id;
+                                option.textContent = model.name;
+                                if (data.selected_model === model.id) {
+                                    option.selected = true;
+                                }
+                                qwenGroup.appendChild(option);
+                            });
+                            modelSelect.appendChild(qwenGroup);
+                        }
                     } else {
                         // OpenAI models
                         if (data.available_models && Array.isArray(data.available_models)) {

@@ -15,7 +15,10 @@ GROQ_MODELS = {
         {"id": "llama-3.1-70b-versatile", "name": "Llama 3.1 70B Versatile"},
         {"id": "llama-3-70b-8192", "name": "Llama 3 70B 8192"},
         {"id": "llama-3-8b-8192", "name": "Llama 3 8B 8192"},
-    ]
+    ],
+    "qwen": [
+        {"id": "qwen/qwen3-32b", "name": "Qwen3 32B"},
+    ],
 }
 
 # OpenAI Models
@@ -29,6 +32,11 @@ OPENAI_MODELS = [
 
 # All Groq models (flattened)
 ALL_GROQ_MODELS = [model for model_list in GROQ_MODELS.values() for model in model_list]
+
+
+def get_groq_available_models() -> dict:
+    """Grouped Groq models for admin and user selection UIs."""
+    return {key: GROQ_MODELS[key] for key in GROQ_MODELS}
 
 # Get all model IDs for a provider
 def get_model_ids_for_provider(provider: str) -> list:
