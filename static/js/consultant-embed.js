@@ -23,6 +23,13 @@
   }
 
   function loadCss() {
+    if (!document.querySelector('link[data-iqbal-font]')) {
+      const f = document.createElement('link');
+      f.rel = 'stylesheet';
+      f.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+      f.setAttribute('data-iqbal-font', '1');
+      document.head.appendChild(f);
+    }
     if (document.querySelector('link[data-iqbal-embed]')) return;
     const l = document.createElement('link');
     l.rel = 'stylesheet';
@@ -30,6 +37,19 @@
     l.setAttribute('data-iqbal-embed', '1');
     document.head.appendChild(l);
   }
+
+  function applyTheme() {
+    const panel = document.getElementById('consultant-panel');
+    const btn = document.getElementById('consultant-btn');
+    const color = state.primaryColor || '#05B0FC';
+    if (panel) panel.style.setProperty('--iqbal-primary', color);
+    if (btn) btn.style.setProperty('--iqbal-primary', color);
+  }
+
+  const SEND_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>';
+  const CHAT_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+  const VOICE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>';
+  const PHONE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
 
   function buildWidget() {
     if (document.getElementById('consultant-btn')) return;
@@ -40,27 +60,54 @@
 
     const btn = document.createElement('button');
     btn.id = 'consultant-btn';
-    btn.innerHTML = '<div class="consultant-icon-inner"><span>Consultant</span></div>';
+    btn.innerHTML = '<div class="consultant-icon-inner"><span class="consultant-btn-dot"></span><span>Consultant</span></div>';
+    btn.setAttribute('aria-label', 'Open AI Consultant');
     btn.addEventListener('click', toggle);
     document.body.appendChild(btn);
 
     const panel = document.createElement('div');
     panel.id = 'consultant-panel';
     panel.innerHTML = [
-      '<div class="consultant-header"><div class="consultant-header-title">' + state.title +
-        '<span class="consultant-header-badge">AI</span></div>',
-      '<button class="consultant-close-btn" type="button">&times;</button></div>',
-      '<div class="consultant-tabs"><button class="consultant-tab" type="button" id="embed-voice-tab">Voice</button></div>',
-      '<div id="c-pane-chat">',
-      '<div class="consultant-messages" id="c-messages"><div class="consultant-msg bot">Hello! How can I help?</div></div>',
-      '<button type="button" id="embed-callback-btn" style="margin:8px 12px;padding:6px 12px;font-size:12px">Request callback</button>',
-      '<div class="consultant-input-row"><textarea id="consultant-text-input" rows="1" placeholder="Type a message…"></textarea>',
-      '<button class="consultant-send-btn" id="c-send-btn" type="button">Send</button></div></div>',
-      '<div id="c-pane-voice" style="display:none"><div class="consultant-voice-pane">',
-      '<div class="consultant-voice-status" id="c-voice-status">Voice ready</div>',
-      '<button class="c-voice-btn start" type="button" id="c-btn-start">Start Voice</button>',
-      '<button class="c-voice-btn stop" type="button" id="c-btn-stop" style="display:none">Stop</button>',
-      '<div class="consultant-voice-transcript" id="c-transcript"></div></div></div>',
+      '<div class="consultant-header">',
+      '  <div class="consultant-header-left">',
+      '    <div class="consultant-header-avatar" aria-hidden="true">AI</div>',
+      '    <div class="consultant-header-title">' + state.title +
+      '      <span class="consultant-header-badge">Online</span>',
+      '    </div>',
+      '  </div>',
+      '  <button class="consultant-close-btn" type="button" aria-label="Close">&times;</button>',
+      '</div>',
+      '<div class="consultant-tabs consultant-tabs-embed">',
+      '  <button class="consultant-tab active" type="button" id="embed-chat-tab">' + CHAT_ICON + ' Chat</button>',
+      '  <button class="consultant-tab" type="button" id="embed-voice-tab">' + VOICE_ICON + ' Voice</button>',
+      '</div>',
+      '<div id="c-pane-chat" class="consultant-embed-pane">',
+      '  <div class="consultant-messages" id="c-messages">',
+      '    <div class="consultant-msg bot consultant-welcome">Hello! How can I help you today?</div>',
+      '  </div>',
+      '  <div class="consultant-embed-footer">',
+      '    <button type="button" class="consultant-callback-btn" id="embed-callback-btn">' + PHONE_ICON + ' Request callback</button>',
+      '    <div class="consultant-input-row">',
+      '      <textarea id="consultant-text-input" rows="1" placeholder="Type a message…" aria-label="Message"></textarea>',
+      '      <button class="consultant-send-btn" id="c-send-btn" type="button" aria-label="Send">' + SEND_ICON + '</button>',
+      '    </div>',
+      '  </div>',
+      '</div>',
+      '<div id="c-pane-voice" class="consultant-embed-pane" style="display:none">',
+      '  <div class="consultant-voice-pane">',
+      '    <div class="consultant-voice-ring" id="c-voice-ring">',
+      '      <div class="consultant-voice-mic-icon" aria-hidden="true">' + VOICE_ICON + '</div>',
+      '    </div>',
+      '    <div class="consultant-voice-status" id="c-voice-status">Tap Start to speak with the AI</div>',
+      '    <div class="consultant-voice-controls">',
+      '      <button class="c-voice-btn start" type="button" id="c-btn-start">' + VOICE_ICON + ' Start Voice</button>',
+      '      <button class="c-voice-btn stop" type="button" id="c-btn-stop" style="display:none">Stop</button>',
+      '    </div>',
+      '    <div class="consultant-voice-transcript" id="c-transcript">',
+      '      <div class="transcript-placeholder">Your voice conversation will appear here</div>',
+      '    </div>',
+      '  </div>',
+      '</div>',
     ].join('');
     document.body.appendChild(panel);
 
@@ -70,14 +117,20 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
     document.getElementById('embed-callback-btn').addEventListener('click', requestCallback);
-    document.getElementById('embed-voice-tab').addEventListener('click', function () {
+    function switchTab(mode) {
       const v = document.getElementById('c-pane-voice');
       const c = document.getElementById('c-pane-chat');
-      const show = v.style.display === 'none';
-      v.style.display = show ? '' : 'none';
-      c.style.display = show ? 'none' : '';
-      document.getElementById('embed-voice-tab').classList.toggle('active', show);
-    });
+      const chatTab = document.getElementById('embed-chat-tab');
+      const voiceTab = document.getElementById('embed-voice-tab');
+      const isVoice = mode === 'voice';
+      v.style.display = isVoice ? '' : 'none';
+      c.style.display = isVoice ? 'none' : '';
+      if (chatTab) chatTab.classList.toggle('active', !isVoice);
+      if (voiceTab) voiceTab.classList.toggle('active', isVoice);
+      if (!isVoice) stopVoice();
+    }
+    document.getElementById('embed-chat-tab').addEventListener('click', function () { switchTab('chat'); });
+    document.getElementById('embed-voice-tab').addEventListener('click', function () { switchTab('voice'); });
     document.getElementById('c-btn-start').addEventListener('click', startVoice);
     document.getElementById('c-btn-stop').addEventListener('click', stopVoice);
   }
@@ -115,8 +168,14 @@
   function addMsg(text, role) {
     const c = document.getElementById('c-messages');
     const div = document.createElement('div');
-    div.className = 'consultant-msg ' + role;
-    div.textContent = text;
+    if (role === 'bot error') {
+      div.className = 'consultant-msg bot error';
+      div.innerHTML = '<span class="consultant-error-icon" aria-hidden="true">!</span><span class="consultant-error-text"></span>';
+      div.querySelector('.consultant-error-text').textContent = text;
+    } else {
+      div.className = 'consultant-msg ' + role;
+      div.textContent = text;
+    }
     c.appendChild(div);
     c.scrollTop = c.scrollHeight;
   }
@@ -274,6 +333,9 @@
       dc.addEventListener('open', function () {
         state.voiceActive = true;
         statusEl.textContent = 'Connected — speak now';
+        statusEl.className = 'consultant-voice-status connected';
+        const ring = document.getElementById('c-voice-ring');
+        if (ring) ring.classList.add('active');
         document.getElementById('c-btn-start').style.display = 'none';
         document.getElementById('c-btn-stop').style.display = '';
       });
@@ -303,7 +365,9 @@
     if (state.localStream) { state.localStream.getTracks().forEach(function (t) { t.stop(); }); state.localStream = null; }
     state.dataChannel = null;
     const s = document.getElementById('c-voice-status');
-    if (s) s.textContent = 'Voice stopped';
+    if (s) { s.textContent = 'Tap Start to speak with the AI'; s.className = 'consultant-voice-status'; }
+    const ring = document.getElementById('c-voice-ring');
+    if (ring) ring.classList.remove('active');
     const st = document.getElementById('c-btn-start');
     const sp = document.getElementById('c-btn-stop');
     if (st) { st.style.display = ''; st.disabled = false; }
@@ -318,6 +382,7 @@
     state.primaryColor = opts.primaryColor || state.primaryColor;
     loadCss();
     if (!state.initialized) { buildWidget(); state.initialized = true; }
+    applyTheme();
   }
 
   global.IqbalConsultant = { init: init, toggle: toggle };

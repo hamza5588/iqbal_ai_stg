@@ -200,9 +200,15 @@ class Config:
         ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins_raw.split(',') if o.strip()]
     else:
         ALLOWED_ORIGINS = [
+            # Local dev
             'http://localhost:3000', 'http://localhost:8080', 'http://localhost:5000',
             'http://localhost:5002', 'http://127.0.0.1:3000', 'http://127.0.0.1:8080',
             'http://127.0.0.1:5000', 'http://127.0.0.1:5002',
+            # Production API + embed clients
+            'http://209.23.13.199',
+            'https://consultation.iqbalai.com',
+            'https://lmda.com.pk', 'https://www.lmda.com.pk',
+            'https://tnmco.uk', 'https://www.tnmco.uk',
         ]
     EMBED_CLIENT_KEYS = os.getenv('EMBED_CLIENT_KEYS', '')
     EMBED_RATE_LIMIT_PER_HOUR = int(os.getenv('EMBED_RATE_LIMIT_PER_HOUR', '60'))
