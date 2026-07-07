@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Embed Chatbot - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'iqbal-primary': '#05B0FC',
+                    }
+                }
+            }
+        };
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
+            <div class="flex items-center gap-4">
+                <a href="/admin/" class="text-[#05B0FC] hover:underline">
+                    <i class="fas fa-arrow-left mr-2"></i>Admin
+                </a>
+                <h1 class="text-xl font-bold text-gray-800">Create Embed Chatbot</h1>
+            </div>
+            <a href="/auth/logout" class="text-red-500 hover:underline text-sm">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto p-6">
+        <p class="text-gray-600 mb-6">
+            Automates the manual onboarding flow: upload PDF, generate client secret, whitelist website,
+            and produce the embed snippet. Uses the same backend logic as
+            <code class="text-sm bg-gray-100 px-1 rounded">scripts/embed_onboard.py</code>
+            and <code class="text-sm bg-gray-100 px-1 rounded">POST /api/consultant/ingest</code>.
+        </p>
+
+        <div id="error-box" class="hidden mb-4 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200"></div>
+
+        <form id="onboard-form" class="bg-white rounded-xl shadow-md p-6 space-y-5 border border-gray-100">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2" for="pdf-file">
+                    Client PDF Document <span class="text-red-500">*</span>
+                </label>
+                <input type="file" id="pdf-file" name="file" accept=".pdf,application/pdf" required
+                    class="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#05B0FC] file:text-white hover:file:bg-blue-500" />
+                <p class="text-xs text-gray-500 mt-1">PDF only. Same upload pipeline as the consultant widget.</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2" for="owner-email">
+                    Owner Email <span class="text-red-500">*</span>
+                </label>
+                <input type="email" id="owner-email" name="owner_email" required placeholder="info@client.com"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#05B0FC] focus:border-transparent" />
+                <p class="text-xs text-gray-500 mt-1">Receives escalation emails and chat exports.</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2" for="website-url">
+                    Website URL <span class="text-red-500">*</span>
+                </label>
+                <input type="url" id="website-url" name="website_url" required placeholder="https://client.com"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#05B0FC] focus:border-transparent" />
+                <p class="text-xs text-gray-500 mt-1">Whitelisted automatically (with www variant).</p>
+            </div>
+
+            <button type="submit" id="submit-btn"
+                class="w-full bg-[#05B0FC] text-white font-medium py-3 rounded-lg hover:bg-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-robot mr-2"></i>Create Chatbot
+            </button>
+        </form>
+
+        <div id="progress-panel" class="hidden mt-6 bg-white rounded-xl shadow-md p-6 border border-gray-100">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Creating chatbot...</h3>
+            <ul id="progress-steps" class="space-y-3"></ul>
+        </div>
+
+        <div id="result-panel" class="hidden mt-6 bg-white rounded-xl shadow-md p-6 border border-green-200">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="bg-green-100 p-2 rounded-full">
+                    <i class="fas fa-check text-green-600"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Chatbot created successfully</h3>
+                    <p class="text-sm text-gray-500">Copy the secret key and integration script below to send to the client.</p>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs font-medium text-gray-500 uppercase">Client Slug</label>
+                        <p id="res-slug" class="font-mono text-sm mt-1"></p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-500 uppercase">Website URL</label>
+                        <p id="res-website" class="font-mono text-sm mt-1 break-all"></p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-500 uppercase">Owner Email</label>
+                        <p id="res-email" class="font-mono text-sm mt-1 break-all"></p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-500 uppercase">Thread ID</label>
+                        <p id="res-thread" class="font-mono text-sm mt-1 break-all"></p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-500 uppercase">User ID</label>
+                        <p id="res-user" class="font-mono text-sm mt-1"></p>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-medium text-gray-500 uppercase">Client Secret Key</label>
+                        <button type="button" onclick="copyField('res-secret')" class="text-[#05B0FC] text-sm hover:underline">
+                            <i class="fas fa-copy mr-1"></i>Copy
+                        </button>
+                    </div>
+                    <pre id="res-secret" class="bg-gray-50 border rounded-lg p-3 text-sm font-mono break-all whitespace-pre-wrap"></pre>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-medium text-gray-500 uppercase">Integration Script</label>
+                        <div class="flex gap-3">
+                            <button type="button" onclick="copyField('res-script')" class="text-[#05B0FC] text-sm hover:underline">
+                                <i class="fas fa-copy mr-1"></i>Copy
+                            </button>
+                            <button type="button" onclick="downloadScript()" class="text-[#05B0FC] text-sm hover:underline">
+                                <i class="fas fa-download mr-1"></i>Download
+                            </button>
+                        </div>
+                    </div>
+                    <pre id="res-script" class="bg-gray-50 border rounded-lg p-3 text-sm font-mono overflow-x-auto whitespace-pre-wrap"></pre>
+                </div>
+            </div>
+
+            <button type="button" onclick="resetForm()"
+                class="mt-6 w-full border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50">
+                Create another chatbot
+            </button>
+        </div>
+    </main>
+
+    <script>
+        const STEPS = [
+            'Uploading PDF...',
+            'Creating thread...',
+            'Creating user binding...',
+            'Generating secret...',
+            'Updating whitelist...',
+            'Finished'
+        ];
+
+        let scriptContent = '';
+        let progressTimer = null;
+
+        function showError(message) {
+            const box = document.getElementById('error-box');
+            box.textContent = message;
+            box.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('error-box').classList.add('hidden');
+        }
+
+        function renderProgress(activeIndex) {
+            const list = document.getElementById('progress-steps');
+            list.innerHTML = STEPS.map((label, i) => {
+                let icon = 'fa-circle text-gray-300';
+                let textClass = 'text-gray-500';
+                if (i < activeIndex) {
+                    icon = 'fa-check-circle text-green-500';
+                    textClass = 'text-green-700';
+                } else if (i === activeIndex) {
+                    icon = 'fa-spinner fa-spin text-[#05B0FC]';
+                    textClass = 'text-gray-800 font-medium';
+                }
+                return `<li class="flex items-center gap-3 ${textClass}"><i class="fas ${icon} w-5"></i><span>${label}</span></li>`;
+            }).join('');
+        }
+
+        function startProgress() {
+            document.getElementById('progress-panel').classList.remove('hidden');
+            document.getElementById('result-panel').classList.add('hidden');
+            let step = 0;
+            renderProgress(step);
+            progressTimer = setInterval(() => {
+                if (step < STEPS.length - 2) {
+                    step += 1;
+                    renderProgress(step);
+                }
+            }, 1800);
+        }
+
+        function stopProgress(success) {
+            if (progressTimer) {
+                clearInterval(progressTimer);
+                progressTimer = null;
+            }
+            renderProgress(success ? STEPS.length - 1 : 0);
+            if (success) {
+                setTimeout(() => document.getElementById('progress-panel').classList.add('hidden'), 400);
+            }
+        }
+
+        function copyField(elementId) {
+            const el = document.getElementById(elementId);
+            const text = el.textContent || '';
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = event.target.closest('button');
+                const original = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied';
+                setTimeout(() => { btn.innerHTML = original; }, 1500);
+            });
+        }
+
+        function downloadScript() {
+            const blob = new Blob([scriptContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'iqbal-consultant-embed.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function showResult(data) {
+            document.getElementById('res-slug').textContent = data.client_slug || '';
+            document.getElementById('res-website').textContent = data.website_url || '';
+            document.getElementById('res-email').textContent = data.owner_email || '';
+            document.getElementById('res-thread').textContent = data.thread_id || '';
+            document.getElementById('res-user').textContent = data.user_id != null ? String(data.user_id) : '';
+            document.getElementById('res-secret').textContent = data.client_secret || '';
+            document.getElementById('res-script').textContent = data.integration_script || '';
+            scriptContent = data.integration_script || '';
+            document.getElementById('result-panel').classList.remove('hidden');
+        }
+
+        function resetForm() {
+            document.getElementById('onboard-form').reset();
+            document.getElementById('result-panel').classList.add('hidden');
+            hideError();
+        }
+
+        document.getElementById('onboard-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError();
+
+            const fileInput = document.getElementById('pdf-file');
+            if (!fileInput.files.length) {
+                showError('Please select a PDF file.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('owner_email', document.getElementById('owner-email').value.trim());
+            formData.append('website_url', document.getElementById('website-url').value.trim());
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            startProgress();
+
+            try {
+                const res = await fetch('/admin/chatbot/create', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    stopProgress(false);
+                    document.getElementById('progress-panel').classList.add('hidden');
+                    showError(data.error || 'Failed to create chatbot.');
+                    return;
+                }
+                stopProgress(true);
+                showResult(data);
+            } catch (err) {
+                stopProgress(false);
+                document.getElementById('progress-panel').classList.add('hidden');
+                showError('Network error: ' + err.message);
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

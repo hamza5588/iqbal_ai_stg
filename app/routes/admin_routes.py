@@ -1562,3 +1562,69 @@ def admin_export_embed_chats(client_id):
         return jsonify({'success': False, 'error': 'Email failed'}), 500
     return jsonify({'success': True, 'sent_to': client.owner_email, 'count': len(convs)})
 
+
+# ==================== CHATBOT ONBOARDING (Admin UI) ====================
+
+
+@bp.route('/chatbot-onboard', methods=['GET'])
+@login_required
+@admin_only
+def chatbot_onboard_page():
+    """Admin UI to automate embed client onboarding (upload PDF + secret + whitelist)."""
+    return render_template('admin/chatbot_onboard.html')
+
+
+@bp.route('/chatbot/create', methods=['POST'])
+@login_required
+@admin_only
+def create_chatbot_admin():
+    """
+    One-shot chatbot onboarding for the Admin Panel.
+
+    Reuses:
+      - consultant ingest pipeline (ingest_pdf + RAGThread) — same as POST /api/consultant/ingest
+      - embed_service.create_embed_client — same as scripts/embed_onboard.py
+      - origin_whitelist.add_origins_to_global_whitelist — replaces manual .env edit
+    """
+    from app.services.chatbot_onboard_service import OnboardError, onboard_chatbot
+
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'PDF file is required', 'code': 'INVALID_PDF'}), 400
+
+    upload = request.files['file']
+    if not upload or not upload.filename:
+        return jsonify({'success': False, 'error': 'No PDF file selected', 'code': 'INVALID_PDF'}), 400
+
+    owner_email = (request.form.get('owner_email') or '').strip()
+    website_url = (request.form.get('website_url') or '').strip()
+
+    if not owner_email:
+        return jsonify({'success': False, 'error': 'Owner email is required', 'code': 'VALIDATION_ERROR'}), 400
+    if not website_url:
+        return jsonify({'success': False, 'error': 'Website URL is required', 'code': 'VALIDATION_ERROR'}), 400
+
+    try:
+        file_bytes = upload.read()
+        result = onboard_chatbot(
+            admin_user_id=session['user_id'],
+            file_bytes=file_bytes,
+            filename=upload.filename,
+            owner_email=owner_email,
+            website_url=website_url,
+        )
+        logger.info(
+            "Admin chatbot created slug=%s thread=%s by user=%s",
+            result.get('client_slug'),
+            result.get('thread_id'),
+            session['user_id'],
+        )
+        return jsonify(result)
+    except OnboardError as exc:
+        status = 400
+        if exc.code in ('ONBOARD_FAILED', 'WHITELIST_UPDATE_FAILED', 'SECRET_GENERATION_FAILED'):
+            status = 500
+        return jsonify({'success': False, 'error': exc.message, 'code': exc.code}), status
+    except Exception as exc:
+        logger.error("create_chatbot_admin: %s", exc, exc_info=True)
+        return jsonify({'success': False, 'error': str(exc), 'code': 'ONBOARD_FAILED'}), 500
+
