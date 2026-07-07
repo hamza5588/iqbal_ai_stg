@@ -16,6 +16,7 @@ from app.models.database_models import (
     EmbedClient,
     EmbedConversation,
     EmbedMessage,
+    RAGChunk,
     RAGThread,
 )
 from app.utils.db import get_db
@@ -317,3 +318,83 @@ def update_embed_client(client_id: int, **fields) -> Optional[EmbedClient]:
 def list_embed_clients() -> list[EmbedClient]:
     db = get_db()
     return db.query(EmbedClient).order_by(EmbedClient.created_at.desc()).all()
+
+
+def get_client_rag_info(client: EmbedClient) -> dict:
+    if not client.rag_thread_id or not client.service_user_id:
+        return {
+            "has_document": False,
+            "filename": None,
+            "num_pages": None,
+            "last_ingested_at": None,
+        }
+    db = get_db()
+    row = (
+        db.query(RAGThread)
+        .filter_by(thread_id=client.rag_thread_id, user_id=client.service_user_id)
+        .first()
+    )
+    if not row:
+        return {
+            "has_document": False,
+            "filename": None,
+            "num_pages": None,
+            "last_ingested_at": None,
+        }
+    return {
+        "has_document": bool(row.has_document),
+        "filename": row.filename,
+        "num_pages": row.num_pages,
+        "last_ingested_at": row.last_ingested_at.isoformat() if row.last_ingested_at else None,
+    }
+
+
+def serialize_embed_client_admin(client: EmbedClient) -> dict:
+    return {
+        "id": client.id,
+        "client_slug": client.client_slug,
+        "owner_email": client.owner_email,
+        "owner_name": client.owner_name,
+        "allowed_origins": parse_allowed_origins(client.allowed_origins),
+        "active": client.active,
+        "rag_thread_id": client.rag_thread_id,
+        "service_user_id": client.service_user_id,
+        "created_at": client.created_at.isoformat() if client.created_at else None,
+        "updated_at": client.updated_at.isoformat() if client.updated_at else None,
+        "document": get_client_rag_info(client),
+    }
+
+
+def delete_embed_client(client_id: int) -> bool:
+    db = get_db()
+    client = db.query(EmbedClient).filter_by(id=client_id).first()
+    if not client:
+        return False
+
+    thread_id = client.rag_thread_id
+    user_id = client.service_user_id
+    if thread_id and user_id:
+        from app.utils.rag_service import delete_thread
+
+        try:
+            delete_thread(thread_id)
+        except Exception as exc:
+            logger.warning("Vector cleanup failed for embed client %s: %s", client_id, exc)
+        try:
+            db.query(RAGChunk).filter_by(thread_id=thread_id).delete()
+            row = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
+            if row:
+                db.delete(row)
+        except Exception as exc:
+            logger.warning("RAG DB cleanup failed for embed client %s: %s", client_id, exc)
+            db.rollback()
+            raise
+
+    try:
+        db.delete(client)
+        db.commit()
+        return True
+    except Exception as exc:
+        logger.error("Failed to delete embed client %s: %s", client_id, exc, exc_info=True)
+        db.rollback()
+        raise

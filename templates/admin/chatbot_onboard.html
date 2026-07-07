@@ -27,7 +27,12 @@
                 </a>
                 <h1 class="text-xl font-bold text-gray-800">Create Embed Chatbot</h1>
             </div>
-            <a href="/auth/logout" class="text-red-500 hover:underline text-sm">Logout</a>
+            <div class="flex items-center gap-4">
+                <a href="/admin/chatbot-clients" class="text-gray-600 hover:text-[#05B0FC] text-sm">
+                    <i class="fas fa-list mr-1"></i>View All Chatbots
+                </a>
+                <a href="/auth/logout" class="text-red-500 hover:underline text-sm">Logout</a>
+            </div>
         </div>
     </nav>
 
@@ -161,9 +166,13 @@
         let scriptContent = '';
         let progressTimer = null;
 
-        function showError(message) {
+        function showError(message, code) {
             const box = document.getElementById('error-box');
-            box.textContent = message;
+            if (code === 'DUPLICATE_WEBSITE' || code === 'DUPLICATE_OWNER') {
+                box.innerHTML = `${message} <a href="/admin/chatbot-clients" class="underline font-medium">View &amp; delete existing chatbots</a>`;
+            } else {
+                box.textContent = message;
+            }
             box.classList.remove('hidden');
         }
 
@@ -279,7 +288,7 @@
                 if (!res.ok || !data.success) {
                     stopProgress(false);
                     document.getElementById('progress-panel').classList.add('hidden');
-                    showError(data.error || 'Failed to create chatbot.');
+                    showError(data.error || 'Failed to create chatbot.', data.code);
                     return;
                 }
                 stopProgress(true);

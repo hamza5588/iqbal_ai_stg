@@ -1503,13 +1503,12 @@ def llm_telemetry_export_csv():
 @login_required
 @admin_only
 def list_embed_clients_admin():
-    from app.services.embed_service import list_embed_clients, parse_allowed_origins
+    from app.services.embed_service import list_embed_clients, serialize_embed_client_admin
     clients = list_embed_clients()
-    return jsonify({'success': True, 'clients': [{
-        'id': c.id, 'client_slug': c.client_slug, 'owner_email': c.owner_email,
-        'rag_thread_id': c.rag_thread_id, 'service_user_id': c.service_user_id,
-        'allowed_origins': parse_allowed_origins(c.allowed_origins), 'active': c.active,
-    } for c in clients]})
+    return jsonify({
+        'success': True,
+        'clients': [serialize_embed_client_admin(c) for c in clients],
+    })
 
 
 @bp.route('/embed-clients', methods=['POST'])
@@ -1532,6 +1531,21 @@ def create_embed_client_admin():
         secret=data.get('secret'),
     )
     return jsonify({'success': True, 'client_id': client.id, 'client_key': secret})
+
+
+@bp.route('/embed-clients/<int:client_id>', methods=['DELETE'])
+@login_required
+@admin_only
+def delete_embed_client_admin(client_id):
+    from app.services.embed_service import delete_embed_client
+    try:
+        if not delete_embed_client(client_id):
+            return jsonify({'success': False, 'error': 'Not found'}), 404
+        logger.info("Admin deleted embed client id=%s by user=%s", client_id, session['user_id'])
+        return jsonify({'success': True, 'message': 'Chatbot client deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting embed client {client_id}: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @bp.route('/embed-clients/<int:client_id>', methods=['PUT'])
@@ -1572,6 +1586,14 @@ def admin_export_embed_chats(client_id):
 def chatbot_onboard_page():
     """Admin UI to automate embed client onboarding (upload PDF + secret + whitelist)."""
     return render_template('admin/chatbot_onboard.html')
+
+
+@bp.route('/chatbot-clients', methods=['GET'])
+@login_required
+@admin_only
+def chatbot_clients_page():
+    """Admin UI to list embed chatbot clients, their PDFs, and delete them."""
+    return render_template('admin/embed_clients.html')
 
 
 @bp.route('/chatbot/create', methods=['POST'])
