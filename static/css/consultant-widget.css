@@ -387,6 +387,65 @@
   border-bottom-left-radius: 4px;
 }
 
+/* Markdown inside bot messages (headings, bullets — same idea as math/RAG chat) */
+.consultant-msg.bot .consultant-msg-content {
+  line-height: 1.58;
+  word-wrap: break-word;
+}
+.consultant-msg.bot .consultant-msg-content > :first-child {
+  margin-top: 0;
+}
+.consultant-msg.bot .consultant-msg-content > :last-child {
+  margin-bottom: 0;
+}
+.consultant-msg.bot .consultant-msg-content h1,
+.consultant-msg.bot .consultant-msg-content h2,
+.consultant-msg.bot .consultant-msg-content h3 {
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1.35;
+  margin: 0.75rem 0 0.4rem;
+}
+.consultant-msg.bot .consultant-msg-content h1 { font-size: 1.05rem; }
+.consultant-msg.bot .consultant-msg-content h2 {
+  font-size: 0.95rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding-bottom: 0.25rem;
+}
+.consultant-msg.bot .consultant-msg-content h3 { font-size: 0.9rem; font-weight: 600; }
+.consultant-msg.bot .consultant-msg-content h1:first-child,
+.consultant-msg.bot .consultant-msg-content h2:first-child,
+.consultant-msg.bot .consultant-msg-content h3:first-child {
+  margin-top: 0;
+}
+.consultant-msg.bot .consultant-msg-content p {
+  margin: 0.35rem 0;
+}
+.consultant-msg.bot .consultant-msg-content ul,
+.consultant-msg.bot .consultant-msg-content ol {
+  margin: 0.35rem 0 0.5rem;
+  padding-left: 1.25rem;
+  list-style-position: outside;
+}
+.consultant-msg.bot .consultant-msg-content ul {
+  list-style-type: disc;
+}
+.consultant-msg.bot .consultant-msg-content ol {
+  list-style-type: decimal;
+}
+.consultant-msg.bot .consultant-msg-content li {
+  margin-bottom: 0.3rem;
+  display: list-item;
+  line-height: 1.5;
+}
+.consultant-msg.bot .consultant-msg-content li::marker {
+  color: var(--iqbal-primary, #05B0FC);
+}
+.consultant-msg.bot .consultant-msg-content strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+
 .consultant-msg.bot.error {
   display: flex;
   align-items: flex-start;

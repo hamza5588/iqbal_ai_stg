@@ -369,11 +369,24 @@
   function addMsg(text, role) {
     const container = document.getElementById('c-messages');
     const div = document.createElement('div');
-    div.className = 'consultant-msg ' + role;
-    div.innerHTML = (text || '')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g,     '<em>$1</em>')
-      .replace(/\n/g,            '<br>');
+    if (role === 'bot error') {
+      div.className = 'consultant-msg bot error';
+      div.innerHTML = '<span class="consultant-error-icon" aria-hidden="true">!</span><span class="consultant-error-text"></span>';
+      div.querySelector('.consultant-error-text').textContent = text;
+    } else {
+      div.className = 'consultant-msg ' + role;
+      if (role === 'bot' && global.ConsultantMessageFormatter) {
+        div.innerHTML = '<div class="consultant-msg-content">' +
+          global.ConsultantMessageFormatter.format(text) + '</div>';
+      } else if (role === 'bot') {
+        div.innerHTML = (text || '')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+          .replace(/\n/g, '<br>');
+      } else {
+        div.textContent = text;
+      }
+    }
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
     return div;
@@ -868,8 +881,38 @@
 
   /* ── Initialise ───────────────────────────────────────────────────────── */
 
+  function loadFormatter() {
+    if (global.ConsultantMessageFormatter) {
+      return global.ConsultantMessageFormatter.ensureReady();
+    }
+    return new Promise(function (resolve, reject) {
+      var src = '/static/js/consultant-message-formatter.js';
+      if (document.querySelector('script[src="' + src + '"]')) {
+        if (global.ConsultantMessageFormatter) {
+          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
+        } else {
+          resolve();
+        }
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = function () {
+        if (global.ConsultantMessageFormatter) {
+          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
+        } else {
+          resolve();
+        }
+      };
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
   function init() {
     buildWidget();
+    loadFormatter().catch(function () {});
   }
 
   if (document.readyState === 'loading') {

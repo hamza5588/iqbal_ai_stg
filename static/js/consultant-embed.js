@@ -38,6 +38,49 @@
     document.head.appendChild(l);
   }
 
+  function loadFormatter() {
+    if (global.ConsultantMessageFormatter) {
+      return global.ConsultantMessageFormatter.ensureReady();
+    }
+    return new Promise(function (resolve, reject) {
+      const src = apiUrl('/static/js/consultant-message-formatter.js');
+      if (document.querySelector('script[src="' + src + '"]')) {
+        if (global.ConsultantMessageFormatter) {
+          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
+        } else {
+          resolve();
+        }
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = function () {
+        if (global.ConsultantMessageFormatter) {
+          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
+        } else {
+          resolve();
+        }
+      };
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  function formatMsgHtml(text, role) {
+    if (role === 'bot' && global.ConsultantMessageFormatter) {
+      return '<div class="consultant-msg-content">' +
+        global.ConsultantMessageFormatter.format(text) + '</div>';
+    }
+    if (role === 'bot') {
+      return (text || '')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/\n/g, '<br>');
+    }
+    return null;
+  }
+
   function applyTheme() {
     const panel = document.getElementById('consultant-panel');
     const btn = document.getElementById('consultant-btn');
@@ -174,7 +217,12 @@
       div.querySelector('.consultant-error-text').textContent = text;
     } else {
       div.className = 'consultant-msg ' + role;
-      div.textContent = text;
+      const html = formatMsgHtml(text, role);
+      if (html) {
+        div.innerHTML = html;
+      } else {
+        div.textContent = text;
+      }
     }
     c.appendChild(div);
     c.scrollTop = c.scrollHeight;
@@ -381,6 +429,7 @@
     state.title = opts.title || state.title;
     state.primaryColor = opts.primaryColor || state.primaryColor;
     loadCss();
+    loadFormatter().catch(function () {});
     if (!state.initialized) { buildWidget(); state.initialized = true; }
     applyTheme();
   }
