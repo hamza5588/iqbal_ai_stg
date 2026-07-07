@@ -17,6 +17,8 @@
 (function (global) {
   'use strict';
 
+  var formatterReady = Promise.resolve();
+
   /* ── Internal state ───────────────────────────────────────────────────── */
 
   const S = {
@@ -337,6 +339,7 @@
 
       if (data.success) {
         if (data.conversation_id) S.conversationId = data.conversation_id;
+        await formatterReady;
         addMsg(data.message, 'bot');
       } else if (data.requires_login) {
         addMsg('Session expired — please refresh and log in again.', 'bot error');
@@ -375,14 +378,21 @@
       div.querySelector('.consultant-error-text').textContent = text;
     } else {
       div.className = 'consultant-msg ' + role;
-      if (role === 'bot' && global.ConsultantMessageFormatter) {
-        div.innerHTML = '<div class="consultant-msg-content">' +
-          global.ConsultantMessageFormatter.format(text) + '</div>';
-      } else if (role === 'bot') {
-        div.innerHTML = (text || '')
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-          .replace(/\n/g, '<br>');
+      if (role === 'bot') {
+        var html;
+        if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
+          html = '<div class="consultant-msg-content">' +
+            TeacherChatFormatter.formatChatResponse(text) + '</div>';
+        } else if (global.ConsultantMessageFormatter) {
+          html = '<div class="consultant-msg-content">' +
+            global.ConsultantMessageFormatter.format(text) + '</div>';
+        } else {
+          html = '<div class="consultant-msg-content">' + (text || '')
+            .replace(/\\(\*)/g, '$1')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>') + '</div>';
+        }
+        div.innerHTML = html;
       } else {
         div.textContent = text;
       }
@@ -882,37 +892,39 @@
   /* ── Initialise ───────────────────────────────────────────────────────── */
 
   function loadFormatter() {
+    var base = (global.location && global.location.origin) ? global.location.origin : '';
+    global.__IQBAL_API_BASE = base;
     if (global.ConsultantMessageFormatter) {
+      global.ConsultantMessageFormatter.setApiBase(base);
       return global.ConsultantMessageFormatter.ensureReady();
     }
-    return new Promise(function (resolve, reject) {
+    return new Promise(function (resolve) {
       var src = '/static/js/consultant-message-formatter.js';
-      if (document.querySelector('script[src="' + src + '"]')) {
+      var existing = document.querySelector('script[src="' + src + '"]');
+      function onReady() {
         if (global.ConsultantMessageFormatter) {
-          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
+          global.ConsultantMessageFormatter.setApiBase(base);
+          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(resolve);
         } else {
           resolve();
         }
+      }
+      if (existing) {
+        onReady();
         return;
       }
       var s = document.createElement('script');
       s.src = src;
-      s.async = true;
-      s.onload = function () {
-        if (global.ConsultantMessageFormatter) {
-          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
-        } else {
-          resolve();
-        }
-      };
-      s.onerror = reject;
+      s.async = false;
+      s.onload = onReady;
+      s.onerror = function () { resolve(); };
       document.head.appendChild(s);
     });
   }
 
   function init() {
     buildWidget();
-    loadFormatter().catch(function () {});
+    formatterReady = loadFormatter();
   }
 
   if (document.readyState === 'loading') {

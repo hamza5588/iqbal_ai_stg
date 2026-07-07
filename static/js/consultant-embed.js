@@ -15,6 +15,8 @@
     localStream: null, audioEl: null,
   };
 
+  var formatterReady = Promise.resolve();
+
   function apiUrl(p) { return (state.apiBase || '').replace(/\/$/, '') + p; }
   function headers(json) {
     const h = { 'X-Client-Key': state.clientKey };
@@ -39,46 +41,50 @@
   }
 
   function loadFormatter() {
+    var base = (state.apiBase || '').replace(/\/$/, '');
+    global.__IQBAL_API_BASE = base;
     if (global.ConsultantMessageFormatter) {
+      global.ConsultantMessageFormatter.setApiBase(base);
       return global.ConsultantMessageFormatter.ensureReady();
     }
     return new Promise(function (resolve, reject) {
-      const src = apiUrl('/static/js/consultant-message-formatter.js');
-      if (document.querySelector('script[src="' + src + '"]')) {
+      var src = apiUrl('/static/js/consultant-message-formatter.js');
+      var existing = document.querySelector('script[src="' + src + '"]');
+      function onReady() {
         if (global.ConsultantMessageFormatter) {
-          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
+          global.ConsultantMessageFormatter.setApiBase(base);
+          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(resolve);
         } else {
           resolve();
         }
+      }
+      if (existing) {
+        onReady();
         return;
       }
-      const s = document.createElement('script');
+      var s = document.createElement('script');
       s.src = src;
-      s.async = true;
-      s.onload = function () {
-        if (global.ConsultantMessageFormatter) {
-          global.ConsultantMessageFormatter.ensureReady().then(resolve).catch(reject);
-        } else {
-          resolve();
-        }
-      };
-      s.onerror = reject;
+      s.async = false;
+      s.onload = onReady;
+      s.onerror = function () { resolve(); };
       document.head.appendChild(s);
     });
   }
 
   function formatMsgHtml(text, role) {
-    if (role === 'bot' && global.ConsultantMessageFormatter) {
+    if (role !== 'bot') return null;
+    if (global.ConsultantMessageFormatter) {
       return '<div class="consultant-msg-content">' +
         global.ConsultantMessageFormatter.format(text) + '</div>';
     }
-    if (role === 'bot') {
-      return (text || '')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/\n/g, '<br>');
+    var processed = text || '';
+    if (global.ConsultantMessageFormatter && global.ConsultantMessageFormatter.preprocess) {
+      processed = global.ConsultantMessageFormatter.preprocess(processed);
     }
-    return null;
+    return '<div class="consultant-msg-content">' + (processed || '')
+      .replace(/\\(\*)/g, '$1')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>') + '</div>';
   }
 
   function applyTheme() {
@@ -300,6 +306,7 @@
       hideTyping(typingId);
       if (d.success) {
         if (d.conversation_id) state.conversationId = d.conversation_id;
+        await formatterReady;
         addMsg(d.message, 'bot');
       } else {
         addMsg(d.error || 'Error', 'bot error');
@@ -429,7 +436,7 @@
     state.title = opts.title || state.title;
     state.primaryColor = opts.primaryColor || state.primaryColor;
     loadCss();
-    loadFormatter().catch(function () {});
+    formatterReady = loadFormatter();
     if (!state.initialized) { buildWidget(); state.initialized = true; }
     applyTheme();
   }
