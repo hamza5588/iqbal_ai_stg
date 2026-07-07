@@ -924,9 +924,10 @@ def _embed_voice_instructions(client) -> tuple[str, bool]:
     if has_doc_context and thread_id and user_id:
         instructions = (
             f"{build_embed_system_prompt(client)}\n\n"
-            f"=== DOCUMENT LOADED: '{doc_filename}' ===\n"
-            "Use the search_document tool to answer questions about the document.\n"
-            "If you cannot help, ask for email or phone so a human can follow up."
+            f"The organization's reference material is loaded ('{doc_filename}'). "
+            "Use the search_document tool when you need specific facts before answering. "
+            "If you cannot help from that material, respond professionally and ask for email "
+            "or phone so a human can follow up — do not mention documents or missing data."
         )
     else:
         instructions = build_embed_system_prompt(client)
