@@ -9,11 +9,14 @@
   const CONV_KEY = 'iqbal_embed_conversation_id';
 
   const state = {
-    apiBase: '', clientKey: '', title: 'AI Consultant', primaryColor: '#05B0FC',
+    apiBase: '', clientKey: '', title: 'IqbalAI', primaryColor: '#05B0FC',
     visitorId: null, conversationId: null, isOpen: false, initialized: false,
     voiceActive: false, voiceConnecting: false, peerConn: null, dataChannel: null,
     localStream: null, audioEl: null,
   };
+
+  var EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  var PHONE_RE = /^(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3}[-.\s]?\d{3,4}$/;
 
   var formatterReady = Promise.resolve();
 
@@ -127,6 +130,101 @@
   const VOICE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>';
   const PHONE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
 
+  function logoUrl() {
+    return apiUrl('/static/images/logo.png');
+  }
+
+  function brandMarkHtml() {
+    return '<img class="consultant-brand-logo" src="' + logoUrl() + '" alt="IqbalAI" width="28" height="28" onerror="this.style.display=\'none\'" />';
+  }
+
+  function isValidEmail(value) {
+    return EMAIL_RE.test((value || '').trim());
+  }
+
+  function isValidPhone(value) {
+    var cleaned = (value || '').trim().replace(/[\s().-]/g, '');
+    if (!cleaned) return false;
+    // Require enough digits; allow optional leading +
+    if (!/^\+?\d{7,15}$/.test(cleaned)) return false;
+    return PHONE_RE.test((value || '').trim()) || /^\+?\d{7,15}$/.test(cleaned);
+  }
+
+  function closeCallbackModal() {
+    var overlay = document.getElementById('c-callback-overlay');
+    if (overlay) overlay.classList.remove('open');
+    var err = document.getElementById('c-callback-error');
+    if (err) { err.textContent = ''; err.classList.add('hidden'); }
+  }
+
+  function openCallbackModal() {
+    var overlay = document.getElementById('c-callback-overlay');
+    if (!overlay) return;
+    var emailEl = document.getElementById('c-callback-email');
+    var phoneEl = document.getElementById('c-callback-phone');
+    if (emailEl) emailEl.value = '';
+    if (phoneEl) phoneEl.value = '';
+    var err = document.getElementById('c-callback-error');
+    if (err) { err.textContent = ''; err.classList.add('hidden'); }
+    overlay.classList.add('open');
+    setTimeout(function () {
+      if (emailEl) emailEl.focus();
+    }, 50);
+  }
+
+  function showCallbackError(message) {
+    var err = document.getElementById('c-callback-error');
+    if (!err) return;
+    err.textContent = message;
+    err.classList.remove('hidden');
+  }
+
+  async function submitCallbackForm() {
+    var email = ((document.getElementById('c-callback-email') || {}).value || '').trim();
+    var phone = ((document.getElementById('c-callback-phone') || {}).value || '').trim();
+
+    if (!email && !phone) {
+      showCallbackError('Please enter an email or phone number.');
+      return;
+    }
+    if (email && !isValidEmail(email)) {
+      showCallbackError('Please enter a valid email address.');
+      return;
+    }
+    if (phone && !isValidPhone(phone)) {
+      showCallbackError('Please enter a valid phone number.');
+      return;
+    }
+
+    var submitBtn = document.getElementById('c-callback-submit');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await ensureSession();
+      var r = await fetch(apiUrl('/api/consultant/public/callback'), {
+        method: 'POST',
+        headers: headers(true),
+        body: JSON.stringify({
+          visitor_id: state.visitorId,
+          conversation_id: state.conversationId,
+          email: email || null,
+          phone: phone || null,
+          notes: null,
+        }),
+      });
+      var d = await r.json().catch(function () { return {}; });
+      if (!r.ok || d.error) {
+        showCallbackError(d.error || 'Could not submit request. Please try again.');
+        return;
+      }
+      closeCallbackModal();
+      await addBotMsg('Thanks! We received your request and someone will follow up soon.');
+    } catch (e) {
+      showCallbackError('Connection error. Please try again.');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
   function buildWidget() {
     if (document.getElementById('consultant-btn')) return;
     const backdrop = document.createElement('div');
@@ -136,8 +234,13 @@
 
     const btn = document.createElement('button');
     btn.id = 'consultant-btn';
-    btn.innerHTML = '<div class="consultant-icon-inner"><span class="consultant-btn-dot"></span><span>Consultant</span></div>';
-    btn.setAttribute('aria-label', 'Open AI Consultant');
+    btn.innerHTML =
+      '<div class="consultant-icon-inner">' +
+      brandMarkHtml() +
+      '<span class="consultant-btn-dot"></span>' +
+      '<span>Talk to us</span>' +
+      '</div>';
+    btn.setAttribute('aria-label', 'Talk to us');
     btn.addEventListener('click', toggle);
     document.body.appendChild(btn);
 
@@ -146,9 +249,14 @@
     panel.innerHTML = [
       '<div class="consultant-header">',
       '  <div class="consultant-header-left">',
-      '    <div class="consultant-header-avatar" aria-hidden="true">AI</div>',
-      '    <div class="consultant-header-title">' + state.title +
-      '      <span class="consultant-header-badge">Online</span>',
+      '    <div class="consultant-header-avatar consultant-header-avatar-logo" aria-hidden="true">',
+      brandMarkHtml(),
+      '    </div>',
+      '    <div class="consultant-header-title-block">',
+      '      <div class="consultant-header-brand">IqbalAI</div>',
+      '      <div class="consultant-header-title">' + (state.title === 'IqbalAI' ? 'Talk to us' : state.title) +
+      '        <span class="consultant-header-badge">Online</span>',
+      '      </div>',
       '    </div>',
       '  </div>',
       '  <button class="consultant-close-btn" type="button" aria-label="Close">&times;</button>',
@@ -165,7 +273,8 @@
       '    <button type="button" class="consultant-callback-btn" id="embed-callback-btn">' + PHONE_ICON + ' Request callback</button>',
       '    <div class="consultant-input-row">',
       '      <textarea id="consultant-text-input" rows="1" placeholder="Type a message…" aria-label="Message"></textarea>',
-      '      <button class="consultant-send-btn" id="c-send-btn" type="button" aria-label="Send">' + SEND_ICON + '</button>',
+      '      <button class="consultant-send-btn" id="c-send-btn" type="button" aria-label="Send">' +
+      SEND_ICON + '<span class="consultant-send-label">Send</span></button>',
       '    </div>',
       '  </div>',
       '</div>',
@@ -184,6 +293,22 @@
       '    </div>',
       '  </div>',
       '</div>',
+      '<div id="c-callback-overlay" class="consultant-callback-overlay" aria-hidden="true">',
+      '  <div class="consultant-callback-modal" role="dialog" aria-labelledby="c-callback-title">',
+      '    <h3 id="c-callback-title" class="consultant-callback-title">Request a callback</h3>',
+      '    <p class="consultant-callback-hint">Enter your email or phone number so our team can reach you.</p>',
+      '    <label class="consultant-callback-label" for="c-callback-email">Email</label>',
+      '    <input id="c-callback-email" class="consultant-callback-input" type="email" placeholder="you@example.com" autocomplete="email" />',
+      '    <div class="consultant-callback-or">or</div>',
+      '    <label class="consultant-callback-label" for="c-callback-phone">Phone</label>',
+      '    <input id="c-callback-phone" class="consultant-callback-input" type="tel" placeholder="+92 300 1234567" autocomplete="tel" />',
+      '    <p id="c-callback-error" class="consultant-callback-error hidden" role="alert"></p>',
+      '    <div class="consultant-callback-actions">',
+      '      <button type="button" class="consultant-callback-cancel" id="c-callback-cancel">Cancel</button>',
+      '      <button type="button" class="consultant-callback-submit" id="c-callback-submit">Submit</button>',
+      '    </div>',
+      '  </div>',
+      '</div>',
     ].join('');
     document.body.appendChild(panel);
 
@@ -192,7 +317,20 @@
     document.getElementById('consultant-text-input').addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
-    document.getElementById('embed-callback-btn').addEventListener('click', requestCallback);
+    document.getElementById('embed-callback-btn').addEventListener('click', openCallbackModal);
+    document.getElementById('c-callback-cancel').addEventListener('click', closeCallbackModal);
+    document.getElementById('c-callback-submit').addEventListener('click', submitCallbackForm);
+    document.getElementById('c-callback-overlay').addEventListener('click', function (e) {
+      if (e.target === e.currentTarget) closeCallbackModal();
+    });
+    document.getElementById('c-callback-email').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); submitCallbackForm(); }
+      if (e.key === 'Escape') closeCallbackModal();
+    });
+    document.getElementById('c-callback-phone').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); submitCallbackForm(); }
+      if (e.key === 'Escape') closeCallbackModal();
+    });
     function switchTab(mode) {
       const v = document.getElementById('c-pane-voice');
       const c = document.getElementById('c-pane-chat');
@@ -323,16 +461,6 @@
     } finally {
       if (sendBtn) sendBtn.disabled = false;
     }
-  }
-
-  async function requestCallback() {
-    try { await ensureSession(); } catch (e) { return; }
-    const notes = prompt('Your email or phone (optional):') || '';
-    await fetch(apiUrl('/api/consultant/public/callback'), {
-      method: 'POST', headers: headers(true),
-      body: JSON.stringify({ visitor_id: state.visitorId, conversation_id: state.conversationId, notes: notes }),
-    });
-    await addBotMsg('Callback requested. Someone will follow up.');
   }
 
   async function executeTool(callId, toolName, argsRaw) {

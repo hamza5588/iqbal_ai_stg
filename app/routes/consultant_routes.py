@@ -1430,6 +1430,8 @@ def public_callback():
     )
     if not email and not phone:
         email, phone = extract_contact_info(notes or "")
+    if not email and not phone:
+        return jsonify({"error": "Email or phone number is required"}), 400
     create_callback_request(conversation.id, email=email, phone=phone, notes=notes)
     mark_escalation(conversation, email=email, phone=phone)
     db = get_db()

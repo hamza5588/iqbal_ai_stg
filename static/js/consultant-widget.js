@@ -54,14 +54,13 @@
     // ── Floating trigger button ────────────────────────────────────────
     const btn = document.createElement('button');
     btn.id = 'consultant-btn';
-    btn.setAttribute('aria-label', 'Open AI Consultant');
+    btn.setAttribute('aria-label', 'Talk to us');
     btn.innerHTML =
       '<div class="consultant-icon-inner">' +
-        '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24"' +
-          ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-          '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>' +
-        '</svg>' +
-        '<span>Consultant</span>' +
+        '<img class="consultant-brand-logo" src="/static/images/logo.png" alt="IqbalAI" width="20" height="20"' +
+          ' onerror="this.style.display=\'none\'" />' +
+        '<span class="consultant-btn-dot"></span>' +
+        '<span>Talk to us</span>' +
       '</div>';
     btn.addEventListener('click', toggle);
     document.body.appendChild(btn);
@@ -75,13 +74,17 @@
 
       // Header
       '<div class="consultant-header">',
-        '<div class="consultant-header-title">',
-          '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"',
-              ' fill="none" stroke="currentColor" stroke-width="2">',
-            '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
-          '</svg>',
-          'AI Consultant',
-          '<span class="consultant-header-badge">AI</span>',
+        '<div class="consultant-header-left">',
+          '<div class="consultant-header-avatar consultant-header-avatar-logo" aria-hidden="true">',
+            '<img class="consultant-brand-logo" src="/static/images/logo.png" alt="IqbalAI" width="28" height="28"',
+              ' onerror="this.style.display=\'none\'" />',
+          '</div>',
+          '<div class="consultant-header-title-block">',
+            '<div class="consultant-header-brand">IqbalAI</div>',
+            '<div class="consultant-header-title">Talk to us',
+              '<span class="consultant-header-badge">Online</span>',
+            '</div>',
+          '</div>',
         '</div>',
         '<button class="consultant-close-btn" aria-label="Close" onclick="consultantWidget.toggle()">&times;</button>',
       '</div>',
@@ -144,6 +147,7 @@
               '<line x1="22" y1="2" x2="11" y2="13"></line>',
               '<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>',
             '</svg>',
+            '<span class="consultant-send-label">Send</span>',
           '</button>',
         '</div>',
 
