@@ -387,64 +387,129 @@
   border-bottom-left-radius: 4px;
 }
 
-/* Markdown inside bot messages (headings, bullets — same idea as math/RAG chat) */
-.consultant-msg.bot .consultant-msg-content {
+/* Markdown inside bot messages (headings, bullets)
+ * Pattern: marked → DOMPurify → .iqbal-md container
+ * WordPress / Elementor / Tailwind often set list-style: none — use !important
+ * so bullets and numbers always show on third-party sites.
+ */
+.consultant-msg.bot .consultant-msg-content,
+.consultant-msg.bot .iqbal-md {
   line-height: 1.58;
   word-wrap: break-word;
-}
-.consultant-msg.bot .consultant-msg-content > :first-child {
-  margin-top: 0;
-}
-.consultant-msg.bot .consultant-msg-content > :last-child {
-  margin-bottom: 0;
-}
-.consultant-msg.bot .consultant-msg-content h1,
-.consultant-msg.bot .consultant-msg-content h2,
-.consultant-msg.bot .consultant-msg-content h3 {
-  font-weight: 700;
+  overflow-wrap: anywhere;
+  font-size: 13px;
   color: #1a1a2e;
-  line-height: 1.35;
-  margin: 0.75rem 0 0.4rem;
 }
-.consultant-msg.bot .consultant-msg-content h1 { font-size: 1.05rem; }
-.consultant-msg.bot .consultant-msg-content h2 {
-  font-size: 0.95rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  padding-bottom: 0.25rem;
+.consultant-msg.bot .iqbal-md > :first-child {
+  margin-top: 0 !important;
 }
-.consultant-msg.bot .consultant-msg-content h3 { font-size: 0.9rem; font-weight: 600; }
-.consultant-msg.bot .consultant-msg-content h1:first-child,
-.consultant-msg.bot .consultant-msg-content h2:first-child,
-.consultant-msg.bot .consultant-msg-content h3:first-child {
-  margin-top: 0;
+.consultant-msg.bot .iqbal-md > :last-child {
+  margin-bottom: 0 !important;
 }
-.consultant-msg.bot .consultant-msg-content p {
-  margin: 0.35rem 0;
+.consultant-msg.bot .iqbal-md h1,
+.consultant-msg.bot .iqbal-md h2,
+.consultant-msg.bot .iqbal-md h3,
+.consultant-msg.bot .iqbal-md h4 {
+  font-weight: 700 !important;
+  color: #1a1a2e !important;
+  line-height: 1.35 !important;
+  margin: 0.7rem 0 0.35rem !important;
+  padding: 0 !important;
+  border: none !important;
+  background: none !important;
+  font-family: inherit !important;
 }
+.consultant-msg.bot .iqbal-md h1 { font-size: 1.05rem !important; }
+.consultant-msg.bot .iqbal-md h2 {
+  font-size: 0.95rem !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  padding-bottom: 0.25rem !important;
+}
+.consultant-msg.bot .iqbal-md h3 { font-size: 0.9rem !important; font-weight: 600 !important; }
+.consultant-msg.bot .iqbal-md h1:first-child,
+.consultant-msg.bot .iqbal-md h2:first-child,
+.consultant-msg.bot .iqbal-md h3:first-child {
+  margin-top: 0 !important;
+}
+.consultant-msg.bot .iqbal-md p {
+  margin: 0.35rem 0 !important;
+  padding: 0 !important;
+  display: block !important;
+}
+.consultant-msg.bot .iqbal-md ul,
+.consultant-msg.bot .iqbal-md ol {
+  margin: 0.4rem 0 0.55rem !important;
+  padding-left: 1.35rem !important;
+  padding-right: 0 !important;
+  list-style-position: outside !important;
+  display: block !important;
+}
+.consultant-msg.bot .iqbal-md ul {
+  list-style-type: disc !important;
+}
+.consultant-msg.bot .iqbal-md ol {
+  list-style-type: decimal !important;
+}
+.consultant-msg.bot .iqbal-md ul ul {
+  list-style-type: circle !important;
+  margin-top: 0.2rem !important;
+}
+.consultant-msg.bot .iqbal-md li {
+  margin: 0 0 0.35rem !important;
+  padding: 0 !important;
+  display: list-item !important;
+  line-height: 1.5 !important;
+  list-style: inherit !important;
+}
+.consultant-msg.bot .iqbal-md li::marker {
+  color: var(--iqbal-primary, #05B0FC) !important;
+  font-weight: 600;
+}
+.consultant-msg.bot .iqbal-md strong,
+.consultant-msg.bot .iqbal-md b {
+  font-weight: 700 !important;
+  color: #0f172a !important;
+}
+.consultant-msg.bot .iqbal-md em,
+.consultant-msg.bot .iqbal-md i {
+  font-style: italic !important;
+}
+.consultant-msg.bot .iqbal-md a {
+  color: var(--iqbal-primary, #05B0FC) !important;
+  text-decoration: underline !important;
+}
+.consultant-msg.bot .iqbal-md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 0.9em !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+  padding: 0.1em 0.35em !important;
+  border-radius: 4px !important;
+}
+.consultant-msg.bot .iqbal-md pre {
+  background: rgba(0, 0, 0, 0.05) !important;
+  padding: 0.6rem 0.75rem !important;
+  border-radius: 8px !important;
+  overflow-x: auto !important;
+  margin: 0.45rem 0 !important;
+}
+.consultant-msg.bot .iqbal-md blockquote {
+  margin: 0.4rem 0 !important;
+  padding: 0.25rem 0.75rem !important;
+  border-left: 3px solid var(--iqbal-primary, #05B0FC) !important;
+  color: #475569 !important;
+  background: rgba(5, 176, 252, 0.06) !important;
+}
+
+/* Legacy selector (older embeds) */
 .consultant-msg.bot .consultant-msg-content ul,
 .consultant-msg.bot .consultant-msg-content ol {
-  margin: 0.35rem 0 0.5rem;
-  padding-left: 1.25rem;
-  list-style-position: outside;
+  list-style-position: outside !important;
+  padding-left: 1.35rem !important;
+  display: block !important;
 }
-.consultant-msg.bot .consultant-msg-content ul {
-  list-style-type: disc;
-}
-.consultant-msg.bot .consultant-msg-content ol {
-  list-style-type: decimal;
-}
-.consultant-msg.bot .consultant-msg-content li {
-  margin-bottom: 0.3rem;
-  display: list-item;
-  line-height: 1.5;
-}
-.consultant-msg.bot .consultant-msg-content li::marker {
-  color: var(--iqbal-primary, #05B0FC);
-}
-.consultant-msg.bot .consultant-msg-content strong {
-  font-weight: 600;
-  color: #0f172a;
-}
+.consultant-msg.bot .consultant-msg-content ul { list-style-type: disc !important; }
+.consultant-msg.bot .consultant-msg-content ol { list-style-type: decimal !important; }
+.consultant-msg.bot .consultant-msg-content li { display: list-item !important; }
 
 .consultant-msg.bot.error {
   display: flex;

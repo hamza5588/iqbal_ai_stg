@@ -133,6 +133,35 @@ def _validate_thread(thread_id: str, user_id: int) -> bool:
     return bool(thread_id) and thread_id.startswith(f"user_{user_id}_")
 
 
+def _is_numeric_fact_query(query: str) -> bool:
+    """True when the visitor is asking about fees, dates, counts, or similar facts."""
+    q = (query or "").lower()
+    keywords = (
+        "fee", "fees", "price", "cost", "charges", "payment", "rupee", "rs.", "rs ",
+        "scholarship", "discount", "early bird", "registration", "total fee",
+        "cpd", "points", "duration", "how long", "how many", "start date", "when does",
+        "timing", "timings", "hours", "weekends", "certificate", "trainer", "trainers",
+        "pillars", "topics", "modules", "eligible", "eligibility", "hec", "pec",
+        "mathematical", "number of", "%", "percent",
+    )
+    return any(k in q for k in keywords)
+
+
+def _expand_retrieval_query(query: str) -> str:
+    """
+    For fee/date/count questions, expand the retrieval query so FAQ chunks that
+    contain amounts and facts (e.g. Rs. 31,000, scholarship) are more likely to match.
+    Does not hardcode FAQ answers — only improves search terms.
+    """
+    if not _is_numeric_fact_query(query):
+        return query
+    return (
+        f"{query}\n"
+        "fee price cost registration scholarship discount certification "
+        "Rs amount CPD points duration start date class timing how many"
+    )
+
+
 def _retrieve_relevant_chunks(thread_id: str, user_id: int, query: str) -> str:
     """
     Retrieve semantically relevant chunks.  Returns plain text (no page info).
@@ -152,10 +181,12 @@ def _retrieve_with_pages(thread_id: str, user_id: int, query: str) -> tuple[str,
         context_text  – concatenated chunk texts, each prefixed with [Page N]
         page_numbers  – sorted unique list of page numbers found
     """
+    retrieval_query = _expand_retrieval_query(query)
+
     # --- Primary path: hybrid / semantic vector retrieval ---
     try:
         retriever = _get_retriever(thread_id, user_id=user_id)
-        docs = retriever.invoke(query)  # returns List[Document]
+        docs = retriever.invoke(retrieval_query)  # returns List[Document]
 
         parts: list[str] = []
         pages: list[int] = []
@@ -925,7 +956,9 @@ def _embed_voice_instructions(client) -> tuple[str, bool]:
         instructions = (
             f"{build_embed_system_prompt(client)}\n\n"
             f"The organization's reference material is loaded ('{doc_filename}'). "
-            "Use the search_document tool when you need specific facts before answering. "
+            "Use the search_document tool when you need specific facts before answering, "
+            "especially for fees, prices, scholarships, dates, timings, CPD points, and counts. "
+            "Quote exact figures from tool results. "
             "If you cannot help from that material, respond professionally and ask for email "
             "or phone so a human can follow up — do not mention documents or missing data."
         )

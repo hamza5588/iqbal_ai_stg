@@ -379,20 +379,21 @@
     } else {
       div.className = 'consultant-msg ' + role;
       if (role === 'bot') {
-        var html;
+        var body;
         if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
-          html = '<div class="consultant-msg-content">' +
-            TeacherChatFormatter.formatChatResponse(text) + '</div>';
+          body = TeacherChatFormatter.formatChatResponse(text);
         } else if (global.ConsultantMessageFormatter) {
-          html = '<div class="consultant-msg-content">' +
-            global.ConsultantMessageFormatter.format(text) + '</div>';
+          body = global.ConsultantMessageFormatter.format(text);
         } else {
-          html = '<div class="consultant-msg-content">' + (text || '')
+          body = (text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
             .replace(/\\(\*)/g, '$1')
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>') + '</div>';
+            .replace(/\n/g, '<br>');
         }
-        div.innerHTML = html;
+        div.innerHTML = '<div class="consultant-msg-content iqbal-md">' + body + '</div>';
       } else {
         div.textContent = text;
       }

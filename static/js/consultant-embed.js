@@ -73,18 +73,45 @@
 
   function formatMsgHtml(text, role) {
     if (role !== 'bot') return null;
+    var body;
     if (global.ConsultantMessageFormatter) {
-      return '<div class="consultant-msg-content">' +
-        global.ConsultantMessageFormatter.format(text) + '</div>';
+      body = global.ConsultantMessageFormatter.format(text);
+    } else {
+      body = (text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\\(\*)/g, '$1')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
     }
-    var processed = text || '';
-    if (global.ConsultantMessageFormatter && global.ConsultantMessageFormatter.preprocess) {
-      processed = global.ConsultantMessageFormatter.preprocess(processed);
+    return '<div class="consultant-msg-content iqbal-md">' + body + '</div>';
+  }
+
+  function addMsg(text, role) {
+    const c = document.getElementById('c-messages');
+    const div = document.createElement('div');
+    if (role === 'bot error') {
+      div.className = 'consultant-msg bot error';
+      div.innerHTML = '<span class="consultant-error-icon" aria-hidden="true">!</span><span class="consultant-error-text"></span>';
+      div.querySelector('.consultant-error-text').textContent = text;
+    } else {
+      div.className = 'consultant-msg ' + role;
+      const html = formatMsgHtml(text, role);
+      if (html) {
+        div.innerHTML = html;
+      } else {
+        div.textContent = text;
+      }
     }
-    return '<div class="consultant-msg-content">' + (processed || '')
-      .replace(/\\(\*)/g, '$1')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br>') + '</div>';
+    c.appendChild(div);
+    c.scrollTop = c.scrollHeight;
+    return div;
+  }
+
+  async function addBotMsg(text) {
+    await formatterReady;
+    addMsg(text, 'bot');
   }
 
   function applyTheme() {
@@ -214,26 +241,6 @@
     return state.conversationId;
   }
 
-  function addMsg(text, role) {
-    const c = document.getElementById('c-messages');
-    const div = document.createElement('div');
-    if (role === 'bot error') {
-      div.className = 'consultant-msg bot error';
-      div.innerHTML = '<span class="consultant-error-icon" aria-hidden="true">!</span><span class="consultant-error-text"></span>';
-      div.querySelector('.consultant-error-text').textContent = text;
-    } else {
-      div.className = 'consultant-msg ' + role;
-      const html = formatMsgHtml(text, role);
-      if (html) {
-        div.innerHTML = html;
-      } else {
-        div.textContent = text;
-      }
-    }
-    c.appendChild(div);
-    c.scrollTop = c.scrollHeight;
-  }
-
   function showTyping() {
     const c = document.getElementById('c-messages');
     const div = document.createElement('div');
@@ -306,8 +313,7 @@
       hideTyping(typingId);
       if (d.success) {
         if (d.conversation_id) state.conversationId = d.conversation_id;
-        await formatterReady;
-        addMsg(d.message, 'bot');
+        await addBotMsg(d.message);
       } else {
         addMsg(d.error || 'Error', 'bot error');
       }
@@ -326,7 +332,7 @@
       method: 'POST', headers: headers(true),
       body: JSON.stringify({ visitor_id: state.visitorId, conversation_id: state.conversationId, notes: notes }),
     });
-    addMsg('Callback requested. Someone will follow up.', 'bot');
+    await addBotMsg('Callback requested. Someone will follow up.');
   }
 
   async function executeTool(callId, toolName, argsRaw) {
