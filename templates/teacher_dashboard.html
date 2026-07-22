@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
   <title>Teacher Dashboard | Iqbal AI - Secure Learning Platform</title>
 
   <!-- Global Theme Colors CSS -->
@@ -605,8 +606,8 @@
     }
 
     .chat-input-button {
-      width: 2.5rem;
-      height: 2.5rem;
+      width: 2.75rem;
+      height: 2.75rem;
       border-radius: 0.5rem;
       background: linear-gradient(135deg, #0ea5e9, #3b82f6);
       color: white;
@@ -1346,8 +1347,8 @@
       }
 
       .chat-input-button {
-        width: 2.25rem;
-        height: 2.25rem;
+        width: 2.75rem;
+        height: 2.75rem;
       }
 
       /* Enhanced mobile form styling */
@@ -3208,7 +3209,7 @@
           <button onclick="logout()"
             class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
             title="Logout">
-            <i class="fas fa-sign-out-alt"></i>
+            <i class="fas fa-sign-out-alt text-lg"></i>
           </button>
         </div>
       </div>
@@ -3298,7 +3299,7 @@
           <button onclick="logout(); toggleMobileSidebar();"
             class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
             title="Logout">
-            <i class="fas fa-sign-out-alt"></i>
+            <i class="fas fa-sign-out-alt text-lg"></i>
           </button>
         </div>
       </div>
@@ -3709,6 +3710,7 @@
         </div>
       </div>
     </div>
+  </div>
     <!-- Save Template Modal -->
     <div id="saveTemplateModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[90] hidden">
@@ -4885,7 +4887,7 @@
         });
       }
 
-      // Show Create Lesson Wizard (3-step process)
+      // Show Create Lesson Wizard (2-step process)
       function showCreateLessonWizard() {
         console.log('showCreateLessonWizard called');
 
@@ -4902,8 +4904,8 @@
                 <div class="bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500 text-white px-4 md:px-10 py-6 md:py-10 shadow-lg">
                     <div class="flex items-start justify-between gap-2 md:gap-4">
                         <div class="min-w-0">
-                            <h2 class="text-xl md:text-4xl font-bold text-white mb-1 md:mb-2 break-words">Create New Lesson</h2>
-                            <p class="text-sm md:text-lg text-primary-100 font-medium opacity-90">Step 1 of 3: Upload Your PDF</p>
+                            <p class="text-xl md:text-4xl text-primary-100 font-bold opacity-90 mb-1 md:mb-2">Step 1 of 2: Upload Your PDF</p>
+                            <h2 class="text-sm md:text-lg font-medium text-white break-words">Create New Lesson</h2>
                         </div>
                         <button onclick="closeCreateLessonModal()" 
                                 class="text-white hover:text-gray-200 hover:bg-white hover:bg-opacity-20 rounded-full p-2 md:p-3 transition-all flex-shrink-0">
@@ -4940,21 +4942,6 @@
                             </div>
                             <h3 class="text-xs md:text-base font-bold text-gray-600 text-center">Process</h3>
                             <p class="text-xs text-gray-500 text-center mt-0.5 md:mt-1 hidden md:block">AI analysis</p>
-                        </div>
-                        
-                        <!-- Connector Line 2 -->
-                        <div class="flex-1 h-0.5 md:h-1 bg-gray-300 mx-0.5 md:mx-3 mb-6 min-w-max md:min-w-0"></div>
-                        
-                        <!-- Step 3: Complete -->
-                        <div class="flex flex-col items-center flex-1 min-w-max md:min-w-0">
-                            <div class="relative mb-2 md:mb-4">
-                                <div class="w-10 h-10 md:w-16 md:h-16 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold text-sm md:text-2xl shadow-md ring-2 md:ring-4 ring-gray-200">
-                                    <i class="fas fa-check-circle text-xs md:text-lg"></i>
-                                </div>
-                                <div class="absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold">3</div>
-                            </div>
-                            <h3 class="text-xs md:text-base font-bold text-gray-600 text-center">Complete</h3>
-                            <p class="text-xs text-gray-500 text-center mt-0.5 md:mt-1 hidden md:block">Review & save</p>
                         </div>
                     </div>
                 </div>
@@ -5335,9 +5322,6 @@
 
         console.log('All validations passed, proceeding to step 2');
 
-        // Show toast notification
-        showToast('PDF uploaded successfully! Processing started...', 'success');
-
         // Auto-progress to Step 2: Processing
         showCreateLessonStep2(file, lessonTitle, lessonContext, lessonSubject, lessonGrade);
       }
@@ -5354,8 +5338,8 @@
         <div class="bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500 text-white px-6 md:px-10 py-8 md:py-10 shadow-lg">
             <div class="flex items-start justify-between gap-4">
                 <div>
-                    <h2 class="text-3xl md:text-4xl font-bold text-white mb-2">Creating Lesson</h2>
-                    <p class="text-lg text-primary-100 font-medium opacity-90">Step 2 of 3: Processing PDF</p>
+                    <p class="text-3xl md:text-4xl text-primary-100 font-bold opacity-90 mb-2">Step 2 of 2: Processing PDF</p>
+                    <h2 class="text-lg font-medium text-white">Creating Lesson</h2>
                 </div>
                 <button onclick="closeCreateLessonModal()" 
                         class="text-white hover:text-gray-200 hover:bg-white hover:bg-opacity-20 rounded-full p-3 transition-all flex-shrink-0">
@@ -5392,21 +5376,6 @@
                     </div>
                     <h3 class="text-sm md:text-base font-bold text-primary-700 text-center">Processing</h3>
                     <p class="text-xs text-gray-600 text-center mt-1">AI analysis</p>
-                </div>
-                
-                <!-- Connector Line 2 -->
-                <div class="flex-1 h-1 bg-gray-300 mx-2 md:mx-3 mb-6"></div>
-                
-                <!-- Step 3: Complete -->
-                <div class="flex flex-col items-center flex-1">
-                    <div class="relative mb-4">
-                        <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold text-xl md:text-2xl shadow-md">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                        <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold">3</div>
-                    </div>
-                    <h3 class="text-sm md:text-base font-bold text-gray-600 text-center">Complete</h3>
-                    <p class="text-xs text-gray-500 text-center mt-1">Review & save</p>
                 </div>
             </div>
         </div>
@@ -5606,9 +5575,7 @@
                 window._createLessonMeta.threadId = threadId;
               }
             }
-            setTimeout(() => {
-              showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
-            }, 500);
+            showCreateLessonUploadComplete(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
           } else {
             // Best-effort cleanup for cancelled thread so it cannot be used accidentally.
             if (window._ingestCancelRequested && pendingThreadId) {
@@ -5629,20 +5596,17 @@
         }
       }
 
-      // Step 3 with responsive design
-      function showCreateLessonStep3(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
+      // Complete the two-step upload workflow without creating a separate completion step.
+      function showCreateLessonUploadComplete(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
         const modalContent = document.getElementById('createLessonModalContent');
         if (!modalContent) return;
 
-        const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
-
         modalContent.innerHTML = `
-        <!-- Header with Beautiful Gradient Background -->
-        <div class="bg-gradient-to-r from-success-600 via-success-500 to-emerald-500 text-white px-6 md:px-10 py-8 md:py-10 shadow-lg">
+        <div class="bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500 text-white px-6 md:px-10 py-8 md:py-10 shadow-lg">
             <div class="flex items-start justify-between gap-4">
                 <div>
-                    <h2 class="text-3xl md:text-4xl font-bold text-white mb-2">Lesson Created!</h2>
-                    <p class="text-lg text-success-100 font-medium opacity-90">Step 3 of 3: Complete</p>
+                    <h2 class="text-3xl md:text-4xl font-bold text-white mb-2">Creating Lesson</h2>
+                    <p class="text-lg text-primary-100 font-medium opacity-90">Step 2 of 2: Processing PDF</p>
                 </div>
                 <button onclick="closeCreateLessonModal()" 
                         class="text-white hover:text-gray-200 hover:bg-white hover:bg-opacity-20 rounded-full p-3 transition-all flex-shrink-0">
@@ -5651,10 +5615,8 @@
             </div>
         </div>
 
-        <!-- Progress Steps Indicator - All Complete -->
         <div class="bg-gray-50 px-6 md:px-10 py-8">
             <div class="flex items-center justify-between">
-                <!-- Step 1: Upload PDF -->
                 <div class="flex flex-col items-center flex-1">
                     <div class="relative mb-4">
                         <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-success-500 text-white flex items-center justify-center font-bold text-xl md:text-2xl shadow-lg ring-4 ring-success-100">
@@ -5666,10 +5628,8 @@
                     <p class="text-xs text-gray-600 text-center mt-1">PDF loaded</p>
                 </div>
                 
-                <!-- Connector Line 1 -->
                 <div class="flex-1 h-1 bg-success-500 mx-2 md:mx-3 mb-6"></div>
                 
-                <!-- Step 2: Processing -->
                 <div class="flex flex-col items-center flex-1">
                     <div class="relative mb-4">
                         <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-success-500 text-white flex items-center justify-center font-bold text-xl md:text-2xl shadow-lg ring-4 ring-success-100">
@@ -5680,70 +5640,20 @@
                     <h3 class="text-sm md:text-base font-bold text-success-700 text-center">Processed</h3>
                     <p class="text-xs text-gray-600 text-center mt-1">AI analysis</p>
                 </div>
-                
-                <!-- Connector Line 2 -->
-                <div class="flex-1 h-1 bg-success-500 mx-2 md:mx-3 mb-6"></div>
-                
-                <!-- Step 3: Complete -->
-                <div class="flex flex-col items-center flex-1">
-                    <div class="relative mb-4">
-                        <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-success-500 text-white flex items-center justify-center font-bold text-xl md:text-2xl shadow-lg ring-4 ring-success-100">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                        <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-success-500 rounded-full flex items-center justify-center text-white text-xs font-bold">3</div>
-                    </div>
-                    <h3 class="text-sm md:text-base font-bold text-success-700 text-center">Complete</h3>
-                    <p class="text-xs text-gray-600 text-center mt-1">Ready to use</p>
-                </div>
             </div>
         </div>
         
-        <!-- Completion Content -->
         <div class="px-6 md:px-10 py-8">
-            <div class="text-center mb-8">
+            <div class="text-center">
                 <div class="w-20 h-20 md:w-24 md:h-24 mx-auto mb-6 bg-gradient-to-br from-success-100 to-emerald-100 rounded-full flex items-center justify-center shadow-lg">
                   <i class="fas fa-check-circle text-5xl md:text-6xl text-success-500"></i>
                 </div>
-                <h3 class="text-3xl font-bold text-gray-900 mb-3">${lessonTitle}</h3>
-                <p class="text-lg text-gray-600 mb-2">Successfully processed from PDF</p>
-                <p class="text-sm text-success-600 font-medium">✓ Ready to use in your lessons</p>
+                <h3 class="text-3xl font-bold text-gray-900 mb-8">Upload Process Complete</h3>
             </div>
-            
-            <!-- Lesson Details Card -->
-            <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6 mb-8">
-                <h4 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <i class="fas fa-info-circle text-blue-600"></i>
-                    Lesson Details
-                </h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="bg-white rounded-lg p-3 border border-blue-100">
-                    <p class="text-xs text-gray-600 font-semibold">PDF File</p>
-                    <p class="text-sm font-medium text-gray-900 truncate mt-1">${fileName}</p>
-                  </div>
-                  <div class="bg-white rounded-lg p-3 border border-blue-100">
-                    <p class="text-xs text-gray-600 font-semibold">File Size</p>
-                    <p class="text-sm font-medium text-gray-900 mt-1">${fileSizeMB} MB</p>
-                  </div>
-                  <div class="bg-white rounded-lg p-3 border border-blue-100">
-                    <p class="text-xs text-gray-600 font-semibold">Subject</p>
-                    <p class="text-sm font-medium text-gray-900 mt-1">${lessonSubject}</p>
-                  </div>
-                  <div class="bg-white rounded-lg p-3 border border-blue-100">
-                    <p class="text-xs text-gray-600 font-semibold">Grade Level</p>
-                    <p class="text-sm font-medium text-gray-900 mt-1">${lessonGrade}</p>
-                  </div>
-                </div>
-                ${lessonContext ? `<div class="mt-4 bg-white rounded-lg p-4 border border-blue-100"><p class="text-xs text-gray-600 font-semibold mb-2">Context</p><p class="text-sm text-gray-700">${lessonContext}</p></div>` : ''}
-            </div>
-            
-            <div class="flex flex-col md:flex-row gap-4">
+            <div class="flex justify-center">
                 <button onclick="finalizeCreateLesson('${fileName.replace(/'/g, "\\'")}', ${fileSize}, '${lessonTitle.replace(/'/g, "\\'")}', '${lessonContext.replace(/'/g, "\\'")}', '${lessonSubject.replace(/'/g, "\\'")}', '${lessonGrade.replace(/'/g, "\\'")}')" 
-                        class="flex-1 bg-gradient-to-r from-success-600 to-success-700 text-white py-4 px-6 rounded-xl hover:from-success-700 hover:to-success-800 transition-all font-bold text-lg shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
-                    <i class="fas fa-comments"></i>View in Chat
-                </button>
-                <button onclick="closeCreateLessonModal()" 
-                        class="flex-1 bg-gray-100 text-gray-800 py-4 px-6 rounded-xl hover:bg-gray-200 transition-all font-bold text-lg">
-                    Close
+                        class="bg-primary-600 text-white py-4 px-8 rounded-xl hover:bg-primary-700 transition-all font-bold text-lg shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+                    Continue to Chat
                 </button>
             </div>
         </div>
@@ -5928,9 +5838,6 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       function finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
         closeCreateLessonModal();
 
-        const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
-        const pages = Math.ceil(fileSize / 50000);
-
         // Store PDF metadata only. Do NOT set currentLessonMarkdown to the template here –
         // the actual lesson comes from the AI when the user says "create a lesson" in chat and is stored by RAG.
         currentPDFData = {
@@ -5954,9 +5861,6 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // Save to localStorage so it persists across tab switches
         savePDFDataToStorage();
 
-        // Show upload success - NOT auto-saving
-        showToast(`✅ PDF "${lessonTitle}" uploaded successfully!`, 'success', 4000);
-
         // Enable chat tab and switch to the NEW backend conversation (do not start a client-side chat)
         enableChatTab();
         showChatTab();
@@ -5968,30 +5872,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           setBackendConversationTitle(newConvId, lessonTitle);
           loadChatHistoryFromBackend().then(function () {
             return loadChatPromise(newConvId);
-          }).then(function () {
-            addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
-            setTimeout(function () {
-              addAssistantMessage('✅ <strong>Successfully uploaded "' + fileName + '"!</strong><br><br>' +
-                '<strong>PDF Details:</strong><br>' +
-                '• <strong>Title:</strong> ' + lessonTitle + '<br>' +
-                '• <strong>Subject:</strong> ' + lessonSubject + '<br>' +
-                '• <strong>Grade:</strong> ' + lessonGrade + '<br>' +
-                '• <strong>File Size:</strong> ' + fileSizeMB + ' MB<br>' +
-                '• <strong>Estimated Pages:</strong> ' + pages + '<br><br>' +
-                '<strong>📝 What would you like to do?</strong><br>' +
-                'Type one of these commands:<br>' +
-                '• "create a lesson" - Generate a lesson from this PDF<br>' +
-                '• "summarize" - Get a brief summary<br>' +
-                '• "ask me questions" - Generate quiz questions<br>' +
-                '• Or ask your own questions about the content!');
-            }, 300);
           }).catch(function (e) { console.error('Error switching to new conversation', e); });
         } else {
           startNewChat();
-          addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
-          setTimeout(function () {
-            addAssistantMessage('✅ <strong>Successfully uploaded "' + fileName + '"!</strong><br><br>You can ask questions about this document.');
-          }, 300);
         }
       }
 
@@ -6052,7 +5935,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       <div class="max-w-6xl mx-auto p-6">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">My Lessons</h1>
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">View &amp; Manage All Lessons.</h1>
             <p class="text-gray-600">View and manage all your created lessons</p>
           </div>
           
@@ -6122,7 +6005,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
         <div class="flex flex-col gap-4">
           <div>
-            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">My Lessons</h1>
+            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View &amp; Manage All Lessons.</h1>
             <p class="text-primary-100 text-sm md:text-base">View and manage all your created lessons</p>
           </div>
           
@@ -7932,32 +7815,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         updateChatHistoryUI();
         closeAllDropdowns();
 
-        // Display welcome message for new chat
+        // Start new chats without a pre-populated welcome card.
         const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = `
-        <!-- AI message on RIGHT side -->
-        <div class="chat-message assistant animate-fade-in">
-          <div class="chat-message-avatar">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
-          </div>
-          <div class="chat-message-content">
-            <h4 class="font-display font-semibold text-surface-900 mb-2">🎯 New Teaching Session Started</h4>
-            <p class="text-surface-700 mb-4">I'm ready to assist you with your teaching needs. What would you like to work on today?</p>
-            <div class="grid grid-cols-2 gap-3">
-              <button onclick="insertCreateLessonPrompt()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
-                <i class="fas fa-file-pdf mb-2"></i>
-                <p class="font-medium">Create Lesson</p>
-                <p class="text-sm opacity-75">From PDF upload</p>
-              </button>
-              <button onclick="insertAssessmentPrompt()" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
-                <i class="fas fa-clipboard-check mb-2"></i>
-                <p class="font-medium">Assessments</p>
-                <p class="text-sm opacity-75">Create quizzes and tests</p>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
+        chatMessages.innerHTML = '';
 
         scrollToBottom();
         document.getElementById('messageInput').focus();
@@ -8049,29 +7909,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         })();
 
         function renderRAGPreamble(uploadedFilename) {
-          // Welcome message (same as new RAG chat)
           chatMessages.innerHTML = `
-        <div class="chat-message assistant animate-fade-in">
-          <div class="chat-message-avatar">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
-          </div>
-          <div class="chat-message-content">
-            <h4 class="font-display font-semibold text-surface-900 mb-2">🎯 New Teaching Session Started</h4>
-            <p class="text-surface-700 mb-4">I'm ready to assist you with your teaching needs. What would you like to work on today?</p>
-            <div class="grid grid-cols-2 gap-3">
-              <button onclick="insertCreateLessonPrompt()" class="p-3 bg-success-50 text-success-700 rounded-lg hover:bg-success-100 transition-colors text-left">
-                <i class="fas fa-file-pdf mb-2"></i>
-                <p class="font-medium">Create Lesson</p>
-                <p class="text-sm opacity-75">From PDF upload</p>
-              </button>
-              <button onclick="insertAssessmentPrompt()" class="p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-left">
-                <i class="fas fa-clipboard-check mb-2"></i>
-                <p class="font-medium">Assessments</p>
-                <p class="text-sm opacity-75">Create quizzes and tests</p>
-              </button>
-            </div>
-          </div>
-        </div>
         <div class="chat-message assistant animate-fade-in">
           <div class="chat-message-avatar">
             <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
@@ -8080,7 +7918,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             ✅ <strong>Successfully uploaded \u201C${String(uploadedFilename || 'document').replace(/["<>]/g, '')}\u201D.</strong><br><br>
             You can ask questions about this document below.
           </div>
-        </div>`;
+        </div>
+        `;
         }
 
         function applyLoadedMessages(messages, options) {
