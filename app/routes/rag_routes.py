@@ -969,8 +969,19 @@ def chat():
                 conversation_id = None
 
         # ── Summary intent: intercept BEFORE thread/document validation ──────────
-        # This allows "summarize" to work even when no PDF has been uploaded yet.
-        if ConversationSummaryService.is_summary_intent(message, user_id=user_id):
+        # Chat-history summarize still works with no PDF. When a PDF is present,
+        # document phrases like "summarize the doc" / bare "summarize" go to RAG.
+        _summary_thread = provided_thread_id
+        if not _summary_thread and conversation_id is not None:
+            _summary_thread = _get_thread_id_for_conversation(user_id, conversation_id)
+        _has_document_for_summary = bool(
+            _summary_thread and thread_has_document(str(_summary_thread).strip())
+        )
+        if ConversationSummaryService.is_summary_intent(
+            message,
+            user_id=user_id,
+            has_document=_has_document_for_summary,
+        ):
             from app.models.models import ConversationModel
             conversation_model = ConversationModel(user_id)
             db_conversation_id = None
