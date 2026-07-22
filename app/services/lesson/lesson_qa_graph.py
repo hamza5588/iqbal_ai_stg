@@ -52,6 +52,9 @@ class LessonQAState(TypedDict, total=False):
     # Loaded from DB
     lesson_content: str
     lesson_title: str
+    lesson_summary: str
+    lesson_focus_area: str
+    lesson_objectives: str
     rag_thread_id: Optional[str]
     teacher_id: Optional[int]
     lesson_service: LessonService
@@ -65,6 +68,59 @@ class LessonQAState(TypedDict, total=False):
     answer: Optional[str]
     needs_rag_confirmation: bool
     permission_request: Optional[Dict[str, Any]]
+
+
+# Questions about the lesson as a whole should answer from lesson content first,
+# not jump to PDF search / "not covered".
+_LESSON_OVERVIEW_INTENT_RE = re.compile(
+    r"\b("
+    r"main\s+focus|focus\s+of|what\s+is\s+this\s+about|what'?s\s+this\s+about|"
+    r"what\s+is\s+the\s+lecture|what\s+is\s+lecture|lecture\s+content|"
+    r"lesson\s+content|lesson\s+about|summarize|summary|overview|"
+    r"in\s+one\s+line|one\s+line|key\s+points?|main\s+topic|main\s+idea|"
+    r"what\s+does\s+this\s+(lesson|lecture|doc|document)\s+(cover|say|teach)|"
+    r"what\s+is\s+covered|what\s+do\s+we\s+learn|purpose\s+of\s+(this\s+)?(lesson|lecture)|"
+    r"wht\s+is\s+the\s+main|whats\s+the\s+main"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_lesson_overview_question(question: str) -> bool:
+    """True for meta/summary questions that the lesson text itself can answer."""
+    q = (question or "").strip()
+    if not q:
+        return False
+    return bool(_LESSON_OVERVIEW_INTENT_RE.search(q))
+
+
+def _build_lesson_classifier_context(
+    *,
+    lesson_title: str,
+    lesson_content: str,
+    lesson_summary: str = "",
+    lesson_focus_area: str = "",
+    lesson_objectives: str = "",
+    max_content_chars: int = 12000,
+) -> str:
+    """Build richer context so overview questions are not falsely marked uncovered."""
+    parts: list[str] = []
+    title = (lesson_title or "").strip()
+    if title:
+        parts.append(f"Lesson title: {title}")
+    focus = (lesson_focus_area or "").strip()
+    if focus:
+        parts.append(f"Focus area: {focus}")
+    summary = (lesson_summary or "").strip()
+    if summary:
+        parts.append(f"Lesson summary:\n{summary}")
+    objectives = (lesson_objectives or "").strip()
+    if objectives:
+        parts.append(f"Learning objectives:\n{objectives}")
+    content = (lesson_content or "").strip()
+    if content:
+        parts.append(f"Lesson content:\n{content[:max_content_chars]}")
+    return "\n\n".join(parts).strip() or "(No content)"
 
 
 def _strip_reasoning(text: str) -> str:
@@ -135,6 +191,9 @@ def load_lesson(state: LessonQAState) -> LessonQAState:
         **state,
         "lesson_content": lesson.get("content", "") or "",
         "lesson_title": lesson.get("title", "this lesson") or "this lesson",
+        "lesson_summary": lesson.get("summary", "") or "",
+        "lesson_focus_area": lesson.get("focus_area", "") or "",
+        "lesson_objectives": lesson.get("learning_objectives", "") or "",
         "rag_thread_id": lesson.get("rag_thread_id"),
         "teacher_id": lesson.get("teacher_id"),
     }
@@ -144,51 +203,113 @@ def can_answer_from_lesson_only(
     question: str,
     lesson_content: str,
     lesson_service: LessonService,
+    *,
+    lesson_title: str = "this lesson",
+    lesson_summary: str = "",
+    lesson_focus_area: str = "",
+    lesson_objectives: str = "",
 ) -> bool:
     """
-    Decide if the question can be answered using ONLY the lesson content.
+    Decide if the question can be answered using the lesson material.
 
-    Uses an LLM so that questions not actually covered (e.g. "Deep Research Module"
-    or "real estate" when the lesson is about frontend-backend) get False, which
-    triggers the interrupt and asks the student whether to search the uploaded PDF.
-
-    Returns True only when the lesson explicitly and clearly contains enough
-    information to answer the question. Otherwise False → needs_rag or needs_confirmation.
+    Prefers answering from lesson content (including overview/summary questions).
+    Returns False only when the question is clearly outside the lesson and may
+    need the teacher PDF / deny path.
     """
-    if not lesson_content or not question:
+    if not question:
         return False
+
+    has_lesson_material = bool(
+        (lesson_content or "").strip()
+        or (lesson_summary or "").strip()
+        or (lesson_title or "").strip()
+    )
+    if not has_lesson_material:
+        return False
+
+    # Fast-path: overview / "what is this about" style questions → lesson first.
+    if _is_lesson_overview_question(question) and (
+        (lesson_content or "").strip() or (lesson_summary or "").strip()
+    ):
+        logger.info(
+            "can_answer_from_lesson_only: overview intent fast-path YES for question=%r",
+            (question or "")[:120],
+        )
+        return True
 
     try:
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_core.output_parsers import StrOutputParser
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a strict classifier. Answer with exactly one word: YES or NO.
-- YES only if the lesson content explicitly and clearly contains enough information to answer the student's question.
-- NO if the question is about something not mentioned in the lesson, or only vaguely related, or requires information not present in the lesson. When in doubt, answer NO."""),
-            ("human", """Lesson content:
-{lesson_content}
+            ("system", """You are a coverage classifier for a student lesson Q&A system.
+Reply with exactly one word: YES or NO.
+
+Answer YES when:
+- The lesson material contains enough information to answer the question, OR
+- The question asks for an overview/summary/main focus/key points/"what is this about"
+  and the lesson has substantive content on that topic, OR
+- The answer can reasonably be synthesized from the lesson title, summary, focus area,
+  objectives, or content.
+
+Answer NO only when:
+- The question is clearly about a different subject not present in the lesson, OR
+- Answering would require information that is not in the lesson at all.
+
+When the question is about this lesson and the lesson has relevant material, prefer YES.
+Do not require verbatim phrasing matches. Reply with exactly YES or NO."""),
+            ("human", """Lesson material:
+{lesson_material}
 
 Student question: {question}
 
-Can this question be answered using ONLY the lesson content above? Reply with exactly YES or NO."""),
+Can this question be answered from the lesson material above? Reply with exactly YES or NO."""),
         ])
         # Use a small token cap for YES/NO classifier — reduces TPM pressure significantly.
         classifier_max_tokens = int(os.getenv("GROQ_CLASSIFIER_MAX_TOKENS", "10"))
         # Force no reasoning for binary YES/NO classification to reduce TPM burn.
-        llm_for_classifier = lesson_service.student_service.llm.bind(
-            max_tokens=classifier_max_tokens,
-            reasoning_effort="none",
-        )
+        # Prefer a safe bind: reasoning_effort is Groq/Qwen-specific and can fail elsewhere.
+        try:
+            llm_for_classifier = lesson_service.student_service.llm.bind(
+                max_tokens=classifier_max_tokens,
+                reasoning_effort="none",
+            )
+        except Exception:
+            llm_for_classifier = lesson_service.student_service.llm.bind(
+                max_tokens=classifier_max_tokens,
+            )
         chain = prompt | llm_for_classifier | StrOutputParser()
-        # Truncate very long lesson content to avoid token limits; keep enough for classification
-        content_snippet = (lesson_content or "")[:8000].strip() or "(No content)"
-        reply = _invoke_with_groq_rate_limit(chain, {"lesson_content": content_snippet, "question": question})
+        lesson_material = _build_lesson_classifier_context(
+            lesson_title=lesson_title,
+            lesson_content=lesson_content,
+            lesson_summary=lesson_summary,
+            lesson_focus_area=lesson_focus_area,
+            lesson_objectives=lesson_objectives,
+        )
+        reply = _invoke_with_groq_rate_limit(
+            chain,
+            {"lesson_material": lesson_material, "question": question},
+        )
         reply = _strip_reasoning(reply or "").strip().upper()
-        return reply.startswith("YES")
+        # Accept YES anywhere in a short reply (models sometimes add punctuation/prefix).
+        if re.search(r"\bYES\b", reply):
+            return True
+        if re.search(r"\bNO\b", reply):
+            return False
+        # Unparseable reply with available lesson material → prefer lesson answer.
+        logger.warning(
+            "can_answer_from_lesson_only: unparseable reply %r; defaulting to YES",
+            reply[:80],
+        )
+        return True
     except Exception as e:
-        logger.warning("can_answer_from_lesson_only LLM check failed: %s; defaulting to needs_rag=True", e)
-        return False
+        # Fail open to lesson content so students are not bounced to PDF / "not covered"
+        # when the classifier itself errors (rate limit, bind kwarg, etc.).
+        logger.warning(
+            "can_answer_from_lesson_only LLM check failed: %s; defaulting to lesson answer",
+            e,
+        )
+        return True
 
 
 def decide_route(state: LessonQAState) -> LessonQAState:
@@ -208,6 +329,10 @@ def decide_route(state: LessonQAState) -> LessonQAState:
         question=question,
         lesson_content=lesson_content,
         lesson_service=state["lesson_service"],
+        lesson_title=state.get("lesson_title") or "this lesson",
+        lesson_summary=state.get("lesson_summary") or "",
+        lesson_focus_area=state.get("lesson_focus_area") or "",
+        lesson_objectives=state.get("lesson_objectives") or "",
     )
     has_rag = bool(rag_thread_id)
     not_covered = not covered
@@ -215,6 +340,17 @@ def decide_route(state: LessonQAState) -> LessonQAState:
     needs_rag = not_covered and has_rag and allow_rag is True
     needs_confirmation = not_covered and has_rag and allow_rag is not True
     needs_deny = not_covered and not has_rag
+    logger.info(
+        "decide_route lesson_id=%s covered=%s has_rag=%s allow_rag=%s "
+        "needs_confirmation=%s needs_deny=%s question=%r",
+        state.get("lesson_id"),
+        covered,
+        has_rag,
+        allow_rag,
+        needs_confirmation,
+        needs_deny,
+        (question or "")[:120],
+    )
     return {
         **state,
         "needs_rag": needs_rag,
