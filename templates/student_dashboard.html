@@ -6464,8 +6464,9 @@
       }
 
       function stopTextToSpeechSession() {
-        if (window.speechSynthesis && speechSynthesis.speaking) {
-          speechSynthesis.cancel();
+        const synth = speechSynthesis || window.speechSynthesis;
+        if (synth && synth.speaking) {
+          synth.cancel();
         }
         isTextToSpeechActive = false;
         const speakerBtn = document.getElementById('speakerBtn');
