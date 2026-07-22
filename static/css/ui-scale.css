@@ -1,0 +1,24 @@
+/*
+ * Application-wide responsive UI scale.
+ * Rem-based Tailwind utilities and component styles inherit this value.
+ */
+html {
+  font-size: clamp(16.5px, calc(0.3vw + 15.5px), 18px);
+}
+
+/* Keep native controls aligned with the scaled typography. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Preserve iOS' minimum readable input size and prevent zoom-on-focus. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, 16px);
+  }
+}

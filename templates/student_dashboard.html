@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
   <title>Student Dashboard | Iqbal AI - Secure Learning Platform</title>
 
   <!-- Global Theme Colors CSS -->
@@ -699,8 +700,8 @@
     }
 
     .chat-input-button {
-      width: 2.5rem;
-      height: 2.5rem;
+      width: 2.75rem;
+      height: 2.75rem;
       border-radius: 0.5rem;
       background: linear-gradient(135deg, #0ea5e9, #3b82f6);
       color: white;
@@ -1461,8 +1462,8 @@
   }
 
       .chat-input-button {
-        width: 2.25rem;
-        height: 2.25rem;
+        width: 2.75rem;
+        height: 2.75rem;
       }
 
       /* Enhanced mobile form styling */
@@ -4657,9 +4658,6 @@
                 </td>
                 <td data-label="Actions">
                   <div class="lesson-actions">
-                    <button class="action-btn view-btn" title="View" onclick="viewLesson('${lesson.id}')">
-                      <i class="fas fa-eye"></i>
-                    </button>
                     <button class="action-btn" style="background: #dbeafe; color: #1e40af;" title="Download PPT" onclick="downloadLessonPPT('${lesson.id}')">
                       <i class="fas fa-file-powerpoint"></i>
                     </button>
