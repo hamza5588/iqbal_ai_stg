@@ -3043,13 +3043,13 @@
           </div>
         </div>
 
-      <!-- View and Manage Lesson Button -->
+      <!-- My Lessons Button -->
       <div class="px-4 mb-4">
         <button id="lessonsTabBtn" onclick="showMyLessonsPage()"
           class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all duration-200 active-tab">
           <div class="flex items-center gap-3">
             <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium sb-hide-when-collapsed">View and Manage Lesson</span>
+            <span class="font-medium sb-hide-when-collapsed">My Lessons</span>
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm sb-hide-when-collapsed"></i>
         </button>
@@ -3114,13 +3114,13 @@
         </button>
       </div>
 
-      <!-- View and Manage Lesson Button -->
+      <!-- My Lessons Button -->
       <div class="px-4 mb-4">
         <button id="lessonsTabBtn" onclick="showMyLessonsPage(); toggleMobileSidebar();"
           class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all duration-200 active-tab">
           <div class="flex items-center gap-3">
             <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium">View and Manage Lesson</span>
+            <span class="font-medium">My Lessons</span>
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
         </button>
@@ -3755,7 +3755,7 @@
           }
         });
 
-        // Always land on View and Manage Lesson immediately on login/load.
+        // Always land on My Lessons immediately on login/load.
         // Load sidebar chat history in the background so a slow/failed
         // conversations request cannot leave the user on an empty chat.
         setStudentActiveView('lessons');
