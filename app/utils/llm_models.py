@@ -3,6 +3,8 @@ LLM Models Configuration
 Defines allowed models per provider for UI dropdowns and server-side validation
 """
 
+from typing import Optional
+
 # Groq Models
 GROQ_MODELS = {
     "gpt_oss": [
@@ -36,13 +38,26 @@ ALL_GROQ_MODELS = [model for model_list in GROQ_MODELS.values() for model in mod
 # Per-model max completion tokens (Groq docs). Requests above these return 400.
 GROQ_MODEL_MAX_COMPLETION_TOKENS = {
     "qwen/qwen3.6-27b": 16384,
+    "qwen/qwen3-32b": 16384,
     "openai/gpt-oss-120b": 65536,
     "openai/gpt-oss-20b": 65536,
     "llama-3.3-70b-versatile": 32768,
     "llama-3.1-8b-instant": 131072,
     "llama-3.1-70b-versatile": 32768,
+    "llama-3-70b-8192": 8192,
+    "llama-3-8b-8192": 8192,
 }
 GROQ_DEFAULT_MAX_COMPLETION_TOKENS = 8192
+
+# OpenAI chat completion output caps (safe ceilings; API rejects higher values).
+OPENAI_MODEL_MAX_COMPLETION_TOKENS = {
+    "gpt-4o": 16384,
+    "gpt-4o-mini": 16384,
+    "gpt-4-turbo": 4096,
+    "gpt-4": 8192,
+    "gpt-3.5-turbo": 4096,
+}
+OPENAI_DEFAULT_MAX_COMPLETION_TOKENS = 16384
 
 
 def get_groq_max_completion_tokens(model_id: str) -> int:
@@ -55,7 +70,54 @@ def get_groq_max_completion_tokens(model_id: str) -> int:
     # Conservative default for unknown / preview models
     if "qwen" in key:
         return 16384
+    if "gpt-oss" in key:
+        return 65536
     return GROQ_DEFAULT_MAX_COMPLETION_TOKENS
+
+
+def get_openai_max_completion_tokens(model_id: str) -> int:
+    """Return OpenAI max_tokens ceiling for a model (completion limit, not context)."""
+    if not model_id:
+        return OPENAI_DEFAULT_MAX_COMPLETION_TOKENS
+    key = model_id.strip().lower()
+    if key in OPENAI_MODEL_MAX_COMPLETION_TOKENS:
+        return OPENAI_MODEL_MAX_COMPLETION_TOKENS[key]
+    if key.startswith("gpt-4o"):
+        return 16384
+    if key.startswith("gpt-4"):
+        return 8192
+    if key.startswith("gpt-3.5"):
+        return 4096
+    return OPENAI_DEFAULT_MAX_COMPLETION_TOKENS
+
+
+def get_provider_max_completion_tokens(provider: str, model_id: str) -> int:
+    """Unified completion-token ceiling for the active provider/model."""
+    p = (provider or "").strip().lower()
+    if p == "groq":
+        return get_groq_max_completion_tokens(model_id)
+    if p == "openai":
+        return get_openai_max_completion_tokens(model_id)
+    # vLLM / unknown: keep a generous but finite default
+    return 16384
+
+
+def clamp_max_tokens_for_model(
+    provider: str,
+    model_id: str,
+    requested: Optional[int],
+) -> Optional[int]:
+    """Clamp requested max_tokens to the model’s supported completion limit."""
+    if requested is None:
+        return None
+    try:
+        value = int(requested)
+    except (TypeError, ValueError):
+        return None
+    if value < 1:
+        return 1
+    cap = get_provider_max_completion_tokens(provider, model_id)
+    return min(value, cap)
 
 
 def get_groq_available_models() -> dict:

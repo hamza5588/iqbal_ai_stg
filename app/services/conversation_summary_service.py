@@ -32,6 +32,44 @@ SUMMARY_INTENT_PHRASES = {
     "what did we discuss",
 }
 
+# Phrases that clearly mean "summarize the chat history", not the uploaded PDF.
+CONVERSATION_SUMMARY_PHRASES = {
+    "what did we discuss",
+    "summarize our conversation",
+    "summarize the conversation",
+    "summarize this conversation",
+    "summarize the chat",
+    "summarize our chat",
+    "summarize this chat",
+    "summarize our discussion",
+    "summarize the discussion",
+    "conversation summary",
+    "chat summary",
+}
+
+# If present with summarize/summary, treat as PDF/document summary (route to RAG).
+DOCUMENT_SUMMARY_MARKERS = {
+    "doc",
+    "docs",
+    "document",
+    "documents",
+    "pdf",
+    "file",
+    "lecture",
+    "chapter",
+    "chapters",
+    "page",
+    "pages",
+    "uploaded",
+    "attachment",
+    "paper",
+    "book",
+    "textbook",
+    "material",
+    "materials",
+    "content",
+}
+
 _SUMMARY_LOCKS: Dict[int, threading.Lock] = {}
 _SUMMARY_LOCKS_GUARD = threading.Lock()
 
@@ -101,21 +139,83 @@ class ConversationSummaryService:
     """Generate, retrieve, and maintain conversation summaries."""
 
     @staticmethod
-    def is_summary_intent(message: str, user_id: Optional[int] = None) -> bool:
+    def _normalize_intent_text(message: str) -> str:
         normalized = re.sub(r"[^a-z0-9\s]", " ", (message or "").strip().lower())
-        normalized = " ".join(normalized.split())
+        return " ".join(normalized.split())
+
+    @staticmethod
+    def is_explicit_conversation_summary_intent(message: str) -> bool:
+        """True when the user clearly wants a chat-history summary, not a PDF summary."""
+        normalized = ConversationSummaryService._normalize_intent_text(message)
         if not normalized:
             return False
-        if normalized in SUMMARY_INTENT_PHRASES:
+        if normalized in CONVERSATION_SUMMARY_PHRASES:
             return True
         words = normalized.split()
-        if "summary" in words or "summarize" in words or "summarise" in words:
-            return True
         if (
             "what" in words
             and "discuss" in words
             and ("we" in words or "did" in words)
         ):
+            return True
+        has_summary_verb = (
+            "summary" in words or "summarize" in words or "summarise" in words
+        )
+        if has_summary_verb and any(
+            marker in words for marker in ("conversation", "chat", "discussion", "thread")
+        ):
+            return True
+        return False
+
+    @staticmethod
+    def is_document_summary_intent(message: str) -> bool:
+        """True when summarize/summary is aimed at an uploaded document/PDF."""
+        normalized = ConversationSummaryService._normalize_intent_text(message)
+        if not normalized:
+            return False
+        if ConversationSummaryService.is_explicit_conversation_summary_intent(normalized):
+            return False
+        words = normalized.split()
+        has_summary_verb = (
+            "summary" in words or "summarize" in words or "summarise" in words
+        )
+        if not has_summary_verb:
+            return False
+        return any(marker in words for marker in DOCUMENT_SUMMARY_MARKERS)
+
+    @staticmethod
+    def is_summary_intent(
+        message: str,
+        user_id: Optional[int] = None,
+        has_document: bool = False,
+    ) -> bool:
+        """
+        Detect chat-history summary intent.
+
+        When a PDF is attached to the thread, only explicit conversation-summary
+        phrasing (e.g. "summarize our conversation", "what did we discuss") is
+        intercepted here. Requests like "summarize", "summarize the doc", or
+        "summarize it" are left for the RAG graph to summarize the PDF.
+        """
+        normalized = ConversationSummaryService._normalize_intent_text(message)
+        if not normalized:
+            return False
+
+        # Always allow explicit conversation-summary phrasing.
+        if ConversationSummaryService.is_explicit_conversation_summary_intent(normalized):
+            return True
+
+        # With a PDF uploaded: any other summarize/summary request → RAG (not this service).
+        if has_document:
+            return False
+
+        if normalized in SUMMARY_INTENT_PHRASES:
+            return True
+        words = normalized.split()
+        if "summary" in words or "summarize" in words or "summarise" in words:
+            # Clear document wording without a PDF still should not use chat-summary prompt.
+            if ConversationSummaryService.is_document_summary_intent(normalized):
+                return False
             return True
         return False
 
