@@ -1407,11 +1407,12 @@ def get_messages(conversation_id):
         # Resolve RAG thread_id and filename for this conversation (for correct chat context and preamble)
         thread_id = None
         uploaded_filename = None
+        num_pages = None
         try:
             from app.models.database_models import RAGThread
             db = get_db()
             prefix = f"user_{user_id}_conv_{conversation_id}_"
-            row = db.query(RAGThread.thread_id, RAGThread.filename).filter(
+            row = db.query(RAGThread.thread_id, RAGThread.filename, RAGThread.num_pages).filter(
                 RAGThread.user_id == user_id,
                 RAGThread.thread_id.like(prefix + "%"),
                 RAGThread.has_document == True,
@@ -1419,12 +1420,14 @@ def get_messages(conversation_id):
             if row:
                 thread_id = row[0] if isinstance(row, (tuple, list)) else row.thread_id
                 uploaded_filename = (row[1] if isinstance(row, (tuple, list)) and len(row) > 1 else getattr(row, 'filename', None)) or None
+                num_pages = (row[2] if isinstance(row, (tuple, list)) and len(row) > 2 else getattr(row, 'num_pages', None))
         except Exception:
             pass
         return jsonify({
             'messages': messages,
             'thread_id': thread_id,
             'uploaded_filename': uploaded_filename,
+            'num_pages': num_pages,
         })
     except Exception as e:
         logger.error(f"Error retrieving messages: {str(e)}")

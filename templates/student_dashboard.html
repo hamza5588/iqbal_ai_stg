@@ -3043,13 +3043,13 @@
           </div>
         </div>
 
-      <!-- View Lessons Button -->
+      <!-- My Lessons Button -->
       <div class="px-4 mb-4">
         <button id="lessonsTabBtn" onclick="showMyLessonsPage()"
           class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all duration-200 active-tab">
           <div class="flex items-center gap-3">
             <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium sb-hide-when-collapsed">View Lessons</span>
+            <span class="font-medium sb-hide-when-collapsed">My Lessons</span>
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm sb-hide-when-collapsed"></i>
         </button>
@@ -3114,13 +3114,13 @@
         </button>
       </div>
 
-      <!-- View Lessons Button -->
+      <!-- My Lessons Button -->
       <div class="px-4 mb-4">
         <button id="lessonsTabBtn" onclick="showMyLessonsPage(); toggleMobileSidebar();"
           class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all duration-200 active-tab">
           <div class="flex items-center gap-3">
             <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium">View Lessons</span>
+            <span class="font-medium">My Lessons</span>
           </div>
           <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
         </button>
@@ -3184,41 +3184,13 @@
         <div class="w-8"></div>
       </div>
 
-      <!-- Chat Area -->
+      <!-- Chat Area — default to lessons list on login (not empty chat) -->
       <section id="chatArea" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar">
         <div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6">
-          <!-- Welcome message - AI on RIGHT side -->
-          <div class="chat-message assistant animate-fade-in">
-            <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
-            </div>
-            <div class="chat-message-content">
-              <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Student Portal!</h4>
-              <p class="text-surface-700">You can explore and learn from:</p>
-              <ul class="mt-2 space-y-1 text-surface-600">
-                <li class="flex items-start gap-2">
-                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                  <span>All available lessons</span>
-                </li>
-                <li class="flex items-start gap-2">
-                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                  <span>Course materials and resources</span>
-                </li>
-                <li class="flex items-start gap-2">
-                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                  <span>Learning objectives and assessments</span>
-                </li>
-                <li class="flex items-start gap-2">
-                  <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
-                  <span>Track your learning progress</span>
-                </li>
-              </ul>
-              <div class="mt-4 p-3 bg-primary-50 rounded-lg border border-primary-100">
-                <p class="text-primary-700 text-sm">
-                  <i class="fas fa-lightbulb mr-2"></i>
-                  <strong>Tip:</strong> Click "View Lessons" to see all available course materials!
-                </p>
-              </div>
+          <div class="max-w-6xl mx-auto">
+            <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
+              <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View and Manage Lesson</h1>
+              <p class="text-primary-100 text-sm md:text-base">Loading lessons...</p>
             </div>
           </div>
         </div>
@@ -3232,8 +3204,8 @@
       </section>
 
 
-      <!-- Modern ChatGPT-style Bottom Chat Input Area - Mobile Optimized -->
-      <div id="chatInputArea" class="sticky bottom-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200 shadow-lg md:shadow-xl transition-all duration-300">
+      <!-- Chat input hidden until a lesson chat is opened -->
+      <div id="chatInputArea" class="sticky bottom-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200 shadow-lg md:shadow-xl transition-all duration-300" style="display: none;">
         <div class="max-w-4xl mx-auto px-2 md:px-4">
           <!-- Voice Input Status (hidden by default) -->
           <div id="voiceStatus" class="voice-status rounded-lg p-3 mb-3 hidden bg-blue-50 border border-blue-200 animate-pulse">
@@ -3527,8 +3499,32 @@
             <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
           </div>
           <div class="chat-message-content">
-            <h4 class="font-display font-semibold text-surface-900 mb-2">📚 Welcome to Learning</h4>
-            <p class="text-surface-700">I'm here to help you learn! Ask me questions about your lessons, clarify concepts, or dive deeper into any topic. Select a lesson to get started or ask me anything!</p>
+            <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Student Portal!</h4>
+            <p class="text-surface-700">You can explore and learn from:</p>
+            <ul class="mt-2 space-y-1 text-surface-600">
+              <li class="flex items-start gap-2">
+                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                <span>All available lessons</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                <span>Course materials and resources</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                <span>Learning objectives and assessments</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <i class="fas fa-check-circle text-success-500 mt-0.5"></i>
+                <span>Track your learning progress</span>
+              </li>
+            </ul>
+            <div class="mt-4 p-3 bg-primary-50 rounded-lg border border-primary-100">
+              <p class="text-primary-700 text-sm">
+                <i class="fas fa-lightbulb mr-2"></i>
+                <strong>Tip:</strong> Open a lesson from View and Manage Lesson, then tap Ask Question to chat about it.
+              </p>
+            </div>
           </div>
         </div>
       `;
@@ -3690,12 +3686,12 @@
 
         chatMessages.innerHTML = `
         <div class="max-w-2xl mx-auto p-8 h-full flex flex-col items-center justify-center text-center">
-          <i class="fas fa-comments text-6xl text-gray-300 mb-4"></i>
-          <h2 class="text-2xl font-bold text-gray-700 mb-2">No conversations yet</h2>
-          <p class="text-gray-500 mb-6">Start your first chat by clicking the button below</p>
-          <button onclick="startNewChat()" class="bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 transition-colors font-medium">
-            <i class="fas fa-plus mr-2"></i>
-            Start New Chat
+          <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
+          <h2 class="text-2xl font-bold text-gray-700 mb-2">No active lesson chat</h2>
+          <p class="text-gray-500 mb-6">Open a lesson from View and Manage Lesson, then use Ask Question to start chatting.</p>
+          <button onclick="showMyLessonsPage()" class="bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 transition-colors font-medium">
+            <i class="fas fa-book-open mr-2"></i>
+            View and Manage Lesson
           </button>
         </div>
       `;
@@ -3759,23 +3755,23 @@
           }
         });
 
-        // Initialize chat state per specification #6
-        // If chat history exists, load most recent chat
-        // If no chats, show empty state
-        await initializeChatState();
-        const preferredView = getStudentActiveView();
-        if (preferredView === 'chat' && currentChatId) {
-          showChatTab();
-        } else {
-          showMyLessonsPage();
-        }
+        // Always land on My Lessons immediately on login/load.
+        // Load sidebar chat history in the background so a slow/failed
+        // conversations request cannot leave the user on an empty chat.
+        setStudentActiveView('lessons');
+        showMyLessonsPage();
+        initializeChatState().catch(function (err) {
+          console.error('Failed to initialize student chat sidebar', err);
+        });
 
         // Setup textarea auto-resize and validation
         const textarea = document.getElementById('messageInput');
-        textarea.addEventListener('input', function () {
-          autoResizeTextarea(this);
-          updateSendButton();
-        });
+        if (textarea) {
+          textarea.addEventListener('input', function () {
+            autoResizeTextarea(this);
+            updateSendButton();
+          });
+        }
 
         // Initialize speech recognition if available
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -3810,9 +3806,12 @@
             alert('Speech recognition error: ' + event.error);
           };
         } else {
-          document.getElementById('micBtn').disabled = true;
-          document.getElementById('micBtn').title = 'Speech recognition not supported';
-          document.getElementById('micBtn').innerHTML = '<i class="fas fa-microphone-slash"></i>';
+          const micBtn = document.getElementById('micBtn');
+          if (micBtn) {
+            micBtn.disabled = true;
+            micBtn.title = 'Speech recognition not supported';
+            micBtn.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+          }
         }
 
         // Initialize speech synthesis
@@ -4533,7 +4532,7 @@
           chatMessages.innerHTML = `
           <div class="max-w-6xl mx-auto">
             <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
-              <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View Lessons</h1>
+              <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View and Manage Lesson</h1>
               <p class="text-primary-100 text-sm md:text-base">Loading lessons...</p>
             </div>
           </div>
@@ -4609,7 +4608,7 @@
       <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
         <div class="flex flex-col gap-4">
           <div>
-            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View Lessons</h1>
+            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View and Manage Lesson</h1>
             <p class="text-primary-100 text-sm md:text-base">Explore and learn from all available courses</p>
           </div>
         </div>
@@ -4658,6 +4657,12 @@
                 </td>
                 <td data-label="Actions">
                   <div class="lesson-actions">
+                    <button class="action-btn view-btn" title="View lesson" onclick="viewLesson('${lesson.id}')">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="action-btn" style="background: #dcfce7; color: #166534;" title="Ask questions about this lesson" onclick="chatWithLesson('${lesson.id}')">
+                      <i class="fas fa-comment-dots"></i>
+                    </button>
                     <button class="action-btn" style="background: #dbeafe; color: #1e40af;" title="Download PPT" onclick="downloadLessonPPT('${lesson.id}')">
                       <i class="fas fa-file-powerpoint"></i>
                     </button>
@@ -4714,6 +4719,38 @@
 
 
       // Lesson actions
+      async function chatWithLesson(lessonId) {
+        if (!lessonId) {
+          showToast('No lesson selected', 'error', 2000);
+          return;
+        }
+        window.currentViewLessonId = lessonId;
+        // Ensure lesson is in cache (may need fetch if not on current page)
+        let index = findLessonById(lessonId);
+        if (index === -1) {
+          try {
+            const response = await fetch(`/api/lessons/lesson/${lessonId}`, {
+              method: 'GET',
+              credentials: 'include'
+            });
+            const data = await response.json().catch(function () { return {}; });
+            if (response.ok && data && data.success && data.lesson) {
+              const lesson = data.lesson;
+              _studentLessonsCache.push({
+                id: lesson.id,
+                title: lesson.title || 'Lesson',
+                subject: lesson.focus_area || lesson.subject || 'Subject',
+                grade: lesson.grade_level || lesson.grade || 'N/A',
+                content: lesson.content || lesson.body || lesson.original_content || ''
+              });
+            }
+          } catch (e) {
+            console.warn('chatWithLesson: failed to prefetch lesson', e);
+          }
+        }
+        await openLessonChat();
+      }
+
       function viewLesson(lessonId) {
         try {
           console.log('🔍 viewLesson called with lessonId:', lessonId, 'type:', typeof lessonId);
@@ -6343,24 +6380,28 @@
         })();
 
         function applyLocalDeletion() {
-          chatHistory = chatHistory.filter(function (chat) { return String(chat.id) !== String(currentChatMenuId); });
+          const deletedId = String(currentChatMenuId);
+          chatHistory = chatHistory.filter(function (chat) { return String(chat.id) !== deletedId; });
+
+          // Drop lesson binding for deleted chat
+          try {
+            const raw = localStorage.getItem('Student_chat_lesson_bindings') || '{}';
+            const map = JSON.parse(raw || '{}') || {};
+            if (map[deletedId] != null) {
+              delete map[deletedId];
+              localStorage.setItem('Student_chat_lesson_bindings', JSON.stringify(map));
+            }
+          } catch (e) {}
 
           saveChatThreads();
-          renderChatSidebar(); // Update sidebar after deletion
+          renderChatSidebar();
 
-          if (String(currentChatId) === String(currentChatMenuId)) {
-            // If deleting active chat, switch to first available
-            if (chatHistory.length > 0) {
-              loadChat(chatHistory[0].id);
-            } else {
-              startNewChat();
-            }
-          }
-
-          // Remove from UI (backup in case renderChatSidebar didn't catch it)
-          const chatElement = document.querySelector(`[onclick="loadChat('${currentChatMenuId}')\"]`);
-          if (chatElement) {
-            chatElement.remove();
+          if (String(currentChatId) === deletedId) {
+            currentChatId = null;
+            window.currentLessonContext = null;
+            window.currentLessonQAId = null;
+            // Return to lessons list; do not leave an empty chat open.
+            showMyLessonsPage();
           }
         }
 
@@ -6423,8 +6464,9 @@
       }
 
       function stopTextToSpeechSession() {
-        if (window.speechSynthesis && speechSynthesis.speaking) {
-          speechSynthesis.cancel();
+        const synth = speechSynthesis || window.speechSynthesis;
+        if (synth && synth.speaking) {
+          synth.cancel();
         }
         isTextToSpeechActive = false;
         const speakerBtn = document.getElementById('speakerBtn');
@@ -6483,7 +6525,7 @@
         }
 
         if (!lessonId) {
-          showToast('No lesson context', 'error');
+          showToast('Open a lesson first, then Ask Question to chat about it.', 'warning', 3500);
           console.warn('[StudentDash] sendLessonQAMessageInMain called without lessonId', {
             currentLessonQAId: window.currentLessonQAId,
             currentLessonContext: window.currentLessonContext
@@ -7233,7 +7275,12 @@
           } catch (e) {
             console.error('Failed to reset chat conversation', e);
           }
-          startNewChat();
+          chatHistory = chatHistory.filter(function (c) { return String(c.id) !== String(currentChatId); });
+          currentChatId = null;
+          window.currentLessonContext = null;
+          window.currentLessonQAId = null;
+          renderChatSidebar();
+          showMyLessonsPage();
         }
       }
 

@@ -10,7 +10,8 @@ from app.config import Config
 from app.utils.llm_models import (
     get_default_model_for_provider,
     is_valid_model_for_provider,
-    get_model_ids_for_provider
+    get_model_ids_for_provider,
+    get_groq_max_completion_tokens,
 )
 from app.utils.encryption import decrypt_api_key
 from app.utils.llm_gateway import wrap_llm_with_telemetry
@@ -131,10 +132,19 @@ def get_chat_model(user_id: Optional[int] = None, **kwargs):
             else:
                 # Fallback to hardcoded default
                 model_to_use = get_default_model_for_provider(active_provider)
+
+        # Groq retired qwen/qwen3-32b (Jul 17 2026); map to current Qwen replacement.
+        if (model_to_use or "").strip().lower() == "qwen/qwen3-32b":
+            logger.warning(
+                "Model qwen/qwen3-32b is retired on Groq; using qwen/qwen3.6-27b instead"
+            )
+            model_to_use = "qwen/qwen3.6-27b"
         
         # Override with explicit model_name if provided
         if kwargs.get('model_name'):
             model_to_use = kwargs['model_name']
+            if (model_to_use or "").strip().lower() == "qwen/qwen3-32b":
+                model_to_use = "qwen/qwen3.6-27b"
         
         # Create LLM instance
         logger.info(f"Creating LLM with provider={active_provider.lower()}, model={model_to_use}, has_api_key={bool(api_key)}")
@@ -312,6 +322,15 @@ def create_llm(
         model = model_name or os.getenv('GROQ_MODEL', 'openai/gpt-oss-120b')
         temp = temperature if temperature is not None else float(os.getenv('GROQ_TEMPERATURE', '0.5'))
         max_toks = max_tokens if max_tokens is not None else int(os.getenv('GROQ_MAX_TOKENS', '1024'))
+        model_cap = get_groq_max_completion_tokens(model)
+        if max_toks > model_cap:
+            logger.warning(
+                "Clamping Groq max_tokens from %s to %s for model %s",
+                max_toks,
+                model_cap,
+                model,
+            )
+            max_toks = model_cap
         time_out = timeout if timeout is not None else int(os.getenv('GROQ_TIMEOUT', '60'))
         
         groq_kwargs = {

@@ -17,7 +17,7 @@ GROQ_MODELS = {
         {"id": "llama-3-8b-8192", "name": "Llama 3 8B 8192"},
     ],
     "qwen": [
-        {"id": "qwen/qwen3-32b", "name": "Qwen3 32B"},
+        {"id": "qwen/qwen3.6-27b", "name": "Qwen3.6 27B"},
     ],
 }
 
@@ -32,6 +32,30 @@ OPENAI_MODELS = [
 
 # All Groq models (flattened)
 ALL_GROQ_MODELS = [model for model_list in GROQ_MODELS.values() for model in model_list]
+
+# Per-model max completion tokens (Groq docs). Requests above these return 400.
+GROQ_MODEL_MAX_COMPLETION_TOKENS = {
+    "qwen/qwen3.6-27b": 16384,
+    "openai/gpt-oss-120b": 65536,
+    "openai/gpt-oss-20b": 65536,
+    "llama-3.3-70b-versatile": 32768,
+    "llama-3.1-8b-instant": 131072,
+    "llama-3.1-70b-versatile": 32768,
+}
+GROQ_DEFAULT_MAX_COMPLETION_TOKENS = 8192
+
+
+def get_groq_max_completion_tokens(model_id: str) -> int:
+    """Return Groq max_tokens ceiling for a model (completion limit, not context)."""
+    if not model_id:
+        return GROQ_DEFAULT_MAX_COMPLETION_TOKENS
+    key = model_id.strip().lower()
+    if key in GROQ_MODEL_MAX_COMPLETION_TOKENS:
+        return GROQ_MODEL_MAX_COMPLETION_TOKENS[key]
+    # Conservative default for unknown / preview models
+    if "qwen" in key:
+        return 16384
+    return GROQ_DEFAULT_MAX_COMPLETION_TOKENS
 
 
 def get_groq_available_models() -> dict:
