@@ -3134,19 +3134,8 @@
         </div>
       </div>
 
-      <!-- Create New Lesson Button (Replaces New Chat) -->
-      <div class="p-4">
-        <!-- <button onclick="showCreateLessonWizard()" 
-                class="w-full py-3 px-4 flex items-center gap-3 bg-gradient-to-r from-success-500 to-success-600 text-white rounded-xl hover:from-success-600 hover:to-success-700 transition-all duration-200 shadow-md hover:shadow-lg">
-          <div class="w-5 h-5 rounded-md bg-white/20 flex items-center justify-center">
-            <i class="fas fa-plus text-xs"></i>
-          </div>
-          <span class="font-medium">Create New Lesson</span>
-        </button> -->
-      </div>
-
       <!-- My Lessons Button -->
-      <div class="px-4 mb-4">
+      <div class="px-4 mb-4 mt-4">
         <button id="lessonsTabBtn" onclick="showMyLessonsPage()"
           class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
           <div class="flex items-center gap-3">
@@ -5550,6 +5539,8 @@
                 pendingConversationId = conversationId;
                 window._ingestPendingThreadId = pendingThreadId;
                 window._ingestCompletedSuccessfully = true;
+                if (!window._createLessonMeta) window._createLessonMeta = {};
+                window._createLessonMeta.numPages = statusData.num_pages || statusData.pages || statusData.documents || null;
                 break;
               }
               if (statusData.status === 'failed' || statusData.status === 'failure' || statusData.state === 'FAILURE') {
@@ -5570,12 +5561,16 @@
             if (conversationId != null) {
               window.currentRAGConversationId = conversationId;
               try { localStorage.setItem('teacher_currentRAGConversationId', String(conversationId)); } catch (e) {}
-              if (window._createLessonMeta) {
-                window._createLessonMeta.conversationId = conversationId;
-                window._createLessonMeta.threadId = threadId;
-              }
+              if (!window._createLessonMeta) window._createLessonMeta = {};
+              window._createLessonMeta.conversationId = conversationId;
+              window._createLessonMeta.threadId = threadId;
             }
-            showCreateLessonUploadComplete(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
+            if (!window._createLessonMeta) window._createLessonMeta = {};
+            if (window._createLessonMeta.numPages == null) {
+              window._createLessonMeta.numPages = data.num_pages || data.pages || data.documents || null;
+            }
+            // Auto-redirect into chat after successful processing (no manual Continue click).
+            finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
           } else {
             // Best-effort cleanup for cancelled thread so it cannot be used accidentally.
             if (window._ingestCancelRequested && pendingThreadId) {
@@ -5834,9 +5829,47 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         return plainContent;
       }
 
+      // Build the PDF upload success bubble (summary + action options).
+      function buildPDFUploadSuccessMessage(opts) {
+        opts = opts || {};
+        const fileName = opts.fileName || opts.filename || 'document';
+        const lessonTitle = opts.lessonTitle || opts.title || fileName.replace(/\.pdf$/i, '');
+        const lessonSubject = opts.lessonSubject || opts.subject || '';
+        const lessonGrade = opts.lessonGrade || opts.grade || '';
+        const lessonContext = opts.lessonContext || opts.context || '';
+        const fileSize = opts.fileSize || opts.size || null;
+        const fileSizeMB = fileSize != null ? (Number(fileSize) / (1024 * 1024)).toFixed(2) : null;
+        let pages = opts.pages || opts.numPages || opts.num_pages || null;
+        if (pages == null && fileSize != null) {
+          pages = Math.ceil(Number(fileSize) / 50000);
+        }
+
+        let details = '<strong>PDF Details:</strong><br>';
+        details += '• <strong>PDF Name:</strong> ' + String(fileName).replace(/[<>]/g, '') + '<br>';
+        if (lessonTitle) details += '• <strong>Title:</strong> ' + String(lessonTitle).replace(/[<>]/g, '') + '<br>';
+        if (lessonSubject) details += '• <strong>Subject:</strong> ' + String(lessonSubject).replace(/[<>]/g, '') + '<br>';
+        if (lessonGrade) details += '• <strong>Grade:</strong> ' + String(lessonGrade).replace(/[<>]/g, '') + '<br>';
+        if (fileSizeMB != null) details += '• <strong>File Size:</strong> ' + fileSizeMB + ' MB<br>';
+        if (pages != null) details += '• <strong>Pages:</strong> ' + pages + '<br>';
+        if (lessonContext) details += '• <strong>Context:</strong> ' + String(lessonContext).replace(/[<>]/g, '') + '<br>';
+
+        return '✅ <strong>Successfully uploaded "' + String(fileName).replace(/[<>"]/g, '') + '"!</strong><br><br>' +
+          details + '<br>' +
+          '<strong>📝 What would you like to do?</strong><br>' +
+          'Type one of these commands:<br>' +
+          '• "create a lesson" - Generate a lesson from this PDF<br>' +
+          '• "summarize" - Get a brief summary<br>' +
+          '• "ask me questions" - Generate quiz questions<br>' +
+          '• Or ask your own questions about the content!';
+      }
+
       // Finalization function - NO AUTO-SAVE
       function finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
         closeCreateLessonModal();
+
+        const numPages = (window._createLessonMeta && window._createLessonMeta.numPages != null)
+          ? window._createLessonMeta.numPages
+          : Math.ceil(fileSize / 50000);
 
         // Store PDF metadata only. Do NOT set currentLessonMarkdown to the template here –
         // the actual lesson comes from the AI when the user says "create a lesson" in chat and is stored by RAG.
@@ -5848,6 +5881,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           context: lessonContext,
           subject: lessonSubject,
           grade: lessonGrade,
+          numPages: numPages,
           createdBy: "Good",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -5861,6 +5895,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // Save to localStorage so it persists across tab switches
         savePDFDataToStorage();
 
+        showToast(`✅ PDF "${lessonTitle}" uploaded successfully!`, 'success', 4000);
+
         // Enable chat tab and switch to the NEW backend conversation (do not start a client-side chat)
         enableChatTab();
         showChatTab();
@@ -5868,13 +5904,31 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // Prefer the conversation/thread created for THIS upload, fall back to global if needed
         var metaConvId = (window._createLessonMeta && window._createLessonMeta.conversationId) || null;
         var newConvId = metaConvId != null ? metaConvId : window.currentRAGConversationId;
+        var successHtml = buildPDFUploadSuccessMessage({
+          fileName: fileName,
+          lessonTitle: lessonTitle,
+          lessonSubject: lessonSubject,
+          lessonGrade: lessonGrade,
+          lessonContext: lessonContext,
+          fileSize: fileSize,
+          pages: numPages
+        });
+
         if (newConvId != null) {
           setBackendConversationTitle(newConvId, lessonTitle);
           loadChatHistoryFromBackend().then(function () {
             return loadChatPromise(newConvId);
+          }).then(function () {
+            // Preamble already shows PDF summary + action bullets from currentPDFData.
+            // Add a single user marker; avoid duplicating the assistant success bubble.
+            addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
           }).catch(function (e) { console.error('Error switching to new conversation', e); });
         } else {
           startNewChat();
+          addUserMessage('📚 Uploaded PDF: ' + lessonTitle);
+          setTimeout(function () {
+            addAssistantMessage(successHtml);
+          }, 300);
         }
       }
 
@@ -5933,31 +5987,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         if (lessons.length === 0) {
           chatMessages.innerHTML = `
       <div class="max-w-6xl mx-auto p-6">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">View &amp; Manage All Lessons.</h1>
-            <p class="text-gray-600">View and manage all your created lessons</p>
-          </div>
-          
-          <!-- Action Buttons moved to top right -->
-          <div class="flex gap-3">
-            <button onclick="showCreateLessonWizard()" 
-                    class="bg-primary-600 text-white px-5 py-2.5 rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center gap-2 whitespace-nowrap">
-              <i class="fas fa-plus"></i>
-              Create New Lesson
-            </button>
-          </div>
+        <div class="mb-8">
+          <h1 class="text-2xl font-bold text-gray-900 mb-2">View &amp; Manage All Lessons</h1>
         </div>
         
         <div class="text-center py-12">
           <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
           <h3 class="text-xl font-semibold text-gray-700 mb-2">No lessons yet</h3>
-          <p class="text-gray-500 mb-6">You haven't created any lessons. Start by creating your first lesson!</p>
-          <button onclick="showCreateLessonWizard()" 
-                  class="bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 transition-colors font-medium">
-            <i class="fas fa-plus mr-2"></i>
-            Create New Lesson
-          </button>
+          <p class="text-gray-500">You haven't created any lessons yet. Use the green button in the sidebar to get started.</p>
         </div>
       </div>
     `;
@@ -6005,8 +6042,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
         <div class="flex flex-col gap-4">
           <div>
-            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View &amp; Manage All Lessons.</h1>
-            <p class="text-primary-100 text-sm md:text-base">View and manage all your created lessons</p>
+            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View &amp; Manage All Lessons</h1>
           </div>
           
           <!-- Action Buttons (none for now on teacher dashboard) -->
@@ -7908,15 +7944,25 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return !isNaN(n) && String(n) === String(chatId);
         })();
 
-        function renderRAGPreamble(uploadedFilename) {
+        function renderRAGPreamble(uploadedFilename, extra) {
+          extra = extra || {};
+          const pdfMeta = (typeof currentPDFData !== 'undefined' && currentPDFData) ? currentPDFData : {};
+          const successHtml = buildPDFUploadSuccessMessage({
+            fileName: uploadedFilename || pdfMeta.fileName || 'document',
+            lessonTitle: pdfMeta.title || null,
+            lessonSubject: pdfMeta.subject || null,
+            lessonGrade: pdfMeta.grade || null,
+            lessonContext: pdfMeta.context || null,
+            fileSize: pdfMeta.fileSize || null,
+            pages: extra.numPages != null ? extra.numPages : (pdfMeta.numPages || null)
+          });
           chatMessages.innerHTML = `
         <div class="chat-message assistant animate-fade-in">
           <div class="chat-message-avatar">
             <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
           </div>
           <div class="chat-message-content">
-            ✅ <strong>Successfully uploaded \u201C${String(uploadedFilename || 'document').replace(/["<>]/g, '')}\u201D.</strong><br><br>
-            You can ask questions about this document below.
+            ${successHtml}
           </div>
         </div>
         `;
@@ -7927,7 +7973,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const prependRAG = options.prependRAGPreamble && options.uploadedFilename !== undefined;
           chatMessages.innerHTML = '';
           if (prependRAG) {
-            renderRAGPreamble(options.uploaded_filename || options.uploadedFilename || 'document');
+            renderRAGPreamble(options.uploaded_filename || options.uploadedFilename || 'document', {
+              numPages: options.num_pages != null ? options.num_pages : options.numPages
+            });
           }
           let effectiveMessages = Array.isArray(messages) ? messages.slice() : [];
 
@@ -7993,6 +8041,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               opts.prependRAGPreamble = true;
               opts.uploaded_filename = data.uploaded_filename || null;
               opts.uploadedFilename = data.uploaded_filename || null;
+              opts.num_pages = data.num_pages != null ? data.num_pages : null;
+              opts.numPages = data.num_pages != null ? data.num_pages : null;
             }
             applyLoadedMessages(messages, opts);
             refreshSaveLessonAvailability();
@@ -8783,6 +8833,21 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             enableChatTab();
             showChatTab();
 
+            const pages = (data && (data.num_pages || data.pages || data.documents)) || Math.ceil(file.size / 50000);
+            currentPDFData = {
+              id: 'lesson_' + Date.now(),
+              title: inferredLessonName,
+              fileName: file.name,
+              fileSize: file.size,
+              context: context || '',
+              subject: '',
+              grade: '',
+              numPages: pages,
+              createdAt: new Date().toISOString(),
+              source: 'pdf_upload'
+            };
+            try { savePDFDataToStorage(); } catch (e) {}
+
             try {
               await loadChatHistoryFromBackend();
               await loadChatPromise(conversationId);
@@ -8790,27 +8855,24 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               console.error('Error switching to new RAG conversation', e);
             }
 
-            // Now, inside the NEW conversation, show upload + context + success messages
+            // Preamble already shows PDF summary + action bullets; only add upload markers.
             addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
             if (context) {
               addUserMessage(`📝 Context: ${context}`);
             }
-            addAssistantMessage(`✅ Successfully uploaded and processed "${file.name}"!<br><br>
-            <strong>PDF Details:</strong><br>
-            • Size: ${fileSizeMB} MB<br>
-            • Pages: Estimated ${Math.ceil(file.size / 50000)} pages<br>
-            • Context: ${context || 'No specific context provided'}<br><br>
-            I can now answer questions based on this material. Try asking something like:<br>
-            • "Summarize the key concepts from this PDF"<br>
-            • "Create quiz questions from chapter 3"<br>
-            • "Explain the main topics in simple terms"`);
           } else {
             // Fallback: no conversation id returned – keep behavior local to current chat
             addUserMessage(`📚 Uploading PDF: ${file.name} (${fileSizeMB} MB)`);
             if (context) {
               addUserMessage(`📝 Context: ${context}`);
             }
-            addAssistantMessage('✅ PDF uploaded. You can now ask questions about this document.');
+            addAssistantMessage(buildPDFUploadSuccessMessage({
+              fileName: file.name,
+              lessonTitle: inferredLessonName,
+              lessonContext: context || '',
+              fileSize: file.size,
+              pages: Math.ceil(file.size / 50000)
+            }));
           }
         } catch (e) {
           console.error('RAG upload error', e);

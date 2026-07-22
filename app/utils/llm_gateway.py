@@ -163,7 +163,8 @@ def extract_token_counts_from_chunk(chunk: BaseMessageChunk) -> tuple[Optional[i
 _DEFAULT_MODEL_PRICING: dict[tuple[str, str], tuple[float, float]] = {
     ("groq", "llama-3.3-70b-versatile"): (0.59, 0.79),
     ("groq", "llama-3.1-8b-instant"): (0.05, 0.08),
-    ("groq", "qwen/qwen3-32b"): (0.29, 0.59),
+    ("groq", "qwen/qwen3.6-27b"): (0.60, 3.00),
+    ("groq", "qwen/qwen3-32b"): (0.29, 0.59),  # retired on Groq; kept for historical telemetry
     ("groq", "mixtral-8x7b-32768"): (0.24, 0.24),
     ("openai", "gpt-4o"): (2.5, 10.0),
     ("openai", "gpt-4o-mini"): (0.15, 0.6),
