@@ -8971,8 +8971,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         showTypingIndicator();
 
         try {
+          // Lecture/lesson generation runs multiple retrieval + LLM rounds server-side and can
+          // take minutes. Keep this above the backend budget (gunicorn --timeout) so we never
+          // abandon a turn the server is still working on and still holding the per-user lock.
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 60000);
+          const timeoutId = setTimeout(() => controller.abort(), 180000);
           const body = {
             message: message,
             thread_id: window.currentRAGThreadId || null,
@@ -8989,6 +8992,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           if (!response.ok) {
             const err = await response.json().catch(function() { return {}; });
+            // Busy/throttled is not a failed turn - the previous answer is still coming.
+            // Surface it as a transient toast and hand the text back so nothing is lost.
+            if (response.status === 429) {
+              removeLastUserMessage();
+              input.value = message;
+              autoResizeTextarea(input);
+              if (typeof showToast === 'function') {
+                showToast(err.error || 'Please wait for the current response.', 'warning', 4000);
+              }
+              return;
+            }
             addAssistantMessage('Error: ' + (err.error || 'Failed to get response from the server.'));
             return;
           }
@@ -9109,6 +9123,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // Persist to active chat (scoped by currentChatId - ensures isolation)
         if (!currentChatId) currentChatId = 'chat1';
         appendMessageToChat(currentChatId, 'user', message);
+      }
+
+      // Undo the optimistic echo of a message the server refused to accept (e.g. 429 busy),
+      // so the text can be handed back to the input instead of stranding a bubble in the thread.
+      function removeLastUserMessage() {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+        const userMessages = chatMessages.querySelectorAll('.chat-message.user');
+        if (userMessages.length) {
+          userMessages[userMessages.length - 1].remove();
+        }
       }
 
       // Add assistant message on RIGHT side (message = HTML from TeacherChatFormatter: marked + DOMPurify)

@@ -1142,15 +1142,23 @@ def chat():
                 'retry_after': retry_after,
             }), 429
 
-        # One message at a time per user: enforce a per-user lock with a bounded wait.
-        # This prevents "zombie" locks from immediately causing 429s after upstream timeouts,
-        # while still guaranteeing only a single in-flight chat per user.
+        # One message at a time per user: enforce a per-user lock with a SHORT bounded wait.
+        # The wait absorbs normal back-to-back sends, but must stay well under the client
+        # timeout: a long wait here means an abandoned turn silently blocks every following
+        # message until the browser gives up, turning one slow turn into a cascade of errors.
         user_lock = _get_user_chat_lock(user_id)
-        acquired = user_lock.acquire(blocking=True, timeout=120)
+        lock_wait_seconds = max(1, int(os.getenv("RAG_USER_CHAT_LOCK_WAIT_SECONDS", "5")))
+        acquired = user_lock.acquire(blocking=True, timeout=lock_wait_seconds)
         if not acquired:
+            logger.info(
+                "RAG chat busy: previous turn still in flight for user_id=%s (waited %ss)",
+                user_id,
+                lock_wait_seconds,
+            )
             return jsonify({
-                'error': 'Your previous message is still being processed. Please try again in a moment.',
-                'code': 'CONCURRENT_REQUEST_TIMEOUT'
+                'error': 'Your previous message is still being generated. Please wait for it to finish before sending another.',
+                'code': 'CONCURRENT_REQUEST_TIMEOUT',
+                'retry_after': lock_wait_seconds,
             }), 429
 
         try:
