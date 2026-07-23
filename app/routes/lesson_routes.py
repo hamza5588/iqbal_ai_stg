@@ -1219,12 +1219,16 @@ def ask_lesson_question():
             'retry_after': retry_after,
         }), 429
 
+    # Short bounded wait: a long wait means an abandoned turn silently stalls every following
+    # message instead of telling the user their previous one is still generating.
     user_lock = _get_lesson_qa_user_lock(int(user_id))
-    acquired = user_lock.acquire(blocking=True, timeout=120)
+    lock_wait_seconds = max(1, int(os.getenv("LESSON_QA_LOCK_WAIT_SECONDS", "5")))
+    acquired = user_lock.acquire(blocking=True, timeout=lock_wait_seconds)
     if not acquired:
         return jsonify({
-            'error': 'Your previous message is still being processed. Please try again in a moment.',
+            'error': 'Your previous message is still being generated. Please wait for it to finish before sending another.',
             'code': 'CONCURRENT_REQUEST_TIMEOUT',
+            'retry_after': lock_wait_seconds,
         }), 429
 
     try:
