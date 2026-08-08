@@ -10,6 +10,7 @@ from app.utils.rag_service import (
     save_finalized_lesson,
     update_lesson_finalized_status,
     delete_thread,
+    clear_thread_conversation_history,
     warmup_rag_embeddings,
     MARKDOWN_EXPORTS_DIR,
     DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF,
@@ -2286,4 +2287,36 @@ def delete_thread_route(thread_id):
     except Exception as e:
         logger.error(f"Error deleting thread: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to delete thread: {str(e)}'}), 500
+
+
+@bp.route('/thread/<thread_id>/reset', methods=['POST'])
+@login_required
+def reset_thread_conversation_route(thread_id):
+    """
+    Reset a thread's conversation: clears the LangGraph checkpointed message
+    history so the next message starts fresh, but keeps the uploaded document
+    (vectors / file) intact. Used by the "Reset Chat" button.
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        user_id = session['user_id']
+
+        if not _validate_thread_id(thread_id, user_id):
+            return jsonify({'error': 'Access denied. You can only reset your own threads.'}), 403
+
+        result = clear_thread_conversation_history(thread_id)
+        if not result.get('success'):
+            return jsonify({'error': result.get('message', 'Failed to reset conversation')}), 500
+
+        return jsonify({
+            'success': True,
+            'message': result.get('message', 'Conversation reset successfully'),
+            'thread_id': thread_id
+        })
+
+    except Exception as e:
+        logger.error(f"Error resetting thread conversation: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Failed to reset conversation: {str(e)}'}), 500
 
