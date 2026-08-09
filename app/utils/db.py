@@ -65,6 +65,11 @@ def get_engine():
         
         # SQLite-specific optimizations
         if db_url.startswith('sqlite'):
+            # QueuePool-only options (pool_size, max_overflow) are invalid for
+            # StaticPool, which SQLite always uses here.
+            engine_options.pop('pool_size', None)
+            engine_options.pop('max_overflow', None)
+
             # Use StaticPool for in-memory, QueuePool otherwise
             if 'sqlite:///:memory:' in db_url:
                 engine_options['poolclass'] = StaticPool

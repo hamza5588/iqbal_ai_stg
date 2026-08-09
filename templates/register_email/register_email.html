@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Your Account | Iqbal AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green-dark:#0e5c2f;
+  --green:#1f9c46;
+  --green-mid:#2fae52;
+  --green-light:#e7f6ec;
+  --green-pale:#d9f2e2;
+  --text-dark:#16241c;
+  --text-muted:#5c6b62;
+  --border-soft:#bfdccb;
+  --error:#dc2626;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:'Inter','Segoe UI',Arial,sans-serif;
+  background:#ffffff;
+  color:var(--text-dark);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:60px 20px 30px;
+}
+h1{ font-family:'Poppins','Inter',sans-serif; }
+svg{ display:block; }
+a{ text-decoration:none; }
+
+.page-wrap{ width:100%; max-width:660px; position:relative; }
+
+.logo-badge{
+  position:absolute; top:-56px; left:50%; transform:translateX(-50%);
+  width:112px; height:112px; border-radius:50%;
+  background:#fff; box-shadow:0 10px 30px rgba(20,80,40,0.12);
+  display:flex; align-items:center; justify-content:center;
+  z-index:5; border:6px solid #fff;
+}
+.logo-badge img{ width:66px; height:66px; object-fit:contain; }
+
+.card{ background:var(--green-light); border-radius:28px; padding:70px 44px 40px; text-align:center; }
+
+.illustration{ margin:0 auto 22px; width:190px; height:170px; }
+
+h1.title{ font-size:1.9rem; font-weight:600; margin-bottom:8px; }
+h1.title span{ color:var(--green); font-weight:700; }
+
+.subtitle{ font-size:0.92rem; color:var(--text-muted); line-height:1.5; margin-bottom:24px; }
+
+.step-pill{
+  display:inline-flex; align-items:center; gap:10px;
+  background:#fff; border-radius:30px; padding:8px 22px 8px 8px; margin-bottom:10px;
+  box-shadow:0 2px 10px rgba(20,80,40,0.06);
+}
+.step-pill .num{
+  width:28px; height:28px; border-radius:50%;
+  background:linear-gradient(135deg,var(--green-dark),var(--green-mid));
+  color:#fff; display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:0.85rem;
+}
+.step-pill .label{ font-weight:600; font-size:0.92rem; color:var(--text-dark); }
+.step-note{ font-size:0.82rem; color:var(--green); font-weight:600; margin-bottom:26px; }
+
+.email-form{ background:#fff; border-radius:18px; padding:26px; text-align:left; }
+.field-label{
+  display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.9rem;
+  margin-bottom:10px; color:var(--text-dark);
+}
+.field-label .icon{
+  width:26px; height:26px; border-radius:50%;
+  background:var(--green-pale); color:var(--green-dark);
+  display:flex; align-items:center; justify-content:center;
+}
+.input-wrap{ position:relative; margin-bottom:8px; }
+.input-wrap .input-icon{
+  position:absolute; left:14px; top:50%; transform:translateY(-50%); color:#9fb3a7; display:flex;
+}
+.input-wrap input{
+  width:100%; padding:13px 14px 13px 42px; border-radius:10px;
+  border:1.5px solid var(--border-soft); font-size:0.92rem;
+  font-family:'Inter',sans-serif; outline:none; color:var(--text-dark);
+}
+.input-wrap input::placeholder{ color:#9fb3a7; }
+.input-wrap input:focus{ border-color:var(--green-mid); box-shadow:0 0 0 3px rgba(31,156,70,0.12); }
+.input-wrap input.field-invalid{ border-color:var(--error); }
+.field-hint{ color:var(--error); font-size:0.78rem; margin-bottom:10px; display:none; }
+.field-hint.show{ display:block; }
+
+.btn{
+  border:none; border-radius:12px; padding:14px 26px; font-size:0.92rem; font-weight:700;
+  font-family:'Inter',sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  gap:8px; transition:transform .15s ease, box-shadow .2s ease; width:100%;
+}
+.btn-primary{ background:linear-gradient(90deg,var(--green-dark),var(--green-mid)); color:#fff; }
+.btn-primary:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(31,156,70,0.35); }
+.btn-primary:disabled{ opacity:0.75; cursor:default; transform:none; }
+
+#form-error{
+  display:none; background:#fef2f2; border:1px solid #fecaca; color:var(--error);
+  padding:12px 14px; border-radius:10px; font-size:0.85rem; margin-bottom:16px;
+}
+#form-error.show{ display:block; }
+
+.divider{
+  display:flex; align-items:center; gap:12px; margin:24px 0 18px; color:var(--text-muted);
+  font-size:0.75rem; font-weight:700; letter-spacing:0.5px;
+}
+.divider::before,.divider::after{ content:""; flex:1; height:1px; background:#c6dccd; }
+
+.link-note{ font-size:0.88rem; color:var(--text-muted); }
+.link-note a{ color:var(--green); font-weight:700; }
+
+.trust-row{
+  display:flex; justify-content:center; gap:34px; flex-wrap:wrap;
+  margin:26px 0 34px; font-size:0.82rem; color:var(--text-muted); font-weight:600;
+}
+.trust-row .item{ display:flex; align-items:center; gap:8px; }
+.trust-row .item .circ{
+  width:26px; height:26px; border-radius:50%;
+  background:var(--green-pale); color:var(--green-dark);
+  display:flex; align-items:center; justify-content:center;
+}
+.trust-divider{ width:1px; background:#d7e6dc; align-self:stretch; }
+
+.page-footer{
+  background:#f5f8f6; border-radius:14px; padding:10px 24px;
+  font-size:0.8rem; color:var(--text-muted); text-align:center;
+}
+.page-footer .brand{ color:var(--green); font-weight:700; }
+
+@media (max-width:640px){ .card{ padding:70px 22px 32px; } }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+  <div class="logo-badge">
+    <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI">
+  </div>
+  <div class="card">
+
+    <svg class="illustration" viewBox="0 0 200 180" xmlns="http://www.w3.org/2000/svg">
+      <g fill="#8fd6a6">
+        <path d="M18 40 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z"/>
+        <path d="M182 46 l2.5 5.5 5.5 2.5 -5.5 2.5 -2.5 5.5 -2.5 -5.5 -5.5 -2.5 5.5 -2.5 z"/>
+        <path d="M170 20 l2 4.5 4.5 2 -4.5 2 -2 4.5 -2 -4.5 -4.5 -2 4.5 -2 z"/>
+      </g>
+      <circle cx="188" cy="80" r="3" fill="none" stroke="#8fd6a6" stroke-width="2"/>
+      <circle cx="182" cy="100" r="2" fill="none" stroke="#8fd6a6" stroke-width="2"/>
+      <g transform="translate(8,70) rotate(-18)">
+        <path d="M0 14 L34 0 L14 8 L10 26 L6 16 Z" fill="#bfe6cc"/>
+      </g>
+      <path d="M20 66 q10 6 16 16" stroke="#bfe6cc" stroke-width="2" fill="none" stroke-dasharray="2 4"/>
+      <g transform="translate(45,45)">
+        <path d="M0 30 L55 0 L110 30 L110 95 Q110 100 105 100 L5 100 Q0 100 0 95 Z" fill="#1f9c46"/>
+        <path d="M0 30 L55 60 L110 30 L110 95 Q110 100 105 100 L5 100 Q0 100 0 95 Z" fill="#2fae52"/>
+        <path d="M0 30 L55 60 L110 30" fill="none" stroke="#0e5c2f" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M0 95 L38 62" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+        <path d="M110 95 L72 62" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+      </g>
+      <g transform="translate(75,42)">
+        <rect x="-2" y="-2" width="59" height="59" rx="14" fill="#ffffff"/>
+        <path d="M27.5 4 L46 11 V26 C46 38 38 45 27.5 50 C17 45 9 38 9 26 V11 Z" fill="#1f9c46"/>
+        <path d="M18 27 L24.5 33.5 L38 20" stroke="#ffffff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </svg>
+
+    <h1 class="title">Create Your <span>Account</span></h1>
+    <p class="subtitle">Enter your email and we'll send you<br>a verification link to complete registration</p>
+
+    <div class="step-pill">
+      <div class="num">1</div>
+      <div class="label">Step 1 - Verify Email</div>
+    </div>
+    <div class="step-note">We'll send a verification link to your email.</div>
+
+    <div id="form-error" class="{% if error %}show{% endif %}">{% if error %}{{ error }}{% endif %}</div>
+
+    <form class="email-form" id="register-email-form" action="{{ url_for('auth.register_email') }}" method="POST" novalidate>
+      <label class="field-label" for="useremail">
+        <span class="icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/></svg></span>
+        Email address
+      </label>
+      <div class="input-wrap">
+        <span class="input-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb3a7" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg></span>
+        <input type="email" id="useremail" name="useremail" placeholder="you@example.com" required autocomplete="email">
+      </div>
+      <div class="field-hint" id="email-hint">Please enter a valid email address</div>
+
+      <button type="submit" class="btn btn-primary" id="submit-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+        <span id="submit-btn-text">Send verification email</span>
+      </button>
+    </form>
+
+    <div class="divider">Or</div>
+    <p class="link-note">Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a></p>
+
+  </div>
+</div>
+
+<div class="trust-row">
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span> Secure &amp; Safe</div>
+  <div class="trust-divider"></div>
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg></span> Privacy Protected</div>
+  <div class="trust-divider"></div>
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20v-1a6 6 0 0 1 8-5.7"/><circle cx="17" cy="9" r="2.8"/><path d="M13.5 20v-1a5.2 5.2 0 0 1 8-4.4"/></svg></span> Trusted by Learners</div>
+</div>
+
+<div class="page-footer">&copy;2026 <span class="brand">Iqbal AI</span>. All Rights Reserved</div>
+
+<script>
+  function validateEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+
+  document.getElementById('register-email-form').addEventListener('submit', function (e) {
+    var input = document.getElementById('useremail');
+    var hint = document.getElementById('email-hint');
+    if (!validateEmail(input.value.trim())) {
+      e.preventDefault();
+      input.classList.add('field-invalid');
+      hint.classList.add('show');
+      return;
+    }
+    input.classList.remove('field-invalid');
+    hint.classList.remove('show');
+    var btn = document.getElementById('submit-btn');
+    var btnText = document.getElementById('submit-btn-text');
+    btn.disabled = true;
+    btnText.textContent = 'Sending…';
+  });
+
+  document.getElementById('useremail').addEventListener('input', function () {
+    this.classList.remove('field-invalid');
+    document.getElementById('email-hint').classList.remove('show');
+  });
+</script>
+</body>
+</html>

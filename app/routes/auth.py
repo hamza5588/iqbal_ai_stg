@@ -27,7 +27,7 @@ def register_email():
             
             # Check if email already exists
             if UserModel.get_user_by_email(email):
-                return render_template('register_email.html', error="Email already registered")
+                return render_template('register_email/register_email.html', error="Email already registered")
             
             # Generate verification token
             token = secrets.token_urlsafe(32)
@@ -103,13 +103,13 @@ If clicking the link doesn't work, please copy and paste it into your browser.''
             mail.send(msg)
             logger.info(f"Verification email sent to {email} with link: {verification_link}")
             
-            return render_template('email_sent.html', email=email)
+            return render_template('email_sent/email_sent.html', email=email)
             
         except Exception as e:
             logger.error(f"Email registration error: {str(e)}")
-            return render_template('register_email.html', error="Failed to send verification email")
+            return render_template('register_email/register_email.html', error="Failed to send verification email")
             
-    return render_template('register_email.html')
+    return render_template('register_email/register_email.html')
 
 @bp.route('/verify_email/<token>')
 def verify_email(token):
@@ -128,7 +128,7 @@ def verify_email(token):
         
         if not verification_token:
             logger.warning(f"Invalid token attempted: {token[:10]}...")
-            return render_template('register.html', error="Invalid or expired verification link")
+            return render_template('register/register.html', error="Invalid or expired verification link")
         
         # Check if token has expired - use UTC for consistency
         current_time = datetime.utcnow()
@@ -143,18 +143,18 @@ def verify_email(token):
             db.commit()
             time_diff = current_time - expires_at
             logger.warning(f"Expired token attempted: {token[:10]}... (expired {time_diff} ago)")
-            return render_template('register.html', error="Verification link has expired")
+            return render_template('register/register.html', error="Verification link has expired")
         
         email = verification_token.email
         logger.info(f"Email verified successfully for: {email}")
         
         # Keep the token valid until registration is complete (don't mark as used yet)
-        return render_template('register.html', email=email)
+        return render_template('register/register.html', email=email)
         
     except Exception as e:
         logger.error(f"Error in email verification: {str(e)}")
         db.rollback()
-        return render_template('register.html', error="An error occurred during verification. Please try again.")
+        return render_template('register/register.html', error="An error occurred during verification. Please try again.")
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -170,13 +170,13 @@ def register():
             # Check if form data exists
             if not request.form:
                 logger.error("No form data received in registration request")
-                return render_template('register.html', error="Invalid request format. Please ensure the form is submitted correctly.")
+                return render_template('register/register.html', error="Invalid request format. Please ensure the form is submitted correctly.")
             
             # Get email - handle both form and potential JSON
             email = request.form.get('useremail')
             if not email:
                 logger.error("Missing email in registration request")
-                return render_template('register.html', error="Email is required")
+                return render_template('register/register.html', error="Email is required")
             
             # Verify that email was previously verified
             db = get_db()
@@ -189,7 +189,7 @@ def register():
             ).first()
                     
             if not verification_token:
-                return render_template('register.html', error="Email not verified")
+                return render_template('register/register.html', error="Email not verified")
             
             # Get all required form fields with validation
             username = request.form.get('username')
@@ -212,7 +212,7 @@ def register():
             
             if missing_fields:
                 logger.error(f"Missing required fields: {missing_fields}")
-                return render_template('register.html', error=f"Missing required fields: {', '.join(missing_fields)}")
+                return render_template('register/register.html', error=f"Missing required fields: {', '.join(missing_fields)}")
             
             user_id = UserModel.create_user(
                 username=username,
@@ -242,15 +242,15 @@ def register():
             return redirect(get_default_route_by_role(role))
         except ValueError as e:
             logger.error(f"Registration validation error: {str(e)}")
-            return render_template('register.html', error=str(e))
+            return render_template('register/register.html', error=str(e))
         except KeyError as e:
             logger.error(f"Missing form field: {str(e)}")
-            return render_template('register.html', error=f"Missing required field: {str(e)}")
+            return render_template('register/register.html', error=f"Missing required field: {str(e)}")
         except Exception as e:
             logger.error(f"Registration error: {str(e)}", exc_info=True)
-            return render_template('register.html', error="Registration failed. Please try again.")
+            return render_template('register/register.html', error="Registration failed. Please try again.")
             
-    return render_template('register.html')
+    return render_template('register/register.html')
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -282,14 +282,14 @@ def login():
             err_msg = "Invalid credentials"
             if _wants_json():
                 return jsonify({'success': False, 'error': err_msg}), 401
-            return render_template('login.html', error=err_msg)
+            return render_template('login/login.html', error=err_msg)
         except Exception as e:
             logger.error(f"Login error: {str(e)}")
             err_msg = "Login failed"
             if _wants_json():
                 return jsonify({'success': False, 'error': err_msg}), 500
-            return render_template('login.html', error=err_msg)
-    return render_template('login.html')
+            return render_template('login/login.html', error=err_msg)
+    return render_template('login/login.html')
 
 # @bp.route('/logout',methods=['GET','POST'])
 # def logout():

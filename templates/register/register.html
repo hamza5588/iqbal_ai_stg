@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Complete Your Registration | Iqbal AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green-dark:#0e5c2f;
+  --green:#1f9c46;
+  --green-mid:#2fae52;
+  --green-light:#e7f6ec;
+  --green-pale:#d9f2e2;
+  --text-dark:#16241c;
+  --text-muted:#5c6b62;
+  --border-soft:#bfdccb;
+  --error:#dc2626;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:'Inter','Segoe UI',Arial,sans-serif;
+  background:#ffffff;
+  color:var(--text-dark);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:60px 20px 30px;
+}
+h1{ font-family:'Poppins','Inter',sans-serif; }
+svg{ display:block; }
+a{ text-decoration:none; }
+
+.page-wrap{ width:100%; max-width:660px; position:relative; }
+
+.logo-badge{
+  position:absolute; top:-56px; left:50%; transform:translateX(-50%);
+  width:112px; height:112px; border-radius:50%;
+  background:#fff; box-shadow:0 10px 30px rgba(20,80,40,0.12);
+  display:flex; align-items:center; justify-content:center;
+  z-index:5; border:6px solid #fff;
+}
+.logo-badge img{ width:66px; height:66px; object-fit:contain; }
+
+.card{ background:var(--green-light); border-radius:28px; padding:70px 44px 40px; text-align:center; }
+
+.illustration{ margin:0 auto 22px; width:220px; height:170px; }
+
+h1.title{ font-size:1.9rem; font-weight:600; margin-bottom:8px; }
+h1.title span{ color:var(--green); font-weight:700; }
+
+.subtitle{ font-size:0.92rem; color:var(--text-muted); line-height:1.5; margin-bottom:24px; }
+
+.progress-row{ display:flex; align-items:flex-start; justify-content:center; gap:0; margin:6px 0 28px; }
+.progress-step{ display:flex; flex-direction:column; align-items:center; width:120px; }
+.progress-circle{
+  width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:1rem; margin-bottom:8px; background:#fff; border:2px solid #d7e6dc; color:#9fb3a7;
+}
+.progress-circle.done{ background:linear-gradient(135deg,var(--green-dark),var(--green-mid)); border-color:transparent; color:#fff; }
+.progress-circle.active{ background:linear-gradient(135deg,var(--green-dark),var(--green-mid)); border-color:transparent; color:#fff; }
+.progress-line{ flex:1; height:2px; background:#d7e6dc; margin-top:22px; min-width:30px; }
+.progress-line.done{ background:var(--green-mid); }
+.progress-label{ font-size:0.82rem; font-weight:700; color:#9fb3a7; }
+.progress-label.active{ color:var(--green); }
+
+#form-error{
+  display:none; text-align:left; background:#fef2f2; border:1px solid #fecaca; color:var(--error);
+  padding:12px 14px; border-radius:10px; font-size:0.85rem; margin-bottom:20px;
+}
+#form-error.show{ display:block; }
+
+.form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; text-align:left; margin-bottom:18px; }
+.form-field{ background:#fff; border-radius:16px; padding:18px 20px; display:flex; gap:14px; align-items:flex-start; }
+.form-field.full{ grid-column:1 / -1; }
+.field-icon{
+  width:38px; height:38px; min-width:38px; border-radius:10px; background:var(--green-pale);
+  color:var(--green-dark); display:flex; align-items:center; justify-content:center;
+}
+.field-body{ flex:1; min-width:0; }
+.field-body label{ display:block; font-size:0.86rem; font-weight:700; margin-bottom:8px; color:var(--text-dark); }
+.field-body input,.field-body select{
+  width:100%; padding:10px 12px; border-radius:8px; border:1.5px solid var(--border-soft);
+  font-size:0.88rem; font-family:'Inter',sans-serif; outline:none; color:var(--text-dark); background:#fff;
+}
+.field-body input::placeholder{ color:#a9bdb0; }
+.field-body input:focus,.field-body select:focus{ border-color:var(--green-mid); box-shadow:0 0 0 3px rgba(31,156,70,0.12); }
+.field-body input.field-invalid,.field-body select.field-invalid{ border-color:var(--error); }
+.field-hint{ color:var(--error); font-size:0.76rem; margin-top:6px; display:none; }
+.field-hint.show{ display:block; }
+
+.strength-row{ margin-top:10px; }
+.strength-label{ font-size:0.76rem; font-weight:600; color:var(--text-muted); margin-bottom:6px; }
+.strength-bars{ display:flex; gap:5px; align-items:center; }
+.strength-bars .bar{ height:5px; flex:1; border-radius:3px; background:#e2ece5; }
+.strength-bars .bar.on{ background:var(--green-mid); }
+.strength-tag{ font-size:0.76rem; font-weight:700; color:var(--green); margin-left:8px; white-space:nowrap; }
+
+.check-row{ text-align:left; margin-bottom:18px; }
+.check-item{ display:flex; align-items:flex-start; gap:10px; font-size:0.85rem; color:var(--text-dark); margin-bottom:10px; }
+.check-item input{ margin-top:2px; accent-color:var(--green-mid); width:16px; height:16px; cursor:pointer; }
+.check-item a{ color:var(--green); font-weight:600; }
+.field-hint.terms-hint{ margin-left:26px; }
+
+.btn{
+  border:none; border-radius:12px; padding:15px; font-size:1rem; font-weight:700;
+  font-family:'Inter',sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  gap:8px; width:100%; transition:transform .15s ease, box-shadow .2s ease;
+}
+.btn-primary{ background:linear-gradient(90deg,var(--green-dark),var(--green-mid)); color:#fff; margin-bottom:22px; }
+.btn-primary:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(31,156,70,0.35); }
+.btn-primary:disabled{ opacity:0.75; cursor:default; transform:none; }
+
+.divider{ display:flex; align-items:center; gap:12px; margin:0 0 18px; color:var(--text-muted); font-size:0.75rem; font-weight:700; letter-spacing:0.5px; }
+.divider::before,.divider::after{ content:""; flex:1; height:1px; background:#c6dccd; }
+
+.social-row{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+.social-btn{
+  display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #d9e4dd; border-radius:10px;
+  padding:10px 18px; font-size:0.88rem; font-weight:600; color:var(--text-dark); opacity:0.6; cursor:not-allowed;
+}
+.social-btn.linkedin{ background:#0a66c2; color:#fff; border-color:#0a66c2; }
+
+.link-note{ font-size:0.88rem; color:var(--text-muted); text-align:center; margin-top:22px; }
+.link-note a{ color:var(--green); font-weight:700; }
+
+.trust-row{ display:flex; justify-content:center; gap:34px; flex-wrap:wrap; margin:26px 0 34px; font-size:0.82rem; color:var(--text-muted); font-weight:600; }
+.trust-row .item{ display:flex; align-items:center; gap:8px; }
+.trust-row .item .circ{ width:26px; height:26px; border-radius:50%; background:var(--green-pale); color:var(--green-dark); display:flex; align-items:center; justify-content:center; }
+.trust-divider{ width:1px; background:#d7e6dc; align-self:stretch; }
+
+.page-footer{ background:#f5f8f6; border-radius:14px; padding:10px 24px; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:26px; }
+.page-footer .brand{ color:var(--green); font-weight:700; }
+
+@media (max-width:640px){
+  .form-grid{ grid-template-columns:1fr; }
+  .card{ padding:70px 22px 32px; }
+  .progress-step{ width:90px; }
+}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+  <div class="logo-badge">
+    <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI">
+  </div>
+  <div class="card">
+
+    <svg class="illustration" viewBox="0 0 220 170" xmlns="http://www.w3.org/2000/svg">
+      <g fill="#8fd6a6">
+        <path d="M14 24 l2.5 5.5 5.5 2.5 -5.5 2.5 -2.5 5.5 -2.5 -5.5 -5.5 -2.5 5.5 -2.5 z"/>
+        <path d="M204 34 l2 4.5 4.5 2 -4.5 2 -2 4.5 -2 -4.5 -4.5 -2 4.5 -2 z"/>
+      </g>
+      <g transform="translate(10,110)">
+        <rect x="0" y="18" width="80" height="14" rx="3" fill="#1f9c46"/>
+        <rect x="6" y="4" width="68" height="14" rx="3" fill="#7cc954"/>
+        <rect x="12" y="-10" width="56" height="14" rx="3" fill="#0e5c2f"/>
+      </g>
+      <g transform="translate(6,60)">
+        <path d="M42 0 L84 16 L42 32 L0 16 Z" fill="#16241c"/>
+        <path d="M42 32 L42 44 Q42 50 30 52 Q18 50 18 44 L18 30" fill="none" stroke="#16241c" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="84" cy="16" r="3" fill="#16241c"/>
+        <line x1="84" y1="16" x2="84" y2="40" stroke="#16241c" stroke-width="2"/>
+        <circle cx="84" cy="44" r="4" fill="#2fae52"/>
+      </g>
+      <g transform="translate(96,26)">
+        <rect x="0" y="0" width="112" height="76" rx="8" fill="#ffffff" stroke="#cfe4d6" stroke-width="2"/>
+        <rect x="10" y="10" width="92" height="46" rx="4" fill="#eaf7ee"/>
+        <circle cx="56" cy="33" r="14" fill="#1f9c46"/>
+        <path d="M51 26 L64 33 L51 40 Z" fill="#ffffff"/>
+        <rect x="16" y="64" width="30" height="5" rx="2.5" fill="#bfe0c9"/>
+        <rect x="16" y="72" width="50" height="4" rx="2" fill="#d8ecdd"/>
+        <path d="M-6 76 L118 76 L128 92 L-16 92 Z" fill="#1f9c46"/>
+        <path d="M-6 76 L118 76 L124 86 L0 86 Z" fill="#2fae52"/>
+      </g>
+      <g transform="translate(184,84)">
+        <rect x="4" y="26" width="20" height="18" rx="3" fill="#0e5c2f"/>
+        <path d="M14 26 C4 20 4 6 14 0 C24 6 24 20 14 26 Z" fill="#2fae52"/>
+        <path d="M14 26 C10 18 10 10 14 4" stroke="#0e5c2f" stroke-width="1.5" fill="none"/>
+      </g>
+    </svg>
+
+    <h1 class="title">Complete Your <span>Registration</span></h1>
+    <p class="subtitle">Create your AI learning profile and start your journey.</p>
+
+    <div class="progress-row">
+      <div class="progress-step">
+        <div class="progress-circle done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div class="progress-label active">Verify Email</div>
+      </div>
+      <div class="progress-line done"></div>
+      <div class="progress-step">
+        <div class="progress-circle active">2</div>
+        <div class="progress-label active">Complete Profile</div>
+      </div>
+      <div class="progress-line"></div>
+      <div class="progress-step">
+        <div class="progress-circle">3</div>
+        <div class="progress-label">Start Learning</div>
+      </div>
+    </div>
+
+    <div id="form-error" class="{% if error %}show{% endif %}">{% if error %}{{ error }}{% endif %}</div>
+
+    <form id="complete-registration-form" action="{{ url_for('auth.register') }}" method="POST" novalidate>
+      <input type="hidden" name="useremail" value="{{ email }}">
+
+      <div class="form-grid">
+        <div class="form-field">
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg></div>
+          <div class="field-body">
+            <label for="username">User Name*</label>
+            <input type="text" id="username" name="username" placeholder="Enter your user name" required>
+            <div class="field-hint" id="username-hint">Username is required</div>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          <div class="field-body">
+            <label for="password">Password*</label>
+            <input type="password" id="password" name="password" placeholder="Enter your strong password" required>
+            <div class="field-hint" id="password-hint">Password must be at least 8 characters</div>
+            <div class="strength-row">
+              <div class="strength-label">Password Strength</div>
+              <div class="strength-bars">
+                <div class="bar" id="bar-1"></div><div class="bar" id="bar-2"></div><div class="bar" id="bar-3"></div><div class="bar" id="bar-4"></div>
+                <span class="strength-tag" id="strength-tag">Weak</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20v-1a6 6 0 0 1 8-5.7"/><circle cx="17" cy="9" r="2.8"/><path d="M13.5 20v-1a5.2 5.2 0 0 1 8-4.4"/></svg></div>
+          <div class="field-body">
+            <label for="role">Role*</label>
+            <select id="role" name="role" required onchange="handleRoleChange()">
+              <option value="">Select your role</option>
+              <option value="student">Student</option>
+              <option value="teacher">Teacher</option>
+            </select>
+            <div class="field-hint" id="role-hint">Please select your role</div>
+          </div>
+        </div>
+
+        <div class="form-field" id="class-standard-field" style="display:none;">
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><path d="M22 10 12 4 2 10l10 6 10-6Z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></div>
+          <div class="field-body">
+            <label for="class_standard">Class Standard</label>
+            <select id="class_standard" name="class_standard">
+              <option value="">Select your class</option>
+              <option value="1st">1st Class</option>
+              <option value="2nd">2nd Class</option>
+              <option value="3rd">3rd Class</option>
+              <option value="4th">4th Class</option>
+              <option value="5th">5th Class</option>
+              <option value="6th">6th Class</option>
+              <option value="7th">7th Class</option>
+              <option value="8th">8th Class</option>
+              <option value="9th">9th Class</option>
+              <option value="10th">10th Class</option>
+              <option value="11th">11th Class</option>
+              <option value="12th">12th Class</option>
+              <option value="College">College</option>
+              <option value="University">University</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg></div>
+          <div class="field-body">
+            <label for="medium">Preferred Medium*</label>
+            <select id="medium" name="medium" required>
+              <option value="">Select medium</option>
+              <option value="English">English</option>
+              <option value="Urdu">Urdu</option>
+            </select>
+            <div class="field-hint" id="medium-hint">Please select a medium</div>
+          </div>
+        </div>
+
+        <div class="form-field full">
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          <div class="field-body">
+            <label for="confirm_password">Confirm Password*</label>
+            <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm your password" required>
+            <div class="field-hint" id="confirm-password-hint">Passwords do not match</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="check-row">
+        <label class="check-item">
+          <input type="checkbox" id="terms" name="terms" required>
+          <span>I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</span>
+        </label>
+        <div class="field-hint terms-hint" id="terms-hint">Please agree to the Terms of Service and Privacy Policy</div>
+        <label class="check-item">
+          <input type="checkbox" id="newsletter" name="newsletter">
+          <span>Send me tips, tutorials, and new updates via email.</span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submit-btn">
+        <span id="submit-btn-text">Complete Registration</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg>
+      </button>
+    </form>
+
+    <div class="divider">or sign up with</div>
+    <div class="social-row">
+      <button type="button" class="social-btn" disabled title="Coming soon"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 35.4 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.3 5.3C41.4 35.4 44 30.1 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg> Google</button>
+      <button type="button" class="social-btn linkedin" disabled title="Coming soon"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.61 0 4.28 2.38 4.28 5.47v6.27zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg> LinkedIn</button>
+      <button type="button" class="social-btn" disabled title="Coming soon"><svg width="18" height="18" viewBox="0 0 24 24" fill="#111"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.7.1-.7 1.3.1 1.9 1.3 1.9 1.3 1.1 1.9 3 1.3 3.7 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6a4.6 4.6 0 0 1 1.2-3.2 4.3 4.3 0 0 1 .1-3.2s1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2a4.3 4.3 0 0 1 .1 3.2 4.6 4.6 0 0 1 1.2 3.2c0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3z"/></svg> GitHub</button>
+    </div>
+
+    <p class="link-note">Already have an account? <a href="{{ url_for('auth.login') }}">Sign in here</a></p>
+
+  </div>
+</div>
+
+<div class="trust-row">
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg></span> SSL Encrypted</div>
+  <div class="trust-divider"></div>
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span> GDPR Compliant</div>
+  <div class="trust-divider"></div>
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg></span> Privacy First</div>
+</div>
+
+<div class="page-footer">&copy;2026 <span class="brand">Iqbal AI</span>. All Rights Reserved</div>
+
+<script>
+  function handleRoleChange() {
+    var role = document.getElementById('role').value;
+    var section = document.getElementById('class-standard-field');
+    var classStandard = document.getElementById('class_standard');
+    if (role === 'student') {
+      section.style.display = 'flex';
+      classStandard.required = true;
+    } else {
+      section.style.display = 'none';
+      classStandard.required = false;
+      classStandard.value = '';
+    }
+  }
+
+  function checkPasswordStrength(password) {
+    var score = 0;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+    var bars = [document.getElementById('bar-1'), document.getElementById('bar-2'), document.getElementById('bar-3'), document.getElementById('bar-4')];
+    bars.forEach(function (bar, i) { bar.classList.toggle('on', i < score); });
+    var tag = document.getElementById('strength-tag');
+    var labels = ['Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+    tag.textContent = labels[score];
+  }
+
+  document.getElementById('password').addEventListener('input', function () {
+    checkPasswordStrength(this.value);
+  });
+
+  function setFieldError(inputId, hintId, show) {
+    var input = document.getElementById(inputId);
+    var hint = document.getElementById(hintId);
+    if (input) input.classList.toggle('field-invalid', show);
+    if (hint) hint.classList.toggle('show', show);
+  }
+
+  document.getElementById('complete-registration-form').addEventListener('submit', function (e) {
+    var isValid = true;
+
+    var username = document.getElementById('username');
+    if (!username.value.trim()) { setFieldError('username', 'username-hint', true); isValid = false; }
+    else setFieldError('username', 'username-hint', false);
+
+    var password = document.getElementById('password');
+    if (password.value.length < 8) { setFieldError('password', 'password-hint', true); isValid = false; }
+    else setFieldError('password', 'password-hint', false);
+
+    var confirmPassword = document.getElementById('confirm_password');
+    if (confirmPassword.value !== password.value || !confirmPassword.value) {
+      setFieldError('confirm_password', 'confirm-password-hint', true); isValid = false;
+    } else setFieldError('confirm_password', 'confirm-password-hint', false);
+
+    var role = document.getElementById('role');
+    if (!role.value) { setFieldError('role', 'role-hint', true); isValid = false; }
+    else setFieldError('role', 'role-hint', false);
+
+    var medium = document.getElementById('medium');
+    if (!medium.value) { setFieldError('medium', 'medium-hint', true); isValid = false; }
+    else setFieldError('medium', 'medium-hint', false);
+
+    var terms = document.getElementById('terms');
+    var termsHint = document.getElementById('terms-hint');
+    if (!terms.checked) { termsHint.classList.add('show'); isValid = false; }
+    else termsHint.classList.remove('show');
+
+    if (!isValid) {
+      e.preventDefault();
+      return;
+    }
+
+    var btn = document.getElementById('submit-btn');
+    var btnText = document.getElementById('submit-btn-text');
+    btn.disabled = true;
+    btnText.textContent = 'Creating your account…';
+  });
+</script>
+</body>
+</html>

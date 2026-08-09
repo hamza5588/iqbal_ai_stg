@@ -1,0 +1,71 @@
+name: Deploy to Staging
+
+# Runs whenever code is pushed/merged into the `staging` branch.
+# 1. test  - installs deps and runs the pytest suite
+# 2. deploy - SSHes into the staging server and rebuilds the docker-compose stack,
+#             but only if the test job passed.
+"on":
+  push:
+    branches:
+      - staging
+
+# Avoid two deploys racing each other if multiple merges land quickly.
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Run test suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: pytest tests/ -v
+
+  deploy:
+    name: Deploy to staging server
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into staging and redeploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT || 22 }}
+          script_stop: true
+          script: |
+            cd "${{ secrets.STAGING_APP_DIR }}"
+            git fetch origin staging
+            git reset --hard origin/staging
+            docker-compose down
+            docker-compose build --no-cache
+            docker-compose up -d
+            docker-compose ps
+
+      - name: Health check
+        if: ${{ vars.STAGING_HEALTHCHECK_URL != '' }}
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS "${{ vars.STAGING_HEALTHCHECK_URL }}" > /dev/null; then
+              echo "Staging is up."
+              exit 0
+            fi
+            echo "Waiting for staging to come up... ($i/10)"
+            sleep 6
+          done
+          echo "Staging did not respond after deploy." >&2
+          exit 1

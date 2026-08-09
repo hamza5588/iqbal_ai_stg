@@ -60,7 +60,6 @@ except ImportError:
         logger.warning("HuggingFace embeddings not available. Install langchain-huggingface or langchain-community.")
 from app.utils.llm_factory import create_llm, get_chat_model
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -4548,11 +4547,15 @@ tool_node = ToolNode(tools)
 _database_url = os.getenv("DATABASE_URL", "")
 if _database_url.startswith("postgres"):
     # Use PostgreSQL-backed LangGraph checkpointer in production.
-    # from_conn_string returns a context manager; enter it once at startup
-    # to obtain a concrete PostgresSaver instance and call setup() so the
-    # required tables are created.
-    _pg_cm = PostgresSaver.from_conn_string(_database_url)
+    # Imported lazily (rather than at module top-level) so that local/dev
+    # environments without libpq installed can still import this module
+    # and fall through to the SQLite saver below.
     try:
+        from langgraph.checkpoint.postgres import PostgresSaver
+        # from_conn_string returns a context manager; enter it once at startup
+        # to obtain a concrete PostgresSaver instance and call setup() so the
+        # required tables are created.
+        _pg_cm = PostgresSaver.from_conn_string(_database_url)
         checkpointer = _pg_cm.__enter__()
         checkpointer.setup()
     except Exception:

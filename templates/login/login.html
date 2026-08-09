@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login | Iqbal AI - Intelligent Learning Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green-dark:#0e5c2f;
+    --green:#1f9c46;
+    --green-light:#e7f6ec;
+    --green-mid:#2fae52;
+    --text-dark:#16241c;
+    --text-muted:#5c6b62;
+    --white:#ffffff;
+    --border-soft:#bfdccb;
+    --error:#dc2626;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Inter', 'Segoe UI', Arial, sans-serif;
+    background:#fafdfb;
+    color:var(--text-dark);
+  }
+  h1, h2, .join-card h2{
+    font-family:'Poppins', 'Inter', sans-serif;
+  }
+  svg{ display:block; }
+  a{ text-decoration:none; }
+
+  /* Header */
+  header{
+    position:relative;
+    background:#101314;
+    height:170px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+  }
+  header::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:
+      linear-gradient(120deg, rgba(10,15,12,0.88), rgba(10,15,12,0.6)),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 26px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 26px);
+    z-index:1;
+  }
+  .header-bar{
+    position:relative;
+    z-index:2;
+    width:min(1100px, 92%);
+    background:rgba(20,24,21,0.55);
+    border:1px solid rgba(255,255,255,0.15);
+    border-radius:14px;
+    padding:16px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    backdrop-filter:blur(4px);
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    color:#fff;
+  }
+  .logo-img{
+    height:44px;
+    width:auto;
+    object-fit:contain;
+  }
+  .header-actions{display:flex; gap:12px;}
+  .btn{
+    border:none;
+    border-radius:20px;
+    padding:9px 20px;
+    font-size:0.85rem;
+    font-weight:600;
+    font-family:'Inter', sans-serif;
+    letter-spacing:0.3px;
+    cursor:pointer;
+    display:inline-block;
+    transition:transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+  }
+  .btn-outline{
+    background:transparent;
+    color:#fff;
+    border:1px solid var(--green-mid);
+  }
+  .btn-solid{
+    background:linear-gradient(90deg,var(--green-dark),var(--green-mid));
+    color:#fff;
+  }
+  .btn:hover{ transform:translateY(-1px); opacity:0.92; }
+
+  /* Main layout */
+  main{
+    display:flex;
+    gap:28px;
+    max-width:1160px;
+    margin:-40px auto 60px;
+    padding:0 20px;
+    position:relative;
+    z-index:3;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .panel{
+    background:var(--green-light);
+    border-radius:26px;
+    padding:40px;
+    flex:1 1 420px;
+    max-width:520px;
+    min-height:640px;
+  }
+
+  /* Left panel: sign in */
+  .panel-left h1{
+    font-size:1.9rem;
+    font-weight:600;
+    margin-bottom:22px;
+  }
+  .social-row{
+    display:flex;
+    gap:12px;
+    margin-bottom:24px;
+    flex-wrap:wrap;
+  }
+  .social-btn{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:#fff;
+    border:1px solid #d9e4dd;
+    border-radius:10px;
+    padding:10px 16px;
+    font-size:0.88rem;
+    font-weight:600;
+    font-family:'Inter', sans-serif;
+    cursor:not-allowed;
+    color:var(--text-dark);
+    opacity:0.6;
+  }
+  .social-btn.linkedin{background:#0a66c2; color:#fff; border-color:#0a66c2;}
+
+  .divider{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin:26px 0;
+    color:var(--text-muted);
+    font-size:0.75rem;
+    font-weight:700;
+    letter-spacing:0.5px;
+  }
+  .divider::before, .divider::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:#c6dccd;
+  }
+
+  #login-error{
+    display:none;
+    background:#fef2f2;
+    border:1px solid #fecaca;
+    color:var(--error);
+    padding:12px 14px;
+    border-radius:10px;
+    font-size:0.85rem;
+    margin-bottom:20px;
+  }
+  #login-error.show{ display:block; }
+
+  label.field-label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:0.88rem;
+    font-weight:600;
+    margin-bottom:8px;
+    color:var(--text-dark);
+  }
+  .field-label .icon{color:var(--green); display:flex;}
+  .field-row{ margin-bottom:20px; }
+  .field-row.password .top-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .forgot{
+    font-size:0.8rem;
+    color:var(--green);
+    font-weight:600;
+    text-decoration:none;
+    cursor:pointer;
+  }
+  .input-wrap{
+    position:relative;
+  }
+  .input-wrap input{
+    width:100%;
+    padding:13px 42px 13px 16px;
+    border-radius:10px;
+    border:1.5px solid var(--border-soft);
+    background:#fff;
+    font-size:0.92rem;
+    font-family:'Inter', sans-serif;
+    outline:none;
+    color:var(--text-dark);
+  }
+  .input-wrap input::placeholder{ color:#9fb3a7; }
+  .input-wrap input:focus{
+    border-color:var(--green-mid);
+    box-shadow:0 0 0 3px rgba(31,156,70,0.12);
+  }
+  .input-wrap input.field-invalid{
+    border-color:var(--error);
+  }
+  .input-wrap .input-icon{
+    position:absolute;
+    right:14px;
+    top:50%;
+    transform:translateY(-50%);
+    color:#9fb3a7;
+    display:flex;
+  }
+  .input-wrap .input-icon.toggle{
+    cursor:pointer;
+    background:none;
+    border:none;
+    padding:0;
+    color:#9fb3a7;
+  }
+  .input-wrap .input-icon.toggle:hover{ color:var(--green); }
+
+  .field-hint{
+    color:var(--error);
+    font-size:0.78rem;
+    margin-top:6px;
+    display:none;
+  }
+  .field-hint.show{ display:block; }
+
+  .options-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:24px;
+    font-size:0.8rem;
+    color:var(--text-muted);
+  }
+  .remember{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    cursor:pointer;
+  }
+  .remember input{ accent-color:var(--green); width:15px; height:15px; cursor:pointer; }
+  .secure{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    color:var(--green);
+    font-weight:600;
+  }
+
+  .signin-btn{
+    width:100%;
+    background:linear-gradient(90deg,var(--green-dark),var(--green-mid));
+    color:#fff;
+    border:none;
+    padding:15px;
+    border-radius:12px;
+    font-size:1rem;
+    font-weight:700;
+    font-family:'Inter', sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    cursor:pointer;
+    transition:transform .15s ease, box-shadow .2s ease;
+  }
+  .signin-btn:hover{
+    transform:translateY(-1px);
+    box-shadow:0 6px 18px rgba(31,156,70,0.35);
+  }
+  .signin-btn:disabled{
+    opacity:0.75;
+    cursor:default;
+    transform:none;
+  }
+  .footer-note{
+    text-align:center;
+    margin-top:22px;
+    font-size:0.82rem;
+    color:var(--text-muted);
+    line-height:1.5;
+  }
+  .footer-note a{
+    color:var(--green);
+    font-weight:600;
+  }
+
+  /* Right panel: join */
+  .panel-right{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .panel-right .brand-block{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:70px;
+  }
+  .panel-right .brand-block .logo-img{
+    height:52px;
+  }
+
+  .join-card{
+    margin-top:auto;
+    background:radial-gradient(120% 140% at 30% 20%, #ffffff 0%, #dff2e6 60%, #cdeeda 100%);
+    border-radius:22px;
+    padding:48px 36px;
+    text-align:center;
+    position:relative;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.6);
+  }
+  .join-card::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    border-radius:22px;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px);
+    background-size:34px 34px;
+    opacity:0.5;
+    pointer-events:none;
+  }
+  .join-card > *{ position:relative; z-index:1; }
+  .join-card h2{
+    font-size:2rem;
+    font-weight:700;
+    margin-bottom:20px;
+  }
+  .join-card .create-label{
+    font-size:1rem;
+    font-weight:600;
+    margin-bottom:18px;
+    color:var(--text-dark);
+  }
+  .join-social{
+    display:flex;
+    justify-content:center;
+    gap:22px;
+    margin-bottom:26px;
+    flex-wrap:wrap;
+  }
+  .join-social .item{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-weight:600;
+    font-size:0.9rem;
+    color:var(--text-dark);
+    opacity:0.6;
+    cursor:not-allowed;
+  }
+
+  .divider.small{ margin:22px 0; }
+
+  .create-account-btn{
+    background:linear-gradient(90deg,var(--green-dark),var(--green-mid));
+    color:#fff;
+    border:none;
+    padding:13px 30px;
+    border-radius:20px;
+    font-weight:700;
+    font-family:'Inter', sans-serif;
+    font-size:0.9rem;
+    letter-spacing:0.3px;
+    cursor:pointer;
+    display:inline-block;
+    margin-bottom:14px;
+  }
+  .create-account-btn:hover{ opacity:0.92; }
+  .trial-note{
+    font-size:0.8rem;
+    color:var(--text-muted);
+    line-height:1.5;
+  }
+
+  @media (max-width: 900px){
+    main{ margin-top:-24px; }
+    .panel{ min-height:auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-bar">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI" class="logo-img">
+    </div>
+    <div class="header-actions">
+      <a class="btn btn-outline" href="{{ url_for('auth.login') }}">LOG IN</a>
+      <a class="btn btn-solid" href="{{ url_for('auth.register_email') }}">CREATE AN ACCOUNT</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Sign In -->
+  <section class="panel panel-left">
+    <h1>Sign In to Iqbal AI</h1>
+
+    <div class="social-row">
+      <button type="button" class="social-btn google" disabled title="Coming soon">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 35.4 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.3 5.3C41.4 35.4 44 30.1 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+        Google
+      </button>
+      <button type="button" class="social-btn linkedin" disabled title="Coming soon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.61 0 4.28 2.38 4.28 5.47v6.27zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+        LinkedIn
+      </button>
+      <button type="button" class="social-btn github" disabled title="Coming soon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#111"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.7.1-.7 1.3.1 1.9 1.3 1.9 1.3 1.1 1.9 3 1.3 3.7 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6a4.6 4.6 0 0 1 1.2-3.2 4.3 4.3 0 0 1 .1-3.2s1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2a4.3 4.3 0 0 1 .1 3.2 4.6 4.6 0 0 1 1.2 3.2c0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3z"/></svg>
+        GitHub
+      </button>
+    </div>
+
+    <div class="divider">OR SIGN IN WITH E-MAIL</div>
+
+    <div id="login-error" class="{% if error %}show{% endif %}">
+      <span id="login-error-text">{% if error %}{{ error }}{% endif %}</span>
+    </div>
+
+    <form id="login-form" novalidate>
+      <div class="field-row">
+        <label class="field-label" for="email">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/></svg>
+          </span>
+          Email Address
+        </label>
+        <div class="input-wrap">
+          <input type="email" id="email" name="useremail" placeholder="john.doe@example.com" required autocomplete="username">
+          <span class="input-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
+          </span>
+        </div>
+        <div class="field-hint" id="email-error">Please enter a valid email address</div>
+      </div>
+
+      <div class="field-row password">
+        <div class="top-row">
+          <label class="field-label" for="password">
+            <span class="icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            </span>
+            Password
+          </label>
+          <a class="forgot" href="{{ url_for('auth.forgot_password') }}">Forgot password?</a>
+        </div>
+        <div class="input-wrap">
+          <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+          <button type="button" class="input-icon toggle" id="toggle-password" aria-label="Show password">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="field-hint" id="password-error">Password must be at least 8 characters</div>
+      </div>
+
+      <div class="options-row">
+        <label class="remember">
+          <input type="checkbox" id="remember"> Remember this device
+        </label>
+        <div class="secure">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/></svg>
+          Secure Connection
+        </div>
+      </div>
+
+      <button type="submit" id="submit-btn" class="signin-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 3h5v5"/><path d="M9 15 19 5"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
+        <span id="submit-btn-text">Sign In</span>
+      </button>
+    </form>
+
+    <p class="footer-note">
+      No account yet? Get started with our <a href="{{ url_for('auth.register_email') }}">Registration Form</a>.<br>
+      No commitment, no credit card required
+    </p>
+  </section>
+
+  <!-- RIGHT: Join us -->
+  <section class="panel panel-right">
+    <div class="brand-block">
+      <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI" class="logo-img">
+    </div>
+
+    <div class="join-card">
+      <h2>Join us for free</h2>
+      <div class="create-label">Create account with</div>
+
+      <div class="join-social">
+        <div class="item google" title="Coming soon">
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 35.4 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-7.6l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.3 5.3C41.4 35.4 44 30.1 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+          Google
+        </div>
+        <div class="item linkedin" title="Coming soon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#0a66c2"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.61 0 4.28 2.38 4.28 5.47v6.27zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+          LinkedIn
+        </div>
+        <div class="item github" title="Coming soon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#111"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.7.1-.7 1.3.1 1.9 1.3 1.9 1.3 1.1 1.9 3 1.3 3.7 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6a4.6 4.6 0 0 1 1.2-3.2 4.3 4.3 0 0 1 .1-3.2s1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2a4.3 4.3 0 0 1 .1 3.2 4.6 4.6 0 0 1 1.2 3.2c0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3z"/></svg>
+          GitHub
+        </div>
+      </div>
+
+      <div class="divider small">or</div>
+
+      <a class="create-account-btn" href="{{ url_for('auth.register_email') }}">CREATE ACCOUNT</a>
+      <div class="trial-note">Enjoy 14-day trial with premium<br>content for free</div>
+    </div>
+  </section>
+</main>
+
+<script>
+  function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+  function validatePassword(password) {
+    return password.length >= 8;
+  }
+
+  var eyeOpenPath = '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>';
+  var eyeClosedPath = '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.4 21.4 0 0 1 5.06-6.06M9.9 4.24A10.6 10.6 0 0 1 12 4c7 0 11 8 11 8a21.5 21.5 0 0 1-2.61 3.94"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/>';
+
+  document.getElementById('toggle-password').addEventListener('click', function () {
+    var input = document.getElementById('password');
+    var svg = this.querySelector('svg');
+    if (input.type === 'password') {
+      input.type = 'text';
+      svg.innerHTML = eyeClosedPath;
+      this.setAttribute('aria-label', 'Hide password');
+    } else {
+      input.type = 'password';
+      svg.innerHTML = eyeOpenPath;
+      this.setAttribute('aria-label', 'Show password');
+    }
+  });
+
+  function setFieldError(inputId, hintId, show) {
+    document.getElementById(inputId).classList.toggle('field-invalid', show);
+    document.getElementById(hintId).classList.toggle('show', show);
+  }
+
+  function showLoginError(message) {
+    var el = document.getElementById('login-error');
+    document.getElementById('login-error-text').textContent = message;
+    el.classList.add('show');
+  }
+  function hideLoginError() {
+    document.getElementById('login-error').classList.remove('show');
+  }
+
+  document.getElementById('login-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    var email = document.getElementById('email').value.trim();
+    var password = document.getElementById('password').value;
+    var submitBtn = document.getElementById('submit-btn');
+    var submitBtnText = document.getElementById('submit-btn-text');
+
+    var isValid = true;
+    var emailValid = validateEmail(email);
+    setFieldError('email', 'email-error', !emailValid);
+    if (!emailValid) isValid = false;
+
+    var passwordValid = validatePassword(password);
+    setFieldError('password', 'password-error', !passwordValid);
+    if (!passwordValid) isValid = false;
+
+    if (!isValid) return;
+
+    hideLoginError();
+    submitBtn.disabled = true;
+    submitBtnText.textContent = 'Signing in…';
+
+    try {
+      var formData = new FormData();
+      formData.append('useremail', email);
+      formData.append('password', password);
+
+      var response = await fetch("{{ url_for('auth.login') }}", {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        }
+      });
+
+      var contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        var data = await response.json().catch(function () { return {}; });
+        if (response.ok && data.success && data.redirect_url) {
+          window.location.replace(data.redirect_url);
+          return;
+        }
+        showLoginError(data.error || (response.status === 401 ? 'Invalid credentials' : 'Login failed. Please try again.'));
+      } else if (response.status === 302) {
+        var location = response.headers.get('Location');
+        if (location) {
+          window.location.replace(location);
+          return;
+        }
+        showLoginError('Login failed. Please try again.');
+      } else {
+        showLoginError(response.status === 401 ? 'Invalid credentials' : 'Login failed. Please try again.');
+      }
+    } catch (err) {
+      showLoginError(err.message || 'Login failed. Please try again.');
+    }
+
+    submitBtn.disabled = false;
+    submitBtnText.textContent = 'Sign In';
+  });
+
+  document.getElementById('email').addEventListener('input', function () {
+    if (this.value.length === 0) setFieldError('email', 'email-error', false);
+  });
+  document.getElementById('password').addEventListener('input', function () {
+    if (this.value.length === 0) setFieldError('password', 'password-error', false);
+  });
+</script>
+
+</body>
+</html>
