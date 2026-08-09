@@ -178,7 +178,7 @@ class Config:
     # When load testing, delay headings extraction so it doesn't contend with ingestion.
     DELAY_RAG_HEADINGS_FOR_LOAD_TEST = os.getenv(
         'DELAY_RAG_HEADINGS_FOR_LOAD_TEST',
-        'false' if (LOAD_TEST_MODE or ENV == 'staging') else 'false'
+        'true' if (LOAD_TEST_MODE or ENV == 'staging') else 'false'
     ).lower() in ('true', '1', 'yes')
 
     # Optional delay seconds before starting headings extraction in load-test mode.

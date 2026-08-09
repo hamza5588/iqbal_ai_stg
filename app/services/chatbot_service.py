@@ -321,9 +321,11 @@ class DocumentChatBot:
         # For OpenAI and Groq, use groq_api_key as the API key (legacy naming)
         # For vLLM, api_key is not needed
         # IMPORTANT: When Groq is selected, we ONLY use Groq - no fallback to OpenAI
+        # No explicit max_tokens: let create_llm resolve the per-provider Config default
+        # (OPENAI_MAX_TOKENS/GROQ_MAX_TOKENS/VLLM_MAX_TOKENS) instead of a hardcoded 1024
+        # that silently ignored those settings and could cut off longer replies.
         self.llm = create_llm(
             temperature=0.5,
-            max_tokens=1024,
             api_key=self.groq_api_key if provider in ['openai', 'groq'] else None,
             provider=provider
         )

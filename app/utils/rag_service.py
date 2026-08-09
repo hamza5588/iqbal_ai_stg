@@ -2043,7 +2043,9 @@ Important:
         batch_size = 3  # Process 3 pages at a time
         all_headings = []
         seen_headings = set()
-        
+        batches_attempted = 0
+        batches_failed = 0
+
         for i in range(0, len(page_docs), batch_size):
             batch = page_docs[i:i + batch_size]
             batch_texts = []
@@ -2058,7 +2060,9 @@ Important:
             
             if not batch_texts:
                 continue
-            
+
+            batches_attempted += 1
+
             heading_extraction_prompt = f"""Analyze the following pages from a document and identify ALL section headings, chapter titles, and major topics.
 
 Pages to analyze:
@@ -2146,9 +2150,19 @@ Important:
                                     seen_headings.add(heading_lower)
                                     all_headings.append({"topic": heading, "page": None})
             except Exception as e:
+                batches_failed += 1
                 logger.warning(f"Error extracting headings from batch {i//batch_size + 1}: {e}")
                 continue
-        
+
+        # If every batch we attempted raised (LLM outage, rate limit, timeout, etc.), this is
+        # an extraction failure, NOT "the document has no headings" - raise so the caller does
+        # not mark headings_ready=True with a misleading 0-heading result. A partial failure
+        # (some batches succeeded) still returns normally with whatever was found.
+        if batches_attempted > 0 and batches_failed == batches_attempted:
+            raise RuntimeError(
+                f"All {batches_attempted} heading-extraction batch(es) failed for thread_id={thread_id}"
+            )
+
         # Sort by page number if available
         def sort_key(item):
             page = item.get("page")
@@ -2158,11 +2172,11 @@ Important:
                 return int(page)
             except:
                 return 10**9
-        
+
         all_headings.sort(key=sort_key)
-        
+
         logger.info(f"AI extracted {len(all_headings)} headings from document")
-        
+
         return {
             "topics": all_headings,
             "method": "ai_heading_extraction",
@@ -2929,7 +2943,82 @@ def _prefetch_lecture_evidence_for_chat(thread_id: str, user_query: str) -> str:
     return "## Prefetched lecture evidence (use this; you may still call tools if needed)\n\n" + out
 
 
-tools = [calculator, rag_tool, get_page_tool, list_topics_whole_doc_tool,count_pdf_words_tool,count_words_in_text_tool]
+@tool
+def finalize_lesson_tool(thread_id: str) -> str:
+    """
+    Finalize and permanently save the lesson you have been building in this conversation,
+    so it becomes available in "My Lessons" and to students.
+
+    Call this tool whenever the user's intent - in ANY wording, in any language - is to
+    save, finalize, complete, or lock in the lesson (for example: "save this as a lesson",
+    "finalize this", "please save it", "make this final", "yeh lesson save kar do", "lock
+    it in", or any other phrasing with the same meaning). Do not try to match the user's
+    exact words yourself; if their intent is to persist the lesson, call this tool.
+
+    Returns a JSON string with "success" (true/false) and "reason". Only tell the user the
+    lesson was saved if success is true. If success is false, explain the reason to them
+    instead of claiming it was saved - never say the lesson was saved unless this tool
+    actually returned success=true for this call.
+
+    Always include the current conversation's thread_id when calling this tool.
+    """
+    result = {"success": False, "reason": "Unknown error.", "already_finalized": False}
+    if not thread_id:
+        result["reason"] = "No active document thread to save a lesson for."
+        return json.dumps(result)
+
+    try:
+        user_id = _get_user_id_for_thread(thread_id)
+        db = get_db()
+        thread_row = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        if not thread_row:
+            result["reason"] = "No conversation thread found to save a lesson for."
+            return json.dumps(result)
+
+        content = (getattr(thread_row, "last_lesson_text", None) or "").strip()
+        if not content:
+            result["reason"] = (
+                "There is no lesson content in this conversation yet - generate a lesson "
+                "first, then ask to save it."
+            )
+            return json.dumps(result)
+
+        is_lesson = _check_if_content_is_lesson(content, user_query="", user_id=user_id)
+        if not is_lesson:
+            result["reason"] = (
+                "The current conversation content doesn't look like a complete lesson yet, "
+                "so it wasn't saved. Continue building the lesson, then try saving again."
+            )
+            return json.dumps(result)
+
+        already_finalized = bool(getattr(thread_row, "lesson_finalized", False))
+        _persist_finalized_lesson_static(str(thread_id), content)
+
+        result["success"] = True
+        result["already_finalized"] = already_finalized
+        result["reason"] = (
+            "Lesson re-saved with the latest content." if already_finalized else "Lesson saved."
+        )
+        logger.info(
+            "finalize_lesson_tool: thread_id=%s user_id=%s success=True already_finalized=%s",
+            thread_id, user_id, already_finalized,
+        )
+        return json.dumps(result)
+    except Exception as e:
+        logger.warning("finalize_lesson_tool failed for thread_id=%s: %s", thread_id, e, exc_info=True)
+        result["reason"] = "An internal error occurred while trying to save the lesson."
+        return json.dumps(result)
+
+
+tools = [
+    calculator,
+    rag_tool,
+    get_page_tool,
+    list_topics_whole_doc_tool,
+    count_pdf_words_tool,
+    count_words_in_text_tool,
+    finalize_lesson_tool,
+]
 # Note: llm_with_tools and llm_structured_output are now created per-request in chat_node
 # to use user-specific API keys and provider settings
 
@@ -3237,6 +3326,11 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "- For page-specific questions, call get_page_tool(page=<n>, thread_id='{thread_id}').\n"
     "- For document outline, chapters, or topics list, call list_topics_whole_doc_tool(thread_id='{thread_id}').\n"
     "- For all other questions about the document, call rag_tool(query=<your_search_query>, thread_id='{thread_id}').\n"
+    "- Whenever the user's intent, in any wording or language, is to save/finalize/complete/lock in the lesson "
+    "you have been building (e.g. \"save this as a lesson\", \"finalize this\", \"please save it\", "
+    "\"make this final\"), call finalize_lesson_tool(thread_id='{thread_id}'). Only tell the user the lesson "
+    "was saved if that tool call returns success=true; if it returns success=false, tell them the reason "
+    "it gives instead of claiming it was saved.\n"
     "- You may use multiple tool calls in one turn when needed (for example long lectures, full-document summaries, or multi-part questions).\n"
     "- For short factual questions, keep answers concise unless the user asks for more detail.\n"
     "- For lectures, long explanations, or document summaries the user requests, answer in full; do not artificially limit length.\n"
@@ -3257,6 +3351,8 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF_LOAD_TEST = (
     "- For page-specific questions, call get_page_tool(page=<n>, thread_id='{thread_id}').\n"
     "- For topics/outline/chapters, call list_topics_whole_doc_tool(thread_id='{thread_id}').\n"
     "- Otherwise call rag_tool(query=<user_question>, thread_id='{thread_id}').\n"
+    "- If the user asks (in any wording) to save/finalize the lesson, call "
+    "finalize_lesson_tool(thread_id='{thread_id}') and only report success if it returns success=true.\n"
     "- Keep replies concise: 4-8 sentences unless user explicitly asks for detailed lesson.\n"
     "- Do not call tools repeatedly in one turn after getting tool results.\n"
     "- For person identity queries (e.g., 'who is <name>?'), try rag_tool before marking irrelevant.\n"
@@ -3851,9 +3947,7 @@ def _chat_handle_lesson_state_and_persistence(
     response_content: str,
     messages: List[BaseMessage],
     last_user_msg_text: str,
-    conversation_messages: List[BaseMessage],
     thread_id_str: Optional[str],
-    user_id: Optional[int],
     provider: str,
     user_llm_structured_output: Any,
     config: Any,
@@ -3884,86 +3978,60 @@ def _chat_handle_lesson_state_and_persistence(
         except Exception as lesson_error:
             logger.warning("Failed to get lesson state (non-critical): %s", str(lesson_error))
 
-    user_wants_to_finalize = False
-    if conversation_messages:
-        last_user_msg = None
-        for msg in reversed(conversation_messages):
-            if isinstance(msg, HumanMessage):
-                last_user_msg = msg.content.lower() if hasattr(msg, "content") else str(msg).lower()
-                break
-        if last_user_msg:
-            # Keep lesson-finalization intent strict to avoid false positives like
-            # "finally in gas" matching a loose "final" substring.
-            finalization_patterns = [
-                r"\bfinali[sz]e\b",
-                r"\bfinali[sz]e\s+(?:this|the)\s+(?:lesson|lecture|presentation)\b",
-                r"\b(?:complete|finish|save)\s+(?:this|the)\s+(?:lesson|lecture|presentation)\b",
-                r"\b(?:lesson|lecture|presentation)\s+(?:is\s+)?(?:ready|complete|completed|finali[sz]ed)\b",
-                r"\bthis\s+(?:lesson|lecture|presentation)\s+is\s+(?:ready|complete|completed|finali[sz]ed)\b",
-                r"\bready\s+to\s+save\s+(?:this|the)\s+(?:lesson|lecture|presentation)\b",
-                r"\bmake\s+(?:this|the)\s+(?:lesson|lecture|presentation)\s+final\b",
-                r"\bthis\s+is\s+the\s+final\s+(?:lesson|lecture|presentation)\b",
-            ]
-            user_wants_to_finalize = any(
-                re.search(pattern, last_user_msg, flags=re.IGNORECASE)
-                for pattern in finalization_patterns
-            )
+    # Finalize/save intent is handled by the model calling finalize_lesson_tool (an actual
+    # tool, bound alongside rag_tool/get_page_tool/etc. - see `tools` list and the
+    # DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF instructions). This replaces matching the user's
+    # message against a fixed list of English regex phrases, which could never generalize to
+    # every way a user might ask to save a lesson (any wording, any language). The LLM's own
+    # language understanding decides intent; the tool call is the one thing regex never had to
+    # guess at reliably.
+    #
+    # Scope to the current turn only (everything after the most recent HumanMessage), same
+    # turn-scoping used by _tool_router, so a finalize call from an earlier turn in this
+    # conversation is never mistaken for one happening right now.
+    last_human_idx = -1
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            last_human_idx = i
+            break
+    current_turn_tail = messages[last_human_idx + 1:] if last_human_idx >= 0 else messages
 
-    if thread_id_str and response_content and user_wants_to_finalize:
-        finalized_source_content = response_content
-        if conversation_messages:
+    finalize_tool_result = None
+    for m in current_turn_tail:
+        if isinstance(m, ToolMessage) and getattr(m, "name", None) == "finalize_lesson_tool":
             try:
-                for msg in reversed(conversation_messages):
-                    if isinstance(msg, AIMessage):
-                        prev_text = (msg.content or "").strip()
-                        if prev_text:
-                            finalized_source_content = prev_text
-                            break
+                finalize_tool_result = json.loads(m.content)
             except Exception:
-                pass
-        if finalized_source_content:
-            user_query_before_lesson = ""
-            last_human_content = ""
-            for msg in conversation_messages:
-                if isinstance(msg, HumanMessage):
-                    last_human_content = (msg.content or "").strip() if hasattr(msg, "content") else str(msg)
-                elif isinstance(msg, AIMessage):
-                    ai_text = (msg.content or "").strip()
-                    if ai_text and ai_text == finalized_source_content:
-                        user_query_before_lesson = last_human_content
-                        break
-            is_lesson = _check_if_content_is_lesson(
-                finalized_source_content,
-                user_query=user_query_before_lesson,
-                user_id=user_id,
+                logger.warning("Could not parse finalize_lesson_tool result: %r", m.content)
+                finalize_tool_result = {"success": False, "reason": "Internal error reading save result."}
+            # Keep scanning: if the model called it more than once this turn, the last
+            # call's outcome is the one that matches the DB's current state.
+
+    if finalize_tool_result is not None:
+        # Backend is authoritative for what the user is told: the tool already performed
+        # (or refused) the real DB write, so the visible reply is forced to match that
+        # outcome exactly - the model's own wording is never trusted for a save/fail claim.
+        if finalize_tool_result.get("success"):
+            response.content = "Lesson finalized and saved. You can download it now."
+            _mark_step("finalize_lesson_tool_success")
+        else:
+            response.content = (
+                finalize_tool_result.get("reason") or "The lesson could not be saved."
             )
-            if is_lesson:
-                _persist_finalized_lesson_static(thread_id_str, finalized_source_content)
-                _mark_step("persist_finalized_lesson")
-                try:
-                    response.content = "Lesson finalized and saved. You can download it now."
-                except Exception:
-                    pass
-            else:
-                _mark_step("lesson_validation_no")
-                try:
-                    response.content = "There is no lesson to finalize."
-                except Exception:
-                    pass
-    else:
-        if thread_id_str and response_content:
-            try:
-                db = get_db()
-                thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-                if thread_row and not getattr(thread_row, "lesson_finalized", False):
-                    is_likely_lesson = (
-                        len(response_content) > 200 or "#" in response_content or "\n\n" in response_content
-                    )
-                    if is_likely_lesson:
-                        thread_row.last_lesson_text = response_content
-                    db.commit()
-            except Exception as e:
-                logger.warning("Error saving lesson text to DB: %s", e)
+            _mark_step("finalize_lesson_tool_failure")
+    elif thread_id_str and response_content:
+        try:
+            db = get_db()
+            thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
+            if thread_row and not getattr(thread_row, "lesson_finalized", False):
+                # Always track the latest AI turn as the in-progress lesson text, even for
+                # short replies (e.g. "I've added that equation"). A length/shape heuristic
+                # here previously skipped short but legitimate lesson edits, so Save could
+                # persist a stale prior turn instead of the teacher's most recent change.
+                thread_row.last_lesson_text = response_content
+                db.commit()
+        except Exception as e:
+            logger.warning("Error saving lesson text to DB: %s", e)
         _mark_step("persist_in_progress_lesson")
 
     return response
@@ -4098,9 +4166,7 @@ def _chat_invoke_llm_with_retry(
                 response_content=response_content,
                 messages=messages,
                 last_user_msg_text=last_user_msg_text,
-                conversation_messages=conversation_messages,
                 thread_id_str=thread_id_str,
-                user_id=user_id,
                 provider=provider,
                 user_llm_structured_output=user_llm_structured_output,
                 config=config,
@@ -4778,3 +4844,25 @@ def delete_thread(thread_id: str) -> dict:
     except Exception as e:
         logger.error("Error deleting thread %s: %s", thread_id_str, e, exc_info=True)
         return {'success': False, 'message': f'Failed to delete thread: {str(e)}'}
+
+
+def clear_thread_conversation_history(thread_id: str) -> dict:
+    """
+    Clear the LangGraph checkpointed conversation history for a thread, without
+    touching the uploaded document (Milvus vectors / uploaded file stay intact).
+    Used by "Reset Chat" so the next message starts with no prior turns.
+    """
+    thread_id_str = str(thread_id)
+    try:
+        if hasattr(checkpointer, "delete_thread"):
+            checkpointer.delete_thread(thread_id_str)
+            logger.info("Cleared checkpointed conversation history for thread %s", thread_id_str)
+            return {'success': True, 'message': f'Conversation history cleared for thread {thread_id_str}'}
+        logger.warning(
+            "Checkpointer %s has no delete_thread method; cannot clear history for thread %s",
+            type(checkpointer).__name__, thread_id_str,
+        )
+        return {'success': False, 'message': 'Checkpointer does not support clearing history'}
+    except Exception as e:
+        logger.error("Error clearing conversation history for thread %s: %s", thread_id_str, e, exc_info=True)
+        return {'success': False, 'message': f'Failed to clear conversation history: {str(e)}'}

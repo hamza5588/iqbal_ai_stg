@@ -408,14 +408,21 @@ class LessonModel:
             db = get_db()
             lessons_query = db.query(DBLesson).options(
                 joinedload(DBLesson.teacher)
-            ).filter(DBLesson.is_public.is_(True))
-            
+            ).filter(
+                DBLesson.is_public.is_(True),
+                # Only the current version of each logical lesson (has_child_version=False is the
+                # same "is this the current version" flag the teacher-side listing uses). Without
+                # this, deleting a lesson's current version left an older version - which still had
+                # has_child_version=True but was otherwise untouched - visible to students.
+                DBLesson.has_child_version.is_(False),
+            )
+
             if grade_level:
                 lessons_query = lessons_query.filter(DBLesson.grade_level == grade_level)
-            
+
             if focus_area:
                 lessons_query = lessons_query.filter(DBLesson.focus_area == focus_area)
-            
+
             # Order by created_at descending so the first occurrence of a lesson_id is the latest version
             lessons = lessons_query.order_by(DBLesson.created_at.desc()).all()
             
@@ -455,7 +462,12 @@ class LessonModel:
             per_page = max(1, min(100, int(per_page or 10)))
 
             group_key = func.coalesce(DBLesson.lesson_id, func.cast(DBLesson.id, String))
-            filtered = db.query(DBLesson).filter(DBLesson.is_public.is_(True))
+            # Only the current version of each logical lesson - see comment in
+            # get_public_latest_lessons() for why has_child_version.is_(False) is required here.
+            filtered = db.query(DBLesson).filter(
+                DBLesson.is_public.is_(True),
+                DBLesson.has_child_version.is_(False),
+            )
 
             if grade_level:
                 filtered = filtered.filter(DBLesson.grade_level == grade_level)
@@ -523,6 +535,8 @@ class LessonModel:
                 joinedload(DBLesson.teacher)
             ).filter(
                 DBLesson.is_public.is_(True),
+                # Only the current version - same reasoning as get_public_latest_lessons().
+                DBLesson.has_child_version.is_(False),
                 or_(
                     DBLesson.title.ilike(f'%{search_term}%'),
                     DBLesson.content.ilike(f'%{search_term}%'),
@@ -1201,9 +1215,12 @@ class ChatModel:
                 # Use dynamic LLM factory - supports OpenAI, Groq, and vLLM
                 # For OpenAI and Groq, use the api_key (from env if OpenAI set from admin, else from self.api_key)
                 # For vLLM, api_key is not needed
+                # No explicit max_tokens: let create_llm resolve the per-provider Config
+                # default (OPENAI_MAX_TOKENS/GROQ_MAX_TOKENS/VLLM_MAX_TOKENS), consistent
+                # with every other non-RAG-chat caller, instead of a hardcoded 1024 that
+                # silently ignored those settings and could cut off longer replies.
                 self._chat_model = create_llm(
                     temperature=0.5,
-                    max_tokens=1024,
                     api_key=api_key_to_use,
                     provider=provider
                 )
