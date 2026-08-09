@@ -4264,8 +4264,16 @@
 
       // Clear context when switching chats (prevents leakage)
       function clearChatContext() {
-        // No persistent variables that carry context
-        // Each chat starts fresh with its own message array
+        // Reset the sticky RAG thread/conversation identifiers so a new or
+        // switched-to chat can never resume another conversation's LangGraph
+        // checkpoint history (was previously a no-op, causing stale answers
+        // to bleed across chats).
+        window.currentRAGThreadId = null;
+        window.currentRAGConversationId = null;
+        try {
+          localStorage.removeItem('teacher_currentRAGThreadId');
+          localStorage.removeItem('teacher_currentRAGConversationId');
+        } catch (e) {}
       }
 
       // Initialize chat state on page load per specification #6
@@ -4346,13 +4354,23 @@
       // Current PDF/Lesson data (stored in localStorage so it persists across tabs)
       let currentPDFData = null;
       let currentLessonMarkdown = null;
+      // Namespaced by the logged-in teacher's user id: on a shared/multi-teacher browser
+      // (e.g. a lab computer), an un-namespaced key would let one teacher's saved lesson
+      // titles block a different teacher from using the same title, even though the
+      // backend (LessonModel.check_title_exists) already scopes uniqueness per-teacher.
+      const CURRENT_TEACHER_ID = '{{ session.get("user_id", "") }}';
+
+      function _teacherScopedStorageKey(baseKey) {
+        return baseKey + '_' + (CURRENT_TEACHER_ID || 'anon');
+      }
+
       const LESSON_SAVE_SIGNATURES_KEY = 'teacher_saved_lesson_signatures';
       const LESSON_USED_TITLES_KEY = 'teacher_used_lesson_titles';
       const LESSON_SAVE_META_KEY = 'teacher_last_saved_lesson_meta';
 
       function getSavedLessonSignatures() {
         try {
-          const raw = JSON.parse(localStorage.getItem(LESSON_SAVE_SIGNATURES_KEY) || '[]');
+          const raw = JSON.parse(localStorage.getItem(_teacherScopedStorageKey(LESSON_SAVE_SIGNATURES_KEY)) || '[]');
           return Array.isArray(raw) ? raw : [];
         } catch (e) {
           return [];
@@ -4361,7 +4379,7 @@
 
       function persistSavedLessonSignatures(signatures) {
         try {
-          localStorage.setItem(LESSON_SAVE_SIGNATURES_KEY, JSON.stringify(Array.isArray(signatures) ? signatures : []));
+          localStorage.setItem(_teacherScopedStorageKey(LESSON_SAVE_SIGNATURES_KEY), JSON.stringify(Array.isArray(signatures) ? signatures : []));
         } catch (e) {
           console.error('Failed to persist saved lesson signatures', e);
         }
@@ -4369,7 +4387,7 @@
 
       function getUsedLessonTitles() {
         try {
-          const raw = JSON.parse(localStorage.getItem(LESSON_USED_TITLES_KEY) || '[]');
+          const raw = JSON.parse(localStorage.getItem(_teacherScopedStorageKey(LESSON_USED_TITLES_KEY)) || '[]');
           return Array.isArray(raw) ? raw : [];
         } catch (e) {
           return [];
@@ -4378,7 +4396,7 @@
 
       function persistUsedLessonTitles(titles) {
         try {
-          localStorage.setItem(LESSON_USED_TITLES_KEY, JSON.stringify(Array.isArray(titles) ? titles : []));
+          localStorage.setItem(_teacherScopedStorageKey(LESSON_USED_TITLES_KEY), JSON.stringify(Array.isArray(titles) ? titles : []));
         } catch (e) {
           console.error('Failed to persist used lesson titles', e);
         }
@@ -8952,6 +8970,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         window.teacherChatRequestInFlight = true;
         updateSendButton();
 
+        // Capture which chat this request belongs to. If the user switches to a
+        // different chat (or starts/loads another one) before the response
+        // arrives, a late answer must not be rendered into the now-open chat.
+        const requestChatId = currentChatId;
+
         // Auto-generate title from first message if needed
         const chat = chatHistory.find(c => c.id === currentChatId);
         if (chat && chat.title === 'New Conversation') {
@@ -9007,11 +9030,21 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             return;
           }
           const data = await response.json();
+          // If the user has since switched away from the chat this request was
+          // sent for, don't let a late-arriving answer land in whatever chat is
+          // now open, and don't let it overwrite currentRAGThreadId/currentLessonMarkdown
+          // (which belong to the now-active chat, not this one).
+          const staleChatSwitch = currentChatId !== requestChatId;
           if (data.error) {
-            addAssistantMessage('Error: ' + data.error);
+            if (!staleChatSwitch) addAssistantMessage('Error: ' + data.error);
             return;
           }
           var aiResponse = data.message || 'No response received.';
+          if (staleChatSwitch) {
+            // Still record it against the chat it actually belongs to, just not on screen.
+            appendMessageToChat(requestChatId, 'assistant', aiResponse);
+            return;
+          }
           if (data.thread_id) {
             window.currentRAGThreadId = data.thread_id;
             try { localStorage.setItem('teacher_currentRAGThreadId', data.thread_id); } catch (e) {}
@@ -9020,8 +9053,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             window.currentRAGConversationId = data.conversation_id;
             try { localStorage.setItem('teacher_currentRAGConversationId', data.conversation_id); } catch (e) {}
           }
-          // Keep currentLessonMarkdown in sync with the actual AI lesson (so Save stores the real lesson, not the template)
-          if (window.currentRAGThreadId && aiResponse && (aiResponse.length > 200 || (aiResponse.indexOf('#') !== -1 && aiResponse.indexOf('\n\n') !== -1))) {
+          // Keep currentLessonMarkdown in sync with the actual AI lesson (so Save stores the real lesson, not
+          // the template). Always sync on any active RAG thread turn - a length/shape heuristic here
+          // previously skipped short but legitimate lesson edits (e.g. "I've added that equation"),
+          // so Save could persist a stale prior turn instead of the teacher's most recent change.
+          if (window.currentRAGThreadId && aiResponse) {
             currentLessonMarkdown = aiResponse;
           }
           var formatted = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
@@ -9029,10 +9065,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           addAssistantMessage(formatted);
           await refreshSaveLessonAvailability();
         } catch (e) {
-          const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
-          addAssistantMessage(isAbort
-            ? 'Error: Request timed out. Please try again.'
-            : 'Error: ' + (e.message || 'Network error. Please try again.'));
+          if (currentChatId === requestChatId) {
+            const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
+            addAssistantMessage(isAbort
+              ? 'Error: Request timed out. Please try again.'
+              : 'Error: ' + (e.message || 'Network error. Please try again.'));
+          }
         } finally {
           window.teacherChatRequestInFlight = false;
           updateSendButton();
@@ -9576,7 +9614,13 @@ To continue your learning journey:
           return;
         }
 
-        const baseTitle = getCurrentChatThreadTitleForLesson();
+        // Prefer the title the teacher actually entered (PDF upload modal, or the
+        // RAG finalized-lesson's own title) over the auto-generated chat-sidebar
+        // title - previously this was ignored entirely, so "Save Lesson" could
+        // name the lesson after an unrelated, truncated first-chat-message string
+        // (or literally "New Conversation") instead of the intended title.
+        const explicitTitle = (pdfData && typeof pdfData.title === 'string') ? pdfData.title.trim() : '';
+        const baseTitle = explicitTitle || getCurrentChatThreadTitleForLesson();
         const lessonSignature = buildLessonSaveSignature(baseTitle, lessonContent);
         const savedSignatures = getSavedLessonSignatures();
         if (savedSignatures.includes(lessonSignature)) {
@@ -9620,7 +9664,7 @@ To continue your learning journey:
             usedTitles.push(finalTitle);
             persistUsedLessonTitles(usedTitles);
             try {
-              localStorage.setItem(LESSON_SAVE_META_KEY, JSON.stringify({ chatId: String(currentChatId || ''), signature: lessonSignature }));
+              localStorage.setItem(_teacherScopedStorageKey(LESSON_SAVE_META_KEY), JSON.stringify({ chatId: String(currentChatId || ''), signature: lessonSignature }));
             } catch (e) {}
 
             showToast(`✅ Lesson "${finalTitle}" saved to My Lessons!`, 'success', 3000);
@@ -10279,8 +10323,23 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
 
       // Reset Chat
-      function resetChat() {
+      async function resetChat() {
         if (confirm('Are you sure you want to reset the chat? This will clear all messages.')) {
+          // Clear the server-side LangGraph conversation history for this thread
+          // first, so a stale checkpoint can never be resumed by the next message.
+          // Keeps the uploaded document (vectors/file) intact.
+          const threadIdToReset = window.currentRAGThreadId;
+          if (threadIdToReset) {
+            try {
+              await fetch('/api/rag/thread/' + encodeURIComponent(threadIdToReset) + '/reset', {
+                method: 'POST',
+                credentials: 'include'
+              });
+            } catch (e) {
+              console.error('Failed to reset thread conversation on server', e);
+            }
+          }
+
           // Clear messages and show welcome
           const chatMessages = document.getElementById('chatMessages');
           chatMessages.innerHTML = `
@@ -10304,6 +10363,15 @@ Align everything with the lesson objectives and do not invent missing informatio
           } catch (e) {
             console.error('Failed to clear stored chat messages', e);
           }
+
+          // Reset sticky RAG thread/conversation identifiers so the next
+          // message can't resume the just-cleared conversation via a stale
+          // client-side id (mirrors the fix in clearChatContext()).
+          window.currentRAGThreadId = null;
+          try {
+            localStorage.removeItem('teacher_currentRAGThreadId');
+          } catch (e) {}
+
           setSaveLessonButtonsVisible(false);
         }
       }
