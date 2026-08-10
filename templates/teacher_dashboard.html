@@ -5539,6 +5539,9 @@
                 pendingConversationId = conversationId;
                 window._ingestPendingThreadId = pendingThreadId;
                 window._ingestCompletedSuccessfully = true;
+                if (statusData.warning) {
+                  showToast(statusData.warning, 'warning');
+                }
                 if (!window._createLessonMeta) window._createLessonMeta = {};
                 window._createLessonMeta.numPages = statusData.num_pages || statusData.pages || statusData.documents || null;
                 break;
