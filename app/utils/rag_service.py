@@ -1608,6 +1608,14 @@ def ingest_pdf(
                 f"PDF loaded with {loader_used} but contains no extractable text content.{scanned_hint}"
             )
 
+        # Some PDF parsers emit embedded NUL (0x00) bytes for certain fonts/encodings.
+        # PostgreSQL text columns reject NUL bytes outright, which previously caused
+        # ingestion to fail after embeddings were already computed. Strip them here,
+        # before splitting/embedding/export, so text stays consistent everywhere downstream.
+        for doc in docs:
+            if doc.page_content and "\x00" in doc.page_content:
+                doc.page_content = doc.page_content.replace("\x00", "")
+
         _send_progress("metadata", 30, "Adding metadata to pages...")
         ingest_page_label_map: Dict[int, int] = {}
         for i, doc in enumerate(docs):
