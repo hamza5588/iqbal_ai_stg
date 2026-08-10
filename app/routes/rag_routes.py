@@ -120,6 +120,95 @@ def _get_ingest_tier(file_size_mb: float) -> dict:
     }
 
 
+def _preflight_check_pdf(file_bytes: bytes, max_scan_pages: int = 25) -> dict:
+    """
+    Fast, synchronous check run at upload time, before the (potentially slow)
+    background ingestion is ever queued. Catches PDFs that can never be
+    ingested — corrupted files, password-protected files, and scanned/
+    image-only files with no selectable text — so the user is told
+    immediately, instead of the file being queued for background processing
+    and only failing later (which previously surfaced as a misleading
+    "PDF may still be processing" message when the user tried to chat).
+
+    Only scans the first `max_scan_pages` pages so this stays fast even for
+    large documents; the real ingestion step still processes every page.
+    """
+    import fitz  # PyMuPDF
+
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+    except Exception:
+        return {
+            'ok': False,
+            'code': 'PDF_UNREADABLE',
+            'message': (
+                'This file could not be opened as a PDF. It may be corrupted '
+                'or not actually a PDF file. Please check the file and upload it again.'
+            ),
+        }
+
+    try:
+        if doc.is_encrypted and not doc.authenticate(""):
+            return {
+                'ok': False,
+                'code': 'PDF_PASSWORD_PROTECTED',
+                'message': (
+                    'This PDF is password-protected. Please remove the password '
+                    'and upload it again.'
+                ),
+            }
+
+        if doc.page_count == 0:
+            return {
+                'ok': False,
+                'code': 'PDF_EMPTY',
+                'message': 'This PDF has no pages.',
+            }
+
+        has_text = False
+        has_images = False
+        for i, page in enumerate(doc):
+            if i >= max_scan_pages:
+                break
+            if not has_text and (page.get_text("text") or "").strip():
+                has_text = True
+            if not has_images and page.get_images():
+                has_images = True
+            if has_text and has_images:
+                break
+
+        if not has_text:
+            scanned_hint = (
+                " It looks like a scanned document (it contains images but no selectable text)."
+                if has_images else ""
+            )
+            return {
+                'ok': False,
+                'code': 'PDF_NO_TEXT',
+                'message': (
+                    f'This PDF has no readable text content.{scanned_hint} '
+                    'OCR support is required for scanned documents — please upload '
+                    'a PDF with real, selectable text instead.'
+                ),
+            }
+
+        return {'ok': True, 'has_images': has_images}
+    except Exception:
+        return {
+            'ok': False,
+            'code': 'PDF_UNREADABLE',
+            'message': (
+                'This file could not be read as a PDF. It may be corrupted. '
+                'Please check the file and upload it again.'
+            ),
+        }
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+
+
 def _strip_lesson_finalization_from_response(text):
     """
     Remove internal lesson-finalization lines from AI response so they are never
@@ -444,6 +533,13 @@ def ingest():
         if not file_bytes:
             return jsonify({'error': 'File is empty'}), 400
 
+        # Reject PDFs that can never be ingested (corrupted, password-protected,
+        # or scanned/image-only with no selectable text) right now, instead of
+        # queuing them for background processing and only finding out later.
+        preflight = _preflight_check_pdf(file_bytes)
+        if not preflight['ok']:
+            return jsonify({'error': preflight['message'], 'code': preflight['code']}), 400
+
         # If streaming is requested, use SSE for backend processing progress (legacy support)
         if stream_progress:
             return _ingest_with_progress(
@@ -508,6 +604,7 @@ def ingest():
                     'chunks': result.get('chunks', 0),
                     'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
                     'processing_time_seconds': result.get('processing_time_seconds'),
+                    'warning': result.get('warning'),
                 })
             except ValueError as e:
                 logger.error(f"Value error in sync ingest: {str(e)}")
@@ -1627,6 +1724,7 @@ def get_ingest_status(task_id):
                 'chunks': result.get('chunks', 0),
                 'markdown_download_url': result.get('markdown_download_url') or (f'/api/rag/download-markdown/{thread_id}' if thread_id else None),
                 'processing_time_seconds': result.get('processing_time_seconds'),
+                'warning': result.get('warning'),
             }
         elif task.state == 'FAILURE':
             # Task failed
