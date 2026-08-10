@@ -1465,6 +1465,30 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
     return VectorRetriever(thread_id, user_id, steps_list)
 
 
+def _sanitize_pdf_text(text: str) -> str:
+    """
+    Clean text extracted from a PDF so it can always be stored in PostgreSQL.
+
+    Two distinct problems show up here, both traced back to broken fonts/
+    encodings in the source PDF:
+    - Embedded NUL (0x00) bytes: valid in a Python str, but PostgreSQL text
+      columns reject them outright.
+    - Lone UTF-16 surrogates and other codepoints that are valid in a Python
+      str (PDF libraries sometimes use surrogateescape-style decoding on bad
+      byte sequences) but cannot be encoded to UTF-8 at all — PostgreSQL
+      raises "invalid byte sequence for encoding UTF8" on these too.
+    """
+    if not text:
+        return text
+    if "\x00" in text:
+        text = text.replace("\x00", "")
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        text = text.encode("utf-8", errors="replace").decode("utf-8")
+    return text
+
+
 def ingest_pdf(
     file_bytes: bytes,
     thread_id: str,
@@ -1630,13 +1654,15 @@ def ingest_pdf(
         except Exception as e:
             logger.debug("Could not check for mixed text/image content: %s", e)
 
-        # Some PDF parsers emit embedded NUL (0x00) bytes for certain fonts/encodings.
-        # PostgreSQL text columns reject NUL bytes outright, which previously caused
-        # ingestion to fail after embeddings were already computed. Strip them here,
-        # before splitting/embedding/export, so text stays consistent everywhere downstream.
+        # Some PDF parsers emit embedded NUL (0x00) bytes, lone UTF-16 surrogates,
+        # or other invalid-for-UTF8 codepoints for certain fonts/broken encodings.
+        # PostgreSQL text columns reject all of these outright, which previously
+        # caused ingestion to fail after embeddings were already computed. Clean
+        # them here, before splitting/embedding/export, so text stays consistent
+        # everywhere downstream.
         for doc in docs:
-            if doc.page_content and "\x00" in doc.page_content:
-                doc.page_content = doc.page_content.replace("\x00", "")
+            if doc.page_content:
+                doc.page_content = _sanitize_pdf_text(doc.page_content)
 
         _send_progress("metadata", 30, "Adding metadata to pages...")
         ingest_page_label_map: Dict[int, int] = {}
@@ -1680,7 +1706,13 @@ def ingest_pdf(
             _save_logical_page_map_to_disk(thread_id_str, combined_logical_map)
 
         # Export extracted text as markdown for user download (## Page N + content per page)
-        safe_base = (safe_filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+        # NOTE: rstrip() strips a *character set*, not a suffix — e.g.
+        # "Chapter_1_pdf.pdf".rstrip(".pdf") wrongly yields "Chapter_1_".
+        # Strip the literal ".pdf"/".PDF" suffix instead.
+        safe_base = safe_filename or "document"
+        if safe_base.lower().endswith(".pdf"):
+            safe_base = safe_base[:-4]
+        safe_base = safe_base or "document"
         md_filename = f"{thread_id_str}_{safe_base}.md"
         md_path = MARKDOWN_EXPORTS_DIR / md_filename
         md_parts = []
