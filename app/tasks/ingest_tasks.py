@@ -75,6 +75,7 @@ def _run_ingest_in_context(self, file_path: str, thread_id: str, filename: str, 
         'chunks': result.get('chunks', 0),
         'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
         'processing_time_seconds': result.get('processing_time_seconds'),
+        'warning': result.get('warning'),
     }
 
 

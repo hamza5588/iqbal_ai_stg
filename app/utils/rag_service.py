@@ -1608,6 +1608,28 @@ def ingest_pdf(
                 f"PDF loaded with {loader_used} but contains no extractable text content.{scanned_hint}"
             )
 
+        # If the document has both real text and embedded images, the text is
+        # still fully processed below, but flag it so the caller can warn the
+        # user that only the text was analyzed — any content that lives only
+        # in the images (diagrams, photos, scanned figures) was not.
+        mixed_content_warning = None
+        try:
+            import fitz  # PyMuPDF
+            pdf_doc = fitz.open(temp_path)
+            try:
+                has_images = any(
+                    len(page.get_images()) > 0 for page in list(pdf_doc)[:25]
+                )
+            finally:
+                pdf_doc.close()
+            if has_images:
+                mixed_content_warning = (
+                    "This PDF contains images as well as text. The text has been "
+                    "analyzed, but the images were not — ask about text content only."
+                )
+        except Exception as e:
+            logger.debug("Could not check for mixed text/image content: %s", e)
+
         # Some PDF parsers emit embedded NUL (0x00) bytes for certain fonts/encodings.
         # PostgreSQL text columns reject NUL bytes outright, which previously caused
         # ingestion to fail after embeddings were already computed. Strip them here,
@@ -1833,6 +1855,7 @@ def ingest_pdf(
             "ingest_profile": ingest_profile["name"],
             "file_size_mb": file_size_mb,
             "processing_time_seconds": _elapsed_seconds,
+            "warning": mixed_content_warning,
         }
 
     finally:

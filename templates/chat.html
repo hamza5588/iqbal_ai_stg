@@ -6026,7 +6026,10 @@ async function initializeApp() {
                             if (uploadBar) uploadBar.style.width = '100%';
                             if (uploadPercent) uploadPercent.textContent = '100%';
                             showNotification('PDF uploaded and processed successfully!', 'success');
-                            
+                            if (statusData.warning) {
+                                showNotification(statusData.warning, 'warning');
+                            }
+
                             // Hide progress and re-enable inputs
                             if (uploadProgress) uploadProgress.classList.add('hidden');
                             if (fileInput) fileInput.disabled = false;
