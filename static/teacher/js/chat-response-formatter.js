@@ -66,6 +66,25 @@
   }
 
   /**
+   * Defense-in-depth: the model is instructed to always use \( \) / \[ \] for math, but if it
+   * still emits malformed bare-bracket math like "[\text{New Length} = 20 - 2x]", the renderer
+   * never recognizes it (brackets aren't a math delimiter). Detect brackets whose content looks
+   * like LaTeX (backslash commands, ^{}, _{}) and convert them to \[ ... \]. Deliberately does
+   * NOT touch markdown links "[text](url)" or reference-style definitions "[id]: url".
+   */
+  function convertBareBracketMathToLatex(str) {
+    if (!str || typeof str !== 'string') return str;
+    return str.replace(/\[([^\[\]\n]{1,400})\]/g, function (match, inner, offset, full) {
+      var after = full.slice(offset + match.length, offset + match.length + 1);
+      if (after === '(' || after === ':') return match;
+      var looksLikeMath = /\\(text|frac|sqrt|sum|int|alpha|beta|gamma|theta|pi|pm|times|cdot|leq|geq|neq|approx|left|right|begin|end|overline|infty|partial|Delta|delta)\b/.test(inner)
+        || /\^\{|_\{|\\[a-zA-Z]+\{/.test(inner);
+      if (!looksLikeMath) return match;
+      return '\\[ ' + inner.trim() + ' \\]';
+    });
+  }
+
+  /**
    * Convert common AI "bold-only" lecture layout into real Markdown (headings + lists)
    * so marked emits <h1>–<h3>, <ul>, <li> instead of flat <p><strong>.
    * Runs only on text; math must already be protected.
@@ -284,6 +303,7 @@
 
     text = decodeHtmlEntities(text);
     text = stripLessonFinalizationFields(text);
+    text = convertBareBracketMathToLatex(text);
     text = normalizeTableMarkdown(text);
     text = normalizeBlockMathForMarkdown(text);
 
@@ -329,17 +349,40 @@
   }
 
   /**
+   * Two animation-frame ticks so the browser has actually painted the post-typeset layout
+   * before a caller measures scrollHeight (one rAF only guarantees "before next paint").
+   */
+  function _settleLayout() {
+    return new Promise(function (resolve) {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(resolve);
+        });
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  }
+
+  /**
    * Run on the message content element after it's in the DOM:
    * - Prefer MathJax typesetting (better compatibility with AI-generated TeX)
    * - Fallback to KaTeX auto-render when MathJax is unavailable
    * - highlight.js on <pre><code>
+   *
+   * Returns a Promise that resolves once typesetting AND layout have settled — MathJax
+   * typesetting is async and can change the element's height (e.g. display equations),
+   * so callers that scroll-to-bottom right after inserting a message must wait on this
+   * promise first, otherwise they scroll against a stale (pre-typeset) height and the
+   * next appended message can land in the wrong position.
    */
   function processRenderedContent(containerElement) {
-    if (!containerElement) return;
+    if (!containerElement) return Promise.resolve();
     try {
       fixBrokenDisplayMathInDOM(containerElement);
 
       var usedMathJax = false;
+      var typesetPromise = Promise.resolve();
       if (
         typeof window !== 'undefined' &&
         window.MathJax &&
@@ -350,7 +393,7 @@
         if (typeof window.MathJax.typesetClear === 'function') {
           window.MathJax.typesetClear([containerElement]);
         }
-        window.MathJax.typesetPromise([containerElement]).catch(function (err) {
+        typesetPromise = window.MathJax.typesetPromise([containerElement]).catch(function (err) {
           console.warn('MathJax typeset failed:', err);
         });
       }
@@ -376,8 +419,11 @@
           try { hljs.highlightElement(block); } catch (e) { /* ignore */ }
         });
       }
+
+      return typesetPromise.then(_settleLayout);
     } catch (e) {
       console.warn('processRenderedContent failed:', e);
+      return Promise.resolve();
     }
   }
 

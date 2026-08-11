@@ -7937,6 +7937,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             <div class="chat-message-content">${escapeHtml(content)}</div>
           `;
             chatMessages.appendChild(messageDiv);
+            return null;
           } else {
             // Convert raw markdown to HTML (same as addAssistantMessage flow) so loaded messages render correctly
             const formattedContent = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
@@ -7952,8 +7953,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             chatMessages.appendChild(messageDiv);
             var contentEl = messageDiv.querySelector('.chat-message-content');
             if (contentEl && typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
-              TeacherChatFormatter.processRenderedContent(contentEl);
+              // Returns a Promise that resolves after MathJax/KaTeX typesetting has settled,
+              // so the caller can wait for all of these before scrolling to the true bottom.
+              return TeacherChatFormatter.processRenderedContent(contentEl);
             }
+            return null;
           }
         }
 
@@ -8027,17 +8031,22 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             });
           }
 
+          const renderPromises = [];
           if (effectiveMessages.length > 0) {
             effectiveMessages.forEach(function (msg) {
               const role = msg.role === 'bot' ? 'assistant' : 'user';
               const content = msg.content || msg.message || '';
-              renderMessageDOM(role, content);
+              renderPromises.push(renderMessageDOM(role, content));
             });
           } else if (!prependRAG) {
-            renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?');
+            renderPromises.push(renderMessageDOM('assistant', 'Welcome to your saved conversation. How can I continue assisting you with your teaching?'));
           }
-          // Ensure reopened chats land at the latest message.
-          requestAnimationFrame(function () { scrollToBottom('auto'); });
+          // Wait for all messages' math typesetting to settle before measuring scrollHeight —
+          // otherwise the last message (often the one with equations) can still be resizing
+          // when we scroll, leaving the view short of the true bottom.
+          Promise.all(renderPromises).then(function () {
+            requestAnimationFrame(function () { scrollToBottom('auto'); });
+          });
         }
 
         if (isBackendConversationId) {
@@ -9180,6 +9189,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Add assistant message on RIGHT side (message = HTML from TeacherChatFormatter: marked + DOMPurify)
       function addAssistantMessage(message) {
         const chatMessages = document.getElementById('chatMessages');
+        // Capture BEFORE appending: if the teacher had already scrolled up to read earlier
+        // content, don't yank them back down once this message (and its math) finishes rendering.
+        const wasNearBottom = isChatNearBottom();
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message assistant animate-fade-in';
         var imgUrl = "{{ url_for('static', filename='teacher/assets/midLogo.png') }}";
@@ -9191,10 +9203,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       `;
         chatMessages.appendChild(messageDiv);
         var contentEl = messageDiv.querySelector('.chat-message-content');
+        // Scroll only AFTER MathJax/KaTeX typesetting (async) and layout have settled — scrolling
+        // immediately here would measure a pre-typeset height and land short once display
+        // equations expand the message, which is what produced the "next message overlaps
+        // the previous response" bug.
         if (contentEl && typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
-          TeacherChatFormatter.processRenderedContent(contentEl);
+          TeacherChatFormatter.processRenderedContent(contentEl).then(function () {
+            if (wasNearBottom) scrollToBottom();
+          });
+        } else if (wasNearBottom) {
+          scrollToBottom();
         }
-        scrollToBottom();
 
         // Persist
         if (!currentChatId) currentChatId = 'chat1';
@@ -9820,6 +9839,16 @@ Keep it grade-appropriate, structured from basic to advanced, and do not invent 
 - Answer key
 - Difficulty level for each question: Easy / Medium / Hard
 Align everything with the lesson objectives and do not invent missing information.`);
+      }
+
+      // True if the chat is scrolled at (or very near) the bottom already — used so an
+      // auto-scroll after an async render doesn't yank the view away from content the
+      // teacher deliberately scrolled up to read.
+      function isChatNearBottom() {
+        const threshold = 150;
+        const chatArea = document.getElementById('chatArea');
+        if (!chatArea) return true;
+        return (chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight) <= threshold;
       }
 
       // Scroll to bottom of chat
