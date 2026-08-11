@@ -357,6 +357,24 @@ def init_db(app):
                 logger.warning(f"Subscription migration warning: {str(e)}")
                 db.rollback()
             
+            # Migration: Add ingest failure-tracking columns to rag_threads
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if 'rag_threads' in inspector.get_table_names():
+                    columns = [col['name'] for col in inspector.get_columns('rag_threads')]
+                    if 'ingest_status' not in columns:
+                        logger.info("Adding ingest_status/ingest_error/ingest_deadline_at columns to rag_threads table...")
+                        db.execute(text("ALTER TABLE rag_threads ADD COLUMN ingest_status VARCHAR(20)"))
+                        db.execute(text("ALTER TABLE rag_threads ADD COLUMN ingest_error TEXT"))
+                        db.execute(text("ALTER TABLE rag_threads ADD COLUMN ingest_deadline_at TIMESTAMP"))
+                        db.execute(text("UPDATE rag_threads SET ingest_status = 'success' WHERE has_document = TRUE"))
+                        db.commit()
+                        logger.info("rag_threads ingest-tracking columns added successfully")
+            except Exception as e:
+                logger.warning(f"rag_threads ingest-tracking migration warning: {str(e)}")
+                db.rollback()
+
             # Run RAG migration (add new columns, create rag_chunks table)
             try:
                 import sys

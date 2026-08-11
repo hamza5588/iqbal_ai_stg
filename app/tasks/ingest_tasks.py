@@ -94,6 +94,7 @@ def ingest_pdf_task(self, file_path: str, thread_id: str, filename: str, user_id
             state='FAILURE',
             meta={'error': error_msg, 'message': f'Validation error: {error_msg}', 'exc_type': 'ValueError', 'exc_message': error_msg}
         )
+        _save_thread_to_db(user_id, thread_id, filename, ingest_error=error_msg)
         return {'success': False, 'error': error_msg, 'message': f'Validation error: {error_msg}'}
     except Exception as e:
         error_msg = f'Failed to ingest PDF: {str(e)}'
@@ -103,10 +104,11 @@ def ingest_pdf_task(self, file_path: str, thread_id: str, filename: str, user_id
             state='FAILURE',
             meta={'error': error_msg, 'message': error_msg, 'exc_type': exc_type, 'exc_message': str(e)}
         )
+        _save_thread_to_db(user_id, thread_id, filename, ingest_error=error_msg)
         return {'success': False, 'error': error_msg, 'message': error_msg, 'exc_type': exc_type}
 
 
-def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
+def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None, ingest_error: str = None):
     """
     Helper function to save thread to database.
     Uses the shared SQLAlchemy session factory via get_db(), which is already
@@ -155,7 +157,13 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
             existing_thread = rag_thread
             logger.info("Created new thread %s for user %s", thread_id, user_id)
 
-        if ingest_result:
+        if ingest_error:
+            existing_thread.ingest_status = 'failed'
+            existing_thread.ingest_error = ingest_error[:2000]
+            existing_thread.updated_at = now
+            db.commit()
+            logger.info("Marked thread %s as failed: %s", thread_id, ingest_error[:200])
+        elif ingest_result:
             existing_thread.filename = filename
             existing_thread.has_document = True
             existing_thread.doc_count = (existing_thread.doc_count or 0) + 1
@@ -163,6 +171,8 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
             existing_thread.last_ingested_at = now
             existing_thread.embedding_model = ingest_result.get("embedding_model")
             existing_thread.embedding_dim = ingest_result.get("embedding_dim")
+            existing_thread.ingest_status = 'success'
+            existing_thread.ingest_error = None
             existing_thread.updated_at = now
             db.commit()
             logger.info("Updated thread %s with has_document=true", thread_id)
