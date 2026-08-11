@@ -120,7 +120,44 @@ def _get_ingest_tier(file_size_mb: float) -> dict:
     }
 
 
-def _preflight_check_pdf(file_bytes: bytes, max_scan_pages: int = 25) -> dict:
+def _preflight_check_pdf(file_bytes: bytes, max_scan_pages: int = 25, timeout_seconds: int = 15) -> dict:
+    """
+    Runs `_preflight_check_pdf_inner` with a hard wall-clock timeout.
+
+    PyMuPDF is a C extension: a malformed PDF can make it hang inside
+    `fz_open_document` with no Python-level exception to catch, which would
+    otherwise block the request thread forever. Running it in a daemon
+    thread with a bounded `.join()` means a hang costs one leaked thread
+    instead of an unresponsive request/worker.
+    """
+    import threading
+
+    box = {}
+
+    def _run():
+        box['result'] = _preflight_check_pdf_inner(file_bytes, max_scan_pages)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout_seconds)
+
+    if t.is_alive():
+        return {
+            'ok': False,
+            'code': 'PDF_VALIDATION_TIMEOUT',
+            'message': (
+                'This PDF took too long to validate and may be malformed or '
+                'unusually complex. Please try a different file.'
+            ),
+        }
+    return box.get('result') or {
+        'ok': False,
+        'code': 'PDF_UNREADABLE',
+        'message': 'This file could not be validated. Please check the file and upload it again.',
+    }
+
+
+def _preflight_check_pdf_inner(file_bytes: bytes, max_scan_pages: int) -> dict:
     """
     Fast, synchronous check run at upload time, before the (potentially slow)
     background ingestion is ever queued. Catches PDFs that can never be
@@ -734,7 +771,13 @@ def download_markdown(thread_id):
     if not matches:
         return jsonify({'error': 'Markdown export not found for this document'}), 404
     md_path = matches[0]
-    download_name = (thread.filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+    # NOTE: rstrip() strips a *character set*, not a suffix — e.g.
+    # "Chapter_1_pdf.pdf".rstrip(".pdf") wrongly yields "Chapter_1_".
+    # Strip the literal ".pdf"/".PDF" suffix instead.
+    download_name = thread.filename or "document"
+    if download_name.lower().endswith(".pdf"):
+        download_name = download_name[:-4]
+    download_name = download_name or "document"
     if not download_name.endswith(".md"):
         download_name += ".md"
     return send_file(
