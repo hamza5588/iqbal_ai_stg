@@ -536,7 +536,7 @@ def forgot_password():
             if not user:
                 if _wants_json():
                     return jsonify({'success': False, 'error': 'Email not found'}), 400
-                return render_template('forgot_password.html', error="Email not found")
+                return render_template('forgot_password/forgot_password.html', error="Email not found")
             
             # Generate OTP
             otp = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
@@ -575,15 +575,15 @@ If you didn't request this password reset, please ignore this email.'''
             
             if _wants_json():
                 return jsonify({'success': True, 'email': email})
-            return render_template('reset_password.html', email=email)
-            
+            return render_template('verify_otp/verify_otp.html', email=email)
+
         except Exception as e:
             logger.error(f"Password reset error: {str(e)}")
             if _wants_json():
                 return jsonify({'success': False, 'error': 'Failed to send OTP'}), 500
-            return render_template('forgot_password.html', error="Failed to send OTP")
-            
-    return render_template('forgot_password.html')
+            return render_template('forgot_password/forgot_password.html', error="Failed to send OTP")
+
+    return render_template('forgot_password/forgot_password.html')
 
 
 @bp.route('/verify_reset_otp', methods=['POST'])
@@ -614,14 +614,14 @@ def reset_password():
             if new_password != confirm_password:
                 if _wants_json():
                     return jsonify({'success': False, 'error': 'Passwords do not match'}), 400
-                return render_template('reset_password.html', email=email, error="Passwords do not match")
-            
+                return render_template('reset_password/reset_password.html', email=email, otp=otp, error="Passwords do not match")
+
             db = get_db()
             reset_token, error = _validate_reset_otp(db, email, otp)
             if error:
                 if _wants_json():
                     return jsonify({'success': False, 'error': error}), 400
-                return render_template('reset_password.html', email=email, error=error)
+                return render_template('reset_password/reset_password.html', email=email, otp=otp, error=error)
             
             # Update password in database
             from app.models.database_models import User as DBUser
@@ -642,6 +642,10 @@ def reset_password():
             logger.error(f"Password reset error: {str(e)}")
             if _wants_json():
                 return jsonify({'success': False, 'error': 'Failed to reset password'}), 500
-            return render_template('reset_password.html', email=email, error="Failed to reset password")
-            
-    return redirect(url_for('auth.forgot_password'))
+            return render_template('reset_password/reset_password.html', email=email, otp=otp, error="Failed to reset password")
+
+    email = request.args.get('email', '')
+    otp = request.args.get('otp', '')
+    if not email:
+        return redirect(url_for('auth.forgot_password'))
+    return render_template('reset_password/reset_password.html', email=email, otp=otp)
