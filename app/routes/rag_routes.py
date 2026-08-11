@@ -120,6 +120,132 @@ def _get_ingest_tier(file_size_mb: float) -> dict:
     }
 
 
+def _preflight_check_pdf(file_bytes: bytes, max_scan_pages: int = 25, timeout_seconds: int = 15) -> dict:
+    """
+    Runs `_preflight_check_pdf_inner` with a hard wall-clock timeout.
+
+    PyMuPDF is a C extension: a malformed PDF can make it hang inside
+    `fz_open_document` with no Python-level exception to catch, which would
+    otherwise block the request thread forever. Running it in a daemon
+    thread with a bounded `.join()` means a hang costs one leaked thread
+    instead of an unresponsive request/worker.
+    """
+    import threading
+
+    box = {}
+
+    def _run():
+        box['result'] = _preflight_check_pdf_inner(file_bytes, max_scan_pages)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout_seconds)
+
+    if t.is_alive():
+        return {
+            'ok': False,
+            'code': 'PDF_VALIDATION_TIMEOUT',
+            'message': (
+                'This PDF took too long to validate and may be malformed or '
+                'unusually complex. Please try a different file.'
+            ),
+        }
+    return box.get('result') or {
+        'ok': False,
+        'code': 'PDF_UNREADABLE',
+        'message': 'This file could not be validated. Please check the file and upload it again.',
+    }
+
+
+def _preflight_check_pdf_inner(file_bytes: bytes, max_scan_pages: int) -> dict:
+    """
+    Fast, synchronous check run at upload time, before the (potentially slow)
+    background ingestion is ever queued. Catches PDFs that can never be
+    ingested — corrupted files, password-protected files, and scanned/
+    image-only files with no selectable text — so the user is told
+    immediately, instead of the file being queued for background processing
+    and only failing later (which previously surfaced as a misleading
+    "PDF may still be processing" message when the user tried to chat).
+
+    Only scans the first `max_scan_pages` pages so this stays fast even for
+    large documents; the real ingestion step still processes every page.
+    """
+    import fitz  # PyMuPDF
+
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+    except Exception:
+        return {
+            'ok': False,
+            'code': 'PDF_UNREADABLE',
+            'message': (
+                'This file could not be opened as a PDF. It may be corrupted '
+                'or not actually a PDF file. Please check the file and upload it again.'
+            ),
+        }
+
+    try:
+        if doc.is_encrypted and not doc.authenticate(""):
+            return {
+                'ok': False,
+                'code': 'PDF_PASSWORD_PROTECTED',
+                'message': (
+                    'This PDF is password-protected. Please remove the password '
+                    'and upload it again.'
+                ),
+            }
+
+        if doc.page_count == 0:
+            return {
+                'ok': False,
+                'code': 'PDF_EMPTY',
+                'message': 'This PDF has no pages.',
+            }
+
+        has_text = False
+        has_images = False
+        for i, page in enumerate(doc):
+            if i >= max_scan_pages:
+                break
+            if not has_text and (page.get_text("text") or "").strip():
+                has_text = True
+            if not has_images and page.get_images():
+                has_images = True
+            if has_text and has_images:
+                break
+
+        if not has_text:
+            scanned_hint = (
+                " It looks like a scanned document (it contains images but no selectable text)."
+                if has_images else ""
+            )
+            return {
+                'ok': False,
+                'code': 'PDF_NO_TEXT',
+                'message': (
+                    f'This PDF has no readable text content.{scanned_hint} '
+                    'OCR support is required for scanned documents — please upload '
+                    'a PDF with real, selectable text instead.'
+                ),
+            }
+
+        return {'ok': True, 'has_images': has_images}
+    except Exception:
+        return {
+            'ok': False,
+            'code': 'PDF_UNREADABLE',
+            'message': (
+                'This file could not be read as a PDF. It may be corrupted. '
+                'Please check the file and upload it again.'
+            ),
+        }
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+
+
 def _strip_lesson_finalization_from_response(text):
     """
     Remove internal lesson-finalization lines from AI response so they are never
@@ -444,6 +570,13 @@ def ingest():
         if not file_bytes:
             return jsonify({'error': 'File is empty'}), 400
 
+        # Reject PDFs that can never be ingested (corrupted, password-protected,
+        # or scanned/image-only with no selectable text) right now, instead of
+        # queuing them for background processing and only finding out later.
+        preflight = _preflight_check_pdf(file_bytes)
+        if not preflight['ok']:
+            return jsonify({'error': preflight['message'], 'code': preflight['code']}), 400
+
         # If streaming is requested, use SSE for backend processing progress (legacy support)
         if stream_progress:
             return _ingest_with_progress(
@@ -508,6 +641,7 @@ def ingest():
                     'chunks': result.get('chunks', 0),
                     'markdown_download_url': f'/api/rag/download-markdown/{thread_id}',
                     'processing_time_seconds': result.get('processing_time_seconds'),
+                    'warning': result.get('warning'),
                 })
             except ValueError as e:
                 logger.error(f"Value error in sync ingest: {str(e)}")
@@ -637,7 +771,13 @@ def download_markdown(thread_id):
     if not matches:
         return jsonify({'error': 'Markdown export not found for this document'}), 404
     md_path = matches[0]
-    download_name = (thread.filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+    # NOTE: rstrip() strips a *character set*, not a suffix — e.g.
+    # "Chapter_1_pdf.pdf".rstrip(".pdf") wrongly yields "Chapter_1_".
+    # Strip the literal ".pdf"/".PDF" suffix instead.
+    download_name = thread.filename or "document"
+    if download_name.lower().endswith(".pdf"):
+        download_name = download_name[:-4]
+    download_name = download_name or "document"
     if not download_name.endswith(".md"):
         download_name += ".md"
     return send_file(
@@ -1627,6 +1767,7 @@ def get_ingest_status(task_id):
                 'chunks': result.get('chunks', 0),
                 'markdown_download_url': result.get('markdown_download_url') or (f'/api/rag/download-markdown/{thread_id}' if thread_id else None),
                 'processing_time_seconds': result.get('processing_time_seconds'),
+                'warning': result.get('warning'),
             }
         elif task.state == 'FAILURE':
             # Task failed

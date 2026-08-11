@@ -613,6 +613,49 @@ def _is_rag_recovery_user_message(text: str) -> bool:
     return "previous response was empty" in low or "re-run the needed tools" in low
 
 
+def _expand_query_for_prefetch(text: str, user_id: Optional[int]) -> str:
+    """
+    rag_tool() rejects single-word queries outright (needs >= 2 words for meaningful
+    retrieval), and even short multi-word phrasings like "summarize it"/"summarize the doc"
+    are poor nearest-neighbor search queries - they retrieve chunks textually close to those
+    literal words, not a representative cross-section of the document.
+
+    This used to be a hardcoded list of English summarize/overview synonyms - the same
+    brittle pattern as the old regex-based lesson-finalize detection this codebase already
+    moved away from (see finalize_lesson_tool): it only covered exact English phrases, so
+    "summary do", "poora document samjhao", "TL;DR", or any wording/language not in the list
+    would silently fall through ungrounded. Production RAG systems handle this class of
+    problem with LLM-based query rewriting rather than static keyword matching - a single,
+    low-latency LLM call that rewrites a short/ambiguous query into a proper retrieval query,
+    applied only when the raw query is actually short (rewriting an already-specific query
+    can hurt retrieval by substituting the user's own terminology for something that matches
+    the corpus worse). That's what this does: only short queries get rewritten, via one fast
+    LLM call, with the raw text as a safe fallback if the call fails or times out.
+    """
+    t = (text or "").strip()
+    if not t or len(t.split()) > 4:
+        return t
+    try:
+        llm = get_rag_llm(user_id=user_id, timeout=8, temperature=0)
+        prompt = (
+            "The user sent this short message in a chat where they can ask questions about "
+            f"an uploaded PDF document: \"{t}\"\n\n"
+            "Rewrite it as a clear, specific search query (at least a few words) suitable for "
+            "a document search/retrieval system. If it's a request to summarize, get an "
+            "overview of, or understand the whole document (in any wording or language), "
+            "write: summarize the full document covering main topics and key points. "
+            "If it's already clear and specific enough as-is, return it unchanged.\n"
+            "Return ONLY the rewritten query text - no explanation, no quotes, no extra words."
+        )
+        response = llm.invoke(prompt)
+        rewritten = (getattr(response, "content", None) or "").strip().strip('"').strip("'")
+        if rewritten and len(rewritten.split()) >= 2:
+            return rewritten
+    except Exception as e:
+        logger.warning("Prefetch query rewrite failed, using raw query %r: %s", t, e)
+    return t
+
+
 def _prune_messages(messages, max_turns: int = 15):
     """
     Keep only recent conversation turns while preserving message integrity.
@@ -1464,6 +1507,30 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
     return VectorRetriever(thread_id, user_id, steps_list)
 
 
+def _sanitize_pdf_text(text: str) -> str:
+    """
+    Clean text extracted from a PDF so it can always be stored in PostgreSQL.
+
+    Two distinct problems show up here, both traced back to broken fonts/
+    encodings in the source PDF:
+    - Embedded NUL (0x00) bytes: valid in a Python str, but PostgreSQL text
+      columns reject them outright.
+    - Lone UTF-16 surrogates and other codepoints that are valid in a Python
+      str (PDF libraries sometimes use surrogateescape-style decoding on bad
+      byte sequences) but cannot be encoded to UTF-8 at all — PostgreSQL
+      raises "invalid byte sequence for encoding UTF8" on these too.
+    """
+    if not text:
+        return text
+    if "\x00" in text:
+        text = text.replace("\x00", "")
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        text = text.encode("utf-8", errors="replace").decode("utf-8")
+    return text
+
+
 def ingest_pdf(
     file_bytes: bytes,
     thread_id: str,
@@ -1607,6 +1674,38 @@ def ingest_pdf(
                 f"PDF loaded with {loader_used} but contains no extractable text content.{scanned_hint}"
             )
 
+        # If the document has both real text and embedded images, the text is
+        # still fully processed below, but flag it so the caller can warn the
+        # user that only the text was analyzed — any content that lives only
+        # in the images (diagrams, photos, scanned figures) was not.
+        mixed_content_warning = None
+        try:
+            import fitz  # PyMuPDF
+            pdf_doc = fitz.open(temp_path)
+            try:
+                has_images = any(
+                    len(page.get_images()) > 0 for page in list(pdf_doc)[:25]
+                )
+            finally:
+                pdf_doc.close()
+            if has_images:
+                mixed_content_warning = (
+                    "This PDF contains images as well as text. The text has been "
+                    "analyzed, but the images were not — ask about text content only."
+                )
+        except Exception as e:
+            logger.debug("Could not check for mixed text/image content: %s", e)
+
+        # Some PDF parsers emit embedded NUL (0x00) bytes, lone UTF-16 surrogates,
+        # or other invalid-for-UTF8 codepoints for certain fonts/broken encodings.
+        # PostgreSQL text columns reject all of these outright, which previously
+        # caused ingestion to fail after embeddings were already computed. Clean
+        # them here, before splitting/embedding/export, so text stays consistent
+        # everywhere downstream.
+        for doc in docs:
+            if doc.page_content:
+                doc.page_content = _sanitize_pdf_text(doc.page_content)
+
         _send_progress("metadata", 30, "Adding metadata to pages...")
         ingest_page_label_map: Dict[int, int] = {}
         for i, doc in enumerate(docs):
@@ -1649,7 +1748,13 @@ def ingest_pdf(
             _save_logical_page_map_to_disk(thread_id_str, combined_logical_map)
 
         # Export extracted text as markdown for user download (## Page N + content per page)
-        safe_base = (safe_filename or "document").rstrip(".pdf").rstrip(".PDF") or "document"
+        # NOTE: rstrip() strips a *character set*, not a suffix — e.g.
+        # "Chapter_1_pdf.pdf".rstrip(".pdf") wrongly yields "Chapter_1_".
+        # Strip the literal ".pdf"/".PDF" suffix instead.
+        safe_base = safe_filename or "document"
+        if safe_base.lower().endswith(".pdf"):
+            safe_base = safe_base[:-4]
+        safe_base = safe_base or "document"
         md_filename = f"{thread_id_str}_{safe_base}.md"
         md_path = MARKDOWN_EXPORTS_DIR / md_filename
         md_parts = []
@@ -1824,6 +1929,7 @@ def ingest_pdf(
             "ingest_profile": ingest_profile["name"],
             "file_size_mb": file_size_mb,
             "processing_time_seconds": _elapsed_seconds,
+            "warning": mixed_content_warning,
         }
 
     finally:
@@ -1981,11 +2087,17 @@ Instructions:
 {{
     "has_toc": true/false,
     "toc_page": page number where TOC was found (or null),
-    "topics": ["topic 1", "topic 2", ...]  // List of all topics from TOC, empty if no TOC
+    "topics": [
+        {{"topic": "topic 1", "page": page number listed next to this topic in the TOC (or null if none is listed)}},
+        {{"topic": "topic 2", "page": ...}}
+    ]  // List of all topics from TOC, empty if no TOC
 }}
 
 Important:
 - Only extract actual topics/sections from the TOC, not regular text
+- "page" for each topic is the page number printed next to THAT topic in the TOC text itself
+  (e.g. the number after the dots/tabs in "Chapter 2 ......... 12" is 12) - NOT the page the
+  TOC listing is printed on (that's "toc_page", used only as a fallback below).
 - Remove page numbers, dots, and formatting from topic names
 - Keep topic names clean and meaningful
 - If no TOC is found, set "has_toc": false and "topics": []
@@ -2023,8 +2135,24 @@ Important:
                                 pass
                     
                     if toc_result and toc_result.get("has_toc") and toc_result.get("topics"):
-                        topics = [{"topic": t.strip(), "page": toc_result.get("toc_page")} 
-                                 for t in toc_result.get("topics", []) if t.strip()]
+                        # Each topic should carry its OWN page number (the number printed next
+                        # to it in the TOC), not toc_page (where the TOC listing itself sits) -
+                        # reusing toc_page for every topic previously made every heading show
+                        # the same, meaningless page number (almost always page 1 or 2).
+                        # Still accept plain strings as a fallback for older/malformed LLM
+                        # output shapes; toc_page is only used there since no per-topic page
+                        # is available at all in that shape.
+                        raw_topics = toc_result.get("topics", [])
+                        topics = []
+                        for t in raw_topics:
+                            if isinstance(t, dict):
+                                name = str(t.get("topic") or t.get("heading") or "").strip()
+                                page = t.get("page")
+                            else:
+                                name = str(t or "").strip()
+                                page = toc_result.get("toc_page")
+                            if name:
+                                topics.append({"topic": name, "page": page})
                         if topics:
                             logger.info(f"Found TOC with {len(topics)} topics using AI")
                             return {
@@ -3700,18 +3828,35 @@ def _chat_build_system_message(
                 if is_lesson_creation_turn:
                     prefetch_blob = _prefetch_lecture_evidence_for_chat(thread_id_str, last_user_msg_text)
                 else:
+                    pf_user_id = _get_user_id_for_thread(thread_id_str)
                     out_pf = rag_tool.invoke(
-                        {"query": last_user_msg_text.strip(), "thread_id": thread_id_str}
+                        {
+                            "query": _expand_query_for_prefetch(last_user_msg_text.strip(), pf_user_id),
+                            "thread_id": thread_id_str,
+                        }
                     )
                     if (
                         isinstance(out_pf, str)
                         and out_pf.strip()
                         and not out_pf.strip().startswith("Error:")
                     ):
+                        # This is an automatic nearest-neighbor retrieval, run before the model
+                        # ever judges relevance - it always returns *something*, even for a
+                        # question completely unrelated to the document. Framing it as
+                        # unconditionally "relevant" (as this text previously did) contradicted
+                        # the system prompt's own "ask permission before answering off-topic
+                        # questions" instruction elsewhere, since the model would just use
+                        # whatever was pre-injected here without weighing actual fit.
                         prefetch_blob = (
-                            "## Prefetched document evidence "
-                            "(use for your answer; you may call tools again if needed)\n\n"
+                            "## Retrieved document excerpts (may or may not actually be relevant "
+                            "to the user's question - this is an automatic nearest-match search, "
+                            "not a relevance judgment)\n\n"
                             + out_pf
+                            + "\n\nBefore using the excerpts above: check whether they actually "
+                            "answer the user's question. If they do, use them and you may call "
+                            "tools again if needed. If they do NOT actually address the question, "
+                            "treat this as an off-topic/not-in-document question and follow this "
+                            "prompt's instructions for that case instead of using these excerpts."
                         )
             except Exception as ex:
                 logger.warning("Mandatory document prefetch failed: %s", ex, exc_info=True)
