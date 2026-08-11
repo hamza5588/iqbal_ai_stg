@@ -1657,6 +1657,26 @@ def ingest_pdf(
         _send_progress("validating", 25, f"Validating {num_pages} pages (loaded with {loader_used})...")
 
         valid_pages = [d for d in docs if d.page_content and d.page_content.strip()]
+
+        # A loader recovering *some* pages from a truncated/corrupted file
+        # (common with PyMuPDF's repair) previously reported full success —
+        # num_pages matched the structural page count, chunks got created
+        # from whatever text survived, and nothing indicated most of the
+        # document never actually made it in. Flag it instead of staying
+        # silent whenever a large share of pages came back with no text at
+        # all (a lone blank page — a cover, a divider — is normal and not
+        # worth warning about).
+        partial_content_warning = None
+        if len(valid_pages) < num_pages:
+            missing_page_count = num_pages - len(valid_pages)
+            if missing_page_count / num_pages >= 0.3:
+                partial_content_warning = (
+                    f"Only {len(valid_pages)} of {num_pages} pages in this PDF had readable text — "
+                    f"the other {missing_page_count} came back empty. This can happen with a damaged, "
+                    "truncated, or partially corrupted file, so the document may be missing content. "
+                    "If answers seem incomplete, try re-exporting or re-uploading the original file."
+                )
+
         if len(valid_pages) == 0:
             # Check if PDF might be scanned (image-based)
             scanned_hint = ""
@@ -2007,6 +2027,8 @@ def ingest_pdf(
         _elapsed_seconds = round(time.time() - _start_time, 2)
         _send_progress("complete", 100, f"PDF processing complete! Processed {num_pages} pages in {_elapsed_seconds}s.")
 
+        combined_warning = " ".join(w for w in (partial_content_warning, mixed_content_warning) if w) or None
+
         return {
             "thread_id": thread_id_str,
             "filename": filename or safe_filename,
@@ -2020,7 +2042,7 @@ def ingest_pdf(
             "ingest_profile": ingest_profile["name"],
             "file_size_mb": file_size_mb,
             "processing_time_seconds": _elapsed_seconds,
-            "warning": mixed_content_warning,
+            "warning": combined_warning,
         }
 
     finally:
