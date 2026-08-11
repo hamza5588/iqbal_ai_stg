@@ -3671,10 +3671,12 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "\"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
     "- Repair turns: if the user's message is a short follow-up expressing dissatisfaction with your previous "
     "answer (e.g. \"answer my question\", \"try again\", \"explain again\", \"I still don't understand\", "
-    "\"that's not what I asked\", \"please answer properly\"), do NOT reply with a generic closing line. "
-    "Instead, look at the previous user question and your previous answer, identify what was likely unclear or "
-    "incomplete, and re-answer the original question with a different explanation or more detail (e.g. step by "
-    "step from the beginning), covering steps you may have skipped.\n"
+    "\"that's not what I asked\", \"please answer properly\"), do NOT reply with a generic closing line, and do "
+    "NOT ask the user what part was unclear or what they'd like added. Immediately look at the previous user "
+    "question and your previous answer, identify what was likely unclear or incomplete, and re-answer the "
+    "original question yourself right now with a different explanation or more detail (e.g. step by step from "
+    "the beginning), covering steps you may have skipped. Only ask a clarifying question if the previous "
+    "question itself was ambiguous, not just because the user said they didn't understand.\n"
     "- Answer the user directly. Do not repeat their question. Do not describe tool usage.\n"
 )
 
@@ -3694,7 +3696,8 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF_LOAD_TEST = (
     "- Do not call tools repeatedly in one turn after getting tool results.\n"
     "- For person identity queries (e.g., 'who is <name>?'), try rag_tool before marking irrelevant.\n"
     "- If the user sends a short dissatisfied follow-up (e.g. 'try again', 'I still don't understand'), "
-    "re-answer the previous question differently instead of giving a generic closing line.\n"
+    "immediately re-answer the previous question yourself with a different, more detailed explanation. "
+    "Do not give a generic closing line and do not ask what part was unclear.\n"
     "- If question is irrelevant to PDF, reply exactly: "
     "\"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
 )
