@@ -2864,7 +2864,14 @@ def _topic_match_score(query_norm: str, query_tokens: set, heading_text: str) ->
 
 
 _TEACH_TOPIC_MATCH_THRESHOLD = float(os.getenv("RAG_TEACH_TOPIC_MATCH_THRESHOLD", "0.5"))
-_TEACH_TOPIC_MAX_CHUNKS = int(os.getenv("RAG_TEACH_TOPIC_MAX_CHUNKS", "600"))
+# Bounded so a broad topic that matches most of a document (e.g. a document that is itself
+# entirely about that topic) can't return so much content in one tool result that it overflows
+# the model's context and stalls the agent loop (observed live: 34 matched sections / 55 chunks
+# on a 52-page document triggered a LangGraph recursion-limit crash). When either cap trims
+# content, that is reported explicitly via "truncated"/"additional_sections_not_included" —
+# never silent.
+_TEACH_TOPIC_MAX_CHUNKS = int(os.getenv("RAG_TEACH_TOPIC_MAX_CHUNKS", "80"))
+_TEACH_TOPIC_MAX_SECTIONS = int(os.getenv("RAG_TEACH_TOPIC_MAX_SECTIONS", "10"))
 
 
 @tool
@@ -2894,8 +2901,12 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
     - "matched_sections": [{"heading", "page_start", "page_end", "chunks_found", "content": [str, ...]}]
     - "related_not_covered": [{"heading", "page", "score"}] — headings with partial keyword
       overlap that fell below the match threshold (candidates to offer the teacher next).
+    - "additional_sections_not_included": [{"heading", "page", "score"}] — present only when the
+      topic matched more sections than fit in one response (e.g. the topic covers most of the
+      document); lists the matched-but-omitted sections by name so nothing is silently dropped.
+      Mention these to the teacher and offer to cover them with a follow-up, more specific request.
     - "total_chunks_retrieved": int
-    - "truncated": bool — true only if the hard safety cap was hit (soft-capped, not silent).
+    - "truncated": bool — true if either safety cap was hit (soft-capped, not silent).
     - "source_file", "num_pages"
     """
     topic_q = (topic or "").strip()
@@ -2960,7 +2971,7 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
                 page_end = later_page - 1
                 break
         page_end = max(page_end, page)
-        matched.append({"heading": heading_text, "page_start": page, "page_end": page_end})
+        matched.append({"heading": heading_text, "page_start": page, "page_end": page_end, "score": score})
 
     if not matched:
         return {
@@ -2978,8 +2989,22 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
 
     from app.utils.rag_vectorstore import query_chunks_by_page_range
 
+    additional_sections_not_included: List[dict] = []
+    if len(matched) > _TEACH_TOPIC_MAX_SECTIONS:
+        # Topic matches an unusually large portion of the document (e.g. the whole document is
+        # about this topic). Keep the highest-relevance sections in original document order;
+        # report the rest by name/page rather than silently dropping them.
+        ranked = sorted(matched, key=lambda s: s["score"], reverse=True)
+        kept_keys = {(s["heading"], s["page_start"]) for s in ranked[:_TEACH_TOPIC_MAX_SECTIONS]}
+        dropped = [s for s in matched if (s["heading"], s["page_start"]) not in kept_keys]
+        additional_sections_not_included = [
+            {"heading": s["heading"], "page": s["page_start"], "score": round(s["score"], 2)}
+            for s in dropped
+        ]
+        matched = [s for s in matched if (s["heading"], s["page_start"]) in kept_keys]
+
     total_chunks = 0
-    truncated = False
+    truncated = bool(additional_sections_not_included)
     matched_sections_out = []
     for section in matched:
         if total_chunks >= _TEACH_TOPIC_MAX_CHUNKS:
@@ -3004,11 +3029,13 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
         })
 
     logger.info(
-        "teach_topic_tool: topic=%r thread_id=%s matched_sections=%d total_chunks=%d truncated=%s",
+        "teach_topic_tool: topic=%r thread_id=%s matched_sections=%d total_chunks=%d truncated=%s "
+        "additional_sections_not_included=%d",
         topic_q, thread_id, len(matched_sections_out), total_chunks, truncated,
+        len(additional_sections_not_included),
     )
 
-    return {
+    result = {
         "matched_sections": matched_sections_out,
         "related_not_covered": related_not_covered,
         "total_chunks_retrieved": total_chunks,
@@ -3016,6 +3043,15 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
         "source_file": source_file,
         "num_pages": num_pages,
     }
+    if additional_sections_not_included:
+        result["additional_sections_not_included"] = additional_sections_not_included
+        result["message"] = (
+            f"Topic '{topic_q}' matched {len(additional_sections_not_included) + len(matched_sections_out)} "
+            f"sections — more than fit in one response. Showing the {len(matched_sections_out)} most relevant; "
+            "see additional_sections_not_included for the rest. If the teacher wants a section not shown, "
+            "call teach_topic_tool again with a more specific topic (e.g. that section's own heading)."
+        )
+    return result
 
 
 @tool
@@ -3653,7 +3689,10 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "sections of the document instead of a limited top-k search, so lecture content is not missed. "
     "After calling it, tell the teacher which sections were used (from matched_sections), and if "
     "related_not_covered is non-empty, mention those related sections were not covered and ask whether the "
-    "teacher wants them included too. Do not force this tool for narrow factual questions — use rag_tool for those.\n"
+    "teacher wants them included too. If additional_sections_not_included is present, the topic matched more "
+    "sections than fit in one lecture — tell the teacher which sections were covered here and that more related "
+    "sections exist (name them), and offer to cover those in a follow-up. Do not force this tool for narrow "
+    "factual questions — use rag_tool for those.\n"
     "- For all other questions about the document, call rag_tool(query=<your_search_query>, thread_id='{thread_id}').\n"
     "- Whenever the user's intent, in any wording or language, is to save/finalize/complete/lock in the lesson "
     "you have been building (e.g. \"save this as a lesson\", \"finalize this\", \"please save it\", "
