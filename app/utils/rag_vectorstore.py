@@ -92,6 +92,31 @@ def query_chunks_by_page(thread_id: str, user_id: int, page: int) -> List[Dict[s
         return []
 
 
+def query_chunks_by_page_range(thread_id: str, user_id: int, start_page: int, end_page: int) -> List[Dict[str, Any]]:
+    """
+    Query every chunk from PostgreSQL whose page falls in [start_page, end_page] (inclusive).
+    No top-k cap: used for exhaustive section-based retrieval where truncation would drop content.
+    Returns [{text, source, page, chunk_index}] ordered by page, chunk_index.
+    """
+    from app.utils.db import get_db
+    from app.models.database_models import RAGChunk
+    try:
+        db = get_db()
+        rows = db.query(RAGChunk).filter(
+            RAGChunk.thread_id == thread_id,
+            RAGChunk.user_id == user_id,
+            RAGChunk.page >= start_page,
+            RAGChunk.page <= end_page,
+        ).order_by(RAGChunk.page, RAGChunk.chunk_index).all()
+        return [
+            {"text": r.text, "source": r.source or "", "page": r.page, "chunk_index": r.chunk_index}
+            for r in rows
+        ]
+    except Exception as e:
+        logger.warning("query_chunks_by_page_range error: %s", e)
+        return []
+
+
 def query_all_chunks(thread_id: str, user_id: int) -> List[Dict[str, Any]]:
     """Query all chunks from PostgreSQL. Returns [{text, source, page, chunk_index}]."""
     from app.utils.db import get_db
