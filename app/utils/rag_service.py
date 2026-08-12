@@ -693,15 +693,22 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
     Approximate token-budget trimming:
     - keep the first SystemMessage (if present)
     - always keep the most recent HumanMessage (required by Qwen/Groq chat templates)
-    - keep most recent messages that fit in budget
+    - keep most recent *units* that fit in budget, where a unit is either one plain
+      message or an AIMessage(tool_calls=[...]) together with its ToolMessage(s) — these
+      are always kept or dropped as one atomic group, never split. Splitting them (the
+      previous per-message behavior) can force-keep a large trailing ToolMessage as "most
+      recent" while its owning AIMessage gets trimmed away for being over budget, producing
+      an orphaned tool message. OpenAI's API then rejects the whole request with 400
+      "messages with role 'tool' must be a response to a preceding message with
+      'tool_calls'" — which the retry-with-fewer-messages loop cannot actually fix (the
+      same split recurs at every message count until the ToolMessage itself finally gets
+      dropped), so the model loses all memory of that tool call and re-issues it next round.
     Uses a 1 token ~= 4 chars approximation for speed.
     """
     if not messages:
         return messages
 
     token_budget_chars = max(400, int(max_input_tokens) * 4)
-    kept = []
-    total_chars = 0
 
     system_msg = None
     start_idx = 0
@@ -710,7 +717,6 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
         if isinstance(messages[0], SystemMessage):
             system_msg = messages[0]
             start_idx = 1
-            total_chars += len(getattr(system_msg, "content", "") or "")
     except Exception:
         pass
 
@@ -725,25 +731,48 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
             pinned_human = rest[i]
             pinned_human_idx = i
             break
+
+    # Group into atomic units: an AIMessage with tool_calls plus its immediately
+    # following ToolMessage(s) travel together; everything else is its own unit.
+    units: List[List[Any]] = []
+    i = 0
+    while i < len(rest):
+        if pinned_human_idx is not None and i == pinned_human_idx:
+            i += 1
+            continue
+        msg = rest[i]
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            group = [msg]
+            j = i + 1
+            while j < len(rest) and isinstance(rest[j], ToolMessage) and j != pinned_human_idx:
+                group.append(rest[j])
+                j += 1
+            units.append(group)
+            i = j
+        else:
+            units.append([msg])
+            i += 1
+
+    def _unit_chars(unit):
+        return sum(len(getattr(m, "content", "") or "") for m in unit)
+
+    total_chars = len(getattr(system_msg, "content", "") or "") if system_msg is not None else 0
     if pinned_human is not None:
         total_chars += len(getattr(pinned_human, "content", "") or "")
 
-    # Always keep the most recent non-system message so the current user
-    # request / latest tool result is never dropped, even when it is large.
-    for idx, msg in enumerate(reversed(rest)):
-        original_idx = len(rest) - 1 - idx
-        if pinned_human_idx is not None and original_idx == pinned_human_idx:
-            # Counted above; append in order at the end.
-            continue
-        content = getattr(msg, "content", "") or ""
-        msg_chars = len(content)
+    # Always keep the most recent unit so the current user request / latest tool
+    # exchange is never dropped, even when it is large — but as a whole unit.
+    kept_units: List[List[Any]] = []
+    for idx, unit in enumerate(reversed(units)):
         is_most_recent = idx == 0
-        if total_chars + msg_chars > token_budget_chars and not is_most_recent:
+        unit_chars = _unit_chars(unit)
+        if total_chars + unit_chars > token_budget_chars and not is_most_recent:
             break
-        kept.append(msg)
-        total_chars += msg_chars
+        kept_units.append(unit)
+        total_chars += unit_chars
 
-    kept.reverse()
+    kept_units.reverse()
+    kept = [m for unit in kept_units for m in unit]
 
     if pinned_human is not None and not any(isinstance(m, HumanMessage) for m in kept):
         # Insert pinned human before the trailing tool/assistant tail.
