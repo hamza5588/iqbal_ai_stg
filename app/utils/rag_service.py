@@ -855,7 +855,13 @@ def get_rag_llm(api_key=None, provider=None, user_id=None, **kwargs):
     # If user_id is provided, use get_chat_model which reads Admin Panel / user settings
     if user_id:
         try:
-            return get_chat_model(user_id=user_id, timeout=120, temperature=0.5, **kwargs)
+            # Defaults first, then caller-supplied kwargs override — callers commonly pass their
+            # own timeout/temperature (e.g. get_rag_llm(user_id=..., timeout=8, temperature=0)),
+            # which previously collided with the identical keyword args below and raised
+            # "got multiple values for keyword argument 'timeout'", silently falling back to the
+            # Admin Panel key/model on every such call instead of the caller's actual settings.
+            call_kwargs = {"timeout": 120, "temperature": 0.5, **kwargs}
+            return get_chat_model(user_id=user_id, **call_kwargs)
         except Exception as e:
             logger.warning(f"Error using get_chat_model with user_id {user_id}, falling back to Admin Panel key: {str(e)}")
     
