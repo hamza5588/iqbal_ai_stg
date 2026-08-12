@@ -1309,7 +1309,12 @@ def chat():
                 int(
                     os.getenv(
                         "RAG_LESSON_MAX_TOOL_ROUNDS_PER_TURN",
-                        os.getenv("RAG_MAX_TOOL_ROUNDS_PER_TURN", "3"),
+                        # Must match rag_service.py's own default for this same env var (15) —
+                        # otherwise the graph's hard recursion_limit floor below is sized for far
+                        # fewer rounds than the soft "stop calling tools" prompt instruction ever
+                        # gets a chance to fire at, and the turn crashes with GraphRecursionError
+                        # before the model can even see that instruction.
+                        os.getenv("RAG_MAX_TOOL_ROUNDS_PER_TURN", "15"),
                     )
                 ),
             )
