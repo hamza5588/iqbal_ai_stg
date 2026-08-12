@@ -300,7 +300,11 @@ def _resolve_ingest_profile(file_size_mb: float) -> dict:
         "name": "standard",
         "chunk_size": int(os.getenv("RAG_STANDARD_CHUNK_SIZE", "2200")),
         "chunk_overlap": int(os.getenv("RAG_STANDARD_CHUNK_OVERLAP", "300")),
-        "max_chunks": int(os.getenv("RAG_STANDARD_MAX_CHUNKS", "0")),
+        # File size is not a proxy for page/chunk count (a 2 MB, 4000-page PDF
+        # is "standard" tier by size but produces as many chunks as a huge
+        # scanned document). Cap it like the large tier instead of leaving it
+        # unbounded just because the file happens to be under the size threshold.
+        "max_chunks": int(os.getenv("RAG_STANDARD_MAX_CHUNKS", "2000")),
         "retrieval_k": int(os.getenv("RAG_STANDARD_RETRIEVAL_K", "6")),
         "threshold_mb": threshold_mb,
     }
@@ -1653,6 +1657,26 @@ def ingest_pdf(
         _send_progress("validating", 25, f"Validating {num_pages} pages (loaded with {loader_used})...")
 
         valid_pages = [d for d in docs if d.page_content and d.page_content.strip()]
+
+        # A loader recovering *some* pages from a truncated/corrupted file
+        # (common with PyMuPDF's repair) previously reported full success —
+        # num_pages matched the structural page count, chunks got created
+        # from whatever text survived, and nothing indicated most of the
+        # document never actually made it in. Flag it instead of staying
+        # silent whenever a large share of pages came back with no text at
+        # all (a lone blank page — a cover, a divider — is normal and not
+        # worth warning about).
+        partial_content_warning = None
+        if len(valid_pages) < num_pages:
+            missing_page_count = num_pages - len(valid_pages)
+            if missing_page_count / num_pages >= 0.3:
+                partial_content_warning = (
+                    f"Only {len(valid_pages)} of {num_pages} pages in this PDF had readable text — "
+                    f"the other {missing_page_count} came back empty. This can happen with a damaged, "
+                    "truncated, or partially corrupted file, so the document may be missing content. "
+                    "If answers seem incomplete, try re-exporting or re-uploading the original file."
+                )
+
         if len(valid_pages) == 0:
             # Check if PDF might be scanned (image-based)
             scanned_hint = ""
@@ -1679,6 +1703,7 @@ def ingest_pdf(
         # user that only the text was analyzed — any content that lives only
         # in the images (diagrams, photos, scanned figures) was not.
         mixed_content_warning = None
+        invisible_text_hits = 0
         try:
             import fitz  # PyMuPDF
             pdf_doc = fitz.open(temp_path)
@@ -1686,6 +1711,37 @@ def ingest_pdf(
                 has_images = any(
                     len(page.get_images()) > 0 for page in list(pdf_doc)[:25]
                 )
+
+                # Strip text rendered with the PDF "invisible" render mode
+                # (Tr 3 — PDF spec 9.3.3). This is a known indirect
+                # prompt-injection vector: content invisible to the
+                # uploading teacher (white-on-white, zero-opacity, or an
+                # explicit invisible render mode) is extracted by every
+                # text loader exactly like visible content and would
+                # otherwise end up verbatim in the retrieval corpus.
+                for page_index, page in enumerate(pdf_doc):
+                    if page_index >= len(docs):
+                        break
+                    try:
+                        traces = page.get_texttrace()
+                    except Exception:
+                        continue
+                    invisible_strings = []
+                    for trace in traces:
+                        if trace.get('type') in (3, 7):  # invisible / invisible+clip
+                            chars = trace.get('chars') or []
+                            hidden_text = ''.join(
+                                chr(c[0]) for c in chars if c and c[0]
+                            )
+                            if hidden_text.strip():
+                                invisible_strings.append(hidden_text)
+                    if invisible_strings and docs[page_index].page_content:
+                        content = docs[page_index].page_content
+                        for hidden_text in invisible_strings:
+                            if hidden_text in content:
+                                content = content.replace(hidden_text, ' ')
+                                invisible_text_hits += 1
+                        docs[page_index].page_content = content
             finally:
                 pdf_doc.close()
             if has_images:
@@ -1695,6 +1751,13 @@ def ingest_pdf(
                 )
         except Exception as e:
             logger.debug("Could not check for mixed text/image content: %s", e)
+
+        if invisible_text_hits:
+            logger.warning(
+                "Stripped invisible/hidden PDF text at %d location(s) for thread %s "
+                "(filename=%s) — possible indirect prompt-injection via invisible text.",
+                invisible_text_hits, thread_id_str, filename,
+            )
 
         # Some PDF parsers emit embedded NUL (0x00) bytes, lone UTF-16 surrogates,
         # or other invalid-for-UTF8 codepoints for certain fonts/broken encodings.
@@ -1746,6 +1809,54 @@ def ingest_pdf(
         if combined_logical_map:
             _cache_thread_page_label_map(thread_id_str, combined_logical_map)
             _save_logical_page_map_to_disk(thread_id_str, combined_logical_map)
+
+        # Tables extracted by PyPDFLoader/PyMuPDFLoader come back as a flat
+        # run of tokens with no row/column relationship (e.g. a grade table
+        # becomes "Student Math Physics ... Ali 61 86 67 Sara 88 ..." with no
+        # way to tell which score belongs to which subject). PDFPlumber is
+        # the one loader in the fallback chain that understands tables, but
+        # it's normally only reached when the primary loaders fail outright
+        # — which they don't here, since the flattened text is non-empty.
+        # So: independently detect tables with pdfplumber and append a
+        # markdown-formatted version alongside the existing flattened text,
+        # regardless of which loader produced the page. This does duplicate
+        # the raw numbers in the chunk, but gives the model a structured
+        # version it can actually read correctly.
+        if PDFPLUMBER_AVAILABLE:
+            try:
+                import pdfplumber
+                with pdfplumber.open(temp_path) as plumber_pdf:
+                    for page_index, plumber_page in enumerate(plumber_pdf.pages):
+                        if page_index >= len(docs):
+                            break
+                        try:
+                            tables = plumber_page.extract_tables()
+                        except Exception:
+                            continue
+                        if not tables:
+                            continue
+                        table_blocks = []
+                        for table in tables:
+                            rows = [r for r in table if r and any((c or "").strip() for c in r)]
+                            if len(rows) < 2:
+                                continue
+                            header, body_rows = rows[0], rows[1:]
+                            header_cells = [(c or "").strip() for c in header]
+                            lines = [
+                                "| " + " | ".join(header_cells) + " |",
+                                "| " + " | ".join(["---"] * len(header_cells)) + " |",
+                            ]
+                            for row in body_rows:
+                                cells = [(c or "").strip() for c in row]
+                                if len(cells) < len(header_cells):
+                                    cells += [""] * (len(header_cells) - len(cells))
+                                lines.append("| " + " | ".join(cells[:len(header_cells)]) + " |")
+                            table_blocks.append("\n".join(lines))
+                        if table_blocks:
+                            addendum = "\n\n[Table data, extracted with row/column structure]\n" + "\n\n".join(table_blocks)
+                            docs[page_index].page_content = (docs[page_index].page_content or "") + addendum
+            except Exception as e:
+                logger.debug("Could not run table-aware extraction pass: %s", e)
 
         # Export extracted text as markdown for user download (## Page N + content per page)
         # NOTE: rstrip() strips a *character set*, not a suffix — e.g.
@@ -1916,6 +2027,8 @@ def ingest_pdf(
         _elapsed_seconds = round(time.time() - _start_time, 2)
         _send_progress("complete", 100, f"PDF processing complete! Processed {num_pages} pages in {_elapsed_seconds}s.")
 
+        combined_warning = " ".join(w for w in (partial_content_warning, mixed_content_warning) if w) or None
+
         return {
             "thread_id": thread_id_str,
             "filename": filename or safe_filename,
@@ -1929,7 +2042,7 @@ def ingest_pdf(
             "ingest_profile": ingest_profile["name"],
             "file_size_mb": file_size_mb,
             "processing_time_seconds": _elapsed_seconds,
-            "warning": mixed_content_warning,
+            "warning": combined_warning,
         }
 
     finally:

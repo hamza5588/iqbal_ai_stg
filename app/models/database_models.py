@@ -398,9 +398,18 @@ class RAGThread(Base):
     headings_ready = Column(Boolean, default=False, server_default='0')
     headings_count = Column(Integer, default=0, server_default='0')
     headings_last_scanned_at = Column(DateTime, nullable=True)
+    # Terminal ingestion state: 'pending' | 'processing' | 'success' | 'failed'.
+    # Lets the chat endpoint distinguish "still working" from "will never finish"
+    # instead of returning the same generic message for both.
+    ingest_status = Column(String(20), nullable=True)
+    ingest_error = Column(Text, nullable=True)
+    # Set to now()+time_limit when a Celery ingest task is queued. If a task is
+    # hard-killed (SIGKILL on Celery's time_limit) it never reaches its own
+    # except block, so this deadline is how we detect "abandoned" ingestion.
+    ingest_deadline_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
-    
+
     # Relationships
     user = relationship("User", back_populates="rag_threads")
     rag_prompts = relationship("RAGPrompt", back_populates="thread", cascade="all, delete-orphan")

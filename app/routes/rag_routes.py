@@ -28,13 +28,14 @@ from langchain_core.messages import HumanMessage
 import logging
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import re
 import json
 import time
 import base64
 import tempfile
+import zlib
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
 _CANCELLED_UPLOAD_FILENAME = "__CANCELLED_UPLOAD__"
@@ -157,6 +158,56 @@ def _preflight_check_pdf(file_bytes: bytes, max_scan_pages: int = 25, timeout_se
     }
 
 
+_STREAM_START_RE = re.compile(rb'stream\r?\n')
+_MAX_BOMB_SCAN_STREAMS = 200
+
+
+def _check_decompression_bomb(file_bytes: bytes, max_output_mb: int = 60) -> str:
+    """
+    Cheap pre-scan for PDF decompression bombs: a FlateDecode stream that
+    expands far beyond anything a legitimate single PDF stream (a page's
+    content, one embedded font, one image) should ever need. Runs on the
+    raw bytes before fitz/pypdf ever open the file, so a bomb is rejected
+    before paying the cost of fully decompressing it.
+
+    Scoped to FlateDecode, the overwhelmingly common PDF compression
+    filter — other filters still fall back on the existing 100 MB total
+    upload-size cap. Returns an error message string, or '' if clean.
+    """
+    max_output_bytes = max_output_mb * 1024 * 1024
+    scanned = 0
+    for match in _STREAM_START_RE.finditer(file_bytes):
+        if scanned >= _MAX_BOMB_SCAN_STREAMS:
+            break
+        start = match.end()
+        end = file_bytes.find(b'endstream', start)
+        if end == -1:
+            continue
+        raw = file_bytes[start:end]
+        scanned += 1
+        if len(raw) < 256:
+            continue  # too small to be a bomb
+        try:
+            decompressor = zlib.decompressobj()
+            out_len = 0
+            out = decompressor.decompress(raw, max_output_bytes + 1)
+            out_len += len(out)
+            while decompressor.unconsumed_tail and out_len <= max_output_bytes:
+                out = decompressor.decompress(decompressor.unconsumed_tail, max_output_bytes + 1 - out_len)
+                if not out:
+                    break
+                out_len += len(out)
+            if out_len > max_output_bytes:
+                return (
+                    f"This PDF contains a compressed stream that expands to over {max_output_mb} MB "
+                    "when decompressed, which is far larger than any normal document needs. It was "
+                    "rejected to protect server memory — please upload a different file."
+                )
+        except zlib.error:
+            continue  # not a zlib stream at this offset — not what we're checking for
+    return ''
+
+
 def _preflight_check_pdf_inner(file_bytes: bytes, max_scan_pages: int) -> dict:
     """
     Fast, synchronous check run at upload time, before the (potentially slow)
@@ -171,6 +222,10 @@ def _preflight_check_pdf_inner(file_bytes: bytes, max_scan_pages: int) -> dict:
     large documents; the real ingestion step still processes every page.
     """
     import fitz  # PyMuPDF
+
+    bomb_message = _check_decompression_bomb(file_bytes)
+    if bomb_message:
+        return {'ok': False, 'code': 'PDF_TOO_COMPLEX', 'message': bomb_message}
 
     try:
         doc = fitz.open(stream=file_bytes, filetype="pdf")
@@ -657,7 +712,8 @@ def ingest():
         # resolution is available immediately even if worker-side DB flag update
         # is delayed or transiently fails under load.
         try:
-            _save_thread_to_db(user_id, thread_id, filename, ingest_result=None)
+            _ingest_deadline = datetime.utcnow() + timedelta(seconds=ingest_tier["time_limit"] + 60)
+            _save_thread_to_db(user_id, thread_id, filename, ingest_result=None, ingest_deadline_at=_ingest_deadline)
         except Exception:
             logger.warning("Failed to precreate thread row for thread_id=%s", thread_id, exc_info=True)
 
@@ -788,8 +844,22 @@ def download_markdown(thread_id):
     )
 
 
-def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_result: dict = None):
-    """Save or update RAG thread in database. On success, set has_document, doc_count, num_pages."""
+def _save_thread_to_db(
+    user_id: int,
+    thread_id: str,
+    filename: str,
+    ingest_result: dict = None,
+    ingest_deadline_at=None,
+    ingest_error: str = None,
+):
+    """
+    Save or update RAG thread in database. On success, set has_document, doc_count, num_pages.
+
+    ingest_status transitions:
+      - precreate (no ingest_result, no ingest_error): 'processing', deadline set from ingest_deadline_at
+      - success (ingest_result provided): 'success'
+      - failure (ingest_error provided): 'failed', error message stored for the chat endpoint to surface
+    """
     db = get_db()
     try:
         existing_thread = db.query(RAGThread).filter_by(thread_id=thread_id).first()
@@ -810,7 +880,13 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
             existing_thread = rag_thread
             logger.info("Created new thread %s for user %s", thread_id, user_id)
 
-        if ingest_result:
+        if ingest_error:
+            existing_thread.ingest_status = 'failed'
+            existing_thread.ingest_error = ingest_error[:2000]
+            existing_thread.updated_at = now
+            db.commit()
+            logger.info("Marked thread %s as failed: %s", thread_id, ingest_error[:200])
+        elif ingest_result:
             existing_thread.filename = filename
             existing_thread.has_document = True
             existing_thread.doc_count = (existing_thread.doc_count or 0) + 1
@@ -818,12 +894,17 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
             existing_thread.last_ingested_at = now
             existing_thread.embedding_model = ingest_result.get("embedding_model")
             existing_thread.embedding_dim = ingest_result.get("embedding_dim")
+            existing_thread.ingest_status = 'success'
+            existing_thread.ingest_error = None
             existing_thread.updated_at = now
             db.commit()
             logger.info("Updated thread %s with has_document=true, doc_count=%s", thread_id, existing_thread.doc_count)
         else:
             if not existing_thread.has_document:
                 existing_thread.filename = filename
+                existing_thread.ingest_status = 'processing'
+                if ingest_deadline_at:
+                    existing_thread.ingest_deadline_at = ingest_deadline_at
                 existing_thread.updated_at = now
                 db.commit()
     except Exception as e:
@@ -1254,6 +1335,28 @@ def chat():
                         'thread_id': thread_id
                     }), 400
             else:
+                # Distinguish a genuinely-still-running ingest from one that
+                # already failed (explicit failure) or was abandoned (worker
+                # hard-killed on Celery's time_limit, so its except block
+                # never ran) — instead of returning the same "still processing"
+                # message for all three, which used to hide permanent failures
+                # forever.
+                ingest_status = getattr(thread_row, 'ingest_status', None)
+                deadline = getattr(thread_row, 'ingest_deadline_at', None)
+                if ingest_status == 'failed':
+                    logger.warning("RAG chat 400: thread_id=%s ingestion failed: %s", thread_id, thread_row.ingest_error)
+                    return jsonify({
+                        'error': f"PDF processing failed: {thread_row.ingest_error or 'unknown error'}. Please upload the document again.",
+                        'code': 'INGEST_FAILED',
+                        'thread_id': thread_id
+                    }), 400
+                if deadline and datetime.utcnow() > deadline:
+                    logger.warning("RAG chat 400: thread_id=%s ingestion abandoned past deadline=%s", thread_id, deadline)
+                    return jsonify({
+                        'error': 'PDF processing took too long and did not complete. Please upload the document again.',
+                        'code': 'INGEST_TIMEOUT',
+                        'thread_id': thread_id
+                    }), 400
                 logger.warning("RAG chat 400: Thread exists but has_document=False and no chunks thread_id=%s", thread_id)
                 return jsonify({
                     'error': 'Your PDF may still be processing. Please wait a moment and try again, or upload the PDF again.',
