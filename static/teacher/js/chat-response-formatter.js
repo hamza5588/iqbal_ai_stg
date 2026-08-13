@@ -84,8 +84,11 @@
     if (!str || typeof str !== 'string') return str;
     // Square brackets: [\s\S] (not just non-newline) so multi-line display math like
     // "[\nax^2 + bx + c = 0\n]" (model wrote bare brackets across several lines) is also
-    // caught, not just the single-line case.
-    str = str.replace(/\[([\s\S]{1,400}?)\]/g, function (match, inner, offset, full) {
+    // caught, not just the single-line case. (?<!\\) excludes '[' that is already part of
+    // a correct "\[" delimiter - without this guard, an already-valid multi-line "\[ ... \]"
+    // block (very common - the model often puts the delimiters on their own lines) gets
+    // matched and double-wrapped into broken "\\[ ... \]" text instead of being left alone.
+    str = str.replace(/(?<!\\)\[([\s\S]{1,400}?)\]/g, function (match, inner, offset, full) {
       var after = full.slice(offset + match.length, offset + match.length + 1);
       if (after === '(' || after === ':') return match;
       if (!_looksLikeMath(inner)) return match;
