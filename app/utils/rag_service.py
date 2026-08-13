@@ -4198,7 +4198,13 @@ def _chat_build_system_message(
                     _get_stored_rag_system_template(RAG_SYSTEM_SETTING_KEY_NO_PDF)
                     or DEFAULT_RAG_CHAT_SYSTEM_BODY_NO_PDF
                 )
-            system_message = SystemMessage(content=no_pdf_body)
+            # Every other branch (with-document, and no-document-with-custom-prompt above)
+            # appends RAG_REPLY_FORMATTING_INSTRUCTIONS - this branch previously didn't, so a
+            # plain question asked with no PDF uploaded got zero math-delimiter guidance and the
+            # model free-styled with bare [...]/(...)  instead of \( \)/\[ \].
+            system_message = SystemMessage(
+                content=f"{no_pdf_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}"
+            )
 
     # Progressive message reduction on token errors
     raw_messages = state.get("messages", []) or []

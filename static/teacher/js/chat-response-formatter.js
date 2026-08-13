@@ -72,16 +72,35 @@
    * like LaTeX (backslash commands, ^{}, _{}) and convert them to \[ ... \]. Deliberately does
    * NOT touch markdown links "[text](url)" or reference-style definitions "[id]: url".
    */
+  function _looksLikeMath(inner) {
+    return /\\(text|frac|sqrt|sum|int|alpha|beta|gamma|theta|pi|pm|times|cdot|leq|geq|neq|approx|left|right|begin|end|overline|infty|partial|Delta|delta)\b/.test(inner)
+      || /\^\{|_\{|\\[a-zA-Z]+\{/.test(inner)
+      // Bare exponents with no LaTeX commands at all, e.g. "ax^2 + bx + c = 0" - the model
+      // sometimes writes plain-notation equations without a single backslash command.
+      || /[a-zA-Z0-9]\^-?\d/.test(inner);
+  }
+
   function convertBareBracketMathToLatex(str) {
     if (!str || typeof str !== 'string') return str;
-    return str.replace(/\[([^\[\]\n]{1,400})\]/g, function (match, inner, offset, full) {
+    // Square brackets: [\s\S] (not just non-newline) so multi-line display math like
+    // "[\nax^2 + bx + c = 0\n]" (model wrote bare brackets across several lines) is also
+    // caught, not just the single-line case. (?<!\\) excludes '[' that is already part of
+    // a correct "\[" delimiter - without this guard, an already-valid multi-line "\[ ... \]"
+    // block (very common - the model often puts the delimiters on their own lines) gets
+    // matched and double-wrapped into broken "\\[ ... \]" text instead of being left alone.
+    str = str.replace(/(?<!\\)\[([\s\S]{1,400}?)\]/g, function (match, inner, offset, full) {
       var after = full.slice(offset + match.length, offset + match.length + 1);
       if (after === '(' || after === ':') return match;
-      var looksLikeMath = /\\(text|frac|sqrt|sum|int|alpha|beta|gamma|theta|pi|pm|times|cdot|leq|geq|neq|approx|left|right|begin|end|overline|infty|partial|Delta|delta)\b/.test(inner)
-        || /\^\{|_\{|\\[a-zA-Z]+\{/.test(inner);
-      if (!looksLikeMath) return match;
+      if (!_looksLikeMath(inner)) return match;
       return '\\[ ' + inner.trim() + ' \\]';
     });
+    // Bare parens containing LaTeX markup, e.g. "(a \neq 0)" instead of "\(a \neq 0\)".
+    // Negative lookbehind excludes '(' that is already part of a correct "\(" delimiter.
+    str = str.replace(/(?<!\\)\(([^()]{1,200})\)/g, function (match, inner) {
+      if (!_looksLikeMath(inner)) return match;
+      return '\\(' + inner.trim() + '\\)';
+    });
+    return str;
   }
 
   /**
