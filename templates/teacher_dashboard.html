@@ -1650,15 +1650,28 @@
       z-index: 9999 !important;
     }
 
+    #viewLessonModal {
+      --vl-green-900:#0a4a2c;
+      --vl-green-700:#166534;
+      --vl-green-600:#1c7c3e;
+      --vl-green-500:#35a344;
+      --vl-lime-500:#d0f73a;
+      --vl-gray-500:#6b7280;
+      --vl-gray-400:#9ca3af;
+      --vl-gray-300:#d1d5db;
+      --vl-gray-100:#f8f8f6;
+    }
+
     #viewLessonModal .view-lesson-modal-panel {
       width: min(100%, 1240px);
       max-height: min(95vh, 1020px);
       display: flex;
       flex-direction: column;
-      overflow: visible;
+      overflow: hidden;
       border: 1px solid #dbe3ee;
       border-radius: 1.35rem;
       box-shadow: 0 30px 80px -36px rgba(15, 23, 42, 0.52);
+      background: var(--vl-gray-100);
     }
 
     #viewLessonModal .view-lesson-modal-panel.is-maximized {
@@ -1670,43 +1683,164 @@
     #viewLessonModal .view-lesson-modal-body {
       flex: 1;
       overflow-y: auto;
-      background: linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+      background: var(--vl-gray-100);
     }
 
-    #viewLessonModal .view-lesson-header {
-      padding-top: 1.25rem;
-      padding-bottom: 1.25rem;
-      position: relative;
-      overflow: hidden;
+    /* Top bar (logo / breadcrumb / expand+close) */
+    #viewLessonModal .vl-topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 20px; background: #fdfdfb; border-bottom: 1px solid #eee;
+      flex-wrap: wrap; gap: 10px;
     }
-
-    #viewLessonModal .view-lesson-header::after {
-      content: '';
-      position: absolute;
-      top: -45%;
-      right: -8%;
-      width: 280px;
-      height: 280px;
-      background: radial-gradient(circle, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
-      pointer-events: none;
+    #viewLessonModal .vl-topbar-logo img { height: 34px; width: auto; }
+    #viewLessonModal .vl-topbar-crumbs { font-size: 14px; color: var(--vl-gray-500); }
+    #viewLessonModal .vl-topbar-crumbs b { color: #111; font-weight: 700; }
+    #viewLessonModal .vl-topbar-actions { display: flex; gap: 22px; align-items: center; }
+    #viewLessonModal .vl-icon-action {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--vl-gray-500); cursor: pointer; background: none; border: none; padding: 0;
     }
-
-    #viewLessonModal .view-lesson-card {
-      border-width: 1px;
-      border-color: #dde4ee;
-      box-shadow: 0 16px 36px -28px rgba(15, 23, 42, 0.42);
-      backdrop-filter: blur(2px);
-      transition: box-shadow 0.25s ease, transform 0.2s ease;
+    #viewLessonModal .vl-circle-btn {
+      width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--vl-gray-300);
+      background: #fff; display: flex; align-items: center; justify-content: center; color: #333;
+      transition: background .15s ease;
     }
+    #viewLessonModal .vl-icon-action:hover .vl-circle-btn { background: #f3f4f6; }
 
-    #viewLessonModal .view-lesson-card:hover {
-      box-shadow: 0 18px 42px -28px rgba(15, 23, 42, 0.48);
-      transform: translateY(-1px);
+    /* Main body */
+    #viewLessonModal .vl-body { padding: 18px 20px 34px; position: relative; }
+
+    /* Toolbar */
+    #viewLessonModal .vl-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #111; border-radius: 12px; padding: 12px 18px; margin-bottom: 26px;
+      gap: 14px; flex-wrap: wrap;
     }
+    #viewLessonModal .vl-tabs { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+    #viewLessonModal .vl-tab {
+      display: flex; align-items: center; gap: 7px; color: #cfcfcf; font-size: 13.5px;
+      font-weight: 600; cursor: pointer;
+    }
+    #viewLessonModal .vl-tab:hover { color: #fff; }
+    #viewLessonModal .vl-version-select { position: relative; }
+    #viewLessonModal .vl-version-btn {
+      display: flex; align-items: center; gap: 10px; background: transparent; color: #e5e7eb;
+      border: 1px solid rgba(255,255,255,0.25); font-size: 12.5px; font-weight: 700;
+      padding: 6px 10px; border-radius: 8px; cursor: pointer;
+    }
+    #viewLessonModal .vl-version-list {
+      position: absolute; top: calc(100% + 6px); left: 0; width: 260px; max-height: 220px;
+      overflow-y: auto; background: #fff; border: 1px solid #eee; border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.18); padding: 8px; z-index: 20;
+    }
+    #viewLessonModal .vl-version-select .version-older-notice { margin: 0 0 6px; }
+    #viewLessonModal .vl-enhance-btn {
+      background: var(--vl-lime-500); color: #1a1a1a; border: none; padding: 9px 18px;
+      border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    }
+    #viewLessonModal .vl-enhance-btn:hover { opacity: .92; }
+    #viewLessonModal .vl-enhance-btn:disabled { opacity: .6; cursor: not-allowed; }
 
-    #viewLessonModal .lesson-preview-card {
-      display: flex;
-      flex-direction: column;
+    /* Floating draft panel */
+    #viewLessonModal .vl-draft-panel {
+      position: absolute; top: 90px; left: 20px; width: 320px; background: #fff;
+      border: 1px solid #eee; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+      padding: 18px; z-index: 10;
+    }
+    #viewLessonModal .vl-draft-head h3 {
+      font-size: 15px; font-weight: 700; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px; color: #111;
+    }
+    #viewLessonModal .vl-draft-panel label { font-size: 12px; font-weight: 700; display: block; margin-bottom: 6px; color: #333; }
+    #viewLessonModal .vl-draft-panel textarea {
+      width: 100%; border: 1px solid var(--vl-gray-300); border-radius: 8px; padding: 9px 11px;
+      font-size: 12.5px; outline: none; margin-bottom: 12px; font-family: inherit; color: #333;
+      resize: vertical; min-height: 56px;
+    }
+    #viewLessonModal .vl-draft-editor {
+      width: 100%; border: 1px solid var(--vl-gray-300); border-radius: 8px; padding: 10px 12px;
+      font-size: 12.5px; outline: none; margin-bottom: 12px; color: #333;
+      min-height: 130px; max-height: 220px; overflow-y: auto; background: #fff;
+    }
+    #viewLessonModal .vl-draft-editor:empty:before { content: attr(placeholder); color: var(--vl-gray-400); }
+    #viewLessonModal .vl-save-draft-btn {
+      width: 100%; border: 1px solid var(--vl-green-600); color: var(--vl-green-700); background: #fff;
+      padding: 9px; border-radius: 8px; font-weight: 700; font-size: 13px;
+      display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+    }
+    #viewLessonModal .vl-save-draft-btn:hover { background: #f3faf5; }
+
+    /* Content header */
+    #viewLessonModal .vl-content-header { margin-left: 360px; margin-bottom: 18px; }
+    #viewLessonModal .vl-title { font-size: 24px; font-weight: 800; margin-bottom: 8px; color: #111; }
+    #viewLessonModal .vl-meta-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--vl-gray-500); flex-wrap: wrap; }
+    #viewLessonModal .vl-meta-row .vl-dot { color: var(--vl-gray-400); }
+    #viewLessonModal .vl-meta-row b { color: #166534; font-weight: 700; }
+    #viewLessonModal .vl-badge { background: #dcfce7; color: #166534; padding: 2px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700; text-transform: capitalize; }
+
+    /* Content card */
+    #viewLessonModal .vl-content-card { margin-left: 360px; background: #fff; border: 1px solid #eee; border-radius: 14px; overflow: hidden; }
+    #viewLessonModal .vl-card-top { display: flex; justify-content: space-between; align-items: center; padding: 16px 22px; border-bottom: 1px solid #f0f0f0; }
+    #viewLessonModal .vl-cv { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: #111; }
+    #viewLessonModal .vl-cv i { color: #f5b301; }
+    #viewLessonModal .vl-expand-btn {
+      display: flex; align-items: center; gap: 6px; border: 1px solid var(--vl-gray-300); border-radius: 8px;
+      padding: 7px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: #333; background: #fff;
+    }
+    #viewLessonModal .vl-expand-btn:hover { background: #f9fafb; }
+    #viewLessonModal .vl-card-body {
+      padding: 24px 22px; border-left: 4px solid var(--vl-green-500); margin: 18px 22px;
+      font-size: 0.96rem; line-height: 1.72; color: #1f2937;
+    }
+    #viewLessonModal .vl-card-body p { margin: 0.55rem 0; }
+
+    /* Timeline */
+    #viewLessonModal .vl-timeline {
+      display: flex; align-items: center; justify-content: space-between; background: #fdfdfb;
+      border-top: 1px solid #f0f0f0; padding: 16px 22px; gap: 8px; flex-wrap: wrap;
+    }
+    #viewLessonModal .vl-tl-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 170px; cursor: pointer; padding: 4px; border-radius: 8px; }
+    #viewLessonModal .vl-tl-item:hover { background: #f4f4f2; }
+    #viewLessonModal .vl-tl-num {
+      width: 28px; height: 28px; border-radius: 50%; background: #e6f4ea; color: #166534;
+      font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    #viewLessonModal .vl-tl-text b { font-size: 13px; display: block; color: #111; }
+    #viewLessonModal .vl-tl-text small { font-size: 11.5px; color: var(--vl-gray-500); }
+    #viewLessonModal .vl-tl-arrow { color: var(--vl-gray-400); font-size: 16px; }
+    #viewLessonModal .vl-chevron { margin-left: auto; color: var(--vl-gray-400); transition: transform .15s ease; }
+    #viewLessonModal .vl-tl-item.open .vl-chevron { transform: rotate(180deg); }
+
+    /* Expandable detail panels (conversation / lesson summary) */
+    #viewLessonModal .vl-tl-detail { padding: 16px 22px 20px; border-top: 1px solid #f0f0f0; }
+    #viewLessonModal .vl-tl-detail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    #viewLessonModal .vl-tl-detail-head h4 { font-size: 14px; font-weight: 700; color: #111; }
+    #viewLessonModal .vl-tl-detail-actions { display: flex; align-items: center; gap: 10px; }
+    #viewLessonModal .vl-tl-detail-actions button { background: none; border: none; cursor: pointer; color: var(--vl-gray-500); padding: 4px; border-radius: 6px; }
+    #viewLessonModal .vl-tl-detail-actions button:hover { color: var(--vl-green-700); background: #f3faf5; }
+    #viewLessonModal .vl-tl-detail-body { font-size: 13px; color: #374151; line-height: 1.7; max-height: 220px; overflow-y: auto; }
+
+    /* Footer actions */
+    #viewLessonModal .vl-footer-actions { display: flex; gap: 12px; margin-top: 22px; }
+    #viewLessonModal .vl-close-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+      border: 1px solid var(--vl-gray-300); background: #fff; padding: 11px 20px; border-radius: 10px;
+      font-size: 14px; font-weight: 700; cursor: pointer; color: #333;
+    }
+    #viewLessonModal .vl-close-btn:hover { background: #f3f4f6; }
+    #viewLessonModal .vl-finalize-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+      border: none; background: linear-gradient(90deg,#166534,#1c7c3e); color: #fff;
+      padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    #viewLessonModal .vl-finalize-btn:hover { opacity: .92; }
+    #viewLessonModal .vl-finalize-btn.hidden { display: none; }
+
+    @media (max-width: 1000px) {
+      #viewLessonModal .vl-draft-panel { position: static; width: 100%; margin-bottom: 18px; }
+      #viewLessonModal .vl-content-header,
+      #viewLessonModal .vl-content-card { margin-left: 0; }
     }
 
     #viewLessonCurrent,
@@ -1735,85 +1869,6 @@
     #expandedLessonPreviewContent ol {
       padding-left: 1.15rem;
       margin: 0.5rem 0;
-    }
-
-    .preview-scroll-wrap {
-      position: relative;
-      background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
-      border: 1px solid #d7dee9;
-      border-radius: 1rem;
-      padding: 1rem 1.1rem;
-      min-height: 17rem;
-      max-height: 46vh;
-      overflow-y: auto;
-      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 26px -24px rgba(15, 23, 42, 0.55);
-      scrollbar-width: thin;
-      scrollbar-color: #c7d2e2 transparent;
-    }
-
-    .preview-scroll-wrap::after {
-      content: '';
-      position: sticky;
-      left: 0;
-      right: 0;
-      bottom: -0.95rem;
-      display: block;
-      height: 1.65rem;
-      margin: 0 -1.1rem;
-      pointer-events: none;
-      background: linear-gradient(to bottom, rgba(249, 250, 251, 0), rgba(249, 250, 251, 0.98));
-    }
-
-    .preview-scroll-wrap::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    .preview-scroll-wrap::-webkit-scrollbar-thumb {
-      background: #c7d2e2;
-      border-radius: 999px;
-      border: 2px solid #f9fafb;
-    }
-
-    .preview-scroll-wrap::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .view-meta-card {
-      border: 1px solid #d7deea;
-      border-radius: 0.9rem;
-      padding: 0.65rem 0.8rem;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-    }
-
-    .view-meta-label {
-      font-size: 0.68rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      font-weight: 700;
-      margin-bottom: 0.2rem;
-    }
-
-    .view-meta-value {
-      font-size: 1rem;
-      line-height: 1.2;
-      font-weight: 700;
-    }
-
-    .expand-preview-btn {
-      border: 1px solid #d6dcea;
-      border-radius: 0.7rem;
-      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-      color: #334155;
-      box-shadow: 0 10px 20px -18px rgba(15, 23, 42, 0.55);
-      transition: all 0.2s ease;
-    }
-
-    .expand-preview-btn:hover {
-      background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
-      color: #0f172a;
-      border-color: #c4d0e2;
-      transform: translateY(-1px);
-      box-shadow: 0 14px 24px -16px rgba(15, 23, 42, 0.45);
     }
 
     #expandedLessonPreviewModal {
@@ -2036,15 +2091,12 @@
         max-height: 98vh;
       }
 
-      #viewLessonModal .view-lesson-header {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
+      #viewLessonModal .vl-body {
+        padding: 14px 14px 24px;
       }
 
-      .preview-scroll-wrap {
-        min-height: 14rem;
-        max-height: 42vh;
-        padding: 0.85rem 0.9rem;
+      #viewLessonModal .vl-topbar-crumbs {
+        display: none;
       }
 
       .expanded-lesson-panel {
@@ -2063,10 +2115,6 @@
 
       #expandedLessonPreviewContent {
         padding: 0.9rem;
-      }
-
-      .view-meta-value {
-        font-size: 0.9rem;
       }
     }
 
@@ -3894,223 +3942,166 @@
       </div>
     </div>
 
-    <!-- View Lesson Modal - Two-Column Design -->
+    <!-- View Lesson Modal - matches new_ui/teacher_dashbaordui/6-view-lesson.html -->
     <div id="viewLessonModal"
       class="fixed inset-0 bg-black/45 backdrop-blur-[2px] flex items-start md:items-center justify-center z-[110] overflow-y-auto py-2 md:py-4 hidden">
-      <div
-        class="view-lesson-modal-panel bg-white rounded-2xl md:rounded-3xl w-full mx-2 md:mx-4 my-auto shadow-2xl">
-        <!-- Header with Gradient Background -->
-        <div
-          class="view-lesson-header text-white px-4 md:px-10 py-6 md:py-10 rounded-t-2xl md:rounded-t-3xl" style="background:linear-gradient(90deg,#0e5c2f,#1f9c46 60%,#2fae52)">
-          <div class="flex items-start justify-between gap-2 md:gap-4">
-            <div>
-              <h2 class="text-2xl md:text-3xl font-bold text-white mb-1 md:mb-1.5 line-clamp-2" id="viewLessonTitle">
-                Lesson Title</h2>
-              <p class="text-blue-100/95 text-sm md:text-base font-medium line-clamp-1" id="viewLessonSubtitle">📚 View and
-                enhance your lesson</p>
-            </div>
-            <div class="flex items-center gap-2 md:gap-3 flex-shrink-0">
-              <button id="expandMainLessonModalBtn" type="button" onclick="toggleMainLessonModalExpand()"
-                class="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center bg-white/20 hover:bg-white/30 transition-all"
-                title="Expand window" aria-label="Expand lesson modal">
-                <i id="expandMainLessonModalIcon" class="fas fa-expand text-base md:text-xl"></i>
-              </button>
-              <button onclick="closeViewLessonModal()"
-                class="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center bg-white bg-opacity-20 hover:bg-opacity-30 transition-all">
-                <i class="fas fa-times text-xl md:text-2xl"></i>
-              </button>
-            </div>
+      <div class="view-lesson-modal-panel w-full mx-2 md:mx-4 my-auto">
+
+        <!-- Top bar -->
+        <div class="vl-topbar">
+          <div class="vl-topbar-logo">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI">
+          </div>
+          <div class="vl-topbar-crumbs">My Lessons&nbsp;/&nbsp;<b>View Lesson</b></div>
+          <div class="vl-topbar-actions">
+            <button id="expandMainLessonModalBtn" type="button" onclick="toggleMainLessonModalExpand()"
+              class="vl-icon-action" title="Expand window" aria-label="Expand lesson modal">
+              <span class="vl-circle-btn"><i id="expandMainLessonModalIcon" class="fas fa-expand"></i></span>
+              Expand
+            </button>
+            <button type="button" onclick="closeViewLessonModal()" class="vl-icon-action">
+              <span class="vl-circle-btn"><i class="fas fa-times"></i></span>
+              Close
+            </button>
           </div>
         </div>
 
-        <!-- Main Content -->
-        <div class="view-lesson-modal-body px-3 md:px-10 py-4 md:py-8">
-          <!-- Metadata Cards -->
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3.5 mb-4 md:mb-6">
-            <div
-              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#e7f6ec,#d9f0e0); border:1px solid #bfdccb;">
-              <p class="view-meta-label" style="color:#1c7c3e;">Subject</p>
-              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#0b3d1f;" id="viewLessonSubject">--</p>
+        <!-- Main scrollable content -->
+        <div class="view-lesson-modal-body vl-body">
+
+          <!-- Toolbar -->
+          <div class="vl-toolbar">
+            <div class="vl-tabs">
+              <div class="vl-tab" onclick="document.getElementById('viewLessonPrompt')?.focus()">
+                <i class="fas fa-pen"></i>Edit Draft
+              </div>
+              <div class="vl-tab" onclick="document.getElementById('viewLessonSummaryTimeline')?.scrollIntoView({behavior:'smooth', block:'center'})">
+                <i class="fas fa-comment-dots"></i>Summaries
+              </div>
+              <div class="vl-version-select">
+                <button id="versionDropdownBtn" type="button"
+                  class="vl-version-btn bg-gradient-to-br border-2 from-emerald-50 to-emerald-100 border-emerald-300">
+                  <span id="currentVersionDisplay"><i class="fas fa-code-branch"></i> v1 (Current)</span>
+                  <i id="versionDropdownIcon" class="fas fa-chevron-down"></i>
+                </button>
+                <div id="viewLessonVersions" class="vl-version-list hidden">
+                  <p class="text-xs text-gray-500 py-2 text-center px-2">No versions yet</p>
+                </div>
+              </div>
             </div>
-            <div
-              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#e6f4ea,#d5eedc); border:1px solid #bfdccb;">
-              <p class="view-meta-label" style="color:#166534;">Grade Level</p>
-              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#0a4a2c;" id="viewLessonGrade">--</p>
+            <button onclick="applyPromptToLessonDraft()" class="vl-enhance-btn">
+              <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
+            </button>
+          </div>
+
+          <!-- Floating Draft Panel -->
+          <div class="vl-draft-panel">
+            <div class="vl-draft-head">
+              <h3><i class="fas fa-edit" style="color:#166534;"></i> Draft Content</h3>
             </div>
-            <div
-              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#eaf7ee,#dcefe0); border:1px solid #bfdccb;">
-              <p class="view-meta-label" style="color:#166534;">Status</p>
-              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#0b3d1f;" id="viewLessonStatus">Draft</p>
-            </div>
-            <div
-              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#f7fbe8,#eef7cd); border:1px solid #d9e88f;">
-              <p class="view-meta-label" style="color:#65780f;">Version</p>
-              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#3f4a09;" id="viewLessonVersion">v1</p>
+            <label>AI Instructions (optional)</label>
+            <textarea id="viewLessonPrompt"
+              placeholder="Describe how you want the lesson improved (e.g. simplify language, add examples, align to a standard)..."></textarea>
+            <label>Draft (AI‑enhanced or manual edits)</label>
+            <div id="viewLessonDraft" contenteditable="true" class="vl-draft-editor" style="white-space: pre-wrap;"
+              placeholder="Draft will appear here after applying AI or making manual edits..."></div>
+            <button onclick="saveLessonDraftVisible()" class="vl-save-draft-btn">
+              <i class="fas fa-floppy-disk"></i> Save Draft
+            </button>
+          </div>
+
+          <!-- Content header -->
+          <div class="vl-content-header">
+            <h1 class="vl-title" id="viewLessonTitle">Lesson Title</h1>
+            <div class="vl-meta-row">
+              <span id="viewLessonSubject">General</span>
+              <span class="vl-dot">&bull;</span>
+              <span id="viewLessonGrade">General</span>
+              <span class="vl-badge" id="viewLessonStatus">Draft</span>
+              <span>Created <span id="viewLessonCreated">--</span></span>
+              <span class="vl-dot">&bull;</span>
+              <span>Version <b id="viewLessonVersion">v1</b></span>
             </div>
           </div>
 
-          <!-- Two Column Layout -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 lg:gap-7 mb-6 md:mb-7">
-            <!-- Left Column: Draft Editor -->
-            <div
-              class="view-lesson-card bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg md:rounded-2xl p-4 md:p-6">
-              <div class="flex items-center gap-3 mb-3 md:mb-4">
-                <div
-                  class="w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background:#d9f2e2;">
-                  <i class="fas fa-edit text-sm md:text-lg" style="color:#166534;"></i>
-                </div>
-                <h3 class="text-lg md:text-xl font-bold text-gray-900">Draft Content</h3>
-              </div>
-
-              <!-- Prompt + Draft -->
-              <div class="mb-3 md:mb-4 space-y-3">
-                <div>
-                  <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-2">
-                    AI Instructions (optional)
-                  </label>
-                  <textarea id="viewLessonPrompt"
-                    class="w-full h-16 md:h-20 p-2.5 md:p-3 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none"
-                    placeholder="Describe how you want the lesson improved (e.g. simplify language, add examples, align to a standard)..."></textarea>
-                </div>
-
-                <div>
-                  <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-2">
-                    Draft (AI‑enhanced or manual edits)
-                  </label>
-                  <div id="viewLessonDraft"
-                    contenteditable="true"
-                    class="w-full h-40 md:h-56 p-3 md:p-4 border-2 border-gray-300 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs md:text-sm resize-none overflow-y-auto bg-white"
-                    style="white-space: pre-wrap;"
-                    placeholder="Draft will appear here after applying AI or making manual edits..."></div>
-                </div>
-              </div>
-
-              <!-- Draft Actions -->
-              <div class="flex flex-col gap-2 md:gap-3">
-                <button onclick="applyPromptToLessonDraft()"
-                  class="w-full text-white py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base"
-                  style="background:linear-gradient(90deg,#166534,#1c7c3e);" onmouseover="this.style.opacity='0.92'" onmouseout="this.style.opacity='1'">
-                  <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
-                </button>
-                <button onclick="saveLessonDraftVisible()"
-                  class="w-full bg-gray-100 text-gray-800 py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center justify-center gap-2 text-sm md:text-base">
-                  <i class="fas fa-floppy-disk"></i>Save Draft
-                </button>
+          <!-- Content card -->
+          <div class="vl-content-card">
+            <div class="vl-card-top">
+              <div class="vl-cv"><i class="fas fa-star"></i> Current Version</div>
+              <button id="expandLessonPreviewBtn" type="button" onclick="openExpandedLessonPreview()" class="vl-expand-btn"
+                title="Expand lesson view">
+                <i class="fas fa-expand-alt"></i> Expand
+              </button>
+            </div>
+            <div class="vl-card-body">
+              <div id="viewLessonCurrent">
+                <p class="text-gray-500 italic">Content preview will appear here...</p>
               </div>
             </div>
 
-            <!-- Right Column: Current Version Preview -->
-            <div
-              class="view-lesson-card lesson-preview-card bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg md:rounded-2xl p-4 md:p-6">
-              <div class="flex items-center justify-between gap-3 mb-3 md:mb-4">
-                <div class="flex items-center gap-3 min-w-0">
-                  <div
-                    class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-success-100 flex items-center justify-center flex-shrink-0">
-                    <i class="fas fa-star text-success-600 text-sm md:text-lg"></i>
-                  </div>
-                  <h3 class="text-lg md:text-xl font-bold text-gray-900">Current Version</h3>
-                </div>
-                <button id="expandLessonPreviewBtn" type="button" onclick="openExpandedLessonPreview()"
-                  class="expand-preview-btn inline-flex items-center gap-2 px-2.5 py-1.5 md:px-3 md:py-2 text-xs md:text-sm font-semibold"
-                  title="Expand lesson view">
-                  <i class="fas fa-expand-alt text-[11px] md:text-xs"></i>
-                  <span>Expand</span>
-                </button>
+            <!-- Timeline: Conversation Summary / Lesson Summary / Version -->
+            <div class="vl-timeline" id="viewLessonSummaryTimeline">
+              <div class="vl-tl-item" onclick="toggleViewLessonTlPanel('conv')">
+                <div class="vl-tl-num">1</div>
+                <div class="vl-tl-text"><b>Conversation Summary</b><small>No summary available yet</small></div>
+                <div class="vl-chevron"><i class="fas fa-chevron-down"></i></div>
               </div>
-
-              <!-- Version Details -->
-              <div class="mb-3 md:mb-4 bg-white border border-gray-200 rounded-lg md:rounded-xl p-3 md:p-4 shadow-sm">
-                <div class="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                  <div>
-                    <p class="text-gray-600 font-semibold mb-1">Created Date</p>
-                    <p class="text-gray-900 font-medium text-xs md:text-sm" id="viewLessonCreated">--</p>
-                  </div>
-                  <div>
-                    <p class="text-gray-600 font-semibold mb-1">Last Updated</p>
-                    <p class="text-gray-900 font-medium text-xs md:text-sm" id="viewLessonUpdated">--</p>
-                  </div>
-                </div>
+              <div class="vl-tl-arrow">&mdash;</div>
+              <div class="vl-tl-item" onclick="toggleViewLessonTlPanel('lesson')">
+                <div class="vl-tl-num">2</div>
+                <div class="vl-tl-text"><b>Lesson Summary</b><small>Saved from chat.</small></div>
+                <div class="vl-chevron"><i class="fas fa-chevron-down"></i></div>
               </div>
-
-              <!-- Content Preview -->
-              <div class="mb-3 md:mb-4 preview-scroll-wrap">
-                <div id="viewLessonCurrent"
-                  class="space-y-1 md:space-y-2">
-                  <p class="text-gray-500 italic">Content preview will appear here...</p>
-                </div>
+              <div class="vl-tl-arrow">&mdash;</div>
+              <div class="vl-tl-item" onclick="document.querySelector('#viewLessonModal .vl-card-top')?.scrollIntoView({behavior:'smooth', block:'center'})">
+                <div class="vl-tl-num">3</div>
+                <div class="vl-tl-text"><b>Current Version</b><small>See card above</small></div>
               </div>
+            </div>
 
-              <!-- Conversation Summary -->
-              <div class="mb-3 md:mb-4 bg-white border border-gray-200 rounded-lg md:rounded-xl p-3 md:p-4 shadow-sm">
-                <div class="flex items-center justify-between gap-2 mb-2">
-                  <h4 class="text-sm md:text-base font-semibold text-gray-900">Conversation Summary</h4>
-                  <div class="flex items-center gap-2">
-                    <button
-                      id="expandConversationSummaryBtn"
-                      onclick="openExpandedConversationSummary()"
-                      class="text-slate-600 hover:text-slate-900 transition-colors p-1 rounded"
-                      title="Expand summary"
-                      aria-label="Expand conversation summary">
-                      <i class="fas fa-expand text-xs"></i>
-                    </button>
-                    <button
-                      id="refreshConversationSummaryBtn"
-                      onclick="if(window.currentViewedLessonData) loadConversationSummaryForLesson(window.currentViewedLessonData, true);"
-                      class="text-primary-600 hover:text-primary-800 transition-colors p-1 rounded"
-                      title="Refresh summary"
-                      aria-label="Refresh conversation summary">
-                      <i class="fas fa-sync-alt text-xs"></i>
-                    </button>
-                    <div id="viewLessonConversationSummarySpinner" class="hidden text-primary-600" aria-live="polite">
-                      <i class="fas fa-spinner fa-spin"></i>
-                    </div>
+            <!-- Conversation Summary detail -->
+            <div id="viewLessonConvPanel" class="vl-tl-detail hidden">
+              <div class="vl-tl-detail-head">
+                <h4>Conversation Summary</h4>
+                <div class="vl-tl-detail-actions">
+                  <button id="expandConversationSummaryBtn" type="button" onclick="openExpandedConversationSummary()"
+                    title="Expand summary" aria-label="Expand conversation summary">
+                    <i class="fas fa-expand text-xs"></i>
+                  </button>
+                  <button id="refreshConversationSummaryBtn" type="button"
+                    onclick="if(window.currentViewedLessonData) loadConversationSummaryForLesson(window.currentViewedLessonData, true);"
+                    title="Refresh summary" aria-label="Refresh conversation summary">
+                    <i class="fas fa-sync-alt text-xs"></i>
+                  </button>
+                  <div id="viewLessonConversationSummarySpinner" class="hidden" aria-live="polite">
+                    <i class="fas fa-spinner fa-spin"></i>
                   </div>
                 </div>
-                <div id="viewLessonConversationSummaryContent"
-                  class="max-h-48 overflow-y-auto text-xs md:text-sm text-gray-700 leading-relaxed">
-                  <p class="text-gray-500 italic">No summary available yet</p>
-                </div>
               </div>
-
-              <!-- Lesson Summary -->
-              <div class="mb-3 md:mb-4 bg-white border border-gray-200 rounded-lg md:rounded-xl p-3 md:p-4 shadow-sm">
-                <h4 class="text-sm md:text-base font-semibold text-gray-900 mb-2">Lesson Summary</h4>
-                <div id="viewLessonStructuredSummary"
-                  class="max-h-32 overflow-y-auto text-xs md:text-sm text-gray-700 leading-relaxed">
-                  <p class="text-gray-500 italic">No lesson summary available</p>
-                </div>
+              <div id="viewLessonConversationSummaryContent" class="vl-tl-detail-body">
+                <p class="text-gray-500 italic">No summary available yet</p>
               </div>
+            </div>
 
-              <!-- Version Selector -->
-              <button id="versionDropdownBtn"
-                class="w-full p-2 md:p-3 bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-300 rounded-lg text-left text-xs md:text-sm font-bold text-emerald-800 hover:from-emerald-100 hover:to-emerald-200 transition-all shadow-sm hover:shadow-md flex items-center justify-between cursor-pointer">
-                <span id="currentVersionDisplay" class="flex items-center gap-2 text-xs md:text-sm">
-                  <i class="fas fa-code-branch"></i>
-                  v1 (Current)
-                </span>
-                <i id="versionDropdownIcon" class="fas fa-chevron-down text-xs"></i>
-              </button>
-              <div id="viewLessonVersions" class="mt-2 md:mt-3 space-y-2 max-h-40 overflow-y-auto hidden">
-                <p class="text-xs text-gray-500 py-2 text-center">No versions yet</p>
+            <!-- Lesson Summary detail -->
+            <div id="viewLessonLessonPanel" class="vl-tl-detail hidden">
+              <div class="vl-tl-detail-head">
+                <h4>Lesson Summary</h4>
+              </div>
+              <div id="viewLessonStructuredSummary" class="vl-tl-detail-body">
+                <p class="text-gray-500 italic">No lesson summary available</p>
               </div>
             </div>
           </div>
 
-          <!-- Action Buttons Footer (draft edits are in-column; no separate Edit CTA) -->
-          <div class="border-t border-gray-200/90 pt-4 md:pt-6">
-            <div class="flex flex-col md:flex-row gap-2 md:gap-3 lg:gap-4">
-              <button onclick="closeViewLessonModal()"
-                class="flex-1 bg-gray-200 text-gray-800 py-2 md:py-3 px-4 md:px-6 rounded-lg md:rounded-xl hover:bg-gray-300 transition-colors font-bold flex items-center justify-center gap-2 text-sm md:text-base">
-                <i class="fas fa-times text-sm md:text-base"></i>
-                <span>Close</span>
-              </button>
-              <button onclick="finalizeNewVersionLesson()"
-                id="finalizeVersionBtn"
-                class="hidden flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 md:py-3 px-4 md:px-6 rounded-lg md:rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all font-bold flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
-                <i class="fas fa-check-circle text-sm md:text-base"></i>
-                <span>✅ Finalize</span>
-              </button>
-            </div>
+          <!-- Footer actions -->
+          <div class="vl-footer-actions">
+            <button onclick="closeViewLessonModal()" class="vl-close-btn">
+              <i class="fas fa-times"></i> Close
+            </button>
+            <button onclick="finalizeNewVersionLesson()" id="finalizeVersionBtn" class="hidden vl-finalize-btn">
+              <i class="fas fa-check-circle"></i> Finalize New Version
+            </button>
           </div>
         </div>
       </div>
@@ -6438,6 +6429,32 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      // Toggle the Conversation Summary / Lesson Summary detail panels under the
+      // View Lesson timeline row (new_ui/teacher_dashbaordui/6-view-lesson.html tl-item design).
+      function toggleViewLessonTlPanel(which) {
+        const panels = {
+          conv: document.getElementById('viewLessonConvPanel'),
+          lesson: document.getElementById('viewLessonLessonPanel'),
+        };
+        const target = panels[which];
+        if (!target) return;
+        const isOpening = target.classList.contains('hidden');
+
+        Object.values(panels).forEach(function (panel) {
+          if (panel) panel.classList.add('hidden');
+        });
+        document.querySelectorAll('#viewLessonSummaryTimeline .vl-tl-item').forEach(function (item) {
+          item.classList.remove('open');
+        });
+
+        if (isOpening) {
+          target.classList.remove('hidden');
+          const items = document.querySelectorAll('#viewLessonSummaryTimeline .vl-tl-item');
+          const idx = which === 'conv' ? 0 : 1;
+          if (items[idx]) items[idx].classList.add('open');
+        }
+      }
+
       function setFinalizeButtonVisible(isVisible) {
         const finalizeBtn = document.getElementById('finalizeVersionBtn');
         if (!finalizeBtn) return;
@@ -6582,6 +6599,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           const subjectEl = document.getElementById('viewLessonSubject');
           if (subjectEl) subjectEl.textContent = lesson.subject || 'General';
+
+          const gradeEl = document.getElementById('viewLessonGrade');
+          if (gradeEl) gradeEl.textContent = lesson.grade || 'General';
 
           // Populate current version preview
           const rawContent = lesson.content || lesson.body || 'No content yet';
