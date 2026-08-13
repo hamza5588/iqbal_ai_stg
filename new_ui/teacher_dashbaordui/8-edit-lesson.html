@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edit Lesson - Iqbal AI</title>
+<style>
+  :root{
+    --green-900:#0a4a2c;
+    --green-700:#166534;
+    --green-600:#1c7c3e;
+    --lime-500:#d0f73a;
+    --gray-500:#6b7280;
+    --gray-300:#d1d5db;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#ffffff;min-height:100vh;position:relative;overflow-x:hidden;}
+
+  .bg{display:none;}
+  .bg-content{position:relative;padding:24px 40px;color:#eee;opacity:.35;}
+  .bg-logo{display:flex;align-items:center;gap:10px;margin-bottom:30px;}
+  .bg-logo img{height:40px;filter:brightness(0) invert(1);opacity:.8;}
+  .bg-sidebar{display:flex;flex-direction:column;gap:22px;max-width:180px;font-size:14px;}
+
+  .overlay{
+    position:fixed;inset:0;background:#ffffff;
+    display:flex;align-items:center;justify-content:center;padding:30px;
+  }
+  .modal{
+    width:100%;max-width:700px;
+    background:#fff;border-radius:20px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.4);
+  }
+  .modal-head{
+    padding:30px 34px 0;position:relative;
+  }
+  .close-x{
+    position:absolute;top:24px;right:24px;
+    width:38px;height:38px;border-radius:50%;
+    border:1px solid #eee;background:#fff;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:#333;
+  }
+  .head-row{display:flex;align-items:center;gap:16px;margin-bottom:24px;}
+  .head-icon{
+    width:60px;height:60px;border-radius:14px;
+    background:var(--green-600);position:relative;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .head-icon svg.spark{position:absolute;top:-4px;right:-4px;}
+  .head-row h1{font-size:27px;font-weight:800;}
+  .head-row p{font-size:14px;color:var(--gray-500);margin-top:4px;}
+  .dots{position:absolute;top:22px;right:70px;display:grid;grid-template-columns:repeat(5,6px);gap:6px;}
+  .dots div{width:5px;height:5px;border-radius:50%;background:#cfe9d6;}
+
+  .modal-body{padding:0 34px 24px;}
+  .field{
+    display:flex;gap:16px;align-items:center;
+    background:#fafafa;border-radius:14px;padding:18px 20px;margin-bottom:16px;
+  }
+  .field-icon{
+    width:52px;height:52px;border-radius:10px;background:#eef0ee;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .field-content{flex:1;}
+  .field-content label{font-size:14.5px;font-weight:700;display:block;margin-bottom:8px;}
+  .field-content input, .field-content select{
+    width:100%;border:1.5px solid var(--green-600);border-radius:8px;
+    padding:11px 14px;font-size:14.5px;outline:none;color:#222;
+    font-family:inherit;
+  }
+
+  .modal-footer{
+    background:#051416;padding:20px 34px;
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;
+  }
+  .footer-logo{display:flex;align-items:center;gap:10px;}
+  .footer-logo img{height:38px;filter:brightness(0) invert(1);}
+  .footer-btns{display:flex;gap:12px;}
+  .btn-save{
+    background:transparent;border:1.5px solid var(--lime-500);color:var(--lime-500);
+    padding:11px 22px;border-radius:8px;font-weight:700;font-size:14px;
+    display:flex;align-items:center;gap:8px;cursor:pointer;
+    box-shadow:0 0 16px rgba(57,255,106,0.25);
+  }
+  .btn-cancel{
+    background:#2b2b2b;border:none;color:#eee;
+    padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px;
+    display:flex;align-items:center;gap:8px;cursor:pointer;
+  }
+</style>
+</head>
+<body>
+  <div class="bg">
+    <div class="bg-content">
+      <div class="bg-logo"><img src="assets/logo.png" alt="Iqbal AI"></div>
+      <div class="bg-sidebar">
+        <div>Dashboard</div>
+        <div>Draft Content</div>
+        <div>Versions</div>
+        <div>Chat Summary</div>
+        <div>Lesson Summary</div>
+        <div>Activity Log</div>
+        <div>Settings</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="close-x">&times;</div>
+        <div class="dots">
+          <div></div><div></div><div></div><div></div><div></div>
+          <div></div><div></div><div></div><div></div><div></div>
+          <div></div><div></div><div></div><div></div><div></div>
+        </div>
+        <div class="head-row">
+          <div class="head-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#fff" stroke-width="1.8"/></svg>
+          </div>
+          <div>
+            <h1>Edit Lesson</h1>
+            <p>Update your lesson details and save your changes.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M2 4h9v16H2zM13 4h9v16h-9z" stroke="#166534" stroke-width="1.6"/></svg>
+          </div>
+          <div class="field-content">
+            <label>Lesson Title</label>
+            <input type="text" value="Quadratic equation All Merged Document">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M22 10L12 5 2 10l10 5 10-5zM6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5" stroke="#166534" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="field-content">
+            <label>Subject</label>
+            <select><option>General</option></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-8M22 20V13" stroke="#166534" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </div>
+          <div class="field-content">
+            <label>Grade Level</label>
+            <select><option>General</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="footer-logo"><img src="assets/logo.png" alt="Iqbal AI"></div>
+        <div class="footer-btns">
+          <button class="btn-save">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="#39ff6a" stroke-width="1.8"/><path d="M17 21v-8H7v8M7 3v5h8" stroke="#39ff6a" stroke-width="1.8"/></svg>
+            Save Changes
+          </button>
+          <button class="btn-cancel">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#eee" stroke-width="2" stroke-linecap="round"/></svg>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
