@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>View Lesson - Iqbal AI</title>
+<style>
+  :root{
+    --green-900:#0a4a2c;
+    --green-700:#166534;
+    --green-600:#1c7c3e;
+    --green-500:#35a344;
+    --lime-500:#d0f73a;
+    --gray-500:#6b7280;
+    --gray-400:#9ca3af;
+    --gray-300:#d1d5db;
+    --gray-100:#f8f8f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:var(--gray-100);color:#111;}
+  header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:18px 40px;background:#fdfdfb;
+  }
+  .logo img{height:48px;width:auto;}
+  .crumbs{font-size:15px;color:var(--gray-500);}
+  .crumbs span{color:#166534;}
+  .crumbs b{color:#111;font-weight:600;}
+  .header-actions{display:flex;gap:26px;align-items:center;}
+  .header-actions .item{
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    font-size:12px;color:var(--gray-500);cursor:pointer;
+  }
+  .circle-btn{
+    width:40px;height:40px;border-radius:50%;
+    border:1px solid var(--gray-300);background:#fff;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  main{max-width:1200px;margin:0 auto;padding:0 40px 60px;position:relative;}
+
+  .toolbar{
+    display:flex;align-items:center;justify-content:space-between;
+    background:#111;border-radius:12px;
+    padding:14px 24px;margin-bottom:30px;gap:16px;flex-wrap:wrap;
+  }
+  .toolbar .tabs{display:flex;gap:34px;align-items:center;flex-wrap:wrap;}
+  .toolbar .tab{
+    display:flex;align-items:center;gap:8px;color:#cfcfcf;font-size:14.5px;
+    font-weight:600;cursor:pointer;padding-bottom:14px;
+  }
+  .toolbar .tab.active{color:#fff;border-bottom:2px solid var(--lime-500);}
+  .toolbar select{
+    background:transparent;color:#e5e7eb;border:none;font-size:14px;font-weight:600;
+  }
+  .toolbar .enhance-btn{
+    background:var(--lime-500);color:#1a1a1a;border:none;
+    padding:10px 20px;border-radius:8px;font-weight:700;font-size:13.5px;cursor:pointer;
+  }
+
+  .draft-panel{
+    position:absolute;top:70px;left:0;width:340px;
+    background:#fff;border:1px solid #eee;border-radius:12px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.08);
+    padding:20px;z-index:10;
+  }
+  .draft-panel .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .draft-panel .head h3{font-size:16px;font-weight:700;}
+  .draft-panel .close{cursor:pointer;color:var(--gray-500);font-size:18px;}
+  .draft-panel label{font-size:12.5px;font-weight:700;display:block;margin-bottom:8px;}
+  .draft-panel input, .draft-panel textarea{
+    width:100%;border:1px solid var(--gray-300);border-radius:8px;
+    padding:10px 12px;font-size:13px;outline:none;margin-bottom:14px;
+    font-family:inherit;color:#333;
+  }
+  .draft-panel textarea{resize:vertical;height:100px;color:var(--gray-400);}
+  .save-draft-btn{
+    width:100%;border:1px solid var(--green-600);color:var(--green-700);
+    background:#fff;padding:10px;border-radius:8px;font-weight:700;font-size:13.5px;
+    display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;
+  }
+
+  .content-header{margin-left:360px;margin-bottom:20px;}
+  h1.title{font-size:28px;font-weight:800;margin-bottom:8px;}
+  .meta-row{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--gray-500);margin-bottom:8px;flex-wrap:wrap;}
+  .meta-row .badge{background:#dcfce7;color:#166534;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;}
+  .meta-row2{display:flex;gap:8px;font-size:13px;color:#333;flex-wrap:wrap;}
+  .meta-row2 b{color:#166534;font-weight:700;}
+
+  .content-card{
+    margin-left:360px;
+    background:#fff;border:1px solid #eee;border-radius:14px;
+    padding:0;overflow:hidden;
+  }
+  .card-top{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:18px 24px;border-bottom:1px solid #f0f0f0;
+  }
+  .card-top .cv{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14.5px;}
+  .expand-btn{
+    display:flex;align-items:center;gap:6px;
+    border:1px solid var(--gray-300);border-radius:8px;
+    padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;color:#333;background:#fff;
+  }
+  .card-body{padding:28px 24px 28px 30px;border-left:4px solid var(--green-500);margin:20px 24px;}
+  .card-body h2{font-size:23px;font-weight:800;margin-bottom:18px;}
+  .card-body p{font-size:15px;line-height:1.9;color:#222;margin-bottom:18px;}
+
+  .timeline{
+    display:flex;align-items:center;justify-content:space-between;
+    background:#fdfdfb;border-top:1px solid #f0f0f0;
+    padding:20px 30px;gap:10px;flex-wrap:wrap;
+  }
+  .tl-item{display:flex;align-items:center;gap:12px;flex:1;min-width:200px;}
+  .tl-num{
+    width:32px;height:32px;border-radius:50%;
+    background:#e6f4ea;color:#166534;font-weight:700;font-size:14px;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .tl-item b{font-size:14px;display:block;}
+  .tl-item small{font-size:12px;color:var(--gray-500);}
+  .tl-arrow{color:var(--gray-400);font-size:18px;}
+  .chevron{margin-left:auto;color:var(--gray-400);}
+
+  .close-bottom{display:flex;justify-content:center;margin-top:30px;margin-left:360px;}
+  .close-bottom button{
+    display:flex;align-items:center;gap:8px;
+    border:1px solid var(--gray-300);background:#fff;
+    padding:10px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;
+  }
+
+  @media(max-width:1000px){
+    .draft-panel{position:static;width:100%;margin-bottom:20px;}
+    .content-header, .content-card, .close-bottom{margin-left:0;}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo"><img src="assets/logo.png" alt="Iqbal AI"></div>
+    <div class="crumbs"><span>My Lessons</span> / <b>View Lesson</b></div>
+    <div class="header-actions">
+      <div class="item"><div class="circle-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Expand</div>
+      <div class="item"><div class="circle-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#333" stroke-width="2" stroke-linecap="round"/></svg></div>Close</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <div class="tabs">
+        <div class="tab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#cfcfcf" stroke-width="1.6"/></svg>Edit Draft</div>
+        <div class="tab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#cfcfcf" stroke-width="1.6"/></svg>Summaries</div>
+        <select><option>Version v1</option></select>
+      </div>
+      <button class="enhance-btn">Apply AI Enhancement</button>
+    </div>
+
+    <div class="draft-panel">
+      <div class="head">
+        <h3>Draft Content</h3>
+        <div class="close">&times;</div>
+      </div>
+      <label>AI Instructions (optional)</label>
+      <input type="text" placeholder="Describe how you want the lesson improved...">
+      <textarea placeholder="Draft will appear here after applying AI or making manual edits..."></textarea>
+      <button class="save-draft-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="#166534" stroke-width="1.8"/><path d="M17 21v-8H7v8M7 3v5h8" stroke="#166534" stroke-width="1.8"/></svg>
+        Save Draft
+      </button>
+    </div>
+
+    <div class="content-header">
+      <h1 class="title">Quadratic Equation All Merged Document</h1>
+      <div class="meta-row">
+        <span>General</span> &bull; <span>Grade General</span>
+        <span class="badge">Finalized</span>
+        <span>Created 8/11/2026</span>
+      </div>
+      <div class="meta-row2">
+        <span>Subject: <b>General</b></span> &bull;
+        <span>Grade Level: <b>General</b></span> &bull;
+        <span>Status: <b>Finalized</b></span> &bull;
+        <span>Version: <b>v1</b></span>
+      </div>
+    </div>
+
+    <div class="content-card">
+      <div class="card-top">
+        <div class="cv">&#9733; Current Version</div>
+        <div class="expand-btn">&#8599; Expand</div>
+      </div>
+      <div class="card-body">
+        <h2>Understanding PDF Formats</h2>
+        <p><b>Text-based Content</b>: This is directly editable and searchable text that can be easily extracted.</p>
+        <p><b>Scanned Content</b>: These are images of text that have been digitized from physical documents. They require OCR (Optical Character Recognition) to convert the images into machine-readable text.</p>
+        <p><b>Mixed Content</b>: A PDF may contain both text and scanned images, which can complicate text extraction.</p>
+        <p>Depending on how the PDF was created, the text extraction process may vary, and some content may not be recognized or retrievable without OCR.</p>
+      </div>
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-num">1</div>
+          <div><b>Conversation Summary</b><small>No summary available yet</small></div>
+          <div class="chevron">&#8964;</div>
+        </div>
+        <div class="tl-arrow">&mdash;</div>
+        <div class="tl-item">
+          <div class="tl-num">2</div>
+          <div><b>Lesson Summary</b><small>Saved from chat.</small></div>
+          <div class="chevron">&#8964;</div>
+        </div>
+        <div class="tl-arrow">&mdash;</div>
+        <div class="tl-item">
+          <div class="tl-num">3</div>
+          <div><b>v1 (Current)</b></div>
+          <div class="chevron">&#8964;</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="close-bottom">
+      <button>&times; Close</button>
+    </div>
+  </main>
+</body>
+</html>

@@ -3050,6 +3050,112 @@
         opacity: 1;
       }
     }
+
+    /* ===== New UI: FAQ Insights modal (#faqModalOverlay) ===== */
+    #faqModalOverlay.faqm-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; padding:16px; z-index:10050; font-family:'Segoe UI',Arial,sans-serif; }
+    #faqModalOverlay .faqm-modal { width:100%; max-width:1040px; max-height:88vh; overflow-y:auto; background:#fff; border-radius:18px; box-shadow:0 10px 40px rgba(0,0,0,0.25); padding:34px 40px; position:relative; }
+    #faqModalOverlay .faqm-close-x { position:absolute; top:26px; right:26px; width:38px; height:38px; border-radius:50%; border:1px solid #eee; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#166534; font-size:20px; line-height:1; }
+    #faqModalOverlay .faqm-top { display:flex; gap:20px; align-items:center; margin-bottom:26px; }
+    #faqModalOverlay .faqm-icon3d { width:90px; height:90px; border-radius:16px; background:linear-gradient(160deg,#eaf7ee,#dcefe0); display:flex; align-items:center; justify-content:center; position:relative; flex-shrink:0; }
+    #faqModalOverlay .faqm-icon-card { width:48px; height:48px; border-radius:10px; background:#166534; display:flex; align-items:center; justify-content:center; }
+    #faqModalOverlay .faqm-icon-base { position:absolute; bottom:12px; width:64px; height:12px; border-radius:50%; background:#dfeee2; }
+    #faqModalOverlay .faqm-label-tag { color:#166534; font-weight:700; font-size:12px; letter-spacing:1px; margin-bottom:6px; }
+    #faqModalOverlay .faqm-top h1 { font-size:26px; font-weight:800; margin-bottom:6px; color:#111; font-family:inherit; }
+    #faqModalOverlay .faqm-sub { font-size:13.5px; color:#6b7280; }
+    #faqModalOverlay .faqm-stats { display:flex; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
+    #faqModalOverlay .faqm-stat-card { flex:1; min-width:200px; display:flex; align-items:center; gap:14px; border-left:4px solid #2a9452; border-radius:10px; background:#fafafa; padding:14px 18px; }
+    #faqModalOverlay .faqm-stat-icon { width:40px; height:40px; border-radius:50%; background:#e6f4ea; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#166534; }
+    #faqModalOverlay .faqm-stat-num { font-size:22px; font-weight:800; color:#111; }
+    #faqModalOverlay .faqm-stat-label { font-size:13px; color:#333; }
+    #faqModalOverlay .faqm-rows { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; }
+    #faqModalOverlay .faqm-card { border:1px solid #d5eedc; border-radius:14px; background:#fff; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,0.03); transition:box-shadow .2s ease; }
+    #faqModalOverlay .faqm-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.06); }
+    #faqModalOverlay .faqm-card-top { display:flex; align-items:flex-start; gap:12px; }
+    #faqModalOverlay .faqm-chev-btn { flex-shrink:0; width:32px; height:32px; border-radius:50%; background:#e6f4ea; color:#166534; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; margin-top:2px; }
+    #faqModalOverlay .faq-modern-chevron { transition:transform .2s ease; }
+    #faqModalOverlay .faq-modern-chevron.rotate-180 { transform:rotate(180deg); }
+    #faqModalOverlay .faqm-card-body { flex:1; min-width:0; }
+    #faqModalOverlay .faqm-card-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
+    #faqModalOverlay .faqm-question { font-size:14.5px; font-weight:700; color:#111; }
+    #faqModalOverlay .faqm-asks-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:700; background:#e6f4ea; color:#166534; white-space:nowrap; }
+    #faqModalOverlay .faqm-card-foot { margin-top:8px; display:flex; align-items:center; gap:8px; }
+    #faqModalOverlay .faqm-index { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:#9ca3af; font-weight:700; }
+    #faqModalOverlay .faqm-dot { color:#d1d5db; }
+    #faqModalOverlay .faqm-copy-btn { background:none; border:none; padding:0; cursor:pointer; font-size:12px; color:#166534; font-weight:600; display:inline-flex; align-items:center; gap:4px; }
+    #faqModalOverlay .faqm-answer { margin-top:14px; border-radius:12px; background:linear-gradient(#fafafa,#fff); border:1px solid #f0f0f0; padding:14px 16px; }
+    #faqModalOverlay .faqm-answer-label { font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+    #faqModalOverlay .faqm-empty { border:1px solid #eee; border-radius:14px; padding:50px 24px; text-align:center; }
+    #faqModalOverlay .faqm-empty-circle { width:110px; height:110px; border-radius:50%; border:2px dashed #ddd; display:flex; align-items:center; justify-content:center; margin:0 auto 22px; }
+    #faqModalOverlay .faqm-empty-circle-inner { width:80px; height:80px; border-radius:50%; background:#eaf7ee; display:flex; align-items:center; justify-content:center; }
+    #faqModalOverlay .faqm-empty h3 { font-size:19px; font-weight:800; margin-bottom:8px; color:#111; }
+    #faqModalOverlay .faqm-empty p { color:#6b7280; font-size:13.5px; }
+    #faqModalOverlay .faqm-footer-bar { display:flex; align-items:center; justify-content:space-between; border:1px solid #eee; border-radius:12px; padding:14px 18px; flex-wrap:wrap; gap:12px; }
+    #faqModalOverlay .faqm-footer-note { display:flex; align-items:center; gap:10px; font-size:13px; color:#333; }
+    #faqModalOverlay .faqm-hex-badge { width:26px; height:26px; background:#166534; clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    #faqModalOverlay .faqm-close-btn { background:#166534; color:#fff; border:none; padding:9px 20px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; }
+    @media(max-width:640px){
+      #faqModalOverlay .faqm-modal{ padding:24px 20px; }
+      #faqModalOverlay .faqm-top{ flex-direction:column; text-align:center; }
+    }
+
+    /* ===== New UI: Edit Lesson modal (#editLessonModal-*) ===== */
+    .elm-overlay{ font-family:'Segoe UI',Arial,sans-serif; padding:16px; }
+    .elm-modal{ width:100%; max-width:620px; background:#fff; border-radius:20px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.4); max-height:92vh; display:flex; flex-direction:column; }
+    .elm-head{ padding:28px 32px 0; position:relative; flex-shrink:0; }
+    .elm-close-x{ position:absolute; top:22px; right:22px; width:36px; height:36px; border-radius:50%; border:1px solid #eee; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#333; }
+    .elm-head-row{ display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+    .elm-head-icon{ width:54px; height:54px; border-radius:14px; background:#1c7c3e; color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:20px; }
+    .elm-head-row h1{ font-size:24px; font-weight:800; color:#111; }
+    .elm-head-row p{ font-size:13.5px; color:#6b7280; margin-top:4px; }
+    .elm-body{ padding:0 32px 20px; overflow-y:auto; }
+    .elm-field{ display:flex; gap:14px; align-items:center; background:#fafafa; border-radius:14px; padding:16px 18px; margin-bottom:14px; }
+    .elm-field-icon{ width:46px; height:46px; border-radius:10px; background:#eef0ee; color:#166534; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .elm-field-content{ flex:1; min-width:0; }
+    .elm-field-content label{ font-size:13.5px; font-weight:700; display:block; margin-bottom:6px; color:#111; }
+    .elm-field-content input, .elm-field-content select{ width:100%; border:1.5px solid #1c7c3e; border-radius:8px; padding:10px 12px; font-size:13.5px; outline:none; color:#222; font-family:inherit; background:#fff; }
+    .elm-footer{ background:#051416; padding:18px 32px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; flex-shrink:0; }
+    .elm-footer-logo img{ height:32px; width:auto; }
+    .elm-footer-btns{ display:flex; gap:10px; }
+    .elm-btn-save{ background:transparent; border:1.5px solid #d0f73a; color:#d0f73a; padding:10px 18px; border-radius:8px; font-weight:700; font-size:13px; display:flex; align-items:center; gap:8px; cursor:pointer; }
+    .elm-btn-cancel{ background:#2b2b2b; border:none; color:#eee; padding:10px 18px; border-radius:8px; font-weight:600; font-size:13px; display:flex; align-items:center; gap:8px; cursor:pointer; }
+    .elm-btn-save:hover, .elm-btn-cancel:hover{ opacity:.9; }
+
+    /* ===== New UI: My Lessons list (inside #chatMessages) ===== */
+    .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; }
+    .mll-page-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; gap:16px; flex-wrap:wrap; }
+    .mll-page-head h1{ font-size:24px; font-weight:800; margin-bottom:4px; }
+    .mll-page-head p{ color:#6b7280; font-size:13.5px; }
+    .mll-search-box{ display:flex; align-items:center; gap:8px; border:1px solid #d1d5db; border-radius:8px; padding:9px 14px; min-width:260px; background:#fff; }
+    .mll-search-box i{ color:#9ca3af; font-size:13px; }
+    .mll-search-box input{ border:none; outline:none; font-size:13.5px; flex:1; font-family:inherit; }
+    .mll-lesson-card{ display:flex; border:1px solid #eee; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.03); background:#fff; }
+    .mll-lesson-bar{ width:32px; background:#0a4a2c; color:#fff; font-size:10.5px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg); padding:10px 0; flex-shrink:0; }
+    .mll-lesson-body{ flex:1; min-width:0; padding:16px 20px; }
+    .mll-lesson-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px; }
+    .mll-lesson-title{ display:flex; align-items:center; gap:10px; min-width:0; }
+    .mll-icon-badge{ width:28px; height:28px; border-radius:8px; background:#166534; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+    .mll-lesson-title h3{ font-size:15.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mll-lesson-meta-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
+    .mll-time-ago{ font-size:11.5px; color:#6b7280; white-space:nowrap; }
+    .mll-lesson-info{ display:flex; gap:40px; margin-bottom:14px; flex-wrap:wrap; }
+    .mll-lesson-info div{ font-size:12px; }
+    .mll-lesson-info label{ display:block; color:#9ca3af; font-size:10px; letter-spacing:.5px; text-transform:uppercase; margin-bottom:2px; }
+    .mll-lesson-info span{ font-size:12.5px; color:#222; }
+    .mll-actions-label{ font-size:10px; color:#9ca3af; letter-spacing:.5px; text-transform:uppercase; margin-bottom:8px; }
+    .mll-actions{ display:flex; gap:16px; flex-wrap:wrap; }
+    .mll-actions a{ display:flex; align-items:center; gap:5px; font-size:12px; font-weight:600; cursor:pointer; }
+    .mll-actions a.mll-view, .mll-actions a.mll-edit{ color:#2563eb; }
+    .mll-actions a.mll-word{ color:#15803d; }
+    .mll-actions a.mll-ppt{ color:#c2410c; }
+    .mll-actions a.mll-ask{ color:#a16207; }
+    .mll-actions a.mll-delete{ color:#dc2626; }
+    .mll-pagination{ display:flex; justify-content:center; align-items:center; gap:14px; margin:26px 0; }
+    .mll-page-btn{ border:1px solid #d1d5db; background:#fff; padding:7px 16px; border-radius:6px; font-size:13px; cursor:pointer; }
+    .mll-page-btn:disabled{ opacity:.5; cursor:default; }
+    .mll-page-info{ font-size:12.5px; color:#6b7280; }
+    @media(max-width:640px){
+      .mll-lesson-info{ gap:20px; }
+    }
   </style>
   <!-- MathJax v3: configure TeX delimiters and skip code blocks; disable automatic typeset -->
   <script>
@@ -3795,7 +3901,7 @@
         class="view-lesson-modal-panel bg-white rounded-2xl md:rounded-3xl w-full mx-2 md:mx-4 my-auto shadow-2xl">
         <!-- Header with Gradient Background -->
         <div
-          class="view-lesson-header bg-gradient-to-r from-primary-600 via-blue-500 to-accent-500 text-white px-4 md:px-10 py-6 md:py-10 rounded-t-2xl md:rounded-t-3xl">
+          class="view-lesson-header text-white px-4 md:px-10 py-6 md:py-10 rounded-t-2xl md:rounded-t-3xl" style="background:linear-gradient(90deg,#0e5c2f,#1f9c46 60%,#2fae52)">
           <div class="flex items-start justify-between gap-2 md:gap-4">
             <div>
               <h2 class="text-2xl md:text-3xl font-bold text-white mb-1 md:mb-1.5 line-clamp-2" id="viewLessonTitle">
@@ -3822,24 +3928,24 @@
           <!-- Metadata Cards -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3.5 mb-4 md:mb-6">
             <div
-              class="view-lesson-card view-meta-card bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg md:rounded-xl p-2.5 md:p-3">
-              <p class="view-meta-label text-blue-600">Subject</p>
-              <p class="view-meta-value text-blue-900 line-clamp-2 leading-tight" id="viewLessonSubject">--</p>
+              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#e7f6ec,#d9f0e0); border:1px solid #bfdccb;">
+              <p class="view-meta-label" style="color:#1c7c3e;">Subject</p>
+              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#0b3d1f;" id="viewLessonSubject">--</p>
             </div>
             <div
-              class="view-lesson-card view-meta-card bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg md:rounded-xl p-2.5 md:p-3">
-              <p class="view-meta-label text-purple-600">Grade Level</p>
-              <p class="view-meta-value text-purple-900 line-clamp-2 leading-tight" id="viewLessonGrade">--</p>
+              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#e6f4ea,#d5eedc); border:1px solid #bfdccb;">
+              <p class="view-meta-label" style="color:#166534;">Grade Level</p>
+              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#0a4a2c;" id="viewLessonGrade">--</p>
             </div>
             <div
-              class="view-lesson-card view-meta-card bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg md:rounded-xl p-2.5 md:p-3">
-              <p class="view-meta-label text-green-600">Status</p>
-              <p class="view-meta-value text-green-900 line-clamp-2 leading-tight" id="viewLessonStatus">Draft</p>
+              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#eaf7ee,#dcefe0); border:1px solid #bfdccb;">
+              <p class="view-meta-label" style="color:#166534;">Status</p>
+              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#0b3d1f;" id="viewLessonStatus">Draft</p>
             </div>
             <div
-              class="view-lesson-card view-meta-card bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-lg md:rounded-xl p-2.5 md:p-3">
-              <p class="view-meta-label text-amber-600">Version</p>
-              <p class="view-meta-value text-amber-900 line-clamp-2 leading-tight" id="viewLessonVersion">v1</p>
+              class="view-lesson-card view-meta-card rounded-lg md:rounded-xl p-2.5 md:p-3" style="background:linear-gradient(160deg,#f7fbe8,#eef7cd); border:1px solid #d9e88f;">
+              <p class="view-meta-label" style="color:#65780f;">Version</p>
+              <p class="view-meta-value line-clamp-2 leading-tight" style="color:#3f4a09;" id="viewLessonVersion">v1</p>
             </div>
           </div>
 
@@ -3850,8 +3956,8 @@
               class="view-lesson-card bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg md:rounded-2xl p-4 md:p-6">
               <div class="flex items-center gap-3 mb-3 md:mb-4">
                 <div
-                  class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
-                  <i class="fas fa-edit text-primary-600 text-sm md:text-lg"></i>
+                  class="w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background:#d9f2e2;">
+                  <i class="fas fa-edit text-sm md:text-lg" style="color:#166534;"></i>
                 </div>
                 <h3 class="text-lg md:text-xl font-bold text-gray-900">Draft Content</h3>
               </div>
@@ -3882,7 +3988,8 @@
               <!-- Draft Actions -->
               <div class="flex flex-col gap-2 md:gap-3">
                 <button onclick="applyPromptToLessonDraft()"
-                  class="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base">
+                  class="w-full text-white py-2 md:py-3 px-3 md:px-4 rounded-lg md:rounded-lg transition-all font-medium flex items-center justify-center gap-2 shadow-md hover:shadow-lg text-sm md:text-base"
+                  style="background:linear-gradient(90deg,#166534,#1c7c3e);" onmouseover="this.style.opacity='0.92'" onmouseout="this.style.opacity='1'">
                   <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
                 </button>
                 <button onclick="saveLessonDraftVisible()"
@@ -6058,99 +6165,60 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         // Clear chat area and show lessons page
         chatMessages.innerHTML = `
-    <div class="max-w-6xl mx-auto">
-      <!-- Header with Background -->
-      <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
-        <div class="flex flex-col gap-4">
-          <div>
-            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View &amp; Manage All Lessons</h1>
-          </div>
-          
-          <!-- Action Buttons (none for now on teacher dashboard) -->
+    <div class="mll-wrap">
+      <div class="mll-page-head">
+        <div>
+          <h1>My Lessons</h1>
+          <p>View and manage all your created lessons</p>
+        </div>
+        <div class="mll-search-box">
+          <i class="fas fa-search"></i>
+          <input type="text"
+                 id="lessonSearch"
+                 placeholder="Search lessons by title, subject, or grade..."
+                 value="${teacherLessonSearchTerm}"
+                 oninput="filterLessons(this.value)">
         </div>
       </div>
 
-      <!-- Content Area -->
-      <div class="px-4 md:px-6 lg:px-6">
-      <!-- Search Bar -->
-      <div class="search-container mb-6">
-        <i class="fas fa-search search-icon"></i>
-        <input type="text" 
-               id="lessonSearch" 
-               placeholder="Search lessons by title, subject, or grade..." 
-               class="search-input"
-               value="${teacherLessonSearchTerm}"
-               oninput="filterLessons(this.value)">
+      <div id="lessonsTableBody">
+        ${formattedLessons.map((lesson, idx) => `
+          <div class="mll-lesson-card" data-lesson-id="${lesson.id}">
+            <div class="mll-lesson-bar">LESSON ${String(idx + 1).padStart(2, '0')}</div>
+            <div class="mll-lesson-body">
+              <div class="mll-lesson-top">
+                <div class="mll-lesson-title">
+                  <div class="mll-icon-badge">${(lesson.title || '?').charAt(0).toUpperCase()}</div>
+                  <h3>${lesson.title}</h3>
+                </div>
+                <div class="mll-lesson-meta-right">
+                  ${lesson.versions}
+                  <span class="mll-time-ago"><i class="fas fa-rotate-right"></i> ${lesson.timestamp}</span>
+                </div>
+              </div>
+              <div class="mll-lesson-info">
+                <div><label>Subject</label><span>${lesson.subject}</span></div>
+                <div><label>Grade</label><span>${lesson.grade}</span></div>
+                <div><label>Created by</label><span>${lesson.createdBy}</span></div>
+              </div>
+              <div class="mll-actions-label">Actions</div>
+              <div class="mll-actions">
+                <a class="mll-view" title="View" onclick="viewLesson('${lesson.id}')"><i class="fas fa-eye"></i> View</a>
+                <a class="mll-edit" title="Edit" onclick="editLesson('${lesson.id}')"><i class="fas fa-pen"></i> Edit</a>
+                <a class="mll-word" title="Download DOCX" onclick="downloadLessonDocx('${lesson.id}')"><i class="fas fa-file-word"></i> Word</a>
+                <a class="mll-ppt" title="Download PPT" onclick="downloadLessonPPT('${lesson.id}')"><i class="fas fa-file-powerpoint"></i> PowerPoint</a>
+                <a class="mll-ask" title="FAQ" onclick="showLessonFAQ('${lesson.id}')"><i class="fas fa-circle-question"></i> FAQ</a>
+                ${!lesson.hasChildVersion ? `<a class="mll-delete" title="Delete" onclick="deleteLesson('${lesson.id}')"><i class="fas fa-trash"></i> Delete</a>` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('')}
       </div>
-      
-      <!-- Lessons Table -->
-      <div class="lessons-table-container">
-        <table class="lessons-table">
-          <thead>
-            <tr>
-              <th>Lesson Title</th>
-              <th>Subject</th>
-              <th>Grade</th>
-              <th>Created By</th>
-              <th>Versions</th>
-              <th>Timestamp</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="lessonsTableBody">
-            ${formattedLessons.map(lesson => `
-              <tr data-lesson-id="${lesson.id}">
-                <td class="font-medium" data-label="Lesson Title">${lesson.title}</td>
-                <td data-label="Subject">${lesson.subject}</td>
-                <td data-label="Grade">${lesson.grade}</td>
-                <td data-label="Created By">${lesson.createdBy}</td>
-                <td data-label="Versions">${lesson.versions}</td>
-                <td data-label="Timestamp">
-                  <div class="timestamp-badge">
-                    <i class="fas fa-clock text-xs"></i>
-                    <span class="timestamp">${lesson.timestamp}</span>
-                  </div>
-                </td>
-                <td data-label="Actions">
-                  <div class="lesson-actions">
-                    <button class="action-btn view-btn" title="View" onclick="viewLesson('${lesson.id}')">
-                      <i class="fas fa-eye"></i>
-                    </button>
-                    <button class="action-btn edit-btn" title="Edit" onclick="editLesson('${lesson.id}')">
-                      <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="action-btn" style="background: #d1fae5; color: #065f46;" title="Download DOCX" onclick="downloadLessonDocx('${lesson.id}')">
-                      <i class="fas fa-file-word"></i>
-                    </button>
-                    <button class="action-btn" style="background: #dbeafe; color: #1e40af;" title="Download PPT" onclick="downloadLessonPPT('${lesson.id}')">
-                      <i class="fas fa-file-powerpoint"></i>
-                    </button>
-                    <button class="action-btn" style="background: #fef3c7; color: #92400e;" title="FAQ" onclick="showLessonFAQ('${lesson.id}')">
-                      <i class="fas fa-circle-question"></i>
-                    </button>
-                    ${!lesson.hasChildVersion ? `
-                    <button class="action-btn delete-btn" title="Delete" onclick="deleteLesson('${lesson.id}')">
-                      <i class="fas fa-trash"></i>
-                    </button>
-                    ` : ''}
-                  </div>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <!-- Pagination -->
-        <div class="pagination">
-          <button class="pagination-btn" onclick="previousPage()" id="prevBtn" disabled>
-            Previous
-          </button>
-          <span class="pagination-info" id="pageInfo">Page ${currentPage} of ${teacherLessonsTotalPages}</span>
-          <button class="pagination-btn" onclick="nextPage()" id="nextBtn" disabled>
-            Next
-          </button>
-        </div>
-      </div>
+
+      <div class="mll-pagination">
+        <button class="mll-page-btn" onclick="previousPage()" id="prevBtn" disabled>Previous</button>
+        <span class="mll-page-info" id="pageInfo">Page ${currentPage} of ${teacherLessonsTotalPages}</span>
+        <button class="mll-page-btn" onclick="nextPage()" id="nextBtn" disabled>Next</button>
       </div>
     </div>
   `;
@@ -7385,81 +7453,84 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const faqRows = faqs.length ? faqs.map(function(faq, idx) {
             const renderedAnswer = renderFaqAnswerContent(faq.answer);
             return `
-              <div class="faq-modern-card rounded-2xl border border-primary-100 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md">
-                <div class="flex items-start gap-3">
+              <div class="faq-modern-card faqm-card">
+                <div class="faqm-card-top">
                   <button type="button"
                           onclick="toggleFaqAnswer(this)"
-                          class="mt-0.5 flex-shrink-0 w-8 h-8 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors flex items-center justify-center"
+                          class="faqm-chev-btn"
                           aria-label="Toggle answer">
-                    <i class="faq-modern-chevron fas fa-chevron-down transition-transform duration-200"></i>
+                    <i class="faq-modern-chevron fas fa-chevron-down"></i>
                   </button>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <h4 class="faq-modern-question text-sm md:text-base font-semibold text-gray-900 leading-6">${escapeHtml(faq.question || '')}</h4>
-                      <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-100 text-primary-700 whitespace-nowrap">
-                        <i class="fas fa-fire-alt mr-1"></i> ${faq.times_asked || faq.count || 1} asks
+                  <div class="faqm-card-body">
+                    <div class="faqm-card-head">
+                      <h4 class="faq-modern-question faqm-question">${escapeHtml(faq.question || '')}</h4>
+                      <span class="faqm-asks-badge">
+                        <i class="fas fa-fire-alt"></i> ${faq.times_asked || faq.count || 1} asks
                       </span>
                     </div>
-                    <div class="mt-2 flex items-center gap-2">
-                      <span class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">FAQ #${idx + 1}</span>
-                      <span class="text-gray-300">•</span>
-                      <button type="button"
-                              onclick="copyFaqQuestion(this)"
-                              class="text-xs text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1">
+                    <div class="faqm-card-foot">
+                      <span class="faqm-index">FAQ #${idx + 1}</span>
+                      <span class="faqm-dot">&bull;</span>
+                      <button type="button" onclick="copyFaqQuestion(this)" class="faqm-copy-btn">
                         <i class="far fa-copy"></i> Copy question
                       </button>
                     </div>
                   </div>
                 </div>
-                <div class="faq-modern-answer hidden mt-4 rounded-xl bg-gradient-to-b from-gray-50 to-white border border-gray-100 p-4">
-                  <p class="text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">Answer</p>
+                <div class="faq-modern-answer faqm-answer hidden">
+                  <p class="faqm-answer-label">Answer</p>
                   <div class="prose prose-sm max-w-none text-gray-800 tex2jax_process">${renderedAnswer}</div>
                 </div>
               </div>
             `;
           }).join('') : `
-            <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/70 p-8 text-center">
-              <div class="w-12 h-12 mx-auto rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-400">
-                <i class="fas fa-comments"></i>
+            <div class="faqm-empty">
+              <div class="faqm-empty-circle">
+                <div class="faqm-empty-circle-inner">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#166534" stroke-width="1.6"/><path d="M12 9v4M12 16h.01" stroke="#166534" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </div>
               </div>
-              <p class="mt-3 text-sm font-semibold text-gray-700">No frequently asked questions yet</p>
-              <p class="text-xs text-gray-500 mt-1">FAQs appear here after students ask similar questions more than once.</p>
+              <h3>No frequently asked questions yet</h3>
+              <p>FAQs appear here after students ask similar questions more than once.</p>
             </div>
           `;
           const faqContent = `
-      <div class="fixed inset-0 bg-black/55 backdrop-blur-[2px] flex items-center justify-center p-3 md:p-6 pointer-events-auto" id="faqModalOverlay" style="z-index:10050">
-        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] shadow-2xl border border-gray-100 flex flex-col min-h-0 overflow-hidden relative">
-          <div class="flex-shrink-0 relative z-20 px-5 md:px-6 py-4 md:py-5 bg-gradient-to-r from-primary-600 to-sky-500 text-white shadow-md">
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0 pr-2">
-                <p class="text-xs uppercase tracking-[0.18em] text-white/80 font-semibold">Insights</p>
-                <h3 class="text-lg md:text-xl font-bold">Frequently Asked Questions</h3>
-                <p class="text-sm text-white/90 mt-1 truncate">${escapeHtml(lessonTitle)}</p>
+      <div class="faqm-overlay" id="faqModalOverlay">
+        <div class="faqm-modal">
+          <div class="faqm-close-x" onclick="document.getElementById('faqModalOverlay').remove()" aria-label="Close FAQ dialog">&times;</div>
+          <div class="faqm-top">
+            <div class="faqm-icon3d">
+              <div class="faqm-icon-base"></div>
+              <div class="faqm-icon-card">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="1.8"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17" r="0.6" fill="#fff"/></svg>
               </div>
-              <button type="button" onclick="document.getElementById('faqModalOverlay').remove()"
-                      class="flex-shrink-0 w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 transition-colors flex items-center justify-center shadow-sm"
-                      aria-label="Close FAQ dialog">
-                <i class="fas fa-times"></i>
-              </button>
             </div>
-            <div class="mt-4 flex flex-wrap gap-2">
-              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/20">
-                <i class="fas fa-layer-group mr-1.5"></i>${faqs.length} FAQ topics
-              </span>
-              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/20">
-                <i class="fas fa-chart-line mr-1.5"></i>${totalAsks} repeated asks
-              </span>
+            <div>
+              <div class="faqm-label-tag">&bull; INSIGHTS</div>
+              <h1>Frequently Asked Questions</h1>
+              <div class="faqm-sub">${escapeHtml(lessonTitle)}</div>
             </div>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 md:px-6 py-5">
-            <div class="space-y-3">${faqRows}</div>
+
+          <div class="faqm-stats">
+            <div class="faqm-stat-card">
+              <div class="faqm-stat-icon"><i class="fas fa-layer-group"></i></div>
+              <div><div class="faqm-stat-num">${faqs.length}</div><div class="faqm-stat-label">FAQ topics</div></div>
+            </div>
+            <div class="faqm-stat-card">
+              <div class="faqm-stat-icon"><i class="fas fa-chart-line"></i></div>
+              <div><div class="faqm-stat-num">${totalAsks}</div><div class="faqm-stat-label">repeated asks</div></div>
+            </div>
           </div>
-          <div class="flex-shrink-0 relative z-10 px-5 md:px-6 py-3.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
-            <p class="text-xs text-gray-500 min-w-0">Only recurring student questions are shown.</p>
-            <button type="button" onclick="document.getElementById('faqModalOverlay').remove()"
-                    class="flex-shrink-0 px-3.5 py-2 rounded-lg bg-gray-800 text-white text-xs font-medium hover:bg-black transition-colors">
-              Close
-            </button>
+
+          <div class="faqm-rows">${faqRows}</div>
+
+          <div class="faqm-footer-bar">
+            <div class="faqm-footer-note">
+              <div class="faqm-hex-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2l1.5 3 3.3.5-2.4 2.3.6 3.3L12 9.5 9 11.1l.6-3.3L7.2 5.5l3.3-.5L12 2z" fill="#fff"/></svg></div>
+              <span>Only recurring student questions are shown.</span>
+            </div>
+            <button type="button" onclick="document.getElementById('faqModalOverlay').remove()" class="faqm-close-btn">Close</button>
           </div>
         </div>
       </div>
@@ -7499,54 +7570,67 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           // Show edit modal
           const modalHtml = `
-          <div id="editLessonModal-${lessonId}" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Edit Lesson</h3>
-                <button onclick="document.getElementById('editLessonModal-${lessonId}').remove()" 
-                        class="text-gray-400 hover:text-gray-600">
-                  <i class="fas fa-times"></i>
-                </button>
+          <div id="editLessonModal-${lessonId}" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 elm-overlay">
+            <div class="elm-modal">
+              <div class="elm-head">
+                <div class="elm-close-x" onclick="document.getElementById('editLessonModal-${lessonId}').remove()"><i class="fas fa-times"></i></div>
+                <div class="elm-head-row">
+                  <div class="elm-head-icon"><i class="fas fa-pen"></i></div>
+                  <div>
+                    <h1>Edit Lesson</h1>
+                    <p>Update your lesson details and save your changes.</p>
+                  </div>
+                </div>
               </div>
-              
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Lesson Title</label>
-                <input type="text" id="editLessonTitle" 
-                       value="${lesson.title || ''}"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+
+              <div class="elm-body">
+                <div class="elm-field">
+                  <div class="elm-field-icon"><i class="fas fa-heading"></i></div>
+                  <div class="elm-field-content">
+                    <label>Lesson Title</label>
+                    <input type="text" id="editLessonTitle" value="${lesson.title || ''}">
+                  </div>
+                </div>
+
+                <div class="elm-field">
+                  <div class="elm-field-icon"><i class="fas fa-graduation-cap"></i></div>
+                  <div class="elm-field-content">
+                    <label>Subject</label>
+                    <select id="editLessonSubject">
+                      <option value="General" ${subject === 'General' ? 'selected' : ''}>General</option>
+                      <option value="Math" ${subject === 'Math' ? 'selected' : ''}>Mathematics</option>
+                      <option value="Science" ${subject === 'Science' ? 'selected' : ''}>Science</option>
+                      <option value="English" ${subject === 'English' ? 'selected' : ''}>English</option>
+                      <option value="History" ${subject === 'History' ? 'selected' : ''}>History</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="elm-field">
+                  <div class="elm-field-icon"><i class="fas fa-layer-group"></i></div>
+                  <div class="elm-field-content">
+                    <label>Grade Level</label>
+                    <select id="editLessonGrade">
+                      <option value="General" ${grade === 'General' ? 'selected' : ''}>General</option>
+                      <option value="Elementary" ${grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
+                      <option value="Middle School" ${grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
+                      <option value="High School" ${grade === 'High School' ? 'selected' : ''}>High School</option>
+                      <option value="College" ${grade === 'College' ? 'selected' : ''}>College</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-              
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-                <select id="editLessonSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${subject === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Math" ${subject === 'Math' ? 'selected' : ''}>Mathematics</option>
-                  <option value="Science" ${subject === 'Science' ? 'selected' : ''}>Science</option>
-                  <option value="English" ${subject === 'English' ? 'selected' : ''}>English</option>
-                  <option value="History" ${subject === 'History' ? 'selected' : ''}>History</option>
-                </select>
-              </div>
-              
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Grade Level</label>
-                <select id="editLessonGrade" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                  <option value="General" ${grade === 'General' ? 'selected' : ''}>General</option>
-                  <option value="Elementary" ${grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
-                  <option value="Middle School" ${grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
-                  <option value="High School" ${grade === 'High School' ? 'selected' : ''}>High School</option>
-                  <option value="College" ${grade === 'College' ? 'selected' : ''}>College</option>
-                </select>
-              </div>
-              
-              <div class="flex gap-3">
-                <button onclick="saveLessonEdit('${lessonId}')" 
-                        class="flex-1 bg-primary-600 text-white py-2.5 px-4 rounded-lg hover:bg-primary-700 transition-colors">
-                  Save Changes
-                </button>
-                <button onclick="this.parentElement.parentElement.parentElement.remove()" 
-                        class="flex-1 bg-gray-200 text-gray-800 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors">
-                  Cancel
-                </button>
+
+              <div class="elm-footer">
+                <div class="elm-footer-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI"></div>
+                <div class="elm-footer-btns">
+                  <button class="elm-btn-save" onclick="saveLessonEdit('${lessonId}')">
+                    <i class="fas fa-save"></i> Save Changes
+                  </button>
+                  <button class="elm-btn-cancel" onclick="document.getElementById('editLessonModal-${lessonId}').remove()">
+                    <i class="fas fa-times"></i> Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -11219,72 +11303,122 @@ Align everything with the lesson objectives and do not invent missing informatio
     </script>
 
   <!-- Simple RAG Prompt Modal (legacy-style Set Prompt) -->
+  <style>
+    #ragPromptModal .sp-wrap{ display:flex; width:100%; max-width:1150px; max-height:90vh; background:#fff; border-radius:20px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.25); }
+    #ragPromptModal .sp-side{ flex:0 0 300px; background:radial-gradient(circle at 30% 20%, #14401c, #0a1a10 70%); padding:40px 30px; color:#fff; position:relative; overflow-y:auto; }
+    #ragPromptModal .sp-side-icon{ width:120px; height:120px; margin:0 auto 24px; position:relative; display:flex; align-items:center; justify-content:center; }
+    #ragPromptModal .sp-glow{ position:absolute; width:100%; height:100%; border-radius:50%; background:radial-gradient(circle, rgba(57,255,106,0.25), transparent 70%); }
+    #ragPromptModal .sp-box{ width:64px; height:64px; border-radius:16px; background:#111; border:1px solid #2a2a2a; display:flex; align-items:center; justify-content:center; position:relative; z-index:2; box-shadow:0 0 30px rgba(57,255,106,0.35); }
+    #ragPromptModal .sp-side h2{ font-size:22px; font-weight:800; line-height:1.3; margin-bottom:14px; font-family:'Segoe UI',Arial,sans-serif; }
+    #ragPromptModal .sp-side h2 span{ color:#d0f73a; }
+    #ragPromptModal .sp-side p{ font-size:13.5px; color:#c7d0c9; line-height:1.6; margin-bottom:20px; }
+    #ragPromptModal .sp-side-line{ width:50px; height:3px; background:#d0f73a; margin-bottom:20px; }
+    #ragPromptModal .sp-info-box{ background:#161b16; border-radius:12px; padding:14px; margin-bottom:14px; display:flex; gap:12px; }
+    #ragPromptModal .sp-info-icon{ width:26px; height:26px; border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+    #ragPromptModal .sp-info-icon.sp-green{ background:#1c7c3e; }
+    #ragPromptModal .sp-info-icon.sp-blue{ background:#2563eb; }
+    #ragPromptModal .sp-info-box b{ font-size:13px; display:block; margin-bottom:4px; color:#fff; }
+    #ragPromptModal .sp-info-box p{ font-size:12px; color:#b6bdb7; line-height:1.5; margin:0; }
+    #ragPromptModal .sp-main{ flex:1; padding:36px 40px; position:relative; overflow-y:auto; font-family:'Segoe UI',Arial,sans-serif; color:#111; }
+    #ragPromptModal .sp-close-x{ position:absolute; top:28px; right:28px; width:36px; height:36px; border-radius:50%; border:1px solid #eee; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#333; font-size:18px; line-height:1; }
+    #ragPromptModal .sp-main h1{ font-size:27px; font-weight:800; margin-bottom:8px; }
+    #ragPromptModal .sp-main h1 span{ color:#1c7c3e; }
+    #ragPromptModal .sp-sub{ font-size:14px; color:#6b7280; margin-bottom:26px; }
+    #ragPromptModal .sp-label-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    #ragPromptModal .sp-label{ display:flex; align-items:center; gap:8px; font-weight:700; font-size:14.5px; }
+    #ragPromptModal .sp-label::before{ content:''; width:4px; height:16px; background:#1c7c3e; border-radius:2px; }
+    #ragPromptModal .sp-word-count{ font-size:13px; color:#6b7280; }
+    #ragPromptModal .sp-word-count b{ color:#1c7c3e; }
+    #ragPromptModal .sp-textarea{ width:100%; height:170px; border:1.5px solid #1c7c3e; border-radius:12px; padding:16px; font-size:14.5px; outline:none; resize:vertical; font-family:inherit; color:#222; margin-bottom:14px; }
+    #ragPromptModal .sp-preview-error{ margin-bottom:14px; font-size:13.5px; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:10px 14px; }
+    #ragPromptModal .sp-preview-wrap{ margin-bottom:16px; }
+    #ragPromptModal .sp-preview-label{ display:block; font-weight:700; font-size:13.5px; margin-bottom:6px; }
+    #ragPromptModal .sp-preview-note{ font-size:12px; color:#6b7280; margin-bottom:8px; }
+    #ragPromptModal .sp-preview-pre{ width:100%; max-height:220px; overflow-y:auto; padding:12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; font-size:12px; color:#333; white-space:pre-wrap; font-family:inherit; }
+    #ragPromptModal .sp-hr{ border:none; border-top:1px solid #eee; margin:6px 0 20px; }
+    #ragPromptModal .sp-btn-row{ display:flex; gap:12px; flex-wrap:wrap; justify-content:flex-end; }
+    #ragPromptModal .sp-btn{ padding:11px 18px; border-radius:9px; font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:8px; cursor:pointer; border:1.5px solid transparent; }
+    #ragPromptModal .sp-btn-outline-green{ border-color:#1c7c3e; color:#166534; background:#fff; }
+    #ragPromptModal .sp-btn-outline-red{ border-color:#dc2626; color:#dc2626; background:#fff; }
+    #ragPromptModal .sp-btn-plain{ border-color:#d1d5db; color:#333; background:#fff; }
+    #ragPromptModal .sp-btn-solid{ background:#166534; color:#fff; border-color:#166534; }
+    #ragPromptModal .sp-btn:hover{ opacity:.92; }
+    @media(max-width:900px){
+      #ragPromptModal .sp-wrap{ flex-direction:column; max-height:95vh; }
+      #ragPromptModal .sp-side{ flex:none; }
+    }
+  </style>
   <div id="ragPromptModal"
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[120] hidden">
-    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
-      <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 rounded-t-lg">
-        <h3 class="text-xl font-semibold text-white">Set Custom System Prompt</h3>
-        <p class="text-primary-100 text-sm mt-1">
-          Up to 300 words, combined with the server PDF instructions for all your threads.
-        </p>
-      </div>
-      <div class="p-6 flex-1 overflow-y-auto">
-        <div class="mb-4">
-          <div class="flex justify-between items-center mb-2">
-            <label class="block text-gray-700 text-sm font-semibold">
-              Your custom instructions (editable)
-            </label>
-            <span class="text-xs text-gray-600">Words: <span id="ragPromptCharCount">0</span>/300</span>
+    <div class="sp-wrap">
+      <div class="sp-side">
+        <div class="sp-side-icon">
+          <div class="sp-glow"></div>
+          <div class="sp-box">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#39ff6a" stroke-width="1.6"/><circle cx="9" cy="11.5" r="1" fill="#39ff6a"/><circle cx="12" cy="11.5" r="1" fill="#39ff6a"/><circle cx="15" cy="11.5" r="1" fill="#39ff6a"/></svg>
           </div>
-          <textarea id="ragPromptTextarea"
-            class="w-full h-48 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
-            placeholder="Instructions (max 300 words). Placed before the PDF system instructions."
-            oninput="updateRagPromptCharCount()"></textarea>
-          <p class="text-xs text-gray-500 mt-2">
-            <i class="fas fa-info-circle mr-1"></i>
-            This text is prepended to the app’s PDF chat instructions. Use &quot;Load system prompt&quot; below to see the
-            full read-only text sent to the model.
-          </p>
         </div>
-
-        <div id="ragSystemPromptPreviewError"
-          class="hidden mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
-
-        <div id="ragSystemPromptPreviewWrap" class="mb-4 hidden">
-          <label class="block text-gray-700 text-sm font-semibold mb-2">
-            Full system prompt (read-only)
-          </label>
-          <p id="ragSystemPromptPreviewNote" class="text-xs text-gray-500 mb-2"></p>
-          <pre id="ragFullSystemPromptReadonly"
-            class="w-full max-h-56 overflow-y-auto p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-800 whitespace-pre-wrap font-sans"></pre>
+        <h2>Smarter Prompts,<br>Better <span>Learning</span></h2>
+        <p>Create clear instructions that help AI deliver the best results for your lessons.</p>
+        <div class="sp-side-line"></div>
+        <div class="sp-info-box">
+          <div class="sp-info-icon sp-green">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 16v-4M12 8h.01" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="1.6"/></svg>
+          </div>
+          <div>
+            <b>Important</b>
+            <p>This text is prepended to the app's PDF chat instructions. Use "Load system prompt" below to see the full read-only text sent to the model.</p>
+          </div>
         </div>
-
-        <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p class="text-xs text-blue-800 font-semibold mb-1">Note:</p>
-          <p class="text-xs text-blue-700">
-            The default PDF instructions are always included after your text (and a separator). Use
-            &quot;Load system prompt&quot; to preview the exact combined message.
-          </p>
+        <div class="sp-info-box">
+          <div class="sp-info-icon sp-blue">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z" stroke="#fff" stroke-width="1.6"/></svg>
+          </div>
+          <div>
+            <b>Note:</b>
+            <p>The default PDF instructions are always included after your text (and a separator). Use "Load system prompt" to preview the exact combined message.</p>
+          </div>
         </div>
       </div>
-      <div class="px-6 py-4 border-t border-gray-200 flex flex-wrap gap-2">
-        <button type="button" onclick="loadRAGSystemPrompt()"
-          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-          Load system prompt
-        </button>
-        <button type="button" onclick="deleteRAGPrompt()"
-          class="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50">
-          Delete prompt
-        </button>
-        <div class="flex-1 min-w-[1rem]"></div>
-        <button type="button" onclick="closeRAGPromptModal()"
-          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-          Cancel
-        </button>
-        <button type="button" onclick="saveRAGPrompt()"
-          class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-          Save prompt
-        </button>
+
+      <div class="sp-main">
+        <div class="sp-close-x" onclick="closeRAGPromptModal()">&times;</div>
+        <h1>Set Custom <span>System Prompt</span></h1>
+        <p class="sp-sub">Up to 300 words, combined with the server PDF instructions for all your threads.</p>
+
+        <div class="sp-label-row">
+          <div class="sp-label">Your custom instructions (editable)</div>
+          <div class="sp-word-count">Words: <b><span id="ragPromptCharCount">0</span></b>/300</div>
+        </div>
+        <textarea id="ragPromptTextarea" class="sp-textarea"
+          placeholder="Instructions (max 300 words). Placed before the PDF system instructions."
+          oninput="updateRagPromptCharCount()"></textarea>
+
+        <div id="ragSystemPromptPreviewError" class="sp-preview-error hidden"></div>
+
+        <div id="ragSystemPromptPreviewWrap" class="sp-preview-wrap hidden">
+          <label class="sp-preview-label">Full system prompt (read-only)</label>
+          <p id="ragSystemPromptPreviewNote" class="sp-preview-note"></p>
+          <pre id="ragFullSystemPromptReadonly" class="sp-preview-pre"></pre>
+        </div>
+
+        <hr class="sp-hr">
+
+        <div class="sp-btn-row">
+          <button type="button" class="sp-btn sp-btn-outline-green" onclick="loadRAGSystemPrompt()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" stroke="#166534" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="#166534" stroke-width="1.8"/></svg>
+            Load system prompt
+          </button>
+          <button type="button" class="sp-btn sp-btn-outline-red" onclick="deleteRAGPrompt()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" stroke="#dc2626" stroke-width="1.8"/></svg>
+            Delete prompt
+          </button>
+          <button type="button" class="sp-btn sp-btn-plain" onclick="closeRAGPromptModal()">Cancel</button>
+          <button type="button" class="sp-btn sp-btn-solid" onclick="saveRAGPrompt()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="#fff" stroke-width="1.8"/><path d="M17 21v-8H7v8M7 3v5h8" stroke="#fff" stroke-width="1.8"/></svg>
+            Save prompt
+          </button>
+        </div>
       </div>
     </div>
   </div>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Lessons - Iqbal AI</title>
+<style>
+  :root{
+    --green-900:#0a4a2c;
+    --green-700:#166534;
+    --green-600:#1c7c3e;
+    --green-500:#2f9e4f;
+    --lime-500:#d0f73a;
+    --gray-500:#6b7280;
+    --gray-400:#9ca3af;
+    --gray-300:#d1d5db;
+    --gray-100:#f3f4f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111;}
+  header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 40px;border-bottom:1px solid #eee;
+  }
+  .logo img{height:44px;width:auto;}
+  .user{display:flex;align-items:center;gap:10px;}
+  .avatar{
+    width:38px;height:38px;border-radius:50%;
+    background:var(--green-600);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;
+  }
+  .user-info{display:flex;flex-direction:column;line-height:1.2;}
+  .user-info b{font-size:14px;}
+  .user-info span{font-size:12px;color:var(--gray-500);}
+  .logout{color:var(--gray-500);margin-left:6px;font-size:18px;cursor:pointer;}
+
+  main{max-width:900px;margin:0 auto;padding:30px 20px 60px;}
+
+  .toolbar{
+    display:flex;align-items:center;justify-content:space-between;
+    background:#111;border-radius:12px;
+    padding:12px 20px;margin-bottom:30px;gap:16px;flex-wrap:wrap;
+  }
+  .toolbar .tabs{display:flex;gap:28px;align-items:center;flex-wrap:wrap;}
+  .toolbar .tab{
+    display:flex;align-items:center;gap:8px;color:#e5e7eb;font-size:14.5px;
+    font-weight:600;cursor:pointer;
+  }
+  .toolbar .tab small{display:block;font-weight:400;color:#9ca3af;font-size:11.5px;}
+  .toolbar .tab .icon-pair{display:flex;gap:2px;}
+  .toolbar .tab .icon-pair div{width:6px;height:16px;background:var(--lime-500);border-radius:2px;}
+  .toolbar .create-btn{
+    background:var(--green-900);color:#fff;border:none;
+    padding:10px 18px;border-radius:8px;font-weight:700;font-size:13.5px;
+    display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;
+  }
+
+  .page-head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    margin-bottom:24px;gap:16px;flex-wrap:wrap;
+  }
+  .page-head h1{font-size:26px;font-weight:800;margin-bottom:4px;}
+  .page-head p{color:var(--gray-500);font-size:14px;}
+  .search-box{
+    display:flex;align-items:center;gap:8px;
+    border:1px solid var(--gray-300);border-radius:8px;
+    padding:9px 14px;min-width:260px;
+  }
+  .search-box input{border:none;outline:none;font-size:13.5px;flex:1;}
+
+  .lesson-card{
+    display:flex;
+    border:1px solid #eee;border-radius:12px;
+    margin-bottom:16px;overflow:hidden;
+    box-shadow:0 2px 10px rgba(0,0,0,0.03);
+  }
+  .lesson-bar{
+    width:34px;background:var(--green-900);
+    color:#fff;font-size:11px;font-weight:700;letter-spacing:1px;
+    display:flex;align-items:center;justify-content:center;
+    writing-mode:vertical-rl;transform:rotate(180deg);
+    padding:10px 0;
+  }
+  .lesson-body{flex:1;padding:16px 20px;}
+  .lesson-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:10px;}
+  .lesson-title{display:flex;align-items:center;gap:10px;}
+  .icon-badge{
+    width:30px;height:30px;border-radius:8px;
+    background:var(--green-700);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:14px;flex-shrink:0;
+  }
+  .lesson-title h3{font-size:16.5px;font-weight:700;}
+  .lesson-meta-right{display:flex;align-items:center;gap:10px;}
+  select.version{
+    border:1px solid var(--gray-300);border-radius:6px;
+    padding:4px 8px;font-size:12.5px;color:#333;
+  }
+  .time-ago{font-size:12px;color:var(--gray-500);white-space:nowrap;}
+
+  .lesson-info{
+    display:flex;gap:50px;margin-bottom:14px;flex-wrap:wrap;
+  }
+  .lesson-info div{font-size:12px;}
+  .lesson-info label{display:block;color:var(--gray-400);font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px;}
+  .lesson-info span{font-size:13px;color:#222;}
+
+  .actions-label{font-size:10.5px;color:var(--gray-400);letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;}
+  .actions{display:flex;gap:18px;flex-wrap:wrap;}
+  .actions a{
+    display:flex;align-items:center;gap:5px;
+    font-size:12.5px;font-weight:600;text-decoration:none;
+  }
+  .actions a.view{color:#2563eb;}
+  .actions a.edit{color:#2563eb;}
+  .actions a.word{color:#15803d;}
+  .actions a.ppt{color:#c2410c;}
+  .actions a.ask{color:#a16207;}
+  .actions a.delete{color:#dc2626;}
+
+  .pagination{
+    display:flex;justify-content:center;align-items:center;gap:10px;margin:30px 0;
+  }
+  .pagination button{
+    border:1px solid var(--gray-300);background:#fff;
+    padding:6px 14px;border-radius:6px;font-size:13px;cursor:pointer;
+  }
+  .pagination .page-num{
+    width:28px;height:28px;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:600;cursor:pointer;
+  }
+  .pagination .page-num.active{background:var(--green-600);color:#fff;}
+  .pagination .page-info{font-size:12.5px;color:var(--gray-500);margin-left:6px;}
+
+  footer{text-align:center;color:#9ca3af;font-size:13px;margin-bottom:30px;}
+  footer b{color:var(--green-700);}
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo"><img src="assets/logo.png" alt="Iqbal AI"></div>
+    <div class="user">
+      <div class="avatar">T</div>
+      <div class="user-info">
+        <b>Teacher1122</b>
+        <span>Teacher</span>
+      </div>
+      <div class="logout">&#8674;</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <div class="tabs">
+        <div class="tab">
+          <div class="icon-pair"><div></div><div></div></div>
+          My Lessons
+        </div>
+        <div class="tab">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#e5e7eb" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.6 1z" stroke="#e5e7eb" stroke-width="1.4"/></svg>
+          Set Prompt
+        </div>
+        <div class="tab">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke="#e5e7eb" stroke-width="1.6"/></svg>
+          <div>Chat: test<small>Yesterday</small></div>
+        </div>
+      </div>
+      <button class="create-btn">+ CREATE AN ACCOUNT</button>
+    </div>
+
+    <div class="page-head">
+      <div>
+        <h1>My Lessons</h1>
+        <p>View and manage all your created lessons</p>
+      </div>
+      <div class="search-box">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#9ca3af" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" placeholder="Search lessons by title, subject, or grade...">
+      </div>
+    </div>
+
+    <div id="lessonsList"></div>
+
+    <div class="pagination">
+      <button>Previous</button>
+      <div class="page-num active">1</div>
+      <div class="page-num">2</div>
+      <div class="page-num">3</div>
+      <button>Next</button>
+      <span class="page-info">Page 1 of 3</span>
+    </div>
+  </main>
+
+  <footer>&copy;2026 <b>Iqbalai</b>. All Rights Reserved</footer>
+
+  <script>
+    const lessons = [
+      {n:1,letter:'P',title:'PMP',subject:'General',grade:'General',by:'Teacher',time:'Yesterday 06:33 AM'},
+      {n:2,letter:'O',title:'Online Mini MBA Proposal',subject:'Business',grade:'Grade 12',by:'Teacher1122',time:'2 days ago'},
+      {n:3,letter:'I',title:'Introduction to Artificial Intelligence',subject:'Computer Science',grade:'Grade 10',by:'Teacher1122',time:'3 days ago'},
+      {n:4,letter:'C',title:'Creative Writing Essentials',subject:'English',grade:'Grade 8',by:'Teacher',time:'4 days ago'},
+      {n:5,letter:'M',title:'Mathematics: Algebra Basics',subject:'Mathematics',grade:'Grade 9',by:'Teacher1122',time:'5 days ago'},
+      {n:6,letter:'T',title:'The Solar System',subject:'Science',grade:'Grade 7',by:'Teacher',time:'6 days ago'},
+      {n:7,letter:'P',title:'Pakistan Studies: Independence',subject:'Social Studies',grade:'Grade 8',by:'Teacher1122',time:'7 days ago'},
+      {n:8,letter:'D',title:'Digital Citizenship',subject:'ICT',grade:'Grade 9',by:'Teacher',time:'8 days ago'},
+    ];
+    const list = document.getElementById('lessonsList');
+    lessons.forEach(l=>{
+      const card = document.createElement('div');
+      card.className='lesson-card';
+      card.innerHTML = `
+        <div class="lesson-bar">LESSON 0${l.n}</div>
+        <div class="lesson-body">
+          <div class="lesson-top">
+            <div class="lesson-title">
+              <div class="icon-badge">${l.letter}</div>
+              <h3>${l.title}</h3>
+            </div>
+            <div class="lesson-meta-right">
+              <select class="version"><option>v3</option></select>
+              <span class="time-ago">&#8635; ${l.time}</span>
+            </div>
+          </div>
+          <div class="lesson-info">
+            <div><label>Subject</label><span>${l.subject}</span></div>
+            <div><label>Grade</label><span>${l.grade}</span></div>
+            <div><label>Created by</label><span>${l.by}</span></div>
+          </div>
+          <div class="actions-label">Actions</div>
+          <div class="actions">
+            <a class="view" href="#">&#128065; View</a>
+            <a class="edit" href="#">&#9998; Edit</a>
+            <a class="word" href="#">W Word</a>
+            <a class="ppt" href="#">P PowerPoint</a>
+            <a class="ask" href="#">? Ask</a>
+            <a class="delete" href="#">&#10005; Delete</a>
+          </div>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+  </script>
+</body>
+</html>
