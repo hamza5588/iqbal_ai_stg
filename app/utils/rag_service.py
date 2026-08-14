@@ -4515,6 +4515,7 @@ def _chat_handle_lesson_state_and_persistence(
     user_llm_structured_output: Any,
     config: Any,
     _mark_step: Any,
+    turn_scope_messages: Optional[List[BaseMessage]] = None,
 ) -> AIMessage:
     """Structured lesson_state, user-driven finalization, and DB persistence for lesson text."""
     msg_lower = last_user_msg_text.lower()
@@ -4549,15 +4550,23 @@ def _chat_handle_lesson_state_and_persistence(
     # language understanding decides intent; the tool call is the one thing regex never had to
     # guess at reliably.
     #
-    # Scope to the current turn only (everything after the most recent HumanMessage), same
-    # turn-scoping used by _tool_router, so a finalize call from an earlier turn in this
-    # conversation is never mistaken for one happening right now.
+    # Scope to the current turn only (everything after the most recent HumanMessage), so a
+    # finalize call from an earlier turn in this conversation is never mistaken for one
+    # happening right now. Must scan the chronologically-ordered conversation (turn_scope_messages,
+    # i.e. prep.conversation_messages before token-budget trimming), NOT the windowed `messages`
+    # actually sent to the LLM this round: _trim_messages_for_token_budget pins the current
+    # HumanMessage and inserts it right before the first AIMessage/ToolMessage it finds in the
+    # kept window - which can be an older turn's finalize_lesson_tool round that still fit in
+    # the budget. That reordering made an old "save this lesson" call look like it happened
+    # after the CURRENT human message, forcing every later unrelated reply in the thread to be
+    # overwritten with "Lesson finalized and saved. You can download it now." - confirmed live.
+    scope_source = turn_scope_messages if turn_scope_messages is not None else messages
     last_human_idx = -1
-    for i in range(len(messages) - 1, -1, -1):
-        if isinstance(messages[i], HumanMessage):
+    for i in range(len(scope_source) - 1, -1, -1):
+        if isinstance(scope_source[i], HumanMessage):
             last_human_idx = i
             break
-    current_turn_tail = messages[last_human_idx + 1:] if last_human_idx >= 0 else messages
+    current_turn_tail = scope_source[last_human_idx + 1:] if last_human_idx >= 0 else scope_source
 
     finalize_tool_result = None
     for m in current_turn_tail:
@@ -4736,6 +4745,7 @@ def _chat_invoke_llm_with_retry(
                 user_llm_structured_output=user_llm_structured_output,
                 config=config,
                 _mark_step=_mark_step,
+                turn_scope_messages=conversation_messages,
             )
 
             if attempt > 0:
