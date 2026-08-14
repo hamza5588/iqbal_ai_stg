@@ -9112,10 +9112,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         try {
           // Lecture/lesson generation runs multiple retrieval + LLM rounds server-side and can
-          // take minutes. Keep this above the backend budget (gunicorn --timeout) so we never
-          // abandon a turn the server is still working on and still holding the per-user lock.
+          // take minutes. Keep this above the backend budget (gunicorn --timeout 300s in
+          // Dockerfile) so we never abandon a turn the server is still working on and still
+          // holding the per-user lock. Was previously 180000 (180s) - BELOW gunicorn's 300s -
+          // so a legitimately slow-but-successful backend run (confirmed live: a real lesson
+          // plan request can take 90s+ under normal load, more under contention) could get
+          // aborted client-side while the backend was still validly working, discarding
+          // completed work and showing a confusing "Request timed out" error instead of the
+          // real answer. 310000 leaves gunicorn's own timeout as the first thing to fire, so a
+          // genuine backend timeout still returns a real error response instead of racing it.
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 180000);
+          const timeoutId = setTimeout(() => controller.abort(), 310000);
           const body = {
             message: message,
             thread_id: window.currentRAGThreadId || null,
