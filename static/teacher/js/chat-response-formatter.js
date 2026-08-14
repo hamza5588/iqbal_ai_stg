@@ -34,6 +34,20 @@
    * If we see a line like "| A | B |" followed by "| x | y |" with no "| --- | --- |" in between, insert separator.
    */
   /**
+   * Placeholder marker for stashed math segments. Deliberately plain alphanumeric with no
+   * markdown-significant characters (no <, >, _, *, `, [, ], $, \\) and no Unicode private-use
+   * characters: marked.js HTML-escapes "<"/">" (so "<<__MATH_0__>>" came back out of
+   * marked.parse() as the literal text "&lt;&lt;__MATH_0__&gt;&gt;", breaking any restore that
+   * ran afterward) and silently drops Unicode PUA characters entirely. Verified against the
+   * real marked library that this exact format passes through marked.parse() byte-for-byte
+   * unchanged, which is required now that the restore happens after parsing (see below).
+   */
+  function _mathPlaceholder(i) {
+    return 'zzMATHSTASHzz' + i + 'zzENDMATHzz';
+  }
+  var _MATH_PLACEHOLDER_RE = /zzMATHSTASHzz(\d+)zzENDMATHzz/g;
+
+  /**
    * Temporarily replace LaTeX/math segments so line-based structure fixes never touch equations.
    * Supports $$...$$, \\[...\\], \\(...\\), and single-line $...$ (inline).
    */
@@ -43,7 +57,7 @@
     var text = str;
     function push(m) {
       stash.push(m);
-      return '<<__MATH_' + (stash.length - 1) + '__>>';
+      return _mathPlaceholder(stash.length - 1);
     }
     text = text.replace(/\$\$[\s\S]*?\$\$/g, function (m) {
       return '\n\n' + push(m) + '\n\n';
@@ -56,13 +70,22 @@
     return { text: text, stash: stash };
   }
 
+  /**
+   * Must run on the rendered HTML, AFTER marked.parse() - not on the markdown source before
+   * it. CommonMark treats a backslash before any ASCII punctuation as an escape and strips the
+   * backslash on render, so restoring "\[ ... \]"/"\( ... \)" into the markdown source before
+   * marked.parse() silently ate every backslash (confirmed with the real marked library:
+   * "\[x\]" parses to "<p>[x]</p>", not "<p>\[x\]</p>"), leaving MathJax nothing to recognize
+   * as math even when the model's own output was perfectly correct. The stash is HTML content
+   * being spliced into already-parsed HTML, so it also gets DOMPurify-sanitized afterward like
+   * everything else.
+   */
   function restoreMathSegments(str, stash) {
     if (!stash || !stash.length) return str;
-    var out = str;
-    for (var i = 0; i < stash.length; i++) {
-      out = out.split('<<__MATH_' + i + '__>>').join(stash[i]);
-    }
-    return out;
+    return str.replace(_MATH_PLACEHOLDER_RE, function (match, idxStr) {
+      var idx = parseInt(idxStr, 10);
+      return idx >= 0 && idx < stash.length ? stash[idx] : match;
+    });
   }
 
   /**
@@ -176,7 +199,7 @@
         continue;
       }
       // Skip lines that still contain only math placeholders (no structural fix needed)
-      if (/^<<__MATH_\d+__>>$/.test(t)) {
+      if (/^zzMATHSTASHzz\d+zzENDMATHzz$/.test(t)) {
         out.push(line);
         continue;
       }
@@ -190,14 +213,14 @@
 
       // Numbered sections: **1. Title** or **2) Title**
       var num = t.match(/^\*\*(\d+[\.)]\s+.+)\*\*$/);
-      if (num && !/\$\$|<<__MATH_/.test(t)) {
+      if (num && !/\$\$|zzMATHSTASHzz/.test(t)) {
         out.push(lead + '## ' + num[1].trim());
         continue;
       }
 
       // Letter subsections: **A. Title** or **B) Title**
       var letter = t.match(/^\*\*([A-Z][\.)]\s+.+)\*\*$/);
-      if (letter && !/\$\$|<<__MATH_/.test(t)) {
+      if (letter && !/\$\$|zzMATHSTASHzz/.test(t)) {
         out.push(lead + '### ' + letter[1].trim());
         continue;
       }
@@ -328,8 +351,6 @@
 
     var mathProtected = protectMathSegments(text);
     text = normalizePseudoLectureMarkdown(mathProtected.text);
-    text = restoreMathSegments(text, mathProtected.stash);
-
     text = normalizeMarkdownAtxHeadings(text);
 
     var html;
@@ -347,6 +368,9 @@
     } else {
       html = escapeAndBreaks(text);
     }
+
+    // Restore math AFTER marked.parse(), not before - see restoreMathSegments' docstring.
+    html = restoreMathSegments(html, mathProtected.stash);
 
     if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
       try {

@@ -9800,19 +9800,10 @@ To continue your learning journey:
         <div style="background: #f9fafb; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb;">
           <h3 style="color: #10b981; font-size: 1.2rem; margin: 0 0 1rem 0;"><strong>✅ Lesson Created & Saved!</strong></h3>
           
-          <div style="background: white; padding: 1.25rem; border-radius: 0.5rem; max-height: 600px; overflow-y: auto; border: 1px solid #e5e7eb; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;">
-            ${(lessonContent || '').split('\n').map(line => {
-          if (line.startsWith('# ')) return `<h2 style="color: #0ea5e9; font-size: 1.4rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('# ', '')}</strong></h2>`;
-          if (line.startsWith('## ')) return `<h3 style="color: #0284c7; font-size: 1.15rem; margin: 1rem 0 0.5rem 0;"><strong>${line.replace('## ', '')}</strong></h3>`;
-          if (line.startsWith('### ')) return `<h4 style="color: #06b6d4; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;"><strong>${line.replace('### ', '')}</strong></h4>`;
-          if (line.startsWith('- ')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.25rem 0;">• ${line.replace('- ', '')}</div>`;
-          if (line.startsWith('  - ')) return `<div style="margin-left: 2.5rem; color: #6b7280; margin: 0.25rem 0;">◦ ${line.replace('  - ', '')}</div>`;
-          if (line.startsWith('    - ')) return `<div style="margin-left: 3.75rem; color: #9ca3af; font-size: 0.9rem; margin: 0.25rem 0;">▪ ${line.replace('    - ', '')}</div>`;
-          if (line.startsWith('- **')) return `<div style="margin-left: 1.25rem; color: #374151; margin: 0.5rem 0;"><strong>• ${line.replace('- **', '').replace(':**', ':')}</strong></div>`;
-          if (line.startsWith('**') && line.endsWith('**')) return `<div style="color: #1f2937; margin: 0.5rem 0;"><strong>${line}</strong></div>`;
-          if (line.trim() === '') return '<div style="height: 0.5rem;"></div>';
-          return `<div style="color: #374151; margin: 0.3rem 0;">${line}</div>`;
-        }).join('')}
+          <div class="markdown-content tex2jax_process" style="background: white; padding: 1.25rem; border-radius: 0.5rem; max-height: 600px; overflow-y: auto; border: 1px solid #e5e7eb; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;">
+            ${(typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
+          ? TeacherChatFormatter.formatChatResponse(lessonContent || '')
+          : escapeHtml(lessonContent || '')}
           </div>
           
           <div style="background: #f0fdf4; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #10b981; margin-bottom: 1rem;">
