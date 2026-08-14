@@ -1083,6 +1083,28 @@ def _start_heading_extraction_background(thread_id: str, user_id: int, app=None)
     t.start()
 
 
+@bp.route('/chat-progress/<thread_id>', methods=['GET'])
+@login_required
+def chat_progress(thread_id):
+    """
+    Lightweight polling endpoint: what step is the AI currently on for this in-flight chat
+    turn (e.g. "Searching the document...", "Composing your answer...")? Best-effort - returns
+    {} if nothing has been recorded yet or Redis is unavailable, which the frontend treats as
+    "keep showing the generic thinking indicator". Scoped to the requesting user's own thread.
+    """
+    if 'user_id' not in session:
+        return jsonify({}), 200
+    user_id = session['user_id']
+
+    db = get_db()
+    owns_thread = db.query(RAGThread).filter_by(thread_id=thread_id, user_id=user_id).first()
+    if not owns_thread:
+        return jsonify({}), 200
+
+    from app.utils.chat_progress import get_progress
+    return jsonify(get_progress(thread_id))
+
+
 @bp.route('/chat', methods=['POST'])
 @login_required
 def chat():

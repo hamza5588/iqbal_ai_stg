@@ -9108,6 +9108,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         // Show typing indicator on RIGHT side
         showTypingIndicator();
+        startChatProgressPolling(window.currentRAGThreadId);
 
         try {
           // Lecture/lesson generation runs multiple retrieval + LLM rounds server-side and can
@@ -9190,6 +9191,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         } finally {
           window.teacherChatRequestInFlight = false;
           updateSendButton();
+          stopChatProgressPolling();
           removeTypingIndicator();
         }
       }
@@ -9889,7 +9891,7 @@ To continue your learning journey:
               <span></span>
               <span></span>
             </div>
-            <span class="text-surface-600 text-sm">AI is thinking...</span>
+            <span class="text-surface-600 text-sm" id="typing-indicator-text">AI is thinking...</span>
           </div>
         </div>
       `;
@@ -9902,6 +9904,40 @@ To continue your learning journey:
         const typingIndicator = document.getElementById('typing-indicator');
         if (typingIndicator) {
           typingIndicator.remove();
+        }
+      }
+
+      // Update the "AI is thinking..." label with what the backend is actually doing right now
+      // (e.g. "Searching the document...", "Composing your answer...") so the wait feels active
+      // instead of a static spinner.
+      function updateTypingIndicatorText(message) {
+        const el = document.getElementById('typing-indicator-text');
+        if (el && message) el.textContent = message;
+      }
+
+      let _chatProgressPollTimer = null;
+
+      function startChatProgressPolling(threadId) {
+        stopChatProgressPolling();
+        if (!threadId) return;
+        _chatProgressPollTimer = setInterval(async function () {
+          try {
+            const res = await fetch('/api/rag/chat-progress/' + encodeURIComponent(threadId), {
+              credentials: 'include'
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data && data.message) updateTypingIndicatorText(data.message);
+          } catch (e) {
+            // Best-effort only - never surface this as a chat error.
+          }
+        }, 800);
+      }
+
+      function stopChatProgressPolling() {
+        if (_chatProgressPollTimer) {
+          clearInterval(_chatProgressPollTimer);
+          _chatProgressPollTimer = null;
         }
       }
 
