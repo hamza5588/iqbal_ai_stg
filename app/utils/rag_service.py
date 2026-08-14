@@ -697,7 +697,13 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
     """
     Approximate token-budget trimming:
     - keep the first SystemMessage (if present)
-    - always keep the most recent HumanMessage (required by Qwen/Groq chat templates)
+    - always keep the most recent HumanMessage (required by Qwen/Groq chat templates),
+      reinserted at its true chronological position among whatever units survive trimming —
+      not unconditionally in front of the trailing tool-call unit. Doing that put an OLDER
+      turn's tool exchange (e.g. a prior finalize_lesson_tool call) chronologically after the
+      new question in what the model actually sees, so it would genuinely believe it just
+      finished that old tool call and continue accordingly (e.g. repeat "Lesson finalized and
+      saved") even though nothing was called this turn. Confirmed live.
     - keep most recent *units* that fit in budget, where a unit is either one plain
       message or an AIMessage(tool_calls=[...]) together with its ToolMessage(s) — these
       are always kept or dropped as one atomic group, never split. Splitting them (the
@@ -738,8 +744,18 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
             break
 
     # Group into atomic units: an AIMessage with tool_calls plus its immediately
-    # following ToolMessage(s) travel together; everything else is its own unit.
+    # following ToolMessage(s) travel together; everything else is its own unit. Each unit
+    # keeps its original start index in `rest` so the pinned human message (added back
+    # separately below) can be reinserted at its true chronological position, instead of
+    # unconditionally in front of whatever tool-call unit happens to survive trimming - which
+    # could be an OLDER turn's tool exchange (e.g. a prior finalize_lesson_tool call) that has
+    # nothing to do with the current question. Making that older exchange appear to
+    # chronologically precede the new question doesn't just mis-scope the post-hoc
+    # lesson-state check - it changes what the MODEL itself sees, so it can genuinely believe
+    # it just finished that old tool call and continue accordingly (e.g. re-stating "Lesson
+    # finalized and saved") even though it never called any tool this turn. Confirmed live.
     units: List[List[Any]] = []
+    unit_start_indices: List[int] = []
     i = 0
     while i < len(rest):
         if pinned_human_idx is not None and i == pinned_human_idx:
@@ -748,14 +764,17 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
         msg = rest[i]
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
             group = [msg]
+            group_start = i
             j = i + 1
             while j < len(rest) and isinstance(rest[j], ToolMessage) and j != pinned_human_idx:
                 group.append(rest[j])
                 j += 1
             units.append(group)
+            unit_start_indices.append(group_start)
             i = j
         else:
             units.append([msg])
+            unit_start_indices.append(i)
             i += 1
 
     def _unit_chars(unit):
@@ -768,31 +787,33 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
     # Always keep the most recent unit so the current user request / latest tool
     # exchange is never dropped, even when it is large — but as a whole unit.
     kept_units: List[List[Any]] = []
-    for idx, unit in enumerate(reversed(units)):
-        is_most_recent = idx == 0
+    kept_start_indices: List[int] = []
+    n_units = len(units)
+    for idx in range(n_units - 1, -1, -1):
+        unit = units[idx]
+        is_most_recent = idx == n_units - 1
         unit_chars = _unit_chars(unit)
         if total_chars + unit_chars > token_budget_chars and not is_most_recent:
             break
         kept_units.append(unit)
+        kept_start_indices.append(unit_start_indices[idx])
         total_chars += unit_chars
 
     kept_units.reverse()
+    kept_start_indices.reverse()
     kept = [m for unit in kept_units for m in unit]
 
-    if pinned_human is not None and not any(isinstance(m, HumanMessage) for m in kept):
-        # Insert pinned human before the trailing tool/assistant tail.
-        insert_at = 0
-        for i, m in enumerate(kept):
-            if isinstance(m, (AIMessage, ToolMessage)):
-                insert_at = i
+    if pinned_human is not None:
+        # Insert at the position that preserves true chronological order: right before the
+        # first surviving unit that originally came AFTER the pinned human message (i.e. later
+        # rounds of tool-calling within the SAME current turn), or at the very end if every
+        # surviving unit is from before it (the normal case - it's the newest message).
+        flat_insert_at = len(kept)
+        for kept_idx, unit_start in enumerate(kept_start_indices):
+            if unit_start > pinned_human_idx:
+                flat_insert_at = sum(len(u) for u in kept_units[:kept_idx])
                 break
-            insert_at = i + 1
-        kept.insert(insert_at, pinned_human)
-    elif pinned_human is not None and not any(
-        isinstance(m, HumanMessage) and (getattr(m, "content", None) == getattr(pinned_human, "content", None))
-        for m in kept
-    ):
-        kept.insert(0, pinned_human)
+        kept.insert(flat_insert_at, pinned_human)
 
     return [system_msg, *kept] if system_msg is not None else kept
 
