@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from app.utils.db import get_db
 from app.utils.encryption import decrypt_api_key
+from app.utils.chat_progress import set_progress as _set_chat_progress
 from app.models.database_models import RAGPrompt, RAGThread, RAGChunk, RAGHeading, SystemSettings
 from app.config import Config
 logger = logging.getLogger(__name__)
@@ -2140,7 +2141,8 @@ def get_page_tool(page: int, thread_id: str) -> dict:
     Always include the thread_id when calling this tool.
     """
     logger.info(f"get_page_tool called: page={page}, thread_id={thread_id}")
-    
+    _set_chat_progress(thread_id, f"📄 Looking up page {page}...")
+
     # Extract user_id from thread_id
     user_id = _get_user_id_for_thread(thread_id) if thread_id else None
     if user_id is None:
@@ -2862,6 +2864,7 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
         - "method": extraction method used ("ai_toc_extraction" or "ai_heading_extraction")
         - "chunks_scanned": number of document pages analyzed
     """
+    _set_chat_progress(thread_id, "📋 Reviewing the document outline...")
     return _get_thread_topics(thread_id)
 
 
@@ -3063,6 +3066,8 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
     if not thread_id or not str(thread_id).strip():
         return {"error": "Error: thread_id is required. No document session found for this request."}
 
+    _set_chat_progress(thread_id, f"📚 Gathering every section on \"{topic_q}\"...")
+
     user_id = _get_user_id_for_thread(thread_id)
     if user_id is None:
         return {"error": f"Could not extract user_id from thread_id: {thread_id}"}
@@ -3262,6 +3267,7 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     query = q
     logger.info(f"rag_tool called: query='{query[:100]}...', thread_id={thread_id}")
     _rag_step("rag_entry")
+    _set_chat_progress(thread_id, "🔍 Searching the document...")
 
     # #region agent log
     _debug_log = (Path(__file__).resolve().parent.parent.parent / ".cursor" / "debug.log")
@@ -3469,6 +3475,8 @@ def finalize_lesson_tool(thread_id: str) -> str:
     if not thread_id:
         result["reason"] = "No active document thread to save a lesson for."
         return json.dumps(result)
+
+    _set_chat_progress(thread_id, "💾 Saving your lesson...")
 
     try:
         user_id = _get_user_id_for_thread(thread_id)
@@ -4670,6 +4678,8 @@ def _chat_invoke_llm_with_retry(
         try:
             if provider == "groq":
                 groq_rate_limiter.wait_if_needed()
+            if attempt == 0:
+                _set_chat_progress(thread_id_str, "✍️ Composing your answer...")
             if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1]:
                 response = user_llm.invoke(messages, config=config)
             else:
@@ -5038,6 +5048,7 @@ def chat_node(state: ChatState, config=None):
         if tid:
             thread_id_str = str(tid)
     _mark_step("resolve_thread_id")
+    _set_chat_progress(thread_id_str, "🤔 Thinking about your question...")
 
     short_mode_active = _consume_short_mode_turn(thread_id_str)
     token_pressure_active = _consume_token_pressure_turn(thread_id_str)
