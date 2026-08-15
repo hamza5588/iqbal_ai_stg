@@ -3895,6 +3895,15 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "original question yourself right now with a different explanation or more detail (e.g. step by step from "
     "the beginning), covering steps you may have skipped. Only ask a clarifying question if the previous "
     "question itself was ambiguous, not just because the user said they didn't understand.\n"
+    "- Follow-ups about your own previous answer: if the user asks you to explain, justify, or clarify a "
+    "specific detail, term, number, variable, or step that appears in YOUR OWN previous response in this "
+    "conversation (e.g. \"explain why 2x\", \"how did you get that number\", \"why did you use that formula\", "
+    "\"what does that mean\"), answer directly from your own prior explanation and reasoning already visible "
+    "in this conversation - this is about your own reasoning, not a new document lookup. Do not call rag_tool "
+    "with just the bare fragment (e.g. \"2x\") as the search query; short symbol-only fragments rarely match "
+    "anything useful and produce a weak or empty result. Only retrieve from the document if the detail being "
+    "asked about was not actually something you derived or stated yourself. Never fall back to a generic "
+    "closing remark, and never respond about lesson-saving status when the user asked a substantive question.\n"
     "- Answer the user directly. Do not repeat their question. Do not describe tool usage.\n"
 )
 
@@ -3917,6 +3926,10 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF_LOAD_TEST = (
     "- If the user sends a short dissatisfied follow-up (e.g. 'try again', 'I still don't understand'), "
     "immediately re-answer the previous question yourself with a different, more detailed explanation. "
     "Do not give a generic closing line and do not ask what part was unclear.\n"
+    "- If the user asks you to explain/justify a specific detail from YOUR OWN previous answer "
+    "(e.g. 'explain why 2x', 'how did you get that number'), answer from your own prior reasoning already in "
+    "this conversation - do not call rag_tool with just the bare fragment, and never reply about lesson-saving "
+    "status when the user asked a substantive question.\n"
     "- If question is irrelevant to PDF, reply exactly: "
     "\"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
 )
