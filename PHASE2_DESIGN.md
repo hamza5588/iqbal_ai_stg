@@ -8,6 +8,39 @@ known-future interface and does not invent routing of its own.
 Worktree: `C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\.claude\worktrees\agent-a70d180170c889c7d`
 Branch: `worktree-agent-a70d180170c889c7d`
 
+## Addendum (2026-08-15): main's review + resolutions
+
+Main reviewed the original design below and confirmed: the heuristic-only-for-non-lesson-
+intents split, the env var rename with deprecation fallback, and (approved) keeping
+`lesson_generation` on unconditional eval. Resolutions to the original §6 open questions:
+
+- **Router intent values (final, from the approved plan Phase 1 is building against):**
+  `document_qa`, `lesson_generation`, `own_answer_followup`, `meta_conversation`,
+  `greeting_casual`, `clarification`, `general_knowledge_qa`, `lesson_modification`,
+  `lesson_qa`, `lesson_save` — 10 values, three more than this doc originally assumed
+  (`own_answer_followup`, `lesson_modification`, `lesson_save`). See the new §6a below for
+  how each of those three is handled.
+- **`meta_conversation_active` confirmed** to be a separate bool threaded through
+  `_ChatTurnSystemPrep`, not derived from `router_intent` at read time — matches what this
+  doc already assumed and coded against in §3.
+- **`general_knowledge_qa` evidence-empty behavior confirmed intended**, not a gap:
+  `general_knowledge_qa` turns don't go through the document `rag_tool` prefetch, so
+  `prefetch_evidence_for_eval` is empty by design and the heuristic correctly never
+  escalates there (§6 item 3 below, now resolved).
+- **No pre-existing eval-loop test coverage confirmed as a known gap**, not a surprise: the
+  direct unit coverage in §7c for the loop's internals is a net-new safety net Phase 2 is
+  adding, not a pre-existing baseline — acknowledged as fine and expected.
+- **Configurability requirement**: main asked that the intent set which gets the eval be
+  configurable via env even with a fixed default, "so ops can drop lesson_generation later
+  without a code change if cost becomes a real concern." Already satisfied by
+  `RAG_ANSWER_QUALITY_GATE_INTENTS` (§4) — no design change needed, calling it out explicitly
+  here since it was a specific ask.
+- **Worktree base mismatch**: acknowledged by main. Phase 1 is still implementing on the
+  correct base (`feature/llm-driven-agentic-routing` tip); main will hand this worktree a
+  corrected base (rebase instruction, or a fresh worktree with this design doc cherry-picked
+  on) once Phase 1 lands, before any real code changes happen here. No action needed from
+  this side until that handoff — sitting tight.
+
 ## 0. Bug this fixes
 
 Staging: user asked "what is zero discriminat just answer main one line" against an uploaded
@@ -444,9 +477,63 @@ test-breakage standpoint. `tests/test_lecture_generation_fixes_static.py` (read 
 (`DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF` at lines 3306–3311) — noted as a shared-fixture risk
 in §7.
 
+## 6a. The three router_intent values not in the original scope
+
+The original brief scoped the qualifying set to exactly `{lesson_generation, document_qa,
+general_knowledge_qa, lesson_qa}` and told me to skip `{meta_conversation, greeting_casual,
+clarification}`. Main's confirmed full router_intent list (§ addendum above) has three more
+values neither list mentioned: `own_answer_followup`, `lesson_modification`, `lesson_save`.
+Resolving each below; default is to **exclude all three from
+`RAG_ANSWER_QUALITY_GATE_INTENTS`'s default set** (i.e. `_ANSWER_QUALITY_GATE_DEFAULT_INTENTS`
+in §3 stays exactly the original 4 values), since that's the scope actually approved — but
+each is a real, considered candidate for ops to add later via the env var without a code
+change, per main's configurability requirement. Flagging the `own_answer_followup` case in
+particular for main's attention, since it's the least obviously "correctly excluded" of the
+three.
+
+- **`lesson_save`** — exclude, confidently. This intent maps to a finalize/save request
+  handled by `finalize_lesson_tool` + `_chat_handle_lesson_state_and_persistence`, which
+  **forces** the user-facing reply to a fixed backend-authoritative string ("Lesson finalized
+  and saved. You can download it now." or the tool's failure `reason`) — see
+  `test_finalize_lesson_tool.py::test_response_forced_to_success_message_when_tool_succeeded`.
+  There is no free-form LLM prose to quality-check; the reply is deterministic and already
+  correct-by-construction. Running the eval here would be pure wasted cost.
+- **`lesson_modification`** — exclude by default, but flagging as the strongest candidate to
+  add later. Checked `_is_lesson_creation_request` (rag_service.py line 565): it only matches
+  explicit creation phrasing ("create/generate/make/write/build a lesson/lecture", "lesson
+  plan", etc.) — a modification request like "add a diagram section" does **not** match it,
+  so `is_lesson_creation_turn` is `False` for these turns today and they get no quality-gate
+  coverage at all, old or new. Modification turns produce the same kind of long, well-formed
+  prose as generation turns (so if added, they should go through the `is_lesson_mode`
+  unconditional-eval path in §3, not the heuristic-gated path — same rationale as
+  `lesson_generation`). Left out of the default set only because it's genuinely new scope
+  beyond what was approved, not because it's a bad fit.
+- **`own_answer_followup`** — exclude by default, but this is the one worth main's explicit
+  read. I checked how it's handled in the main checkout's `rag_service.py` (lines 4341–4370,
+  not present in this worktree — see §6 item 1 on the base mismatch): when
+  `_is_own_answer_followup_request(last_user_msg_text)` fires, the model's own prior
+  substantive answer is injected as `prefetch_blob` and **`prefetch_evidence_for_eval` is
+  set from it**, exactly like the document-evidence case. That means the "evidence existed
+  and the model ignored it" failure mode this whole gate exists to catch is *structurally
+  possible* here too — e.g. the model could still answer "the lesson has been saved" filler
+  instead of explaining its own prior reasoning (this is literally the bug
+  `test_own_answer_followup.py` was written against, just fixed by the deterministic prompt
+  injection rather than by a quality gate — a second line of defense wouldn't be redundant).
+  The heuristic-gated path (§3) would handle this safely and cheaply if added: no evidence
+  → never escalate, filler + evidence → escalate, same as `document_qa`. I did not add it to
+  the default set because it's outside the approved scope, but functionally it fits the
+  `document_qa`-style bucket better than the lesson-mode bucket, and the cost/safety
+  reasoning for including it is essentially identical. Recommend main decide whether to add
+  it to the default `RAG_ANSWER_QUALITY_GATE_INTENTS` set or leave it for a follow-up once
+  the base four intents are proven in production.
+
 ## 6. Open questions / risks for main + Phase 1
 
-1. **Worktree base mismatch.** This worktree's branch (`worktree-agent-a70d180170c889c7d`)
+*(Items 1, 2, 3, and 5 below are now RESOLVED per the addendum at the top of this doc — kept
+verbatim for the record of what was asked and why; item 4 is acknowledged, not a blocker; the
+new item 6a above covers what wasn't in the original scope.)*
+
+1. **RESOLVED — sitting tight, no action needed.** Worktree base mismatch. This worktree's branch (`worktree-agent-a70d180170c889c7d`)
    was cut from `a39a37b` (tip of the default line at the time), while Phase 1's worktree
    (`agent-a31abe7adf8f0d07e`, branch `phase1/llm-driven-routing`) is cut from `8ef34d7`
    (`feature/llm-driven-agentic-routing`). These two commits are **not** ancestors of each
@@ -461,14 +548,14 @@ in §7.
    integration, I should be pointed at whatever branch is the actual merge target** (probably
    `feature/llm-driven-agentic-routing` after Phase 1 lands) rather than rebasing this
    worktree's current base.
-2. **Router intent taxonomy confirmation.** This design assumes `router_intent` is a plain
+2. **RESOLVED — see addendum.** Router intent taxonomy confirmation. This design assumes `router_intent` is a plain
    string with values including exactly `lesson_generation`, `document_qa`,
    `general_knowledge_qa`, `lesson_qa`, `meta_conversation`, `greeting_casual`,
    `clarification`, and that `meta_conversation_active` is a separate bool (not derivable
    from `router_intent == "meta_conversation"` alone — I gate on it directly in case it's
    true for more than one intent value). Please confirm the literal string values before I
    wire the real `set(...)` comparison, since a mismatch would silently no-op the whole gate.
-3. **`has_document=False` turns.** The existing function already handles no-PDF lessons
+3. **RESOLVED — see addendum.** `has_document=False` turns. The existing function already handles no-PDF lessons
    (`evidence_bundle = "(no PDF for this thread)\n\n" + evidence_bundle` when `not
    has_document`). For `general_knowledge_qa` specifically, is evidence *expected* to be
    empty by design (it's answering from the model's own knowledge, no RAG involved)? If so,
@@ -487,16 +574,16 @@ in §7.
    lesson-generation still works exactly as before" is a *new* test asserting existing
    behavior, not a pre-existing test that already caught regressions — main should know the
    safety net here is being built now, not verified against a pre-existing baseline.
-5. **Default-flip cost impact on lesson_generation is NOT covered by the heuristic.**
-   Because lesson_generation intentionally bypasses `_quality_gate_should_escalate` (§3
-   rationale), flipping the default to `"true"` means every lesson-generation turn now pays
-   for at least one full LLM eval call by default in every environment that doesn't override
-   the env var — this exactly matches what "explicitly turn it on" already did today, just
-   with a new default. Confirm this is acceptable prod cost (lesson generation is already the
-   most expensive turn type) before shipping the default flip; if not, an easy knob is to keep
-   `RAG_ANSWER_QUALITY_GATE_ENABLED` defaulting to `true` for the three new intents but require
-   an explicit opt-in specifically for `lesson_generation` via
-   `RAG_ANSWER_QUALITY_GATE_INTENTS` (drop it from the default set) until cost is measured.
+5. **RESOLVED — approved by main.** Default-flip cost impact on lesson_generation is NOT
+   covered by the heuristic. Because lesson_generation intentionally bypasses
+   `_quality_gate_should_escalate` (§3 rationale), flipping the default to `"true"` means
+   every lesson-generation turn now pays for at least one full LLM eval call by default in
+   every environment that doesn't override the env var — this exactly matches what
+   "explicitly turn it on" already did today, just with a new default. Main approved keeping
+   `lesson_generation` on unconditional eval for now (matches today's behavior when the flag
+   is on), with the explicit condition that the qualifying-intent set stays configurable via
+   `RAG_ANSWER_QUALITY_GATE_INTENTS` so ops can drop it later without a code change if cost
+   becomes a real concern — already satisfied by this design (§4), no change needed.
 
 ## 7. Test plan
 
