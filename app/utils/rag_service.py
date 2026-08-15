@@ -596,6 +596,37 @@ def _is_lesson_creation_request(text: str) -> bool:
     return any(re.search(pattern, normalized) for pattern in lesson_intent_patterns)
 
 
+_OWN_ANSWER_FOLLOWUP_PATTERNS = (
+    r"\bexplain\s+why\b",
+    r"\bhow\s+did\s+you\s+get\b",
+    r"\bwhy\s+did\s+you\s+use\b",
+    r"\bwhy\s+is\s+it\b",
+    r"\bwhat\s+does\s+.*\s+mean\b",
+    r"\bwhy\s+not\b",
+    r"\bwhere\s+did\s+.*\s+come\s+from\b",
+)
+
+
+def _is_own_answer_followup_request(text: str) -> bool:
+    """
+    Heuristic detection for a follow-up asking the model to explain/justify a specific detail
+    from its OWN previous answer (e.g. "explain why 2x, how did you get 2x and not x") - as
+    opposed to a fresh question about the document. A system-prompt instruction alone was not
+    reliably enough to stop the model from treating these as a new document search (confirmed
+    live across two rounds of prompt-only fixes: the model kept calling rag_tool and, on weak
+    results, falling back to a generic remark instead of using its own prior reasoning). This
+    detector backs that instruction with a deterministic prefetch of the model's own last
+    answer (see _chat_build_system_message), so the context is unavoidably present rather than
+    relying on the model to remember/prioritize it correctly on its own.
+    """
+    if not text:
+        return False
+    normalized = re.sub(r"\s+", " ", str(text).strip().lower())
+    if not normalized:
+        return False
+    return any(re.search(pattern, normalized) for pattern in _OWN_ANSWER_FOLLOWUP_PATTERNS)
+
+
 def _is_underspecified_rag_query(text: str) -> bool:
     """True when the user message is too vague for mandatory prefetch (e.g. single word 'explain')."""
     t = (text or "").strip().lower()
@@ -4280,6 +4311,31 @@ def _chat_build_system_message(
             try:
                 if is_lesson_creation_turn:
                     prefetch_blob = _prefetch_lecture_evidence_for_chat(thread_id_str, last_user_msg_text)
+                elif _is_own_answer_followup_request(last_user_msg_text):
+                    # Deterministic fallback for "explain why 2x" style follow-ups: don't rely
+                    # on the model to remember/prioritize its own prior answer from the trimmed
+                    # conversation window - hand it the answer directly so it physically cannot
+                    # miss it. Search strictly BEFORE the current human message for the most
+                    # recent substantive (non-tool-call) AIMessage, i.e. what the user is
+                    # actually asking about.
+                    own_answer_text = ""
+                    search_range = raw_messages[:last_human_idx_pf] if last_human_idx_pf >= 0 else raw_messages
+                    for m in reversed(search_range):
+                        if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None):
+                            candidate = (getattr(m, "content", "") or "").strip()
+                            if candidate:
+                                own_answer_text = candidate
+                                break
+                    if own_answer_text:
+                        prefetch_blob = (
+                            "## Your own previous answer in this conversation (the user is asking "
+                            "you to explain or justify something from it)\n\n"
+                            + own_answer_text[:6000]
+                            + "\n\nAnswer the user's follow-up directly using your own reasoning "
+                            "from the answer above. This is not a new document search - do not "
+                            "call rag_tool for it, and do not reply about lesson-saving status; "
+                            "the user asked a substantive question and expects a real answer."
+                        )
                 else:
                     pf_user_id = _get_user_id_for_thread(thread_id_str)
                     out_pf = rag_tool.invoke(
