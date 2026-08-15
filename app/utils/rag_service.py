@@ -4343,6 +4343,10 @@ def _chat_build_system_message(
                     # miss it.
                     search_range = raw_messages[:last_human_idx_pf] if last_human_idx_pf >= 0 else raw_messages
                     own_answer_text = _find_last_substantive_ai_answer(search_range)
+                    logger.info(
+                        "own_answer_followup: thread_id=%s search_range_len=%d found_chars=%d",
+                        thread_id_str, len(search_range), len(own_answer_text),
+                    )
                     if own_answer_text:
                         prefetch_blob = (
                             "## Your own previous answer in this conversation (the user is asking "
