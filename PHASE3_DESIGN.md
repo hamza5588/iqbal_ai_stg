@@ -6,7 +6,24 @@ Status: design only, no implementation. Blocked on Phase 1's `RouterOutput` (int
 verified" below).
 
 Branch/worktree: `worktree-agent-a1b84d13f82fd7d33` at
-`.claude/worktrees/agent-a1b84d13f82fd7d33` (based on `main` @ `a39a37b`).
+`.claude/worktrees/agent-a1b84d13f82fd7d33` (based on `main` @ `a39a37b`; main has
+flagged this base is stale — same issue phase2/phase4 hit — and will sort out the
+right base once Phase 1 merges).
+
+**Update after checking in with main:** the four open questions originally at the
+bottom of this doc are answered inline now (search "RESOLVED"). Two corrections to
+what I originally wrote, both from main's answers:
+1. The router intent field is confirmed as `router_intent`, a plain string threaded
+   through `_ChatTurnSystemPrep` exactly like `is_lesson_creation_turn` /
+   `own_answer_followup_active` already are — section 2's sketch below is updated to
+   match the real call-site shape.
+2. `tests/` in this repo is gitignored except `tests/test_routes_helper.py` (an
+   established convention) — the three test files I originally reported as
+   "don't exist anywhere in git history" DO exist for real, as uncommitted local
+   files in the main checkout's `tests/` directory
+   (`C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\tests\`). I've now read them
+   directly and corrected section 5 below to match their actual house style instead
+   of inventing one from scratch.
 
 ## The bug, precisely
 
@@ -56,17 +73,13 @@ pre-edit text) and reports `success=true, "Lesson re-saved with the latest conte
   grepped `phase1/llm-driven-routing` for all of these — zero matches). This is
   consistent with "Phase 1 is currently implementing" — I'm designing against the
   *contract* described in my task prompt, not against code I could read.
-- **The three test files named in my task prompt
-  (`tests/test_finalize_lesson_tool.py`, `tests/test_lesson_delete_visibility.py`,
-  `tests/test_group_c_bug_fix_static.py`) do not exist in any branch reachable from
-  this repo's `.git`** (`git log --all` on all three paths returns nothing). The only
-  test file that exists anywhere is `tests/test_routes_helper.py` (9 trivial
-  parametrized cases, no DB/fake-object pattern to mirror). I flag this as an open
-  question for main — either they exist uncommitted in another phase's worktree, or
-  the references were aspirational. My test plan below defines the pattern from
-  scratch, following how `_persist_finalized_lesson_static` / `finalize_lesson_tool`
-  actually talk to `get_db()` (a plain SQLAlchemy session via
-  `app.utils.db.get_db`), since that's the only house pattern I could verify.
+- **RESOLVED — the three test files named in my task prompt are real**, just not
+  visible from any worktree: `tests/` is gitignored in this repo except
+  `tests/test_routes_helper.py`, so they only exist as uncommitted local files in the
+  main checkout (`C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\tests\`), which
+  explains why `git log --all` on those paths found nothing. I read all three
+  directly from there — see section 5, which now reflects their real fake-object
+  pattern instead of one I invented from scratch.
 - **Traced the `RAGThread` ↔ `LessonModel`/`Lesson` relationship precisely** (this
   was the highest-risk unknown): they are **two independent persistence systems**,
   bridged only by a one-shot, user-initiated copy. See section 4.
@@ -116,10 +129,53 @@ elif thread_id_str and response_content:
     _mark_step("persist_in_progress_lesson")
 ```
 
-### After (Phase 3, once `RouterOutput.intent` is available on `state`/`prep`)
+### After (Phase 3 — `router_intent` confirmed by main: a plain string threaded
+through `_ChatTurnSystemPrep` exactly like `is_lesson_creation_turn` /
+`own_answer_followup_active` already are, per `_chat_invoke_llm_with_retry`,
+~line 4754-4762 on phase1 branch)
+
+Function signature gets one new keyword-only param, following the existing pattern
+(`turn_scope_messages` was added the same way for the reordering fix):
 
 ```python
-elif thread_id_str and response_content and router_intent in ("lesson_modification",):
+def _chat_handle_lesson_state_and_persistence(
+    *,
+    response: AIMessage,
+    response_content: str,
+    messages: List[BaseMessage],
+    last_user_msg_text: str,
+    thread_id_str: Optional[str],
+    provider: str,
+    user_llm_structured_output: Any,
+    config: Any,
+    _mark_step: Any,
+    turn_scope_messages: Optional[List[BaseMessage]] = None,
+    router_intent: Optional[str] = None,   # new
+) -> AIMessage:
+```
+
+Call site in `_chat_invoke_llm_with_retry` (~line 4862) adds one line:
+
+```python
+response = _chat_handle_lesson_state_and_persistence(
+    response=response,
+    response_content=response_content,
+    messages=messages,
+    last_user_msg_text=last_user_msg_text,
+    thread_id_str=thread_id_str,
+    provider=provider,
+    user_llm_structured_output=user_llm_structured_output,
+    config=config,
+    _mark_step=_mark_step,
+    turn_scope_messages=conversation_messages,
+    router_intent=prep.router_intent,   # new — same pattern as prep.is_lesson_creation_turn
+)
+```
+
+And the write-gate itself:
+
+```python
+elif thread_id_str and response_content and router_intent == "lesson_modification":
     try:
         db = get_db()
         thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
@@ -170,10 +226,10 @@ instruction telling the model to re-emit the complete lesson text on an edit tur
 Phase 3 must add one, e.g.: *"When the user asks you to modify a lesson you have
 already been building or that was previously finalized in this conversation, always
 respond with the complete, updated lesson text in full — not just a description of
-the change — since your reply is what gets saved."* This is a system-prompt change
-that ships alongside the persistence-gate fix, in the same PR — without it the gate
-fix is actively dangerous. Flagging it here so it isn't dropped when this design
-becomes a ticket.
+the change — since your reply is what gets saved."* This is a **hard dependency of
+the persistence-gate fix, not an optional companion or a separate follow-up** — it
+ships in the same PR, same commit if practical. Without it, the gate fix is actively
+dangerous (confirmed with main: this is how it'll be treated at implementation time).
 
 ## 3. State-aware context switching
 
@@ -258,81 +314,152 @@ task warned me to avoid.
 
 ## 5. Test plan
 
-No usable house pattern exists yet for this (see "What I verified" — the three named
-test files don't exist in the repo). Proposed new file:
-`tests/test_lesson_state_persistence.py`, following the only observable convention
-(`tests/test_routes_helper.py`: plain `pytest`, direct imports, no fixtures file) plus
-a minimal fake-session pattern matched to how `_persist_finalized_lesson_static` /
-`finalize_lesson_tool` actually talk to the DB (`get_db()` →
-`db.query(RAGThread).filter_by(thread_id=...).first()` → mutate attrs → `db.commit()`).
-A `FakeRAGThread` (plain object with the relevant attrs) + `FakeDBSession` (records
-`.query().filter_by().first()` returning the fake row, and a `committed` counter) is
-enough — no real SQLAlchemy engine needed, monkeypatching `get_db` in
-`app.utils.rag_service`.
+**Updated after reading the real files** (found in the main checkout's gitignored
+`tests/` dir — see "What I verified"). The house pattern is exactly the fake-object
+style I'd guessed at, but now confirmed verbatim from
+`tests/test_finalize_lesson_tool.py`:
 
-Planned cases:
+```python
+class _FakeThreadRow:
+    def __init__(self, last_lesson_text="", lesson_finalized=False):
+        self.last_lesson_text = last_lesson_text
+        self.lesson_finalized = lesson_finalized
+        self.lesson_title = ""
 
-**(a) Editing after finalize updates persisted content.**
-Seed a `FakeRAGThread(lesson_finalized=True, last_lesson_text="<old lesson>")`. Call
-`_chat_handle_lesson_state_and_persistence` with `response_content="<old lesson +
-5 examples>"` and a turn-scope router intent of `lesson_modification` (mocked/passed
-in per whatever Phase 1's actual state field turns out to be named). Assert
-`thread_row.last_lesson_text == "<old lesson + 5 examples>"` and
-`thread_row.lesson_finalized` is still `True` (unchanged — finalize state is a
-display flag, not touched by an edit).
+class _FakeQuery:
+    def __init__(self, row):
+        self._row = row
+    def filter_by(self, **kwargs):
+        return self
+    def first(self):
+        return self._row
 
-**(b) Re-finalizing after an edit saves the NEW content, not stale content.**
-Two-step: (1) run the modification turn from (a) so `last_lesson_text` is updated in
-the fake DB; (2) call `finalize_lesson_tool(thread_id=...)` against the same fake
-thread row and assert the JSON result has `success=True`,
-`already_finalized=True`, and — critically — that the persisted
-`last_lesson_text` after the call equals the edited content from step 1, not the
-original seed content. This directly tests the "lied about re-saving" symptom.
+class _FakeDB:
+    def __init__(self, row):
+        self._row = row
+        self.committed = False
+    def query(self, model):
+        return _FakeQuery(self._row)
+    def commit(self):
+        self.committed = True
+```
 
-**(c) A `meta_conversation`/`document_qa` turn never touches lesson state.**
-Seed a finalized thread with known `last_lesson_text`/`lesson_title`/
-`lesson_finalized`. Call `_chat_handle_lesson_state_and_persistence` with a
-substantial, lesson-shaped-looking `response_content` (long, has headings — i.e.
-deliberately shaped to fool the *old* length/shape heuristic) but intent
-`document_qa` (and separately, `meta_conversation`). Assert all three fields on
-`thread_row` are byte-for-byte unchanged after the call, and that `db.commit()` was
-never invoked for this turn (i.e., the fake session's write counter is `0`) — proving
-this isn't just "wrote the same value back" but "never entered the write branch at
-all."
+Tests monkeypatch `rag_service.get_db` to return a `_FakeDB`, and call
+`rag_service.finalize_lesson_tool.invoke({...})` /
+`rag_service._chat_handle_lesson_state_and_persistence(...)` directly — no real
+SQLAlchemy engine, no `pytest.importorskip("sqlalchemy")` needed for this file
+(that guard is only in `test_lesson_delete_visibility.py`, which uses a real
+in-memory SQLite engine because it tests actual query filtering, not simple
+attribute mutation).
 
-**(d) Existing finalize behavior (backend-authoritative success/failure wording)
-still works unchanged.** Regression-lock the existing tool-message-authoritative
-override in `_chat_handle_lesson_state_and_persistence`: feed a turn tail containing
-a `ToolMessage(name="finalize_lesson_tool", content='{"success": true, ...}')` and
-assert `response.content == "Lesson finalized and saved. You can download it now."`
-regardless of what the model itself said; then the `success: false` case and assert
-`response.content` is forced to the tool's `reason` string. This is unchanged by
-Phase 3, so this test is a guard against Phase 3's edits accidentally touching that
-branch, not new coverage of new behavior.
+**Home for new tests: extend `tests/test_finalize_lesson_tool.py` in place**, not a
+new file. It already has the exact scaffolding above, already tests
+`_chat_handle_lesson_state_and_persistence` directly with hand-built
+`HumanMessage`/`AIMessage`/`ToolMessage` lists, and its existing
+`test_no_tool_call_falls_back_to_in_progress_persistence` test is the one Phase 3's
+fix directly changes the behavior of (see below) — keeping the before/after
+assertions in the same file next to each other is more useful than splitting them
+out. Per main, the file needs to land in the main checkout's `tests/` directory at
+implementation time (gitignored, so my worktree's copy won't be the one that
+persists) — main will handle that path detail during integration.
+
+**One existing test needs updating, not just new tests added.**
+`test_no_tool_call_falls_back_to_in_progress_persistence` (current file, line ~200)
+today calls `_chat_handle_lesson_state_and_persistence` with no intent concept at all
+and asserts a plain conversational turn (`"add a diagram section"` /
+`lesson_finalized` unset → defaults to `False`) still writes
+`last_lesson_text`. Once the fix adds the `router_intent` param, this call will need
+`router_intent="lesson_modification"` passed explicitly to keep passing — otherwise,
+under the new gate, it will (correctly) NOT write, which would look like a
+regression in that test even though it's the new fix behaving as designed. Flagging
+so whoever implements doesn't mistake "this old test now fails" for a bug.
+
+Planned new cases (function names anticipate the real file's naming style, e.g.
+`test_finalize_lesson_tool_success_persists_and_returns_success`):
+
+**(a) `test_modification_intent_after_finalize_updates_persisted_content`.**
+Seed `_FakeThreadRow(lesson_finalized=True, last_lesson_text="<old lesson>")`. Call
+`_chat_handle_lesson_state_and_persistence` with
+`response_content="<old lesson + 5 examples>"`, `messages=[HumanMessage("add 5
+examples")]`, and `router_intent="lesson_modification"`. Assert
+`fake_db._row.last_lesson_text == "<old lesson + 5 examples>"` and
+`fake_db._row.lesson_finalized is True` (unchanged — finalize state is a display
+flag, not touched by an edit) and `fake_db.committed is True`.
+
+**(b) `test_refinalize_after_edit_persists_new_content_not_stale`.**
+Two-step, reusing one `_FakeDB`/`_FakeThreadRow` across both calls (mirrors how a
+real turn sequence shares one DB row): (1) run the modification turn from (a) so
+`last_lesson_text` is updated in the fake row; (2) monkeypatch
+`_check_if_content_is_lesson` to `True` (as the existing
+`test_finalize_lesson_tool_success_persists_and_returns_success` does) and call
+`rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"})` against the
+*same* fake row; assert the JSON result has `success=True`,
+`already_finalized=True`, and — critically — assert
+`fake_db._row.last_lesson_text` equals the edited content from step 1, not the
+original seed content. This directly tests the "lied about re-saving" symptom from
+the bug report.
+
+**(c) `test_document_qa_intent_never_touches_lesson_state` /
+`test_meta_conversation_intent_never_touches_lesson_state`.**
+Seed a finalized thread with known `last_lesson_text`/`lesson_title`. Call
+`_chat_handle_lesson_state_and_persistence` with a long, heading-shaped
+`response_content` (deliberately shaped to fool the *old* length/shape heuristic
+that predates phase1's simplification) but `router_intent="document_qa"` (and
+separately `"meta_conversation"`). Assert `fake_db._row.last_lesson_text`,
+`.lesson_title`, and `.lesson_finalized` are all byte-for-byte unchanged, and
+`fake_db.committed is False` — proving this isn't "wrote the same value back" but
+"never entered the write branch at all." Also run the same assertion with
+`lesson_finalized=False` on the seed row, to lock in the pre-finalize tightening from
+section 3 (main's approval, open question 3 resolved below).
+
+**(d) Existing finalize behavior still works unchanged — already covered, no new
+test needed.** `test_response_forced_to_success_message_when_tool_succeeded`,
+`test_response_forced_to_failure_reason_when_tool_failed`, and
+`test_old_finalize_call_reordered_into_windowed_messages_does_not_leak_into_new_turn`
+already regression-lock the tool-message-authoritative override and the turn-scoping
+fix. None of them pass a `router_intent`, so they'll pass `None` under the new
+signature — I need to confirm at implementation time that `router_intent=None`
+(intent not classified/passed) safely falls through to "don't write," same as any
+non-`lesson_modification` value, so these three keep passing unmodified.
 
 I'm not writing these tests now per my instructions (design doc only, no real test
-files yet) — this section is the spec for when Phase 3 actually implements.
+file edits yet) — this section is the spec for when Phase 3 actually implements.
 
-## Open questions for main
+## Open questions for main — RESOLVED
 
-1. **Field name/shape of the router's per-turn intent as it will actually appear in
-   `rag_service.py`.** My design assumes something like a `router_intent` string
-   available at the point `_chat_handle_lesson_state_and_persistence` runs (it
-   already receives `messages`/`conversation_messages`/`config` — I'd expect the
-   intent to be threaded through similarly, e.g. via `prep` like
-   `is_lesson_creation_turn` already is). I need the actual field/param name once
-   Phase 1 lands to write the real diff.
-2. **The three test files named in my task prompt do not exist anywhere in this
-   repo's git history.** Confirmed via `git log --all` on all three paths. Want to
-   confirm whether they exist uncommitted in another phase's worktree (and I should
-   go read them there) or whether my test plan above (written from scratch against
-   the only real code path involved) is the right basis to build from.
-3. **Confirm the "tighten pre-finalize writes too" scope call in section 3.** My fix
-   naturally also stops non-`lesson_modification` turns from clobbering the draft
-   *before* finalize (today's `not lesson_finalized` gate has no intent check at
-   all). This is more correct, and I believe it's what the task's point 3 is asking
-   for, but it's a slightly bigger behavior change than "just unfreeze after
-   finalize" — want explicit sign-off before it's built.
-4. **The `create_lesson_simple` duplicate-lesson-on-resave gap (section 4)** is real
-   but downstream of Phase 3's boundary. Confirming it should stay a flagged
-   follow-up and not get pulled into this phase.
+All four resolved by main; keeping the original questions plus answers here for the
+record, since this doc is what implementation will actually be built from.
+
+1. **Field name/shape of the router's per-turn intent.** RESOLVED: `router_intent`,
+   a plain string on `_ChatTurnSystemPrep`, threaded the same way
+   `is_lesson_creation_turn` / `own_answer_followup_active` already are, available
+   wherever `_chat_handle_lesson_state_and_persistence` is called from
+   `_chat_invoke_llm_with_retry`. Gate on `router_intent == "lesson_modification"`.
+   Section 2 above is now written against this exact shape (signature + call site).
+2. **Whether the three named test files exist.** RESOLVED: they're real, just
+   uncommitted — `tests/` is gitignored in this repo except
+   `tests/test_routes_helper.py` (confirmed by main, matches phase2 hitting the same
+   thing independently). Read all three directly from the main checkout; section 5
+   now reflects their actual `_FakeThreadRow`/`_FakeQuery`/`_FakeDB` pattern instead
+   of an invented one, and identifies which existing test needs updating (not just
+   which new tests to add). Implementation-time reminder from main: the new/edited
+   test file needs to land in the main checkout's `tests/` dir specifically, not a
+   worktree's (gitignored) copy — main will handle that path detail during
+   integration.
+3. **Tightening pre-finalize writes too, not just unfreezing post-finalize.**
+   APPROVED: gate both pre- and post-finalize writes on
+   `router_intent == "lesson_modification"`, dropping `not lesson_finalized`
+   entirely, as designed. Main flagged this will be called out explicitly at ship
+   time (PR description) and both pre-finalize and post-finalize edit flows get
+   live-tested, not just the post-finalize case the original bug report was about.
+4. **`create_lesson_simple` duplicate-lesson-on-resave gap.** CONFIRMED out of
+   scope: stays a flagged follow-up (`LessonModel`/`lesson_routes.py` territory,
+   its own test surface), not pulled into Phase 3.
+
+## Status
+
+Design complete and confirmed with main. Waiting on Phase 1's `RouterOutput`/
+`router_intent` to land and merge before real implementation (edits to
+`app/utils/rag_service.py` and the test file) can start. Worktree base
+(`main @ a39a37b`) is known-stale per main (same issue as phase2/phase4); main will
+provide the correct base once Phase 1 merges.
