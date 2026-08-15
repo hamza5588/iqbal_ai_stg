@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Menu - Iqbal AI</title>
+<style>
+  :root{
+    --mint-bg:#e3f3ea;
+    --pink-bg:#fbeae8;
+    --teal:#0e7c6b;
+    --red:#c0504d;
+    --dark:#1f2937;
+    --gray-500:#6b7280;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:'Segoe UI',Arial,sans-serif;
+    background:#f4f5f4;
+    display:flex;align-items:center;justify-content:center;
+    padding:40px 20px;
+  }
+
+  .menu-wrap{
+    position:relative;
+    width:min(92vw,460px);
+    aspect-ratio:1/1;
+    filter:drop-shadow(0 18px 40px rgba(0,0,0,0.10));
+  }
+
+  .pointer{
+    position:absolute;
+    top:-7%;
+    left:50%;
+    transform:translateX(-50%);
+    width:0;height:0;
+    border-left:20px solid transparent;
+    border-right:20px solid transparent;
+    border-bottom:26px solid #ffffff;
+    z-index:3;
+  }
+
+  .circle{
+    position:absolute;inset:0;
+    border-radius:50%;
+    background:#ffffff;
+    padding:2.2%;
+  }
+  .circle-inner{
+    width:100%;height:100%;
+    border-radius:50%;
+    overflow:hidden;
+    position:relative;
+    background:linear-gradient(to bottom, var(--mint-bg) 0%, var(--mint-bg) 50%, var(--pink-bg) 50%, var(--pink-bg) 100%);
+  }
+
+  .option{
+    position:absolute;
+    left:0;right:0;
+    display:flex;align-items:center;justify-content:center;
+    gap:4%;
+    cursor:pointer;
+    user-select:none;
+  }
+  .option.rename{ top:24%; }
+  .option.delete{ top:75%; transform:translateY(-50%); }
+  .option.rename{ transform:translateY(-50%); }
+
+  .opt-icon{
+    width:11%;aspect-ratio:1/1;
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+  }
+  .opt-icon svg{width:100%;height:100%;}
+
+  .opt-label{
+    font-size:clamp(15px,4.2vw,22px);
+    font-weight:700;
+    white-space:nowrap;
+  }
+  .option.rename .opt-label{color:var(--dark);}
+  .option.delete .opt-label{color:var(--red);}
+
+  .opt-chevron{
+    width:6.5%;flex-shrink:0;
+    display:flex;align-items:center;
+  }
+  .opt-chevron svg{width:100%;height:auto;}
+
+  .center-btn{
+    position:absolute;
+    top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    width:35%;aspect-ratio:1/1;
+    border-radius:50%;
+    background:#ffffff;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:6%;
+    box-shadow:0 6px 18px rgba(0,0,0,0.10);
+    z-index:2;
+    cursor:pointer;
+  }
+  .center-btn svg{width:34%;height:auto;color:var(--dark);}
+  .center-label{
+    font-size:clamp(12px,3.1vw,15px);
+    font-weight:800;
+    letter-spacing:0.5px;
+    color:var(--dark);
+  }
+
+  @media(max-width:420px){
+    .menu-wrap{width:94vw;}
+  }
+</style>
+</head>
+<body>
+
+  <div class="menu-wrap">
+    <div class="pointer"></div>
+
+    <div class="circle">
+      <div class="circle-inner">
+
+        <div class="option rename" onclick="alert('Rename Chat clicked')">
+          <div class="opt-icon">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#0e7c6b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="opt-label">Rename Chat</div>
+          <div class="opt-chevron">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#0e7c6b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <div class="option delete" onclick="alert('Delete Chat clicked')">
+          <div class="opt-icon">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" stroke="#c0504d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M10 11v6M14 11v6" stroke="#c0504d" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="opt-label">Delete Chat</div>
+          <div class="opt-chevron">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#c0504d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="center-btn" onclick="event.stopPropagation();">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#1f2937" stroke-width="1.6"/>
+        <circle cx="9" cy="11.5" r="1" fill="#1f2937"/>
+        <circle cx="12" cy="11.5" r="1" fill="#1f2937"/>
+        <circle cx="15" cy="11.5" r="1" fill="#1f2937"/>
+      </svg>
+      <div class="center-label">CHAT</div>
+    </div>
+  </div>
+
+</body>
+</html>
