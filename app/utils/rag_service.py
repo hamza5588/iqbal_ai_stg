@@ -627,6 +627,31 @@ def _is_own_answer_followup_request(text: str) -> bool:
     return any(re.search(pattern, normalized) for pattern in _OWN_ANSWER_FOLLOWUP_PATTERNS)
 
 
+_MIN_SUBSTANTIVE_ANSWER_CHARS = 200
+
+
+def _find_last_substantive_ai_answer(messages: List[BaseMessage]) -> str:
+    """
+    Scan backward for the most recent AIMessage that is real explanatory content (no
+    tool_calls, and long enough to be an actual answer rather than a short status line).
+
+    The length floor matters: the immediately-preceding AIMessage after finalizing a lesson is
+    a short confirmation like "Lesson finalized and saved. You can download it now." - without
+    skipping that, a follow-up like "explain why 2x" right after finalizing would inject the
+    confirmation instead of the actual lesson content the user is asking about (confirmed
+    live: this was the reason the first version of the own-answer-followup fix still didn't
+    produce a real answer). A genuine explanatory answer (e.g. a lesson plan) is always much
+    longer than a status line, so this is a cheap proxy that avoids hardcoding the exact
+    confirmation strings, which would break the moment their wording changes.
+    """
+    for m in reversed(messages):
+        if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None):
+            candidate = (getattr(m, "content", "") or "").strip()
+            if len(candidate) >= _MIN_SUBSTANTIVE_ANSWER_CHARS:
+                return candidate
+    return ""
+
+
 def _is_underspecified_rag_query(text: str) -> bool:
     """True when the user message is too vague for mandatory prefetch (e.g. single word 'explain')."""
     t = (text or "").strip().lower()
@@ -4315,17 +4340,9 @@ def _chat_build_system_message(
                     # Deterministic fallback for "explain why 2x" style follow-ups: don't rely
                     # on the model to remember/prioritize its own prior answer from the trimmed
                     # conversation window - hand it the answer directly so it physically cannot
-                    # miss it. Search strictly BEFORE the current human message for the most
-                    # recent substantive (non-tool-call) AIMessage, i.e. what the user is
-                    # actually asking about.
-                    own_answer_text = ""
+                    # miss it.
                     search_range = raw_messages[:last_human_idx_pf] if last_human_idx_pf >= 0 else raw_messages
-                    for m in reversed(search_range):
-                        if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None):
-                            candidate = (getattr(m, "content", "") or "").strip()
-                            if candidate:
-                                own_answer_text = candidate
-                                break
+                    own_answer_text = _find_last_substantive_ai_answer(search_range)
                     if own_answer_text:
                         prefetch_blob = (
                             "## Your own previous answer in this conversation (the user is asking "
