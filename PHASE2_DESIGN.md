@@ -41,6 +41,20 @@ intents split, the env var rename with deprecation fallback, and (approved) keep
   on) once Phase 1 lands, before any real code changes happen here. No action needed from
   this side until that handoff — sitting tight.
 
+## Addendum 2 (2026-08-15): §6a decision — own_answer_followup added to the default set
+
+Main decided on the three unscoped router_intent values raised in §6a:
+`own_answer_followup` is **approved for the default `RAG_ANSWER_QUALITY_GATE_INTENTS` set,
+added now** (not deferred) — main's reasoning: it's exactly the failure mode this whole
+effort started from (the "explain why 2x" bug was an `own_answer_followup` turn falling back
+to lesson-saved filler instead of using injected prior-answer evidence, currently mitigated
+only by prompt injection + hard tool-suppression, no quality-gate backstop). `lesson_save`
+stays confidently excluded (no free-form prose to grade). `lesson_modification` stays
+excluded by default, correctly flagged as the strongest "add later" candidate, deferred to
+whichever phase wires it to the unconditional lesson-mode eval path — no action needed here
+now. `_ANSWER_QUALITY_GATE_DEFAULT_INTENTS` (§3) and the `RAG_ANSWER_QUALITY_GATE_INTENTS`
+default (§4) below are updated accordingly; full reasoning kept in §6a.
+
 ## 0. Bug this fixes
 
 Staging: user asked "what is zero discriminat just answer main one line" against an uploaded
@@ -268,6 +282,7 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
 ```python
 _ANSWER_QUALITY_GATE_DEFAULT_INTENTS = (
     "lesson_generation", "document_qa", "general_knowledge_qa", "lesson_qa",
+    "own_answer_followup",
 )
 
 
@@ -310,8 +325,9 @@ def _answer_quality_gate_eval_and_maybe_regenerate(
 ) -> Tuple[str, AIMessage]:
     """
     Answer-quality gate: verify grounding vs evidence for lesson-generation, document_qa,
-    general_knowledge_qa, and lesson_qa turns; optionally regenerate without tools until
-    pass or max attempts. Generalized from the lecture-only failsafe (see PHASE2_DESIGN.md).
+    general_knowledge_qa, lesson_qa, and own_answer_followup turns; optionally regenerate
+    without tools until pass or max attempts. Generalized from the lecture-only failsafe
+    (see PHASE2_DESIGN.md).
 
     Non-lesson intents are additionally heuristic-gated (_quality_gate_should_escalate) so
     the expensive LLM eval only runs when evidence existed AND the response looks like
@@ -435,7 +451,7 @@ if (
 | `RAG_ANSWER_QUALITY_GATE_MAX_ROUNDS` | `"4"` | `RAG_LECTURE_FAILSAFE_MAX_ROUNDS` | eval/regen rounds |
 | `RAG_ANSWER_QUALITY_GATE_IN_LOAD_TEST` | `"false"` | `RAG_LECTURE_FAILSAFE_IN_LOAD_TEST` | run under `LOAD_TEST_MODE` |
 | `RAG_ANSWER_QUALITY_FILLER_MAX_CHARS` | `"350"` | (new) | heuristic length threshold |
-| `RAG_ANSWER_QUALITY_GATE_INTENTS` | `"lesson_generation,document_qa,general_knowledge_qa,lesson_qa"` | (new) | ops kill-switch per intent without a redeploy |
+| `RAG_ANSWER_QUALITY_GATE_INTENTS` | `"lesson_generation,document_qa,general_knowledge_qa,lesson_qa,own_answer_followup"` | (new) | ops kill-switch per intent without a redeploy |
 
 Old names are read as a one-release fallback (see `_answer_quality_gate_enabled` /
 `RAG_ANSWER_QUALITY_GATE_MAX_ROUNDS` above) with a deprecation log line, then can be deleted
@@ -477,19 +493,38 @@ test-breakage standpoint. `tests/test_lecture_generation_fixes_static.py` (read 
 (`DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF` at lines 3306–3311) — noted as a shared-fixture risk
 in §7.
 
-## 6a. The three router_intent values not in the original scope
+## 6a. The three router_intent values not in the original scope — RESOLVED by main (2026-08-15)
 
 The original brief scoped the qualifying set to exactly `{lesson_generation, document_qa,
 general_knowledge_qa, lesson_qa}` and told me to skip `{meta_conversation, greeting_casual,
 clarification}`. Main's confirmed full router_intent list (§ addendum above) has three more
 values neither list mentioned: `own_answer_followup`, `lesson_modification`, `lesson_save`.
-Resolving each below; default is to **exclude all three from
-`RAG_ANSWER_QUALITY_GATE_INTENTS`'s default set** (i.e. `_ANSWER_QUALITY_GATE_DEFAULT_INTENTS`
-in §3 stays exactly the original 4 values), since that's the scope actually approved — but
-each is a real, considered candidate for ops to add later via the env var without a code
-change, per main's configurability requirement. Flagging the `own_answer_followup` case in
-particular for main's attention, since it's the least obviously "correctly excluded" of the
-three.
+
+Main's decision on each (given verbatim, since it changes the default set from what this doc
+originally proposed):
+
+- **`own_answer_followup` — APPROVED for the default set, added now, not deferred.**
+  `_ANSWER_QUALITY_GATE_DEFAULT_INTENTS` (§3) and the `RAG_ANSWER_QUALITY_GATE_INTENTS`
+  default (§4) are both updated to include it, heuristic-gated in the same bucket as
+  `document_qa`. Main's reasoning: this is exactly the failure mode the whole effort started
+  from — the "explain why 2x" bug (see `tests/test_own_answer_followup.py`'s docstring) was
+  an `own_answer_followup` turn falling back to lesson-saved filler instead of using the
+  injected prior-answer evidence, and today that's mitigated *only* by prompt injection +
+  hard tool-suppression (`own_answer_followup_active`), with no quality-gate backstop if the
+  model ignores the injected evidence anyway. My original analysis (kept below for the
+  record) found `prefetch_evidence_for_eval` genuinely gets populated from the model's own
+  prior answer on these turns (rag_service.py lines 4341–4370 in the main checkout, not in
+  this worktree — see §6 item 1), so the heuristic-gated path handles it safely: no evidence
+  → never escalate, filler + evidence → escalate, same as `document_qa`.
+- **`lesson_save` — agreed, confidently excluded.** No free-form prose to grade when the
+  reply is backend-forced (see original rationale below, unchanged).
+- **`lesson_modification` — agreed, excluded by default for now.** Correctly flagged as the
+  strongest "add later" candidate, but wiring it to the unconditional lesson-mode eval path
+  is Phase 2/3 boundary territory — no action needed here now, kept as a documented note for
+  whichever phase picks it up.
+
+<details>
+<summary>Original analysis (pre-resolution), kept for the record</summary>
 
 - **`lesson_save`** — exclude, confidently. This intent maps to a finalize/save request
   handled by `finalize_lesson_tool` + `_chat_handle_lesson_state_and_persistence`, which
@@ -508,24 +543,21 @@ three.
   unconditional-eval path in §3, not the heuristic-gated path — same rationale as
   `lesson_generation`). Left out of the default set only because it's genuinely new scope
   beyond what was approved, not because it's a bad fit.
-- **`own_answer_followup`** — exclude by default, but this is the one worth main's explicit
-  read. I checked how it's handled in the main checkout's `rag_service.py` (lines 4341–4370,
-  not present in this worktree — see §6 item 1 on the base mismatch): when
-  `_is_own_answer_followup_request(last_user_msg_text)` fires, the model's own prior
-  substantive answer is injected as `prefetch_blob` and **`prefetch_evidence_for_eval` is
-  set from it**, exactly like the document-evidence case. That means the "evidence existed
-  and the model ignored it" failure mode this whole gate exists to catch is *structurally
-  possible* here too — e.g. the model could still answer "the lesson has been saved" filler
-  instead of explaining its own prior reasoning (this is literally the bug
-  `test_own_answer_followup.py` was written against, just fixed by the deterministic prompt
-  injection rather than by a quality gate — a second line of defense wouldn't be redundant).
-  The heuristic-gated path (§3) would handle this safely and cheaply if added: no evidence
-  → never escalate, filler + evidence → escalate, same as `document_qa`. I did not add it to
-  the default set because it's outside the approved scope, but functionally it fits the
-  `document_qa`-style bucket better than the lesson-mode bucket, and the cost/safety
-  reasoning for including it is essentially identical. Recommend main decide whether to add
-  it to the default `RAG_ANSWER_QUALITY_GATE_INTENTS` set or leave it for a follow-up once
-  the base four intents are proven in production.
+- **`own_answer_followup`** — originally proposed excluded-by-default pending main's read
+  (see resolution above: now APPROVED and included). I checked how it's handled in the main
+  checkout's `rag_service.py` (lines 4341–4370, not present in this worktree — see §6 item 1
+  on the base mismatch): when `_is_own_answer_followup_request(last_user_msg_text)` fires,
+  the model's own prior substantive answer is injected as `prefetch_blob` and
+  **`prefetch_evidence_for_eval` is set from it**, exactly like the document-evidence case.
+  That means the "evidence existed and the model ignored it" failure mode this whole gate
+  exists to catch is *structurally possible* here too — e.g. the model could still answer
+  "the lesson has been saved" filler instead of explaining its own prior reasoning (this is
+  literally the bug `test_own_answer_followup.py` was written against, just fixed by the
+  deterministic prompt injection rather than by a quality gate — a second line of defense
+  wouldn't be redundant). The heuristic-gated path (§3) handles it safely and cheaply: no
+  evidence → never escalate, filler + evidence → escalate, same as `document_qa`.
+
+</details>
 
 ## 6. Open questions / risks for main + Phase 1
 
@@ -678,6 +710,17 @@ whose `.with_structured_output(...)` returns a stub whose `.invoke(...)` is scri
 - `test_general_knowledge_qa_with_no_evidence_never_escalates` — `router_intent=
   "general_knowledge_qa"`, `prefetch_evidence_for_eval=""`; assert `eval_llm.invoke` never
   called regardless of response content (§6.3's assumption, locked in as a test).
+- `test_own_answer_followup_escalates_on_filler_over_injected_prior_answer` —
+  `router_intent="own_answer_followup"`, `prefetch_evidence_for_eval` set to the model's own
+  injected prior-answer text (mirrors the `prefetch_blob` shape from rag_service.py
+  4360–4370 in the main checkout), `response_content="Lesson finalized and saved. You can
+  download it now."` (the live "explain why 2x" bug's actual filler reply — see §6a
+  addendum 2); assert `eval_llm.invoke` **is** called — this is the regression test for the
+  bug that got `own_answer_followup` added to the default set.
+- `test_own_answer_followup_skips_eval_when_heuristic_says_no` —
+  `router_intent="own_answer_followup"`, same injected-prior-answer evidence, but a
+  substantive non-filler `response_content`; assert `eval_llm.invoke` is **never called**
+  (same cost-safety property as `document_qa`).
 - `test_greeting_casual_intent_is_a_full_noop` — `router_intent="greeting_casual"`; assert
   the function returns `(response_content, response)` unchanged and neither `with_structured_
   output` nor `invoke` are ever called on `user_llm`.
