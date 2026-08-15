@@ -3389,6 +3389,20 @@
     #chatInputArea .tt-util-bar button i{ color:inherit; }
     #chatInputArea #saveLessonBtn{ color:#166534; }
     #chatInputArea #downloadChatBtn{ color:#1d4ed8; }
+
+    /* Per-message Listen/Copy actions row — matches new_ui .card-actions */
+    #chatMessages .msg-actions{
+      display:flex; gap:22px; padding-top:14px; margin-top:14px;
+      border-top:1px solid #f0f0f0; font-size:13px; font-weight:600; color:#333;
+    }
+    #chatMessages .msg-actions button{
+      display:flex; align-items:center; gap:7px; background:none; border:none; cursor:pointer;
+      color:#333; padding:0; font-size:13px; font-weight:600;
+    }
+    #chatMessages .msg-action-listen{ color:#1c7c3e; }
+    #chatMessages .msg-action-listen.active{ color:#0a4a2c; }
+    #chatMessages .msg-action-copy:hover{ color:#111; }
+    #chatMessages .msg-action-listen:hover{ color:#0a4a2c; }
   </style>
   <!-- MathJax v3: configure TeX delimiters and skip code blocks; disable automatic typeset -->
   <script>
@@ -3523,7 +3537,7 @@
           <!-- Welcome message - AI on RIGHT side -->
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Teacher Mode!</h4>
@@ -4256,6 +4270,7 @@
       let mediaStream = null;
       let ttsAudio = null;
       let ttsObjectUrl = null;
+      let activeTtsBtn = null;
       let currentChatMenuId = null;
       let lessonCreationCompleted = false; // Flag to track if first lesson is created
       let conversationSummaryRequestToken = 0;
@@ -8231,7 +8246,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             messageDiv.className = 'chat-message assistant animate-fade-in';
             messageDiv.innerHTML = `
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
             </div>
             <div class="chat-message-content markdown-content tex2jax_process">${formattedContent}</div>
           `;
@@ -8269,7 +8284,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           chatMessages.innerHTML = `
         <div class="chat-message assistant animate-fade-in">
           <div class="chat-message-avatar">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
           </div>
           <div class="chat-message-content">
             ${successHtml}
@@ -8751,7 +8766,128 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           speakerBtn.classList.remove('active');
           speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
         }
+        if (activeTtsBtn && activeTtsBtn !== speakerBtn) {
+          activeTtsBtn.classList.remove('active');
+          activeTtsBtn.innerHTML = '<i class="fas fa-volume-up"></i><span>Listen</span>';
+        }
+        activeTtsBtn = null;
       }
+
+      // Per-message "Listen" button (new_ui card-actions row) — shares the same backend TTS
+      // playback session/state as the input-bar speaker button, so starting one stops the other.
+      async function playMessageAudio(btn, text) {
+        if (!text || !text.trim()) {
+          showToast('No text to read aloud', 'info');
+          return;
+        }
+        if (isTextToSpeechActive && activeTtsBtn === btn) {
+          stopTextToSpeechSession();
+          return;
+        }
+        stopTextToSpeechSession();
+        activeTtsBtn = btn;
+        isTextToSpeechActive = true;
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Loading...</span>';
+        try {
+          const res = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ text: text })
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(function () { return {}; });
+            showToast(err.error || 'TTS failed', 'error');
+            stopTextToSpeechSession();
+            return;
+          }
+          const blob = await res.blob();
+          ttsObjectUrl = URL.createObjectURL(blob);
+          ttsAudio = new Audio(ttsObjectUrl);
+          btn.innerHTML = '<i class="fas fa-volume-up"></i><span>Stop</span>';
+          ttsAudio.onended = function () { stopTextToSpeechSession(); };
+          ttsAudio.onerror = function () { showToast('Playback failed', 'error'); stopTextToSpeechSession(); };
+          ttsAudio.play();
+        } catch (err) {
+          console.error('Message TTS error:', err);
+          showToast('Could not reach speech service', 'error');
+          stopTextToSpeechSession();
+        }
+      }
+
+      // Per-message "Copy" button
+      async function copyMessageText(btn, text) {
+        try {
+          await navigator.clipboard.writeText(text || '');
+          showToast('Copied to clipboard', 'success', 1500);
+        } catch (e) {
+          console.error('Copy failed:', e);
+          showToast('Copy failed', 'error');
+        }
+      }
+
+      // Attach a Listen/Copy actions row to every assistant message bubble, regardless of which
+      // code path rendered it (welcome message, addAssistantMessage, loadChat, etc.) — avoids
+      // having to touch every individual render call site.
+      function attachMessageActionsIfMissing(msgEl) {
+        if (!msgEl || !msgEl.classList || !msgEl.classList.contains('assistant')) return;
+        const contentEl = msgEl.querySelector('.chat-message-content');
+        if (!contentEl || contentEl.querySelector('.msg-actions')) return;
+
+        const actions = document.createElement('div');
+        actions.className = 'msg-actions';
+
+        const listenBtn = document.createElement('button');
+        listenBtn.type = 'button';
+        listenBtn.className = 'msg-action-listen';
+        listenBtn.innerHTML = '<i class="fas fa-volume-up"></i><span>Listen</span>';
+        listenBtn.addEventListener('click', function () {
+          const text = (contentEl.innerText || contentEl.textContent || '').replace(/\s+/g, ' ').trim();
+          playMessageAudio(listenBtn, text);
+        });
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'msg-action-copy';
+        copyBtn.innerHTML = '<i class="fas fa-copy"></i><span>Copy</span>';
+        copyBtn.addEventListener('click', function () {
+          const text = (contentEl.innerText || contentEl.textContent || '').trim();
+          copyMessageText(copyBtn, text);
+        });
+
+        actions.appendChild(listenBtn);
+        actions.appendChild(copyBtn);
+        contentEl.appendChild(actions);
+      }
+
+      (function watchChatMessagesForActions() {
+        function scan(root) {
+          if (!root) return;
+          if (root.nodeType === 1 && root.classList && root.classList.contains('chat-message')) {
+            attachMessageActionsIfMissing(root);
+          }
+          if (root.querySelectorAll) {
+            root.querySelectorAll('.chat-message.assistant').forEach(attachMessageActionsIfMissing);
+          }
+        }
+        function start() {
+          const chatMessages = document.getElementById('chatMessages');
+          if (!chatMessages) return;
+          scan(chatMessages);
+          const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (m) {
+              m.addedNodes.forEach(function (node) { scan(node); });
+            });
+          });
+          observer.observe(chatMessages, { childList: true, subtree: true });
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', start);
+        } else {
+          start();
+        }
+      })();
 
       // Toggle text-to-speech: use backend /api/tts (gTTS) and play returned audio
       async function toggleTextToSpeech() {
@@ -9488,7 +9624,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const wasNearBottom = isChatNearBottom();
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message assistant animate-fade-in';
-        var imgUrl = "{{ url_for('static', filename='teacher/assets/midLogo.png') }}";
+        var imgUrl = "{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}";
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
           <img src="${imgUrl}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
@@ -10070,7 +10206,7 @@ To continue your learning journey:
         typingDiv.className = 'chat-message assistant animate-fade-in';
         typingDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -10246,7 +10382,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         successMsg.className = 'chat-message assistant animate-fade-in';
         successMsg.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -10469,7 +10605,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           chatMessages.innerHTML = `
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Teacher Mode!</h4>
@@ -10696,7 +10832,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           chatMessages.innerHTML = `
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Chat Reset</h4>
