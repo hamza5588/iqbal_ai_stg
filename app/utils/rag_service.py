@@ -4030,6 +4030,7 @@ class _ChatTurnSystemPrep(NamedTuple):
     tool_rounds_current_turn: int
     tool_round_limit_reached: bool
     max_tool_rounds_per_turn: int
+    own_answer_followup_active: bool = False
 
 
 class _ChatLlmBundle(NamedTuple):
@@ -4313,6 +4314,7 @@ def _chat_build_system_message(
             break
     is_lesson_creation_turn = _is_lesson_creation_request(last_user_msg_text)
     prefetch_evidence_for_eval = ""
+    own_answer_followup_active = False
 
     # P0-4 / P0-5: server-side prefetch so answers are grounded even if the model skips tools.
     enable_prefetch = os.getenv("RAG_MANDATORY_PREFETCH", "true").lower() in ("true", "1", "yes")
@@ -4348,14 +4350,23 @@ def _chat_build_system_message(
                         thread_id_str, len(search_range), len(own_answer_text),
                     )
                     if own_answer_text:
+                        # Hard guarantee (not just a prompt instruction): this turn is answered
+                        # with tools unbound entirely (see own_answer_followup_active below), so
+                        # the model physically cannot call finalize_lesson_tool/rag_tool again -
+                        # a prompt-only "don't call tools" instruction was tried first and the
+                        # model still occasionally re-invoked finalize_lesson_tool anyway when the
+                        # recent conversation history was dominated by save-confirmation messages.
+                        own_answer_followup_active = True
                         prefetch_blob = (
                             "## Your own previous answer in this conversation (the user is asking "
                             "you to explain or justify something from it)\n\n"
                             + own_answer_text[:6000]
                             + "\n\nAnswer the user's follow-up directly using your own reasoning "
-                            "from the answer above. This is not a new document search - do not "
-                            "call rag_tool for it, and do not reply about lesson-saving status; "
-                            "the user asked a substantive question and expects a real answer."
+                            "from the answer above, right now, in plain text. This is a request to "
+                            "explain your own prior reasoning, not a document search and not a "
+                            "save/finalize request. Do not reply about lesson-saving status, and do "
+                            "not re-save or re-finalize anything; the user asked a substantive "
+                            "question and expects a real, direct answer."
                         )
                 else:
                     pf_user_id = _get_user_id_for_thread(thread_id_str)
@@ -4394,10 +4405,6 @@ def _chat_build_system_message(
             prefetch_evidence_for_eval = (prefetch_blob or "").strip()
             if prefetch_blob:
                 system_message = SystemMessage(content=system_message.content + "\n\n" + prefetch_blob)
-                logger.info(
-                    "prefetch_blob_appended: thread_id=%s total_system_len=%d tail=%r",
-                    thread_id_str, len(system_message.content), system_message.content[-400:],
-                )
 
     conversation_messages = _prune_messages(raw_messages, max_turns=15)
     if len(state.get("messages", [])) > int(os.getenv("RAG_SUMMARY_TRIGGER_MESSAGES", "20")):
@@ -4447,11 +4454,6 @@ def _chat_build_system_message(
               "Respond directly and keep the answer within 2-3 short sentences."
         )
 
-    logger.info(
-        "chat_turn_prep: thread_id=%s conv_msgs=%d tail_types=%r",
-        thread_id_str, len(conversation_messages),
-        [(type(m).__name__, (getattr(m, "content", "") or "")[:60]) for m in conversation_messages[-4:]],
-    )
     return _ChatTurnSystemPrep(
         system_message=system_message,
         prefetch_evidence_for_eval=prefetch_evidence_for_eval,
@@ -4461,6 +4463,7 @@ def _chat_build_system_message(
         tool_rounds_current_turn=tool_rounds_current_turn,
         tool_round_limit_reached=tool_round_limit_reached,
         max_tool_rounds_per_turn=max_tool_rounds_per_turn,
+        own_answer_followup_active=own_answer_followup_active,
     )
 
 
@@ -4756,6 +4759,7 @@ def _chat_invoke_llm_with_retry(
     tool_round_limit_reached = prep.tool_round_limit_reached
     tool_rounds_current_turn = prep.tool_rounds_current_turn
     max_tool_rounds_per_turn = prep.max_tool_rounds_per_turn
+    own_answer_followup_active = prep.own_answer_followup_active
 
     mode_flags = [short_mode_active, token_pressure_active]
     force_flat_qwen_turn = False
@@ -4809,7 +4813,7 @@ def _chat_invoke_llm_with_retry(
                 groq_rate_limiter.wait_if_needed()
             if attempt == 0:
                 _set_chat_progress(thread_id_str, "✍️ Composing your answer...")
-            if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1]:
+            if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1] or own_answer_followup_active:
                 response = user_llm.invoke(messages, config=config)
             else:
                 response = user_llm_with_tools.invoke(messages, config=config)
