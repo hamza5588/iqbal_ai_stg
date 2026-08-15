@@ -4394,6 +4394,10 @@ def _chat_build_system_message(
             prefetch_evidence_for_eval = (prefetch_blob or "").strip()
             if prefetch_blob:
                 system_message = SystemMessage(content=system_message.content + "\n\n" + prefetch_blob)
+                logger.info(
+                    "prefetch_blob_appended: thread_id=%s total_system_len=%d tail=%r",
+                    thread_id_str, len(system_message.content), system_message.content[-400:],
+                )
 
     conversation_messages = _prune_messages(raw_messages, max_turns=15)
     if len(state.get("messages", [])) > int(os.getenv("RAG_SUMMARY_TRIGGER_MESSAGES", "20")):
@@ -4443,6 +4447,11 @@ def _chat_build_system_message(
               "Respond directly and keep the answer within 2-3 short sentences."
         )
 
+    logger.info(
+        "chat_turn_prep: thread_id=%s conv_msgs=%d tail_types=%r",
+        thread_id_str, len(conversation_messages),
+        [(type(m).__name__, (getattr(m, "content", "") or "")[:60]) for m in conversation_messages[-4:]],
+    )
     return _ChatTurnSystemPrep(
         system_message=system_message,
         prefetch_evidence_for_eval=prefetch_evidence_for_eval,
