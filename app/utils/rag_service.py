@@ -596,6 +596,62 @@ def _is_lesson_creation_request(text: str) -> bool:
     return any(re.search(pattern, normalized) for pattern in lesson_intent_patterns)
 
 
+_OWN_ANSWER_FOLLOWUP_PATTERNS = (
+    r"\bexplain\s+why\b",
+    r"\bhow\s+did\s+you\s+get\b",
+    r"\bwhy\s+did\s+you\s+use\b",
+    r"\bwhy\s+is\s+it\b",
+    r"\bwhat\s+does\s+.*\s+mean\b",
+    r"\bwhy\s+not\b",
+    r"\bwhere\s+did\s+.*\s+come\s+from\b",
+)
+
+
+def _is_own_answer_followup_request(text: str) -> bool:
+    """
+    Heuristic detection for a follow-up asking the model to explain/justify a specific detail
+    from its OWN previous answer (e.g. "explain why 2x, how did you get 2x and not x") - as
+    opposed to a fresh question about the document. A system-prompt instruction alone was not
+    reliably enough to stop the model from treating these as a new document search (confirmed
+    live across two rounds of prompt-only fixes: the model kept calling rag_tool and, on weak
+    results, falling back to a generic remark instead of using its own prior reasoning). This
+    detector backs that instruction with a deterministic prefetch of the model's own last
+    answer (see _chat_build_system_message), so the context is unavoidably present rather than
+    relying on the model to remember/prioritize it correctly on its own.
+    """
+    if not text:
+        return False
+    normalized = re.sub(r"\s+", " ", str(text).strip().lower())
+    if not normalized:
+        return False
+    return any(re.search(pattern, normalized) for pattern in _OWN_ANSWER_FOLLOWUP_PATTERNS)
+
+
+_MIN_SUBSTANTIVE_ANSWER_CHARS = 200
+
+
+def _find_last_substantive_ai_answer(messages: List[BaseMessage]) -> str:
+    """
+    Scan backward for the most recent AIMessage that is real explanatory content (no
+    tool_calls, and long enough to be an actual answer rather than a short status line).
+
+    The length floor matters: the immediately-preceding AIMessage after finalizing a lesson is
+    a short confirmation like "Lesson finalized and saved. You can download it now." - without
+    skipping that, a follow-up like "explain why 2x" right after finalizing would inject the
+    confirmation instead of the actual lesson content the user is asking about (confirmed
+    live: this was the reason the first version of the own-answer-followup fix still didn't
+    produce a real answer). A genuine explanatory answer (e.g. a lesson plan) is always much
+    longer than a status line, so this is a cheap proxy that avoids hardcoding the exact
+    confirmation strings, which would break the moment their wording changes.
+    """
+    for m in reversed(messages):
+        if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None):
+            candidate = (getattr(m, "content", "") or "").strip()
+            if len(candidate) >= _MIN_SUBSTANTIVE_ANSWER_CHARS:
+                return candidate
+    return ""
+
+
 def _is_underspecified_rag_query(text: str) -> bool:
     """True when the user message is too vague for mandatory prefetch (e.g. single word 'explain')."""
     t = (text or "").strip().lower()
@@ -697,7 +753,13 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
     """
     Approximate token-budget trimming:
     - keep the first SystemMessage (if present)
-    - always keep the most recent HumanMessage (required by Qwen/Groq chat templates)
+    - always keep the most recent HumanMessage (required by Qwen/Groq chat templates),
+      reinserted at its true chronological position among whatever units survive trimming —
+      not unconditionally in front of the trailing tool-call unit. Doing that put an OLDER
+      turn's tool exchange (e.g. a prior finalize_lesson_tool call) chronologically after the
+      new question in what the model actually sees, so it would genuinely believe it just
+      finished that old tool call and continue accordingly (e.g. repeat "Lesson finalized and
+      saved") even though nothing was called this turn. Confirmed live.
     - keep most recent *units* that fit in budget, where a unit is either one plain
       message or an AIMessage(tool_calls=[...]) together with its ToolMessage(s) — these
       are always kept or dropped as one atomic group, never split. Splitting them (the
@@ -738,8 +800,18 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
             break
 
     # Group into atomic units: an AIMessage with tool_calls plus its immediately
-    # following ToolMessage(s) travel together; everything else is its own unit.
+    # following ToolMessage(s) travel together; everything else is its own unit. Each unit
+    # keeps its original start index in `rest` so the pinned human message (added back
+    # separately below) can be reinserted at its true chronological position, instead of
+    # unconditionally in front of whatever tool-call unit happens to survive trimming - which
+    # could be an OLDER turn's tool exchange (e.g. a prior finalize_lesson_tool call) that has
+    # nothing to do with the current question. Making that older exchange appear to
+    # chronologically precede the new question doesn't just mis-scope the post-hoc
+    # lesson-state check - it changes what the MODEL itself sees, so it can genuinely believe
+    # it just finished that old tool call and continue accordingly (e.g. re-stating "Lesson
+    # finalized and saved") even though it never called any tool this turn. Confirmed live.
     units: List[List[Any]] = []
+    unit_start_indices: List[int] = []
     i = 0
     while i < len(rest):
         if pinned_human_idx is not None and i == pinned_human_idx:
@@ -748,14 +820,17 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
         msg = rest[i]
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
             group = [msg]
+            group_start = i
             j = i + 1
             while j < len(rest) and isinstance(rest[j], ToolMessage) and j != pinned_human_idx:
                 group.append(rest[j])
                 j += 1
             units.append(group)
+            unit_start_indices.append(group_start)
             i = j
         else:
             units.append([msg])
+            unit_start_indices.append(i)
             i += 1
 
     def _unit_chars(unit):
@@ -768,31 +843,33 @@ def _trim_messages_for_token_budget(messages, max_input_tokens: int = 3000):
     # Always keep the most recent unit so the current user request / latest tool
     # exchange is never dropped, even when it is large — but as a whole unit.
     kept_units: List[List[Any]] = []
-    for idx, unit in enumerate(reversed(units)):
-        is_most_recent = idx == 0
+    kept_start_indices: List[int] = []
+    n_units = len(units)
+    for idx in range(n_units - 1, -1, -1):
+        unit = units[idx]
+        is_most_recent = idx == n_units - 1
         unit_chars = _unit_chars(unit)
         if total_chars + unit_chars > token_budget_chars and not is_most_recent:
             break
         kept_units.append(unit)
+        kept_start_indices.append(unit_start_indices[idx])
         total_chars += unit_chars
 
     kept_units.reverse()
+    kept_start_indices.reverse()
     kept = [m for unit in kept_units for m in unit]
 
-    if pinned_human is not None and not any(isinstance(m, HumanMessage) for m in kept):
-        # Insert pinned human before the trailing tool/assistant tail.
-        insert_at = 0
-        for i, m in enumerate(kept):
-            if isinstance(m, (AIMessage, ToolMessage)):
-                insert_at = i
+    if pinned_human is not None:
+        # Insert at the position that preserves true chronological order: right before the
+        # first surviving unit that originally came AFTER the pinned human message (i.e. later
+        # rounds of tool-calling within the SAME current turn), or at the very end if every
+        # surviving unit is from before it (the normal case - it's the newest message).
+        flat_insert_at = len(kept)
+        for kept_idx, unit_start in enumerate(kept_start_indices):
+            if unit_start > pinned_human_idx:
+                flat_insert_at = sum(len(u) for u in kept_units[:kept_idx])
                 break
-            insert_at = i + 1
-        kept.insert(insert_at, pinned_human)
-    elif pinned_human is not None and not any(
-        isinstance(m, HumanMessage) and (getattr(m, "content", None) == getattr(pinned_human, "content", None))
-        for m in kept
-    ):
-        kept.insert(0, pinned_human)
+        kept.insert(flat_insert_at, pinned_human)
 
     return [system_msg, *kept] if system_msg is not None else kept
 
@@ -3874,6 +3951,15 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "original question yourself right now with a different explanation or more detail (e.g. step by step from "
     "the beginning), covering steps you may have skipped. Only ask a clarifying question if the previous "
     "question itself was ambiguous, not just because the user said they didn't understand.\n"
+    "- Follow-ups about your own previous answer: if the user asks you to explain, justify, or clarify a "
+    "specific detail, term, number, variable, or step that appears in YOUR OWN previous response in this "
+    "conversation (e.g. \"explain why 2x\", \"how did you get that number\", \"why did you use that formula\", "
+    "\"what does that mean\"), answer directly from your own prior explanation and reasoning already visible "
+    "in this conversation - this is about your own reasoning, not a new document lookup. Do not call rag_tool "
+    "with just the bare fragment (e.g. \"2x\") as the search query; short symbol-only fragments rarely match "
+    "anything useful and produce a weak or empty result. Only retrieve from the document if the detail being "
+    "asked about was not actually something you derived or stated yourself. Never fall back to a generic "
+    "closing remark, and never respond about lesson-saving status when the user asked a substantive question.\n"
     "- Answer the user directly. Do not repeat their question. Do not describe tool usage.\n"
 )
 
@@ -3896,6 +3982,10 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF_LOAD_TEST = (
     "- If the user sends a short dissatisfied follow-up (e.g. 'try again', 'I still don't understand'), "
     "immediately re-answer the previous question yourself with a different, more detailed explanation. "
     "Do not give a generic closing line and do not ask what part was unclear.\n"
+    "- If the user asks you to explain/justify a specific detail from YOUR OWN previous answer "
+    "(e.g. 'explain why 2x', 'how did you get that number'), answer from your own prior reasoning already in "
+    "this conversation - do not call rag_tool with just the bare fragment, and never reply about lesson-saving "
+    "status when the user asked a substantive question.\n"
     "- If question is irrelevant to PDF, reply exactly: "
     "\"Irrelevant question. Do you want me to answer from my own knowledge base?\"\n"
 )
@@ -3940,6 +4030,7 @@ class _ChatTurnSystemPrep(NamedTuple):
     tool_rounds_current_turn: int
     tool_round_limit_reached: bool
     max_tool_rounds_per_turn: int
+    own_answer_followup_active: bool = False
 
 
 class _ChatLlmBundle(NamedTuple):
@@ -4223,6 +4314,7 @@ def _chat_build_system_message(
             break
     is_lesson_creation_turn = _is_lesson_creation_request(last_user_msg_text)
     prefetch_evidence_for_eval = ""
+    own_answer_followup_active = False
 
     # P0-4 / P0-5: server-side prefetch so answers are grounded even if the model skips tools.
     enable_prefetch = os.getenv("RAG_MANDATORY_PREFETCH", "true").lower() in ("true", "1", "yes")
@@ -4246,6 +4338,36 @@ def _chat_build_system_message(
             try:
                 if is_lesson_creation_turn:
                     prefetch_blob = _prefetch_lecture_evidence_for_chat(thread_id_str, last_user_msg_text)
+                elif _is_own_answer_followup_request(last_user_msg_text):
+                    # Deterministic fallback for "explain why 2x" style follow-ups: don't rely
+                    # on the model to remember/prioritize its own prior answer from the trimmed
+                    # conversation window - hand it the answer directly so it physically cannot
+                    # miss it.
+                    search_range = raw_messages[:last_human_idx_pf] if last_human_idx_pf >= 0 else raw_messages
+                    own_answer_text = _find_last_substantive_ai_answer(search_range)
+                    logger.info(
+                        "own_answer_followup: thread_id=%s search_range_len=%d found_chars=%d",
+                        thread_id_str, len(search_range), len(own_answer_text),
+                    )
+                    if own_answer_text:
+                        # Hard guarantee (not just a prompt instruction): this turn is answered
+                        # with tools unbound entirely (see own_answer_followup_active below), so
+                        # the model physically cannot call finalize_lesson_tool/rag_tool again -
+                        # a prompt-only "don't call tools" instruction was tried first and the
+                        # model still occasionally re-invoked finalize_lesson_tool anyway when the
+                        # recent conversation history was dominated by save-confirmation messages.
+                        own_answer_followup_active = True
+                        prefetch_blob = (
+                            "## Your own previous answer in this conversation (the user is asking "
+                            "you to explain or justify something from it)\n\n"
+                            + own_answer_text[:6000]
+                            + "\n\nAnswer the user's follow-up directly using your own reasoning "
+                            "from the answer above, right now, in plain text. This is a request to "
+                            "explain your own prior reasoning, not a document search and not a "
+                            "save/finalize request. Do not reply about lesson-saving status, and do "
+                            "not re-save or re-finalize anything; the user asked a substantive "
+                            "question and expects a real, direct answer."
+                        )
                 else:
                     pf_user_id = _get_user_id_for_thread(thread_id_str)
                     out_pf = rag_tool.invoke(
@@ -4341,6 +4463,7 @@ def _chat_build_system_message(
         tool_rounds_current_turn=tool_rounds_current_turn,
         tool_round_limit_reached=tool_round_limit_reached,
         max_tool_rounds_per_turn=max_tool_rounds_per_turn,
+        own_answer_followup_active=own_answer_followup_active,
     )
 
 
@@ -4636,6 +4759,7 @@ def _chat_invoke_llm_with_retry(
     tool_round_limit_reached = prep.tool_round_limit_reached
     tool_rounds_current_turn = prep.tool_rounds_current_turn
     max_tool_rounds_per_turn = prep.max_tool_rounds_per_turn
+    own_answer_followup_active = prep.own_answer_followup_active
 
     mode_flags = [short_mode_active, token_pressure_active]
     force_flat_qwen_turn = False
@@ -4689,7 +4813,7 @@ def _chat_invoke_llm_with_retry(
                 groq_rate_limiter.wait_if_needed()
             if attempt == 0:
                 _set_chat_progress(thread_id_str, "✍️ Composing your answer...")
-            if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1]:
+            if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1] or own_answer_followup_active:
                 response = user_llm.invoke(messages, config=config)
             else:
                 response = user_llm_with_tools.invoke(messages, config=config)
