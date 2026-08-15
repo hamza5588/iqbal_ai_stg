@@ -3365,16 +3365,30 @@
     /* ===== New UI: chat bubble / input bar palette (colors + shape only — markdown typography rules untouched) ===== */
     #chatMessages .chat-message-avatar{ border-radius:50%; }
     #chatMessages .chat-message-avatar img{ border-radius:50%; }
-    #chatMessages .chat-message.assistant .chat-message-avatar{ background:#fff; border:1.5px solid #2f9e4f; padding:6px; }
+    #chatMessages .chat-message.assistant .chat-message-avatar{ background:#fff; border:1.5px solid #2f9e4f; padding:2px; }
     #chatMessages .chat-message.user .chat-message-avatar{ background:#166534; border:1.5px solid #166534; color:#fff; font-weight:800; }
     #chatMessages .chat-message.assistant .chat-message-content{ background:#fff; border:1px solid #eee; border-radius:16px; box-shadow:0 4px 16px rgba(0,0,0,0.03); }
     #chatMessages .chat-message.user .chat-message-content{ background:#166534; border-radius:14px; border-bottom-right-radius:4px; }
-    #chatInputArea .flex-1.bg-white,
-    #chatInputArea textarea#messageInput{ border-radius:20px; }
-    #chatInputArea #sendBtn{ background:#d0f73a !important; color:#1a1a1a !important; }
-    #chatInputArea #sendBtn:hover{ background:#c3ea2c !important; }
-    #chatInputArea #saveLessonBtn{ background:#1c7c3e !important; }
-    #chatInputArea #resetChatBtn{ background:#dc2626 !important; }
+
+    /* Input bar as one rounded pill — matches new_ui/chatbot-main-screen/15-chat-history-dropdown.html .input-bar */
+    #chatInputArea .tt-input-bar{
+      border:1px solid #eee; border-radius:40px; padding:8px 18px;
+    }
+    #chatInputArea .tt-round-icon{
+      width:40px; height:40px; border-radius:50%; border:1px solid #d1d5db;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#fff;
+    }
+    #chatInputArea .tt-round-icon:hover{ background:#f9fafb; }
+    #chatInputArea .tt-input-mid{ padding:6px 0; }
+    #chatInputArea .tt-message-input{ border:none !important; box-shadow:none !important; padding:6px 0; }
+    #chatInputArea .tt-send-btn{
+      width:36px; height:36px; border-radius:50%; background:#d0f73a !important; color:#1a1a1a !important;
+    }
+    #chatInputArea .tt-send-btn:hover{ background:#c3ea2c !important; }
+    #chatInputArea .tt-input-divider{ width:1px; height:26px; background:#eee; }
+    #chatInputArea .tt-util-bar button i{ color:inherit; }
+    #chatInputArea #saveLessonBtn{ color:#166534; }
+    #chatInputArea #downloadChatBtn{ color:#1d4ed8; }
   </style>
   <!-- MathJax v3: configure TeX delimiters and skip code blocks; disable automatic typeset -->
   <script>
@@ -3442,7 +3456,7 @@
 
     <!-- Top Header: logo + user info -->
     <header class="tt-header">
-      <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI"></div>
+      <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
       <div class="tt-user">
         <div class="tt-avatar" id="userAvatar" onclick="openSettings()">G</div>
         <div class="tt-user-info">
@@ -3686,62 +3700,64 @@
             <div id="voiceText" class="mt-2 text-sm text-gray-700"></div>
           </div>
 
-          <!-- Modern Input Container -->
-          <div class="flex items-center gap-2 md:gap-3">
+          <!-- Modern Input Container - matches new_ui/chatbot-main-screen/15-chat-history-dropdown.html .input-bar -->
+          <div class="flex items-center gap-2 md:gap-3 tt-input-bar">
             <!-- Mic/Speaker Icons (Left Outside) (Hidden on mobile) -->
             <div class="hidden sm:flex items-center gap-2 flex-shrink-0">
               <!-- Microphone Button -->
               <button id="micBtn" onclick="toggleVoiceInput()"
-                class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                class="tt-round-icon text-gray-600 hover:text-primary-600 transition-colors"
                 title="Voice input" aria-label="Voice input">
-                <i class="fas fa-microphone text-xl"></i>
+                <i class="fas fa-microphone"></i>
               </button>
 
               <!-- Speaker Button -->
               <button id="speakerBtn" onclick="toggleTextToSpeech()"
-                class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                class="tt-round-icon text-gray-600 hover:text-primary-600 transition-colors"
                 title="Text to speech" aria-label="Text to speech">
-                <i class="fas fa-volume-up text-xl"></i>
+                <i class="fas fa-volume-up"></i>
               </button>
             </div>
 
             <!-- Main Input Area (Clean, Borderless) -->
-            <div class="flex-1 bg-transparent flex items-center gap-3 px-5 py-3">
+            <div class="flex-1 bg-transparent flex items-center gap-3 tt-input-mid">
               <!-- Text Input -->
-              <textarea id="messageInput" placeholder="Type your message..."
-                class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 placeholder-gray-500 text-base resize-none focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+              <textarea id="messageInput" placeholder="Ask a question about this lesson..."
+                class="flex-1 bg-transparent text-gray-800 placeholder-gray-500 text-base resize-none focus:outline-none transition-colors tt-message-input"
                 rows="1" aria-label="Chat message input" oninput="autoResizeTextarea(this)"
                 onkeydown="handleKeyDown(event)"></textarea>
 
               <!-- Send Button (Inside Input Area) -->
               <button id="sendBtn" onclick="sendMessage()"
-                class="flex items-center justify-center p-2 rounded-lg text-white bg-primary-500 hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                class="flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0 tt-send-btn"
                 title="Send message (Ctrl+Enter)" aria-label="Send message" disabled>
-                <i class="fas fa-arrow-up text-lg"></i>
+                <i class="fas fa-arrow-up"></i>
               </button>
             </div>
 
+            <div class="tt-input-divider hidden md:block"></div>
+
             <!-- Action Buttons (Right Side - Compact on mobile) -->
-            <div class="flex items-center gap-2 md:gap-4 flex-shrink-0">
+            <div class="flex items-center gap-2 md:gap-4 flex-shrink-0 tt-util-bar">
               <!-- Save Lesson Button (hidden on mobile) -->
               <button id="saveLessonBtn" onclick="saveLessonFromChat()" title="Save lesson"
-                class="hidden md:flex items-center justify-center p-2 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors text-sm md:text-base"
+                class="hidden md:flex items-center justify-center gap-2 text-gray-700 hover:text-primary-700 transition-colors text-sm md:text-base font-semibold"
                 aria-label="Save lesson">
-                <i class="fas fa-save text-base md:text-lg"></i>
+                <i class="fas fa-save"></i><span>Save</span>
               </button>
 
               <!-- Download Chat Button (hidden on mobile) -->
               <button id="downloadChatBtn" onclick="downloadChat()" title="Download chat"
-                class="hidden md:flex items-center justify-center p-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                class="hidden md:flex items-center justify-center gap-2 text-gray-700 hover:text-primary-700 transition-colors text-sm md:text-base font-semibold"
                 aria-label="Download chat">
-                <i class="fas fa-download text-lg"></i>
+                <i class="fas fa-download"></i><span>Download</span>
               </button>
 
               <!-- Reset Chat Button (hidden on mobile) -->
               <button id="resetChatBtn" onclick="resetChat()" title="Reset chat"
-                class="hidden md:flex items-center justify-center p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
+                class="hidden md:flex items-center justify-center gap-2 text-red-600 hover:text-red-700 transition-colors text-sm md:text-base font-semibold"
                 aria-label="Reset chat">
-                <i class="fas fa-redo text-lg"></i>
+                <i class="fas fa-redo"></i><span>Reset</span>
               </button>
             </div>
           </div>
@@ -4010,7 +4026,7 @@
         <!-- Top bar -->
         <div class="vl-topbar">
           <div class="vl-topbar-logo">
-            <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI">
           </div>
           <div class="vl-topbar-crumbs">My Lessons&nbsp;/&nbsp;<b>View Lesson</b></div>
           <div class="vl-topbar-actions">
@@ -5519,7 +5535,7 @@
         modalContent.innerHTML = `
         <!-- Header: matches new_ui/processing_upload_pdfui/17-processing-pdf.html -->
         <div class="ppm-header">
-          <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI"></div>
+          <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
           <div class="ppm-close-x" onclick="closeCreateLessonModal()">
             <i class="fas fa-times"></i>
           </div>
