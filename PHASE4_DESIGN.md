@@ -19,6 +19,24 @@ Two runtime flags referenced in the phase4 brief were checked against current br
   flag phase1 is expected to introduce for meta-conversation turns (e.g. "what did I ask last
   question"). Naming/shape should be confirmed with phase1 (see Open Questions).
 
+**Update (post-review, from main/coordinator):** the open questions below were resolved during
+review and are reflected throughout this doc — see the "Resolved" note at the top of each
+relevant section and the updated Open Questions list at the end. In short: (1) the consent
+yes/no classifier is confirmed as phase4-owned, build now, don't wait on `RouterOutput`; (2) the
+`with_structured_output`/`TelemetryChatModel` coverage gap is a noted risk for phase1 to verify,
+not a phase4 blocker; (3) `meta_conversation_scope` is finalized as
+`"last_question" | "last_n_questions" | "exact_text" | "other"`, with `meta_conversation_n` only
+set when scope is `"last_n_questions"`; (4) the regex-fallback classifier
+(`_router_fallback_from_regex`, reconstructing today's behavior from the 4 existing regex
+functions) is confirmed in phase1's scope as the router-failure safety net —
+`RouterDecisionEvent.router_used_fallback`/`fallback_reason` are designed to capture when it
+fires; (5) router-driven offer-detection is confirmed deferred — the literal-string-match
+approach in section 2 stands as-is for now.
+
+Also per main: this worktree is on a stale base (same known issue as phase2) — sitting tight,
+not rebasing or otherwise touching the worktree base myself. A corrected base will be handed over
+once phase1 lands and merges.
+
 ---
 
 ## 1. Routing decision tracing
@@ -72,11 +90,16 @@ class RouterDecisionEvent(Base):
     # --- RouterOutput fields (mirror phase1's structured-output schema) ---
     intent = Column(String(64), nullable=True, index=True)
     requested_brevity = Column(Boolean, nullable=True)
-    meta_conversation_scope = Column(String(64), nullable=True)
+    meta_conversation_scope = Column(String(32), nullable=True)
+    # Finalized enum (confirmed by main): "last_question" | "last_n_questions" | "exact_text" | "other"
     meta_conversation_n = Column(Integer, nullable=True)
+    # Only ever set when meta_conversation_scope == "last_n_questions"; NULL otherwise.
     reasoning = Column(Text, nullable=True)   # truncate at persist time, same pattern as error_message
 
     # --- Failure / fallback tracking ---
+    # router_used_fallback=True whenever phase1's _router_fallback_from_regex path fires (the
+    # deterministic regex-based safety net phase1 is building, reconstructing today's behavior
+    # from the 4 existing regex functions, for when structured-output parsing/validation fails).
     router_used_fallback = Column(Boolean, nullable=False, default=False, server_default='0', index=True)
     fallback_reason = Column(String(255), nullable=True)   # e.g. "structured_output_error", "timeout", "validation_error"
 
@@ -219,21 +242,21 @@ table.
 5. A new `offered` event always overwrites whatever was previously in these columns — only one
    outstanding offer can exist per thread at a time (single-threaded conversation).
 
-### Where yes/no detection lives (two options, recommendation below)
+### Where yes/no detection lives (resolved: option b, confirmed by main)
 
 - **(a)** Extend `RouterOutput` with a `consent_response: Optional[Literal["yes","no"]]` field
   that phase1's router always fills in when `gk_consent_state == 'offered'` is passed as part of
   its input context. Cleanest long-term (one classifier, not two), but requires phase1 to accept a
-  schema addition — flagged as an open question below rather than assumed.
+  schema addition.
 - **(b)** Keep it fully outside the router: a small, narrowly-scoped yes/no classifier
   (deterministic keyword check first — "yes"/"sure"/"go ahead" vs "no"/"nvm"/"don't" — with a
   cheap LLM fallback only for ambiguous phrasing), invoked by `rag_service.py` **only** when
   `gk_consent_state == 'offered'`, so it's cheap and never runs on the common case. This is
   phase4-ownable without any dependency on phase1's schema landing first.
 
-**Recommendation: build (b) now** (it's fully within phase4's scope and doesn't block on phase1),
-and treat (a) as a future consolidation once `RouterOutput` has shipped and stabilized — note it
-to phase1/main as a possible follow-up, not a blocking requirement.
+**Resolved: build (b) now.** Confirmed by main — build the narrow classifier as part of phase4,
+don't block on phase1's schema. (a) stays a possible future consolidation to revisit once
+`RouterOutput` has shipped and proven useful for this, not a near-term plan.
 
 The consuming check itself (replacing the current "the model just re-reads the prompt and
 proceeds" behavior) is a single guard at the top of whatever code path answers
@@ -253,10 +276,20 @@ multiple people add cases, trivially diffable in review.
 
 ```jsonl
 {"id": "bug-001-discriminant-brevity", "source": "prod bug report", "setup": {"document_fixture": "quadratic_formula_notes.pdf", "prior_turns": []}, "input": "what is zero discriminat just answer main one line", "expected": {"intent": "document_qa", "requested_brevity": true}, "behavior_assertions": [{"type": "max_sentences", "value": 2}, {"type": "not_contains_any", "value": ["I'm sorry", "misunderstanding", "could you clarify"]}, {"type": "contains_any", "value": ["discriminant", "b^2", "b²"]}]}
-{"id": "bug-002a-what-i-ask-last", "source": "prod bug report", "setup": {"document_fixture": null, "prior_turns": "@fixture:meta_conv_prior_turns_01"}, "input": "what i ask last question?", "expected": {"intent": "meta_conversation", "meta_conversation_scope": "last_question", "meta_conversation_n": 1}, "behavior_assertions": [{"type": "contains_exact_prior_user_text", "value": true}, {"type": "not_contains_any", "value": ["misunderstanding", "I think there might be some confusion"]}]}
-{"id": "bug-002b-what-i-ask", "source": "prod bug report", "setup": {"document_fixture": null, "prior_turns": "@fixture:meta_conv_prior_turns_01"}, "input": "what i ask?", "expected": {"intent": "meta_conversation", "meta_conversation_scope": "last_question", "meta_conversation_n": 1}, "behavior_assertions": [{"type": "contains_exact_prior_user_text", "value": true}]}
-{"id": "bug-002c-paste-exactly", "source": "prod bug report", "setup": {"document_fixture": null, "prior_turns": "@fixture:meta_conv_prior_turns_01"}, "input": "paste exactly to me what ia sk", "expected": {"intent": "meta_conversation", "meta_conversation_scope": "last_question", "meta_conversation_n": 1}, "behavior_assertions": [{"type": "contains_exact_prior_user_text", "value": true}]}
+{"id": "bug-002a-what-i-ask-last", "source": "prod bug report", "setup": {"document_fixture": null, "prior_turns": "@fixture:meta_conv_prior_turns_01"}, "input": "what i ask last question?", "expected": {"intent": "meta_conversation", "meta_conversation_scope": "last_question", "meta_conversation_n": null}, "behavior_assertions": [{"type": "contains_exact_prior_user_text", "value": true}, {"type": "not_contains_any", "value": ["misunderstanding", "I think there might be some confusion"]}]}
+{"id": "bug-002b-what-i-ask", "source": "prod bug report", "setup": {"document_fixture": null, "prior_turns": "@fixture:meta_conv_prior_turns_01"}, "input": "what i ask?", "expected": {"intent": "meta_conversation", "meta_conversation_scope": "last_question", "meta_conversation_n": null}, "behavior_assertions": [{"type": "contains_exact_prior_user_text", "value": true}]}
+{"id": "bug-002c-paste-exactly", "source": "prod bug report", "setup": {"document_fixture": null, "prior_turns": "@fixture:meta_conv_prior_turns_01"}, "input": "paste exactly to me what ia sk", "expected": {"intent": "meta_conversation", "meta_conversation_scope": "exact_text", "meta_conversation_n": null}, "behavior_assertions": [{"type": "contains_exact_prior_user_text", "value": true}]}
 ```
+
+Field values above use the finalized `meta_conversation_scope` enum
+(`"last_question" | "last_n_questions" | "exact_text" | "other"`, with `meta_conversation_n`
+only ever set when scope is `"last_n_questions"`). The two "what i ask" phrasings ask about the
+*content* of the last question (scope `last_question`), while "paste exactly to me what ia sk"
+explicitly requests literal text (scope `exact_text`) — both still assert
+`contains_exact_prior_user_text` since exact-text retrieval is the correct behavior either way
+per the original bug report; a `last_n_questions` fixture case (e.g. "what were my last 3
+questions?", `meta_conversation_n: 3`) should be added to this file once real conversations
+surface that pattern, to exercise the third enum branch.
 
 - `prior_turns` can inline a short seeded conversation or reference a shared fixture
   (`@fixture:name` → `tests/eval_fixtures/prior_turns/meta_conv_prior_turns_01.json`) so the three
@@ -354,34 +387,40 @@ per scope (design doc only, no real test files yet).
 
 ---
 
-## Open questions for phase1 / main
+## Open questions — resolved (2026-08-15, per main/coordinator)
 
-1. **Consent yes/no signal**: should `RouterOutput` eventually carry a `consent_response` field
-   (option a in section 2), or should phase4 own a fully separate narrow classifier (option b,
-   recommended as the immediate build since it has no dependency on phase1's schema)?
-2. **Structured-output call mechanism**: does phase1's router use a `bind_tools`-based structured
-   output path, or LangChain's `with_structured_output(method="json_mode")` (or similar) that
-   might call the underlying provider directly rather than through `bind_tools`? This matters
-   because `TelemetryChatModel` (`llm_gateway.py:405-441`) currently only overrides `bind_tools`
-   (and `_generate`/`_agenerate`) — if the router's structured-output call doesn't route through
-   one of those, it silently produces no `LLMUsageEvent` row, and
-   `RouterDecisionEvent.router_llm_usage_event_id` would have nothing to link to. If needed,
-   `TelemetryChatModel` would need a `with_structured_output` override too — that's a
-   `llm_gateway.py` change outside phase4's current scope but worth flagging now.
-3. **Exact `meta_conversation_scope` values**: this design uses `'last_question'` as a placeholder
-   value; `RouterDecisionEvent.meta_conversation_scope` should mirror whatever enum/string values
-   phase1 actually ships rather than this guess.
-4. **Regex fallback**: `router_used_fallback` assumes phase1 is building a deterministic backup
-   classifier for when structured-output parsing/validation fails — confirming this is in scope
-   for phase1 (not something phase4 needs to build itself) would help finalize the fallback
-   detection wiring.
-5. **Detection of the "offer was made" event** (section 2, transition 1): currently the fallback
-   text is a literal string match against the model's own reply
-   (`"Would you like me to answer from my own knowledge base?"` /
-   `"Irrelevant question. Do you want me to answer..."`). Once phase1's router exists, is intent
-   classification itself expected to also flag "this turn IS the offer" more robustly than string
-   matching, or should phase4 keep the string-match approach as the trigger for flipping
-   `gk_consent_state`?
+All five original open questions were reviewed and answered by main. Recorded here for the
+record, with the doc updated in place above to reflect each:
+
+1. **Consent yes/no signal** — **Resolved: option (b).** Phase4 builds a fully separate, narrow
+   yes/no classifier now, invoked only when `gk_consent_state == 'offered'`. Do not wait on
+   `RouterOutput`. Folding this into `RouterOutput` as a `consent_response` field (option a) may
+   be revisited in a later pass if it turns out to be useful there — not planned now.
+2. **Structured-output call mechanism / `TelemetryChatModel` coverage gap** — **Confirmed as a
+   real risk, not phase4's to fix.** Main is passing this to phase1 to verify whether the
+   router's own LLM call actually gets wrapped by `TelemetryChatModel` (i.e. whether it goes
+   through `bind_tools`/`_generate`/`_agenerate`, or some other path like
+   `with_structured_output(method="json_mode")` that could bypass it). If it turns out not to be
+   wrapped, the router's cost/latency won't show up in `LLMUsageEvent` at all, and
+   `RouterDecisionEvent.router_llm_usage_event_id` will have nothing to link to for those calls.
+   Kept in this doc as a noted risk (see section 1's schema notes) — not a blocker for phase4's
+   design or eventual implementation.
+3. **`meta_conversation_scope` enum** — **Finalized:**
+   `"last_question" | "last_n_questions" | "exact_text" | "other"`, with `meta_conversation_n`
+   as `Optional[int]`, set **only** when scope is `"last_n_questions"`. Reflected in
+   `RouterDecisionEvent`'s schema comment (section 1) and the eval fixtures (section 3).
+4. **Regex fallback** — **Confirmed in phase1's scope.** Main has instructed phase1 to build
+   `_router_fallback_from_regex` (reconstructing today's behavior from the 4 existing regex
+   functions) as the router-failure safety net. `RouterDecisionEvent.router_used_fallback` /
+   `fallback_reason` are designed to capture exactly when that path fires — noted in the schema
+   comment in section 1.
+5. **Detection of the "offer was made" event** — **Confirmed deferred.** The current
+   literal-string-match approach (section 2, transition 1) is fine for now; router-driven
+   offer-detection is a possible future improvement, not something to build in this pass.
+
+No new open questions remain from this round of review. If further questions surface once
+phase1's `RouterOutput` interface actually lands (as opposed to this doc's inferred version of
+it), those will be raised at integration time rather than guessed at here.
 
 ---
 
@@ -394,6 +433,9 @@ per scope (design doc only, no real test files yet).
 | Consent state storage | 3 new columns on `RAGThread` (`gk_consent_state`, `gk_consent_question`, `gk_consent_updated_at`) |
 | Migration for #2 | Requires a guarded `ALTER TABLE` block in `init_db`, following the `users.subscription_tier` pattern |
 | Consent granularity | Per-question, single-use, not a sticky thread-level grant |
-| Consent yes/no detection | Narrow phase4-owned classifier for now (option b); flag option (a) to phase1 as a possible future consolidation |
+| Consent yes/no detection | Narrow phase4-owned classifier, confirmed by main — build now, don't block on phase1's `RouterOutput` schema |
+| `meta_conversation_scope` values | Finalized: `last_question`, `last_n_questions`, `exact_text`, `other`; `meta_conversation_n` only set for `last_n_questions` |
+| Regex fallback ownership | Confirmed: phase1 builds `_router_fallback_from_regex`; `RouterDecisionEvent.router_used_fallback`/`fallback_reason` capture when it fires |
+| `TelemetryChatModel` coverage of router calls | Open risk, handed to phase1 to verify — not a phase4 blocker |
 | Eval fixtures | `tests/eval_fixtures/routing_regressions.jsonl`, run via `scripts/run_routing_eval.py`, scheduled (not per-PR), flat JSON/CSV report — no dashboard |
 | Unit tests | Fake-session DB write-path test for `RouterDecisionEvent`; pure-function transition-table tests for the consent state machine — neither needs a live LLM |
