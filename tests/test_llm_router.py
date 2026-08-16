@@ -32,6 +32,7 @@ from app.utils.rag_service import (
     _find_last_real_user_question,
     _looks_like_meta_conversation_text,
     _router_fallback_from_regex,
+    _select_intent_tool_names,
 )
 
 
@@ -563,6 +564,118 @@ class TestChatBuildSystemMessageBranchSelection:
         )
         assert "Retrieved document excerpts" in prep.system_message.content
         assert "Some retrieved excerpt text." in prep.system_message.content
+        assert prep.intent_tool_names is None
+        assert "update_lesson_tool" in prep.system_message.content
+
+
+class TestSpecialistHandoff:
+    """Production bug: router classified lesson_modification / lesson_save / meta_conversation
+    correctly, then the executor still ran generic_rag_prefetch and bound every tool, so the
+    agent searched the PDF and reused the previous Q&A. Industry fix is a specialist handoff
+    (scoped tools + state as observations), not a canned reply."""
+
+    def test_select_intent_tool_names_scopes_specialists(self):
+        assert _select_intent_tool_names("lesson_save") == ("finalize_lesson_tool",)
+        mod = _select_intent_tool_names("lesson_modification")
+        assert mod is not None
+        assert "update_lesson_tool" in mod
+        assert "teach_topic_tool" in mod
+        assert "finalize_lesson_tool" not in mod
+        assert _select_intent_tool_names("meta_conversation") == ()
+        assert _select_intent_tool_names("document_qa") is None
+
+    def test_lesson_modification_injects_draft_and_does_not_prefetch_rag(self, monkeypatch):
+        def _explode(*args, **kwargs):
+            raise AssertionError("rag_tool must not be invoked during lesson_modification prefetch")
+
+        monkeypatch.setattr(rag_service, "rag_tool", types.SimpleNamespace(invoke=_explode))
+        monkeypatch.setattr(
+            rag_service,
+            "_get_thread_metadata_from_db",
+            lambda tid: {
+                "filename": "All_merged.pdf",
+                "num_pages": 52,
+                "last_lesson_text": "## Lesson Plan: Setting Up a Quadratic Equation\n\nPool example draft.",
+            },
+        )
+        long_explain = ("In the context of the swimming pool problem, 2x is used because the sidewalk is on both sides. " * 8)
+        messages = [
+            HumanMessage(content="create the lesson plan on the pool of area 192"),
+            AIMessage(content="## Lesson Plan: Setting Up a Quadratic Equation\n\nPool example draft."),
+            HumanMessage(content="explain why 2x how did you get 2x and not x"),
+            AIMessage(content=long_explain),
+            HumanMessage(content="PLEASE ADD TGHE EXAMPLE IN THE ELCTURE"),
+        ]
+        prep = _chat_build_system_message(
+            _make_state(messages),
+            has_document=True,
+            thread_id_str="user_2_conv_116",
+            custom_prompt=None,
+            token_pressure_active=False,
+            short_mode_active=False,
+            router_output=RouterOutput(intent="lesson_modification"),
+        )
+        content = prep.system_message.content
+        assert prep.prefetch_branch == "specialist_handoff"
+        assert "Specialist handoff: lesson editor" in content
+        assert "Lesson Plan: Setting Up a Quadratic Equation" in content
+        assert "Retrieved document excerpts" not in content
+        assert prep.intent_tool_names is not None
+        assert "update_lesson_tool" in prep.intent_tool_names
+        assert "finalize_lesson_tool" not in prep.intent_tool_names
+
+    def test_lesson_save_does_not_prefetch_rag_and_only_binds_finalize(self, monkeypatch):
+        def _explode(*args, **kwargs):
+            raise AssertionError("rag_tool must not be invoked during lesson_save prefetch")
+
+        monkeypatch.setattr(rag_service, "rag_tool", types.SimpleNamespace(invoke=_explode))
+        monkeypatch.setattr(
+            rag_service,
+            "_get_thread_metadata_from_db",
+            lambda tid: {"filename": "All_merged.pdf", "last_lesson_text": "FULL LESSON DRAFT TEXT"},
+        )
+        messages = [HumanMessage(content="SAVE THE LESSON")]
+        prep = _chat_build_system_message(
+            _make_state(messages),
+            has_document=True,
+            thread_id_str="user_2_conv_116",
+            custom_prompt=None,
+            token_pressure_active=False,
+            short_mode_active=False,
+            router_output=RouterOutput(intent="lesson_save"),
+        )
+        content = prep.system_message.content
+        assert prep.prefetch_branch == "specialist_handoff"
+        assert "Specialist handoff: lesson save" in content
+        assert "FULL LESSON DRAFT TEXT" in content
+        assert "Retrieved document excerpts" not in content
+        assert prep.intent_tool_names == ("finalize_lesson_tool",)
+
+    def test_meta_conversation_gets_transcript_and_forbids_not_in_document(self, monkeypatch):
+        def _explode(*args, **kwargs):
+            raise AssertionError("rag_tool must never be invoked for meta_conversation")
+
+        monkeypatch.setattr(rag_service, "rag_tool", types.SimpleNamespace(invoke=_explode))
+        messages = [
+            HumanMessage(content="PLEASE ADD TGHE EXAMPLE IN THE ELCTURE"),
+            AIMessage(content="In the context of the swimming pool problem..."),
+            HumanMessage(content="WHAT DID I ASK??"),
+        ]
+        prep = _chat_build_system_message(
+            _make_state(messages),
+            has_document=True,
+            thread_id_str="test_thread_meta_transcript",
+            custom_prompt=None,
+            token_pressure_active=False,
+            short_mode_active=False,
+            router_output=RouterOutput(intent="meta_conversation", meta_conversation_scope="last_question"),
+        )
+        content = prep.system_message.content
+        assert prep.meta_conversation_active is True
+        assert "Specialist handoff: conversation memory" in content
+        assert "PLEASE ADD TGHE EXAMPLE IN THE ELCTURE" in content
+        assert "not present in the document" in content.lower()
+        assert prep.intent_tool_names == ()
 
 
 class TestBugConsumption:

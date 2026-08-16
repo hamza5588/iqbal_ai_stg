@@ -3753,6 +3753,109 @@ def _prefetch_lecture_evidence_for_chat(thread_id: str, user_query: str) -> str:
     return "## Prefetched lecture evidence (use this; you may still call tools if needed)\n\n" + out
 
 
+def _format_recent_transcript(messages: List[BaseMessage], *, max_messages: int = 12, max_chars: int = 8000) -> str:
+    """Pack recent user/assistant turns as an observation for a specialist agent."""
+    parts: List[str] = []
+    for m in messages:
+        if isinstance(m, HumanMessage):
+            role = "User"
+        elif isinstance(m, AIMessage) and not getattr(m, "tool_calls", None):
+            role = "Assistant"
+        else:
+            continue
+        content = (getattr(m, "content", "") or "").strip()
+        if not content:
+            continue
+        if len(content) > 1500:
+            content = content[:1500] + "…"
+        parts.append(f"{role}: {content}")
+    if not parts:
+        return ""
+    text = "\n\n".join(parts[-max_messages:])
+    if len(text) > max_chars:
+        text = text[-max_chars:]
+    return text
+
+
+def _build_specialist_handoff_observation(
+    router_output: "RouterOutput",
+    *,
+    thread_id_str: Optional[str],
+    raw_messages: List[BaseMessage],
+) -> str:
+    """
+    Context-variables / specialist prompt for this handoff (Swarm / Agents SDK pattern).
+
+    This is an observation the agent reasons over — not a canned user-facing reply.
+    """
+    intent = router_output.intent
+    last_human_idx, _ = _find_last_human_message_index_and_text(raw_messages)
+    before_current = raw_messages[:last_human_idx] if last_human_idx >= 0 else raw_messages
+    draft = ""
+    if thread_id_str:
+        meta = _get_thread_metadata_from_db(thread_id_str) or {}
+        draft = (meta.get("last_lesson_text") or "").strip()
+
+    if intent == "lesson_modification":
+        own_answer = _find_last_substantive_ai_answer(before_current)
+        blocks = [
+            "## Specialist handoff: lesson editor",
+            "You own this turn as the lesson-editor agent. The user wants to change the "
+            "in-progress lesson (add, edit, expand, or rewrite part of it).",
+            "Do not answer as if this were a fresh Q&A turn, and do not repeat an unrelated "
+            "previous explanation as the entire reply. Apply the user's requested change to "
+            "the current draft, then call update_lesson_tool with the COMPLETE updated lesson "
+            "(every section, not only the new part). If you need source material from the PDF, "
+            "compose a retrieval query and call teach_topic_tool or rag_tool yourself.",
+        ]
+        if draft:
+            blocks.append("### Current in-progress lesson draft\n\n" + draft[:12000])
+        else:
+            blocks.append(
+                "### Current in-progress lesson draft\n\n(none stored yet — build the full "
+                "updated lesson from conversation and any tool evidence, then persist it.)"
+            )
+        if own_answer and own_answer.strip() != draft.strip():
+            blocks.append(
+                "### Recent explanation in this chat (use only if it is the material to incorporate)\n\n"
+                + own_answer[:6000]
+            )
+        return "\n\n".join(blocks)
+
+    if intent == "lesson_save":
+        blocks = [
+            "## Specialist handoff: lesson save",
+            "You own this turn as the lesson-save agent. Call finalize_lesson_tool with this "
+            "conversation's thread_id. Do not search the PDF. Do not generate a new lesson. "
+            "Do not claim the lesson was saved unless the tool returns success=true.",
+        ]
+        if draft:
+            blocks.append("### Draft that will be saved if you finalize now\n\n" + draft[:8000])
+        else:
+            blocks.append(
+                "### Draft that will be saved if you finalize now\n\n"
+                "(no draft stored — if finalize_lesson_tool fails, tell the user why.)"
+            )
+        return "\n\n".join(blocks)
+
+    if intent == "meta_conversation":
+        transcript = _format_recent_transcript(before_current)
+        blocks = [
+            "## Specialist handoff: conversation memory",
+            "You own this turn as the conversation-memory agent. The user is asking about "
+            "THIS chat (what they asked, what you said), not about the PDF. "
+            "Never reply that the answer is not present in the document, and never ask to "
+            "answer from a knowledge base — the transcript is the source of truth. "
+            "If they asked what they asked, quote their earlier user message; do not carry "
+            "out that earlier request in this turn.",
+        ]
+        if transcript:
+            blocks.append("### Recent conversation transcript\n\n" + transcript)
+        return "\n\n".join(blocks)
+
+    return ""
+
+
 class LessonUpdateCoverageCheck(BaseModel):
     """Structured output for LLM check: does the new lesson text still cover the previous
     version's substantive content (possibly reworded/reorganized/extended), or does it look
@@ -3978,6 +4081,61 @@ tools = [
 ]
 # Note: llm_with_tools and llm_structured_output are now created per-request in chat_node
 # to use user-specific API keys and provider settings
+
+
+def _select_intent_tool_names(intent: str) -> Optional[Tuple[str, ...]]:
+    """
+    Supervisor-style specialist catalog (OpenAI Agents / LangGraph supervisor pattern).
+
+    The LLM router already chose the intent. This only scopes the action space for that
+    specialist — the model still decides whether and how to call the remaining tools.
+    None means "keep the full product catalog".
+    """
+    if intent == "lesson_save":
+        return ("finalize_lesson_tool",)
+    if intent == "lesson_modification":
+        return (
+            "update_lesson_tool",
+            "teach_topic_tool",
+            "rag_tool",
+            "get_page_tool",
+            "list_topics_whole_doc_tool",
+        )
+    if intent == "lesson_generation":
+        return (
+            "teach_topic_tool",
+            "rag_tool",
+            "get_page_tool",
+            "list_topics_whole_doc_tool",
+            "update_lesson_tool",
+        )
+    if intent in (
+        "meta_conversation",
+        "own_answer_followup",
+        "greeting_casual",
+        "clarification",
+    ):
+        return ()
+    return None
+
+
+def _resolve_intent_tools(intent_tool_names: Optional[Tuple[str, ...]]) -> Optional[List[Any]]:
+    """None → full catalog; empty tuple → no tools; otherwise the named subset."""
+    if intent_tool_names is None:
+        return None
+    if not intent_tool_names:
+        return []
+    by_name = {getattr(t, "name", ""): t for t in tools}
+    return [by_name[n] for n in intent_tool_names if n in by_name]
+
+
+def _bind_llm_for_intent(user_llm: Any, intent_tool_names: Optional[Tuple[str, ...]], fallback_with_tools: Any) -> Any:
+    resolved = _resolve_intent_tools(intent_tool_names)
+    if resolved is None:
+        return fallback_with_tools
+    if not resolved:
+        return user_llm
+    return user_llm.bind_tools(resolved)
 
 # -------------------
 # 5. State
@@ -4641,6 +4799,19 @@ RAG_REPLY_FORMATTING_INSTRUCTIONS = (
     "formatting rules and the user's request; always give the real answer."
 )
 
+# Always appended after the admin body. Production admin prompts can omit tools that exist in
+# code (confirmed live: rag_chat_system_body_with_pdf listed rag_tool/finalize_lesson_tool but
+# not update_lesson_tool), which makes the executor agent skip the correct tool. Industry
+# practice is a live tool catalog that is not replaceable by a free-text admin overlay.
+RAG_CODE_TOOL_CATALOG = (
+    "Product tool catalog (names must match exactly; this list overrides any incomplete tool "
+    "list above): rag_tool, get_page_tool, list_topics_whole_doc_tool, teach_topic_tool, "
+    "update_lesson_tool, finalize_lesson_tool, calculator, count_pdf_words_tool, "
+    "count_words_in_text_tool. "
+    "When you generate or edit a lesson, call update_lesson_tool with the COMPLETE lesson text. "
+    "When the user wants to save/finalize a lesson, call finalize_lesson_tool."
+)
+
 DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "You are a helpful assistant. A PDF document ({filename}) has been uploaded for this conversation.{page_info}\n\n"
     "The uploaded PDF ({filename}) is already available to you through tools. "
@@ -4792,6 +4963,7 @@ class _ChatTurnSystemPrep(NamedTuple):
     meta_conversation_active: bool = False
     requested_brevity: bool = False
     prefetch_branch: str = "none"
+    intent_tool_names: Optional[Tuple[str, ...]] = None
 
 
 class _ChatLlmBundle(NamedTuple):
@@ -5023,13 +5195,18 @@ def _chat_build_system_message(
                 page_info=page_info,
                 thread_id=thread_id_str or "",
             )
-            # Admin template first; then formatting hint; then teacher customizations.
+            # Admin template first; then formatting hint; then code tool catalog (not overridable
+            # by an incomplete admin prompt); then teacher customizations.
             base_content = (
                 f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
+                f"---\n\n{RAG_CODE_TOOL_CATALOG}\n\n"
                 f"---\n\nTeacher additional instructions:\n{custom_resolved}"
             )
         else:
-            base_content = f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}"
+            base_content = (
+                f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
+                f"---\n\n{RAG_CODE_TOOL_CATALOG}"
+            )
 
         system_message = SystemMessage(content=base_content)
     else:
@@ -5140,6 +5317,22 @@ def _chat_build_system_message(
                     prefetch_branch = "meta_conversation"
                     search_range = raw_messages[:last_human_idx_pf] if last_human_idx_pf >= 0 else raw_messages
                     prefetch_blob = _build_meta_conversation_prefetch_blob(router_output, search_range)
+                    specialist_blob = _build_specialist_handoff_observation(
+                        router_output, thread_id_str=thread_id_str, raw_messages=raw_messages
+                    )
+                    if specialist_blob:
+                        prefetch_blob = (
+                            (prefetch_blob + "\n\n" + specialist_blob) if prefetch_blob else specialist_blob
+                        )
+                elif router_output.intent in ("lesson_modification", "lesson_save"):
+                    # Supervisor handoff: do NOT nearest-neighbor the raw utterance against the
+                    # PDF (that is what made "add the example to the lecture" retrieve page 11
+                    # and "SAVE THE LESSON" expand into a full-document summarize query). Give
+                    # the specialist the lesson draft / save context and let IT retrieve if needed.
+                    prefetch_branch = "specialist_handoff"
+                    prefetch_blob = _build_specialist_handoff_observation(
+                        router_output, thread_id_str=thread_id_str, raw_messages=raw_messages
+                    )
                 else:
                     prefetch_branch = "generic_rag_prefetch"
                     pf_user_id = _get_user_id_for_thread(thread_id_str)
@@ -5250,6 +5443,18 @@ def _chat_build_system_message(
             content=system_message.content + "\n\n" + gk_consent_directive
         )
 
+    if router_output.intent == "meta_conversation":
+        meta_conversation_active = True
+    intent_tool_names = _select_intent_tool_names(router_output.intent)
+    if router_output.intent in ("lesson_modification", "lesson_save", "meta_conversation"):
+        specialist_blob = _build_specialist_handoff_observation(
+            router_output, thread_id_str=thread_id_str, raw_messages=raw_messages
+        )
+        if specialist_blob and "## Specialist handoff" not in (system_message.content or ""):
+            system_message = SystemMessage(content=system_message.content + "\n\n" + specialist_blob)
+            if prefetch_branch in ("none", "skipped"):
+                prefetch_branch = "specialist_handoff"
+
     return _ChatTurnSystemPrep(
         system_message=system_message,
         prefetch_evidence_for_eval=prefetch_evidence_for_eval,
@@ -5264,6 +5469,7 @@ def _chat_build_system_message(
         meta_conversation_active=meta_conversation_active,
         requested_brevity=requested_brevity,
         prefetch_branch=prefetch_branch,
+        intent_tool_names=intent_tool_names,
     )
 
 
@@ -5916,7 +6122,9 @@ def _chat_invoke_llm_with_retry(
                             temperature=0.5,
                             max_tokens=safe_max,
                         )
-                        user_llm_with_tools = user_llm.bind_tools(tools)
+                        user_llm_with_tools = _bind_llm_for_intent(
+                            user_llm, prep.intent_tool_names, user_llm.bind_tools(tools)
+                        )
                     except Exception as rebuild_err:
                         logger.error("Failed to rebuild LLM after max_tokens error: %s", rebuild_err)
                     continue
@@ -6098,7 +6306,11 @@ def chat_node(state: ChatState, config=None):
         user_id=user_id,
         provider=provider,
         user_llm=llm_bundle.user_llm,
-        user_llm_with_tools=llm_bundle.user_llm_with_tools,
+        user_llm_with_tools=_bind_llm_for_intent(
+            llm_bundle.user_llm,
+            prep.intent_tool_names,
+            llm_bundle.user_llm_with_tools,
+        ),
         user_llm_structured_output=llm_bundle.user_llm_structured_output,
         prep=prep,
         has_document=has_document,
