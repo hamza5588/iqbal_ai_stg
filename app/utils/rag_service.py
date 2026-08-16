@@ -3753,6 +3753,59 @@ def _prefetch_lecture_evidence_for_chat(thread_id: str, user_query: str) -> str:
     return "## Prefetched lecture evidence (use this; you may still call tools if needed)\n\n" + out
 
 
+class LessonUpdateCoverageCheck(BaseModel):
+    """Structured output for LLM check: does the new lesson text still cover the previous
+    version's substantive content (possibly reworded/reorganized/extended), or does it look
+    like a replacement that dropped it?"""
+
+    still_covers_previous: bool = Field(
+        description="True if the new lesson text still includes/covers the substantive "
+        "material from the previous version (even if reworded, reorganized, or condensed). "
+        "False if the new text looks like ONLY the newest addition/section, or an unrelated "
+        "replacement, with the previous material genuinely missing rather than incorporated."
+    )
+
+
+_LESSON_UPDATE_COVERAGE_PROMPT = (
+    "You are checking whether an updated lesson draft still contains the previous lesson's "
+    "material, or whether it looks like the previous material was dropped/replaced.\n\n"
+    "PREVIOUS LESSON VERSION:\n---\n{previous}\n---\n\n"
+    "NEW LESSON VERSION (submitted as the complete, updated lesson):\n---\n{new_content}\n---\n\n"
+    "Does the NEW version still cover the substantive topics/sections from the PREVIOUS "
+    "version (rewording, reorganizing, condensing, or adding to it is fine), or does it look "
+    "like the previous material is genuinely missing - e.g. the new version reads like only "
+    "the newest addition on its own, or a different/unrelated topic?"
+)
+
+
+def _lesson_update_still_covers_previous(previous: str, new_content: str, user_id: Optional[int]) -> bool:
+    """
+    A pure length-ratio check cannot tell "a legitimate full rewrite that's shorter" apart
+    from "a same-length-or-longer chunk that silently replaced the previous content with
+    something unrelated" - confirmed live: an "add a section on the discriminant" edit
+    returned ONLY the new discriminant section (nothing from the original pool-example lesson
+    it was supposed to extend), and because that section alone was long enough (64% of the
+    original length), it passed the length-ratio guard cleanly. This semantic check is the
+    stronger gate for exactly that shape of failure. On any error, returns True (fail open) -
+    a validation-check outage must never block legitimate lesson saves.
+    """
+    try:
+        llm = get_chat_model(user_id=user_id, timeout=30, temperature=0)
+        llm_structured = llm.with_structured_output(LessonUpdateCoverageCheck)
+        prev_sample = (previous or "").strip()
+        new_sample = (new_content or "").strip()
+        if len(prev_sample) > 6000:
+            prev_sample = prev_sample[:6000] + "\n\n[...truncated for validation...]"
+        if len(new_sample) > 6000:
+            new_sample = new_sample[:6000] + "\n\n[...truncated for validation...]"
+        prompt = _LESSON_UPDATE_COVERAGE_PROMPT.format(previous=prev_sample, new_content=new_sample)
+        result = llm_structured.invoke(prompt)
+        return bool(getattr(result, "still_covers_previous", True))
+    except Exception as e:
+        logger.warning("Lesson update coverage check failed (failing open): %s", e)
+        return True
+
+
 @tool
 def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
     """
@@ -3807,6 +3860,23 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
                 "sections plus your change), not just the new or changed part."
             )
             return json.dumps(result)
+
+        # Stronger, content-aware backstop: a length ratio alone cannot tell "a legitimate
+        # full rewrite that's shorter" apart from "a same-length-or-longer chunk that silently
+        # replaced the previous content with something unrelated" - confirmed live an "add a
+        # section on the discriminant" edit returned ONLY the new section (none of the original
+        # lesson it was supposed to extend), and because that section alone was long enough
+        # (64% of the original length), it passed the length check above cleanly.
+        if previous and len(previous) > 200 and content != previous:
+            user_id_for_check = _get_user_id_for_thread(thread_id)
+            if not _lesson_update_still_covers_previous(previous, content, user_id_for_check):
+                result["reason"] = (
+                    "This looks like it replaced or dropped the previous lesson content "
+                    "instead of extending it. Call update_lesson_tool again with the FULL "
+                    "current lesson - everything that was already there, plus your change - "
+                    "not a replacement."
+                )
+                return json.dumps(result)
 
         title = _parse_lesson_title_from_content(content) or getattr(thread_row, "lesson_title", None) or ""
         thread_row.last_lesson_text = content

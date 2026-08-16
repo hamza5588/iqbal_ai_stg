@@ -394,10 +394,12 @@ def test_update_lesson_tool_rejects_short_fragment_over_long_previous(monkeypatc
 def test_update_lesson_tool_allows_genuine_full_rewrite_even_if_shorter(monkeypatch):
     """A legitimately shorter full lesson (e.g. "make this more concise") must still be
     accepted - the guard is a fragment heuristic, not a monotonic-growth requirement, so it
-    only fires well below the 50% threshold."""
+    only fires well below the 50% threshold. Semantic check mocked True (genuinely covers the
+    previous content) so this test isn't silently passing on the fail-open path."""
     original = "# Lesson\n\n" + ("Verbose original paragraph. " * 40)
     fake_db = _FakeDB(_FakeThreadRow(last_lesson_text=original, lesson_finalized=True))
     monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(rag_service, "_lesson_update_still_covers_previous", lambda *a, **k: True)
 
     concise_rewrite = "# Lesson\n\n" + ("Tighter paragraph. " * 32).strip()  # ~53% of original length
     result = json.loads(
@@ -405,6 +407,87 @@ def test_update_lesson_tool_allows_genuine_full_rewrite_even_if_shorter(monkeypa
     )
     assert result["success"] is True
     assert fake_db._row.last_lesson_text == concise_rewrite
+
+
+# --- Semantic coverage check (catches same-length replacement, not just short fragments) ---
+#
+# QA-retest bug: the length-ratio guard alone missed a real failure - "add a section on the
+# discriminant" returned ONLY the new discriminant section (none of the original pool-example
+# lesson it was supposed to extend), and because that section alone was long enough (64% of
+# the original length), it passed the 50%-length-ratio guard cleanly and silently replaced the
+# saved lesson. _lesson_update_still_covers_previous is a content-aware LLM check specifically
+# for this shape of failure: same-length-or-longer content that doesn't actually cover what
+# came before.
+
+def test_update_lesson_tool_rejects_same_length_content_that_drops_previous_material(monkeypatch):
+    """The exact live failure: new content is long enough to pass the length-ratio guard, but
+    the semantic check correctly identifies it as having dropped the previous material."""
+    original = "# Setting Up a Quadratic Equation\n\n" + ("Pool example content here. " * 40)
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text=original, lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
+    monkeypatch.setattr(rag_service, "_lesson_update_still_covers_previous", lambda *a, **k: False)
+
+    # Long enough to pass the length-ratio guard (> 50% of original) but semantically it's a
+    # different, unrelated section - exactly the live failure shape.
+    replacement_section = "## Understanding the Discriminant\n\n" + ("Discriminant content here. " * 30)
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": replacement_section, "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is False
+    assert "replaced or dropped" in result["reason"].lower()
+    # Original lesson must survive - this is the actual data-loss bug being guarded against.
+    assert fake_db._row.last_lesson_text == original
+    assert fake_db.committed is False
+
+
+def test_update_lesson_tool_accepts_when_semantic_check_confirms_coverage(monkeypatch):
+    """When the semantic check says the new content genuinely still covers the previous
+    material (e.g. a real extension), the update proceeds even if it's not a trivial
+    superset-by-length."""
+    original = "# Lesson\n\n" + ("Original content. " * 40)
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text=original, lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
+    monkeypatch.setattr(rag_service, "_lesson_update_still_covers_previous", lambda *a, **k: True)
+
+    extended = original + "\n\n## New Section\n\n" + ("New content. " * 20).strip()
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": extended, "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is True
+    assert fake_db._row.last_lesson_text == extended
+
+
+def test_update_lesson_tool_skips_semantic_check_when_no_substantial_previous_content(monkeypatch):
+    """No meaningful previous content to lose (fresh lesson, previous is empty/trivial) -
+    the semantic check must not even run (and definitely must not block a brand-new lesson)."""
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="", lesson_finalized=False))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+    calls = []
+    monkeypatch.setattr(
+        rag_service, "_lesson_update_still_covers_previous",
+        lambda *a, **k: calls.append(1) or False,  # would reject if it ran at all
+    )
+
+    full_lesson = "# Brand New Lesson\n\n" + ("Content. " * 30)
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": full_lesson, "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is True
+    assert calls == [], "semantic check must not run when there's no substantial previous content"
+
+
+def test_lesson_update_coverage_check_fails_open_on_error(monkeypatch):
+    """A validation-check outage (LLM call throws) must never block a legitimate lesson save -
+    fail open (treat as covered), matching _check_if_content_is_lesson's own fail-safe
+    convention elsewhere in this file (that one fails closed for a different reason: it's
+    gating the higher-stakes finalize step, not an in-progress draft edit)."""
+    def _raise(*a, **k):
+        raise RuntimeError("LLM provider unavailable")
+    monkeypatch.setattr(rag_service, "get_chat_model", _raise)
+
+    assert rag_service._lesson_update_still_covers_previous("previous text", "new text", 1) is True
 
 
 def test_refinalize_after_tool_edit_persists_new_content_not_stale(monkeypatch):
