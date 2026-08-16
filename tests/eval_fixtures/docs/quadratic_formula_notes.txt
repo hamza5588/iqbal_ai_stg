@@ -1,0 +1,34 @@
+Quadratic Equations - Class Notes
+
+A quadratic equation has the general form:
+
+    a*x^2 + b*x + c = 0,   where a is not equal to 0.
+
+The Discriminant
+
+The discriminant of a quadratic equation is defined as:
+
+    D = b^2 - 4*a*c
+
+The discriminant tells you how many real roots the equation has, without solving it fully:
+
+- If D > 0, the equation has two distinct real roots.
+- If D = 0, the equation has exactly one real root (a repeated root).
+- If D < 0, the equation has two complex conjugate roots and no real roots.
+
+The Quadratic Formula
+
+The roots of a quadratic equation can be found using the quadratic formula:
+
+    x = (-b +/- sqrt(D)) / (2*a)
+
+where D is the discriminant defined above. Substituting D = 0 into the formula shows that when
+the discriminant is zero, both roots collapse to the single value x = -b / (2*a).
+
+Worked Example
+
+Consider x^2 - 4x + 4 = 0. Here a = 1, b = -4, c = 4.
+
+    D = (-4)^2 - 4*(1)*(4) = 16 - 16 = 0
+
+Since D = 0, this equation has exactly one repeated real root: x = 4 / 2 = 2.

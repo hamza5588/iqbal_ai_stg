@@ -60,6 +60,22 @@ except ImportError:
         HUGGINGFACE_EMBEDDINGS_AVAILABLE = False
         logger.warning("HuggingFace embeddings not available. Install langchain-huggingface or langchain-community.")
 from app.utils.llm_factory import create_llm, get_chat_model
+from app.utils.router_telemetry import persist_router_decision_event
+from app.utils.gk_consent import (
+    GkConsentState,
+    GK_CONSENT_NONE,
+    GK_CONSENT_OFFERED,
+    GK_CONSENT_GRANTED,
+    GK_CONSENT_DENIED,
+    GK_EVENT_OFFER,
+    GK_EVENT_AFFIRMATIVE,
+    GK_EVENT_NEGATIVE,
+    GK_EVENT_UNRELATED,
+    resolve_gk_consent_transition,
+    consume_gk_consent,
+    response_contains_gk_offer,
+    classify_yes_no,
+)
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.message import add_messages
@@ -1563,6 +1579,125 @@ def _get_thread_metadata_from_db(thread_id: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.warning("Error getting thread metadata from DB: %s", e)
         return None
+
+
+def _load_gk_consent_state(thread_id: str) -> GkConsentState:
+    """
+    Read the current general-knowledge consent state for a thread (Phase 4).
+    Falls back to GK_CONSENT_NONE on any error or missing thread - a tracing/consent-state
+    failure must never block the turn from answering.
+    """
+    try:
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        if not thread:
+            return GkConsentState(GK_CONSENT_NONE, None)
+        return GkConsentState(
+            getattr(thread, "gk_consent_state", None) or GK_CONSENT_NONE,
+            getattr(thread, "gk_consent_question", None),
+        )
+    except Exception as e:
+        logger.warning("Error loading gk_consent state for thread_id=%s: %s", thread_id, e)
+        return GkConsentState(GK_CONSENT_NONE, None)
+
+
+def _save_gk_consent_state(thread_id: str, new_state: GkConsentState) -> None:
+    """Persist a new general-knowledge consent state for a thread (Phase 4)."""
+    try:
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        if not thread:
+            return
+        thread.gk_consent_state = new_state.state
+        thread.gk_consent_question = new_state.question
+        thread.gk_consent_updated_at = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        logger.warning("Error saving gk_consent state for thread_id=%s: %s", thread_id, e)
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
+
+
+def _resolve_gk_consent_for_turn(thread_id_str: str, last_human_text: str) -> Optional[str]:
+    """
+    Phase 4: if this thread has an outstanding general-knowledge consent offer, resolve it
+    against the CURRENT user message (yes / no / unrelated-so-it-lapses), persist the
+    transition, and - when it was just granted or declined this turn - return a directive
+    string to append to the system prompt so the model gets a programmatic instruction instead
+    of re-reading conversation history and judging consent for itself.
+
+    No-op (returns None) when there's no outstanding offer. Never raises - a consent-state
+    failure must never block the turn from answering.
+    """
+    try:
+        db = get_db()
+        thread = db.query(RAGThread).filter_by(thread_id=str(thread_id_str)).first()
+        if not thread:
+            return None
+        current_state = getattr(thread, "gk_consent_state", None) or GK_CONSENT_NONE
+        if current_state != GK_CONSENT_OFFERED:
+            return None
+        current_question = getattr(thread, "gk_consent_question", None)
+        yn = classify_yes_no(last_human_text)
+        event = (
+            GK_EVENT_AFFIRMATIVE if yn == "yes"
+            else GK_EVENT_NEGATIVE if yn == "no"
+            else GK_EVENT_UNRELATED
+        )
+        transitioned = resolve_gk_consent_transition(current_state, current_question, event)
+        thread.gk_consent_state = transitioned.state
+        thread.gk_consent_question = transitioned.question
+        thread.gk_consent_updated_at = datetime.utcnow()
+
+        directive: Optional[str] = None
+        if transitioned.state in (GK_CONSENT_GRANTED, GK_CONSENT_DENIED):
+            # Single-use: consume (reset to 'none') right away - the grant/denial only ever
+            # applies to answering this one turn, never a standing permission.
+            was_granted = consume_gk_consent(thread)
+            if was_granted:
+                directive = (
+                    "GENERAL KNOWLEDGE CONSENT GRANTED (this turn only): the user just "
+                    "confirmed they want you to answer their earlier question "
+                    f"(\"{(current_question or '').strip()[:300]}\") using your own general "
+                    "knowledge, not the uploaded document. Answer it now, directly, from "
+                    "general knowledge, and make clear the answer is from general knowledge "
+                    "rather than the document."
+                )
+            else:
+                directive = (
+                    "GENERAL KNOWLEDGE CONSENT DECLINED (this turn only): the user just "
+                    "declined your offer to answer their earlier question from general "
+                    "knowledge. Do not answer that earlier question from general knowledge. "
+                    "Acknowledge briefly and address whatever the user is asking now instead."
+                )
+        db.commit()
+        return directive
+    except Exception as e:
+        logger.warning("Error resolving gk_consent for thread_id=%s: %s", thread_id_str, e)
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _maybe_record_gk_consent_offer(thread_id_str: str, last_human_text: str, reply_text: str) -> None:
+    """
+    Phase 4: if this turn's reply just made a "would you like general knowledge?" offer,
+    persist it as the thread's single outstanding offer (a new offer always overwrites
+    whatever - if anything - was previously outstanding). Never raises.
+    """
+    try:
+        if not response_contains_gk_offer(reply_text):
+            return
+        offered = resolve_gk_consent_transition(
+            GK_CONSENT_NONE, None, GK_EVENT_OFFER, event_text=last_human_text
+        )
+        _save_gk_consent_state(thread_id_str, offered)
+    except Exception as e:
+        logger.debug("gk_consent offer-detection skipped: %s", e)
 
 
 def _get_user_id_for_thread(thread_id: str) -> Optional[int]:
@@ -4253,20 +4388,36 @@ def _build_router_context_snippet(raw_messages: List[BaseMessage], max_messages:
     return "\n".join(lines) if lines else "(no prior conversation)"
 
 
-def _classify_turn_intent(
+class _RouterClassification(NamedTuple):
+    """
+    Result of _classify_turn_intent_traced, including whether the regex fallback fired (Phase 4
+    tracing needs this in addition to the RouterOutput itself - see RouterDecisionEvent).
+    """
+
+    output: "RouterOutput"
+    used_fallback: bool
+    fallback_reason: Optional[str]
+
+
+def _classify_turn_intent_traced(
     *,
     last_user_msg_text: str,
     raw_messages: List[BaseMessage],
     user_id: Optional[int],
     provider: str,
     has_document: bool,
-) -> "RouterOutput":
+) -> _RouterClassification:
     """
     LLM-driven turn-intent classification (Phase 1). Falls back to the regex heuristics on any
     failure or when disabled via RAG_LLM_ROUTER_ENABLED - never hard-fails the turn.
+
+    This is the real implementation; it also reports whether/why the fallback fired, for Phase 4
+    routing-decision tracing (see chat_node's RouterDecisionEvent write). _classify_turn_intent
+    below is a thin RouterOutput-only wrapper kept for backward compatibility with existing
+    callers/tests that only need the classification, not the fallback metadata.
     """
     if os.getenv(RAG_LLM_ROUTER_ENABLED_ENV, "true").lower() not in ("true", "1", "yes"):
-        return _router_fallback_from_regex(last_user_msg_text)
+        return _RouterClassification(_router_fallback_from_regex(last_user_msg_text), True, "router_disabled")
     try:
         router_llm = _get_router_llm(user_id, provider)
         prompt = _ROUTER_PROMPT.format(
@@ -4280,11 +4431,36 @@ def _classify_turn_intent(
         if provider == "groq":
             groq_rate_limiter.record_success()
         if not isinstance(verdict, RouterOutput):
-            return _router_fallback_from_regex(last_user_msg_text)
-        return verdict
+            return _RouterClassification(
+                _router_fallback_from_regex(last_user_msg_text), True, "invalid_verdict_type"
+            )
+        return _RouterClassification(verdict, False, None)
     except Exception as ex:
         logger.warning("Turn-intent router failed, falling back to regex heuristic: %s", ex, exc_info=True)
-        return _router_fallback_from_regex(last_user_msg_text)
+        return _RouterClassification(
+            _router_fallback_from_regex(last_user_msg_text), True, f"exception:{type(ex).__name__}"
+        )
+
+
+def _classify_turn_intent(
+    *,
+    last_user_msg_text: str,
+    raw_messages: List[BaseMessage],
+    user_id: Optional[int],
+    provider: str,
+    has_document: bool,
+) -> "RouterOutput":
+    """
+    Backward-compatible wrapper around _classify_turn_intent_traced: returns just the
+    RouterOutput, for callers/tests that don't need fallback metadata.
+    """
+    return _classify_turn_intent_traced(
+        last_user_msg_text=last_user_msg_text,
+        raw_messages=raw_messages,
+        user_id=user_id,
+        provider=provider,
+        has_document=has_document,
+    ).output
 
 
 # Admin-editable RAG chat system bodies (stored in system_settings). Placeholders: {filename}, {page_info}, {thread_id}
@@ -4448,6 +4624,7 @@ class _ChatTurnSystemPrep(NamedTuple):
     router_intent: str = "document_qa"
     meta_conversation_active: bool = False
     requested_brevity: bool = False
+    prefetch_branch: str = "none"
 
 
 class _ChatLlmBundle(NamedTuple):
@@ -4646,6 +4823,7 @@ def _chat_build_system_message(
     token_pressure_active: bool,
     short_mode_active: bool,
     router_output: "RouterOutput",
+    gk_consent_directive: Optional[str] = None,
 ) -> _ChatTurnSystemPrep:
     """
     Build system message (admin + teacher + optional prefetch + summary + turn limits),
@@ -4723,6 +4901,7 @@ def _chat_build_system_message(
     prefetch_evidence_for_eval = ""
     own_answer_followup_active = False
     meta_conversation_active = False
+    prefetch_branch = "none"
 
     # P0-4 / P0-5: server-side prefetch so answers are grounded even if the model skips tools.
     enable_prefetch = os.getenv("RAG_MANDATORY_PREFETCH", "true").lower() in ("true", "1", "yes")
@@ -4744,10 +4923,13 @@ def _chat_build_system_message(
             "greeting_casual",
             "clarification",
         )
+        if tail_has_tool or skip_prefetch:
+            prefetch_branch = "skipped"
         if not tail_has_tool and not skip_prefetch:
             prefetch_blob = ""
             try:
                 if is_lesson_creation_turn:
+                    prefetch_branch = "lecture_evidence"
                     prefetch_blob = _prefetch_lecture_evidence_for_chat(thread_id_str, last_user_msg_text)
                 elif router_output.intent == "own_answer_followup":
                     # Deterministic fallback for "explain why 2x" style follow-ups: don't rely
@@ -4768,6 +4950,7 @@ def _chat_build_system_message(
                         # model still occasionally re-invoked finalize_lesson_tool anyway when the
                         # recent conversation history was dominated by save-confirmation messages.
                         own_answer_followup_active = True
+                        prefetch_branch = "own_answer_followup"
                         prefetch_blob = (
                             "## Your own previous answer in this conversation (the user is asking "
                             "you to explain or justify something from it)\n\n"
@@ -4787,9 +4970,11 @@ def _chat_build_system_message(
                     # deterministically pull the exact stored text of the earlier real question(s)
                     # and hard-suppress tool calling for the rest of this turn (below).
                     meta_conversation_active = True
+                    prefetch_branch = "meta_conversation"
                     search_range = raw_messages[:last_human_idx_pf] if last_human_idx_pf >= 0 else raw_messages
                     prefetch_blob = _build_meta_conversation_prefetch_blob(router_output, search_range)
                 else:
+                    prefetch_branch = "generic_rag_prefetch"
                     pf_user_id = _get_user_id_for_thread(thread_id_str)
                     out_pf = rag_tool.invoke(
                         {
@@ -4888,6 +5073,15 @@ def _chat_build_system_message(
               "counts, mandatory spacing) that would conflict with a short answer. Give the real "
               "answer; do not deflect with a generic closing remark."
         )
+    if gk_consent_directive:
+        # Phase 4: computed from real persisted consent state (app/utils/gk_consent.py),
+        # appended last (same recency-wins pattern as the blocks above) so it overrides the
+        # generic "if the user agrees, you may answer from general knowledge" prompt text with
+        # this turn's actual, programmatically-determined answer instead of relying on the model
+        # to re-read conversation history and judge for itself whether consent was given.
+        system_message = SystemMessage(
+            content=system_message.content + "\n\n" + gk_consent_directive
+        )
 
     return _ChatTurnSystemPrep(
         system_message=system_message,
@@ -4902,6 +5096,7 @@ def _chat_build_system_message(
         router_intent=router_output.intent,
         meta_conversation_active=meta_conversation_active,
         requested_brevity=requested_brevity,
+        prefetch_branch=prefetch_branch,
     )
 
 
@@ -5675,7 +5870,12 @@ def chat_node(state: ChatState, config=None):
     raw_messages_for_routing = state.get("messages", []) or []
     last_human_idx, last_human_text = _find_last_human_message_index_and_text(raw_messages_for_routing)
     turn_key = f"{last_human_idx}:{last_human_text}"
-    if state.get("router_intent_turn_key") == turn_key and state.get("router_intent"):
+    is_fresh_classification = not (
+        state.get("router_intent_turn_key") == turn_key and state.get("router_intent")
+    )
+    router_used_fallback = False
+    router_fallback_reason: Optional[str] = None
+    if not is_fresh_classification:
         router_output = RouterOutput(
             intent=state.get("router_intent", "document_qa"),
             requested_brevity=bool(state.get("router_requested_brevity", False)),
@@ -5683,14 +5883,27 @@ def chat_node(state: ChatState, config=None):
             meta_conversation_n=state.get("router_meta_n"),
         )
     else:
-        router_output = _classify_turn_intent(
+        classification = _classify_turn_intent_traced(
             last_user_msg_text=last_human_text,
             raw_messages=raw_messages_for_routing,
             user_id=user_id,
             provider=provider,
             has_document=has_document,
         )
+        router_output = classification.output
+        router_used_fallback = classification.used_fallback
+        router_fallback_reason = classification.fallback_reason
     _mark_step("classify_turn_intent")
+
+    # General-knowledge consent state machine (Phase 4): resolve any outstanding "answer from
+    # general knowledge?" offer against THIS turn's message before building the system prompt,
+    # so the model gets a computed directive instead of re-reading conversation history and
+    # judging consent for itself. Scoped to has_document (the offer only ever fires when a
+    # document is present - see DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF) and to fresh
+    # classifications only (once per real user turn, not on same-turn tool-loop re-entries).
+    gk_consent_directive: Optional[str] = None
+    if has_document and thread_id_str and is_fresh_classification:
+        gk_consent_directive = _resolve_gk_consent_for_turn(thread_id_str, last_human_text)
 
     custom_prompt = _get_rag_prompt(user_id, thread_id_str)
     prep = _chat_build_system_message(
@@ -5701,6 +5914,7 @@ def chat_node(state: ChatState, config=None):
         token_pressure_active=token_pressure_active,
         short_mode_active=short_mode_active,
         router_output=router_output,
+        gk_consent_directive=gk_consent_directive,
     )
 
     result = _chat_invoke_llm_with_retry(
@@ -5720,6 +5934,44 @@ def chat_node(state: ChatState, config=None):
         perf_started=perf_started,
         _mark_step=_mark_step,
     )
+
+    reply_text = ""
+    if isinstance(result, dict):
+        try:
+            reply_msgs = result.get("messages") or []
+            if reply_msgs:
+                content = getattr(reply_msgs[-1], "content", "") or ""
+                reply_text = content if isinstance(content, str) else str(content)
+        except Exception:
+            reply_text = ""
+
+    # General-knowledge consent state machine (Phase 4), continued: detect a fresh offer made
+    # in THIS turn's reply and persist it so the next turn can resolve it against real state.
+    if has_document and thread_id_str:
+        _maybe_record_gk_consent_offer(thread_id_str, last_human_text, reply_text)
+
+    # Phase 4: structured trace of this turn's routing decision. Only written on a fresh
+    # classification (not same-turn cache-hit re-entries) so there's exactly one
+    # RouterDecisionEvent per actual routing decision, not per graph-node revisit.
+    if is_fresh_classification:
+        outcome = "success" if isinstance(result, dict) else "error"
+        if outcome == "success" and reply_text.strip().startswith("⚠️"):
+            # Matches this file's own error-response convention (see _chat_invoke_llm_with_retry
+            # and _chat_init_llms_for_turn's error payloads, which all lead with this marker).
+            outcome = "error"
+        persist_router_decision_event(
+            router_output=router_output,
+            router_used_fallback=router_used_fallback,
+            fallback_reason=router_fallback_reason,
+            prefetch_branch=prep.prefetch_branch,
+            meta_conversation_active=prep.meta_conversation_active,
+            own_answer_followup_active=prep.own_answer_followup_active,
+            tool_rounds_used=prep.tool_rounds_current_turn,
+            tool_round_limit_reached=prep.tool_round_limit_reached,
+            outcome=outcome,
+            duration_ms=int((time.perf_counter() - perf_started) * 1000),
+        )
+
     # Single injection point: attach the router verdict to whatever _chat_invoke_llm_with_retry
     # returned (success or one of its terminal error payloads) so it's cached on ChatState for
     # the next graph step, without touching that function's internal early-return sites.
