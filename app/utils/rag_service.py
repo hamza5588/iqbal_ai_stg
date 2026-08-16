@@ -4193,6 +4193,12 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "\"make this final\"), call finalize_lesson_tool(thread_id='{thread_id}'). Only tell the user the lesson "
     "was saved if that tool call returns success=true; if it returns success=false, tell them the reason "
     "it gives instead of claiming it was saved.\n"
+    "- When the user asks you to modify, edit, update, or add to a lesson you have already been building or "
+    "that was previously finalized/saved in this conversation (e.g. \"add 5 examples\", \"make this easier for "
+    "beginners\", \"add a section on X\"), always respond with the COMPLETE, updated lesson text in full - "
+    "every section, not just the part you changed, and not just a description of the change (e.g. never reply "
+    "with only \"I've added 5 examples\" without the actual lesson). Your reply text is what gets saved as the "
+    "lesson, so a partial reply would silently delete the rest of the lesson.\n"
     "- You may use multiple tool calls in one turn when needed (for example long lectures, full-document summaries, or multi-part questions).\n"
     "- For short factual questions, keep answers concise unless the user asks for more detail.\n"
     "- For lectures, long explanations, or document summaries the user requests, answer in full; do not artificially limit length.\n"
@@ -4235,6 +4241,9 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF_LOAD_TEST = (
     "- Otherwise call rag_tool(query=<user_question>, thread_id='{thread_id}').\n"
     "- If the user asks (in any wording) to save/finalize the lesson, call "
     "finalize_lesson_tool(thread_id='{thread_id}') and only report success if it returns success=true.\n"
+    "- If the user asks you to modify/edit/add to a lesson already built or saved in this conversation, always "
+    "reply with the COMPLETE updated lesson text in full, not just a description of the change - your reply is "
+    "what gets saved.\n"
     "- Keep replies concise: 4-8 sentences unless user explicitly asks for detailed lesson.\n"
     "- Do not call tools repeatedly in one turn after getting tool results.\n"
     "- For person identity queries (e.g., 'who is <name>?'), try rag_tool before marking irrelevant.\n"
@@ -4922,6 +4931,7 @@ def _chat_handle_lesson_state_and_persistence(
     config: Any,
     _mark_step: Any,
     turn_scope_messages: Optional[List[BaseMessage]] = None,
+    router_intent: Optional[str] = None,
 ) -> AIMessage:
     """Structured lesson_state, user-driven finalization, and DB persistence for lesson text."""
     msg_lower = last_user_msg_text.lower()
@@ -4997,15 +5007,30 @@ def _chat_handle_lesson_state_and_persistence(
                 finalize_tool_result.get("reason") or "The lesson could not be saved."
             )
             _mark_step("finalize_lesson_tool_failure")
-    elif thread_id_str and response_content:
+    elif thread_id_str and response_content and router_intent == "lesson_modification":
+        # Gate on the router's per-turn intent, not on thread_row.lesson_finalized.
+        # The old `not lesson_finalized` gate was a one-way ratchet: once a lesson was
+        # finalized, this branch stopped writing forever, so a later "add 5 examples"
+        # edit was silently discarded and a subsequent re-finalize just re-persisted the
+        # stale pre-edit content while claiming "re-saved with the latest content" (Phase
+        # 3 bug fix - see PHASE3_DESIGN.md). Gating on router_intent == "lesson_modification"
+        # instead fixes that (the write now fires identically before and after finalize)
+        # and is strictly safer than the old gate: unrelated turns (lesson_qa,
+        # meta_conversation, document_qa, etc.) never reach this branch and so never
+        # touch last_lesson_text, whether or not the thread has been finalized yet.
         try:
             db = get_db()
             thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-            if thread_row and not getattr(thread_row, "lesson_finalized", False):
+            if thread_row:
                 # Always track the latest AI turn as the in-progress lesson text, even for
                 # short replies (e.g. "I've added that equation"). A length/shape heuristic
                 # here previously skipped short but legitimate lesson edits, so Save could
                 # persist a stale prior turn instead of the teacher's most recent change.
+                # NOTE: this relies on the system prompt instructing the model to always
+                # re-emit the FULL updated lesson body (not just a change summary) on
+                # lesson_modification turns - see the "re-emit the full lesson" instruction
+                # in DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF. Without that, a short
+                # confirmation reply would overwrite a good finalized lesson with a stub.
                 thread_row.last_lesson_text = response_content
                 db.commit()
         except Exception as e:
@@ -5156,6 +5181,7 @@ def _chat_invoke_llm_with_retry(
                 config=config,
                 _mark_step=_mark_step,
                 turn_scope_messages=conversation_messages,
+                router_intent=router_intent,
             )
 
             if attempt > 0:
