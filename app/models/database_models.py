@@ -398,6 +398,13 @@ class RAGThread(Base):
     headings_ready = Column(Boolean, default=False, server_default='0')
     headings_count = Column(Integer, default=0, server_default='0')
     headings_last_scanned_at = Column(DateTime, nullable=True)
+    # General-knowledge consent state machine (Phase 4): tracks the single outstanding
+    # "answer from general knowledge?" offer for this thread, if any. 'none' | 'offered' |
+    # 'granted' | 'denied'. Single-use per question - see app/utils/gk_consent.py for the
+    # pure transition logic and app/utils/rag_service.py for where it's read/written.
+    gk_consent_state = Column(String(16), nullable=False, default='none', server_default='none')
+    gk_consent_question = Column(Text, nullable=True)
+    gk_consent_updated_at = Column(DateTime, nullable=True)
     # Terminal ingestion state: 'pending' | 'processing' | 'success' | 'failed'.
     # Lets the chat endpoint distinguish "still working" from "will never finish"
     # instead of returning the same generic message for both.
@@ -588,5 +595,72 @@ class LLMUsageEvent(Base):
         Index('idx_llm_usage_workflow_created', 'workflow', 'created_at'),
         Index('idx_llm_usage_user_created', 'user_id', 'created_at'),
         Index('idx_llm_usage_traffic_created', 'traffic_source', 'created_at'),
+    )
+
+
+class RouterDecisionEvent(Base):
+    """
+    Structured trace of one turn-intent routing decision (Phase 4 of the routing rework).
+
+    One row per chat_node turn where the router freshly classified the turn (not on
+    same-turn re-entries that reuse a cached verdict - see _classify_turn_intent's caller
+    in rag_service.py). Deliberately a separate table from LLMUsageEvent: LLMUsageEvent is
+    per-LLM-call (a turn can produce several rows - main completion, retries, lecture
+    failsafe eval/regen, and the router's own structured-output call), while a routing
+    decision is a per-turn concept. See PHASE4_DESIGN.md section 1 for the full rationale.
+    """
+    __tablename__ = 'router_decision_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True, server_default=func.now())
+
+    # Same actor/context columns as LLMUsageEvent, for standalone queries without a join.
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    user_role = Column(String(50), nullable=True)
+    traffic_source = Column(String(32), nullable=False, default='production', server_default='production', index=True)
+    workflow = Column(String(64), nullable=False, default='unknown', server_default='unknown', index=True)
+    conversation_id = Column(Integer, nullable=True, index=True)   # unconstrained, matches LLMUsageEvent.conversation_id
+    thread_id = Column(String(255), nullable=True, index=True)
+
+    # Link to the router's own structured-output LLM call, if/when one is correlated back to
+    # its LLMUsageEvent row. Nullable: not populated in the initial implementation (persisting
+    # the created LLMUsageEvent's id would require changing llm_gateway.py's shared write path
+    # used by every LLM call in the app; deferred as a documented follow-up rather than widening
+    # that hot path's blast radius here). Kept for future use / manual correlation by timestamp.
+    router_llm_usage_event_id = Column(Integer, ForeignKey('llm_usage_events.id', ondelete='SET NULL'), nullable=True, index=True)
+
+    # --- RouterOutput fields ---
+    intent = Column(String(64), nullable=True, index=True)
+    requested_brevity = Column(Boolean, nullable=True)
+    meta_conversation_scope = Column(String(32), nullable=True)
+    meta_conversation_n = Column(Integer, nullable=True)
+    reasoning = Column(Text, nullable=True)
+
+    # --- Failure / fallback tracking ---
+    # True whenever _router_fallback_from_regex fired (router disabled, invalid verdict type,
+    # or the structured-output call raised) instead of a real router LLM classification.
+    router_used_fallback = Column(Boolean, nullable=False, default=False, server_default='0', index=True)
+    fallback_reason = Column(String(255), nullable=True)
+
+    # --- Downstream branch/suppression flags actually taken this turn ---
+    prefetch_branch = Column(String(64), nullable=True)
+    meta_conversation_active = Column(Boolean, nullable=False, default=False, server_default='0')
+    own_answer_followup_active = Column(Boolean, nullable=False, default=False, server_default='0')
+    tool_rounds_used = Column(Integer, nullable=True)
+    tool_round_limit_reached = Column(Boolean, nullable=False, default=False, server_default='0')
+
+    # --- Turn outcome ---
+    outcome = Column(String(16), nullable=False, default='success', server_default='success', index=True)
+    error_class = Column(String(255), nullable=True)
+    error_message = Column(Text, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index('idx_router_decision_created_at', 'created_at'),
+        Index('idx_router_decision_intent_created', 'intent', 'created_at'),
+        Index('idx_router_decision_fallback_created', 'router_used_fallback', 'created_at'),
+        Index('idx_router_decision_user_created', 'user_id', 'created_at'),
     )
 

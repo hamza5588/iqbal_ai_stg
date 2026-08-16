@@ -1,0 +1,7 @@
+{
+  "description": "Single prior real Q&A exchange, replayed for real through the compiled chat graph before the fixture's actual `input` is sent - used by the three meta-conversation bug fixtures (bug-002a/b/c in routing_regressions.jsonl) so each can assert the assistant correctly retrieves this exact prior question's text instead of a canned 'misunderstanding' reply.",
+  "document_fixture": "quadratic_formula_notes.txt",
+  "prior_user_turns": [
+    "What is the quadratic formula and when is it used?"
+  ]
+}

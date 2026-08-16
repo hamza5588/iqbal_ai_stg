@@ -375,6 +375,27 @@ def init_db(app):
                 logger.warning(f"rag_threads ingest-tracking migration warning: {str(e)}")
                 db.rollback()
 
+            # Migration: Add general-knowledge consent state machine columns to rag_threads
+            # (Phase 4 - see PHASE4_DESIGN.md section 2). RouterDecisionEvent needs no migration
+            # here: it's a brand-new table, so Base.metadata.create_all() above already created
+            # it - only new columns on an EXISTING table need this guarded ALTER TABLE pattern.
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if 'rag_threads' in inspector.get_table_names():
+                    columns = [col['name'] for col in inspector.get_columns('rag_threads')]
+                    if 'gk_consent_state' not in columns:
+                        logger.info("Adding gk_consent_state/gk_consent_question/gk_consent_updated_at columns to rag_threads table...")
+                        db.execute(text("ALTER TABLE rag_threads ADD COLUMN gk_consent_state VARCHAR(16) DEFAULT 'none'"))
+                        db.execute(text("ALTER TABLE rag_threads ADD COLUMN gk_consent_question TEXT"))
+                        db.execute(text("ALTER TABLE rag_threads ADD COLUMN gk_consent_updated_at TIMESTAMP"))
+                        db.execute(text("UPDATE rag_threads SET gk_consent_state = 'none' WHERE gk_consent_state IS NULL"))
+                        db.commit()
+                        logger.info("rag_threads gk_consent columns added successfully")
+            except Exception as e:
+                logger.warning(f"rag_threads gk_consent migration warning: {str(e)}")
+                db.rollback()
+
             # Run RAG migration (add new columns, create rag_chunks table)
             try:
                 import sys
