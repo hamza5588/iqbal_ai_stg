@@ -1171,35 +1171,6 @@
         gap: 0.5rem;
       }
 
-      .mobile-sidebar {
-        position: fixed;
-        left: -100%;
-        transition: left 0.3s ease;
-        z-index: 50;
-        width: 280px;
-        height: 100vh;
-        background: white;
-      }
-
-      .mobile-sidebar.open {
-        left: 0;
-      }
-
-      .mobile-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 40;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.3s ease;
-      }
-
-      .mobile-overlay.open {
-        opacity: 1;
-        pointer-events: all;
-      }
-
       /* Mobile optimizations for better UX */
       @media (max-width: 768px) {
         body {
@@ -3204,6 +3175,234 @@
     @media(max-width:640px){
       .mll-lesson-info{ gap:20px; }
     }
+
+    /* ===== New UI: Top toolbar (replaces sidebar) — matches new_ui/chatbot-main-screen/15-chat-history-dropdown.html ===== */
+    .tt-header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 28px; border-bottom:1px solid #eee; flex-wrap:wrap; gap:14px; background:#fff;
+    }
+    .tt-header .tt-logo img{ height:38px; }
+    .tt-user{ display:flex; align-items:center; gap:14px; }
+    .tt-avatar{
+      width:38px; height:38px; border-radius:50%; background:#166534; color:#fff;
+      display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0; cursor:pointer;
+    }
+    .tt-user-info{ display:flex; flex-direction:column; line-height:1.25; }
+    .tt-user-info b{ font-size:14px; color:#111; }
+    .tt-user-info span{ font-size:12px; color:#166534; font-weight:600; }
+    .tt-logout{ color:#6b7280; cursor:pointer; margin-left:2px; padding:6px; border-radius:8px; }
+    .tt-logout:hover{ background:#fef2f2; color:#dc2626; }
+
+    .tt-toolbar-wrap{ padding:16px 20px 0; background:#fff; }
+    .tt-toolbar{
+      position:relative; display:flex; align-items:center; justify-content:space-between;
+      background:#0a0a0a; border-radius:40px; padding:10px 20px; gap:16px; flex-wrap:wrap;
+    }
+    .tt-tabs{ display:flex; gap:26px; align-items:center; flex-wrap:wrap; }
+    .tt-tab{
+      display:flex; align-items:center; gap:8px; color:#fff; font-size:14.5px;
+      font-weight:600; cursor:pointer; background:none; border:none; padding:8px 2px;
+    }
+    .tt-tab:hover{ opacity:.85; }
+    .tt-icon-pair{ display:flex; gap:3px; }
+    .tt-icon-pair span{ width:6px; height:16px; background:#d0f73a; border-radius:2px; display:block; }
+    .tt-tab.tt-chat-history{ position:relative; }
+    .tt-chevron{ transition:transform .2s ease; font-size:11px; }
+    .tt-chevron.open{ transform:rotate(180deg); }
+    .tt-create-btn{
+      background:#1c7c3e; color:#fff; border:none; padding:10px 20px; border-radius:24px;
+      font-weight:700; font-size:14px; display:flex; align-items:center; gap:8px; cursor:pointer; white-space:nowrap;
+    }
+    .tt-create-btn:hover{ background:#166534; }
+
+    #chatHistoryDropdown.tt-chat-dropdown{
+      position:absolute; top:calc(100% + 12px); left:50%; transform:translateX(-50%);
+      width:320px; max-width:88vw; background:#fff; border-radius:16px;
+      box-shadow:0 12px 40px rgba(0,0,0,0.18); padding:16px 0; z-index:150;
+    }
+    .tt-dropdown-label{ font-size:11.5px; font-weight:800; color:#3b5bdb; letter-spacing:.6px; padding:0 20px 10px; }
+    #chatHistoryDropdown .tt-dropdown-list{ max-height:340px; overflow-y:auto; padding:0 8px; }
+    #chatHistoryDropdown .chat-history-item{
+      padding:10px 12px; border-radius:10px; border-left:none; margin-bottom:2px;
+    }
+    #chatHistoryDropdown .chat-history-item:hover{ background:#f4f4f2; }
+    #chatHistoryDropdown .chat-history-item.active{ background:#eaf7ee; border-left:none; }
+    .tt-dropdown-footer{ text-align:center; padding-top:10px; margin-top:6px; border-top:1px solid #f0f0f0; }
+    .tt-dropdown-footer a{ color:#1c7c3e; font-weight:700; font-size:13.5px; text-decoration:none; cursor:pointer; }
+
+    @media(max-width:900px){
+      .tt-header{ padding:12px 16px; }
+      .tt-toolbar-wrap{ padding:12px 12px 0; }
+      .tt-toolbar{ padding:10px 14px; border-radius:22px; flex-direction:column; align-items:stretch; }
+      .tt-tabs{ justify-content:space-between; width:100%; gap:10px; }
+      .tt-tab{ font-size:12.5px; gap:5px; }
+      .tt-icon-pair span{ width:4px; height:12px; }
+      .tt-create-btn{ width:100%; justify-content:center; font-size:13.5px; padding:10px; }
+      #chatHistoryDropdown.tt-chat-dropdown{ left:0; transform:none; width:100%; max-width:320px; }
+    }
+    @media(max-width:520px){
+      .tt-user-info{ display:none; }
+    }
+
+    /* ===== New UI: Chat context menu (radial) — matches new_ui/chatbot-main-screen/16-chat-context-menu.html ===== */
+    #chatMenuDropdown.ccm-menu{
+      position:fixed;
+      width:260px; aspect-ratio:1/1;
+      background:transparent; border:none; box-shadow:none; padding:0; min-width:0;
+      filter:drop-shadow(0 14px 32px rgba(0,0,0,0.18));
+      z-index:200;
+    }
+    .ccm-pointer{
+      position:absolute; top:-6%; left:50%; transform:translateX(-50%);
+      width:0; height:0; border-left:14px solid transparent; border-right:14px solid transparent;
+      border-bottom:18px solid #fff; z-index:3;
+    }
+    .ccm-circle{ position:absolute; inset:0; border-radius:50%; background:#fff; padding:2.2%; }
+    .ccm-circle-inner{
+      width:100%; height:100%; border-radius:50%; overflow:hidden; position:relative;
+      background:linear-gradient(to bottom, #e3f3ea 0%, #e3f3ea 50%, #fbeae8 50%, #fbeae8 100%);
+    }
+    .ccm-option{
+      position:absolute; left:0; right:0; display:flex; align-items:center; justify-content:center;
+      gap:6px; cursor:pointer; user-select:none; transform:translateY(-50%);
+    }
+    .ccm-option.ccm-rename{ top:26%; }
+    .ccm-option.ccm-delete{ top:74%; }
+    .ccm-opt-icon{ width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .ccm-opt-icon svg{ width:100%; height:100%; }
+    .ccm-opt-label{ font-size:14.5px; font-weight:700; white-space:nowrap; }
+    .ccm-option.ccm-rename .ccm-opt-label{ color:#1f2937; }
+    .ccm-option.ccm-delete .ccm-opt-label{ color:#c0504d; }
+    .ccm-opt-chevron{ width:14px; flex-shrink:0; display:flex; align-items:center; }
+    .ccm-opt-chevron svg{ width:100%; height:auto; }
+    .ccm-center-btn{
+      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      width:34%; aspect-ratio:1/1; border-radius:50%; background:#fff;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+      box-shadow:0 6px 18px rgba(0,0,0,0.12); z-index:2; cursor:default;
+    }
+    .ccm-center-btn svg{ width:32%; height:auto; color:#1f2937; }
+    .ccm-center-label{ font-size:10.5px; font-weight:800; letter-spacing:.5px; color:#1f2937; }
+
+    /* ===== New UI: PDF processing modal — matches new_ui/processing_upload_pdfui/17-processing-pdf.html ===== */
+    .ppm-header{ display:flex; align-items:center; justify-content:space-between; padding:18px 28px; border-bottom:1px solid #f0f0f0; }
+    .ppm-header .tt-logo img{ height:38px; }
+    .ppm-close-x{
+      width:36px; height:36px; border-radius:50%; border:1px solid #eee; background:#fff;
+      display:flex; align-items:center; justify-content:center; cursor:pointer; color:#166534; flex-shrink:0;
+    }
+    .ppm-body{ background:#fbfcfb; padding:26px 28px; }
+    .ppm-top-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:22px; flex-wrap:wrap; }
+    .ppm-step-label{ color:#1c7c3e; font-weight:700; font-size:14px; margin-bottom:6px; }
+    .ppm-top-left h1{ font-size:28px; font-weight:800; color:#1f2430; margin-bottom:6px; }
+    .ppm-top-left .ppm-subtitle{ color:#6b7280; font-size:14px; }
+    .ppm-main-grid{ display:grid; grid-template-columns:300px 1fr; gap:20px; }
+    .ppm-left-panel{ background:#eef6f0; border-radius:16px; padding:22px 18px; text-align:center; }
+    .ppm-file-preview{
+      position:relative; width:120px; height:120px; margin:4px auto 16px; border-radius:50%; background:#fff;
+      display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(0,0,0,0.05);
+    }
+    .ppm-file-preview svg{ width:46px; height:58px; }
+    .ppm-upload-badge{
+      position:absolute; bottom:2px; right:2px; width:30px; height:30px; border-radius:50%;
+      background:#1c7c3e; display:flex; align-items:center; justify-content:center; border:3px solid #fff;
+    }
+    .ppm-file-name{ font-size:16px; font-weight:800; color:#1f2430; margin-bottom:4px; word-break:break-word; }
+    .ppm-file-size{ font-size:13px; color:#6b7280; margin-bottom:16px; }
+    .ppm-secure-box{ display:flex; align-items:center; gap:10px; text-align:left; background:#fff; border-radius:12px; padding:12px 14px; }
+    .ppm-secure-box .ppm-shield{ width:30px; height:30px; border-radius:50%; background:#e3f1e7; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .ppm-secure-box b{ font-size:13px; color:#1f2430; display:block; }
+    .ppm-secure-box span{ font-size:11.5px; color:#6b7280; }
+    .ppm-right-panel{ border:1px solid #eee; border-radius:16px; overflow:hidden; }
+    .ppm-progress-head{ background:#eef6f0; padding:18px 22px; }
+    .ppm-progress-head-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap; }
+    .ppm-progress-head-left{ display:flex; align-items:center; gap:12px; }
+    .ppm-wave-icon{ width:38px; height:38px; border-radius:50%; background:#166534; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .ppm-progress-head-left h2{ font-size:18px; font-weight:800; color:#1f2430; }
+    .ppm-progress-pct{ font-size:24px; font-weight:800; color:#1f2430; }
+    .ppm-progress-track{ width:100%; height:10px; background:#e2e2e4; border-radius:6px; overflow:hidden; }
+    .ppm-progress-fill{ height:100%; border-radius:6px; background:linear-gradient(90deg,#166534,#2f9e4f); transition:width .3s ease; }
+    .ppm-steps{ padding:4px 0; }
+    .ppm-step-row{ display:flex; align-items:center; gap:14px; padding:14px 22px; position:relative; }
+    .ppm-step-row.active{ background:#eef6f0; }
+    .ppm-step-icon{ width:32px; height:32px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; position:relative; z-index:2; }
+    .ppm-step-icon.done{ background:#1c7c3e; }
+    .ppm-step-icon.progress{ background:#e3f1e7; border:2px dotted #2f9e4f; }
+    .ppm-step-icon.pending{ background:#eee; border:2px dotted #d1d5db; }
+    .ppm-step-text{ flex:1; }
+    .ppm-step-text h4{ font-size:14.5px; font-weight:700; color:#1f2430; margin-bottom:1px; }
+    .ppm-step-text p{ font-size:12.5px; color:#6b7280; }
+    .ppm-step-status{ font-size:13px; font-weight:700; white-space:nowrap; }
+    .ppm-step-status.completed, .ppm-step-status.inprogress{ color:#1c7c3e; }
+    .ppm-step-status.pending{ color:#9ca3af; }
+    .ppm-spin{ animation:ppmspin 1.4s linear infinite; }
+    @keyframes ppmspin{ to{ transform:rotate(360deg); } }
+    .ppm-bottom-bar{
+      display:flex; align-items:center; justify-content:space-between;
+      background:linear-gradient(90deg,#eef6f0,#e9f4ec); padding:16px 28px; gap:16px; flex-wrap:wrap;
+    }
+    .ppm-bottom-left{ display:flex; align-items:center; gap:14px; }
+    .ppm-bot-icon{ width:44px; height:44px; border-radius:50%; background:#0f1115; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .ppm-bottom-left h3{ font-size:15px; font-weight:800; color:#1f2430; }
+    .ppm-bottom-left p{ font-size:12.5px; color:#6b7280; margin-top:2px; }
+    .ppm-dots{ display:flex; gap:5px; margin-top:8px; }
+    .ppm-dots span{ width:6px; height:6px; border-radius:50%; background:#d1d5db; }
+    .ppm-dots span.on{ background:#1c7c3e; }
+    .ppm-cancel-btn{
+      display:flex; align-items:center; gap:8px; border:1.5px solid #1c7c3e; color:#166534; background:#fff;
+      padding:11px 20px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;
+    }
+    .ppm-cancel-btn:hover{ background:#f3faf5; }
+    @media(max-width:900px){
+      .ppm-main-grid{ grid-template-columns:1fr; }
+    }
+    @media(max-width:560px){
+      .ppm-body{ padding:18px 16px; }
+      .ppm-top-left h1{ font-size:22px; }
+      .ppm-bottom-bar{ flex-direction:column; align-items:stretch; }
+    }
+
+    /* ===== New UI: chat bubble / input bar palette (colors + shape only — markdown typography rules untouched) ===== */
+    #chatMessages .chat-message-avatar{ border-radius:50%; }
+    #chatMessages .chat-message-avatar img{ border-radius:50%; }
+    #chatMessages .chat-message.assistant .chat-message-avatar{ background:#fff; border:1.5px solid #2f9e4f; padding:2px; }
+    #chatMessages .chat-message.user .chat-message-avatar{ background:#166534; border:1.5px solid #166534; color:#fff; font-weight:800; }
+    #chatMessages .chat-message.assistant .chat-message-content{ background:#fff; border:1px solid #eee; border-radius:16px; box-shadow:0 4px 16px rgba(0,0,0,0.03); }
+    #chatMessages .chat-message.user .chat-message-content{ background:#166534; border-radius:14px; border-bottom-right-radius:4px; }
+
+    /* Input bar as one rounded pill — matches new_ui/chatbot-main-screen/15-chat-history-dropdown.html .input-bar */
+    #chatInputArea .tt-input-bar{
+      border:1px solid #eee; border-radius:40px; padding:8px 18px;
+    }
+    #chatInputArea .tt-round-icon{
+      width:40px; height:40px; border-radius:50%; border:1px solid #d1d5db;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#fff;
+    }
+    #chatInputArea .tt-round-icon:hover{ background:#f9fafb; }
+    #chatInputArea .tt-input-mid{ padding:6px 0; }
+    #chatInputArea .tt-message-input{ border:none !important; box-shadow:none !important; padding:6px 0; }
+    #chatInputArea .tt-send-btn{
+      width:36px; height:36px; border-radius:50%; background:#d0f73a !important; color:#1a1a1a !important;
+    }
+    #chatInputArea .tt-send-btn:hover{ background:#c3ea2c !important; }
+    #chatInputArea .tt-input-divider{ width:1px; height:26px; background:#eee; }
+    #chatInputArea .tt-util-bar button i{ color:inherit; }
+    #chatInputArea #saveLessonBtn{ color:#166534; }
+    #chatInputArea #downloadChatBtn{ color:#1d4ed8; }
+
+    /* Per-message Listen/Copy actions row — matches new_ui .card-actions */
+    #chatMessages .msg-actions{
+      display:flex; gap:22px; padding-top:14px; margin-top:14px;
+      border-top:1px solid #f0f0f0; font-size:13px; font-weight:600; color:#333;
+    }
+    #chatMessages .msg-actions button{
+      display:flex; align-items:center; gap:7px; background:none; border:none; cursor:pointer;
+      color:#333; padding:0; font-size:13px; font-weight:600;
+    }
+    #chatMessages .msg-action-listen{ color:#1c7c3e; }
+    #chatMessages .msg-action-listen.active{ color:#0a4a2c; }
+    #chatMessages .msg-action-copy:hover{ color:#111; }
+    #chatMessages .msg-action-listen:hover{ color:#0a4a2c; }
   </style>
   <!-- MathJax v3: configure TeX delimiters and skip code blocks; disable automatic typeset -->
   <script>
@@ -3266,201 +3465,71 @@
     </div>
   </div>
 
-  <!-- Mobile overlay -->
-  <div id="mobileOverlay" class="mobile-overlay" onclick="toggleMobileSidebar()"></div>
+  <!-- Main Container: top toolbar (matches new_ui/chatbot-main-screen/15-chat-history-dropdown.html) + main content -->
+  <div class="flex flex-col h-screen w-screen overflow-hidden">
 
-  <!-- Main Container -->
-  <div class="flex h-screen w-screen overflow-hidden">
+    <!-- Top Header: logo + user info -->
+    <header class="tt-header">
+      <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
+      <div class="tt-user">
+        <div class="tt-avatar" id="userAvatar" onclick="openSettings()">G</div>
+        <div class="tt-user-info">
+          <b id="userName">Good</b>
+          <span>Teacher</span>
+        </div>
+        <div class="tt-logout" onclick="logout()" title="Logout">
+          <i class="fas fa-sign-out-alt"></i>
+        </div>
+      </div>
+    </header>
 
-    <!-- Sidebar - ChatGPT Style -->
-    <aside id="sidebar" class="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex">
-      <!-- Sidebar Header - Only Logo -->
-      <div class="p-4 border-b border-gray-200">
-        <div class="flex items-center start">
-          <!-- Your Logo -->
-          <button onclick="showCreateLessonWizard()"
-            class="w-full py-3 px-4 flex items-center gap-3 bg-gradient-to-r from-success-500 to-success-600 text-white rounded-xl hover:from-success-600 hover:to-success-700 transition-all duration-200 shadow-md hover:shadow-lg">
-            <div class="w-5 h-5 rounded-md bg-white/20 flex items-center justify-center">
-              <i class="fas fa-plus text-xs"></i>
+    <!-- Toolbar: My Lessons / Set Prompt / Chat History dropdown / Create New Lesson -->
+    <div class="tt-toolbar-wrap">
+      <div class="tt-toolbar">
+        <div class="tt-tabs">
+          <button id="lessonsTabBtn" class="tt-tab" onclick="showMyLessonsPage()">
+            <span class="tt-icon-pair"><span></span><span></span></span>
+            My Lessons
+          </button>
+          <button id="ragPromptBtn" class="tt-tab" onclick="showRAGPromptModal()">
+            <i class="fas fa-cog"></i>
+            Set Prompt
+          </button>
+          <button id="chatHistoryBtn" class="tt-tab tt-chat-history" type="button" onclick="toggleChatHistoryDropdown(event)">
+            <i class="fas fa-comment-dots"></i>
+            Chat History
+            <i id="chatHistoryChevron" class="fas fa-chevron-down tt-chevron"></i>
+
+            <div id="chatHistoryDropdown" class="dropdown-menu tt-chat-dropdown">
+              <div class="tt-dropdown-label">CHAT HISTORY</div>
+              <div class="tt-dropdown-list" id="chatHistoryContainer">
+                <div class="mb-2">
+                  <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-1">Today</h3>
+                  <div id="todayChats" class="space-y-1"></div>
+                </div>
+                <div class="mb-2">
+                  <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-1">Yesterday</h3>
+                  <div id="yesterdayChats" class="space-y-1"></div>
+                </div>
+                <div class="mb-2">
+                  <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-1">Previous 7 Days</h3>
+                  <div id="weekChats" class="space-y-1"></div>
+                </div>
+              </div>
+              <div class="tt-dropdown-footer">
+                <a onclick="closeAllDropdowns(); showMyLessonsPage();">View all conversations</a>
+              </div>
             </div>
-            <span class="font-medium">Create New Lesson</span>
           </button>
         </div>
-      </div>
-
-      <!-- My Lessons Button -->
-      <div class="px-4 mb-4 mt-4">
-        <button id="lessonsTabBtn" onclick="showMyLessonsPage()"
-          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
-          <div class="flex items-center gap-3">
-            <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium">My Lessons</span>
-          </div>
-          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
+        <button class="tt-create-btn" onclick="showCreateLessonWizard()">
+          <i class="fas fa-plus"></i> Create New Lesson
         </button>
       </div>
-
-      <!-- Action Buttons Row (match legacy chat: only Set Prompt/reset/history in chat area, so sidebar keeps a single Set Prompt entry) -->
-      <div class="px-4 mb-4 space-y-2">
-        <!-- Set Prompt button (opens simple RAG prompt modal like legacy chat.html) -->
-        <button id="ragPromptBtn" onclick="showRAGPromptModal()"
-          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
-          <div class="flex items-center gap-3">
-            <i class="fas fa-cog w-5 text-primary-500"></i>
-            <span class="font-medium">Set Prompt</span>
-          </div>
-          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
-        </button>
-      </div>
-
-      <!-- Chat History - Dynamically populated by renderChatSidebar() -->
-      <div class="flex-1 p-4 overflow-y-auto custom-scrollbar" id="chatHistoryContainer">
-        <!-- Empty containers that will be populated dynamically -->
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Today</h3>
-          <div id="todayChats" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Yesterday</h3>
-          <div id="yesterdayChats" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Previous 7 Days</h3>
-          <div id="weekChats" class="space-y-1"></div>
-        </div>
-      </div>
-
-      <!-- Sidebar Footer - Avatar and Logout in same row -->
-      <div class="p-4 border-t border-gray-200">
-        <div class="flex items-center justify-between">
-          <!-- User Avatar -->
-          <div class="flex items-center gap-3">
-            <div
-              class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold cursor-pointer"
-              id="userAvatar" onclick="openSettings()">
-              G
-            </div>
-            <div>
-              <p class="text-sm font-medium text-gray-900" id="userName">Good</p>
-              <p class="text-xs text-gray-500">Teacher</p>
-            </div>
-          </div>
-
-          <!-- Logout Button -->
-          <button onclick="logout()"
-            class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
-            title="Logout">
-            <i class="fas fa-sign-out-alt text-lg"></i>
-          </button>
-        </div>
-      </div>
-    </aside>
-
-      <!-- Mobile Sidebar -->
-    <aside id="mobileSidebar"
-      class="mobile-sidebar w-64 bg-white border-r border-gray-200 flex flex-col md:hidden overflow-y-auto">
-      <!-- Close Button -->
-      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-gray-900">Menu</h2>
-        <button onclick="toggleMobileSidebar()"
-          class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-700">
-          <i class="fas fa-times text-xl"></i>
-        </button>
-      </div>
-
-      <!-- Create New Lesson Button -->
-      <div class="p-4">
-        <button onclick="showCreateLessonWizard(); toggleMobileSidebar();"
-          class="w-full py-3 px-4 flex items-center gap-3 bg-gradient-to-r from-success-500 to-success-600 text-white rounded-xl hover:from-success-600 hover:to-success-700 transition-all duration-200 shadow-md hover:shadow-lg">
-          <div class="w-5 h-5 rounded-md bg-white/20 flex items-center justify-center">
-            <i class="fas fa-plus text-xs"></i>
-          </div>
-          <span class="font-medium">Create New Lesson</span>
-        </button>
-      </div>
-
-      <!-- My Lessons Button -->
-      <div class="px-4 mb-4">
-        <button id="lessonsTabBtn" onclick="showMyLessonsPage(); toggleMobileSidebar();"
-          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
-          <div class="flex items-center gap-3">
-            <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium">My Lessons</span>
-          </div>
-          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
-        </button>
-      </div>
-
-      <!-- Action Buttons Row -->
-      <div class="px-4 mb-4 space-y-2">
-        <!-- Set Prompt button (mobile) -->
-        <button id="ragPromptBtnMobile" onclick="showRAGPromptModal(); toggleMobileSidebar();"
-          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
-          <div class="flex items-center gap-3">
-            <i class="fas fa-cog w-5 text-primary-500"></i>
-            <span class="font-medium">Set Prompt</span>
-          </div>
-          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
-        </button>
-      </div>
-
-      <!-- Chat History -->
-      <div class="flex-1 p-4 overflow-y-auto custom-scrollbar" id="chatHistoryContainer-mobile">
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Today</h3>
-          <div id="todayChats-mobile" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Yesterday</h3>
-          <div id="yesterdayChats-mobile" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Previous 7 Days</h3>
-          <div id="weekChats-mobile" class="space-y-1"></div>
-        </div>
-      </div>
-
-      <!-- Sidebar Footer -->
-      <div class="p-4 border-t border-gray-200">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold cursor-pointer"
-              id="userAvatarMobile" onclick="openSettings(); toggleMobileSidebar();">
-              G
-            </div>
-            <div>
-              <p class="text-sm font-medium text-gray-900" id="userNameMobile">Good</p>
-              <p class="text-xs text-gray-500">Teacher</p>
-            </div>
-          </div>
-
-          <button onclick="logout(); toggleMobileSidebar();"
-            class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
-            title="Logout">
-            <i class="fas fa-sign-out-alt text-lg"></i>
-          </button>
-        </div>
-      </div>
-    </aside>
+    </div>
 
     <!-- Main content: min-h-0 so flex child can shrink and chat area scrolls; input stays at bottom -->
     <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
-
-      <!-- Mobile Header with Hamburger Menu -->
-      <div
-        class="md:hidden sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-40">
-        <button onclick="toggleMobileSidebar()"
-          class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-700">
-          <i class="fas fa-bars text-xl"></i>
-        </button>
-        <h1 class="font-bold text-lg text-gray-900">Teacher Mode</h1>
-        <div class="w-8"></div>
-      </div>
 
       <!-- Chat Area: min-h-0 so this is the only scroll container; messages scroll, input stays fixed -->
       <section id="chatArea" class="flex-1 min-h-0 p-4 md:p-6 overflow-y-auto custom-scrollbar">
@@ -3468,7 +3537,7 @@
           <!-- Welcome message - AI on RIGHT side -->
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Teacher Mode!</h4>
@@ -3645,62 +3714,64 @@
             <div id="voiceText" class="mt-2 text-sm text-gray-700"></div>
           </div>
 
-          <!-- Modern Input Container -->
-          <div class="flex items-center gap-2 md:gap-3">
+          <!-- Modern Input Container - matches new_ui/chatbot-main-screen/15-chat-history-dropdown.html .input-bar -->
+          <div class="flex items-center gap-2 md:gap-3 tt-input-bar">
             <!-- Mic/Speaker Icons (Left Outside) (Hidden on mobile) -->
             <div class="hidden sm:flex items-center gap-2 flex-shrink-0">
               <!-- Microphone Button -->
               <button id="micBtn" onclick="toggleVoiceInput()"
-                class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                class="tt-round-icon text-gray-600 hover:text-primary-600 transition-colors"
                 title="Voice input" aria-label="Voice input">
-                <i class="fas fa-microphone text-xl"></i>
+                <i class="fas fa-microphone"></i>
               </button>
 
               <!-- Speaker Button -->
               <button id="speakerBtn" onclick="toggleTextToSpeech()"
-                class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                class="tt-round-icon text-gray-600 hover:text-primary-600 transition-colors"
                 title="Text to speech" aria-label="Text to speech">
-                <i class="fas fa-volume-up text-xl"></i>
+                <i class="fas fa-volume-up"></i>
               </button>
             </div>
 
             <!-- Main Input Area (Clean, Borderless) -->
-            <div class="flex-1 bg-transparent flex items-center gap-3 px-5 py-3">
+            <div class="flex-1 bg-transparent flex items-center gap-3 tt-input-mid">
               <!-- Text Input -->
-              <textarea id="messageInput" placeholder="Type your message..."
-                class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 placeholder-gray-500 text-base resize-none focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+              <textarea id="messageInput" placeholder="Ask a question about this lesson..."
+                class="flex-1 bg-transparent text-gray-800 placeholder-gray-500 text-base resize-none focus:outline-none transition-colors tt-message-input"
                 rows="1" aria-label="Chat message input" oninput="autoResizeTextarea(this)"
                 onkeydown="handleKeyDown(event)"></textarea>
 
               <!-- Send Button (Inside Input Area) -->
               <button id="sendBtn" onclick="sendMessage()"
-                class="flex items-center justify-center p-2 rounded-lg text-white bg-primary-500 hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                class="flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0 tt-send-btn"
                 title="Send message (Ctrl+Enter)" aria-label="Send message" disabled>
-                <i class="fas fa-arrow-up text-lg"></i>
+                <i class="fas fa-arrow-up"></i>
               </button>
             </div>
 
+            <div class="tt-input-divider hidden md:block"></div>
+
             <!-- Action Buttons (Right Side - Compact on mobile) -->
-            <div class="flex items-center gap-2 md:gap-4 flex-shrink-0">
+            <div class="flex items-center gap-2 md:gap-4 flex-shrink-0 tt-util-bar">
               <!-- Save Lesson Button (hidden on mobile) -->
               <button id="saveLessonBtn" onclick="saveLessonFromChat()" title="Save lesson"
-                class="hidden md:flex items-center justify-center p-2 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors text-sm md:text-base"
+                class="hidden md:flex items-center justify-center gap-2 text-gray-700 hover:text-primary-700 transition-colors text-sm md:text-base font-semibold"
                 aria-label="Save lesson">
-                <i class="fas fa-save text-base md:text-lg"></i>
+                <i class="fas fa-save"></i><span>Save</span>
               </button>
 
               <!-- Download Chat Button (hidden on mobile) -->
               <button id="downloadChatBtn" onclick="downloadChat()" title="Download chat"
-                class="hidden md:flex items-center justify-center p-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                class="hidden md:flex items-center justify-center gap-2 text-gray-700 hover:text-primary-700 transition-colors text-sm md:text-base font-semibold"
                 aria-label="Download chat">
-                <i class="fas fa-download text-lg"></i>
+                <i class="fas fa-download"></i><span>Download</span>
               </button>
 
               <!-- Reset Chat Button (hidden on mobile) -->
               <button id="resetChatBtn" onclick="resetChat()" title="Reset chat"
-                class="hidden md:flex items-center justify-center p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
+                class="hidden md:flex items-center justify-center gap-2 text-red-600 hover:text-red-700 transition-colors text-sm md:text-base font-semibold"
                 aria-label="Reset chat">
-                <i class="fas fa-redo text-lg"></i>
+                <i class="fas fa-redo"></i><span>Reset</span>
               </button>
             </div>
           </div>
@@ -3708,15 +3779,34 @@
       </div>
     </main>
 
-    <!-- Chat Menu Dropdown (for renaming) -->
-    <div id="chatMenuDropdown" class="dropdown-menu">
-      <div class="dropdown-item" onclick="renameChat()">
-        <i class="fas fa-edit text-gray-500"></i>
-        <span>Rename Chat</span>
+    <!-- Chat Menu Dropdown (radial) - matches new_ui/chatbot-main-screen/16-chat-context-menu.html -->
+    <div id="chatMenuDropdown" class="dropdown-menu ccm-menu">
+      <div class="ccm-pointer"></div>
+      <div class="ccm-circle">
+        <div class="ccm-circle-inner">
+          <div class="ccm-option ccm-rename" onclick="renameChat()">
+            <div class="ccm-opt-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#0e7c6b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="ccm-opt-label">Rename Chat</div>
+            <div class="ccm-opt-chevron">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#0e7c6b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="ccm-option ccm-delete" onclick="deleteCurrentChat()">
+            <div class="ccm-opt-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" stroke="#c0504d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="#c0504d" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <div class="ccm-opt-label">Delete Chat</div>
+            <div class="ccm-opt-chevron">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#c0504d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="dropdown-item danger" onclick="deleteCurrentChat()">
-        <i class="fas fa-trash text-red-500"></i>
-        <span>Delete Chat</span>
+      <div class="ccm-center-btn" onclick="event.stopPropagation();">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#1f2937" stroke-width="1.6"/><circle cx="9" cy="11.5" r="1" fill="#1f2937"/><circle cx="12" cy="11.5" r="1" fill="#1f2937"/><circle cx="15" cy="11.5" r="1" fill="#1f2937"/></svg>
+        <div class="ccm-center-label">CHAT</div>
       </div>
     </div>
   </div>
@@ -3950,7 +4040,7 @@
         <!-- Top bar -->
         <div class="vl-topbar">
           <div class="vl-topbar-logo">
-            <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI">
           </div>
           <div class="vl-topbar-crumbs">My Lessons&nbsp;/&nbsp;<b>View Lesson</b></div>
           <div class="vl-topbar-actions">
@@ -4180,6 +4270,7 @@
       let mediaStream = null;
       let ttsAudio = null;
       let ttsObjectUrl = null;
+      let activeTtsBtn = null;
       let currentChatMenuId = null;
       let lessonCreationCompleted = false; // Flag to track if first lesson is created
       let conversationSummaryRequestToken = 0;
@@ -4964,12 +5055,20 @@
         }
       }
 
-      // Toggle mobile sidebar
-      function toggleMobileSidebar() {
-        const sidebar = document.getElementById('mobileSidebar');
-        const overlay = document.getElementById('mobileOverlay');
-        sidebar.classList.toggle('open');
-        overlay.classList.toggle('open');
+      // Toggle chat history dropdown (top toolbar)
+      function toggleChatHistoryDropdown(event) {
+        if (event) event.stopPropagation();
+        const dropdown = document.getElementById('chatHistoryDropdown');
+        const chev = document.getElementById('chatHistoryChevron');
+        if (!dropdown) return;
+        const isOpen = dropdown.classList.contains('show');
+        closeAllDropdowns();
+        if (!isOpen) {
+          dropdown.classList.add('show');
+          if (chev) chev.classList.add('open');
+        } else if (chev) {
+          chev.classList.remove('open');
+        }
       }
 
       // Toggle chat menu
@@ -4979,9 +5078,17 @@
 
         const dropdown = document.getElementById('chatMenuDropdown');
         const rect = event.target.closest('button').getBoundingClientRect();
+        const menuSize = 260; // matches .ccm-menu width in CSS
 
-        dropdown.style.left = (rect.left - 150) + 'px';
-        dropdown.style.top = (rect.bottom + 5) + 'px';
+        let left = rect.left + rect.width / 2 - menuSize / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - menuSize - 8));
+        let top = rect.bottom + 14;
+        if (top + menuSize > window.innerHeight - 8) {
+          top = Math.max(8, rect.top - menuSize - 14);
+        }
+
+        dropdown.style.left = left + 'px';
+        dropdown.style.top = top + 'px';
         dropdown.classList.toggle('show');
       }
 
@@ -4990,6 +5097,8 @@
         document.querySelectorAll('.dropdown-menu').forEach(dropdown => {
           dropdown.classList.remove('show');
         });
+        const chev = document.getElementById('chatHistoryChevron');
+        if (chev) chev.classList.remove('open');
       }
 
       // Show Create Lesson Wizard (2-step process)
@@ -5439,78 +5548,122 @@
         const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
 
         modalContent.innerHTML = `
-        <!-- Header with Beautiful Gradient Background -->
-        <div class="bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500 text-white px-6 md:px-10 py-8 md:py-10 shadow-lg">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <p class="text-3xl md:text-4xl text-primary-100 font-bold opacity-90 mb-2">Step 2 of 2: Processing PDF</p>
-                    <h2 class="text-lg font-medium text-white">Creating Lesson</h2>
-                </div>
-                <button onclick="closeCreateLessonModal()" 
-                        class="text-white hover:text-gray-200 hover:bg-white hover:bg-opacity-20 rounded-full p-3 transition-all flex-shrink-0">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
-            </div>
+        <!-- Header: matches new_ui/processing_upload_pdfui/17-processing-pdf.html -->
+        <div class="ppm-header">
+          <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
+          <div class="ppm-close-x" onclick="closeCreateLessonModal()">
+            <i class="fas fa-times"></i>
+          </div>
         </div>
 
-        <!-- Progress Steps Indicator - Enhanced Design -->
-        <div class="bg-gray-50 px-6 md:px-10 py-8">
-            <div class="flex items-center justify-between">
-                <!-- Step 1: Upload PDF -->
-                <div class="flex flex-col items-center flex-1">
-                    <div class="relative mb-4">
-                        <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-success-500 text-white flex items-center justify-center font-bold text-xl md:text-2xl shadow-lg ring-4 ring-success-100">
-                            <i class="fas fa-check"></i>
-                        </div>
-                        <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-success-500 rounded-full flex items-center justify-center text-white text-xs font-bold">1</div>
-                    </div>
-                    <h3 class="text-sm md:text-base font-bold text-success-700 text-center">Uploaded</h3>
-                    <p class="text-xs text-gray-600 text-center mt-1">PDF loaded</p>
-                </div>
-                
-                <!-- Connector Line 1 -->
-                <div class="flex-1 h-1 bg-success-500 mx-2 md:mx-3 mb-6"></div>
-                
-                <!-- Step 2: Processing -->
-                <div class="flex flex-col items-center flex-1">
-                    <div class="relative mb-4">
-                        <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold text-xl md:text-2xl shadow-lg ring-4 ring-primary-100">
-                            <i class="fas fa-cogs animate-spin"></i>
-                        </div>
-                        <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center text-white text-xs font-bold">2</div>
-                    </div>
-                    <h3 class="text-sm md:text-base font-bold text-primary-700 text-center">Processing</h3>
-                    <p class="text-xs text-gray-600 text-center mt-1">AI analysis</p>
-                </div>
+        <div class="ppm-body">
+          <div class="ppm-top-row">
+            <div class="ppm-top-left">
+              <div class="ppm-step-label">Step 2 of 2</div>
+              <h1>Processing PDF</h1>
+              <div class="ppm-subtitle">Creating Lesson</div>
             </div>
+          </div>
+
+          <div class="ppm-main-grid">
+            <!-- Left: file preview -->
+            <div class="ppm-left-panel">
+              <div class="ppm-file-preview">
+                <svg viewBox="0 0 384 512" fill="#166534"><path d="M369.9 97.9L286 14C277 5 264.8-.1 252.1-.1H48C21.5 0 0 21.5 0 48v416c0 26.5 21.5 48 48 48h288c26.5 0 48-21.5 48-48V131.9c0-12.7-5.1-25-14.1-34zM332.1 128H256V51.9l76.1 76.1zM48 464V48h160v104c0 13.3 10.7 24 24 24h104v288H48z"/></svg>
+                <div class="ppm-upload-badge">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+              </div>
+              <div class="ppm-file-name">${file.name}</div>
+              <div class="ppm-file-size">${fileSizeMB} MB</div>
+              <div class="ppm-secure-box">
+                <div class="ppm-shield">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z" stroke="#166534" stroke-width="1.8"/></svg>
+                </div>
+                <div>
+                  <b>Your file is secure and private</b>
+                  <span>We don't store your content</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: progress + steps -->
+            <div class="ppm-right-panel">
+              <div class="ppm-progress-head">
+                <div class="ppm-progress-head-top">
+                  <div class="ppm-progress-head-left">
+                    <div class="ppm-wave-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 12h2l2-6 3 12 3-9 2 4h6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <h2>Processing PDF...</h2>
+                  </div>
+                  <div class="ppm-progress-pct"><span id="progressPercent">0%</span></div>
+                </div>
+                <div class="ppm-progress-track"><div id="progressBar" class="ppm-progress-fill" style="width: 0%;"></div></div>
+                <p id="progressStatus" class="ppm-progress-status-text" style="font-size:12.5px;color:#6b7280;margin-top:10px;">Starting PDF analysis...</p>
+              </div>
+
+              <div class="ppm-steps">
+                <div class="ppm-step-row active" id="ppmStepRow1">
+                  <div class="ppm-step-icon pending" id="ppmStepIcon1">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div class="ppm-step-text">
+                    <h4>File received</h4>
+                    <p>PDF successfully uploaded</p>
+                  </div>
+                  <div class="ppm-step-status pending" id="ppmStepStatus1">Pending</div>
+                </div>
+                <div class="ppm-step-row" id="ppmStepRow2">
+                  <div class="ppm-step-icon pending" id="ppmStepIcon2">
+                    <i class="fas fa-circle-notch ppm-spin" style="font-size:13px;color:#2f9e4f;"></i>
+                  </div>
+                  <div class="ppm-step-text">
+                    <h4>Extracting text</h4>
+                    <p>Reading content from PDF</p>
+                  </div>
+                  <div class="ppm-step-status pending" id="ppmStepStatus2">Pending</div>
+                </div>
+                <div class="ppm-step-row" id="ppmStepRow3">
+                  <div class="ppm-step-icon pending" id="ppmStepIcon3">
+                    <i class="fas fa-circle-notch ppm-spin" style="font-size:13px;color:#2f9e4f;"></i>
+                  </div>
+                  <div class="ppm-step-text">
+                    <h4>Indexing for chat</h4>
+                    <p>Organizing content for AI</p>
+                  </div>
+                  <div class="ppm-step-status pending" id="ppmStepStatus3">Pending</div>
+                </div>
+                <div class="ppm-step-row" id="ppmStepRow4">
+                  <div class="ppm-step-icon pending" id="ppmStepIcon4">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M8 11V7a4 4 0 018 0v4" stroke="#fff" stroke-width="1.8" fill="none"/></svg>
+                  </div>
+                  <div class="ppm-step-text">
+                    <h4>Preparing response</h4>
+                    <p>Almost there...</p>
+                  </div>
+                  <div class="ppm-step-status pending" id="ppmStepStatus4">Pending</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        
-        <!-- Processing Content -->
-        <div class="px-6 md:px-10 py-8">
-            <div class="text-center mb-8">
-                <i class="fas fa-file-pdf text-6xl md:text-7xl text-accent-500 mb-6"></i>
-                <h4 class="text-2xl font-bold text-gray-900 mb-2 truncate">${file.name}</h4>
-                <p class="text-lg text-gray-600">${fileSizeMB} MB</p>
+
+        <div class="ppm-bottom-bar">
+          <div class="ppm-bottom-left">
+            <div class="ppm-bot-icon">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="4" y="8" width="16" height="12" rx="3" fill="#fff"/><circle cx="9" cy="14" r="1.4" fill="#0f1115"/><circle cx="15" cy="14" r="1.4" fill="#0f1115"/><path d="M12 8V4M8 4l-2-2M16 4l2-2" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>
             </div>
-            
-            <!-- Progress Bar -->
-            <div class="mb-8">
-                <div class="flex justify-between mb-3">
-                    <span class="text-sm font-bold text-gray-700">Processing PDF...</span>
-                    <span id="progressPercent" class="text-sm font-bold text-primary-600">0%</span>
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-sm">
-                  <div id="progressBar" class="bg-gradient-to-r from-primary-600 to-accent-500 h-4 rounded-full progress-bar" style="width: 0%; transition: width 0.3s ease;"></div>
-                </div>
-                <p class="text-sm text-gray-600 mt-3 font-medium" id="progressStatus">Starting PDF analysis...</p>
+            <div>
+              <h3>IQBAL AI is analyzing your content</h3>
+              <p>This may take a few moments</p>
+              <div class="ppm-dots"><span class="on"></span><span></span><span></span></div>
             </div>
-            
-            <div class="flex flex-col md:flex-row gap-4">
-                <button onclick="cancelCreateLessonUpload()" 
-                        class="flex-1 bg-gray-100 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-200 transition-all font-bold text-lg">
-                  Cancel
-                </button>
-            </div>
+          </div>
+          <button onclick="cancelCreateLessonUpload()" class="ppm-cancel-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#166534" stroke-width="1.8"/><path d="M5.5 5.5l13 13" stroke="#166534" stroke-width="1.8"/></svg>
+            Cancel Processing
+          </button>
         </div>
       `;
 
@@ -5556,6 +5709,44 @@
         closeCreateLessonModal();
       }
 
+      // Drive the 4-step "File received / Extracting text / Indexing for chat / Preparing response"
+      // list (new_ui/processing_upload_pdfui/17-processing-pdf.html) off the single 0-100 progress number.
+      function updatePpmSteps(progress) {
+        const p = Math.max(0, Math.min(100, progress || 0));
+        const steps = [
+          { icon: 'ppmStepIcon1', status: 'ppmStepStatus1', row: 'ppmStepRow1', doneAt: 2 },
+          { icon: 'ppmStepIcon2', status: 'ppmStepStatus2', row: 'ppmStepRow2', doneAt: 45 },
+          { icon: 'ppmStepIcon3', status: 'ppmStepStatus3', row: 'ppmStepRow3', doneAt: 85 },
+          { icon: 'ppmStepIcon4', status: 'ppmStepStatus4', row: 'ppmStepRow4', doneAt: 100 },
+        ];
+        let activeIndex = steps.findIndex(function (s) { return p < s.doneAt; });
+        if (activeIndex === -1) activeIndex = steps.length - 1;
+        steps.forEach(function (step, idx) {
+          const iconEl = document.getElementById(step.icon);
+          const statusEl = document.getElementById(step.status);
+          const rowEl = document.getElementById(step.row);
+          if (!iconEl || !statusEl || !rowEl) return;
+          const isDone = idx < activeIndex || (idx === steps.length - 1 && p >= 100);
+          const isActive = !isDone && idx === activeIndex;
+          iconEl.classList.remove('done', 'progress', 'pending');
+          statusEl.classList.remove('completed', 'inprogress', 'pending');
+          rowEl.classList.toggle('active', isActive);
+          if (isDone) {
+            iconEl.classList.add('done');
+            statusEl.classList.add('completed');
+            statusEl.textContent = 'Completed';
+          } else if (isActive) {
+            iconEl.classList.add('progress');
+            statusEl.classList.add('inprogress');
+            statusEl.textContent = 'In progress';
+          } else {
+            iconEl.classList.add('pending');
+            statusEl.classList.add('pending');
+            statusEl.textContent = 'Pending';
+          }
+        });
+      }
+
       // Step 2 processing - API: POST /api/rag/ingest (RAG document ingest for chat), NOT create_lesson
       async function processCreateLessonStep2(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
         const modal = document.getElementById('createLessonModal');
@@ -5584,6 +5775,7 @@
         formData.append('create_new_thread', 'true');
         // Do NOT send conversation_id: each upload gets a new conversation and thread (isolated instance)
         let progress = 0;
+        updatePpmSteps(0);
         const progressInterval = setInterval(() => {
           progress += Math.random() * 8 + 2;
           if (progress > 90) progress = 90;
@@ -5594,6 +5786,7 @@
             else if (progress < 80) progressStatus.textContent = 'Extracting text and indexing for chat...';
             else progressStatus.textContent = 'Finalizing...';
           }
+          updatePpmSteps(progress);
         }, 400);
         try {
           const response = await fetch('/api/rag/ingest', {
@@ -5621,6 +5814,7 @@
           if (data.task_id && data.status === 'processing') {
             window._ingestTaskId = data.task_id;
             if (progressStatus) progressStatus.textContent = 'Processing in background...';
+            updatePpmSteps(45);
             threadId = data.thread_id || null;
             conversationId = data.conversation_id != null ? data.conversation_id : null;
             pendingThreadId = threadId;
@@ -5644,6 +5838,7 @@
               if (progressBar) progressBar.style.width = (statusData.progress || 0) + '%';
               if (progressPercent) progressPercent.textContent = Math.round(statusData.progress || 0) + '%';
               if (progressStatus && statusData.message) progressStatus.textContent = statusData.message;
+              updatePpmSteps(statusData.progress || 0);
               if (statusData.status === 'revoked') {
                 showToast('Upload cancelled.', 'warning');
                 break;
@@ -5670,6 +5865,7 @@
             }
           }
           const ingestSuccess = !window._ingestCancelRequested && (window._ingestCompletedSuccessfully || (!data.task_id && threadId)) && threadId;
+          if (ingestSuccess) updatePpmSteps(100);
 
           // Commit new thread/conversation only after confirmed success.
           if (ingestSuccess) {
@@ -8050,7 +8246,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             messageDiv.className = 'chat-message assistant animate-fade-in';
             messageDiv.innerHTML = `
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
             </div>
             <div class="chat-message-content markdown-content tex2jax_process">${formattedContent}</div>
           `;
@@ -8088,7 +8284,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           chatMessages.innerHTML = `
         <div class="chat-message assistant animate-fade-in">
           <div class="chat-message-avatar">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
           </div>
           <div class="chat-message-content">
             ${successHtml}
@@ -8570,7 +8766,128 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           speakerBtn.classList.remove('active');
           speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
         }
+        if (activeTtsBtn && activeTtsBtn !== speakerBtn) {
+          activeTtsBtn.classList.remove('active');
+          activeTtsBtn.innerHTML = '<i class="fas fa-volume-up"></i><span>Listen</span>';
+        }
+        activeTtsBtn = null;
       }
+
+      // Per-message "Listen" button (new_ui card-actions row) — shares the same backend TTS
+      // playback session/state as the input-bar speaker button, so starting one stops the other.
+      async function playMessageAudio(btn, text) {
+        if (!text || !text.trim()) {
+          showToast('No text to read aloud', 'info');
+          return;
+        }
+        if (isTextToSpeechActive && activeTtsBtn === btn) {
+          stopTextToSpeechSession();
+          return;
+        }
+        stopTextToSpeechSession();
+        activeTtsBtn = btn;
+        isTextToSpeechActive = true;
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Loading...</span>';
+        try {
+          const res = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ text: text })
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(function () { return {}; });
+            showToast(err.error || 'TTS failed', 'error');
+            stopTextToSpeechSession();
+            return;
+          }
+          const blob = await res.blob();
+          ttsObjectUrl = URL.createObjectURL(blob);
+          ttsAudio = new Audio(ttsObjectUrl);
+          btn.innerHTML = '<i class="fas fa-volume-up"></i><span>Stop</span>';
+          ttsAudio.onended = function () { stopTextToSpeechSession(); };
+          ttsAudio.onerror = function () { showToast('Playback failed', 'error'); stopTextToSpeechSession(); };
+          ttsAudio.play();
+        } catch (err) {
+          console.error('Message TTS error:', err);
+          showToast('Could not reach speech service', 'error');
+          stopTextToSpeechSession();
+        }
+      }
+
+      // Per-message "Copy" button
+      async function copyMessageText(btn, text) {
+        try {
+          await navigator.clipboard.writeText(text || '');
+          showToast('Copied to clipboard', 'success', 1500);
+        } catch (e) {
+          console.error('Copy failed:', e);
+          showToast('Copy failed', 'error');
+        }
+      }
+
+      // Attach a Listen/Copy actions row to every assistant message bubble, regardless of which
+      // code path rendered it (welcome message, addAssistantMessage, loadChat, etc.) — avoids
+      // having to touch every individual render call site.
+      function attachMessageActionsIfMissing(msgEl) {
+        if (!msgEl || !msgEl.classList || !msgEl.classList.contains('assistant')) return;
+        const contentEl = msgEl.querySelector('.chat-message-content');
+        if (!contentEl || contentEl.querySelector('.msg-actions')) return;
+
+        const actions = document.createElement('div');
+        actions.className = 'msg-actions';
+
+        const listenBtn = document.createElement('button');
+        listenBtn.type = 'button';
+        listenBtn.className = 'msg-action-listen';
+        listenBtn.innerHTML = '<i class="fas fa-volume-up"></i><span>Listen</span>';
+        listenBtn.addEventListener('click', function () {
+          const text = (contentEl.innerText || contentEl.textContent || '').replace(/\s+/g, ' ').trim();
+          playMessageAudio(listenBtn, text);
+        });
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'msg-action-copy';
+        copyBtn.innerHTML = '<i class="fas fa-copy"></i><span>Copy</span>';
+        copyBtn.addEventListener('click', function () {
+          const text = (contentEl.innerText || contentEl.textContent || '').trim();
+          copyMessageText(copyBtn, text);
+        });
+
+        actions.appendChild(listenBtn);
+        actions.appendChild(copyBtn);
+        contentEl.appendChild(actions);
+      }
+
+      (function watchChatMessagesForActions() {
+        function scan(root) {
+          if (!root) return;
+          if (root.nodeType === 1 && root.classList && root.classList.contains('chat-message')) {
+            attachMessageActionsIfMissing(root);
+          }
+          if (root.querySelectorAll) {
+            root.querySelectorAll('.chat-message.assistant').forEach(attachMessageActionsIfMissing);
+          }
+        }
+        function start() {
+          const chatMessages = document.getElementById('chatMessages');
+          if (!chatMessages) return;
+          scan(chatMessages);
+          const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (m) {
+              m.addedNodes.forEach(function (node) { scan(node); });
+            });
+          });
+          observer.observe(chatMessages, { childList: true, subtree: true });
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', start);
+        } else {
+          start();
+        }
+      })();
 
       // Toggle text-to-speech: use backend /api/tts (gTTS) and play returned audio
       async function toggleTextToSpeech() {
@@ -9307,7 +9624,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const wasNearBottom = isChatNearBottom();
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message assistant animate-fade-in';
-        var imgUrl = "{{ url_for('static', filename='teacher/assets/midLogo.png') }}";
+        var imgUrl = "{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}";
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
           <img src="${imgUrl}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
@@ -9889,7 +10206,7 @@ To continue your learning journey:
         typingDiv.className = 'chat-message assistant animate-fade-in';
         typingDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -10065,7 +10382,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         successMsg.className = 'chat-message assistant animate-fade-in';
         successMsg.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -10288,7 +10605,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           chatMessages.innerHTML = `
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Teacher Mode!</h4>
@@ -10515,7 +10832,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           chatMessages.innerHTML = `
           <div class="chat-message assistant animate-fade-in">
             <div class="chat-message-avatar">
-              <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+              <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
             </div>
             <div class="chat-message-content">
               <h4 class="font-display font-semibold text-surface-900 mb-2">Chat Reset</h4>
@@ -10548,12 +10865,6 @@ Align everything with the lesson objectives and do not invent missing informatio
 
       // Handle window resize
       window.addEventListener('resize', function () {
-        if (window.innerWidth >= 768) {
-          const sidebar = document.getElementById('mobileSidebar');
-          const overlay = document.getElementById('mobileOverlay');
-          sidebar.classList.remove('open');
-          overlay.classList.remove('open');
-        }
         closeAllDropdowns();
       });
       // Add these functions to your existing JavaScript

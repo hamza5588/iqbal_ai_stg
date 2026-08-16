@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Processing PDF - Iqbal AI</title>
+<style>
+  :root{
+    --green-900:#0a4a2c;
+    --green-700:#166534;
+    --green-600:#1c7c3e;
+    --green-500:#2f9e4f;
+    --mint:#eef6f0;
+    --mint-2:#e3f1e7;
+    --gray-500:#6b7280;
+    --gray-400:#9ca3af;
+    --gray-300:#d1d5db;
+    --dark:#1f2430;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#eef0ee;color:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+
+  .modal{
+    width:100%;max-width:1360px;
+    background:#fff;border-radius:22px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.10);
+    overflow:hidden;
+  }
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:20px 32px;border-bottom:1px solid #f0f0f0;
+  }
+  .logo img{height:48px;}
+  .close-x{
+    width:40px;height:40px;border-radius:50%;
+    border:1px solid #eee;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--green-700);flex-shrink:0;
+  }
+
+  .body-area{background:#fbfcfb;padding:34px 32px;}
+
+  .top-row{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    gap:24px;margin-bottom:30px;flex-wrap:wrap;
+  }
+  .top-left .step-label{
+    color:var(--green-600);font-weight:700;font-size:16px;margin-bottom:8px;
+  }
+  .top-left h1{font-size:38px;font-weight:800;color:var(--dark);margin-bottom:8px;}
+  .top-left .subtitle{color:var(--gray-500);font-size:16px;}
+
+  .pdf-art{
+    position:relative;width:220px;height:170px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .pdf-art .ring{
+    position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+    width:180px;height:60px;border-radius:50%;
+    background:radial-gradient(ellipse at center, rgba(47,158,79,0.18), transparent 70%);
+  }
+  .pdf-art .ring-line{
+    position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+    width:160px;height:36px;border-radius:50%;
+    border:2px dashed #d7ead9;
+  }
+  .pdf-doc{
+    position:relative;width:90px;height:110px;background:#fff;
+    border:1px solid #e5e9e6;border-radius:6px 14px 6px 6px;
+    box-shadow:0 10px 24px rgba(0,0,0,0.08);
+    display:flex;flex-direction:column;align-items:center;
+    padding-top:38px;z-index:2;
+  }
+  .pdf-doc::before{
+    content:'';position:absolute;top:0;right:0;
+    width:0;height:0;border-style:solid;
+    border-width:0 14px 14px 0;border-color:transparent #f4f4f4 transparent transparent;
+  }
+  .pdf-badge{
+    background:var(--green-700);color:#fff;font-weight:800;font-size:12px;
+    padding:4px 10px;border-radius:4px;letter-spacing:.5px;
+  }
+  .pdf-lines{width:60%;margin-top:14px;}
+  .pdf-lines div{height:3px;background:#eee;border-radius:2px;margin-bottom:6px;}
+
+  .main-grid{
+    display:grid;grid-template-columns:340px 1fr;gap:24px;
+  }
+
+  .left-panel{
+    background:var(--mint);border-radius:18px;
+    padding:28px 24px;text-align:center;position:relative;
+  }
+  .file-preview{
+    position:relative;width:170px;height:170px;margin:6px auto 20px;
+    border-radius:50%;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 20px rgba(0,0,0,0.05);
+  }
+  .file-preview svg{width:64px;height:80px;}
+  .upload-badge{
+    position:absolute;bottom:4px;right:4px;
+    width:38px;height:38px;border-radius:50%;
+    background:var(--green-600);display:flex;align-items:center;justify-content:center;
+    border:3px solid #fff;
+  }
+  .file-name{font-size:19px;font-weight:800;color:var(--dark);margin-bottom:4px;}
+  .file-size{font-size:14px;color:var(--gray-500);margin-bottom:20px;}
+  .secure-box{
+    display:flex;align-items:center;gap:12px;text-align:left;
+    background:#fff;border-radius:12px;padding:14px 16px;
+  }
+  .secure-box .shield{
+    width:34px;height:34px;border-radius:50%;background:var(--mint-2);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .secure-box b{font-size:14px;color:var(--dark);display:block;}
+  .secure-box span{font-size:12.5px;color:var(--gray-500);}
+
+  .right-panel{
+    border:1px solid #eee;border-radius:18px;overflow:hidden;
+  }
+  .progress-head{
+    background:var(--mint);padding:22px 26px;
+  }
+  .progress-head-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:14px;flex-wrap:wrap;}
+  .progress-head-left{display:flex;align-items:center;gap:14px;}
+  .wave-icon{
+    width:44px;height:44px;border-radius:50%;background:var(--green-700);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .progress-head-left h2{font-size:21px;font-weight:800;color:var(--dark);}
+  .progress-pct{font-size:30px;font-weight:800;color:var(--dark);}
+  .progress-track{
+    width:100%;height:11px;background:#e2e2e4;border-radius:6px;overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;width:73%;border-radius:6px;
+    background:linear-gradient(90deg,var(--green-700),var(--green-500));
+  }
+
+  .steps{padding:6px 0;}
+  .step-row{
+    display:flex;align-items:center;gap:16px;
+    padding:18px 26px;position:relative;
+  }
+  .step-row.active{background:var(--mint);}
+  .step-row:not(:last-child)::after{
+    content:'';position:absolute;left:44px;bottom:-1px;top:auto;
+    width:2px;height:0;
+  }
+  .step-icon{
+    width:36px;height:36px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;position:relative;z-index:2;
+  }
+  .step-icon.done{background:var(--green-600);}
+  .step-icon.progress{background:var(--mint-2);border:2px dotted var(--green-500);}
+  .step-icon.pending{background:#eee;border:2px dotted var(--gray-300);}
+  .step-icon.locked{background:#565f6b;}
+  .step-text{flex:1;}
+  .step-text h4{font-size:16px;font-weight:700;color:var(--dark);margin-bottom:2px;}
+  .step-text p{font-size:13.5px;color:var(--gray-500);}
+  .step-status{font-size:14px;font-weight:700;white-space:nowrap;}
+  .step-status.completed{color:var(--green-600);}
+  .step-status.inprogress{color:var(--green-600);}
+  .step-status.pending{color:var(--gray-400);}
+
+  .step-connector{
+    position:absolute;left:44px;top:54px;bottom:-18px;
+    width:2px;background:#e2e6e3;z-index:1;
+  }
+
+  .spin{animation:spin 1.4s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .bottom-bar{
+    display:flex;align-items:center;justify-content:space-between;
+    background:linear-gradient(90deg,#eef6f0,#e9f4ec);
+    padding:20px 32px;gap:20px;flex-wrap:wrap;
+  }
+  .bottom-left{display:flex;align-items:center;gap:16px;}
+  .bot-icon{
+    width:56px;height:56px;border-radius:50%;background:#0f1115;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .bottom-left h3{font-size:17px;font-weight:800;color:var(--dark);}
+  .bottom-left p{font-size:13.5px;color:var(--gray-500);margin-top:2px;}
+  .dots{display:flex;gap:6px;margin-top:10px;}
+  .dots span{width:7px;height:7px;border-radius:50%;background:var(--gray-300);}
+  .dots span.on{background:var(--green-600);}
+
+  .bottom-right{display:flex;align-items:center;gap:20px;}
+  .v-divider{width:1px;height:34px;background:#c9dccd;}
+  .cancel-btn{
+    display:flex;align-items:center;gap:10px;
+    border:1.5px solid var(--green-600);color:var(--green-700);background:#fff;
+    padding:13px 24px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;
+  }
+
+  @media(max-width:900px){
+    .main-grid{grid-template-columns:1fr;}
+    .top-row{flex-direction:column;}
+    .pdf-art{align-self:center;}
+    .top-left h1{font-size:30px;}
+  }
+  @media(max-width:560px){
+    header{padding:16px 18px;}
+    .body-area{padding:22px 16px;}
+    .top-left h1{font-size:25px;}
+    .progress-head-top{flex-direction:column;align-items:flex-start;gap:10px;}
+    .step-row{padding:14px 16px;gap:12px;}
+    .step-connector{left:34px;}
+    .bottom-bar{flex-direction:column;align-items:stretch;padding:18px;}
+    .bottom-right{justify-content:space-between;}
+    .v-divider{display:none;}
+    .cancel-btn{flex:1;justify-content:center;}
+  }
+</style>
+</head>
+<body>
+  <div class="modal">
+    <header>
+      <div class="logo"><img src="assets/logo.png" alt="Iqbal AI"></div>
+      <div class="close-x">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+    </header>
+
+    <div class="body-area">
+      <div class="top-row">
+        <div class="top-left">
+          <div class="step-label">Step 2 of 2</div>
+          <h1>Processing PDF</h1>
+          <div class="subtitle">Creating Lesson</div>
+        </div>
+
+        <div class="pdf-art">
+          <div class="ring"></div>
+          <div class="ring-line"></div>
+          <div class="pdf-doc">
+            <div class="pdf-badge">PDF</div>
+            <div class="pdf-lines">
+              <div style="width:100%;"></div>
+              <div style="width:80%;"></div>
+              <div style="width:90%;"></div>
+              <div style="width:70%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="main-grid">
+        <div class="left-panel">
+          <div class="file-preview">
+            <svg viewBox="0 0 384 512" fill="#166534"><path d="M369.9 97.9L286 14C277 5 264.8-.1 252.1-.1H48C21.5 0 0 21.5 0 48v416c0 26.5 21.5 48 48 48h288c26.5 0 48-21.5 48-48V131.9c0-12.7-5.1-25-14.1-34zM332.1 128H256V51.9l76.1 76.1zM48 464V48h160v104c0 13.3 10.7 24 24 24h104v288H48z"/><text x="70" y="330" font-size="90" fill="#fff" font-family="Arial" font-weight="bold">A</text></svg>
+            <div class="upload-badge">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="file-name">Screen 4.pdf</div>
+          <div class="file-size">13.62 MB</div>
+          <div class="secure-box">
+            <div class="shield">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z" stroke="#166534" stroke-width="1.8"/></svg>
+            </div>
+            <div>
+              <b>Your file is secure and private</b>
+              <span>We don't store your content</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="right-panel">
+          <div class="progress-head">
+            <div class="progress-head-top">
+              <div class="progress-head-left">
+                <div class="wave-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h2l2-6 3 12 3-9 2 4h6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <h2>Processing PDF...</h2>
+              </div>
+              <div class="progress-pct">73%</div>
+            </div>
+            <div class="progress-track"><div class="progress-fill"></div></div>
+          </div>
+
+          <div class="steps">
+            <div style="position:relative;">
+              <div class="step-connector" style="top:0;height:100%;"></div>
+
+              <div class="step-row">
+                <div class="step-icon done">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="step-text">
+                  <h4>File received</h4>
+                  <p>PDF successfully uploaded</p>
+                </div>
+                <div class="step-status completed">Completed</div>
+              </div>
+
+              <div class="step-row active">
+                <div class="step-icon progress">
+                  <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="1.6" fill="#166534"/><circle cx="12" cy="19" r="1.2" fill="#a7d7b3"/><circle cx="19" cy="12" r="1.4" fill="#7fc294"/><circle cx="5" cy="12" r="1.4" fill="#c8e7cf"/><circle cx="17" cy="7" r="1.2" fill="#8fcb9d"/><circle cx="7" cy="17" r="1" fill="#d9f0dd"/><circle cx="17" cy="17" r="1" fill="#d9f0dd"/><circle cx="7" cy="7" r="1" fill="#d9f0dd"/></svg>
+                </div>
+                <div class="step-text">
+                  <h4>Extracting text</h4>
+                  <p>Reading content from PDF</p>
+                </div>
+                <div class="step-status inprogress">In progress</div>
+              </div>
+
+              <div class="step-row">
+                <div class="step-icon pending">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="1.4" fill="#c3c9cf"/><circle cx="12" cy="19" r="1" fill="#e2e5e8"/><circle cx="19" cy="12" r="1.2" fill="#d6dade"/><circle cx="5" cy="12" r="1.2" fill="#d6dade"/></svg>
+                </div>
+                <div class="step-text">
+                  <h4>Indexing for chat</h4>
+                  <p>Organizing content for AI</p>
+                </div>
+                <div class="step-status pending">Pending</div>
+              </div>
+
+              <div class="step-row">
+                <div class="step-icon locked">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M8 11V7a4 4 0 018 0v4" stroke="#fff" stroke-width="1.8" fill="none"/></svg>
+                </div>
+                <div class="step-text">
+                  <h4>Preparing response</h4>
+                  <p>Almost there...</p>
+                </div>
+                <div class="step-status pending">Pending</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <div class="bot-icon">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><rect x="4" y="8" width="16" height="12" rx="3" fill="#fff"/><circle cx="9" cy="14" r="1.4" fill="#0f1115"/><circle cx="15" cy="14" r="1.4" fill="#0f1115"/><path d="M12 8V4M8 4l-2-2M16 4l2-2" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <h3>IQBAL AI is analyzing your content</h3>
+          <p>This may take a few moments</p>
+          <div class="dots"><span class="on"></span><span></span><span></span></div>
+        </div>
+      </div>
+      <div class="bottom-right">
+        <div class="v-divider"></div>
+        <button class="cancel-btn">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#166534" stroke-width="1.8"/><path d="M5.5 5.5l13 13" stroke="#166534" stroke-width="1.8"/></svg>
+          Cancel Processing
+        </button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
