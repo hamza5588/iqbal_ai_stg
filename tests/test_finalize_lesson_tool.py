@@ -202,15 +202,16 @@ def test_response_forced_to_failure_reason_when_tool_failed(monkeypatch):
     assert result.content == failure_reason
 
 
-def test_no_tool_call_and_no_update_lesson_tool_call_does_not_persist(monkeypatch):
+def test_no_explicit_tool_call_still_persists_via_deterministic_fallback(monkeypatch):
     """
-    Formerly (Group B fix, then Phase 3): a plain conversational reply on a
-    router_intent == "lesson_modification" turn was trusted as "the full lesson" and written
-    directly to last_lesson_text. That trust is exactly what caused the truncation bug found
-    live via QA sweep (a reply with only the new section silently deleted the rest of the
-    lesson). Persistence now requires an explicit update_lesson_tool call (see that tool's own
-    tests) - a plain reply with no tool call, even on a lesson_modification turn, must not
-    write anything.
+    History: Group B fix wrote response_content directly; Phase 3 kept that but re-gated it on
+    router_intent; the first version of the update_lesson_tool fix REQUIRED an explicit tool
+    call and stopped writing anything otherwise - but live end-to-end testing showed the model
+    never calls the tool on its own (0/4 turns in a real generate/save/modify/save-again run),
+    which silently regressed back to "nothing gets saved". The deterministic fallback in
+    _chat_handle_lesson_state_and_persistence closes that: a plain reply with no explicit tool
+    call, on a lesson_modification turn, still gets persisted - through update_lesson_tool's
+    own validated path (see its guard tests), not a blind write.
     """
     fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="old draft"))
     monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
@@ -233,11 +234,9 @@ def test_no_tool_call_and_no_update_lesson_tool_call_does_not_persist(monkeypatc
         router_intent="lesson_modification",
     )
 
-    # Unmodified - the model's normal reply passes through untouched either way.
     assert result.content == "Here's the updated lesson with a diagram section..."
-    # Not persisted - only update_lesson_tool writes last_lesson_text now.
-    assert fake_db._row.last_lesson_text == "old draft"
-    assert fake_db.committed is False
+    assert fake_db._row.last_lesson_text == "Here's the updated lesson with a diagram section..."
+    assert fake_db.committed is True
 
 
 def test_old_finalize_call_reordered_into_windowed_messages_does_not_leak_into_new_turn(monkeypatch):
@@ -432,20 +431,62 @@ def test_refinalize_after_tool_edit_persists_new_content_not_stale(monkeypatch):
     assert fake_db._row.last_lesson_text == full_lesson
 
 
-def test_chat_handle_lesson_state_no_longer_writes_lesson_text(monkeypatch):
-    """
-    _chat_handle_lesson_state_and_persistence must not write last_lesson_text at all anymore
-    (for ANY router_intent, including "lesson_modification") - persistence is now exclusively
-    update_lesson_tool's job. This locks in the architectural change so a future edit can't
-    accidentally reintroduce the free-text-trusting write path.
-    """
-    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="original", lesson_finalized=True))
+# --- Deterministic update_lesson_tool fallback ------------------------------------
+#
+# QA-sweep follow-up finding: the FIRST version of the update_lesson_tool fix (a system-prompt
+# instruction telling the model to call it after generating/editing a lesson) was live-tested
+# end to end (generate -> save -> modify -> save-again) and the model never called the tool
+# ONCE across all 4 turns - reproducing the exact "no lesson content yet" bug this fix was
+# supposed to solve. This is the same lesson already learned twice elsewhere in this codebase
+# (own_answer_followup_active, meta_conversation_active both exist because a prompt-only
+# instruction wasn't reliably followed either) - so _chat_handle_lesson_state_and_persistence
+# now calls update_lesson_tool itself with the model's final response as a deterministic
+# fallback whenever the model didn't call it, while the model calling it directly (if it does)
+# is still honored and not double-processed.
+
+def test_deterministic_fallback_calls_update_lesson_tool_when_model_did_not(monkeypatch):
+    """The core fix for the live 0/4-calls finding: if the model produced real lesson content
+    on a lesson_generation/lesson_modification turn but never called update_lesson_tool
+    itself, the backend must call it for them."""
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="", lesson_finalized=False))
     monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
 
-    response = AIMessage(content="I've added 5 examples to the lesson.")
+    full_lesson = "# Composting Basics\n\n" + ("Real generated lesson content. " * 20).strip()
+    response = AIMessage(content=full_lesson)
     result = rag_service._chat_handle_lesson_state_and_persistence(
         response=response,
-        response_content=response.content,
+        response_content=full_lesson,
+        messages=[HumanMessage(content="create a lesson on composting")],
+        last_user_msg_text="create a lesson on composting",
+        thread_id_str="user_1_abc",
+        provider="openai",
+        user_llm_structured_output=None,
+        config={},
+        _mark_step=lambda *a, **k: None,
+        router_intent="lesson_generation",
+    )
+    assert result.content == full_lesson  # passthrough, not forced like finalize's response
+    assert fake_db._row.last_lesson_text == full_lesson
+    assert fake_db.committed is True
+
+
+def test_deterministic_fallback_still_goes_through_the_fragment_guard(monkeypatch):
+    """
+    Critical safety property: the fallback must NOT bypass update_lesson_tool's validation -
+    it calls the SAME tool, so a short confirmation-shaped reply on a lesson_modification turn
+    still gets rejected instead of silently truncating a real saved lesson. This is what makes
+    the fallback safe to call automatically rather than reintroducing the original blind-write
+    bug under a new name.
+    """
+    original = "# Composting Basics\n\n" + ("Full original lesson content here. " * 40)
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text=original, lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+
+    short_reply = "I've added 5 examples to the lesson."
+    response = AIMessage(content=short_reply)
+    result = rag_service._chat_handle_lesson_state_and_persistence(
+        response=response,
+        response_content=short_reply,
         messages=[HumanMessage(content="add 5 examples")],
         last_user_msg_text="add 5 examples",
         thread_id_str="user_1_abc",
@@ -455,8 +496,43 @@ def test_chat_handle_lesson_state_no_longer_writes_lesson_text(monkeypatch):
         _mark_step=lambda *a, **k: None,
         router_intent="lesson_modification",
     )
+    assert result.content == short_reply  # the chat reply itself is untouched either way
+    # Original lesson must survive - NOT overwritten with the short confirmation text.
+    assert fake_db._row.last_lesson_text == original
+    assert fake_db.committed is False
+
+
+def test_deterministic_fallback_skipped_when_model_already_called_the_tool(monkeypatch):
+    """If the model DID call update_lesson_tool itself this turn (a ToolMessage for it is
+    present), the backend must not call it again - avoids a redundant second DB write."""
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="whatever the tool call already wrote"))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+
+    response = AIMessage(content="I've added 5 examples to the lesson.")
+    messages = [
+        HumanMessage(content="add 5 examples"),
+        AIMessage(content="", tool_calls=[{"name": "update_lesson_tool", "args": {}, "id": "call_1"}]),
+        ToolMessage(content=json.dumps({"success": True, "reason": "Lesson draft updated."}),
+                    name="update_lesson_tool", tool_call_id="call_1"),
+        response,
+    ]
+    result = rag_service._chat_handle_lesson_state_and_persistence(
+        response=response,
+        response_content=response.content,
+        messages=messages,
+        last_user_msg_text="add 5 examples",
+        thread_id_str="user_1_abc",
+        provider="openai",
+        user_llm_structured_output=None,
+        config={},
+        _mark_step=lambda *a, **k: None,
+        turn_scope_messages=messages,
+        router_intent="lesson_modification",
+    )
     assert result.content == "I've added 5 examples to the lesson."
-    assert fake_db._row.last_lesson_text == "original"
+    # Unchanged from what the (simulated) real tool call already wrote - the fallback must not
+    # have run a second, redundant write with the short chat-reply text.
+    assert fake_db._row.last_lesson_text == "whatever the tool call already wrote"
     assert fake_db.committed is False
 
 

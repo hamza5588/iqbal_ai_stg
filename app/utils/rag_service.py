@@ -5423,6 +5423,7 @@ def _chat_handle_lesson_state_and_persistence(
     current_turn_tail = scope_source[last_human_idx + 1:] if last_human_idx >= 0 else scope_source
 
     finalize_tool_result = None
+    update_lesson_tool_called = False
     for m in current_turn_tail:
         if isinstance(m, ToolMessage) and getattr(m, "name", None) == "finalize_lesson_tool":
             try:
@@ -5432,6 +5433,8 @@ def _chat_handle_lesson_state_and_persistence(
                 finalize_tool_result = {"success": False, "reason": "Internal error reading save result."}
             # Keep scanning: if the model called it more than once this turn, the last
             # call's outcome is the one that matches the DB's current state.
+        if isinstance(m, ToolMessage) and getattr(m, "name", None) == "update_lesson_tool":
+            update_lesson_tool_called = True
 
     if finalize_tool_result is not None:
         # Backend is authoritative for what the user is told: the tool already performed
@@ -5445,19 +5448,29 @@ def _chat_handle_lesson_state_and_persistence(
                 finalize_tool_result.get("reason") or "The lesson could not be saved."
             )
             _mark_step("finalize_lesson_tool_failure")
-    # Lesson draft persistence (creation AND every later edit) now happens exclusively via an
-    # explicit update_lesson_tool call (see its docstring above finalize_lesson_tool) instead
-    # of inferring "the full lesson" from whatever the free-text chat reply said. The previous
-    # version of this branch blindly assigned the raw chat reply text onto last_lesson_text for
-    # every router_intent == "lesson_modification" turn, trusting a system-prompt instruction
-    # to make the model always re-emit the complete lesson body in its reply - that trust did
-    # not hold in practice (confirmed live via QA sweep: a natural "add a section about X"
-    # reply containing only the new section silently truncated a saved lesson down to that one
-    # fragment). It also never covered the very first lesson_generation turn at all, so an
-    # immediate "save this" right after generating a lesson was rejected as having no content
-    # to save. A structured tool call with server-side validation (see update_lesson_tool)
-    # replaces both gaps: the model must explicitly pass the full lesson text as a validated
-    # argument, and it's called after generation as well as every edit.
+    elif (
+        thread_id_str
+        and response_content
+        and router_intent in ("lesson_generation", "lesson_modification")
+        and not update_lesson_tool_called
+    ):
+        # Deterministic guarantee, not just a prompt instruction: confirmed live that telling
+        # the model to call update_lesson_tool itself was NOT reliably followed - across a full
+        # generate -> save -> modify -> save-again test, the model produced real lesson content
+        # every time but never once called the tool (0/4 turns), reproducing the "no lesson
+        # content yet" failure this whole fix was meant to solve. Same lesson already learned
+        # twice elsewhere in this codebase (own_answer_followup_active, meta_conversation_active
+        # both exist because a prompt-only instruction wasn't enough on its own) - so instead of
+        # hoping, call update_lesson_tool ourselves with the model's own final response as the
+        # full lesson text whenever the model didn't call it. This keeps the validated path (the
+        # fragment-rejection guard) as the ONLY way last_lesson_text changes - never a blind
+        # write - while guaranteeing that path actually runs.
+        try:
+            update_lesson_tool.invoke({"full_lesson_text": response_content, "thread_id": thread_id_str})
+        except Exception as e:
+            logger.warning("Deterministic update_lesson_tool call failed for thread_id=%s: %s", thread_id_str, e)
+        _mark_step("persist_lesson_via_tool_fallback")
+
     return response
 
 
