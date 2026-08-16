@@ -8,7 +8,7 @@ import re
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Dict, Optional, TypedDict, List, Tuple, NamedTuple
+from typing import Annotated, Any, Dict, Literal, Optional, TypedDict, List, Tuple, NamedTuple
 
 from pydantic import BaseModel, Field
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -652,6 +652,22 @@ def _find_last_substantive_ai_answer(messages: List[BaseMessage]) -> str:
     return ""
 
 
+def _find_last_human_message_index_and_text(messages: List[BaseMessage]) -> Tuple[int, str]:
+    """
+    Scan backward for the most recent HumanMessage, returning (index, text).
+
+    This exact backward scan was duplicated across several call sites in this file (tool-round
+    counting, prefetch gating, tool routing, turn-intent cache keys) as near-identical copies.
+    Factored out to a single implementation so all callers agree on what "the current turn's
+    user message" means. Returns (-1, "") when no HumanMessage is present.
+    """
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            text = (getattr(messages[i], "content", "") or "").strip()
+            return i, text
+    return -1, ""
+
+
 def _is_underspecified_rag_query(text: str) -> bool:
     """True when the user message is too vague for mandatory prefetch (e.g. single word 'explain')."""
     t = (text or "").strip().lower()
@@ -672,6 +688,74 @@ def _is_rag_recovery_user_message(text: str) -> bool:
     """True for internal recovery prompts that must not trigger mandatory prefetch."""
     low = (text or "").lower()
     return "previous response was empty" in low or "re-run the needed tools" in low
+
+
+_META_CONVERSATION_TEXT_PATTERNS = (
+    r"\bwhat\s+(did|do)\s+i\s+ask\b",
+    r"\bwhat\s+i\s+ask\b",
+    r"\blast\s+question\b",
+    r"\bpaste\s+exactly\b",
+    r"\bwhat\s+were\s+my\s+(last\s+)?\d*\s*questions?\b",
+)
+
+
+def _looks_like_meta_conversation_text(text: str) -> bool:
+    """Best-effort only (the router is the primary classifier) - used to skip past PRIOR
+    meta-conversation turns while walking backward for the last REAL question, so a chain of
+    meta-questions resolves to the real question beneath them, not to another meta-question."""
+    if not text:
+        return False
+    normalized = re.sub(r"\s+", " ", str(text).strip().lower())
+    return any(re.search(p, normalized) for p in _META_CONVERSATION_TEXT_PATTERNS)
+
+
+def _find_last_n_real_user_questions(messages: List[BaseMessage], n: int = 1) -> List[str]:
+    """
+    Scan messages STRICTLY BACKWARD for up to n most recent real (non-meta-conversation,
+    non-internal-recovery) HumanMessage texts, most-recent-first. Caller MUST pass messages
+    from BEFORE the current in-flight meta-question (e.g. raw_messages[:last_human_idx_pf],
+    same slicing _chat_build_system_message already uses for own_answer_followup) so the
+    question asking "what did I ask" is never returned as the answer to itself.
+    """
+    out: List[str] = []
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            t = (getattr(m, "content", "") or "").strip()
+            if not t or _looks_like_meta_conversation_text(t) or _is_rag_recovery_user_message(t):
+                continue
+            out.append(t)
+            if len(out) >= n:
+                break
+    return out
+
+
+def _find_last_real_user_question(messages: List[BaseMessage]) -> str:
+    found = _find_last_n_real_user_questions(messages, n=1)
+    return found[0] if found else ""
+
+
+def _build_meta_conversation_prefetch_blob(router_output: "RouterOutput", search_range: List[BaseMessage]) -> str:
+    n = router_output.meta_conversation_n or 1
+    if router_output.meta_conversation_scope in ("exact_text", "last_question", None):
+        n = 1
+    questions = _find_last_n_real_user_questions(search_range, n=max(n, 1))
+    if not questions:
+        return (
+            "## Meta-conversation note\nThe user is asking about earlier turns, but no earlier "
+            "real question was found. Say plainly that there is no earlier question in this "
+            "conversation to refer to."
+        )
+    body = (
+        f'"{questions[0]}"' if len(questions) == 1
+        else "\n".join(f"{i+1}. \"{q}\"" for i, q in enumerate(reversed(questions)))
+    )
+    return (
+        "## Exact stored text of the user's earlier question(s) (verbatim from conversation "
+        "history — NOT a document search, NOT an LLM reconstruction)\n\n" + body +
+        "\n\nAnswer using ONLY the exact text above; quote it back verbatim (or summarize "
+        "precisely if asked to). If asked to 'paste exactly', reproduce it character-for-"
+        "character. Do not search the document for this — it is not a document question."
+    )
 
 
 def _expand_query_for_prefetch(text: str, user_id: Optional[int]) -> str:
@@ -3621,6 +3705,11 @@ class ChatState(TypedDict):
     lesson_in_progress: bool
     lesson_finalized: bool
     last_lesson_text: str
+    router_intent: str
+    router_intent_turn_key: str
+    router_requested_brevity: bool
+    router_meta_scope: Optional[str]
+    router_meta_n: Optional[int]
 
 class LessonState(TypedDict):
     lesson_in_progress: bool
@@ -3887,6 +3976,171 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
     return current, current_response
 
 
+# -------------------
+# Turn-intent router (Phase 1 of the LLM-driven routing rework)
+# -------------------
+class RouterOutput(BaseModel):
+    """Structured verdict for the turn-intent router (Phase 1 of the routing rework)."""
+
+    intent: Literal[
+        "document_qa", "lesson_generation", "own_answer_followup",
+        "meta_conversation", "greeting_casual", "clarification",
+        "general_knowledge_qa", "lesson_modification", "lesson_qa", "lesson_save",
+    ] = Field(description="Single best-fit label for what this user turn is asking for.")
+    requested_brevity: bool = Field(
+        default=False,
+        description=(
+            "True only if the user's current message explicitly asks for a short/brief/"
+            "one-line/concise answer (e.g. 'just answer in one line', 'briefly'), overriding "
+            "default formatting verbosity for this reply only."
+        ),
+    )
+    meta_conversation_scope: Optional[Literal["last_question", "last_n_questions", "exact_text", "other"]] = Field(
+        default=None, description="Only set when intent == meta_conversation."
+    )
+    meta_conversation_n: Optional[int] = Field(
+        default=None, description="Only set when meta_conversation_scope == last_n_questions."
+    )
+    reasoning: str = Field(default="", description="One-sentence justification, logs only.")
+
+
+RAG_LLM_ROUTER_ENABLED_ENV = "RAG_LLM_ROUTER_ENABLED"
+
+_ROUTER_PROMPT = """You are the turn-intent router for a document-grounded (RAG) teaching assistant chat. \
+Classify the user's CURRENT message into exactly one intent, using the recent conversation for context.
+
+Intents:
+- document_qa: a factual/explanatory question that should be answered from the uploaded document (default when unsure and a document is present).
+- lesson_generation: user wants a new lesson/lecture created (e.g. "create a lesson on X", "make a lecture about Y").
+- own_answer_followup: user is asking the assistant to explain/justify/clarify a specific detail from the ASSISTANT'S OWN previous answer (e.g. "explain why 2x", "how did you get that number", "why not x instead").
+- meta_conversation: user is asking about the CONVERSATION ITSELF (what they asked before, to repeat/paste their own earlier question) - NOT a question about the document's content.
+- greeting_casual: greetings, thanks, small talk with no substantive request.
+- clarification: the message is too vague/underspecified to act on (e.g. a single bare word like "explain" or "what").
+- general_knowledge_qa: user explicitly wants an answer from general knowledge, not the document.
+- lesson_modification: user wants to change/edit a lesson that is being built.
+- lesson_qa: a question specifically about a lesson currently being built/discussed (not the source document).
+- lesson_save: user wants to save/finalize/lock in the current lesson.
+
+Also set requested_brevity=true ONLY if the CURRENT message explicitly asks for a short/brief/one-line/concise answer.
+
+Examples:
+1. "what is zero discriminat just answer main one line" -> intent=document_qa, requested_brevity=true (asks a document question but explicitly wants a one-line answer)
+2. "what i ask last question?" -> intent=meta_conversation, meta_conversation_scope=last_question
+3. "paste exactly to me what ia sk" -> intent=meta_conversation, meta_conversation_scope=exact_text (typo for "i ask"; still a meta-conversation request)
+4. "what were my last 3 questions" -> intent=meta_conversation, meta_conversation_scope=last_n_questions, meta_conversation_n=3
+5. "create a lesson on photosynthesis" -> intent=lesson_generation
+6. "explain why you used 2x there" -> intent=own_answer_followup
+7. "hi there" -> intent=greeting_casual
+8. "explain" -> intent=clarification (too vague on its own)
+9. "what is the capital of France" (no document context relevant) -> intent=general_knowledge_qa
+10. "save this as a lesson" -> intent=lesson_save
+
+RECENT CONVERSATION (most recent last):
+---
+{conversation_context}
+---
+
+CURRENT USER MESSAGE:
+---
+{current_message}
+---
+
+Has a document been uploaded for this conversation: {has_document}
+
+Return your structured verdict now."""
+
+
+def _get_router_llm(user_id: Optional[int], provider: str) -> Any:
+    """
+    Own lightweight LLM instance for turn-intent classification, kept separate from the main
+    tools-bound turn LLM (same precedent as _check_if_content_is_lesson's dedicated classifier
+    LLM). Cached under a distinct key suffix so it doesn't collide with/get evicted alongside
+    the main per-turn LLM cache entries.
+    """
+    cache_key = f"{user_id}_{provider}_router_v1"
+    with _llm_cache_lock:
+        if cache_key not in _llm_cache:
+            _llm_cache[cache_key] = get_chat_model(
+                user_id=user_id,
+                timeout=int(os.getenv("RAG_ROUTER_TIMEOUT_SECONDS", "20")),
+                temperature=0,
+            )
+        return _llm_cache[cache_key]
+
+
+def _router_fallback_from_regex(text: str) -> "RouterOutput":
+    """
+    Safety net: reconstruct pre-Phase-1 branch priority using the existing regex classifiers,
+    which stay in the file specifically for this (moved from primary path to fallback-only, not
+    deleted). KNOWN GAP: this fallback has no meta-conversation detector, so a meta-conversation
+    message routed through here falls through to document_qa (see test coverage) - the router
+    LLM is the only classifier that recognizes meta_conversation; this fallback only fires when
+    the router itself is disabled or errors out.
+    """
+    if _is_lesson_creation_request(text):
+        return RouterOutput(intent="lesson_generation")
+    if _is_own_answer_followup_request(text):
+        return RouterOutput(intent="own_answer_followup")
+    if _is_underspecified_rag_query(text):
+        return RouterOutput(intent="clarification")
+    return RouterOutput(intent="document_qa")
+
+
+def _build_router_context_snippet(raw_messages: List[BaseMessage], max_messages: int = 6, max_chars: int = 400) -> str:
+    """Small recent-history snippet so the router can resolve ambiguous references."""
+    lines: List[str] = []
+    for m in raw_messages[-max_messages:]:
+        if isinstance(m, HumanMessage):
+            role = "User"
+        elif isinstance(m, AIMessage):
+            if getattr(m, "tool_calls", None):
+                continue
+            role = "Assistant"
+        else:
+            continue
+        content = (getattr(m, "content", "") or "").strip()
+        if not content:
+            continue
+        if len(content) > max_chars:
+            content = content[:max_chars] + "...[truncated]"
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines) if lines else "(no prior conversation)"
+
+
+def _classify_turn_intent(
+    *,
+    last_user_msg_text: str,
+    raw_messages: List[BaseMessage],
+    user_id: Optional[int],
+    provider: str,
+    has_document: bool,
+) -> "RouterOutput":
+    """
+    LLM-driven turn-intent classification (Phase 1). Falls back to the regex heuristics on any
+    failure or when disabled via RAG_LLM_ROUTER_ENABLED - never hard-fails the turn.
+    """
+    if os.getenv(RAG_LLM_ROUTER_ENABLED_ENV, "true").lower() not in ("true", "1", "yes"):
+        return _router_fallback_from_regex(last_user_msg_text)
+    try:
+        router_llm = _get_router_llm(user_id, provider)
+        prompt = _ROUTER_PROMPT.format(
+            conversation_context=_build_router_context_snippet(raw_messages),
+            current_message=last_user_msg_text,
+            has_document=has_document,
+        )
+        if provider == "groq":
+            groq_rate_limiter.wait_if_needed()
+        verdict = router_llm.with_structured_output(RouterOutput).invoke(prompt)
+        if provider == "groq":
+            groq_rate_limiter.record_success()
+        if not isinstance(verdict, RouterOutput):
+            return _router_fallback_from_regex(last_user_msg_text)
+        return verdict
+    except Exception as ex:
+        logger.warning("Turn-intent router failed, falling back to regex heuristic: %s", ex, exc_info=True)
+        return _router_fallback_from_regex(last_user_msg_text)
+
+
 # Admin-editable RAG chat system bodies (stored in system_settings). Placeholders: {filename}, {page_info}, {thread_id}
 RAG_SYSTEM_SETTING_KEY_WITH_PDF = "rag_chat_system_body_with_pdf"
 RAG_SYSTEM_SETTING_KEY_NO_PDF = "rag_chat_system_body_no_pdf"
@@ -3899,7 +4153,12 @@ RAG_REPLY_FORMATTING_INSTRUCTIONS = (
     "single line (do not split \\[ and \\] onto separate paragraphs from the formula). "
     "Never use bare square brackets [ ... ] to wrap an equation — only \\( \\) or \\[ \\] are valid math delimiters. "
     "Never output LaTeX commands (e.g. \\text, \\frac, \\sqrt) as plain text outside a valid math delimiter. "
-    "When the user asks for more detail or expansion, preserve existing equation delimiters and math formatting style."
+    "When the user asks for more detail or expansion, preserve existing equation delimiters and math formatting style. "
+    "Precedence: if the user's current message explicitly asks for a short, brief, one-line, or concise answer, "
+    "that request WINS over every formatting rule above and over any admin/teacher instruction requiring headers, "
+    "bold section titles, a minimum number of sections, or mandatory spacing — give the short answer the user asked "
+    "for instead. A generic non-answer or closing remark is never an acceptable way to resolve a conflict between "
+    "formatting rules and the user's request; always give the real answer."
 )
 
 DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
@@ -4031,6 +4290,9 @@ class _ChatTurnSystemPrep(NamedTuple):
     tool_round_limit_reached: bool
     max_tool_rounds_per_turn: int
     own_answer_followup_active: bool = False
+    router_intent: str = "document_qa"
+    meta_conversation_active: bool = False
+    requested_brevity: bool = False
 
 
 class _ChatLlmBundle(NamedTuple):
@@ -4050,11 +4312,7 @@ def _chat_safe_int_env(name: str, default: int) -> int:
 def _chat_tool_outputs_in_current_turn(messages: List[BaseMessage]) -> bool:
     if not messages:
         return False
-    last_human_idx = -1
-    for i in range(len(messages) - 1, -1, -1):
-        if isinstance(messages[i], HumanMessage):
-            last_human_idx = i
-            break
+    last_human_idx, _ = _find_last_human_message_index_and_text(messages)
     tail = messages[last_human_idx + 1 :] if last_human_idx >= 0 else messages
     return any(isinstance(m, ToolMessage) for m in tail)
 
@@ -4062,11 +4320,7 @@ def _chat_tool_outputs_in_current_turn(messages: List[BaseMessage]) -> bool:
 def _chat_tool_rounds_in_current_turn(messages: List[BaseMessage]) -> int:
     if not messages:
         return 0
-    last_human_idx = -1
-    for i in range(len(messages) - 1, -1, -1):
-        if isinstance(messages[i], HumanMessage):
-            last_human_idx = i
-            break
+    last_human_idx, _ = _find_last_human_message_index_and_text(messages)
     tail = messages[last_human_idx + 1 :] if last_human_idx >= 0 else messages
     rounds = 0
     for m in tail:
@@ -4236,6 +4490,7 @@ def _chat_build_system_message(
     custom_prompt: Optional[str],
     token_pressure_active: bool,
     short_mode_active: bool,
+    router_output: "RouterOutput",
 ) -> _ChatTurnSystemPrep:
     """
     Build system message (admin + teacher + optional prefetch + summary + turn limits),
@@ -4307,14 +4562,12 @@ def _chat_build_system_message(
 
     # Progressive message reduction on token errors
     raw_messages = state.get("messages", []) or []
-    last_user_msg_text = ""
-    for msg in reversed(raw_messages):
-        if isinstance(msg, HumanMessage):
-            last_user_msg_text = (getattr(msg, "content", "") or "").strip()
-            break
-    is_lesson_creation_turn = _is_lesson_creation_request(last_user_msg_text)
+    _, last_user_msg_text = _find_last_human_message_index_and_text(raw_messages)
+    is_lesson_creation_turn = router_output.intent == "lesson_generation"
+    requested_brevity = bool(getattr(router_output, "requested_brevity", False))
     prefetch_evidence_for_eval = ""
     own_answer_followup_active = False
+    meta_conversation_active = False
 
     # P0-4 / P0-5: server-side prefetch so answers are grounded even if the model skips tools.
     enable_prefetch = os.getenv("RAG_MANDATORY_PREFETCH", "true").lower() in ("true", "1", "yes")
@@ -4326,19 +4579,22 @@ def _chat_build_system_message(
         and not token_pressure_active
         and not _is_rag_recovery_user_message(last_user_msg_text)
     ):
-        last_human_idx_pf = -1
-        for i in range(len(raw_messages) - 1, -1, -1):
-            if isinstance(raw_messages[i], HumanMessage):
-                last_human_idx_pf = i
-                break
+        last_human_idx_pf, _ = _find_last_human_message_index_and_text(raw_messages)
         tail_pf = raw_messages[last_human_idx_pf + 1:] if last_human_idx_pf >= 0 else raw_messages
         tail_has_tool = any(isinstance(m, ToolMessage) for m in tail_pf)
-        if not tail_has_tool and not _is_underspecified_rag_query(last_user_msg_text):
+        # Underspecified queries and greeting/clarification turns never warrant an automatic
+        # document search - for greeting_casual/clarification this is intentional: no tool call
+        # is attempted at all, the prefetch blob stays empty.
+        skip_prefetch = _is_underspecified_rag_query(last_user_msg_text) or router_output.intent in (
+            "greeting_casual",
+            "clarification",
+        )
+        if not tail_has_tool and not skip_prefetch:
             prefetch_blob = ""
             try:
                 if is_lesson_creation_turn:
                     prefetch_blob = _prefetch_lecture_evidence_for_chat(thread_id_str, last_user_msg_text)
-                elif _is_own_answer_followup_request(last_user_msg_text):
+                elif router_output.intent == "own_answer_followup":
                     # Deterministic fallback for "explain why 2x" style follow-ups: don't rely
                     # on the model to remember/prioritize its own prior answer from the trimmed
                     # conversation window - hand it the answer directly so it physically cannot
@@ -4368,6 +4624,16 @@ def _chat_build_system_message(
                             "not re-save or re-finalize anything; the user asked a substantive "
                             "question and expects a real, direct answer."
                         )
+                elif router_output.intent == "meta_conversation":
+                    # Bug B fix: the user is asking about the conversation itself (e.g. "what did
+                    # I ask last question?"), NOT about the document. rag_tool must NEVER be
+                    # invoked here - a PDF search against the meta-question text itself is what
+                    # produced the canned "misunderstanding" replies in production. Instead,
+                    # deterministically pull the exact stored text of the earlier real question(s)
+                    # and hard-suppress tool calling for the rest of this turn (below).
+                    meta_conversation_active = True
+                    search_range = raw_messages[:last_human_idx_pf] if last_human_idx_pf >= 0 else raw_messages
+                    prefetch_blob = _build_meta_conversation_prefetch_blob(router_output, search_range)
                 else:
                     pf_user_id = _get_user_id_for_thread(thread_id_str)
                     out_pf = rag_tool.invoke(
@@ -4453,6 +4719,20 @@ def _chat_build_system_message(
             + "\n\nTOKEN PRESSURE SAFE MODE: do NOT call tools this turn. "
               "Respond directly and keep the answer within 2-3 short sentences."
         )
+    if requested_brevity:
+        # Bug A fix: appended LAST (same pattern as short_mode/token_pressure above) so it wins
+        # via recency over the admin's custom prompt - e.g. a LOCKED "always include a bold
+        # section header" rule that directly conflicts with the user's own "just answer in one
+        # line" request. Without this, the model was observed bailing into generic filler rather
+        # than resolving the conflict.
+        system_message = SystemMessage(
+            content=system_message.content
+            + "\n\nUSER BREVITY OVERRIDE (this turn only): the user explicitly asked for a short "
+              "answer. For THIS reply, honor it exactly — answer in the requested short form and "
+              "suspend any formatting rules above (headers, bold section titles, minimum section "
+              "counts, mandatory spacing) that would conflict with a short answer. Give the real "
+              "answer; do not deflect with a generic closing remark."
+        )
 
     return _ChatTurnSystemPrep(
         system_message=system_message,
@@ -4464,6 +4744,9 @@ def _chat_build_system_message(
         tool_round_limit_reached=tool_round_limit_reached,
         max_tool_rounds_per_turn=max_tool_rounds_per_turn,
         own_answer_followup_active=own_answer_followup_active,
+        router_intent=router_output.intent,
+        meta_conversation_active=meta_conversation_active,
+        requested_brevity=requested_brevity,
     )
 
 
@@ -4760,6 +5043,9 @@ def _chat_invoke_llm_with_retry(
     tool_rounds_current_turn = prep.tool_rounds_current_turn
     max_tool_rounds_per_turn = prep.max_tool_rounds_per_turn
     own_answer_followup_active = prep.own_answer_followup_active
+    router_intent = prep.router_intent
+    meta_conversation_active = prep.meta_conversation_active
+    requested_brevity = prep.requested_brevity
 
     mode_flags = [short_mode_active, token_pressure_active]
     force_flat_qwen_turn = False
@@ -4813,7 +5099,7 @@ def _chat_invoke_llm_with_retry(
                 groq_rate_limiter.wait_if_needed()
             if attempt == 0:
                 _set_chat_progress(thread_id_str, "✍️ Composing your answer...")
-            if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1] or own_answer_followup_active:
+            if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1] or own_answer_followup_active or meta_conversation_active:
                 response = user_llm.invoke(messages, config=config)
             else:
                 response = user_llm_with_tools.invoke(messages, config=config)
@@ -5210,6 +5496,29 @@ def chat_node(state: ChatState, config=None):
     if llm_bundle.error_payload is not None:
         return llm_bundle.error_payload
 
+    # Turn-intent router (Phase 1): classify once per user turn and cache the verdict on
+    # ChatState so the model<->tools loop within the SAME turn (see _tool_router below) doesn't
+    # re-classify on every re-entry into this node.
+    raw_messages_for_routing = state.get("messages", []) or []
+    last_human_idx, last_human_text = _find_last_human_message_index_and_text(raw_messages_for_routing)
+    turn_key = f"{last_human_idx}:{last_human_text}"
+    if state.get("router_intent_turn_key") == turn_key and state.get("router_intent"):
+        router_output = RouterOutput(
+            intent=state.get("router_intent", "document_qa"),
+            requested_brevity=bool(state.get("router_requested_brevity", False)),
+            meta_conversation_scope=state.get("router_meta_scope"),
+            meta_conversation_n=state.get("router_meta_n"),
+        )
+    else:
+        router_output = _classify_turn_intent(
+            last_user_msg_text=last_human_text,
+            raw_messages=raw_messages_for_routing,
+            user_id=user_id,
+            provider=provider,
+            has_document=has_document,
+        )
+    _mark_step("classify_turn_intent")
+
     custom_prompt = _get_rag_prompt(user_id, thread_id_str)
     prep = _chat_build_system_message(
         state,
@@ -5218,9 +5527,10 @@ def chat_node(state: ChatState, config=None):
         custom_prompt=custom_prompt,
         token_pressure_active=token_pressure_active,
         short_mode_active=short_mode_active,
+        router_output=router_output,
     )
 
-    return _chat_invoke_llm_with_retry(
+    result = _chat_invoke_llm_with_retry(
         state=state,
         config=config,
         thread_id_str=thread_id_str,
@@ -5237,6 +5547,17 @@ def chat_node(state: ChatState, config=None):
         perf_started=perf_started,
         _mark_step=_mark_step,
     )
+    # Single injection point: attach the router verdict to whatever _chat_invoke_llm_with_retry
+    # returned (success or one of its terminal error payloads) so it's cached on ChatState for
+    # the next graph step, without touching that function's internal early-return sites.
+    if isinstance(result, dict):
+        result = dict(result)
+        result["router_intent"] = router_output.intent
+        result["router_intent_turn_key"] = turn_key
+        result["router_requested_brevity"] = router_output.requested_brevity
+        result["router_meta_scope"] = router_output.meta_conversation_scope
+        result["router_meta_n"] = router_output.meta_conversation_n
+    return result
 
 
 
@@ -5287,7 +5608,7 @@ def _tool_router(state: ChatState):
     if not msgs:
         return "end"
 
-    from langchain_core.messages import AIMessage, HumanMessage
+    from langchain_core.messages import AIMessage
 
     def _safe_int_env(name: str, default: int) -> int:
         try:
@@ -5295,12 +5616,9 @@ def _tool_router(state: ChatState):
         except Exception:
             return default
 
-    latest_user_text = ""
-    for i in range(len(msgs) - 1, -1, -1):
-        if isinstance(msgs[i], HumanMessage):
-            latest_user_text = (getattr(msgs[i], "content", "") or "").strip()
-            break
-    is_lesson_creation_turn = _is_lesson_creation_request(latest_user_text)
+    # Defensive default "document_qa" covers old in-flight checkpoints created before this
+    # field existed, and any state where the router hasn't run yet for this turn.
+    is_lesson_creation_turn = state.get("router_intent", "document_qa") == "lesson_generation"
 
     if is_lesson_creation_turn:
         max_tool_rounds_per_turn = max(
@@ -5316,11 +5634,7 @@ def _tool_router(state: ChatState):
     # Turn-scoped tool routing:
     # Count tool rounds in this turn as the number of AI messages containing
     # tool_calls after the latest HumanMessage.
-    last_human_idx = -1
-    for i in range(len(msgs) - 1, -1, -1):
-        if isinstance(msgs[i], HumanMessage):
-            last_human_idx = i
-            break
+    last_human_idx, _ = _find_last_human_message_index_and_text(msgs)
     tail = msgs[last_human_idx + 1:] if last_human_idx >= 0 else msgs
     tool_rounds_current_turn = sum(
         1 for m in tail if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
