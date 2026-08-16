@@ -5693,14 +5693,21 @@ def _chat_limit_messages_for_llm(
             i -= 1
 
     if latest_human_idx is not None and latest_human_idx not in included_indices:
-        # Place the user message before the first assistant/tool message in the window.
-        insert_at = 0
-        for j, m in enumerate(limited_messages):
-            if isinstance(m, (AIMessage, ToolMessage)):
-                insert_at = j
-                break
-            insert_at = j + 1
-        limited_messages.insert(insert_at, conversation_messages[latest_human_idx])
+        # latest_human_idx is, by construction, the index of the chronologically LAST human
+        # message in the full conversation - every other message that made it into
+        # limited_messages came from an earlier index (the walk-backward loop above never
+        # revisits it). It must therefore always go at the END of limited_messages.
+        #
+        # Production bug (confirmed live via QA sweep): the previous logic inserted it
+        # "before the first AIMessage/ToolMessage found in the kept window" instead - which,
+        # for a normal multi-turn conversation, is near the START of the window, not the end.
+        # That silently reordered the transcript actually sent to the LLM, e.g.
+        # [..., Q2, Q5, A2, Q3, A3, Q4, A4] instead of [..., Q2, A2, Q3, A3, Q4, A4, Q5] - the
+        # model then answered A4's stale topic (the most recent message in ITS view) instead
+        # of Q5, the user's real current question, with no error or wrong routing anywhere
+        # else in the stack (router, tool selection, and persistence were all already correct
+        # for this same case - only the message order the LLM actually read was wrong).
+        limited_messages.append(conversation_messages[latest_human_idx])
         included_indices.add(latest_human_idx)
 
     logger.debug(
