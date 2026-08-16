@@ -59,12 +59,30 @@ def test_backend_last_lesson_text_heuristic_removed():
     assert BUGGY_HEURISTIC_BACKEND not in RAG_SERVICE_SRC
 
 
-def test_backend_last_lesson_text_always_synced_when_not_finalized():
-    assert re.search(
-        r'if thread_row and not getattr\(thread_row, "lesson_finalized", False\):\s*'
-        r'(?:#[^\n]*\n\s*)*thread_row\.last_lesson_text = response_content',
-        RAG_SERVICE_SRC,
-    ), "last_lesson_text must sync on every in-progress turn, not just ones matching a shape heuristic"
+def test_backend_last_lesson_text_syncs_on_lesson_modification_turns():
+    """
+    Supersedes the original Group B assertion (which required the write to be gated on
+    `not thread_row.lesson_finalized`). Phase 3 (PHASE3_DESIGN.md) replaced that gate with
+    `router_intent == "lesson_modification"`: once a lesson is finalized, the old gate froze
+    last_lesson_text forever, so a later "add 5 examples" edit was silently discarded and a
+    subsequent re-finalize just re-persisted stale content. Gating on intent instead means the
+    write fires the same way before and after finalize, and - unlike the old gate - never fires
+    for unrelated intents (lesson_qa, meta_conversation, document_qa, etc.) regardless of
+    finalize status. This locks in that invariant: still no length/shape heuristic (Group B's
+    original point), and no longer conditioned on lesson_finalized at all.
+    """
+    marker = 'router_intent == "lesson_modification":'
+    idx = RAG_SERVICE_SRC.find(marker)
+    assert idx != -1, "the lesson_modification-gated persistence branch was not found"
+    window = RAG_SERVICE_SRC[idx: idx + 2000]
+    assert "thread_row.last_lesson_text = response_content" in window, (
+        "last_lesson_text must still sync (unconditionally, no shape heuristic) on "
+        "lesson_modification turns"
+    )
+    assert 'not getattr(thread_row, "lesson_finalized"' not in window, (
+        "the write must no longer be additionally gated on lesson_finalized - Phase 3 "
+        "intentionally removed that gate so post-finalize edits are captured too"
+    )
 
 
 # --- Bug #7: saved lesson name must use the teacher's explicit title -------
