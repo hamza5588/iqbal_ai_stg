@@ -5436,19 +5436,17 @@ def _chat_handle_lesson_state_and_persistence(
         if isinstance(m, ToolMessage) and getattr(m, "name", None) == "update_lesson_tool":
             update_lesson_tool_called = True
 
-    if finalize_tool_result is not None:
-        # Backend is authoritative for what the user is told: the tool already performed
-        # (or refused) the real DB write, so the visible reply is forced to match that
-        # outcome exactly - the model's own wording is never trusted for a save/fail claim.
-        if finalize_tool_result.get("success"):
-            response.content = "Lesson finalized and saved. You can download it now."
-            _mark_step("finalize_lesson_tool_success")
-        else:
-            response.content = (
-                finalize_tool_result.get("reason") or "The lesson could not be saved."
-            )
-            _mark_step("finalize_lesson_tool_failure")
-    elif (
+    # Deliberately NOT an elif against the finalize_tool_result branch below: confirmed live
+    # that on a genuine lesson_modification turn, the model sometimes ALSO calls
+    # finalize_lesson_tool on its own initiative (e.g. reflexively re-saving after an edit)
+    # even though the router correctly classified the turn as modification, not save. With an
+    # elif, that finalize call short-circuited this branch entirely, silently discarding the
+    # edit - finalize_lesson_tool just re-persisted the OLD pre-edit content while the forced
+    # "Lesson finalized and saved" message told the user the edit was saved. Running this
+    # unconditionally first means the edit is captured (through the validated path) regardless
+    # of what else the model called this same turn, and if finalize_lesson_tool's result is
+    # then reported below, the DB it's describing already reflects the fresh content.
+    if (
         thread_id_str
         and response_content
         and router_intent in ("lesson_generation", "lesson_modification")
@@ -5470,6 +5468,19 @@ def _chat_handle_lesson_state_and_persistence(
         except Exception as e:
             logger.warning("Deterministic update_lesson_tool call failed for thread_id=%s: %s", thread_id_str, e)
         _mark_step("persist_lesson_via_tool_fallback")
+
+    if finalize_tool_result is not None:
+        # Backend is authoritative for what the user is told: the tool already performed
+        # (or refused) the real DB write, so the visible reply is forced to match that
+        # outcome exactly - the model's own wording is never trusted for a save/fail claim.
+        if finalize_tool_result.get("success"):
+            response.content = "Lesson finalized and saved. You can download it now."
+            _mark_step("finalize_lesson_tool_success")
+        else:
+            response.content = (
+                finalize_tool_result.get("reason") or "The lesson could not be saved."
+            )
+            _mark_step("finalize_lesson_tool_failure")
 
     return response
 

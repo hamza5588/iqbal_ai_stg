@@ -536,6 +536,54 @@ def test_deterministic_fallback_skipped_when_model_already_called_the_tool(monke
     assert fake_db.committed is False
 
 
+def test_edit_still_persists_when_model_also_calls_finalize_same_turn(monkeypatch):
+    """
+    Live-discovered regression in the first version of the deterministic fallback: it was
+    written as `if finalize_tool_result is not None: ... elif router_intent ==
+    "lesson_modification": ...` - an elif. On a real lesson_modification turn, the model
+    sometimes ALSO calls finalize_lesson_tool on its own initiative (confirmed live: router
+    correctly classified the turn as lesson_modification, but the model reflexively re-saved
+    after making the edit). With the elif, that finalize call short-circuited the
+    update_lesson_tool fallback entirely - the edit was silently discarded, and
+    finalize_lesson_tool just re-persisted the OLD pre-edit content while the forced "Lesson
+    finalized and saved" message told the user the edit was saved. Both branches must run:
+    the edit gets captured first, then finalize's response override applies on top of the
+    now-correct DB state.
+    """
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="# Old Lesson\n\noriginal body", lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+
+    full_edited_lesson = "# Old Lesson\n\noriginal body\n\n## Discriminant\n\nExplanation of the discriminant..."
+    response = AIMessage(content=full_edited_lesson)
+    messages = [
+        HumanMessage(content="add a section on the discriminant"),
+        AIMessage(content="", tool_calls=[{"name": "finalize_lesson_tool", "args": {}, "id": "call_1"}]),
+        ToolMessage(
+            content=json.dumps({"success": True, "reason": "Lesson re-saved with the latest content.", "already_finalized": True}),
+            name="finalize_lesson_tool", tool_call_id="call_1",
+        ),
+        response,
+    ]
+    result = rag_service._chat_handle_lesson_state_and_persistence(
+        response=response,
+        response_content=full_edited_lesson,
+        messages=messages,
+        last_user_msg_text="add a section on the discriminant",
+        thread_id_str="user_1_abc",
+        provider="openai",
+        user_llm_structured_output=None,
+        config={},
+        _mark_step=lambda *a, **k: None,
+        turn_scope_messages=messages,
+        router_intent="lesson_modification",
+    )
+    # The backend-authoritative finalize message still wins for what the user sees...
+    assert result.content == "Lesson finalized and saved. You can download it now."
+    # ...but the actual persisted content must be the NEW edited lesson, not the stale
+    # pre-edit text finalize_lesson_tool would have re-saved on its own.
+    assert fake_db._row.last_lesson_text == full_edited_lesson
+
+
 def test_document_qa_intent_never_touches_lesson_state_post_finalize(monkeypatch):
     """meta_conversation/document_qa turns must never write lesson state, even post-finalize."""
     fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="# Saved Lesson", lesson_finalized=True))
