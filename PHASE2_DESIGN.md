@@ -55,6 +55,41 @@ whichever phase wires it to the unconditional lesson-mode eval path — no actio
 now. `_ANSWER_QUALITY_GATE_DEFAULT_INTENTS` (§3) and the `RAG_ANSWER_QUALITY_GATE_INTENTS`
 default (§4) below are updated accordingly; full reasoning kept in §6a.
 
+## Addendum 3 (2026-08-15): implementation complete, one heuristic gap found and fixed
+
+Real implementation done on branch `phase2/answer-quality-gate` (rebased onto the merged
+`feature/llm-driven-agentic-routing`, Phase 1's `RouterOutput`/`router_intent`/
+`_ChatTurnSystemPrep.meta_conversation_active` now real). The design in §§1-8 below was
+implemented essentially as written, with one gap the test-writing process caught:
+
+**`_FILLER_PATTERNS` (§2) did not actually catch the real own_answer_followup bug text.**
+The historical "explain why 2x" bug's filler reply was the lesson-save confirmation ("Lesson
+finalized and saved. You can download it now."), not a "feel free to ask"-style
+conversational filler phrase — none of the originally-designed patterns match it. Writing
+`test_escalates_on_filler_over_injected_prior_answer` in
+`tests/test_answer_quality_gate_eval_loop.py` against the exact historical bug text caught
+this: the heuristic returned `False` (never escalate) for the one scenario the whole
+`own_answer_followup` addition exists to catch. Fixed by adding two more patterns to
+`_FILLER_PATTERNS`:
+
+```python
+re.compile(r"\blesson (?:has been |is |was )?finalized and saved\b", re.I),
+re.compile(r"\byou can download it now\b", re.I),
+```
+
+Safe to add broadly (not just for `own_answer_followup`) because this exact text is only
+ever legitimate as the backend-forced `finalize_lesson_tool` success message on a genuine
+`lesson_save` turn — and `lesson_save` is excluded from the qualifying-intent set by default
+(Addendum 2), so the heuristic never even evaluates content on those turns. On every other
+qualifying intent, this text appearing is always the historical leaking-save-confirmation
+bug (see `tests/test_finalize_lesson_tool.py`'s
+`test_old_finalize_call_reordered_into_windowed_messages_does_not_leak_into_new_turn`), never
+a correct answer.
+
+Everything else (gate condition, env var renames/fallbacks, function/class renames, call
+site wiring) matches §§3-5 exactly as designed — no other deviations. See §7's addendum note
+for final test counts.
+
 ## 0. Bug this fixes
 
 Staging: user asked "what is zero discriminat just answer main one line" against an uploaded
@@ -727,6 +762,15 @@ whose `.with_structured_output(...)` returns a stub whose `.invoke(...)` is scri
 - `test_meta_conversation_active_is_a_full_noop_even_with_qualifying_intent` — sets
   `meta_conversation_active=True` together with `router_intent="document_qa"` and a filler
   response + evidence (would otherwise escalate); assert still a full no-op.
+
+**Addendum 3 update**: implemented as `tests/test_answer_quality_gate_heuristic.py` (17
+tests), `tests/test_answer_quality_gate_wiring_static.py` (18 tests, dependency-free —
+runnable directly with plain `python`), and `tests/test_answer_quality_gate_eval_loop.py`
+(21 tests) — 56 tests total, all passing against the real implementation. One extra test was
+added beyond this plan in each of the first two files
+(`test_flags_lesson_saved_confirmation_leaking_into_a_followup` /
+`test_filler_patterns_cover_the_own_answer_followup_live_bug_phrase`) to lock in the
+heuristic gap fix from Addendum 3.
 
 ### 7d. What must keep passing unchanged: `tests/test_lecture_generation_fixes_static.py`
 

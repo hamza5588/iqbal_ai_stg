@@ -3754,33 +3754,39 @@ NOT a lesson to finalize:
 Output your judgment: user must say somethin like "create a lesson", "generate a lesson", "make a lesson plan", "create lesson on X" to finalize the lesson. Then in  the  AI RESPINSE must be a well structured lesson with headings, sections, bullet points, or organized topics."""
 
 
-class LectureFailsafeEvalResult(BaseModel):
-    """Structured verdict for lecture-only RAG quality gate (retrieval grounding + citations)."""
+class AnswerQualityEvalResult(BaseModel):
+    """Structured verdict for the answer-quality RAG gate (retrieval grounding + citations).
+
+    Generalized from the original lecture-only failsafe (LectureFailsafeEvalResult) to also
+    cover document_qa/general_knowledge_qa/lesson_qa/own_answer_followup turns; see
+    PHASE2_DESIGN.md for the design rationale.
+    """
 
     passed: bool = Field(
-        description="True if failsafe criteria are met, OR the output is a non-substantive clarification (see is_underspecified_clarification)."
+        description="True if quality-gate criteria are met, OR the output is a non-substantive clarification (see is_underspecified_clarification)."
     )
     is_underspecified_clarification: bool = Field(
         default=False,
-        description="True if the assistant only asked a brief clarification or gave a short meta reply, not substantive lecture body text.",
+        description="True if the assistant only asked a brief clarification or gave a short meta reply, not substantive answer text.",
     )
     reasoning: str = Field(default="", description="Brief justification.")
     feedback_for_regeneration: str = Field(
         default="",
-        description="If passed is false for a substantive lecture, concrete fixes: citations, retrieval gaps, or required fallback_behavior wording.",
+        description="If passed is false for a substantive answer, concrete fixes: citations, retrieval gaps, or required fallback_behavior wording.",
     )
 
 
-LECTURE_FAILSAFE_EVAL_PROMPT = """You are a strict quality verifier for LECTURE / lesson BODY text in a document-grounded (RAG) teaching assistant.
+ANSWER_QUALITY_EVAL_PROMPT = """You are a strict quality verifier for ANSWER TEXT (a full lecture body OR a direct document/general-knowledge Q&A reply) in a document-grounded (RAG) teaching assistant.
 
-<failsafe_check>
-Apply only to SUBSTANTIVE answers that state document facts or deliver lecture body text.
+<quality_check>
+Apply only to SUBSTANTIVE answers that state document facts, deliver lecture body text, or directly answer the user's question.
 • Was appropriate retrieval used for this answer (prefetched evidence and/or tool outputs below count as returned evidence)?
-• Is every factual claim in the lecture supported by the RETURNED EVIDENCE, with honest citations or clear attribution to the document?
-• If evidence does not support a claim, the lecture must follow fallback_behavior: state when content is not in the document and only then offer general knowledge as your product rules describe.
+• Is every factual claim in the answer supported by the RETURNED EVIDENCE, with honest citations or clear attribution to the document?
+• If evidence does not support a claim, the answer must follow fallback_behavior: state when content is not in the document and only then offer general knowledge as your product rules describe.
+• If evidence WAS returned but the answer is generic filler that never engages with it (e.g. "let me know if you have more questions" instead of using the evidence), that fails the check.
 
-Do not apply these checks to pure UNDERSPECIFIED clarification questions: if the assistant output is only a short clarification question to the user (not substantive lecture body), set is_underspecified_clarification=true and passed=true.
-</failsafe_check>
+Do not apply these checks to pure UNDERSPECIFIED clarification questions: if the assistant output is only a short clarification question to the user (not a substantive answer), set is_underspecified_clarification=true and passed=true.
+</quality_check>
 
 USER REQUEST:
 ---
@@ -3792,15 +3798,15 @@ RETURNED EVIDENCE (prefetch + tool outputs for this turn; may be minimal if no P
 {evidence}
 ---
 
-LECTURE TEXT TO EVALUATE:
+ANSWER TEXT TO EVALUATE:
 ---
 {lecture}
 ---
 
-Judge whether the lecture (if substantive) is fully grounded in the evidence. Return structured output only."""
+Judge whether the answer (if substantive) is fully grounded in the evidence and actually uses it. Return structured output only."""
 
 
-def _collect_document_evidence_for_failsafe(
+def _collect_document_evidence_for_quality_gate(
     conversation_messages: List[BaseMessage],
     prefetch_evidence: str,
     max_chars: int = 16000,
@@ -3831,19 +3837,132 @@ def _collect_document_evidence_for_failsafe(
     return out
 
 
-def _format_lecture_failsafe_prompt(user_query: str, evidence: str, lecture: str) -> str:
-    """Avoid str.format issues if lecture contains braces."""
+def _format_answer_quality_eval_prompt(user_query: str, evidence: str, lecture: str) -> str:
+    """Avoid str.format issues if the answer text contains braces."""
     uq = (user_query or "")[:6000]
     ev = (evidence or "")[:20000]
     lec = (lecture or "")[:24000]
     return (
-        LECTURE_FAILSAFE_EVAL_PROMPT.replace("{user_query}", uq)
+        ANSWER_QUALITY_EVAL_PROMPT.replace("{user_query}", uq)
         .replace("{evidence}", ev)
         .replace("{lecture}", lec)
     )
 
 
-def _lecture_failsafe_eval_and_maybe_regenerate(
+# --- Cheap heuristic pre-filter (no LLM call) -------------------------------------
+# Decides whether a turn's response is even worth paying for the expensive structured-
+# output eval above. Only escalates when real evidence existed this turn AND the response
+# looks like a filler non-answer that ignored it (the "zero discriminant" staging bug:
+# rag_tool returned score=1.0/page=41 evidence and the model replied with pure filler).
+# See PHASE2_DESIGN.md section 2 for the full design rationale and true/false-positive matrix.
+
+_FILLER_PATTERNS: List[re.Pattern] = [
+    re.compile(r"\bfeel free to ask\b", re.I),
+    re.compile(r"\blet me know if\b", re.I),
+    re.compile(r"\bany (?:other|further) questions\b", re.I),
+    re.compile(r"\bif you have any (?:further |other )?questions\b", re.I),
+    re.compile(r"\bhappy to help\b", re.I),
+    re.compile(r"\banything else\b", re.I),
+    re.compile(r"\bdon'?t hesitate\b", re.I),
+    re.compile(r"\breach out\b", re.I),
+    re.compile(r"\bi'?m here to help\b", re.I),
+    re.compile(r"\bhope (?:this|that) helps\b", re.I),
+    # own_answer_followup's real staging failure mode (see test_own_answer_followup.py):
+    # the model falls back to the lesson-save confirmation instead of answering a genuine
+    # "explain your own prior answer" follow-up. This is never a valid response to a
+    # follow-up question (tools are hard-suppressed on these turns, so the model cannot
+    # have actually just saved anything).
+    re.compile(r"\blesson (?:has been |is |was )?finalized and saved\b", re.I),
+    re.compile(r"\byou can download it now\b", re.I),
+]
+
+# Legitimate fallback wording (see DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF) — must NOT be
+# flagged as filler even though it is short and citation-free; it is a correct answer.
+_LEGITIMATE_FALLBACK_PATTERNS: List[re.Pattern] = [
+    re.compile(r"not present in the document", re.I),
+    re.compile(r"irrelevant question", re.I),
+    re.compile(r"answer from my own knowledge base", re.I),
+]
+
+_CITATION_MARKER_PATTERN = re.compile(
+    r"\bpage\s*\d+\b|\bp\.\s*\d+\b|\bpp\.\s*\d+\b|\bsection\s+\d+\b|\(source[:\s]|\[source[:\s]",
+    re.I,
+)
+
+
+def _quality_gate_filler_max_chars() -> int:
+    return _chat_safe_int_env("RAG_ANSWER_QUALITY_FILLER_MAX_CHARS", 350)
+
+
+def _looks_like_filler_non_answer(response_content: str) -> bool:
+    """Cheap regex/length heuristic — no LLM call.
+
+    True: `response_content` looks like a filler non-answer (evidence was ignored).
+    False: looks like a substantive answer, OR is legitimate fallback wording, OR is empty
+    (empty-response handling is a separate concern, not this gate's job).
+    """
+    text = (response_content or "").strip()
+    if not text:
+        return False
+    if any(p.search(text) for p in _LEGITIMATE_FALLBACK_PATTERNS):
+        return False
+    if not any(p.search(text) for p in _FILLER_PATTERNS):
+        return False
+    # A filler phrase alone isn't damning — a good, substantive answer can still end with
+    # "let me know if you want more detail." Only flag when the WHOLE response reads like
+    # filler: short AND no citation marker anywhere in it.
+    is_short = len(text) <= _quality_gate_filler_max_chars()
+    has_citation = bool(_CITATION_MARKER_PATTERN.search(text))
+    return is_short and not has_citation
+
+
+def _quality_gate_should_escalate(response_content: str, prefetch_evidence_for_eval: str) -> bool:
+    """True => pay for the LLM eval this turn. False => skip it (the common case).
+
+    Escalates only when there was real evidence to have used (prefetch_evidence_for_eval
+    non-empty — exactly the zero-discriminant bug's signal: score=1.0/page=41 was present,
+    and the own_answer_followup bug's signal: the model's own prior answer was injected as
+    evidence) AND the response looks like filler. No evidence => nothing to grade => never
+    escalate, regardless of how the response reads.
+    """
+    if not (prefetch_evidence_for_eval or "").strip():
+        return False
+    return _looks_like_filler_non_answer(response_content)
+
+
+_ANSWER_QUALITY_GATE_DEFAULT_INTENTS = (
+    "lesson_generation", "document_qa", "general_knowledge_qa", "lesson_qa",
+    "own_answer_followup",
+)
+
+
+def _answer_quality_gate_enabled() -> bool:
+    """RAG_ANSWER_QUALITY_GATE_ENABLED (new, default true) wins if set. Falls back to the old
+    RAG_LECTURE_FAILSAFE_ENABLED name for one release so an ops config that pinned the old
+    var to false doesn't silently flip on underneath them the moment this ships."""
+    new_val = os.getenv("RAG_ANSWER_QUALITY_GATE_ENABLED")
+    if new_val is not None:
+        return new_val.lower() in ("true", "1", "yes")
+    old_val = os.getenv("RAG_LECTURE_FAILSAFE_ENABLED")
+    if old_val is not None:
+        logger.warning(
+            "RAG_LECTURE_FAILSAFE_ENABLED is deprecated; use RAG_ANSWER_QUALITY_GATE_ENABLED."
+        )
+        return old_val.lower() in ("true", "1", "yes")
+    return True  # new default: on
+
+
+def _answer_quality_gate_qualifying_intents() -> set:
+    return set(
+        s.strip()
+        for s in os.getenv(
+            "RAG_ANSWER_QUALITY_GATE_INTENTS", ",".join(_ANSWER_QUALITY_GATE_DEFAULT_INTENTS)
+        ).split(",")
+        if s.strip()
+    )
+
+
+def _answer_quality_gate_eval_and_maybe_regenerate(
     *,
     user_llm: Any,
     system_message: SystemMessage,
@@ -3854,6 +3973,8 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
     prefetch_evidence_for_eval: str,
     has_document: bool,
     is_lesson_creation_turn: bool,
+    router_intent: Optional[str],
+    meta_conversation_active: bool,
     user_id: Optional[int],
     provider: str,
     config: Any,
@@ -3863,30 +3984,54 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
     _mark_step: Any,
 ) -> Tuple[str, AIMessage]:
     """
-    Lecture-only gate: verify grounding vs evidence; optionally regenerate without tools until pass or max attempts.
+    Answer-quality gate: verify grounding vs evidence for lesson-generation, document_qa,
+    general_knowledge_qa, lesson_qa, and own_answer_followup turns; optionally regenerate
+    without tools until pass or max attempts. Generalized from the lecture-only failsafe
+    (see PHASE2_DESIGN.md for the full design writeup).
+
+    Non-lesson intents are additionally heuristic-gated (_quality_gate_should_escalate) so
+    the expensive LLM eval only runs when evidence existed AND the response looks like
+    filler — this is what makes default-ON safe. Lesson generation keeps the original
+    unconditional-eval behavior: ungrounded lecture claims read as long, well-formed prose,
+    not short filler, so the filler heuristic would routinely miss the failure mode it was
+    built to catch there.
     """
-    if not is_lesson_creation_turn:
+    is_lesson_mode = is_lesson_creation_turn or router_intent == "lesson_generation"
+
+    if meta_conversation_active:
+        return response_content, response
+    if not is_lesson_mode and router_intent not in _answer_quality_gate_qualifying_intents():
         return response_content, response
     if short_mode_active or token_pressure_active:
         return response_content, response
-    if os.getenv("RAG_LECTURE_FAILSAFE_ENABLED", "false").lower() not in ("true", "1", "yes"):
+    if not _answer_quality_gate_enabled():
         return response_content, response
-    if _LOAD_TEST_MODE and os.getenv("RAG_LECTURE_FAILSAFE_IN_LOAD_TEST", "false").lower() not in (
-        "true",
-        "1",
-        "yes",
-    ):
+    load_test_override = os.getenv(
+        "RAG_ANSWER_QUALITY_GATE_IN_LOAD_TEST",
+        os.getenv("RAG_LECTURE_FAILSAFE_IN_LOAD_TEST", "false"),
+    )
+    if _LOAD_TEST_MODE and load_test_override.lower() not in ("true", "1", "yes"):
         return response_content, response
     if not (response_content or "").strip():
         return response_content, response
     if _is_underspecified_rag_query(last_user_msg_text):
         return response_content, response
 
-    # Full evaluate→(maybe regen) cycles; e.g. 4 rounds = up to 3 regenerations after failed evals.
-    max_rounds = max(2, int(os.getenv("RAG_LECTURE_FAILSAFE_MAX_ROUNDS", "4")))
-    eval_llm = user_llm.with_structured_output(LectureFailsafeEvalResult)
+    # Non-lesson intents only pay for the LLM eval when the cheap heuristic thinks the
+    # response ignored real evidence. Lesson generation/modification keeps the original
+    # unconditional-eval behavior (see docstring above).
+    if not is_lesson_mode:
+        if not _quality_gate_should_escalate(response_content, prefetch_evidence_for_eval):
+            return response_content, response
 
-    evidence_bundle = _collect_document_evidence_for_failsafe(
+    # Full evaluate→(maybe regen) cycles; e.g. 4 rounds = up to 3 regenerations after failed evals.
+    max_rounds = max(2, int(os.getenv(
+        "RAG_ANSWER_QUALITY_GATE_MAX_ROUNDS",
+        os.getenv("RAG_LECTURE_FAILSAFE_MAX_ROUNDS", "4"),
+    )))
+    eval_llm = user_llm.with_structured_output(AnswerQualityEvalResult)
+
+    evidence_bundle = _collect_document_evidence_for_quality_gate(
         conversation_messages,
         prefetch_evidence_for_eval,
     )
@@ -3897,7 +4042,7 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
     current_response = response
 
     for attempt in range(max_rounds):
-        prompt = _format_lecture_failsafe_prompt(last_user_msg_text, evidence_bundle, current)
+        prompt = _format_answer_quality_eval_prompt(last_user_msg_text, evidence_bundle, current)
         try:
             if provider == "groq":
                 groq_rate_limiter.wait_if_needed()
@@ -3905,8 +4050,8 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
             if provider == "groq":
                 groq_rate_limiter.record_success()
         except Exception as ex:
-            logger.warning("Lecture failsafe eval failed (non-fatal): %s", ex, exc_info=True)
-            _mark_step("lecture_failsafe_eval_error")
+            logger.warning("Answer quality gate eval failed (non-fatal): %s", ex, exc_info=True)
+            _mark_step("answer_quality_gate_eval_error")
             break
 
         passed = bool(getattr(verdict, "passed", False))
@@ -3915,14 +4060,15 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
         feedback = (getattr(verdict, "feedback_for_regeneration", "") or "").strip()
 
         logger.info(
-            "Lecture failsafe attempt %s/%s: passed=%s underspec_clar=%s reasoning=%s",
+            "Answer quality gate attempt %s/%s: intent=%s passed=%s underspec_clar=%s reasoning=%s",
             attempt + 1,
             max_rounds,
+            router_intent,
             passed,
             is_clar,
             (reasoning[:200] + "…") if len(reasoning) > 200 else reasoning,
         )
-        _mark_step(f"lecture_failsafe_eval_{attempt + 1}")
+        _mark_step(f"answer_quality_gate_eval_{attempt + 1}")
 
         if passed or is_clar:
             try:
@@ -3933,18 +4079,18 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
 
         if attempt >= max_rounds - 1:
             logger.warning(
-                "Lecture failsafe: max rounds (%s) reached; keeping last draft.",
+                "Answer quality gate: max rounds (%s) reached; keeping last draft.",
                 max_rounds,
             )
-            _mark_step("lecture_failsafe_max_regen")
+            _mark_step("answer_quality_gate_max_regen")
             break
 
         revision_human = (
-            "[Automated quality verification — lecture only]\n"
+            "[Automated quality verification]\n"
             "The previous draft did not satisfy document-grounding rules.\n\n"
             f"Required fixes:\n{feedback or reasoning or 'Ground every factual claim in the returned evidence; add honest citations; use fallback wording when the document does not support a claim.'}\n\n"
-            "Regenerate the **complete** lecture for the user. Do not describe this verification step. "
-            "Answer only with the revised lecture (and citations as appropriate)."
+            "Regenerate the **complete** answer for the user. Do not describe this verification step. "
+            "Answer only with the revised answer (and citations as appropriate)."
         )
         regen_messages: List[BaseMessage] = [
             system_message,
@@ -3960,14 +4106,14 @@ def _lecture_failsafe_eval_and_maybe_regenerate(
             if provider == "groq":
                 groq_rate_limiter.record_success()
         except Exception as ex:
-            logger.warning("Lecture failsafe regeneration failed: %s", ex, exc_info=True)
-            _mark_step("lecture_failsafe_regen_error")
+            logger.warning("Answer quality gate regeneration failed: %s", ex, exc_info=True)
+            _mark_step("answer_quality_gate_regen_error")
             break
 
         raw_next = regen.content if hasattr(regen, "content") else str(regen)
         current = _sanitize_user_facing_response(raw_next)
         current_response = AIMessage(content=current)
-        _mark_step(f"lecture_failsafe_regen_{attempt + 1}")
+        _mark_step(f"answer_quality_gate_regen_{attempt + 1}")
 
     try:
         current_response.content = current
@@ -5122,11 +5268,10 @@ def _chat_invoke_llm_with_retry(
             _mark_step("extract_response")
 
             if (
-                is_lesson_creation_turn
-                and isinstance(response, AIMessage)
+                isinstance(response, AIMessage)
                 and not getattr(response, "tool_calls", None)
             ):
-                response_content, response = _lecture_failsafe_eval_and_maybe_regenerate(
+                response_content, response = _answer_quality_gate_eval_and_maybe_regenerate(
                     user_llm=user_llm,
                     system_message=system_message,
                     conversation_messages=conversation_messages,
@@ -5136,6 +5281,8 @@ def _chat_invoke_llm_with_retry(
                     prefetch_evidence_for_eval=prefetch_evidence_for_eval,
                     has_document=has_document,
                     is_lesson_creation_turn=is_lesson_creation_turn,
+                    router_intent=router_intent,
+                    meta_conversation_active=meta_conversation_active,
                     user_id=user_id,
                     provider=provider,
                     config=config,
