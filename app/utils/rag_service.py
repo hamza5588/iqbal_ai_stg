@@ -4037,14 +4037,44 @@ def finalize_lesson_tool(thread_id: str) -> str:
 
     _set_chat_progress(thread_id, "💾 Saving your lesson...")
 
+    # get_db() returns one SQLAlchemy session shared across every tool call made during this
+    # turn (Flask request-scoped, see app/utils/db.py). If an earlier operation in this same
+    # turn left the session in a failed-transaction state, the very next query on it raises
+    # immediately - even a simple read - until an explicit rollback(). Observed live: the
+    # model sometimes calls this tool twice in one turn; the first call saves successfully,
+    # then something makes the session's next query raise, and the second call reports
+    # "internal error" even though the lesson was already correctly saved by the first call.
+    # Roll back and retry the read once before giving up, so a poisoned session from an
+    # unrelated earlier failure doesn't produce a false failure here.
     try:
-        user_id = _get_user_id_for_thread(thread_id)
         db = get_db()
         thread_row = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+    except Exception as e:
+        logger.warning(
+            "finalize_lesson_tool: initial RAGThread query failed for thread_id=%s "
+            "(session may be in a failed-transaction state); rolling back and retrying once: %s",
+            thread_id, e,
+        )
+        try:
+            db = get_db()
+            db.rollback()
+            thread_row = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        except Exception as retry_err:
+            logger.warning(
+                "finalize_lesson_tool failed for thread_id=%s (after rollback retry): %s",
+                thread_id, retry_err, exc_info=True,
+            )
+            result["reason"] = "An internal error occurred while trying to save the lesson."
+            return json.dumps(result)
+
+    try:
         if not thread_row:
             result["reason"] = "No conversation thread found to save a lesson for."
             return json.dumps(result)
 
+        user_id = getattr(thread_row, "user_id", None)
+        if user_id is None:
+            user_id = _get_user_id_for_thread(thread_id)
         content = (getattr(thread_row, "last_lesson_text", None) or "").strip()
         if not content:
             result["reason"] = (
@@ -4062,7 +4092,12 @@ def finalize_lesson_tool(thread_id: str) -> str:
             return json.dumps(result)
 
         already_finalized = bool(getattr(thread_row, "lesson_finalized", False))
-        _persist_finalized_lesson_static(str(thread_id), content)
+        persisted = _persist_finalized_lesson_static(str(thread_id), content)
+        if not persisted:
+            # The actual DB state is the source of truth: do not claim success unless the
+            # commit is confirmed to have happened.
+            result["reason"] = "Could not save the lesson due to a database error. Please try again."
+            return json.dumps(result)
 
         result["success"] = True
         result["already_finalized"] = already_finalized
@@ -6613,30 +6648,42 @@ def _parse_lesson_title_from_content(content: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-def _persist_finalized_lesson_static(thread_id_str: str, response_content: str) -> None:
+def _persist_finalized_lesson_static(thread_id_str: str, response_content: str) -> bool:
     """
     Static approach: save the current AI response as the finalized lesson to the RAG thread.
     Call this when the user's message contains finalization keywords (final, finalized, create the lesson, etc.).
     Optionally parses Lesson Title from response content.
+
+    Returns True only if the row was found and the commit actually completed. Callers must
+    not report success to the user unless this returns True - previously this returned None
+    unconditionally, so a failed commit here was silently swallowed and the caller still
+    claimed the lesson was saved even though nothing was persisted.
     """
     if not thread_id_str or not (response_content or "").strip():
-        return
+        return False
     title = _parse_lesson_title_from_content(response_content)
     try:
         db = get_db()
         thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-        if thread_row:
-            thread_row.lesson_finalized = True
-            thread_row.last_lesson_text = response_content
-            thread_row.lesson_title = title
-            db.commit()
-            logger.info(
-                "Persisted finalized lesson (static, thread_id=%s, title=%s)",
-                thread_id_str,
-                (title[:50] + "…") if len(title) > 50 else title or "(none)",
-            )
+        if not thread_row:
+            return False
+        thread_row.lesson_finalized = True
+        thread_row.last_lesson_text = response_content
+        thread_row.lesson_title = title
+        db.commit()
+        logger.info(
+            "Persisted finalized lesson (static, thread_id=%s, title=%s)",
+            thread_id_str,
+            (title[:50] + "…") if len(title) > 50 else title or "(none)",
+        )
+        return True
     except Exception as e:
         logger.warning("Error persisting finalized lesson: %s", e)
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _try_persist_finalized_from_response_content(thread_id_str: str, response_content: str) -> None:

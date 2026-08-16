@@ -144,10 +144,12 @@ def test_finalize_lesson_tool_success_persists_and_returns_success(monkeypatch):
     )
     monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", lambda *a, **k: True)
     persist_calls = []
-    monkeypatch.setattr(
-        rag_service, "_persist_finalized_lesson_static",
-        lambda tid, content: persist_calls.append((tid, content)),
-    )
+
+    def _fake_persist(tid, content):
+        persist_calls.append((tid, content))
+        return True  # confirms the commit actually happened
+
+    monkeypatch.setattr(rag_service, "_persist_finalized_lesson_static", _fake_persist)
 
     result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
     assert result["success"] is True
@@ -756,3 +758,152 @@ def test_meta_conversation_intent_never_touches_lesson_state_pre_finalize(monkey
     assert result.content == response.content
     assert fake_db._row.last_lesson_text == "draft so far"
     assert fake_db.committed is False
+
+
+# --- Phase 1 regression: false "internal error" on a save that actually succeeded ------
+#
+# Live bug report: router=lesson_save, prefetch_branch=specialist_handoff, finalize_lesson_tool
+# executed, lesson_finalized=True in the DB, the lesson WAS actually saved - but the
+# user-facing response sometimes said "An internal error occurred while trying to save the
+# lesson." Root cause: get_db() returns one SQLAlchemy session shared across every tool call
+# in a turn (Flask request-scoped). If an earlier operation in the same turn (e.g. the model
+# calling finalize_lesson_tool twice) leaves that session in a failed-transaction state, the
+# very next query on it raises immediately, even though nothing about the save itself was
+# wrong. Fix: finalize_lesson_tool now rolls back and retries its own read once, and
+# _persist_finalized_lesson_static now returns a real bool the caller checks instead of being
+# silently trusted, so the DB's actual state is always the source of truth.
+
+class _RollbackCapableFakeDB(_FakeDB):
+    """Adds rollback() tracking and the ability to make the Nth .query() call raise, so tests
+    can simulate a session left in a failed-transaction state by an earlier operation."""
+
+    def __init__(self, row, raise_on_query_call=None):
+        super().__init__(row)
+        self.rollback_calls = 0
+        self.query_call_count = 0
+        self.raise_on_query_call = raise_on_query_call  # 1-indexed call number to raise on
+
+    def rollback(self):
+        self.rollback_calls += 1
+
+    def query(self, model):
+        self.query_call_count += 1
+        if self.raise_on_query_call == self.query_call_count:
+            raise RuntimeError("current transaction is aborted, commands ignored until rollback")
+        return _FakeQuery(self._row)
+
+
+class TestFinalizeLessonToolRetryAndFailureAccuracy:
+    def test_1_successful_save_reports_success(self, monkeypatch):
+        row = _FakeThreadRow(last_lesson_text="# Photosynthesis\n\nFull lesson body.", lesson_finalized=False)
+        fake_db = _RollbackCapableFakeDB(row)
+        monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+        monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", lambda *a, **k: True)
+
+        result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert result["success"] is True
+        assert result["already_finalized"] is False
+        assert result["reason"] == "Lesson saved."
+        assert fake_db.committed is True
+        assert fake_db._row.lesson_finalized is True
+
+    def test_2_failed_save_reports_failure_not_success(self, monkeypatch):
+        """A genuine persistence failure (commit never actually happens) must never be
+        reported as success - closes the inverse of the reported bug."""
+        row = _FakeThreadRow(last_lesson_text="# Photosynthesis\n\nFull lesson body.", lesson_finalized=False)
+        fake_db = _RollbackCapableFakeDB(row)
+        monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+        monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", lambda *a, **k: True)
+        # Simulate _persist_finalized_lesson_static confirming the commit did NOT happen.
+        monkeypatch.setattr(rag_service, "_persist_finalized_lesson_static", lambda tid, content: False)
+
+        result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert result["success"] is False
+        assert "database error" in result["reason"].lower()
+
+    def test_3_retry_after_transient_session_error_still_succeeds(self, monkeypatch):
+        """The exact reported mechanism: the session's first query in this call raises (as if
+        poisoned by an earlier operation in the same turn); finalize_lesson_tool must roll
+        back and retry once, and the save must go through and report success - not the old
+        unconditional 'internal error'."""
+        row = _FakeThreadRow(last_lesson_text="# Photosynthesis\n\nFull lesson body.", lesson_finalized=False)
+        fake_db = _RollbackCapableFakeDB(row, raise_on_query_call=1)  # first query raises, retry succeeds
+        monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+        monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", lambda *a, **k: True)
+
+        result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert result["success"] is True, f"retry must recover a transient session error, got: {result}"
+        assert fake_db.rollback_calls == 1
+        assert fake_db.committed is True
+
+    def test_4_stale_error_cannot_override_a_save_that_actually_succeeded(self, monkeypatch):
+        """Same mechanism as test 3, framed as the acceptance criterion: a transient error from
+        earlier in the turn must never be allowed to produce a false failure response once the
+        actual save completes successfully on the recovered session."""
+        row = _FakeThreadRow(last_lesson_text="# Stale Error Repro\n\nLesson body.", lesson_finalized=False)
+        fake_db = _RollbackCapableFakeDB(row, raise_on_query_call=1)
+        monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+        monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", lambda *a, **k: True)
+
+        result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert result["success"] is True
+        assert "internal error" not in result["reason"].lower()
+        assert fake_db._row.lesson_finalized is True, "the DB state (source of truth) must reflect the real save"
+
+    def test_5_repeated_save_both_calls_succeed_with_correct_already_finalized_flag(self, monkeypatch):
+        """Calling finalize_lesson_tool twice in a row (e.g. the model re-confirming, or the
+        user saying 'save it' twice) must never error on the second call - both succeed, and
+        already_finalized correctly flips False -> True."""
+        row = _FakeThreadRow(last_lesson_text="# Repeated Save Lesson\n\nBody.", lesson_finalized=False)
+        fake_db = _RollbackCapableFakeDB(row)
+        monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+        monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", lambda *a, **k: True)
+
+        first = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert first["success"] is True
+        assert first["already_finalized"] is False
+
+        second = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert second["success"] is True
+        assert second["already_finalized"] is True
+        assert second["reason"] == "Lesson re-saved with the latest content."
+
+    def test_6_save_after_modification_persists_the_new_content_not_stale_text(self, monkeypatch):
+        """A lesson already finalized once, then edited via update_lesson_tool (which does not
+        clear lesson_finalized - see its own docstring/comment), must re-validate and persist
+        the NEW content when saved again, not silently skip validation and leave the old text."""
+        row = _FakeThreadRow(last_lesson_text="# Original Lesson\n\nOriginal body.", lesson_finalized=True)
+        fake_db = _RollbackCapableFakeDB(row)
+        monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+        validation_calls = []
+
+        def _track_validation(content, **kwargs):
+            validation_calls.append(content)
+            return True
+
+        monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", _track_validation)
+
+        # Simulate update_lesson_tool having modified the draft after the original finalize.
+        row.last_lesson_text = "# Original Lesson\n\nOriginal body.\n\n## New Section\n\nAdded via modification."
+
+        result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert result["success"] is True
+        assert result["already_finalized"] is True
+        # The re-validation must have run against the NEW content, not been skipped.
+        assert validation_calls == [row.last_lesson_text] or validation_calls == [
+            "# Original Lesson\n\nOriginal body.\n\n## New Section\n\nAdded via modification."
+        ]
+        assert fake_db._row.last_lesson_text == (
+            "# Original Lesson\n\nOriginal body.\n\n## New Section\n\nAdded via modification."
+        )
+
+    def test_get_db_raising_immediately_still_returns_a_json_error_not_a_crash(self, monkeypatch):
+        """Belt-and-suspenders on the pre-existing crash-safety guarantee: even get_db() itself
+        failing (not just the query) must never propagate out of the tool."""
+        def boom():
+            raise RuntimeError("db pool exhausted")
+
+        monkeypatch.setattr(rag_service, "get_db", boom)
+        result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+        assert result["success"] is False
+        assert "internal error" in result["reason"].lower()
