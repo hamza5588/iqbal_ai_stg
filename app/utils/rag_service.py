@@ -6337,13 +6337,20 @@ def _check_if_content_is_lesson(
 
 
 def _parse_lesson_title_from_content(content: str) -> str:
-    """Extract Lesson Title from AI response text if present."""
+    """Extract a lesson title from AI response text if present."""
     if not content:
         return ""
     m = re.search(r"Lesson\s+Title\s*:\s*[\"']([^\"']+)[\"']", content, re.IGNORECASE)
     if m:
         return m.group(1).strip()
     m = re.search(r"Lesson\s+Title\s*:\s*(.+?)(?:\n|$)", content, re.IGNORECASE | re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    # Fallback: the model almost never actually writes the literal "Lesson Title:" string in
+    # practice (confirmed live - titles were consistently blank in the DB despite the saved
+    # lesson clearly having a heading) - it writes a normal markdown heading instead. Use the
+    # first H1/H2 heading as the title rather than leaving it blank.
+    m = re.search(r"^#{1,2}\s+(.+?)\s*$", content, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 

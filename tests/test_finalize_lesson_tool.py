@@ -60,6 +60,40 @@ class _FakeDB:
         self.committed = True
 
 
+# --- _parse_lesson_title_from_content: markdown-heading fallback ------------------
+#
+# QA-sweep Low-severity finding: lesson_title was consistently left blank in the DB despite
+# the saved lesson clearly having a heading - the parser only recognized a literal
+# "Lesson Title: ..." string, which the model almost never actually writes; it writes a normal
+# markdown heading instead.
+
+def test_parse_lesson_title_literal_lesson_title_string():
+    assert rag_service._parse_lesson_title_from_content('Lesson Title: "Composting Basics"') == "Composting Basics"
+
+
+def test_parse_lesson_title_falls_back_to_h1_heading():
+    content = "# Composting Basics\n\nSome lesson content here."
+    assert rag_service._parse_lesson_title_from_content(content) == "Composting Basics"
+
+
+def test_parse_lesson_title_falls_back_to_h2_heading():
+    content = "## Understanding the Discriminant\n\nSome content here."
+    assert rag_service._parse_lesson_title_from_content(content) == "Understanding the Discriminant"
+
+
+def test_parse_lesson_title_prefers_literal_string_over_heading():
+    content = 'Lesson Title: "The Real Title"\n\n# A Different Heading\n\nBody text.'
+    assert rag_service._parse_lesson_title_from_content(content) == "The Real Title"
+
+
+def test_parse_lesson_title_empty_when_no_heading_or_literal_string():
+    assert rag_service._parse_lesson_title_from_content("Just a plain paragraph, no heading.") == ""
+
+
+def test_parse_lesson_title_empty_content():
+    assert rag_service._parse_lesson_title_from_content("") == ""
+
+
 # --- finalize_lesson_tool: direct behavior -----------------------------------
 
 def test_finalize_lesson_tool_no_thread_id():
