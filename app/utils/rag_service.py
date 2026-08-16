@@ -3851,6 +3851,18 @@ def _build_specialist_handoff_observation(
         ]
         if transcript:
             blocks.append("### Recent conversation transcript\n\n" + transcript)
+        # Observed failure mode in production: the actual message history that follows this
+        # system message includes the model's own earlier long lesson/lecture reply, and the
+        # model sometimes lets that recency pull it into repeating/continuing that content
+        # instead of answering the meta-question. Name the failure mode explicitly and give a
+        # concrete positive constraint, as the last (most salient) instruction before generation.
+        blocks.append(
+            "### Critical — what NOT to do this turn\n"
+            "The conversation history that follows may include a long lesson/lecture you wrote "
+            "earlier. Do NOT repeat, continue, or regenerate that lesson content now — that is "
+            "not what this turn asks for. This turn has exactly one job: answer the "
+            "meta-question above using the transcript, in one or two sentences, then stop."
+        )
         return "\n\n".join(blocks)
 
     return ""
@@ -4116,6 +4128,20 @@ def _select_intent_tool_names(intent: str) -> Optional[Tuple[str, ...]]:
         "clarification",
     ):
         return ()
+    if intent in ("document_qa", "general_knowledge_qa", "lesson_qa"):
+        # Read-only Q&A intents get the full retrieval/teaching catalog (generic RAG is
+        # legitimate here), but never finalize_lesson_tool — a question must never be able to
+        # silently save/finalize the in-progress lesson as a side effect of answering it.
+        return (
+            "calculator",
+            "rag_tool",
+            "get_page_tool",
+            "list_topics_whole_doc_tool",
+            "teach_topic_tool",
+            "count_pdf_words_tool",
+            "count_words_in_text_tool",
+            "update_lesson_tool",
+        )
     return None
 
 
@@ -4129,13 +4155,30 @@ def _resolve_intent_tools(intent_tool_names: Optional[Tuple[str, ...]]) -> Optio
     return [by_name[n] for n in intent_tool_names if n in by_name]
 
 
-def _bind_llm_for_intent(user_llm: Any, intent_tool_names: Optional[Tuple[str, ...]], fallback_with_tools: Any) -> Any:
+def _bind_llm_for_intent(
+    user_llm: Any,
+    intent_tool_names: Optional[Tuple[str, ...]],
+    fallback_with_tools: Any,
+    force_low_temperature: bool = False,
+) -> Any:
     resolved = _resolve_intent_tools(intent_tool_names)
     if resolved is None:
-        return fallback_with_tools
-    if not resolved:
-        return user_llm
-    return user_llm.bind_tools(resolved)
+        bound = fallback_with_tools
+    elif not resolved:
+        bound = user_llm
+    else:
+        bound = user_llm.bind_tools(resolved)
+    if force_low_temperature:
+        # meta_conversation is "recall the transcript," a deterministic task, not a creative
+        # one. At the default chat temperature the model occasionally drifts into repeating
+        # the in-progress lesson instead of answering the meta-question (observed live on
+        # Conversation 116 retests). Forcing near-zero temperature only for this intent makes
+        # that failure mode far less likely without touching temperature for any other turn.
+        try:
+            bound = bound.bind(temperature=0)
+        except Exception:
+            logger.debug("Could not force low temperature for meta_conversation turn", exc_info=True)
+    return bound
 
 # -------------------
 # 5. State
@@ -6123,7 +6166,10 @@ def _chat_invoke_llm_with_retry(
                             max_tokens=safe_max,
                         )
                         user_llm_with_tools = _bind_llm_for_intent(
-                            user_llm, prep.intent_tool_names, user_llm.bind_tools(tools)
+                            user_llm,
+                            prep.intent_tool_names,
+                            user_llm.bind_tools(tools),
+                            force_low_temperature=prep.meta_conversation_active,
                         )
                     except Exception as rebuild_err:
                         logger.error("Failed to rebuild LLM after max_tokens error: %s", rebuild_err)
@@ -6310,6 +6356,7 @@ def chat_node(state: ChatState, config=None):
             llm_bundle.user_llm,
             prep.intent_tool_names,
             llm_bundle.user_llm_with_tools,
+            force_low_temperature=prep.meta_conversation_active,
         ),
         user_llm_structured_output=llm_bundle.user_llm_structured_output,
         prep=prep,

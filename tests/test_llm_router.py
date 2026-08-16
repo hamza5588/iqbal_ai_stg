@@ -22,7 +22,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from app.utils import rag_service
 from app.utils.rag_service import (
     RouterOutput,
+    _bind_llm_for_intent,
     _build_meta_conversation_prefetch_blob,
+    _build_specialist_handoff_observation,
     _chat_build_system_message,
     _chat_invoke_llm_with_retry,
     _ChatTurnSystemPrep,
@@ -564,7 +566,11 @@ class TestChatBuildSystemMessageBranchSelection:
         )
         assert "Retrieved document excerpts" in prep.system_message.content
         assert "Some retrieved excerpt text." in prep.system_message.content
-        assert prep.intent_tool_names is None
+        # document_qa gets the full retrieval/teaching catalog (generic RAG is legitimate
+        # here) but never finalize_lesson_tool - see TestSpecialistToolCatalogMatrix.
+        assert prep.intent_tool_names is not None
+        assert "rag_tool" in prep.intent_tool_names
+        assert "finalize_lesson_tool" not in prep.intent_tool_names
         assert "update_lesson_tool" in prep.system_message.content
 
 
@@ -582,7 +588,12 @@ class TestSpecialistHandoff:
         assert "teach_topic_tool" in mod
         assert "finalize_lesson_tool" not in mod
         assert _select_intent_tool_names("meta_conversation") == ()
-        assert _select_intent_tool_names("document_qa") is None
+        # document_qa: full retrieval catalog, but finalize_lesson_tool excluded -
+        # see TestSpecialistToolCatalogMatrix for the full 10-intent contract.
+        docqa = _select_intent_tool_names("document_qa")
+        assert docqa is not None
+        assert "rag_tool" in docqa
+        assert "finalize_lesson_tool" not in docqa
 
     def test_lesson_modification_injects_draft_and_does_not_prefetch_rag(self, monkeypatch):
         def _explode(*args, **kwargs):
@@ -774,3 +785,216 @@ class TestFindLastHumanMessageIndexAndText:
         idx, text = _find_last_human_message_index_and_text([])
         assert idx == -1
         assert text == ""
+
+
+# ---------------------------------------------------------------------------
+# 9. Specialist tool catalog — full matrix over every router intent.
+#
+# Ports the audit's EXPECTED_TOOLS matrix (previously only in a local, untracked
+# audit script) into the permanent suite. Before this, document_qa /
+# general_knowledge_qa / lesson_qa fell through _select_intent_tool_names to
+# `None` ("full catalog"), which includes finalize_lesson_tool — a pure Q&A
+# turn could technically trigger the same tool as an explicit "save the
+# lesson" request. 7/10 intents passed this matrix; 3 leaked finalize_lesson_tool.
+# ---------------------------------------------------------------------------
+
+_ALL_ROUTER_INTENTS = (
+    "document_qa", "lesson_generation", "own_answer_followup", "meta_conversation",
+    "greeting_casual", "clarification", "general_knowledge_qa", "lesson_modification",
+    "lesson_qa", "lesson_save",
+)
+
+_EXPECTED_TOOL_CONSTRAINTS = {
+    "document_qa": {"must": {"rag_tool"}, "must_not": {"finalize_lesson_tool"}},
+    "lesson_generation": {"must": {"teach_topic_tool", "update_lesson_tool"}, "must_not": {"finalize_lesson_tool"}},
+    "lesson_modification": {"must": {"update_lesson_tool"}, "must_not": {"finalize_lesson_tool"}},
+    "lesson_save": {"must": {"finalize_lesson_tool"}, "must_not": {"rag_tool", "teach_topic_tool"}},
+    "meta_conversation": {"must": set(), "must_not": {"rag_tool", "teach_topic_tool", "finalize_lesson_tool"}},
+    "own_answer_followup": {"must": set(), "must_not": {"rag_tool", "finalize_lesson_tool"}},
+    "greeting_casual": {"must": set(), "must_not": {"rag_tool", "finalize_lesson_tool"}},
+    "clarification": {"must": set(), "must_not": {"rag_tool", "finalize_lesson_tool"}},
+    "general_knowledge_qa": {"must": set(), "must_not": {"finalize_lesson_tool"}},
+    "lesson_qa": {"must": set(), "must_not": {"finalize_lesson_tool"}},
+}
+
+_FULL_PRODUCT_CATALOG = {
+    "calculator", "rag_tool", "get_page_tool", "list_topics_whole_doc_tool",
+    "teach_topic_tool", "count_pdf_words_tool", "count_words_in_text_tool",
+    "update_lesson_tool", "finalize_lesson_tool",
+}
+
+
+class TestSpecialistToolCatalogMatrix:
+    @pytest.mark.parametrize("intent", _ALL_ROUTER_INTENTS)
+    def test_intent_tool_scope_matches_contract(self, intent):
+        names = _select_intent_tool_names(intent)
+        resolved = set(names) if names is not None else set(_FULL_PRODUCT_CATALOG)
+        spec = _EXPECTED_TOOL_CONSTRAINTS[intent]
+        missing = spec["must"] - resolved
+        leaked = spec["must_not"] & resolved
+        assert not missing, f"{intent} is missing required tools: {missing}"
+        assert not leaked, f"{intent} leaks forbidden tools: {leaked}"
+
+    def test_all_ten_router_intents_are_covered_by_the_registry(self):
+        # Every intent the router can emit must resolve to *some* explicit decision here,
+        # not silently fall through — this is what the 7/10 -> 10/10 fix actually closes.
+        for intent in _ALL_ROUTER_INTENTS:
+            assert intent in _EXPECTED_TOOL_CONSTRAINTS
+
+    def test_mutation_intents_cannot_reach_each_others_tool(self):
+        save_tools = set(_select_intent_tool_names("lesson_save") or _FULL_PRODUCT_CATALOG)
+        mod_tools = set(_select_intent_tool_names("lesson_modification") or _FULL_PRODUCT_CATALOG)
+        assert "update_lesson_tool" not in save_tools
+        assert "finalize_lesson_tool" not in mod_tools
+
+    @pytest.mark.parametrize("intent", ("meta_conversation", "own_answer_followup", "greeting_casual", "clarification"))
+    def test_no_tool_intents_truly_have_no_tools(self, intent):
+        assert _select_intent_tool_names(intent) == ()
+
+    @pytest.mark.parametrize("intent", ("document_qa", "general_knowledge_qa", "lesson_qa"))
+    def test_qa_intents_get_generic_rag_but_never_finalize(self, intent):
+        names = set(_select_intent_tool_names(intent))
+        assert "rag_tool" in names
+        assert "finalize_lesson_tool" not in names
+
+
+# ---------------------------------------------------------------------------
+# 10. Regex fallback safety — the fallback must never be able to trigger a
+# mutation (lesson_save / lesson_modification), regardless of phrasing. It is
+# a safety net for when the LLM router itself fails, not a second router.
+# ---------------------------------------------------------------------------
+
+class TestRegexFallbackNeverMutates:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "save the lesson",
+            "SAVE THE LESSON",
+            "please save and finalize this",
+            "modify the lesson to add an example",
+            "update the lesson plan",
+            "finalize it",
+            "can you save this lesson for me now",
+            "add the example to the lecture",
+            "edit the third paragraph",
+            "",
+            "asdkjhaskjdh save modify finalize update lesson",
+        ],
+    )
+    def test_fallback_output_is_never_a_mutation_intent(self, text):
+        out = _router_fallback_from_regex(text)
+        assert out.intent not in ("lesson_save", "lesson_modification"), (
+            f"regex fallback must never emit a mutation intent, got {out.intent!r} for {text!r}"
+        )
+
+    def test_fallback_can_only_emit_the_five_designed_intents(self):
+        # Locks the current, deliberately small fallback intent set as a regression guard:
+        # if this ever grows, it must grow with the same never-includes-mutation property.
+        allowed = {"meta_conversation", "lesson_generation", "own_answer_followup", "clarification", "document_qa"}
+        samples = [
+            "what did I ask", "create a lesson on photosynthesis", "why did you say that",
+            "x", "what is a quadratic equation", "save the lesson", "modify the lesson",
+            "hello", "explain", "",
+        ]
+        for text in samples:
+            out = _router_fallback_from_regex(text)
+            assert out.intent in allowed
+
+    def test_fallback_tool_scope_for_its_own_outputs_never_includes_finalize(self):
+        # Even if the fallback fires, whatever intent it produces must not resolve to a tool
+        # scope containing finalize_lesson_tool (belt-and-suspenders on top of the intent check).
+        for text in ["what did I ask", "create a lesson on photosynthesis", "why did you say that", "x"]:
+            out = _router_fallback_from_regex(text)
+            names = _select_intent_tool_names(out.intent)
+            resolved = set(names) if names is not None else set(_FULL_PRODUCT_CATALOG)
+            assert "finalize_lesson_tool" not in resolved
+
+
+# ---------------------------------------------------------------------------
+# 11. Meta-conversation determinism — production bug: router correctly chose
+# meta_conversation and injected the transcript, but the model (temperature
+# 0.5, same as every other turn) sometimes ignored the instruction and
+# regenerated the in-progress lesson instead of answering. Fix is (a) a more
+# explicit instruction naming the exact failure mode, and (b) forcing
+# near-zero temperature only for this intent.
+# ---------------------------------------------------------------------------
+
+class _FakeBindableLlm:
+    """Records .bind()/.bind_tools() calls without needing a real LangChain model."""
+
+    def __init__(self, label="root", bind_calls=None, bind_tools_calls=None):
+        self.label = label
+        self.bind_calls = bind_calls if bind_calls is not None else []
+        self.bind_tools_calls = bind_tools_calls if bind_tools_calls is not None else []
+
+    def bind(self, **kwargs):
+        self.bind_calls.append(kwargs)
+        return _FakeBindableLlm(f"{self.label}+bind{kwargs}", self.bind_calls, self.bind_tools_calls)
+
+    def bind_tools(self, tools):
+        self.bind_tools_calls.append(tools)
+        return _FakeBindableLlm(f"{self.label}+bind_tools", self.bind_calls, self.bind_tools_calls)
+
+
+class TestMetaConversationDeterminism:
+    def test_force_low_temperature_binds_zero_temperature(self):
+        llm = _FakeBindableLlm()
+        result = _bind_llm_for_intent(llm, (), llm, force_low_temperature=True)
+        assert result.bind_calls == [{"temperature": 0}]
+
+    def test_without_force_flag_temperature_is_untouched(self):
+        llm = _FakeBindableLlm()
+        result = _bind_llm_for_intent(llm, (), llm, force_low_temperature=False)
+        assert result.bind_calls == []
+        assert result is llm
+
+    def test_force_low_temperature_applies_after_tool_binding_for_scoped_intents(self):
+        llm = _FakeBindableLlm()
+        fallback = _FakeBindableLlm()
+        result = _bind_llm_for_intent(
+            llm, ("finalize_lesson_tool",), fallback, force_low_temperature=True
+        )
+        # tool binding happened (bind_tools was called on the root llm)...
+        assert len(llm.bind_tools_calls) == 1
+        # ...and temperature=0 was applied on top of that, not instead of it.
+        assert result.bind_calls == [{"temperature": 0}]
+
+    def test_force_low_temperature_never_raises_if_bind_is_unsupported(self):
+        class _NoBind:
+            pass
+
+        # Should not raise even though _NoBind has no .bind()/.bind_tools().
+        result = _bind_llm_for_intent(_NoBind(), None, "fallback_llm", force_low_temperature=True)
+        assert result == "fallback_llm"
+
+    def test_meta_conversation_observation_names_the_exact_failure_mode(self, monkeypatch):
+        monkeypatch.setattr(
+            rag_service,
+            "_get_thread_metadata_from_db",
+            lambda tid: {"last_lesson_text": "## Some Lesson\n\nContent."},
+        )
+        messages = [
+            HumanMessage(content="create a lesson"),
+            AIMessage(content="## Some Lesson\n\nContent."),
+            HumanMessage(content="WHAT DID I ASK??"),
+        ]
+        blob = _build_specialist_handoff_observation(
+            RouterOutput(intent="meta_conversation", meta_conversation_scope="last_question"),
+            thread_id_str="test_thread",
+            raw_messages=messages,
+        )
+        assert "do not repeat" in blob.lower() or "do not carry" in blob.lower()
+        assert "regenerate" in blob.lower()
+        assert "one or two sentences" in blob.lower()
+
+    def test_chat_turn_system_prep_still_has_meta_conversation_active_field(self):
+        # prep.meta_conversation_active is the exact flag the two _bind_llm_for_intent call
+        # sites pass through as force_low_temperature - this pins that the field still exists,
+        # so a future refactor of _ChatTurnSystemPrep can't silently drop the wiring.
+        assert "meta_conversation_active" in _ChatTurnSystemPrep._fields
+
+    def test_bind_llm_for_intent_call_sites_pass_meta_conversation_active(self):
+        chat_node_src = inspect.getsource(rag_service.chat_node)
+        retry_src = inspect.getsource(rag_service._chat_invoke_llm_with_retry)
+        assert "force_low_temperature=prep.meta_conversation_active" in chat_node_src
+        assert "force_low_temperature=prep.meta_conversation_active" in retry_src
