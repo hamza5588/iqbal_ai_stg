@@ -118,26 +118,45 @@ class TestRouterFallbackFromRegex:
         assert isinstance(out, RouterOutput)
         assert out.intent == expected_intent
 
+    def test_regex_fallback_document_qa_with_brevity_phrasing_stays_document_qa(self):
+        """Not a meta-conversation message - "just answer main one line" asks about document
+        content with a brevity request, so it must stay document_qa even through the
+        meta-conversation check added below (regex fallback has no brevity detection at all;
+        that's the router LLM's job - the fallback only needs to get the base intent right)."""
+        out = _router_fallback_from_regex("what is zero discriminat just answer main one line")
+        assert out.intent == "document_qa"
+
     @pytest.mark.parametrize(
         "text",
         [
-            "what is zero discriminat just answer main one line",
             "what i ask last question?",
             "what i ask?",
             "paste exactly to me what ia sk",
         ],
     )
-    def test_regex_fallback_known_gap_no_meta_conversation_detector(self, text):
+    def test_regex_fallback_now_detects_common_meta_conversation_phrasings(self, text):
         """
-        KNOWN GAP (documented limitation, not a bug): the regex fallback has no
-        meta-conversation detector - only the router LLM recognizes meta_conversation.
-        When the router is disabled/erroring and falls back to regex, a meta-conversation
-        message like "what i ask last question?" is NOT recognized as such and instead falls
-        through to the generic document_qa default. This is acceptable because the fallback
-        only fires when the LLM router itself is unavailable, and document_qa is the same
-        conservative default the pre-Phase-1 code used for anything it didn't recognize.
+        QA-sweep bug: a router LLM failure/timeout on a meta-conversation message (e.g. "what
+        did I ask you first in this conversation?") fell through to document_qa and ran a
+        pointless document search - confirmed live. _router_fallback_from_regex now reuses
+        _looks_like_meta_conversation_text (the same loose pattern list already used to skip
+        past prior meta-turns elsewhere) to catch the common phrasings, closing most - not
+        all - of the gap. See test_regex_fallback_residual_meta_conversation_gap below for
+        what's still NOT caught.
         """
         out = _router_fallback_from_regex(text)
+        assert out.intent == "meta_conversation"
+        assert out.meta_conversation_scope == "last_question"
+
+    def test_regex_fallback_residual_meta_conversation_gap(self):
+        """
+        Documented residual gap: the loose pattern list is not a full re-implementation of the
+        router's own classification, so unusual phrasings it doesn't recognize still fall
+        through to document_qa. This is acceptable because the fallback only fires when the
+        LLM router itself is unavailable, and document_qa is the same conservative default the
+        pre-Phase-1 code used for anything it didn't recognize.
+        """
+        out = _router_fallback_from_regex("could you remind me what I asked you a few messages back")
         assert out.intent == "document_qa"
 
     def test_empty_text_falls_back_to_clarification(self):
@@ -257,8 +276,9 @@ class TestClassifyTurnIntent:
             has_document=True,
         )
         assert fake_llm.invoke_calls == 0
-        # Kill-switch routes straight to the regex fallback (known gap: no meta detector there).
-        assert result.intent == "document_qa"
+        # Kill-switch routes straight to the regex fallback, which now recognizes this common
+        # meta-conversation phrasing on its own (see TestRouterFallbackFromRegex above).
+        assert result.intent == "meta_conversation"
 
     def test_non_router_output_return_value_falls_back_safely(self, monkeypatch):
         """Defensive: if the structured-output call somehow returns something unexpected."""

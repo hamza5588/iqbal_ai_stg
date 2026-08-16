@@ -202,13 +202,15 @@ def test_response_forced_to_failure_reason_when_tool_failed(monkeypatch):
     assert result.content == failure_reason
 
 
-def test_no_tool_call_falls_back_to_in_progress_persistence(monkeypatch):
+def test_no_tool_call_and_no_update_lesson_tool_call_does_not_persist(monkeypatch):
     """
-    Normal conversation turns with no finalize tool call still persist the draft when the
-    router classified this turn as a lesson edit (Group B fix, now gated on router_intent
-    instead of `not lesson_finalized` - see Phase 3 fix below). router_intent must be passed
-    explicitly here: without it (default None), this turn would NOT persist under the new
-    gate, since None != "lesson_modification".
+    Formerly (Group B fix, then Phase 3): a plain conversational reply on a
+    router_intent == "lesson_modification" turn was trusted as "the full lesson" and written
+    directly to last_lesson_text. That trust is exactly what caused the truncation bug found
+    live via QA sweep (a reply with only the new section silently deleted the rest of the
+    lesson). Persistence now requires an explicit update_lesson_tool call (see that tool's own
+    tests) - a plain reply with no tool call, even on a lesson_modification turn, must not
+    write anything.
     """
     fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="old draft"))
     monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
@@ -231,10 +233,11 @@ def test_no_tool_call_falls_back_to_in_progress_persistence(monkeypatch):
         router_intent="lesson_modification",
     )
 
-    # Unmodified - no finalize tool call happened, so the model's normal reply passes through.
+    # Unmodified - the model's normal reply passes through untouched either way.
     assert result.content == "Here's the updated lesson with a diagram section..."
-    assert fake_db._row.last_lesson_text == "Here's the updated lesson with a diagram section..."
-    assert fake_db.committed is True
+    # Not persisted - only update_lesson_tool writes last_lesson_text now.
+    assert fake_db._row.last_lesson_text == "old draft"
+    assert fake_db.committed is False
 
 
 def test_old_finalize_call_reordered_into_windowed_messages_does_not_leak_into_new_turn(monkeypatch):
@@ -297,59 +300,152 @@ def test_old_finalize_call_reordered_into_windowed_messages_does_not_leak_into_n
     assert result.content == "You used 2x because the width shrinks by x on each side..."
 
 
-# --- Phase 3: post-finalize lesson_modification persistence (PHASE3_DESIGN.md) ----
+# --- update_lesson_tool: structured persistence for lesson creation/edits ---------
+#
+# QA-sweep bug (post Phase 3): _chat_handle_lesson_state_and_persistence's
+# `router_intent == "lesson_modification"` branch blindly wrote
+# `thread_row.last_lesson_text = response_content`, trusting a system-prompt instruction to
+# make the model always re-emit the complete lesson body in its free-text reply. Confirmed
+# live that this did not hold: a natural "add a section about X" reply containing only the
+# new section silently truncated a saved lesson down to that one fragment. It also never
+# covered the very first lesson_generation turn at all (only "lesson_modification"), so an
+# immediate "save this" right after generating a lesson was rejected as having no content to
+# save. Fix: persistence now happens via an explicit update_lesson_tool call (a real bound
+# tool, like finalize_lesson_tool) with the full lesson text as a validated structured
+# argument, called after generation as well as every edit - never inferred from chat reply
+# text. _chat_handle_lesson_state_and_persistence no longer writes last_lesson_text at all.
 
-def test_modification_intent_after_finalize_updates_persisted_content(monkeypatch):
-    """
-    The core Phase 3 bug fix: previously, once lesson_finalized=True, this function never
-    wrote last_lesson_text again, so a later "add 5 examples" edit was silently discarded.
-    Gating the write on router_intent == "lesson_modification" instead of
-    `not lesson_finalized` means the write now fires the same way before and after finalize.
-    """
-    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="# Old Lesson\n\noriginal body", lesson_finalized=True))
+def test_update_lesson_tool_no_thread_id():
+    result = json.loads(rag_service.update_lesson_tool.invoke({"full_lesson_text": "# Lesson", "thread_id": ""}))
+    assert result["success"] is False
+
+
+def test_update_lesson_tool_empty_content(monkeypatch):
+    monkeypatch.setattr(rag_service, "get_db", lambda: _FakeDB(_FakeThreadRow()))
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": "   ", "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is False
+    assert "no lesson content" in result["reason"].lower()
+
+
+def test_update_lesson_tool_missing_thread_row(monkeypatch):
+    monkeypatch.setattr(rag_service, "get_db", lambda: _FakeDB(None))
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": "# Lesson\n\nbody", "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is False
+    assert "No conversation thread" in result["reason"]
+
+
+def test_update_lesson_tool_persists_new_lesson_first_time(monkeypatch):
+    """The lesson_generation gap: the very first save (nothing persisted yet) must succeed -
+    this is exactly the "no lesson content yet" symptom from the bug report, hit immediately
+    after generating a brand-new lesson."""
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text=""))
     monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
 
-    messages = [HumanMessage(content="add 5 examples")]
-    response = AIMessage(content="# Old Lesson\n\noriginal body\n\n5 new examples...")
-
-    result = rag_service._chat_handle_lesson_state_and_persistence(
-        response=response,
-        response_content=response.content,
-        messages=messages,
-        last_user_msg_text="add 5 examples",
-        thread_id_str="user_1_abc",
-        provider="openai",
-        user_llm_structured_output=None,
-        config={},
-        _mark_step=lambda *a, **k: None,
-        router_intent="lesson_modification",
+    full_lesson = "# Composting Basics\n\n" + ("Intro paragraph. " * 30).strip()
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": full_lesson, "thread_id": "user_1_abc"})
     )
-
-    assert result.content == "# Old Lesson\n\noriginal body\n\n5 new examples..."
-    assert fake_db._row.last_lesson_text == "# Old Lesson\n\noriginal body\n\n5 new examples..."
-    # lesson_finalized is a display flag only - an edit does not touch it.
-    assert fake_db._row.lesson_finalized is True
+    assert result["success"] is True
+    assert fake_db._row.last_lesson_text == full_lesson
     assert fake_db.committed is True
 
 
-def test_refinalize_after_edit_persists_new_content_not_stale(monkeypatch):
+def test_update_lesson_tool_persists_edit_after_finalize(monkeypatch):
+    """The core Phase 3 bug fix, now via the tool: previously, once lesson_finalized=True,
+    nothing wrote last_lesson_text again, so a later "add 5 examples" edit was silently
+    discarded."""
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="# Old Lesson\n\noriginal body", lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+
+    full_lesson = "# Old Lesson\n\noriginal body\n\n## Examples\n\n5 new examples in detail here..."
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": full_lesson, "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is True
+    assert fake_db._row.last_lesson_text == full_lesson
+    # lesson_finalized is a display flag only - an edit does not touch it.
+    assert fake_db._row.lesson_finalized is True
+
+
+def test_update_lesson_tool_rejects_short_fragment_over_long_previous(monkeypatch):
     """
-    End-to-end symptom from the bug report: "add 5 examples" then "save it again" must save
-    the NEW content, not silently re-persist the stale pre-edit text while claiming success.
+    The exact truncation bug found live: the model replies with only the NEW section
+    ("add a section about X" -> just that section, not the full lesson) instead of the
+    complete lesson body. Must be rejected, not silently persisted as a fragment.
+    """
+    original = "# Composting Basics\n\n" + ("Full original lesson content here. " * 40)
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text=original, lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+
+    fragment_only = "## Benefits of Composting for Soil Health\n\nSome new content about soil health."
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": fragment_only, "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is False
+    assert "only part of the lesson" in result["reason"].lower()
+    # Must NOT have overwritten the original - this is the actual data-loss bug.
+    assert fake_db._row.last_lesson_text == original
+    assert fake_db.committed is False
+
+
+def test_update_lesson_tool_allows_genuine_full_rewrite_even_if_shorter(monkeypatch):
+    """A legitimately shorter full lesson (e.g. "make this more concise") must still be
+    accepted - the guard is a fragment heuristic, not a monotonic-growth requirement, so it
+    only fires well below the 50% threshold."""
+    original = "# Lesson\n\n" + ("Verbose original paragraph. " * 40)
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text=original, lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+
+    concise_rewrite = "# Lesson\n\n" + ("Tighter paragraph. " * 32).strip()  # ~53% of original length
+    result = json.loads(
+        rag_service.update_lesson_tool.invoke({"full_lesson_text": concise_rewrite, "thread_id": "user_1_abc"})
+    )
+    assert result["success"] is True
+    assert fake_db._row.last_lesson_text == concise_rewrite
+
+
+def test_refinalize_after_tool_edit_persists_new_content_not_stale(monkeypatch):
+    """
+    End-to-end symptom from the bug report: edit then "save it again" must save the NEW
+    content, not silently re-persist the stale pre-edit text while claiming success.
     finalize_lesson_tool itself needs no change - it already re-reads last_lesson_text fresh
-    from the DB, so once the modification-turn write above lands, re-finalizing picks it up
-    for free.
+    from the DB, so once update_lesson_tool's write lands, re-finalizing picks it up for free.
     """
     fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="# Old Lesson\n\noriginal body", lesson_finalized=True))
     monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
     monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
     monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", lambda *a, **k: True)
 
-    # Step 1: the edit turn ("add 5 examples") persists the new content.
-    edit_response = AIMessage(content="# Old Lesson\n\noriginal body\n\n5 new examples...")
-    rag_service._chat_handle_lesson_state_and_persistence(
-        response=edit_response,
-        response_content=edit_response.content,
+    full_lesson = "# Old Lesson\n\noriginal body\n\n## Examples\n\n5 new examples in detail here..."
+    rag_service.update_lesson_tool.invoke({"full_lesson_text": full_lesson, "thread_id": "user_1_abc"})
+    assert fake_db._row.last_lesson_text == full_lesson
+
+    result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+    assert result["success"] is True
+    assert result["already_finalized"] is True
+    # Must reflect the edited content, not the original seed text - this is the exact
+    # "lied about re-saving" symptom the bug report described.
+    assert fake_db._row.last_lesson_text == full_lesson
+
+
+def test_chat_handle_lesson_state_no_longer_writes_lesson_text(monkeypatch):
+    """
+    _chat_handle_lesson_state_and_persistence must not write last_lesson_text at all anymore
+    (for ANY router_intent, including "lesson_modification") - persistence is now exclusively
+    update_lesson_tool's job. This locks in the architectural change so a future edit can't
+    accidentally reintroduce the free-text-trusting write path.
+    """
+    fake_db = _FakeDB(_FakeThreadRow(last_lesson_text="original", lesson_finalized=True))
+    monkeypatch.setattr(rag_service, "get_db", lambda: fake_db)
+
+    response = AIMessage(content="I've added 5 examples to the lesson.")
+    result = rag_service._chat_handle_lesson_state_and_persistence(
+        response=response,
+        response_content=response.content,
         messages=[HumanMessage(content="add 5 examples")],
         last_user_msg_text="add 5 examples",
         thread_id_str="user_1_abc",
@@ -359,15 +455,9 @@ def test_refinalize_after_edit_persists_new_content_not_stale(monkeypatch):
         _mark_step=lambda *a, **k: None,
         router_intent="lesson_modification",
     )
-    assert fake_db._row.last_lesson_text == "# Old Lesson\n\noriginal body\n\n5 new examples..."
-
-    # Step 2: "save it again" re-finalizes against the SAME thread row.
-    result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
-    assert result["success"] is True
-    assert result["already_finalized"] is True
-    # Must reflect the edited content, not the original seed text - this is the exact
-    # "lied about re-saving" symptom the bug report described.
-    assert fake_db._row.last_lesson_text == "# Old Lesson\n\noriginal body\n\n5 new examples..."
+    assert result.content == "I've added 5 examples to the lesson."
+    assert fake_db._row.last_lesson_text == "original"
+    assert fake_db.committed is False
 
 
 def test_document_qa_intent_never_touches_lesson_state_post_finalize(monkeypatch):

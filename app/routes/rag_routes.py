@@ -19,6 +19,7 @@ from app.utils.rag_service import (
     _substitute_rag_system_placeholders,
 )
 from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
+from app.utils.chat_lock import acquire_chat_lock, release_chat_lock
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
@@ -49,17 +50,11 @@ def _count_words(text: str) -> int:
         return 0
     return len(re.findall(r"\S+", str(text).strip()))
 
-# Per-user lock so only one RAG chat request is processed at a time per user (prevents duplicate/concatenated responses)
-_user_chat_locks = {}
-_locks_lock = threading.Lock()
+# Per-thread cross-process lock so only one RAG chat request is processed at a time per
+# thread (prevents duplicate/concatenated/cross-wired responses) - see app/utils/chat_lock.py
+# for why this must be Redis-backed rather than a plain in-process threading.Lock().
 _user_chat_rate = {}
 _rate_lock = threading.Lock()
-
-def _get_user_chat_lock(user_id):
-    with _locks_lock:
-        if user_id not in _user_chat_locks:
-            _user_chat_locks[user_id] = threading.Lock()
-        return _user_chat_locks[user_id]
 
 
 def _check_and_record_user_chat_rate(user_id):
@@ -1408,14 +1403,20 @@ def chat():
                 'retry_after': retry_after,
             }), 429
 
-        # One message at a time per user: enforce a per-user lock with a SHORT bounded wait.
-        # The wait absorbs normal back-to-back sends, but must stay well under the client
-        # timeout: a long wait here means an abandoned turn silently blocks every following
-        # message until the browser gives up, turning one slow turn into a cascade of errors.
-        user_lock = _get_user_chat_lock(user_id)
+        # One message at a time per thread: enforce a cross-process lock (Redis-backed, see
+        # app/utils/chat_lock.py) with a SHORT bounded wait. The wait absorbs normal
+        # back-to-back sends, but must stay well under the client timeout: a long wait here
+        # means an abandoned turn silently blocks every following message until the browser
+        # gives up, turning one slow turn into a cascade of errors.
+        #
+        # Keyed by thread_id, not user_id: the actual hazard is two requests racing against the
+        # same LangGraph thread's checkpointed state. A plain in-process threading.Lock() here
+        # only ever serialized requests landing on the same gunicorn worker process - two
+        # requests for the same thread on two different workers ran concurrently and could
+        # deliver one request's answer back to a different, unrelated request (confirmed live).
         lock_wait_seconds = max(1, int(os.getenv("RAG_USER_CHAT_LOCK_WAIT_SECONDS", "5")))
-        acquired = user_lock.acquire(blocking=True, timeout=lock_wait_seconds)
-        if not acquired:
+        chat_lock_handle = acquire_chat_lock(thread_id, lock_wait_seconds)
+        if chat_lock_handle is None:
             logger.info(
                 "RAG chat busy: previous turn still in flight for user_id=%s (waited %ss)",
                 user_id,
@@ -1608,7 +1609,6 @@ def chat():
                         logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
                 else:
                     # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
-                    import re
                     thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
                     if thread_conv_match:
                         db_conversation_id = int(thread_conv_match.group(1))
@@ -1659,7 +1659,7 @@ def chat():
                 'has_document': thread_has_document(thread_id)
             })
         finally:
-            user_lock.release()
+            release_chat_lock(chat_lock_handle)
 
     except GroqRateLimitError as rl_exc:
         logger.warning(

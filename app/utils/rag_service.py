@@ -1669,8 +1669,13 @@ def _resolve_gk_consent_for_turn(thread_id_str: str, last_human_text: str) -> Op
                 directive = (
                     "GENERAL KNOWLEDGE CONSENT DECLINED (this turn only): the user just "
                     "declined your offer to answer their earlier question from general "
-                    "knowledge. Do not answer that earlier question from general knowledge. "
-                    "Acknowledge briefly and address whatever the user is asking now instead."
+                    "knowledge. Do not answer that earlier question from general knowledge, "
+                    "and do not bring it up again. Reply with a single short acknowledgment "
+                    "only (e.g. \"No problem.\" or \"Sure, let me know if you need anything "
+                    "else.\"). If the user's current message ALSO asks something new, answer "
+                    "that too - but if it does not (e.g. it was just \"no thanks\"), do not "
+                    "add anything else: do not list document topics, do not offer a summary, "
+                    "and do not volunteer other content unless the user actually asked for it."
                 )
         db.commit()
         return directive
@@ -3749,6 +3754,79 @@ def _prefetch_lecture_evidence_for_chat(thread_id: str, user_query: str) -> str:
 
 
 @tool
+def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
+    """
+    Persist the lesson you have just generated or modified in this conversation, as the
+    current in-progress draft.
+
+    Call this tool immediately after you generate a NEW lesson, AND every time you modify,
+    edit, update, or add to a lesson (e.g. "add 5 examples", "make this easier for beginners",
+    "add a section on X") - whether or not the lesson has already been finalized/saved before.
+    This is the ONLY way lesson content actually gets persisted; your plain chat reply to the
+    user does not save anything by itself, so skipping this call means the edit is lost.
+
+    full_lesson_text must be the COMPLETE, current lesson - every section, not just the part
+    you just changed. Your separate chat reply to the user can be a normal, appropriately
+    concise message (e.g. "I've added 5 examples to the lesson.") - it does not need to repeat
+    the full lesson text; only the full_lesson_text argument to this tool does.
+
+    Returns a JSON string with "success" (true/false) and "reason". If success is false (for
+    example because full_lesson_text looks like only a fragment, not the complete lesson),
+    call this tool again with the actual complete lesson text - do not tell the user it was
+    saved.
+
+    Always include the current conversation's thread_id when calling this tool.
+    """
+    result = {"success": False, "reason": "Unknown error."}
+    if not thread_id:
+        result["reason"] = "No active document thread to update a lesson for."
+        return json.dumps(result)
+
+    content = (full_lesson_text or "").strip()
+    if not content:
+        result["reason"] = "No lesson content was provided to save."
+        return json.dumps(result)
+
+    try:
+        db = get_db()
+        thread_row = db.query(RAGThread).filter_by(thread_id=str(thread_id)).first()
+        if not thread_row:
+            result["reason"] = "No conversation thread found to update a lesson for."
+            return json.dumps(result)
+
+        previous = (getattr(thread_row, "last_lesson_text", None) or "").strip()
+        # Guard against silently replacing a full lesson with a short fragment - the exact
+        # failure mode that truncated a saved lesson down to just its newest section in
+        # practice (confirmed live via QA sweep). This is a heuristic backstop, not the primary
+        # mechanism: the primary fix is that persistence now requires an explicit, structured
+        # tool call instead of inferring "the full lesson" from whatever the chat reply said.
+        if previous and len(previous) > 200 and len(content) < 0.5 * len(previous):
+            result["reason"] = (
+                "This looks like only part of the lesson, not the complete current lesson. "
+                "Call update_lesson_tool again with the FULL lesson text (all existing "
+                "sections plus your change), not just the new or changed part."
+            )
+            return json.dumps(result)
+
+        title = _parse_lesson_title_from_content(content) or getattr(thread_row, "lesson_title", None) or ""
+        thread_row.last_lesson_text = content
+        if title:
+            thread_row.lesson_title = title
+        # lesson_finalized is a display flag only (set/cleared by finalize_lesson_tool) - an
+        # edit does not touch it, whether the lesson was finalized before or not.
+        db.commit()
+
+        result["success"] = True
+        result["reason"] = "Lesson draft updated."
+        logger.info("update_lesson_tool: thread_id=%s content_len=%s", thread_id, len(content))
+        return json.dumps(result)
+    except Exception as e:
+        logger.warning("update_lesson_tool failed for thread_id=%s: %s", thread_id, e, exc_info=True)
+        result["reason"] = "An internal error occurred while trying to update the lesson."
+        return json.dumps(result)
+
+
+@tool
 def finalize_lesson_tool(thread_id: str) -> str:
     """
     Finalize and permanently save the lesson you have been building in this conversation,
@@ -3825,6 +3903,7 @@ tools = [
     teach_topic_tool,
     count_pdf_words_tool,
     count_words_in_text_tool,
+    update_lesson_tool,
     finalize_lesson_tool,
 ]
 # Note: llm_with_tools and llm_structured_output are now created per-request in chat_node
@@ -4353,11 +4432,20 @@ def _router_fallback_from_regex(text: str) -> "RouterOutput":
     """
     Safety net: reconstruct pre-Phase-1 branch priority using the existing regex classifiers,
     which stay in the file specifically for this (moved from primary path to fallback-only, not
-    deleted). KNOWN GAP: this fallback has no meta-conversation detector, so a meta-conversation
-    message routed through here falls through to document_qa (see test coverage) - the router
-    LLM is the only classifier that recognizes meta_conversation; this fallback only fires when
-    the router itself is disabled or errors out.
+    deleted).
+
+    Includes a lightweight meta-conversation check (reusing _looks_like_meta_conversation_text,
+    the same loose pattern set already used to skip past prior meta-turns when resolving "the
+    real question" - see _find_last_n_real_user_questions) so the fallback doesn't unconditionally
+    misroute every meta-conversation message to document_qa, which was confirmed live: a router
+    LLM failure/timeout on "what did I ask you first in this conversation?" fell through to
+    document_qa and ran a pointless document search. This is intentionally the same LOOSE
+    pattern list used elsewhere, not a full re-implementation of the router's own classification -
+    it will not catch every phrasing the LLM router would have caught (that gap can never be
+    fully closed by regex), but it materially narrows it for the common phrasings.
     """
+    if _looks_like_meta_conversation_text(text):
+        return RouterOutput(intent="meta_conversation", meta_conversation_scope="last_question")
     if _is_lesson_creation_request(text):
         return RouterOutput(intent="lesson_generation")
     if _is_own_answer_followup_request(text):
@@ -4510,17 +4598,23 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "sections exist (name them), and offer to cover those in a follow-up. Do not force this tool for narrow "
     "factual questions — use rag_tool for those.\n"
     "- For all other questions about the document, call rag_tool(query=<your_search_query>, thread_id='{thread_id}').\n"
+    "- Whenever you generate a NEW lesson, or the user asks you to modify, edit, update, or add to a lesson you "
+    "have already been building or that was previously finalized/saved in this conversation (e.g. \"add 5 "
+    "examples\", \"make this easier for beginners\", \"add a section on X\"), call "
+    "update_lesson_tool(full_lesson_text=<the COMPLETE current lesson - every section, not just the part you "
+    "just changed>, thread_id='{thread_id}'). This is the ONLY way the lesson actually gets saved as the "
+    "in-progress draft - your plain chat reply to the user does not persist anything by itself, so skipping "
+    "this call silently loses the lesson/edit. Your separate chat reply to the user can be a normal, "
+    "appropriately concise message (e.g. \"I've added 5 examples to the lesson.\") - it does not need to repeat "
+    "the full lesson text; only the full_lesson_text argument does. If the tool returns success=false (for "
+    "example because it looks like only a fragment), call it again with the actual complete lesson text.\n"
     "- Whenever the user's intent, in any wording or language, is to save/finalize/complete/lock in the lesson "
     "you have been building (e.g. \"save this as a lesson\", \"finalize this\", \"please save it\", "
     "\"make this final\"), call finalize_lesson_tool(thread_id='{thread_id}'). Only tell the user the lesson "
     "was saved if that tool call returns success=true; if it returns success=false, tell them the reason "
-    "it gives instead of claiming it was saved.\n"
-    "- When the user asks you to modify, edit, update, or add to a lesson you have already been building or "
-    "that was previously finalized/saved in this conversation (e.g. \"add 5 examples\", \"make this easier for "
-    "beginners\", \"add a section on X\"), always respond with the COMPLETE, updated lesson text in full - "
-    "every section, not just the part you changed, and not just a description of the change (e.g. never reply "
-    "with only \"I've added 5 examples\" without the actual lesson). Your reply text is what gets saved as the "
-    "lesson, so a partial reply would silently delete the rest of the lesson.\n"
+    "it gives instead of claiming it was saved. If the document does not have enough content to build a lesson "
+    "on the requested topic, say so plainly (e.g. \"this document doesn't have enough content on X to build a "
+    "lesson\") - do not call finalize_lesson_tool or use lesson-saved/lesson-status language for that case.\n"
     "- You may use multiple tool calls in one turn when needed (for example long lectures, full-document summaries, or multi-part questions).\n"
     "- For short factual questions, keep answers concise unless the user asks for more detail.\n"
     "- For lectures, long explanations, or document summaries the user requests, answer in full; do not artificially limit length.\n"
@@ -4561,11 +4655,14 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF_LOAD_TEST = (
     "exactly ONCE instead of rag_tool, so all matching sections are retrieved instead of a limited top-k search. "
     "Do not call it again with the same topic — write the answer from that single result.\n"
     "- Otherwise call rag_tool(query=<user_question>, thread_id='{thread_id}').\n"
+    "- Whenever you generate a NEW lesson, or the user asks you to modify/edit/add to a lesson already built or "
+    "saved in this conversation, call update_lesson_tool(full_lesson_text=<the COMPLETE current lesson, every "
+    "section>, thread_id='{thread_id}') - this is the only thing that actually saves it; your chat reply alone "
+    "does not.\n"
     "- If the user asks (in any wording) to save/finalize the lesson, call "
-    "finalize_lesson_tool(thread_id='{thread_id}') and only report success if it returns success=true.\n"
-    "- If the user asks you to modify/edit/add to a lesson already built or saved in this conversation, always "
-    "reply with the COMPLETE updated lesson text in full, not just a description of the change - your reply is "
-    "what gets saved.\n"
+    "finalize_lesson_tool(thread_id='{thread_id}') and only report success if it returns success=true. If the "
+    "document lacks enough content to build the requested lesson, say so plainly instead of using "
+    "lesson-saved/lesson-status language.\n"
     "- Keep replies concise: 4-8 sentences unless user explicitly asks for detailed lesson.\n"
     "- Do not call tools repeatedly in one turn after getting tool results.\n"
     "- For person identity queries (e.g., 'who is <name>?'), try rag_tool before marking irrelevant.\n"
@@ -5348,36 +5445,19 @@ def _chat_handle_lesson_state_and_persistence(
                 finalize_tool_result.get("reason") or "The lesson could not be saved."
             )
             _mark_step("finalize_lesson_tool_failure")
-    elif thread_id_str and response_content and router_intent == "lesson_modification":
-        # Gate on the router's per-turn intent, not on thread_row.lesson_finalized.
-        # The old `not lesson_finalized` gate was a one-way ratchet: once a lesson was
-        # finalized, this branch stopped writing forever, so a later "add 5 examples"
-        # edit was silently discarded and a subsequent re-finalize just re-persisted the
-        # stale pre-edit content while claiming "re-saved with the latest content" (Phase
-        # 3 bug fix - see PHASE3_DESIGN.md). Gating on router_intent == "lesson_modification"
-        # instead fixes that (the write now fires identically before and after finalize)
-        # and is strictly safer than the old gate: unrelated turns (lesson_qa,
-        # meta_conversation, document_qa, etc.) never reach this branch and so never
-        # touch last_lesson_text, whether or not the thread has been finalized yet.
-        try:
-            db = get_db()
-            thread_row = db.query(RAGThread).filter_by(thread_id=thread_id_str).first()
-            if thread_row:
-                # Always track the latest AI turn as the in-progress lesson text, even for
-                # short replies (e.g. "I've added that equation"). A length/shape heuristic
-                # here previously skipped short but legitimate lesson edits, so Save could
-                # persist a stale prior turn instead of the teacher's most recent change.
-                # NOTE: this relies on the system prompt instructing the model to always
-                # re-emit the FULL updated lesson body (not just a change summary) on
-                # lesson_modification turns - see the "re-emit the full lesson" instruction
-                # in DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF. Without that, a short
-                # confirmation reply would overwrite a good finalized lesson with a stub.
-                thread_row.last_lesson_text = response_content
-                db.commit()
-        except Exception as e:
-            logger.warning("Error saving lesson text to DB: %s", e)
-        _mark_step("persist_in_progress_lesson")
-
+    # Lesson draft persistence (creation AND every later edit) now happens exclusively via an
+    # explicit update_lesson_tool call (see its docstring above finalize_lesson_tool) instead
+    # of inferring "the full lesson" from whatever the free-text chat reply said. The previous
+    # version of this branch blindly assigned the raw chat reply text onto last_lesson_text for
+    # every router_intent == "lesson_modification" turn, trusting a system-prompt instruction
+    # to make the model always re-emit the complete lesson body in its reply - that trust did
+    # not hold in practice (confirmed live via QA sweep: a natural "add a section about X"
+    # reply containing only the new section silently truncated a saved lesson down to that one
+    # fragment). It also never covered the very first lesson_generation turn at all, so an
+    # immediate "save this" right after generating a lesson was rejected as having no content
+    # to save. A structured tool call with server-side validation (see update_lesson_tool)
+    # replaces both gaps: the model must explicitly pass the full lesson text as a validated
+    # argument, and it's called after generation as well as every edit.
     return response
 
 

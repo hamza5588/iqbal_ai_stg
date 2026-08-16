@@ -59,29 +59,53 @@ def test_backend_last_lesson_text_heuristic_removed():
     assert BUGGY_HEURISTIC_BACKEND not in RAG_SERVICE_SRC
 
 
-def test_backend_last_lesson_text_syncs_on_lesson_modification_turns():
+def test_backend_last_lesson_text_syncs_via_update_lesson_tool_not_free_text():
     """
-    Supersedes the original Group B assertion (which required the write to be gated on
-    `not thread_row.lesson_finalized`). Phase 3 (PHASE3_DESIGN.md) replaced that gate with
-    `router_intent == "lesson_modification"`: once a lesson is finalized, the old gate froze
-    last_lesson_text forever, so a later "add 5 examples" edit was silently discarded and a
-    subsequent re-finalize just re-persisted stale content. Gating on intent instead means the
-    write fires the same way before and after finalize, and - unlike the old gate - never fires
-    for unrelated intents (lesson_qa, meta_conversation, document_qa, etc.) regardless of
-    finalize status. This locks in that invariant: still no length/shape heuristic (Group B's
-    original point), and no longer conditioned on lesson_finalized at all.
+    Supersedes both the original Group B assertion (write gated on
+    `not thread_row.lesson_finalized`) and the Phase 3 assertion that replaced it (write gated
+    on `router_intent == "lesson_modification"` inside _chat_handle_lesson_state_and_persistence).
+
+    QA-sweep bug: trusting response_content (the model's free-text chat reply) as "the full
+    lesson" did not hold in practice - a natural "add a section about X" reply containing only
+    the new section silently truncated a saved lesson down to that fragment (confirmed live via
+    direct DB check). It also never covered the very first lesson_generation turn, so an
+    immediate "save this" right after generating a lesson failed with "no lesson content yet".
+
+    Fix: persistence now happens exclusively via update_lesson_tool, a real bound tool (like
+    finalize_lesson_tool) that takes the full lesson text as an explicit, validated argument -
+    never inferred from response_content - called after generation as well as every edit. This
+    locks in that _chat_handle_lesson_state_and_persistence no longer writes last_lesson_text
+    at all, and that update_lesson_tool's own fragment-rejection guard exists.
     """
-    marker = 'router_intent == "lesson_modification":'
-    idx = RAG_SERVICE_SRC.find(marker)
-    assert idx != -1, "the lesson_modification-gated persistence branch was not found"
-    window = RAG_SERVICE_SRC[idx: idx + 2000]
-    assert "thread_row.last_lesson_text = response_content" in window, (
-        "last_lesson_text must still sync (unconditionally, no shape heuristic) on "
-        "lesson_modification turns"
+    assert "def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:" in RAG_SERVICE_SRC, (
+        "update_lesson_tool must exist as the structured persistence path for lesson "
+        "creation/edits"
     )
-    assert 'not getattr(thread_row, "lesson_finalized"' not in window, (
-        "the write must no longer be additionally gated on lesson_finalized - Phase 3 "
-        "intentionally removed that gate so post-finalize edits are captured too"
+    assert "update_lesson_tool," in RAG_SERVICE_SRC and "\ntools = [" in RAG_SERVICE_SRC, (
+        "update_lesson_tool must be bound alongside the other tools"
+    )
+
+    persistence_fn_marker = "def _chat_handle_lesson_state_and_persistence("
+    idx = RAG_SERVICE_SRC.find(persistence_fn_marker)
+    assert idx != -1, "_chat_handle_lesson_state_and_persistence not found"
+    next_fn_idx = RAG_SERVICE_SRC.find("\ndef ", idx + len(persistence_fn_marker))
+    fn_body = RAG_SERVICE_SRC[idx:next_fn_idx if next_fn_idx != -1 else idx + 4000]
+    assert "thread_row.last_lesson_text = response_content" not in fn_body, (
+        "_chat_handle_lesson_state_and_persistence must no longer blindly write "
+        "last_lesson_text from the free-text chat reply - that is exactly the bug that "
+        "truncated a saved lesson down to a single fragment. Persistence must go through "
+        "update_lesson_tool's validated structured argument instead."
+    )
+
+    update_tool_marker = "def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:"
+    tool_idx = RAG_SERVICE_SRC.find(update_tool_marker)
+    tool_window = RAG_SERVICE_SRC[tool_idx: tool_idx + 4500]
+    assert "thread_row.last_lesson_text = content" in tool_window, (
+        "update_lesson_tool must be the one writing last_lesson_text"
+    )
+    assert "len(content) < 0.5 * len(previous)" in tool_window, (
+        "update_lesson_tool must reject a reply that looks like only a fragment of the "
+        "lesson rather than silently persisting it and truncating the saved lesson"
     )
 
 

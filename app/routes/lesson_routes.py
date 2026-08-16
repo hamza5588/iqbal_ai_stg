@@ -6,6 +6,7 @@ from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 from app.utils.decorators import login_required, teacher_required, student_required
 from app.utils.db import get_db
 from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
+from app.utils.chat_lock import acquire_chat_lock, release_chat_lock
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
 from sqlalchemy import func, or_, desc
@@ -25,8 +26,6 @@ except Exception:  # pragma: no cover - optional dependency fallback
 
 logger = logging.getLogger(__name__)
 
-_lesson_qa_user_locks = {}
-_lesson_qa_locks_lock = threading.Lock()
 _lesson_qa_user_rate = {}
 _lesson_qa_rate_lock = threading.Lock()
 _lesson_qa_redis_client = None
@@ -94,13 +93,6 @@ def _faq_display_question(question_key: str) -> str:
     if not cleaned.endswith("?"):
         cleaned += "?"
     return cleaned[:1].upper() + cleaned[1:]
-
-
-def _get_lesson_qa_user_lock(user_id: int) -> threading.Lock:
-    with _lesson_qa_locks_lock:
-        if user_id not in _lesson_qa_user_locks:
-            _lesson_qa_user_locks[user_id] = threading.Lock()
-        return _lesson_qa_user_locks[user_id]
 
 
 def _get_lesson_qa_redis_client():
@@ -1221,10 +1213,13 @@ def ask_lesson_question():
 
     # Short bounded wait: a long wait means an abandoned turn silently stalls every following
     # message instead of telling the user their previous one is still generating.
-    user_lock = _get_lesson_qa_user_lock(int(user_id))
+    #
+    # Cross-process lock (Redis-backed, see app/utils/chat_lock.py) - the previous in-process
+    # threading.Lock() only serialized requests landing on the same gunicorn worker process,
+    # the same bug class confirmed live on the main RAG chat endpoint (rag_routes.py).
     lock_wait_seconds = max(1, int(os.getenv("LESSON_QA_LOCK_WAIT_SECONDS", "5")))
-    acquired = user_lock.acquire(blocking=True, timeout=lock_wait_seconds)
-    if not acquired:
+    lesson_qa_lock_handle = acquire_chat_lock(f"lesson_qa_user_{user_id}", lock_wait_seconds)
+    if lesson_qa_lock_handle is None:
         return jsonify({
             'error': 'Your previous message is still being generated. Please wait for it to finish before sending another.',
             'code': 'CONCURRENT_REQUEST_TIMEOUT',
@@ -1300,7 +1295,7 @@ def ask_lesson_question():
             'code': 'INTERNAL_ERROR',
         }), 500
     finally:
-        user_lock.release()
+        release_chat_lock(lesson_qa_lock_handle)
 
 
 @bp.route('/lesson_chat_history/<int:lesson_id>', methods=['GET'])
