@@ -499,14 +499,52 @@ def create_lesson_simple():
 
         if not title:
             return jsonify({'error': 'Title is required'}), 400
-        
+
         if not content:
             return jsonify({'error': 'Content is required'}), 400
-        
+
+        # Re-save detection: if this thread already has a saved lesson, update it in place
+        # instead of creating a duplicate. Without this, editing a lesson via chat after it
+        # was already saved once ("please add the example as well") never reached "My
+        # Lessons"/"View Lesson" - they kept showing the original pre-edit content forever,
+        # since this endpoint always created a brand-new row and never looked one up first
+        # (confirmed live).
+        existing_lesson = (
+            LessonModel.get_lesson_by_rag_thread_id(session['user_id'], rag_thread_id)
+            if rag_thread_id else None
+        )
+        if existing_lesson:
+            # Deliberately keep the EXISTING title rather than the incoming one: the frontend's
+            # client-side uniqueness check (getUniqueLessonTitle in teacher_dashboard.html) has
+            # no way to know in advance that this save will become an update rather than a new
+            # lesson, so on a re-save it sees the original title as "already used" (by this very
+            # lesson) and appends "- Lesson Saved" / "- Lesson Saved 2" / etc. each time. Since
+            # this is an update to the SAME lesson, not a new one, that auto-suffixed title must
+            # never overwrite the real one - re-saving an edited lesson should update its
+            # content, not make its name grow a new suffix on every save.
+            updated = LessonModel(existing_lesson['id']).update_lesson(
+                summary=summary or f"Lesson on {focus_area} for {grade_level}",
+                content=content,
+                focus_area=focus_area,
+                grade_level=grade_level,
+            )
+            if not updated:
+                return jsonify({'error': 'Failed to update saved lesson'}), 500
+
+            lesson_id = existing_lesson['id']
+            lesson = LessonModel.get_lesson_by_id(lesson_id)
+            return jsonify({
+                'success': True,
+                'lesson': lesson,
+                'id': lesson_id,
+                'message': 'Lesson updated successfully',
+                'updated_existing': True,
+            })
+
         # Check if lesson title already exists for this teacher
         if LessonModel.check_title_exists(session['user_id'], title):
             return jsonify({'error': 'This lesson title is already used. Please choose a different title.'}), 400
-        
+
         # Create the lesson
         lesson_id = LessonModel.create_lesson(
             teacher_id=session['user_id'],
@@ -521,13 +559,13 @@ def create_lesson_simple():
             rag_thread_id=rag_thread_id,
             conversation_id=lesson_conversation_id,
         )
-        
+
         if not lesson_id:
             return jsonify({'error': 'Failed to save lesson to database'}), 500
-        
+
         # Get the created lesson
         lesson = LessonModel.get_lesson_by_id(lesson_id)
-        
+
         return jsonify({
             'success': True,
             'lesson': lesson,

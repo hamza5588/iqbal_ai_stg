@@ -107,19 +107,26 @@
     if (!str || typeof str !== 'string') return str;
     // Square brackets: [\s\S] (not just non-newline) so multi-line display math like
     // "[\nax^2 + bx + c = 0\n]" (model wrote bare brackets across several lines) is also
-    // caught, not just the single-line case. (?<!\\) excludes '[' that is already part of
-    // a correct "\[" delimiter - without this guard, an already-valid multi-line "\[ ... \]"
-    // block (very common - the model often puts the delimiters on their own lines) gets
-    // matched and double-wrapped into broken "\\[ ... \]" text instead of being left alone.
-    str = str.replace(/(?<!\\)\[([\s\S]{1,400}?)\]/g, function (match, inner, offset, full) {
+    // caught, not just the single-line case. (?<!\\[a-zA-Z]*) excludes '[' that is already
+    // part of a correct "\[" delimiter OR a LaTeX sizing command like "\left[" / "\big[" -
+    // a plain "(?<!\\)" (checking only the single character immediately before '[') does NOT
+    // exclude "\left[": the character right before '[' there is "t", not a backslash, so the
+    // regex still matched inside "\left[ ... \right]" and corrupted it into "\left\[ ...
+    // \right\]" - MathJax then fails with "Missing or unrecognized delimiter for \left"
+    // (confirmed live and reproduced in isolation). The fixed lookbehind matches a backslash
+    // followed by zero-or-more letters immediately before the bracket, which covers both the
+    // bare "\[" case (zero letters) and any command-word case ("\left[", "\big[", "\Bigg[", …).
+    str = str.replace(/(?<!\\[a-zA-Z]*)\[([\s\S]{1,400}?)\]/g, function (match, inner, offset, full) {
       var after = full.slice(offset + match.length, offset + match.length + 1);
       if (after === '(' || after === ':') return match;
       if (!_looksLikeMath(inner)) return match;
       return '\\[ ' + inner.trim() + ' \\]';
     });
     // Bare parens containing LaTeX markup, e.g. "(a \neq 0)" instead of "\(a \neq 0\)".
-    // Negative lookbehind excludes '(' that is already part of a correct "\(" delimiter.
-    str = str.replace(/(?<!\\)\(([^()]{1,200})\)/g, function (match, inner) {
+    // Same fixed lookbehind as above - excludes '(' already part of a correct "\(" delimiter
+    // AND '(' that's actually the argument to "\left(" / "\big(" / etc. (the exact live bug:
+    // "\left(x + \frac{b}{2a}\right)" was getting mangled into "\left\(x + \frac{b}{2a}\right\)").
+    str = str.replace(/(?<!\\[a-zA-Z]*)\(([^()]{1,200})\)/g, function (match, inner) {
       if (!_looksLikeMath(inner)) return match;
       return '\\(' + inner.trim() + '\\)';
     });

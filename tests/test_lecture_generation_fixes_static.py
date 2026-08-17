@@ -130,15 +130,38 @@ def test_bracket_math_fallback_handles_multiline_and_bare_parens():
     m = re.search(r"function convertBareBracketMathToLatex\(str\) \{(.*?)\n  \}", FORMATTER_SRC, re.S)
     assert m, "convertBareBracketMathToLatex body not found"
     body = m.group(1)
-    # [\s\S] (not [^\[\]\n]) so bracket content can span multiple lines, AND (?<!\\) so an
-    # already-correct multi-line "\[ ... \]" block (very common - delimiters on their own
-    # lines) is never matched and double-wrapped into broken "\\[ ... \]" text. The first
-    # version of this fix had [\s\S] without the lookbehind guard, which was itself a live
-    # regression - caught and fixed by testing the exact reported text with Node before
-    # redeploying.
-    assert r"(?<!\\)\[([\s\S]{1,400}?)\]" in body
+    # [\s\S] (not [^\[\]\n]) so bracket content can span multiple lines, AND
+    # (?<!\\[a-zA-Z]*) so an already-correct multi-line "\[ ... \]" block (very common -
+    # delimiters on their own lines) is never matched and double-wrapped into broken
+    # "\\[ ... \]" text. The first version of this fix had [\s\S] without the lookbehind
+    # guard, which was itself a live regression - caught and fixed by testing the exact
+    # reported text with Node before redeploying. The lookbehind was later widened from
+    # "(?<!\\)" to "(?<!\\[a-zA-Z]*)" - see test_bracket_math_fallback_protects_left_right_delimiters.
+    assert r"(?<!\\[a-zA-Z]*)\[([\s\S]{1,400}?)\]" in body
     # Separate pass for bare parens, guarded against double-wrapping already-correct \( \).
-    assert r"(?<!\\)\(([^()]{1,200})\)" in body
+    assert r"(?<!\\[a-zA-Z]*)\(([^()]{1,200})\)" in body
+
+
+def test_bracket_math_fallback_protects_left_right_delimiters():
+    """
+    Regression test for a live bug: "\\left(x + \\frac{b}{2a}\\right)^2" (a correctly-delimited
+    equation using LaTeX sizing commands) was getting corrupted into
+    "\\left\\(x + \\frac{b}{2a}\\right\\)^2" by the bare-paren fallback, because its negative
+    lookbehind "(?<!\\)" only checks the single character immediately before "(" - which in
+    "\\left(" is "t", not a backslash - so it didn't recognize the "(" as already belonging to
+    a LaTeX command. MathJax then failed to render it with "Missing or unrecognized delimiter
+    for \\left". Verified with Node against the exact reported text before fixing: the widened
+    lookbehind "(?<!\\[a-zA-Z]*)" (backslash followed by zero-or-more letters) covers both the
+    bare "\\(" case and any command-word case ("\\left(", "\\big(", "\\Bigg[", etc.).
+    """
+    m = re.search(r"function convertBareBracketMathToLatex\(str\) \{(.*?)\n  \}", FORMATTER_SRC, re.S)
+    assert m, "convertBareBracketMathToLatex body not found"
+    body = m.group(1)
+    assert r"(?<!\\[a-zA-Z]*)\[" in body
+    assert r"(?<!\\[a-zA-Z]*)\(" in body
+    # Both occurrences of the old, too-narrow lookbehind must be gone, not just supplemented.
+    assert r"(?<!\\)\[" not in body
+    assert r"(?<!\\)\(" not in body
 
 
 def test_math_restore_runs_after_marked_parse_not_before():
@@ -284,6 +307,47 @@ def test_frontend_chat_timeout_is_not_shorter_than_gunicorn_timeout():
         f"--timeout ({gunicorn_timeout_s}s) so the backend's real timeout response wins "
         f"the race instead of a premature client-side abort discarding completed work"
     )
+
+
+# --- Live bug: View Lesson kept showing the original after a chat edit -------------
+
+LESSON_ROUTES_SRC = (ROOT / "app" / "routes" / "lesson_routes.py").read_text(encoding="utf-8")
+MODELS_SRC = (ROOT / "app" / "models" / "models.py").read_text(encoding="utf-8")
+
+
+def test_update_lesson_tool_syncs_existing_my_lessons_row():
+    """Chat edits must also update the already-saved Lesson row, not just RAGThread."""
+    assert "def _sync_saved_lesson_row(thread_id: str, content: str)" in RAG_SERVICE_SRC
+    m = re.search(r"def update_lesson_tool\(full_lesson_text: str, thread_id: str\).*?\n@tool\n", RAG_SERVICE_SRC, re.S)
+    assert m, "update_lesson_tool body not found"
+    body = m.group(0)
+    assert "_sync_saved_lesson_row(str(thread_id), content)" in body
+    assert "get_lesson_by_rag_thread_id" in RAG_SERVICE_SRC
+
+
+def test_lesson_persist_fallback_retries_when_tool_called_but_failed():
+    """
+    Confirmed live: the model called update_lesson_tool, got success=false, then dumped
+    the complete updated lesson in chat ("issue with updating the lesson plan"). The
+    fallback used to skip that case because it gated on `not update_lesson_tool_called`.
+    """
+    assert "update_lesson_tool_succeeded" in RAG_SERVICE_SRC
+    assert "and not update_lesson_tool_succeeded" in RAG_SERVICE_SRC
+    assert "and not update_lesson_tool_called" not in RAG_SERVICE_SRC
+
+
+def test_create_lesson_simple_updates_existing_row_for_same_thread():
+    """Re-save from chat must update the existing Lesson, not create a disconnected duplicate."""
+    assert "def get_lesson_by_rag_thread_id" in MODELS_SRC
+    m = re.search(r"def create_lesson_simple\(\):.*?\n@bp\.route", LESSON_ROUTES_SRC, re.S)
+    assert m, "create_lesson_simple body not found"
+    body = m.group(0)
+    assert "get_lesson_by_rag_thread_id" in body
+    assert "updated_existing" in body
+    # Re-save must not overwrite the real title with the frontend's auto-suffix.
+    update_call = re.search(r"LessonModel\(existing_lesson\['id'\]\)\.update_lesson\((.*?)\)", body, re.S)
+    assert update_call, "re-save update_lesson call not found"
+    assert "title=" not in update_call.group(1)
 
 
 if __name__ == "__main__":

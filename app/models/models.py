@@ -292,6 +292,34 @@ class LessonModel:
             raise
 
     @staticmethod
+    def get_lesson_by_rag_thread_id(teacher_id: int, rag_thread_id: str) -> Dict[str, Any]:
+        """
+        Retrieve the most recently saved lesson for this teacher+thread, if one exists.
+
+        Used by the "Save Lesson" flow to detect a re-save (the teacher already saved once
+        from this chat thread, then kept editing in chat and is saving again) so the existing
+        entry gets updated in place instead of silently leaving the previously-saved lesson
+        stale while a newer edit sits unreflected in "My Lessons"/"View Lesson" - confirmed
+        live: editing a lesson via chat after it was already saved once did not change what
+        "View Lesson" showed, because create_lesson_simple always created a brand-new row and
+        never looked one up first.
+        """
+        if not rag_thread_id:
+            return None
+        try:
+            db = get_db()
+            lesson = (
+                db.query(DBLesson)
+                .filter(DBLesson.teacher_id == teacher_id, DBLesson.rag_thread_id == rag_thread_id)
+                .order_by(DBLesson.id.desc())
+                .first()
+            )
+            return LessonModel._lesson_to_dict(lesson) if lesson else None
+        except Exception as e:
+            logger.error(f"Error retrieving lesson by rag_thread_id: {str(e)}")
+            return None
+
+    @staticmethod
     def get_lessons_by_lesson_id(lesson_id: str) -> List[Dict[str, Any]]:
         """Get all versions of a lesson by lesson_id"""
         try:

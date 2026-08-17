@@ -3917,6 +3917,55 @@ _LESSON_UPDATE_COVERAGE_PROMPT = (
 )
 
 
+def _parse_tool_json_result(content: Any) -> Dict[str, Any]:
+    """Best-effort parse of a ToolMessage payload into a dict. Empty dict on failure."""
+    if isinstance(content, dict):
+        return content
+    if not content or not isinstance(content, str):
+        return {}
+    try:
+        parsed = json.loads(content)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _sync_saved_lesson_row(thread_id: str, content: str) -> None:
+    """
+    If this chat thread already has a row in My Lessons, update that row's content
+    in place so "View Lesson" shows the latest edit without requiring a second Save.
+
+    Confirmed live: after "please add the example as well", chat showed the modified
+    lesson but View Lesson kept serving the original because update_lesson_tool only
+    wrote RAGThread.last_lesson_text and never touched the Lesson table.
+
+    Failures here must never roll back the RAGThread write that already committed.
+    """
+    if not thread_id or not (content or "").strip():
+        return
+    try:
+        from app.models.models import LessonModel
+        user_id = _get_user_id_for_thread(thread_id)
+        if not user_id:
+            return
+        existing = LessonModel.get_lesson_by_rag_thread_id(user_id, str(thread_id))
+        if not existing:
+            return
+        ok = LessonModel(existing["id"]).update_lesson(content=content)
+        if ok:
+            logger.info(
+                "Synced My Lessons row id=%s for thread_id=%s content_len=%s",
+                existing["id"], thread_id, len(content),
+            )
+        else:
+            logger.warning(
+                "Failed to sync My Lessons row id=%s for thread_id=%s",
+                existing["id"], thread_id,
+            )
+    except Exception as e:
+        logger.warning("Failed to sync saved Lesson row for thread_id=%s: %s", thread_id, e)
+
+
 def _lesson_update_still_covers_previous(previous: str, new_content: str, user_id: Optional[int]) -> bool:
     """
     A pure length-ratio check cannot tell "a legitimate full rewrite that's shorter" apart
@@ -4024,6 +4073,12 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
         # lesson_finalized is a display flag only (set/cleared by finalize_lesson_tool) - an
         # edit does not touch it, whether the lesson was finalized before or not.
         db.commit()
+
+        # If this thread was already saved to My Lessons, keep that row in sync so
+        # "View Lesson" shows the edit immediately — not the original pre-edit content.
+        # Confirmed live: "please add the example as well" updated last_lesson_text (or
+        # tried to) while /api/lessons/lesson/:id/view kept serving the stale Lesson row.
+        _sync_saved_lesson_row(str(thread_id), content)
 
         result["success"] = True
         result["reason"] = "Lesson draft updated."
@@ -5810,6 +5865,7 @@ def _chat_handle_lesson_state_and_persistence(
 
     finalize_tool_result = None
     update_lesson_tool_called = False
+    update_lesson_tool_succeeded = False
     for m in current_turn_tail:
         if isinstance(m, ToolMessage) and getattr(m, "name", None) == "finalize_lesson_tool":
             try:
@@ -5821,6 +5877,9 @@ def _chat_handle_lesson_state_and_persistence(
             # call's outcome is the one that matches the DB's current state.
         if isinstance(m, ToolMessage) and getattr(m, "name", None) == "update_lesson_tool":
             update_lesson_tool_called = True
+            parsed_update = _parse_tool_json_result(getattr(m, "content", None))
+            if parsed_update.get("success"):
+                update_lesson_tool_succeeded = True
 
     # Deliberately NOT an elif against the finalize_tool_result branch below: confirmed live
     # that on a genuine lesson_modification turn, the model sometimes ALSO calls
@@ -5836,21 +5895,26 @@ def _chat_handle_lesson_state_and_persistence(
         thread_id_str
         and response_content
         and router_intent in ("lesson_generation", "lesson_modification")
-        and not update_lesson_tool_called
+        and not update_lesson_tool_succeeded
     ):
         # Deterministic guarantee, not just a prompt instruction: confirmed live that telling
         # the model to call update_lesson_tool itself was NOT reliably followed - across a full
         # generate -> save -> modify -> save-again test, the model produced real lesson content
-        # every time but never once called the tool (0/4 turns), reproducing the "no lesson
-        # content yet" failure this whole fix was meant to solve. Same lesson already learned
-        # twice elsewhere in this codebase (own_answer_followup_active, meta_conversation_active
-        # both exist because a prompt-only instruction wasn't enough on its own) - so instead of
-        # hoping, call update_lesson_tool ourselves with the model's own final response as the
-        # full lesson text whenever the model didn't call it. This keeps the validated path (the
-        # fragment-rejection guard) as the ONLY way last_lesson_text changes - never a blind
-        # write - while guaranteeing that path actually runs.
+        # every time but never once called the tool (0/4 turns). Also confirmed live: the model
+        # CAN call the tool and still fail (fragment/coverage guard), then dump the COMPLETE
+        # updated lesson in the user-facing reply ("It seems there was an issue with updating
+        # the lesson plan..."). Gating this fallback on "tool was never called" skipped that
+        # case, so View Lesson stayed on the original. Gate on success instead: if the tool
+        # already persisted, do not overwrite with a short chat ack; if it was skipped OR
+        # returned success=false, retry with the model's own final response through the same
+        # validated path (fragment-rejection guard is still the only way last_lesson_text
+        # changes - never a blind write).
         try:
             update_lesson_tool.invoke({"full_lesson_text": response_content, "thread_id": thread_id_str})
+            logger.info(
+                "persist_lesson_via_tool_fallback: thread_id=%s prior_call=%s",
+                thread_id_str, update_lesson_tool_called,
+            )
         except Exception as e:
             logger.warning("Deterministic update_lesson_tool call failed for thread_id=%s: %s", thread_id_str, e)
         _mark_step("persist_lesson_via_tool_fallback")
