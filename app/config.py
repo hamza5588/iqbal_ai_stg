@@ -8,37 +8,38 @@ _load_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'utils
 if os.path.isfile(_load_env_path):
     load_dotenv(_load_env_path, override=True)
 
+def _env_str(key: str, default: str = "") -> str:
+    """Read an env var, treating missing/blank values as unset."""
+    val = os.getenv(key)
+    if val is None or not str(val).strip():
+        return default
+    return str(val).strip()
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    val = os.getenv(key)
+    if val is None or not str(val).strip():
+        return default
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
 class Config:
     # Basic Flask configuration
     SECRET_KEY = os.getenv('SECRET_KEY', 'your_secret_key')  # Change this in production
     
-    # Email configuration
-    # MAIL_SERVER = 'mail.privateemail.com'
-    # MAIL_PORT = 465
-    # # MAIL_SERVER = 'smtp.gmail.com'
-    # # MAIL_PORT = 587
-    # MAIL_USE_TLS = True
-    # MAIL_USE_SSL = False
-    # # MAIL_USERNAME = 'info@iqbalai.com'  # Make sure this is the full email address
-    # # MAIL_PASSWORD = 'Iqbalai12@'  # Make sure this is the correct app-specific password
-    # # MAIL_DEFAULT_SENDER = 'info@iqbalai.com'
-    # MAIL_USERNAME = os.getenv('MAIL_USERNAME', 'info@iqbalai.com')
-    # MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', 'Iqbalai12@')
-    # MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME', 'info@iqbalai.com')
-    # MAIL_DEBUG = True  # Enable debug mode to see more detailed logs
-
-        # Email configuration with extended timeout
-    MAIL_SERVER = 'mail.privateemail.com'
-    MAIL_PORT = 465
-    MAIL_USE_TLS = False
-    MAIL_USE_SSL = True
-    MAIL_USERNAME = os.getenv('MAIL_USERNAME', 'info@iqbalai.com')
-    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', 'Iqbalai123@')
-    MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME', 'info@iqbalai.com')
+    # Namecheap Private Email: 465/SSL or 587/STARTTLS. Empty env values must not
+    # wipe the sender (Flask-Mail then raises "no sender configured").
+    MAIL_SERVER = _env_str('MAIL_SERVER', 'mail.privateemail.com')
+    MAIL_PORT = int(_env_str('MAIL_PORT', '465'))
+    MAIL_USE_TLS = _env_bool('MAIL_USE_TLS', False)
+    MAIL_USE_SSL = _env_bool('MAIL_USE_SSL', True)
+    MAIL_USERNAME = _env_str('MAIL_USERNAME', 'info@iqbalai.com')
+    MAIL_PASSWORD = _env_str('MAIL_PASSWORD', 'Iqbalai123@')
+    MAIL_DEFAULT_SENDER = _env_str('MAIL_DEFAULT_SENDER', MAIL_USERNAME)
     MAIL_DEBUG = True
     MAIL_MAX_EMAILS = None
     MAIL_ASCII_ATTACHMENTS = False
-    MAIL_TIMEOUT = 30  # Add 30 second timeout
+    MAIL_TIMEOUT = int(_env_str('MAIL_TIMEOUT', '20'))
     # Database configuration - supports SQLite, MySQL, and PostgreSQL
     # Examples:
     # SQLite: sqlite:///instance/chatbot.db or sqlite:////absolute/path/to/chatbot.db

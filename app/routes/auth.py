@@ -7,9 +7,8 @@ import logging
 import requests
 import secrets
 from datetime import datetime, timedelta
-from flask_mail import Message
-from app import mail
 from app.config import Config
+from app.utils.mailer import MailConfigError, send_email
 from app.utils.openai_realtime import create_realtime_client_secret
 from app.utils.routes import get_default_route_by_role
 import os
@@ -17,98 +16,97 @@ import os
 logger = logging.getLogger(__name__)
 bp = Blueprint('auth', __name__)
 
+
+def _public_origin() -> str:
+    """Host the user should open from an emailed link (proxy-aware)."""
+    forwarded_host = request.headers.get('X-Forwarded-Host')
+    if forwarded_host:
+        scheme = request.headers.get('X-Forwarded-Proto', 'https')
+        return f"{scheme}://{forwarded_host}".rstrip('/')
+
+    host = (request.host or '').lower()
+    is_local = (
+        host.startswith('localhost')
+        or host.startswith('127.0.0.1')
+        or host.startswith('0.0.0.0')
+        or 'localhost' in host
+        or '127.0.0.1' in host
+    )
+    server_url = (os.getenv('SERVER_URL') or getattr(Config, 'SERVER_URL', '') or '').rstrip('/')
+    if not is_local and server_url:
+        return server_url
+    return (request.url_root or '').rstrip('/')
+
+
+def _verification_link(token: str) -> str:
+    origin = _public_origin()
+    if origin:
+        return f"{origin}/auth/verify_email/{token}"
+    return url_for('auth.verify_email', token=token, _external=True)
+
+
 @bp.route('/register_email', methods=['GET', 'POST'])
 def register_email():
     if request.method == 'GET' and 'user_id' in session:
         return redirect(get_default_route_by_role(session.get('role')))
     if request.method == 'POST':
+        email = (request.form.get('useremail') or '').strip()
+        if not email:
+            return render_template('register_email/register_email.html', error="Email is required")
+
         try:
-            email = request.form['useremail']
-            
-            # Check if email already exists
             if UserModel.get_user_by_email(email):
                 return render_template('register_email/register_email.html', error="Email already registered")
-            
-            # Generate verification token
+
             token = secrets.token_urlsafe(32)
             expires_at = datetime.utcnow() + timedelta(hours=24)
-            
-            # Store token in database
+
             db = get_db()
-            
-            # Delete any existing tokens for this email
             db.query(DBEmailVerificationToken).filter(
                 DBEmailVerificationToken.email == email
             ).delete()
-            
-            # Create new token
-            verification_token = DBEmailVerificationToken(
+            db.add(DBEmailVerificationToken(
                 token=token,
                 email=email,
                 expires_at=expires_at,
                 used=False
-            )
-            db.add(verification_token)
+            ))
             db.commit()
-            
-            # Send verification email
-            msg = Message('Verify your email',
-                        recipients=[email])
-            
-            # Generate verification link - handle production vs development
-            # Detect if we're running locally or in production
-            is_local = (
-                request.host.startswith('localhost') or 
-                request.host.startswith('127.0.0.1') or
-                request.host.startswith('0.0.0.0') or
-                'localhost' in request.host or
-                '127.0.0.1' in request.host
-            )
-            
-            # Check if behind reverse proxy (production)
-            is_production = 'X-Forwarded-Host' in request.headers or not is_local
-            
-            if is_production and not is_local:
-                # Production environment - use SERVER_URL or X-Forwarded-Host
-                server_url = os.getenv('SERVER_URL') or getattr(Config, 'SERVER_URL', None)
-                
-                if 'X-Forwarded-Host' in request.headers:
-                    # Behind reverse proxy (nginx, etc.) - use forwarded headers
-                    scheme = request.headers.get('X-Forwarded-Proto', 'https')
-                    host = request.headers['X-Forwarded-Host']
-                    verification_link = f"{scheme}://{host}/auth/verify_email/{token}"
-                elif server_url:
-                    # Use configured server URL (for production)
-                    verification_link = f"{server_url.rstrip('/')}/auth/verify_email/{token}"
-                else:
-                    # Fallback to url_for with external=True
-                    verification_link = url_for('auth.verify_email',
-                                            token=token,
-                                            _external=True,
-                                            _scheme=request.scheme)
-            else:
-                # Local development - use request-based URL generation
-                verification_link = url_for('auth.verify_email',
-                                          token=token,
-                                          _external=True,
-                                          _scheme=request.scheme)
-            
-            msg.body = f'''Please click the following link to verify your email and complete registration:
-{verification_link}
-
-This link will expire in 24 hours.
-
-If clicking the link doesn't work, please copy and paste it into your browser.'''
-            
-            mail.send(msg)
-            logger.info(f"Verification email sent to {email} with link: {verification_link}")
-            
-            return render_template('email_sent/email_sent.html', email=email)
-            
         except Exception as e:
-            logger.error(f"Email registration error: {str(e)}")
-            return render_template('register_email/register_email.html', error="Failed to send verification email")
-            
+            logger.error("Email registration database error: %s", e, exc_info=True)
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
+            return render_template(
+                'register_email/register_email.html',
+                error="Could not start verification. Please try again."
+            )
+
+        verification_link = _verification_link(token)
+        body = (
+            "Please click the following link to verify your email and complete registration:\n"
+            f"{verification_link}\n\n"
+            "This link will expire in 24 hours.\n\n"
+            "If clicking the link doesn't work, please copy and paste it into your browser."
+        )
+        try:
+            send_email('Verify your email', email, body)
+            logger.info("Verification email sent to %s with link: %s", email, verification_link)
+            return render_template('email_sent/email_sent.html', email=email)
+        except MailConfigError as e:
+            logger.error("Email registration mail config error: %s", e, exc_info=True)
+            return render_template(
+                'register_email/register_email.html',
+                error="Email is not configured on this server. Please contact support."
+            )
+        except Exception as e:
+            logger.error("Email registration send error: %s", e, exc_info=True)
+            return render_template(
+                'register_email/register_email.html',
+                error="Failed to send verification email"
+            )
+
     return render_template('register_email/register_email.html')
 
 @bp.route('/verify_email/<token>')
@@ -559,26 +557,29 @@ def forgot_password():
             )
             db.add(reset_token)
             db.commit()
-            
-            # Send OTP email
-            msg = Message('Password Reset OTP',
-                        recipients=[email])
-            
-            msg.body = f'''Your password reset OTP is: {otp}
 
-This OTP will expire in 15 minutes.
-
-If you didn't request this password reset, please ignore this email.'''
-            
-            mail.send(msg)
-            logger.info(f"Password reset OTP sent to {email}")
+            send_email(
+                'Password Reset OTP',
+                email,
+                (
+                    f"Your password reset OTP is: {otp}\n\n"
+                    "This OTP will expire in 15 minutes.\n\n"
+                    "If you didn't request this password reset, please ignore this email."
+                ),
+            )
+            logger.info("Password reset OTP sent to %s", email)
             
             if _wants_json():
                 return jsonify({'success': True, 'email': email})
             return render_template('verify_otp/verify_otp.html', email=email)
 
+        except MailConfigError as e:
+            logger.error("Password reset mail config error: %s", e, exc_info=True)
+            if _wants_json():
+                return jsonify({'success': False, 'error': 'Email is not configured on this server. Please contact support.'}), 500
+            return render_template('forgot_password/forgot_password.html', error="Email is not configured on this server. Please contact support.")
         except Exception as e:
-            logger.error(f"Password reset error: {str(e)}")
+            logger.error("Password reset error: %s", e, exc_info=True)
             if _wants_json():
                 return jsonify({'success': False, 'error': 'Failed to send OTP'}), 500
             return render_template('forgot_password/forgot_password.html', error="Failed to send OTP")
