@@ -22,7 +22,9 @@
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
     font-family:'Inter', 'Segoe UI', Arial, sans-serif;
-    background:#fafdfb;
+    background:
+      linear-gradient(160deg, rgba(250,253,251,0.94), rgba(223,242,230,0.94)),
+      url('{{ url_for('static', filename='images/forgot-password-bg.jpg') }}') center/cover no-repeat fixed;
     color:var(--text-dark);
   }
   h1, h2, .join-card h2{
