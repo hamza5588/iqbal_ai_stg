@@ -806,6 +806,95 @@ def view_lesson(lesson_id):
         logger.error(f"Error viewing lesson: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to view lesson: {str(e)}'}), 500
 
+
+def _is_placeholder_lesson_summary(summary):
+    text = (summary or '').strip().lower()
+    return (not text) or text in ('saved from chat.', 'saved from chat')
+
+
+@bp.route('/lesson/<int:lesson_id>/summary', methods=['GET'])
+@login_required
+def get_lesson_content_summary(lesson_id):
+    """Return a summary of this lesson's stored content (existing LessonService)."""
+    try:
+        lesson = LessonModel.get_lesson_by_id(lesson_id)
+        if not lesson:
+            return jsonify({'error': 'Lesson not found'}), 404
+
+        user_id = session.get('user_id')
+        user_role = session.get('role', 'student')
+        lesson_teacher_id = lesson.get('teacher_id')
+        is_public = lesson.get('is_public', False)
+
+        if lesson_teacher_id == user_id:
+            pass
+        elif is_public:
+            pass
+        else:
+            logger.info(
+                f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} "
+                f"(teacher: {lesson_teacher_id}, public: {is_public})"
+            )
+            return jsonify({'error': 'Access denied'}), 403
+
+        stored_summary = (lesson.get('summary') or '').strip()
+        if stored_summary and not _is_placeholder_lesson_summary(stored_summary):
+            return jsonify({
+                'success': True,
+                'summary': stored_summary,
+                'lesson_id': lesson_id,
+                'title': lesson.get('title', ''),
+                'cached': True,
+            })
+
+        lesson_service = LessonService(api_key=None)
+        result = lesson_service.get_lesson_summary(lesson_id)
+        if result.get('error'):
+            status = 404 if 'not found' in str(result.get('error', '')).lower() else 500
+            return jsonify({'error': result['error']}), status
+
+        generated = (result.get('summary') or '').strip()
+        if generated and _is_placeholder_lesson_summary(stored_summary):
+            try:
+                LessonModel(lesson_id).update_lesson(summary=generated)
+            except Exception as persist_err:
+                logger.warning(
+                    "Generated lesson summary for %s but failed to persist: %s",
+                    lesson_id,
+                    persist_err,
+                )
+
+        return jsonify({
+            'success': True,
+            'summary': generated,
+            'lesson_id': result.get('lesson_id', lesson_id),
+            'title': result.get('title', lesson.get('title', '')),
+            'cached': False,
+        })
+    except GroqRateLimitError as rl_exc:
+        logger.warning(
+            "get_lesson_content_summary: Groq rate limit for lesson %s — %s retry_after=%ds",
+            lesson_id, rl_exc.info.kind, rl_exc.info.retry_after,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily rate limited. Please wait and try again.',
+            'code': rl_exc.info.kind,
+            'retry_after': rl_exc.info.retry_after,
+        }), 429
+    except GroqBusyError as busy_exc:
+        logger.warning(
+            "get_lesson_content_summary: Groq semaphore busy for lesson %s — %s",
+            lesson_id, busy_exc,
+        )
+        return jsonify({
+            'error': 'The AI service is temporarily at capacity. Please try again in a moment.',
+            'code': 'SERVICE_AT_CAPACITY',
+            'retry_after': 10,
+        }), 503
+    except Exception as e:
+        logger.error(f"Error generating lesson summary: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to generate lesson summary. Please try again.'}), 500
+
 @bp.route('/lesson/<int:lesson_id>', methods=['PUT'])
 @teacher_required
 def update_lesson(lesson_id):

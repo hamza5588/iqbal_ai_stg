@@ -4239,7 +4239,7 @@
               <div class="vl-tl-arrow">&mdash;</div>
               <div class="vl-tl-item" onclick="toggleViewLessonTlPanel('lesson')">
                 <div class="vl-tl-num">2</div>
-                <div class="vl-tl-text"><b>Lesson Summary</b><small>Saved from chat.</small></div>
+                <div class="vl-tl-text"><b>Lesson Summary</b><small id="viewLessonSummaryTlSub">Click to view</small></div>
                 <div class="vl-chevron"><i class="fas fa-chevron-down"></i></div>
               </div>
               <div class="vl-tl-arrow">&mdash;</div>
@@ -4277,6 +4277,11 @@
             <div id="viewLessonLessonPanel" class="vl-tl-detail hidden">
               <div class="vl-tl-detail-head">
                 <h4>Lesson Summary</h4>
+                <div class="vl-tl-detail-actions">
+                  <div id="viewLessonLessonSummarySpinner" class="hidden" aria-live="polite">
+                    <i class="fas fa-spinner fa-spin"></i>
+                  </div>
+                </div>
               </div>
               <div id="viewLessonStructuredSummary" class="vl-tl-detail-body">
                 <p class="text-gray-500 italic">No lesson summary available</p>
@@ -4374,6 +4379,7 @@
       let currentChatMenuId = null;
       let lessonCreationCompleted = false; // Flag to track if first lesson is created
       let conversationSummaryRequestToken = 0;
+      let lessonSummaryRequestToken = 0;
 
       // ════════════════════════════════════════════════════════════════════════════════
       // 🔐 CHAT LIFECYCLE SYSTEM - CORE SPECIFICATION
@@ -6554,6 +6560,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             created_at: lesson.created_at || targetVersion.created_at,
             createdAt: lesson.created_at || targetVersion.created_at,
             version: viewedVersionNum,
+            versionLessonId: targetVersion.id || lesson.id,
             versions: sortedVersions.map(function(v) {
               return { version: v.version_number || v.version || 1, createdAt: v.created_at, content: v.content };
             }),
@@ -6563,7 +6570,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             // Fields required for conversation summary lookup
             rag_thread_id: lesson.rag_thread_id || null,
             conversation_id: lesson.conversation_id || null,
-            summary: lesson.summary || null,
+            summary: targetVersion.summary || lesson.summary || null,
           };
           await populateViewLessonModal(forModal);
           showViewLessonModal();
@@ -6737,6 +6744,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const items = document.querySelectorAll('#viewLessonSummaryTimeline .vl-tl-item');
           const idx = which === 'conv' ? 0 : 1;
           if (items[idx]) items[idx].classList.add('open');
+          if (which === 'lesson') {
+            loadLessonSummaryForLesson(window.currentViewedLessonData);
+          }
         }
       }
 
@@ -6793,15 +6803,104 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         syncExpandedConversationSummaryFromCurrent();
       }
 
-      function renderLessonSummaryText(lesson) {
-        const target = document.getElementById('viewLessonStructuredSummary');
-        if (!target) return;
-        const summary = (lesson && lesson.summary) ? String(lesson.summary).trim() : '';
-        if (!summary) {
-          target.innerHTML = '<p class="text-gray-500 italic">No lesson summary available</p>';
+      function isPlaceholderLessonSummary(text) {
+        const summary = String(text || '').trim().toLowerCase();
+        return !summary || summary === 'saved from chat.' || summary === 'saved from chat';
+      }
+
+      function setLessonSummaryLoading(isLoading) {
+        const spinner = document.getElementById('viewLessonLessonSummarySpinner');
+        if (spinner) spinner.classList.toggle('hidden', !isLoading);
+      }
+
+      function updateLessonSummaryTimelineSub(text) {
+        const sub = document.getElementById('viewLessonSummaryTlSub');
+        if (!sub) return;
+        const value = String(text || '').trim();
+        if (!value || isPlaceholderLessonSummary(value)) {
+          sub.textContent = 'Click to view';
           return;
         }
-        target.textContent = summary;
+        sub.textContent = value.length > 72 ? (value.slice(0, 72).trim() + '…') : value;
+      }
+
+      function renderLessonSummaryText(lesson, state) {
+        const target = document.getElementById('viewLessonStructuredSummary');
+        if (!target) return;
+        if (state === 'loading') {
+          target.innerHTML = '<p class="text-gray-500 italic">Generating lesson summary...</p>';
+          updateLessonSummaryTimelineSub('Generating...');
+          return;
+        }
+        if (state === 'error') {
+          target.innerHTML = '<p class="text-red-600">Failed to load lesson summary</p>';
+          updateLessonSummaryTimelineSub('Unavailable');
+          return;
+        }
+        const summary = (lesson && lesson.summary) ? String(lesson.summary).trim() : '';
+        if (isPlaceholderLessonSummary(summary)) {
+          target.innerHTML = '<p class="text-gray-500 italic">No lesson summary available</p>';
+          updateLessonSummaryTimelineSub('Click to view');
+          return;
+        }
+        updateLessonSummaryTimelineSub(summary);
+        try {
+          if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
+            target.innerHTML = TeacherChatFormatter.formatChatResponse(summary);
+            return;
+          }
+        } catch (e) { /* fall through to pre-wrap fallback */ }
+        const escaped = summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        target.innerHTML = '<pre class="whitespace-pre-wrap font-sans text-xs md:text-sm text-gray-700 leading-relaxed m-0 p-0">' + escaped + '</pre>';
+      }
+
+      async function loadLessonSummaryForLesson(lesson) {
+        const token = ++lessonSummaryRequestToken;
+        if (!lesson) {
+          renderLessonSummaryText(null);
+          return;
+        }
+        if (!isPlaceholderLessonSummary(lesson.summary)) {
+          renderLessonSummaryText(lesson);
+          return;
+        }
+
+        const summaryLessonId = Number(lesson.versionLessonId || lesson.id) || null;
+        if (!summaryLessonId) {
+          renderLessonSummaryText(null);
+          return;
+        }
+
+        try {
+          setLessonSummaryLoading(true);
+          renderLessonSummaryText(lesson, 'loading');
+          const summaryResponse = await fetch('/api/lessons/lesson/' + summaryLessonId + '/summary', {
+            method: 'GET',
+            credentials: 'include',
+          });
+          const summaryData = await summaryResponse.json().catch(function () { return {}; });
+          if (token !== lessonSummaryRequestToken) return;
+          if (!summaryResponse.ok) throw new Error(summaryData.error || 'Failed to load lesson summary');
+
+          const generated = String(summaryData.summary || '').trim();
+          if (isPlaceholderLessonSummary(generated)) {
+            renderLessonSummaryText(null);
+            return;
+          }
+          lesson.summary = generated;
+          if (window.currentViewedLessonData) {
+            window.currentViewedLessonData.summary = generated;
+          }
+          renderLessonSummaryText(lesson);
+        } catch (error) {
+          if (token !== lessonSummaryRequestToken) return;
+          console.warn('Lesson summary load failed:', error);
+          renderLessonSummaryText(null, 'error');
+        } finally {
+          if (token === lessonSummaryRequestToken) {
+            setLessonSummaryLoading(false);
+          }
+        }
       }
 
       async function loadConversationSummaryForLesson(lesson, forceRefresh) {
@@ -6897,6 +6996,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           renderConversationSummaryText(null);
           setConversationSummaryLoading(false);
           loadConversationSummaryForLesson(lesson);
+          const lessonPanel = document.getElementById('viewLessonLessonPanel');
+          if (lessonPanel && !lessonPanel.classList.contains('hidden')) {
+            loadLessonSummaryForLesson(lesson);
+          }
 
           // Load draft content from backend so edits persist across sessions
           const draftTextarea = document.getElementById('viewLessonDraft');
@@ -7180,8 +7283,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         window.currentViewLessonId = null;
         window.currentViewedLessonData = null;
         conversationSummaryRequestToken += 1;
+        lessonSummaryRequestToken += 1;
         setConversationSummaryLoading(false);
+        setLessonSummaryLoading(false);
         renderConversationSummaryText(null);
+        renderLessonSummaryText(null);
 
         // Only show chat input area if Chat tab is currently active
         const chatTabBtn = document.getElementById('chatTabBtn');
@@ -7387,7 +7493,19 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const currentEl = document.getElementById('viewLessonCurrent');
         if (currentEl) renderLessonMarkdown(currentEl, target.content || '');
         syncExpandedLessonPreviewFromCurrent();
-        renderLessonSummaryText(target);
+        if (window.currentViewedLessonData) {
+          window.currentViewedLessonData.versionLessonId = target.id || window.currentViewedLessonData.versionLessonId;
+          window.currentViewedLessonData.content = target.content || '';
+          window.currentViewedLessonData.summary = target.summary || null;
+          window.currentViewedLessonData.version = versionNumber;
+        }
+        lessonSummaryRequestToken += 1;
+        setLessonSummaryLoading(false);
+        renderLessonSummaryText(window.currentViewedLessonData || target);
+        const lessonPanel = document.getElementById('viewLessonLessonPanel');
+        if (lessonPanel && !lessonPanel.classList.contains('hidden')) {
+          loadLessonSummaryForLesson(window.currentViewedLessonData || target);
+        }
 
         // Update version badge in header
         const versionEl = document.getElementById('viewLessonVersion');
