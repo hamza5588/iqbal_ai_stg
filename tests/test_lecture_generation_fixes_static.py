@@ -267,15 +267,21 @@ def test_process_rendered_content_returns_a_promise():
     assert "return Promise.resolve();" in body
 
 
-def test_add_assistant_message_scrolls_only_after_typesetting_settles():
+def test_add_assistant_message_scrolls_to_start_not_end():
+    """
+    Live UX bug: after a long lecture arrived, addAssistantMessage called scrollToBottom()
+    once MathJax settled, which parked the viewport on Listen/Copy at the END of the
+    lecture. Teachers then had to scroll back up to start reading. Pin the new message's
+    start instead. Still run processRenderedContent for math, but do not wait on it to
+    scroll — the message top does not move when equations expand below.
+    """
     m = re.search(r"function addAssistantMessage\(message\) \{(.*?)\n      \}", DASHBOARD_SRC, re.S)
     assert m, "addAssistantMessage not found"
     body = m.group(1)
-    assert "processRenderedContent(contentEl).then(function () {" in body
-    assert "if (wasNearBottom) scrollToBottom();" in body
-    # The old bug pattern: processRenderedContent fired off, then scrollToBottom() called
-    # unconditionally right after, before its (unawaited) typesetting promise resolved.
-    assert "TeacherChatFormatter.processRenderedContent(contentEl);\n        }\n        scrollToBottom();" not in body
+    assert "if (wasNearBottom) scrollMessageToTop(messageDiv);" in body
+    assert "processRenderedContent(contentEl)" in body
+    assert "scrollToBottom();" not in body
+    assert "function scrollMessageToTop" in DASHBOARD_SRC
 
 
 def test_bulk_conversation_load_waits_for_all_renders_before_scrolling():

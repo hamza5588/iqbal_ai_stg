@@ -9709,8 +9709,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       function addAssistantMessage(message) {
         const chatMessages = document.getElementById('chatMessages');
         // Capture BEFORE appending: if the teacher had already scrolled up to read earlier
-        // content, don't yank them back down once this message (and its math) finishes rendering.
+        // content, don't yank them to the new reply.
         const wasNearBottom = isChatNearBottom();
+        // Drop the "AI is thinking..." bubble first so the lecture starts at the viewport
+        // top instead of sitting under the spinner (sendMessage also removes it in finally).
+        removeTypingIndicator();
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message assistant animate-fade-in';
         var imgUrl = "{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}";
@@ -9722,16 +9725,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       `;
         chatMessages.appendChild(messageDiv);
         var contentEl = messageDiv.querySelector('.chat-message-content');
-        // Scroll only AFTER MathJax/KaTeX typesetting (async) and layout have settled — scrolling
-        // immediately here would measure a pre-typeset height and land short once display
-        // equations expand the message, which is what produced the "next message overlaps
-        // the previous response" bug.
+        // Long lectures used to jump to the chat bottom after MathJax, which parked the
+        // teacher on Listen/Copy at the END of the lecture so they had to scroll back up
+        // to start reading. Pin the START of this reply in view instead. Do it immediately
+        // — the message top does not move when equations expand below, and waiting for
+        // typesetting would flash the lecture's end first.
+        if (wasNearBottom) scrollMessageToTop(messageDiv);
         if (contentEl && typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
-          TeacherChatFormatter.processRenderedContent(contentEl).then(function () {
-            if (wasNearBottom) scrollToBottom();
-          });
-        } else if (wasNearBottom) {
-          scrollToBottom();
+          TeacherChatFormatter.processRenderedContent(contentEl);
         }
 
         // Persist
@@ -10393,6 +10394,21 @@ Align everything with the lesson objectives and do not invent missing informatio
         const chatArea = document.getElementById('chatArea');
         if (!chatArea) return true;
         return (chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight) <= threshold;
+      }
+
+      // Align a message's start with the top of the chat viewport so a newly arrived
+      // lecture is readable from the beginning instead of jumping to its last line.
+      function scrollMessageToTop(messageEl, behavior) {
+        const chatArea = document.getElementById('chatArea');
+        if (!chatArea || !messageEl) return;
+        const mode = behavior || 'smooth';
+        const padding = 12;
+        const top = messageEl.getBoundingClientRect().top - chatArea.getBoundingClientRect().top + chatArea.scrollTop - padding;
+        try {
+          chatArea.scrollTo({ top: Math.max(0, top), behavior: mode });
+        } catch (e) {
+          chatArea.scrollTop = Math.max(0, top);
+        }
       }
 
       // Scroll to bottom of chat
