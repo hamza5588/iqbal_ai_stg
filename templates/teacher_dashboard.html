@@ -1599,6 +1599,54 @@
       }
     }
 
+    /* In-app confirm banner (replaces native window.confirm) */
+    .in-app-confirm {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200010;
+      width: min(560px, calc(100% - 24px));
+    }
+    .in-app-confirm-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+      padding: 12px 14px;
+    }
+    .in-app-confirm-icon { color: #166534; font-size: 18px; flex-shrink: 0; }
+    .in-app-confirm-card p {
+      flex: 1;
+      margin: 0;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #111;
+      line-height: 1.4;
+    }
+    .in-app-confirm-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .in-app-confirm-cancel,
+    .in-app-confirm-ok {
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    .in-app-confirm-cancel {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      color: #374151;
+    }
+    .in-app-confirm-ok {
+      background: #166534;
+      border: 1px solid #166534;
+      color: #fff;
+    }
+
     /* View Lesson Modal - Two Column Layout */
     #viewLessonModal {
       display: none !important;
@@ -3555,6 +3603,17 @@
 
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="fixed top-4 right-4 z-[200000] space-y-3 pointer-events-none"></div>
+
+  <div id="inAppConfirmBanner" class="in-app-confirm hidden" role="alertdialog" aria-modal="true" aria-labelledby="inAppConfirmMessage">
+    <div class="in-app-confirm-card">
+      <i class="fas fa-exclamation-circle in-app-confirm-icon"></i>
+      <p id="inAppConfirmMessage"></p>
+      <div class="in-app-confirm-actions">
+        <button type="button" id="inAppConfirmCancel" class="in-app-confirm-cancel">Cancel</button>
+        <button type="button" id="inAppConfirmOk" class="in-app-confirm-ok">OK</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Loading Overlay -->
   <div id="loading-overlay"
@@ -7447,7 +7506,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        if (!confirm('Finalize this new version? This will create a new published version from the draft.')) {
+        if (!await showInAppConfirm(
+          'Finalize this new version? This will create a new published version from the draft.',
+          { confirmLabel: 'Finalize', cancelLabel: 'Cancel' }
+        )) {
           return;
         }
 
@@ -10730,6 +10792,42 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
 
       // ===== TOAST NOTIFICATION SYSTEM =====
+      function showInAppConfirm(message, options) {
+        const banner = document.getElementById('inAppConfirmBanner');
+        const textEl = document.getElementById('inAppConfirmMessage');
+        const okBtn = document.getElementById('inAppConfirmOk');
+        const cancelBtn = document.getElementById('inAppConfirmCancel');
+        if (!banner || !textEl || !okBtn || !cancelBtn) {
+          return Promise.resolve(window.confirm(message));
+        }
+
+        const opts = options || {};
+        textEl.textContent = String(message || '');
+        okBtn.textContent = opts.confirmLabel || 'OK';
+        cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+        banner.classList.remove('hidden');
+
+        return new Promise(function (resolve) {
+          function finish(result) {
+            banner.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+            resolve(result);
+          }
+          function onOk() { finish(true); }
+          function onCancel() { finish(false); }
+          function onKey(event) {
+            if (event.key === 'Escape') finish(false);
+            if (event.key === 'Enter') finish(true);
+          }
+          okBtn.addEventListener('click', onOk);
+          cancelBtn.addEventListener('click', onCancel);
+          document.addEventListener('keydown', onKey);
+          okBtn.focus();
+        });
+      }
+
       function showToast(message, type = 'success', duration = 4000) {
         const container = document.getElementById('toastContainer');
         if (!container) return;
