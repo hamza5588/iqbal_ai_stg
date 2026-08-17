@@ -8968,6 +8968,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           ttsObjectUrl = null;
         }
         isTextToSpeechActive = false;
+        if (window.speechSynthesis) {
+          try { window.speechSynthesis.cancel(); } catch (e) {}
+        }
         const speakerBtn = document.getElementById('speakerBtn');
         if (speakerBtn) {
           speakerBtn.classList.remove('active');
@@ -8979,6 +8982,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
         activeTtsBtn = null;
       }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) stopTextToSpeechSession();
+      });
+      window.addEventListener('pagehide', function () {
+        stopTextToSpeechSession();
+      });
 
       // Per-message "Listen" button (new_ui card-actions row) — shares the same backend TTS
       // playback session/state as the input-bar speaker button, so starting one stops the other.
@@ -9010,6 +9020,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             return;
           }
           const blob = await res.blob();
+          if (!isTextToSpeechActive || activeTtsBtn !== btn) return;
           ttsObjectUrl = URL.createObjectURL(blob);
           ttsAudio = new Audio(ttsObjectUrl);
           btn.innerHTML = '<i class="fas fa-volume-up"></i><span>Stop</span>';
@@ -9132,6 +9143,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             return;
           }
           const blob = await res.blob();
+          if (!isTextToSpeechActive) return;
           if (ttsObjectUrl) {
             try {
               URL.revokeObjectURL(ttsObjectUrl);
