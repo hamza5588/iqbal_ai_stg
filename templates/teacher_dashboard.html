@@ -3362,6 +3362,104 @@
       .ppm-bottom-bar{ flex-direction:column; align-items:stretch; }
     }
 
+    /* ===== New UI: Step 1 "Upload Your PDF" form — matches design provided for create-lesson wizard ===== */
+    .pu1-body{ background:#fbfcfb; padding:26px 28px; display:grid; grid-template-columns:320px 1fr; gap:22px; align-items:start; }
+    .pu1-upload-card{
+      background:#fff; border:1px solid #eee; border-radius:16px; padding:26px 22px 22px; text-align:center;
+      background-image:radial-gradient(circle at 90% 8%, rgba(28,124,62,0.06) 0, transparent 55%);
+    }
+    .pu1-doc-visual{ position:relative; width:110px; height:110px; margin:4px auto 18px; }
+    .pu1-doc-visual .pu1-doc-circle{
+      width:100%; height:100%; border-radius:50%; background:#fff; box-shadow:0 6px 22px rgba(15,23,42,0.07);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .pu1-doc-visual .pu1-doc-icon{ font-size:44px; color:#c7d2c9; }
+    .pu1-doc-visual .pu1-pdf-chip{
+      position:absolute; top:36px; left:50%; transform:translateX(-50%);
+      background:#166534; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:.03em;
+      padding:3px 9px; border-radius:5px;
+    }
+    .pu1-doc-visual .pu1-upload-badge{
+      position:absolute; bottom:0; right:6px; width:32px; height:32px; border-radius:50%;
+      background:#1c7c3e; border:3px solid #fff; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px;
+    }
+    .pu1-upload-card h2{ font-size:21px; font-weight:800; color:#1f2430; margin-bottom:8px; }
+    .pu1-upload-card .pu1-upload-sub{ font-size:13.5px; color:#6b7280; line-height:1.6; margin-bottom:20px; }
+    .pu1-upload-card .pu1-upload-sub b{ color:#166534; font-weight:700; }
+    .pu1-dropzone{
+      border:2px dashed #9fcbac; border-radius:14px; padding:26px 16px; cursor:pointer;
+      transition:border-color .2s ease, background .2s ease;
+    }
+    .pu1-dropzone:hover, .pu1-dropzone.pu1-drag-over{ border-color:#1c7c3e; background:#f3faf5; }
+    .pu1-dropzone .pu1-dropzone-icon{ font-size:30px; color:#9ca3af; margin-bottom:10px; }
+    .pu1-dropzone .pu1-dropzone-title{ font-size:14.5px; font-weight:700; color:#1f2430; }
+    .pu1-dropzone .pu1-dropzone-sub{ font-size:12.5px; color:#6b7280; margin-bottom:14px; }
+    .pu1-format-badge{
+      display:inline-flex; align-items:center; gap:6px; background:#e6f4ea; color:#166534;
+      font-size:11.5px; font-weight:700; padding:6px 12px; border-radius:999px;
+    }
+    .pu1-tracker-card{ background:#fff; border:1px solid #eee; border-radius:16px; padding:18px 20px; margin-top:16px; }
+    .pu1-tracker-row{ display:flex; align-items:flex-start; }
+    .pu1-tracker-step{ display:flex; flex-direction:column; align-items:center; flex:1; text-align:center; }
+    .pu1-tracker-circle{
+      width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+      font-weight:800; font-size:15px; margin-bottom:8px; position:relative;
+    }
+    .pu1-tracker-step.active .pu1-tracker-circle{ background:#166534; color:#fff; }
+    .pu1-tracker-step.pending .pu1-tracker-circle{ background:#eee; color:#9ca3af; border:2px dotted #d1d5db; }
+    .pu1-tracker-circle i{ font-size:15px; }
+    .pu1-tracker-step h4{ font-size:13.5px; font-weight:800; color:#1f2430; }
+    .pu1-tracker-step p{ font-size:11.5px; color:#9ca3af; margin-top:2px; }
+    .pu1-tracker-arrow{ flex:0 0 auto; width:60px; display:flex; align-items:center; justify-content:center; margin-top:20px; color:#1c7c3e; }
+    .pu1-tracker-arrow .pu1-arrow-line{ flex:1; height:0; border-top:2px dashed #b9dcc3; }
+    .pu1-tracker-arrow i{ font-size:13px; margin:0 4px; }
+
+    .pu1-right{ background:#fff; border:1px solid #eee; border-radius:16px; overflow:hidden; }
+    .pu1-step-ribbon{
+      background:#166534; color:#fff; font-weight:800; font-size:12.5px; letter-spacing:.06em;
+      padding:13px 30px 13px 22px; display:inline-block;
+      clip-path:polygon(0 0, 100% 0, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+      border-radius:16px 0 0 0;
+    }
+    .pu1-right-body{ padding:6px 28px 28px; }
+    .pu1-field{ margin-bottom:20px; }
+    .pu1-field-label{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .pu1-field-icon{
+      width:34px; height:34px; border-radius:9px; background:#e6f4ea; color:#166534;
+      display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0;
+    }
+    .pu1-field-label span{ font-size:14px; font-weight:700; color:#1f2430; }
+    .pu1-input{
+      width:100%; padding:12px 15px; border-radius:10px; font-size:14px; color:#1f2430;
+      font-family:inherit; outline:none; transition:box-shadow .15s ease;
+    }
+    .pu1-input::placeholder{ color:#9ca3af; }
+    .pu1-input:focus{ box-shadow:0 0 0 3px rgba(28,124,62,0.15); }
+    select.pu1-input{ background:#fff; cursor:pointer; }
+    .pu1-row2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    .pu1-context-wrap{ position:relative; }
+    .pu1-char-count{ position:absolute; right:14px; bottom:12px; font-size:11.5px; color:#9ca3af; }
+    .pu1-tip-box{
+      display:flex; align-items:flex-start; gap:12px; background:#f4faf5; border-radius:12px;
+      padding:14px 16px; margin-bottom:22px;
+    }
+    .pu1-tip-box i{ color:#1c7c3e; font-size:16px; margin-top:1px; flex-shrink:0; }
+    .pu1-tip-box p{ font-size:13px; color:#166534; line-height:1.55; }
+    .pu1-submit-btn{
+      width:100%; background:#166534; color:#fff; border:none; padding:15px; border-radius:10px;
+      font-weight:800; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px;
+      transition:background .15s ease;
+    }
+    .pu1-submit-btn:hover{ background:#125129; }
+    .pu1-cancel-btn2{
+      width:100%; background:#fff; color:#166534; border:1.5px solid #1c7c3e; padding:14px; border-radius:10px;
+      font-weight:800; font-size:15px; cursor:pointer; margin-top:12px;
+    }
+    .pu1-cancel-btn2:hover{ background:#f3faf5; }
+    @media(max-width:820px){
+      .pu1-body{ grid-template-columns:1fr; }
+    }
+
     /* ===== New UI: chat bubble / input bar palette (colors + shape only — markdown typography rules untouched) ===== */
     #chatMessages .chat-message-avatar{ border-radius:50%; }
     #chatMessages .chat-message-avatar img{ border-radius:50%; }
@@ -5110,172 +5208,161 @@
         document.body.style.position = 'fixed';
         document.body.style.width = '100%';
 
-        // Step 1: Upload PDF with modern redesign
+        // Step 1: Upload PDF — matches the "Upload Your PDF" design provided for the create-lesson wizard
         const modalHtml = `
         <div id="createLessonModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center z-[9999] overflow-y-auto py-2 md:py-4">
-            <div id="createLessonModalContent" class="bg-white rounded-2xl md:rounded-3xl w-full max-w-3xl mx-2 md:mx-4 my-auto shadow-2xl overflow-hidden">
-                <!-- Header with Beautiful Gradient Background -->
-                <div class="bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500 text-white px-4 md:px-10 py-6 md:py-10 shadow-lg">
-                    <div class="flex items-start justify-between gap-2 md:gap-4">
-                        <div class="min-w-0">
-                            <p class="text-xl md:text-4xl text-primary-100 font-bold opacity-90 mb-1 md:mb-2">Step 1 of 2: Upload Your PDF</p>
-                            <h2 class="text-sm md:text-lg font-medium text-white break-words">Create New Lesson</h2>
-                        </div>
-                        <button onclick="closeCreateLessonModal()" 
-                                class="text-white hover:text-gray-200 hover:bg-white hover:bg-opacity-20 rounded-full p-2 md:p-3 transition-all flex-shrink-0">
-                            <i class="fas fa-times text-lg md:text-2xl"></i>
-                        </button>
-                    </div>
+            <div id="createLessonModalContent" class="bg-white rounded-2xl md:rounded-3xl w-full max-w-5xl mx-2 md:mx-4 my-auto shadow-2xl overflow-hidden">
+                <!-- Header: matches new_ui/processing_upload_pdfui/17-processing-pdf.html -->
+                <div class="ppm-header">
+                  <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
+                  <div class="ppm-close-x" onclick="closeCreateLessonModal()">
+                    <i class="fas fa-times"></i>
+                  </div>
                 </div>
 
-                <!-- Progress Steps Indicator - Enhanced Design -->
-                <div class="bg-gray-50 px-3 md:px-10 py-6 md:py-8 overflow-x-auto">
-                    <div class="flex items-center justify-between gap-1 md:gap-3 min-w-max md:min-w-0">
-                        <!-- Step 1: Upload PDF -->
-                        <div class="flex flex-col items-center flex-1 min-w-max md:min-w-0">
-                            <div class="relative mb-2 md:mb-4">
-                                <div class="w-10 h-10 md:w-16 md:h-16 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold text-sm md:text-2xl shadow-lg ring-2 md:ring-4 ring-primary-100">
-                                    <i class="fas fa-cloud-upload-alt text-xs md:text-lg"></i>
-                                </div>
-                                <div class="absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 bg-primary-600 rounded-full flex items-center justify-center text-white text-xs font-bold">1</div>
-                            </div>
-                            <h3 class="text-xs md:text-base font-bold text-primary-700 text-center">Upload</h3>
-                            <p class="text-xs text-gray-600 text-center mt-0.5 md:mt-1 hidden md:block">Select & validate</p>
-                        </div>
-                        
-                        <!-- Connector Line 1 -->
-                        <div class="flex-1 h-0.5 md:h-1 bg-gray-300 mx-0.5 md:mx-3 mb-6 min-w-max md:min-w-0"></div>
-                        
-                        <!-- Step 2: Processing -->
-                        <div class="flex flex-col items-center flex-1 min-w-max md:min-w-0">
-                            <div class="relative mb-2 md:mb-4">
-                                <div class="w-10 h-10 md:w-16 md:h-16 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold text-sm md:text-2xl shadow-md ring-2 md:ring-4 ring-gray-200">
-                                    <i class="fas fa-cogs text-xs md:text-lg"></i>
-                                </div>
-                                <div class="absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold">2</div>
-                            </div>
-                            <h3 class="text-xs md:text-base font-bold text-gray-600 text-center">Process</h3>
-                            <p class="text-xs text-gray-500 text-center mt-0.5 md:mt-1 hidden md:block">AI analysis</p>
-                        </div>
-                    </div>
-                </div>
+                <div class="pu1-body">
+                  <!-- Left column: decorative upload visual + dropzone + step tracker -->
+                  <div>
+                    <div class="pu1-upload-card">
+                      <div class="pu1-doc-visual">
+                        <div class="pu1-doc-circle"><i class="fas fa-file-alt pu1-doc-icon"></i></div>
+                        <div class="pu1-pdf-chip">PDF</div>
+                        <div class="pu1-upload-badge"><i class="fas fa-arrow-up"></i></div>
+                      </div>
+                      <h2>Upload Your PDF</h2>
+                      <p class="pu1-upload-sub">Drag &amp; drop your PDF file here<br>or <b>click to browse</b></p>
 
-                <!-- Form Content -->
-                <div class="px-4 md:px-10 py-6 md:py-8">
-                    <!-- Lesson Title -->
-                    <div class="mb-5 md:mb-6">
-                        <label class="block text-xs md:text-sm font-bold text-gray-900 mb-2 md:mb-3 flex items-center gap-2">
-                            <i class="fas fa-heading text-primary-600 text-sm md:text-base"></i>
+                      <div id="dropZone" class="pu1-dropzone">
+                          <i class="fas fa-file-alt pu1-dropzone-icon"></i>
+                          <p class="pu1-dropzone-title">Your PDF file</p>
+                          <p class="pu1-dropzone-sub">(up to 100MB)</p>
+                          <div class="pu1-format-badge"><i class="fas fa-check-circle"></i>PDF Format Supported</div>
+                      </div>
+                      <input type="file" id="pdfFileInput" accept=".pdf" class="hidden">
+                      <div id="fileError" class="text-red-600 text-xs md:text-sm mt-3 hidden flex items-center gap-2 bg-red-50 p-2 md:p-3 rounded-lg border border-red-200 text-left">
+                          <i class="fas fa-exclamation-triangle flex-shrink-0 text-sm md:text-base"></i>
+                          <span id="fileErrorText" class="font-medium"></span>
+                      </div>
+                      <!-- Selected File Display -->
+                      <div id="selectedFileDisplay" class="mt-3 md:mt-4 hidden">
+                          <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg md:rounded-xl p-3 md:p-4 flex items-center gap-3 shadow-sm text-left">
+                              <div class="text-green-600 text-2xl flex-shrink-0">
+                                  <i class="fas fa-check-circle"></i>
+                              </div>
+                              <div class="flex-1 text-left min-w-0">
+                                  <p class="font-bold text-green-900 text-xs md:text-sm truncate" id="selectedFileName"></p>
+                                  <p class="text-xs text-green-700 mt-0.5" id="selectedFileSize"></p>
+                              </div>
+                              <button type="button" onclick="clearFileSelection()" class="text-green-600 hover:text-green-800 hover:bg-green-100 p-1.5 md:p-2 rounded-lg transition-all flex-shrink-0">
+                                  <i class="fas fa-times text-sm md:text-lg"></i>
+                              </button>
+                          </div>
+                      </div>
+                    </div>
+
+                    <!-- Step tracker: Upload -> Process -->
+                    <div class="pu1-tracker-card">
+                      <div class="pu1-tracker-row">
+                        <div class="pu1-tracker-step active">
+                          <div class="pu1-tracker-circle"><i class="fas fa-cloud-upload-alt"></i></div>
+                          <h4>Upload</h4>
+                          <p>Select &amp; validate</p>
+                        </div>
+                        <div class="pu1-tracker-arrow"><span class="pu1-arrow-line"></span><i class="fas fa-chevron-right"></i></div>
+                        <div class="pu1-tracker-step pending">
+                          <div class="pu1-tracker-circle"><i class="fas fa-brain"></i></div>
+                          <h4>Process</h4>
+                          <p>AI analysis</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Right column: lesson details form -->
+                  <div class="pu1-right">
+                    <div class="pu1-step-ribbon">STEP 1 OF 2</div>
+                    <div class="pu1-right-body">
+                      <!-- Lesson Title -->
+                      <div class="pu1-field">
+                          <div class="pu1-field-label">
+                            <span class="pu1-field-icon"><i class="fas fa-heading"></i></span>
                             <span>Lesson Title <span class="text-red-500">*</span></span>
-                        </label>
-                        <input type="text" id="lessonTitle" 
-                               class="w-full px-4 md:px-5 py-2.5 md:py-3.5 border-2 border-gray-200 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all placeholder-gray-400 font-medium text-gray-900 text-sm md:text-base"
-                               placeholder="e.g., 'Introduction to Algebra'"
-                               oninput="clearLessonTitleFormError()"
-                               required>
-                        <div id="lessonTitleError" class="text-red-600 text-xs md:text-sm mt-2 hidden flex items-start gap-2 bg-red-50 p-2 md:p-3 rounded-lg border border-red-200" role="alert">
-                            <i class="fas fa-exclamation-circle flex-shrink-0 mt-0.5 text-sm md:text-base"></i>
-                            <span id="lessonTitleErrorText" class="font-medium"></span>
-                        </div>
-                    </div>
+                          </div>
+                          <input type="text" id="lessonTitle"
+                                 class="pu1-input border-2 border-emerald-600 focus:border-emerald-700"
+                                 placeholder="e.g., 'Introduction to Algebra'"
+                                 oninput="clearLessonTitleFormError()"
+                                 required>
+                          <div id="lessonTitleError" class="text-red-600 text-xs md:text-sm mt-2 hidden flex items-start gap-2 bg-red-50 p-2 md:p-3 rounded-lg border border-red-200" role="alert">
+                              <i class="fas fa-exclamation-circle flex-shrink-0 mt-0.5 text-sm md:text-base"></i>
+                              <span id="lessonTitleErrorText" class="font-medium"></span>
+                          </div>
+                      </div>
 
-                    <!-- Subject and Grade Row -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-5 md:mb-6">
-                        <div>
-                            <label class="block text-xs md:text-sm font-bold text-gray-900 mb-2 md:mb-3 flex items-center gap-2">
-                                <i class="fas fa-book text-primary-600 text-sm md:text-base"></i>
+                      <!-- Subject and Grade Row -->
+                      <div class="pu1-row2">
+                          <div class="pu1-field">
+                              <div class="pu1-field-label">
+                                <span class="pu1-field-icon"><i class="fas fa-book"></i></span>
                                 <span>Subject</span>
-                            </label>
-                            <select id="lessonSubject" 
-                                    class="w-full px-4 md:px-5 py-2.5 md:py-3.5 border-2 border-gray-200 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all bg-white cursor-pointer font-medium text-gray-900 text-sm md:text-base">
-                                <option value="General">General</option>
-                                <option value="Math">Mathematics</option>
-                                <option value="Science">Science</option>
-                                <option value="English">English</option>
-                                <option value="History">History</option>
-                                <option value="Biology">Biology</option>
-                                <option value="Chemistry">Chemistry</option>
-                                <option value="Physics">Physics</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs md:text-sm font-bold text-gray-900 mb-2 md:mb-3 flex items-center gap-2">
-                                <i class="fas fa-graduation-cap text-primary-600 text-sm md:text-base"></i>
+                              </div>
+                              <select id="lessonSubject" class="pu1-input border-2 border-emerald-600 focus:border-emerald-700">
+                                  <option value="General">General</option>
+                                  <option value="Math">Mathematics</option>
+                                  <option value="Science">Science</option>
+                                  <option value="English">English</option>
+                                  <option value="History">History</option>
+                                  <option value="Biology">Biology</option>
+                                  <option value="Chemistry">Chemistry</option>
+                                  <option value="Physics">Physics</option>
+                              </select>
+                          </div>
+                          <div class="pu1-field">
+                              <div class="pu1-field-label">
+                                <span class="pu1-field-icon"><i class="fas fa-graduation-cap"></i></span>
                                 <span>Grade Level</span>
-                            </label>
-                            <select id="lessonGrade" 
-                                    class="w-full px-4 md:px-5 py-2.5 md:py-3.5 border-2 border-gray-200 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all bg-white cursor-pointer font-medium text-gray-900 text-sm md:text-base">
-                                <option value="General">General</option>
-                                <option value="Elementary">Elementary</option>
-                                <option value="Middle School">Middle School</option>
-                                <option value="High School">High School</option>
-                                <option value="College">College</option>
-                            </select>
-                        </div>
-                    </div>
+                              </div>
+                              <select id="lessonGrade" class="pu1-input border-2 border-emerald-600 focus:border-emerald-700">
+                                  <option value="General">General</option>
+                                  <option value="Elementary">Elementary</option>
+                                  <option value="Middle School">Middle School</option>
+                                  <option value="High School">High School</option>
+                                  <option value="College">College</option>
+                              </select>
+                          </div>
+                      </div>
 
-                    <!-- Context/Prompt -->
-                    <div class="mb-5 md:mb-7">
-                        <label class="block text-xs md:text-sm font-bold text-gray-900 mb-2 md:mb-3 flex items-center gap-2">
-                            <i class="fas fa-comment-dots text-primary-600 text-sm md:text-base"></i>
-                            <span>Lesson Context <span class="text-gray-400 font-normal text-xs ml-auto">(Optional)</span></span>
-                        </label>
-                        <textarea id="lessonContext" 
-                                 class="w-full px-4 md:px-5 py-2.5 md:py-3.5 border-2 border-gray-200 rounded-lg md:rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all placeholder-gray-400 font-medium text-gray-900 text-sm md:text-base"
-                                 rows="3"
-                                 placeholder="Describe the lesson content, target audience, or any specific requirements..."></textarea>
-                    </div>
+                      <!-- Context/Prompt -->
+                      <div class="pu1-field">
+                          <div class="pu1-field-label">
+                            <span class="pu1-field-icon"><i class="fas fa-comment-dots"></i></span>
+                            <span>Lesson Context <span class="text-gray-400 font-normal text-xs">(Optional)</span></span>
+                          </div>
+                          <div class="pu1-context-wrap">
+                            <textarea id="lessonContext"
+                                     class="pu1-input border-2 border-emerald-600 focus:border-emerald-700"
+                                     rows="3" maxlength="500"
+                                     oninput="document.getElementById('lessonContextCount').textContent = this.value.length"
+                                     placeholder="Describe the lesson content, target audience, or any specific requirements..."></textarea>
+                            <span class="pu1-char-count"><span id="lessonContextCount">0</span>/500</span>
+                          </div>
+                      </div>
 
-                    <!-- PDF Upload Zone - Enhanced -->
-                    <div class="mb-5 md:mb-7">
-                        <label class="block text-xs md:text-sm font-bold text-gray-900 mb-2 md:mb-3 flex items-center gap-2">
-                            <i class="fas fa-file-pdf text-accent-600 text-sm md:text-base"></i>
-                            <span>Select PDF File <span class="text-red-500">*</span></span>
-                        </label>
-                        <div id="dropZone" class="border-3 border-dashed border-primary-300 rounded-xl md:rounded-2xl p-6 md:p-10 text-center hover:border-primary-500 hover:bg-primary-50 transition-all duration-300 cursor-pointer bg-gradient-to-br from-primary-50 via-blue-50 to-accent-50 group">
-                            <div class="mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
-                                <i class="fas fa-cloud-upload-alt text-4xl md:text-6xl text-primary-500 opacity-75"></i>
-                            </div>
-                            <p class="text-gray-900 font-bold text-base md:text-lg mb-1 md:mb-2">Click to upload or drag & drop</p>
-                            <p class="text-gray-600 text-xs md:text-sm mb-3 md:mb-4">Your PDF file (up to 100MB)</p>
-                            <div class="inline-block bg-primary-100 text-primary-700 text-xs font-bold px-3 md:px-4 py-1.5 md:py-2 rounded-full border border-primary-200">
-                                <i class="fas fa-check-circle mr-1.5 md:mr-2"></i>PDF Format Supported
-                            </div>
-                        </div>
-                        <input type="file" id="pdfFileInput" accept=".pdf" class="hidden">
-                        <div id="fileError" class="text-red-600 text-xs md:text-sm mt-2 md:mt-3 hidden flex items-center gap-2 bg-red-50 p-2 md:p-3 rounded-lg border border-red-200">
-                            <i class="fas fa-exclamation-triangle flex-shrink-0 text-sm md:text-base"></i>
-                            <span id="fileErrorText" class="font-medium"></span>
-                        </div>
-                        <!-- Selected File Display -->
-                        <div id="selectedFileDisplay" class="mt-3 md:mt-4 hidden">
-                            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg md:rounded-xl p-3 md:p-5 flex items-center gap-3 md:gap-4 shadow-sm">
-                                <div class="text-green-600 text-2xl md:text-3xl flex-shrink-0">
-                                    <i class="fas fa-check-circle"></i>
-                                </div>
-                                <div class="flex-1 text-left min-w-0">
-                                    <p class="font-bold text-green-900 text-xs md:text-sm truncate" id="selectedFileName"></p>
-                                    <p class="text-xs text-green-700 mt-0.5 md:mt-1" id="selectedFileSize"></p>
-                                </div>
-                                <button type="button" onclick="clearFileSelection()" class="text-green-600 hover:text-green-800 hover:bg-green-100 p-1.5 md:p-2 rounded-lg transition-all flex-shrink-0">
-                                    <i class="fas fa-times text-sm md:text-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                      <div class="pu1-tip-box">
+                        <i class="fas fa-lightbulb"></i>
+                        <p>Provide a clear context to help IQBAL AI create more accurate and effective lessons.</p>
+                      </div>
 
-                    <!-- Action Buttons -->
-                    <div class="flex flex-col gap-3 md:gap-4 pt-2 md:pt-4">
-                        <button id="nextStepButton" onclick="processCreateLessonStep1()" 
-                                class="w-full bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 md:py-4 px-4 md:px-6 rounded-lg md:rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-bold shadow-lg hover:shadow-xl flex items-center justify-center gap-2 text-sm md:text-lg">
-                            <i class="fas fa-arrow-right"></i>
-                            Upload & Process
-                        </button>
-                        <button onclick="closeCreateLessonModal()" 
-                                class="w-full bg-gray-100 text-gray-800 py-3 md:py-4 px-4 md:px-6 rounded-lg md:rounded-xl hover:bg-gray-200 transition-all font-bold text-sm md:text-lg">
-                            Cancel
-                        </button>
+                      <!-- Action Buttons -->
+                      <button id="nextStepButton" onclick="processCreateLessonStep1()" class="pu1-submit-btn">
+                          <i class="fas fa-arrow-up"></i>
+                          Upload &amp; Process
+                      </button>
+                      <button onclick="closeCreateLessonModal()" class="pu1-cancel-btn2">
+                          Cancel
+                      </button>
                     </div>
+                  </div>
                 </div>
             </div>
         </div>
@@ -5390,19 +5477,19 @@
         dropZone.addEventListener('dragover', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          this.classList.add('border-primary-500', 'bg-primary-50');
+          this.classList.add('pu1-drag-over');
         });
 
         dropZone.addEventListener('dragleave', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          this.classList.remove('border-primary-500', 'bg-primary-50');
+          this.classList.remove('pu1-drag-over');
         });
 
         dropZone.addEventListener('drop', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          this.classList.remove('border-primary-500', 'bg-primary-50');
+          this.classList.remove('pu1-drag-over');
 
           const files = e.dataTransfer.files;
           if (files.length > 0) {
@@ -5422,7 +5509,7 @@
         if (textEl) textEl.textContent = '';
         if (input) {
           input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
-          input.classList.add('border-gray-200');
+          input.classList.add('border-emerald-600');
         }
       }
 
@@ -5433,7 +5520,7 @@
         if (textEl) textEl.textContent = message;
         if (wrap) wrap.classList.remove('hidden');
         if (input) {
-          input.classList.remove('border-gray-200');
+          input.classList.remove('border-emerald-600');
           input.classList.add('border-red-500', 'ring-2', 'ring-red-200');
         }
       }
