@@ -3206,7 +3206,7 @@
     .tt-tab:hover{ opacity:.85; }
     .tt-icon-pair{ display:flex; gap:3px; }
     .tt-icon-pair span{ width:6px; height:16px; background:#d0f73a; border-radius:2px; display:block; }
-    .tt-tab.tt-chat-history{ position:relative; }
+    .tt-chat-history-wrap{ position:relative; display:inline-flex; }
     .tt-chevron{ transition:transform .2s ease; font-size:11px; }
     .tt-chevron.open{ transform:rotate(180deg); }
     .tt-create-btn{
@@ -3593,10 +3593,12 @@
             <i class="fas fa-cog"></i>
             Set Prompt
           </button>
-          <button id="chatHistoryBtn" class="tt-tab tt-chat-history" type="button" onclick="toggleChatHistoryDropdown(event)">
-            <i class="fas fa-comment-dots"></i>
-            Chat History
-            <i id="chatHistoryChevron" class="fas fa-chevron-down tt-chevron"></i>
+          <div class="tt-chat-history-wrap">
+            <button id="chatHistoryBtn" class="tt-tab tt-chat-history" type="button" onclick="toggleChatHistoryDropdown(event)">
+              <i class="fas fa-comment-dots"></i>
+              Chat History
+              <i id="chatHistoryChevron" class="fas fa-chevron-down tt-chevron"></i>
+            </button>
 
             <div id="chatHistoryDropdown" class="dropdown-menu tt-chat-dropdown">
               <div class="tt-dropdown-label">CHAT HISTORY</div>
@@ -3618,7 +3620,7 @@
                 <a onclick="closeAllDropdowns(); showMyLessonsPage();">View all conversations</a>
               </div>
             </div>
-          </button>
+          </div>
         </div>
         <button class="tt-create-btn" onclick="showCreateLessonWizard()">
           <i class="fas fa-plus"></i> Create New Lesson
