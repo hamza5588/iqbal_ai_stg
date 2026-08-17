@@ -1926,6 +1926,12 @@ def get_lesson_draft(lesson_id):
         
         # Get the current content from the lesson (this is what we update when finalizing)
         current_content = lesson.get('content') or lesson.get('original_content') or ''
+
+        # A leftover draft that is identical to the published version was already
+        # finalized — do not keep showing it in the Draft panel.
+        if (draft_content or '').strip() and (draft_content or '').strip() == (current_content or '').strip():
+            LessonModel.clear_draft_content(lesson_id)
+            draft_content = ''
         
         # Get the original content from the first version of this lesson
         original_content = lesson.get('original_content', '')
@@ -2145,8 +2151,10 @@ def finalize_lesson_version(lesson_id):
         except Exception as e:
             logger.warning(f"Failed to delete FAISS index for lesson {new_lesson_id}: {str(e)}")
         
-        # Clear the draft content from the current lesson
-        LessonModel.clear_draft_content(lesson_id)
+        # Clear leftover draft from the whole version family (root + every version).
+        # Clearing only the source row left the new version's editor showing the old AI draft.
+        LessonModel.clear_draft_content_for_family(original_lesson_id)
+        LessonModel.clear_draft_content(new_lesson_id)
         
         return jsonify({
             'success': True,

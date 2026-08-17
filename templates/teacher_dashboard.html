@@ -6772,6 +6772,20 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function clearViewLessonDraftEditor() {
+        const draftEl = document.getElementById('viewLessonDraft');
+        if (draftEl) {
+          renderLessonMarkdown(
+            draftEl,
+            '',
+            '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
+          );
+        }
+        const promptEl = document.getElementById('viewLessonPrompt');
+        if (promptEl) promptEl.value = '';
+        setFinalizeButtonVisible(false);
+      }
+
       function setOlderVersionNotice(isOlder, viewedVersion, latestVersionNum) {
         const slot = document.getElementById('olderVersionNoticeSlot');
         const existingNotice = document.getElementById('olderVersionNotice');
@@ -7044,6 +7058,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 const draftData = await draftResponse.json().catch(function () { return {}; });
                 // Only pre-fill if there is an existing draft; otherwise start empty.
                 draftValue = draftData.draft_content || '';
+                const published = String(lesson.content || lesson.body || '').trim();
+                if (draftValue.trim() && draftValue.trim() === published) {
+                  draftValue = '';
+                }
               }
             } catch (e) {
               console.warn('get_draft error:', e);
@@ -7308,6 +7326,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         renderConversationSummaryText(null);
         renderLessonSummaryText(null);
         setOlderVersionNotice(false);
+        clearViewLessonDraftEditor();
 
         // Only show chat input area if Chat tab is currently active
         const chatTabBtn = document.getElementById('chatTabBtn');
@@ -7463,6 +7482,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           }
 
           showToast('✅ New version created successfully!', 'success', 3000);
+          clearViewLessonDraftEditor();
           closeViewLessonModal();
           showMyLessonsPage();
         } catch (e) {

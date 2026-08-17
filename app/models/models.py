@@ -690,6 +690,11 @@ class LessonModel:
                 logger.warning(f"Failed to set has_child_version flag for lesson {original_lesson_id}: {flag_err}")
                 db.rollback()
 
+            try:
+                LessonModel.clear_draft_content_for_family(root_lesson_id)
+            except Exception as draft_err:
+                logger.warning("Failed to clear drafts after creating version of %s: %s", original_lesson_id, draft_err)
+
             return new_id
         except Exception as e:
             logger.error(f"Error creating new version: {str(e)}")
@@ -816,6 +821,26 @@ class LessonModel:
             return False
         except Exception as e:
             logger.error(f"Error clearing draft content: {str(e)}")
+            db.rollback()
+            return False
+
+    @staticmethod
+    def clear_draft_content_for_family(lesson_id: int) -> bool:
+        """Clear draft content on the root lesson and every version in its family."""
+        try:
+            db = get_db()
+            lesson = db.query(DBLesson).filter(DBLesson.id == lesson_id).first()
+            if not lesson:
+                return False
+            root_id = lesson.parent_lesson_id or lesson_id
+            db.query(DBLesson).filter(
+                or_(DBLesson.id == root_id, DBLesson.parent_lesson_id == root_id)
+            ).update({DBLesson.draft_content: None}, synchronize_session=False)
+            db.commit()
+            logger.info("Cleared draft content for lesson family rooted at %s", root_id)
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing family draft content: {str(e)}")
             db.rollback()
             return False
 
