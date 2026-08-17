@@ -1797,6 +1797,13 @@
       display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
     }
     #viewLessonModal .vl-save-draft-btn:hover { background: #f3faf5; }
+    #viewLessonModal .vl-draft-actions {
+      display: flex; align-items: stretch; gap: 8px;
+    }
+    #viewLessonModal .vl-draft-actions .vl-save-draft-btn,
+    #viewLessonModal .vl-draft-actions .vl-finalize-btn {
+      flex: 1; width: auto; min-width: 0; padding: 9px 8px; font-size: 12px; border-radius: 8px;
+    }
 
     /* Content header */
     #viewLessonModal .vl-content-header { margin-left: 360px; margin-bottom: 18px; }
@@ -4264,9 +4271,14 @@
             <label>Draft (AI‑enhanced or manual edits)</label>
             <div id="viewLessonDraft" contenteditable="true" class="vl-draft-editor" style="white-space: pre-wrap;"
               placeholder="Draft will appear here after applying AI or making manual edits..."></div>
-            <button onclick="saveLessonDraftVisible()" class="vl-save-draft-btn">
-              <i class="fas fa-floppy-disk"></i> Save Draft
-            </button>
+            <div class="vl-draft-actions">
+              <button type="button" onclick="saveLessonDraftVisible()" class="vl-save-draft-btn">
+                <i class="fas fa-floppy-disk"></i> Save Draft
+              </button>
+              <button type="button" onclick="finalizeNewVersionLesson()" id="finalizeVersionBtn" class="hidden vl-finalize-btn">
+                <i class="fas fa-check-circle"></i> Finalize New Version
+              </button>
+            </div>
           </div>
 
           <!-- Content header -->
@@ -4363,9 +4375,7 @@
             <button onclick="closeViewLessonModal()" class="vl-close-btn">
               <i class="fas fa-times"></i> Close
             </button>
-            <button onclick="finalizeNewVersionLesson()" id="finalizeVersionBtn" class="hidden vl-finalize-btn">
-              <i class="fas fa-check-circle"></i> Finalize New Version
-            </button>
+          </div>
           </div>
         </div>
       </div>
