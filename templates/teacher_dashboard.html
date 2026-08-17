@@ -1687,13 +1687,13 @@
       background: #111; border-radius: 12px; padding: 12px 18px; margin-bottom: 26px;
       gap: 14px; flex-wrap: wrap;
     }
-    #viewLessonModal .vl-tabs { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+    #viewLessonModal .vl-tabs { display: flex; gap: 22px; align-items: center; flex-wrap: nowrap; }
     #viewLessonModal .vl-tab {
       display: flex; align-items: center; gap: 7px; color: #cfcfcf; font-size: 13.5px;
-      font-weight: 600; cursor: pointer;
+      font-weight: 600; cursor: pointer; white-space: nowrap;
     }
     #viewLessonModal .vl-tab:hover { color: #fff; }
-    #viewLessonModal .vl-version-select { position: relative; }
+    #viewLessonModal .vl-version-select { position: relative; flex-shrink: 0; }
     #viewLessonModal .vl-version-btn {
       display: flex; align-items: center; gap: 10px; background: transparent; color: #e5e7eb;
       border: 1px solid rgba(255,255,255,0.25); font-size: 12.5px; font-weight: 700;
@@ -1704,7 +1704,15 @@
       overflow-y: auto; background: #fff; border: 1px solid #eee; border-radius: 10px;
       box-shadow: 0 12px 30px rgba(0,0,0,0.18); padding: 8px; z-index: 20;
     }
-    #viewLessonModal .vl-version-select .version-older-notice { margin: 0 0 6px; }
+    #viewLessonModal .vl-older-notice-slot {
+      margin: -14px 0 18px 360px;
+    }
+    #viewLessonModal .vl-older-notice-slot.hidden { display: none; }
+    #viewLessonModal .vl-older-notice-slot .version-older-notice {
+      margin: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
     #viewLessonModal .vl-enhance-btn {
       background: var(--vl-lime-500); color: #1a1a1a; border: none; padding: 9px 18px;
       border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
@@ -1811,7 +1819,8 @@
     @media (max-width: 1000px) {
       #viewLessonModal .vl-draft-panel { position: static; width: 100%; margin-bottom: 18px; }
       #viewLessonModal .vl-content-header,
-      #viewLessonModal .vl-content-card { margin-left: 0; }
+      #viewLessonModal .vl-content-card,
+      #viewLessonModal .vl-older-notice-slot { margin-left: 0; }
     }
 
     #viewLessonCurrent,
@@ -4183,6 +4192,7 @@
               <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
             </button>
           </div>
+          <div id="olderVersionNoticeSlot" class="vl-older-notice-slot hidden" aria-live="polite"></div>
 
           <!-- Floating Draft Panel -->
           <div class="vl-draft-panel">
@@ -6762,6 +6772,26 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function setOlderVersionNotice(isOlder, viewedVersion, latestVersionNum) {
+        const slot = document.getElementById('olderVersionNoticeSlot');
+        const existingNotice = document.getElementById('olderVersionNotice');
+        if (existingNotice) existingNotice.remove();
+        if (!slot) return;
+        if (!isOlder) {
+          slot.innerHTML = '';
+          slot.classList.add('hidden');
+          return;
+        }
+        const notice = document.createElement('div');
+        notice.id = 'olderVersionNotice';
+        notice.className = 'version-older-notice';
+        notice.innerHTML = '<i class="fas fa-info-circle"></i>'
+          + ' Viewing v' + viewedVersion + ' (older). New versions can only be created from the latest (v'
+          + latestVersionNum + ').';
+        slot.appendChild(notice);
+        slot.classList.remove('hidden');
+      }
+
       function extractConversationIdFromLesson(lesson) {
         if (!lesson) return null;
         if (lesson.conversation_id) return Number(lesson.conversation_id) || null;
@@ -7112,20 +7142,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           }
 
           // Show/hide older-version notice and restrict new version creation
-          const existingNotice = document.getElementById('olderVersionNotice');
-          if (existingNotice) existingNotice.remove();
           const finalizeBtn = document.getElementById('finalizeVersionBtn');
+          setOlderVersionNotice(!isLatestVersion, viewedVersion, latestVersionNum);
           if (!isLatestVersion) {
-            // Insert a notice above the version selector
-            const notice = document.createElement('div');
-            notice.id = 'olderVersionNotice';
-            notice.className = 'version-older-notice';
-            notice.innerHTML = '<i class="fas fa-info-circle"></i>'
-              + ' Viewing v' + viewedVersion + ' (older). New versions can only be created from the latest (v' + latestVersionNum + ').';
-            if (dropdownBtn && dropdownBtn.parentNode) {
-              dropdownBtn.parentNode.insertBefore(notice, dropdownBtn);
-            }
-            // Lock the finalize button completely for older versions
             if (finalizeBtn) {
               finalizeBtn.classList.add('hidden');
               finalizeBtn.disabled = true;
@@ -7288,6 +7307,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         setLessonSummaryLoading(false);
         renderConversationSummaryText(null);
         renderLessonSummaryText(null);
+        setOlderVersionNotice(false);
 
         // Only show chat input area if Chat tab is currently active
         const chatTabBtn = document.getElementById('chatTabBtn');
@@ -7533,21 +7553,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         // Manage finalize button and older-version notice
         const finalizeBtn = document.getElementById('finalizeVersionBtn');
-        const existingNotice = document.getElementById('olderVersionNotice');
-        if (existingNotice) existingNotice.remove();
+        setOlderVersionNotice(!isLatest, versionNumber, latestVersionNum);
 
         const dropdownBtn = document.getElementById('versionDropdownBtn');
         if (!isLatest) {
           if (finalizeBtn) { finalizeBtn.classList.add('hidden'); finalizeBtn.disabled = true; }
-          // Insert notice
-          const notice = document.createElement('div');
-          notice.id = 'olderVersionNotice';
-          notice.className = 'version-older-notice';
-          notice.innerHTML = '<i class="fas fa-info-circle"></i>'
-            + ' Viewing v' + versionNumber + ' (older). New versions can only be created from v' + latestVersionNum + '.';
-          if (dropdownBtn && dropdownBtn.parentNode) {
-            dropdownBtn.parentNode.insertBefore(notice, dropdownBtn);
-          }
           // Amber tint on dropdown button
           if (dropdownBtn) {
             dropdownBtn.classList.add('from-amber-50', 'to-amber-100', 'border-amber-300');
