@@ -29,6 +29,7 @@ from app.utils.rag_service import (
     _chat_invoke_llm_with_retry,
     _ChatTurnSystemPrep,
     _classify_turn_intent,
+    _find_first_real_user_question,
     _find_last_human_message_index_and_text,
     _find_last_n_real_user_questions,
     _find_last_real_user_question,
@@ -382,6 +383,42 @@ class TestFindLastRealUserQuestions:
         assert _looks_like_meta_conversation_text("what is the capital of France") is False
 
 
+class TestFindFirstRealUserQuestion:
+    """_find_last_n_real_user_questions only ever scans backward, so it can never correctly
+    answer 'what did I ask FIRST' - confirmed live it silently returned the most recent
+    question instead. This scans forward for the one specific case 'first' needs."""
+
+    def test_returns_the_first_real_question_not_the_last(self):
+        messages = [
+            HumanMessage(content="the first one"),
+            AIMessage(content="answer"),
+            HumanMessage(content="a middle one"),
+            AIMessage(content="answer"),
+            HumanMessage(content="the last one"),
+        ]
+        assert _find_first_real_user_question(messages) == "the first one"
+
+    def test_skips_leading_meta_conversation_messages(self):
+        messages = [
+            HumanMessage(content="what did I ask you first?"),  # meta - not a real question
+            HumanMessage(content="the actual first real question"),
+        ]
+        assert _find_first_real_user_question(messages) == "the actual first real question"
+
+    def test_skips_leading_recovery_messages(self):
+        messages = [
+            HumanMessage(content="Your previous response was empty, please re-run the needed tools."),
+            HumanMessage(content="the real first question"),
+        ]
+        assert _find_first_real_user_question(messages) == "the real first question"
+
+    def test_empty_conversation_returns_empty_string(self):
+        assert _find_first_real_user_question([]) == ""
+
+    def test_no_human_messages_returns_empty_string(self):
+        assert _find_first_real_user_question([AIMessage(content="hi")]) == ""
+
+
 # ---------------------------------------------------------------------------
 # 6. _build_meta_conversation_prefetch_blob
 # ---------------------------------------------------------------------------
@@ -420,6 +457,41 @@ class TestBuildMetaConversationPrefetchBlob:
         blob = _build_meta_conversation_prefetch_blob(router_output, search_range)
         assert '"only question"' in blob
         assert "1. " not in blob
+
+    def test_first_question_scope_returns_the_first_not_the_last(self):
+        """Production bug: 'what did I ask you FIRST?' was answered with the most recent
+        question instead - meta_conversation_scope had no distinct value for 'first', so it
+        silently reused the last-question path. Confirmed live (QA sweep): asked mid-way
+        through a long conversation, got back the question asked seconds earlier instead of
+        the true first one."""
+        router_output = RouterOutput(intent="meta_conversation", meta_conversation_scope="first_question")
+        search_range = [
+            HumanMessage(content="the very first thing I asked"),
+            AIMessage(content="answer 1"),
+            HumanMessage(content="a middle question"),
+            AIMessage(content="answer 2"),
+            HumanMessage(content="the most recent question"),
+        ]
+        blob = _build_meta_conversation_prefetch_blob(router_output, search_range)
+        assert "the very first thing I asked" in blob
+        assert "the most recent question" not in blob
+        assert "a middle question" not in blob
+
+    def test_first_question_scope_skips_meta_and_recovery_turns(self):
+        router_output = RouterOutput(intent="meta_conversation", meta_conversation_scope="first_question")
+        search_range = [
+            HumanMessage(content="what did I ask before?"),  # meta - must be skipped
+            HumanMessage(content="the real first question"),
+            HumanMessage(content="a later question"),
+        ]
+        blob = _build_meta_conversation_prefetch_blob(router_output, search_range)
+        assert "the real first question" in blob
+        assert "a later question" not in blob
+
+    def test_first_question_scope_with_no_real_question_falls_back_to_no_earlier_text(self):
+        router_output = RouterOutput(intent="meta_conversation", meta_conversation_scope="first_question")
+        blob = _build_meta_conversation_prefetch_blob(router_output, [])
+        assert "no earlier" in blob.lower()
 
 
 # ---------------------------------------------------------------------------

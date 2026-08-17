@@ -750,11 +750,35 @@ def _find_last_real_user_question(messages: List[BaseMessage]) -> str:
     return found[0] if found else ""
 
 
+def _find_first_real_user_question(messages: List[BaseMessage]) -> str:
+    """
+    Scan messages FORWARD for the first real (non-meta-conversation, non-internal-recovery)
+    HumanMessage text.
+
+    Production bug (confirmed live via QA sweep): "what did I ask you FIRST in this
+    conversation?" was answered with the MOST RECENT question instead - meta_conversation_scope
+    had no distinct value for "first", so it silently fell back to the same last-question path
+    as _find_last_n_real_user_questions (which only ever scans backward). Needed as its own
+    forward scan since "first" and "last" require opposite directions, not just a different N.
+    """
+    for m in messages:
+        if isinstance(m, HumanMessage):
+            t = (getattr(m, "content", "") or "").strip()
+            if not t or _looks_like_meta_conversation_text(t) or _is_rag_recovery_user_message(t):
+                continue
+            return t
+    return ""
+
+
 def _build_meta_conversation_prefetch_blob(router_output: "RouterOutput", search_range: List[BaseMessage]) -> str:
-    n = router_output.meta_conversation_n or 1
-    if router_output.meta_conversation_scope in ("exact_text", "last_question", None):
-        n = 1
-    questions = _find_last_n_real_user_questions(search_range, n=max(n, 1))
+    if router_output.meta_conversation_scope == "first_question":
+        first_q = _find_first_real_user_question(search_range)
+        questions = [first_q] if first_q else []
+    else:
+        n = router_output.meta_conversation_n or 1
+        if router_output.meta_conversation_scope in ("exact_text", "last_question", None):
+            n = 1
+        questions = _find_last_n_real_user_questions(search_range, n=max(n, 1))
     if not questions:
         return (
             "## Meta-conversation note\nThe user is asking about earlier turns, but no earlier "
@@ -4661,7 +4685,7 @@ class RouterOutput(BaseModel):
             "default formatting verbosity for this reply only."
         ),
     )
-    meta_conversation_scope: Optional[Literal["last_question", "last_n_questions", "exact_text", "other"]] = Field(
+    meta_conversation_scope: Optional[Literal["last_question", "last_n_questions", "exact_text", "first_question", "other"]] = Field(
         default=None, description="Only set when intent == meta_conversation."
     )
     meta_conversation_n: Optional[int] = Field(
@@ -4700,6 +4724,7 @@ Examples:
 8. "explain" -> intent=clarification (too vague on its own)
 9. "what is the capital of France" (no document context relevant) -> intent=general_knowledge_qa
 10. "save this as a lesson" -> intent=lesson_save
+11. "what did I ask you first in this conversation?" -> intent=meta_conversation, meta_conversation_scope=first_question (the VERY FIRST question, not the most recent - do not confuse with last_question)
 
 RECENT CONVERSATION (most recent last):
 ---
