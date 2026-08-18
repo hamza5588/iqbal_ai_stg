@@ -320,6 +320,29 @@ class LessonModel:
             return None
 
     @staticmethod
+    def get_lessons_by_rag_thread_id(teacher_id: int, rag_thread_id: str) -> List[Dict[str, Any]]:
+        """All lessons this teacher saved from a given chat thread, newest first.
+
+        One thread can hold several saved lessons (save quadratic, then later save a
+        different "nature of roots" lesson in the same chat). Callers that need to
+        decide update-vs-insert must look at every row, not only the latest.
+        """
+        if not rag_thread_id:
+            return []
+        try:
+            db = get_db()
+            lessons = (
+                db.query(DBLesson)
+                .filter(DBLesson.teacher_id == teacher_id, DBLesson.rag_thread_id == rag_thread_id)
+                .order_by(DBLesson.id.desc())
+                .all()
+            )
+            return [LessonModel._lesson_to_dict(lesson) for lesson in lessons]
+        except Exception as e:
+            logger.error(f"Error retrieving lessons by rag_thread_id: {str(e)}")
+            return []
+
+    @staticmethod
     def get_lessons_by_lesson_id(lesson_id: str) -> List[Dict[str, Any]]:
         """Get all versions of a lesson by lesson_id"""
         try:
