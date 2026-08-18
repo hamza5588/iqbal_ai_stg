@@ -563,6 +563,18 @@ function restoreButton(btn) {
  * Log out user (for use in HTML onclick handlers)
  */
 function logout() {
+  const proceed = function (ok) {
+    if (ok) auth.logout();
+  };
+  if (typeof window.showInAppConfirm === 'function') {
+    window.showInAppConfirm('Are you sure you want to logout?', {
+      title: 'Logout',
+      confirmLabel: 'Logout',
+      cancelLabel: 'Cancel',
+      iconClass: 'fas fa-sign-out-alt'
+    }).then(proceed);
+    return;
+  }
   if (confirm('Are you sure you want to logout?')) {
     auth.logout();
   }
