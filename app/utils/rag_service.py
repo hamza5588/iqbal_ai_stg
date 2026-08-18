@@ -3932,12 +3932,19 @@ def _parse_tool_json_result(content: Any) -> Dict[str, Any]:
 
 def _sync_saved_lesson_row(thread_id: str, content: str) -> None:
     """
-    If this chat thread already has a row in My Lessons, update that row's content
-    in place so "View Lesson" shows the latest edit without requiring a second Save.
+    If this chat thread already has a My Lessons row that is the SAME lesson as
+    `content` (an in-chat edit), update that row in place so "View Lesson" shows
+    the latest edit without requiring a second Save.
 
     Confirmed live: after "please add the example as well", chat showed the modified
     lesson but View Lesson kept serving the original because update_lesson_tool only
     wrote RAGThread.last_lesson_text and never touched the Lesson table.
+
+    Must NOT blindly update the newest row for this thread. Generating a second,
+    different lesson in the same chat (quadratic saved, then "nature of the roots")
+    used to overwrite the first My Lessons row the moment the new draft was
+    persisted — then Save thought it was a re-save of that same row. Only sync
+    when the new content is actually an edit of an existing saved lesson.
 
     Failures here must never roll back the RAGThread write that already committed.
     """
@@ -3945,11 +3952,23 @@ def _sync_saved_lesson_row(thread_id: str, content: str) -> None:
         return
     try:
         from app.models.models import LessonModel
+        from app.utils.lesson_similarity import is_likely_same_lesson
         user_id = _get_user_id_for_thread(thread_id)
         if not user_id:
             return
-        existing = LessonModel.get_lesson_by_rag_thread_id(user_id, str(thread_id))
+        candidates = LessonModel.get_lessons_by_rag_thread_id(user_id, str(thread_id))
+        if not candidates:
+            return
+        existing = next(
+            (row for row in candidates if is_likely_same_lesson(row.get("content"), content)),
+            None,
+        )
         if not existing:
+            logger.info(
+                "Skipping My Lessons sync for thread_id=%s: new draft is a different "
+                "lesson (leaving %s existing saved row(s) unchanged)",
+                thread_id, len(candidates),
+            )
             return
         ok = LessonModel(existing["id"]).update_lesson(content=content)
         if ok:
@@ -4036,12 +4055,16 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
             return json.dumps(result)
 
         previous = (getattr(thread_row, "last_lesson_text", None) or "").strip()
-        # Guard against silently replacing a full lesson with a short fragment - the exact
-        # failure mode that truncated a saved lesson down to just its newest section in
-        # practice (confirmed live via QA sweep). This is a heuristic backstop, not the primary
-        # mechanism: the primary fix is that persistence now requires an explicit, structured
-        # tool call instead of inferring "the full lesson" from whatever the chat reply said.
-        if previous and len(previous) > 200 and len(content) < 0.5 * len(previous):
+        from app.utils.lesson_similarity import is_likely_same_lesson
+        same_lesson = is_likely_same_lesson(previous, content)
+
+        # Fragment / coverage guards apply only when this is an EDIT of the current
+        # lesson. A teacher asking for a second, different lesson in the same chat
+        # (e.g. quadratic already drafted, now "create a lesson on nature of roots")
+        # is supposed to replace the in-progress draft. Treating that as a dropped
+        # section would block the new lesson, and syncing it into My Lessons would
+        # overwrite the first saved row.
+        if same_lesson and previous and len(previous) > 200 and len(content) < 0.5 * len(previous):
             result["reason"] = (
                 "This looks like only part of the lesson, not the complete current lesson. "
                 "Call update_lesson_tool again with the FULL lesson text (all existing "
@@ -4049,13 +4072,7 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
             )
             return json.dumps(result)
 
-        # Stronger, content-aware backstop: a length ratio alone cannot tell "a legitimate
-        # full rewrite that's shorter" apart from "a same-length-or-longer chunk that silently
-        # replaced the previous content with something unrelated" - confirmed live an "add a
-        # section on the discriminant" edit returned ONLY the new section (none of the original
-        # lesson it was supposed to extend), and because that section alone was long enough
-        # (64% of the original length), it passed the length check above cleanly.
-        if previous and len(previous) > 200 and content != previous:
+        if same_lesson and previous and len(previous) > 200 and content != previous:
             user_id_for_check = _get_user_id_for_thread(thread_id)
             if not _lesson_update_still_covers_previous(previous, content, user_id_for_check):
                 result["reason"] = (
@@ -4070,15 +4087,24 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
         thread_row.last_lesson_text = content
         if title:
             thread_row.lesson_title = title
-        # lesson_finalized is a display flag only (set/cleared by finalize_lesson_tool) - an
-        # edit does not touch it, whether the lesson was finalized before or not.
+        # lesson_finalized is a display flag only (set/cleared by finalize_lesson_tool).
+        # An edit of the same lesson does not touch it. A brand-new lesson in this
+        # thread is not yet saved, so clear the flag so the next Save inserts a new row
+        # instead of looking like a re-finalize of the previous one.
+        if previous and not same_lesson:
+            thread_row.lesson_finalized = False
         db.commit()
 
-        # If this thread was already saved to My Lessons, keep that row in sync so
-        # "View Lesson" shows the edit immediately — not the original pre-edit content.
-        # Confirmed live: "please add the example as well" updated last_lesson_text (or
-        # tried to) while /api/lessons/lesson/:id/view kept serving the stale Lesson row.
-        _sync_saved_lesson_row(str(thread_id), content)
+        # Keep My Lessons in sync only for edits of an already-saved lesson. A
+        # different new draft in this thread must not overwrite the prior saved row.
+        if same_lesson or not previous:
+            _sync_saved_lesson_row(str(thread_id), content)
+        else:
+            logger.info(
+                "update_lesson_tool: thread_id=%s stored a different new draft; "
+                "not syncing prior My Lessons row",
+                thread_id,
+            )
 
         result["success"] = True
         result["reason"] = "Lesson draft updated."

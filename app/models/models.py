@@ -320,6 +320,29 @@ class LessonModel:
             return None
 
     @staticmethod
+    def get_lessons_by_rag_thread_id(teacher_id: int, rag_thread_id: str) -> List[Dict[str, Any]]:
+        """All lessons this teacher saved from a given chat thread, newest first.
+
+        One thread can hold several saved lessons (save quadratic, then later save a
+        different "nature of roots" lesson in the same chat). Callers that need to
+        decide update-vs-insert must look at every row, not only the latest.
+        """
+        if not rag_thread_id:
+            return []
+        try:
+            db = get_db()
+            lessons = (
+                db.query(DBLesson)
+                .filter(DBLesson.teacher_id == teacher_id, DBLesson.rag_thread_id == rag_thread_id)
+                .order_by(DBLesson.id.desc())
+                .all()
+            )
+            return [LessonModel._lesson_to_dict(lesson) for lesson in lessons]
+        except Exception as e:
+            logger.error(f"Error retrieving lessons by rag_thread_id: {str(e)}")
+            return []
+
+    @staticmethod
     def get_lessons_by_lesson_id(lesson_id: str) -> List[Dict[str, Any]]:
         """Get all versions of a lesson by lesson_id"""
         try:
@@ -668,7 +691,9 @@ class LessonModel:
                 parent_lesson_id=root_lesson_id,
                 draft_content=None,  # New version starts with empty draft
                 lesson_id=root_lesson['lesson_id'],  # Use same lesson_id as root
-                parent_version_id=original_lesson_id  # Set parent version (the one we branched from)
+                parent_version_id=original_lesson_id,  # Set parent version (the one we branched from)
+                rag_thread_id=original_lesson.get('rag_thread_id'),
+                conversation_id=original_lesson.get('conversation_id'),
             )
 
             # Mark the specific source version (original_lesson_id) as having a child version
@@ -720,13 +745,11 @@ class LessonModel:
             result = []
             for lesson in lessons:
                 lesson_dict = LessonModel._lesson_to_dict(lesson, include_teacher_name=True)
-                
-                if lesson_dict['id'] == lesson_id and lesson_dict.get('parent_lesson_id') is None:
-                    lesson_dict['version'] = 1
-                    lesson_dict['is_original'] = True
-                else:
-                    lesson_dict['is_original'] = False
-                
+                # Prefer version_number: the older `version` column stays 1 on every row,
+                # so the View Lesson dropdown would otherwise label every version as v1
+                # and switching versions would keep showing the same content.
+                lesson_dict['version'] = lesson_dict.get('version_number') or lesson_dict.get('version') or 1
+                lesson_dict['is_original'] = lesson_dict.get('parent_lesson_id') is None
                 result.append(lesson_dict)
             
             logger.info(f"get_lesson_versions for lesson {lesson_id}: found {len(result)} versions")
