@@ -4622,14 +4622,34 @@ def _message_chunk_text(chunk: Any) -> str:
 
 
 def _chunk_has_tool_signal(chunk: Any) -> bool:
-    if getattr(chunk, "tool_call_chunks", None):
+    tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+    if tool_call_chunks:
         return True
-    if getattr(chunk, "tool_calls", None):
+    tool_calls = getattr(chunk, "tool_calls", None)
+    if tool_calls:
         return True
     additional = getattr(chunk, "additional_kwargs", None) or {}
     if isinstance(additional, dict) and additional.get("tool_calls"):
         return True
     return False
+
+
+def _stream_content_delta(piece: str, emitted_prefix: str) -> Tuple[str, str]:
+    """Return (delta, new_prefix). Handles both true deltas and accumulated chunks."""
+    if not piece:
+        return "", emitted_prefix
+    if emitted_prefix and piece.startswith(emitted_prefix):
+        return piece[len(emitted_prefix):], piece
+    if emitted_prefix and emitted_prefix.endswith(piece):
+        return "", emitted_prefix
+    return piece, emitted_prefix + piece
+
+
+def _llm_with_streaming(llm: Any) -> Any:
+    try:
+        return llm.bind(streaming=True)
+    except Exception:
+        return llm
 
 
 def _ai_message_from_stream_result(assembled: Any) -> AIMessage:
@@ -4656,10 +4676,12 @@ def _invoke_llm_maybe_stream(llm: Any, messages: List[BaseMessage], config: Any,
         return llm.invoke(messages, config=config)
 
     streamed_any = False
+    emitted_prefix = ""
+    stream_llm = _llm_with_streaming(llm)
     try:
         assembled = None
         saw_tool = False
-        for chunk in llm.stream(messages, config=config):
+        for chunk in stream_llm.stream(messages, config=config):
             assembled = chunk if assembled is None else assembled + chunk
             if _chunk_has_tool_signal(chunk):
                 saw_tool = True
@@ -4669,11 +4691,15 @@ def _invoke_llm_maybe_stream(llm: Any, messages: List[BaseMessage], config: Any,
                     except Exception:
                         logger.warning("token sink on_retract failed", exc_info=True)
                     streamed_any = False
+                    emitted_prefix = ""
                 continue
             piece = _message_chunk_text(chunk)
             if piece and not saw_tool:
+                delta, emitted_prefix = _stream_content_delta(piece, emitted_prefix)
+                if not delta:
+                    continue
                 try:
-                    sink.on_token(piece)
+                    sink.on_token(delta)
                     streamed_any = True
                 except Exception:
                     logger.warning("token sink on_token failed", exc_info=True)
@@ -4873,7 +4899,13 @@ def _answer_quality_gate_eval_and_maybe_regenerate(
         try:
             if provider == "groq":
                 groq_rate_limiter.wait_if_needed()
-            regen = user_llm.invoke(regen_messages, config=config)
+            sink = _token_sink_from_config(config)
+            if sink is not None:
+                try:
+                    sink.on_retract()
+                except Exception:
+                    logger.warning("token sink on_retract before quality-gate regen failed", exc_info=True)
+            regen = _invoke_llm_maybe_stream(user_llm, regen_messages, config, provider)
             if provider == "groq":
                 groq_rate_limiter.record_success()
         except Exception as ex:

@@ -9787,6 +9787,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               if (!evt || !evt.type) continue;
               if (evt.type === 'token') {
                 if (hooks && typeof hooks.onToken === 'function') hooks.onToken(evt.text || '');
+              } else if (evt.type === 'start') {
+                if (hooks && typeof hooks.onStart === 'function') hooks.onStart();
               } else if (evt.type === 'retract') {
                 if (hooks && typeof hooks.onRetract === 'function') hooks.onRetract();
               } else if (evt.type === 'replace') {

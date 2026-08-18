@@ -1740,9 +1740,12 @@ def chat():
 
                 def generate():
                     try:
+                        # Defeat proxy/nginx buffering so tokens flush immediately.
+                        yield ":" + (" " * 4096) + "\n\n"
+                        yield 'data: {"type":"start"}\n\n'
                         while True:
                             try:
-                                ev = sse_queue.get(timeout=15)
+                                ev = sse_queue.get(timeout=1)
                             except queue.Empty:
                                 yield ": keepalive\n\n"
                                 continue
@@ -1753,15 +1756,17 @@ def chat():
                         worker.join(timeout=620)
                         release_chat_lock(chat_lock_handle)
 
-                return Response(
+                response = Response(
                     stream_with_context(generate()),
                     mimetype="text/event-stream",
                     headers={
-                        "Cache-Control": "no-cache, no-transform",
+                        "Cache-Control": "no-cache, no-store, no-transform",
                         "X-Accel-Buffering": "no",
                         "Connection": "keep-alive",
+                        "Content-Type": "text/event-stream; charset=utf-8",
                     },
                 )
+                return response
 
             payload = _execute_rag_chat_turn()
             return jsonify(payload)
