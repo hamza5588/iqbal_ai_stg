@@ -23,10 +23,12 @@ from app.models.database_models import (
     LLMModelPricing,
 )
 from app.utils.rag_service import (
+    ANSWER_QUALITY_GATE_SETTING_KEY,
     DEFAULT_RAG_CHAT_SYSTEM_BODY_NO_PDF,
     DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF,
     RAG_SYSTEM_SETTING_KEY_NO_PDF,
     RAG_SYSTEM_SETTING_KEY_WITH_PDF,
+    _answer_quality_gate_enabled,
 )
 from sqlalchemy import or_, func, desc, cast, Date
 from datetime import datetime, timedelta
@@ -925,7 +927,8 @@ def get_llm_settings():
                 'groq_default_model',
                 'openai_default_model',
                 'groq_allow_user_model_selection',
-                'openai_allow_user_model_selection'
+                'openai_allow_user_model_selection',
+                ANSWER_QUALITY_GATE_SETTING_KEY,
             ])
         ).all()
         
@@ -943,6 +946,7 @@ def get_llm_settings():
             'openai_default_model': settings_dict.get('openai_default_model', 'gpt-4o-mini'),
             'groq_allow_user_model_selection': settings_dict.get('groq_allow_user_model_selection', 'false').lower() == 'true',
             'openai_allow_user_model_selection': settings_dict.get('openai_allow_user_model_selection', 'false').lower() == 'true',
+            'rag_answer_quality_gate_enabled': _answer_quality_gate_enabled(),
             'available_models': {
                 'groq': get_groq_available_models(),
                 'openai': OPENAI_MODELS
@@ -1024,6 +1028,14 @@ def update_llm_settings():
         if 'openai_allow_user_model_selection' in data:
             allow = 'true' if data['openai_allow_user_model_selection'] else 'false'
             set_setting('openai_allow_user_model_selection', allow, 'Allow users to select OpenAI model')
+
+        if 'rag_answer_quality_gate_enabled' in data:
+            enabled = 'true' if data['rag_answer_quality_gate_enabled'] else 'false'
+            set_setting(
+                ANSWER_QUALITY_GATE_SETTING_KEY,
+                enabled,
+                'Run extra answer-quality check/rewrite after RAG chat turns',
+            )
         
         db.commit()
         

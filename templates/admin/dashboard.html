@@ -525,6 +525,20 @@
                     </div>
                 </div>
 
+                <!-- Answer quality gate -->
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Answer Quality Gate</h3>
+                    <p class="text-gray-600 mb-4">After a chat reply, run an extra check (and rewrite if needed) so the answer stays grounded in the PDF. Turn this off to skip that extra step and get faster replies.</p>
+                    <div class="flex items-start">
+                        <input type="checkbox" id="rag-answer-quality-gate" checked
+                            class="mt-1 mr-2 text-[#05B0FC] focus:ring-[#05B0FC]">
+                        <label for="rag-answer-quality-gate" class="text-sm text-gray-700">
+                            Enable answer quality gate
+                            <span class="block text-xs text-gray-500 mt-1">On by default. Applies to lecture generation always, and to PDF/Q&amp;A replies only when the answer looks like filler. Takes effect on the next chat message after you save — no restart needed.</span>
+                        </label>
+                    </div>
+                </div>
+
                 <!-- Save Button -->
                 <div class="flex justify-end">
                     <button onclick="saveLLMSettings()"
@@ -1472,6 +1486,7 @@
                     }
                     document.getElementById('groq-default-model').value = settings.groq_default_model;
                     document.getElementById('groq-allow-user-selection').checked = settings.groq_allow_user_model_selection;
+                    document.getElementById('rag-answer-quality-gate').checked = settings.rag_answer_quality_gate_enabled !== false;
                 }
             } catch (error) {
                 console.error('Error loading LLM settings:', error);
@@ -1494,7 +1509,8 @@
                 openai_allow_user_model_selection: document.getElementById('openai-allow-user-selection').checked,
                 groq_api_key: document.getElementById('groq-api-key').value.trim(),
                 groq_default_model: document.getElementById('groq-default-model').value,
-                groq_allow_user_model_selection: document.getElementById('groq-allow-user-selection').checked
+                groq_allow_user_model_selection: document.getElementById('groq-allow-user-selection').checked,
+                rag_answer_quality_gate_enabled: document.getElementById('rag-answer-quality-gate').checked
             };
 
             // Only include API keys if they were provided (non-empty)

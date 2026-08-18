@@ -4561,19 +4561,36 @@ _ANSWER_QUALITY_GATE_DEFAULT_INTENTS = (
 )
 
 
+ANSWER_QUALITY_GATE_SETTING_KEY = "rag_answer_quality_gate_enabled"
+
+
+def _truthy_flag(value: Optional[str]) -> bool:
+    return str(value or "").strip().lower() in ("true", "1", "yes")
+
+
 def _answer_quality_gate_enabled() -> bool:
-    """RAG_ANSWER_QUALITY_GATE_ENABLED (new, default true) wins if set. Falls back to the old
-    RAG_LECTURE_FAILSAFE_ENABLED name for one release so an ops config that pinned the old
-    var to false doesn't silently flip on underneath them the moment this ships."""
+    """Admin panel SystemSettings wins when set. Else env RAG_ANSWER_QUALITY_GATE_ENABLED,
+    else deprecated RAG_LECTURE_FAILSAFE_ENABLED, else default on."""
+    try:
+        db = get_db()
+        row = db.query(SystemSettings).filter(
+            SystemSettings.key == ANSWER_QUALITY_GATE_SETTING_KEY
+        ).first()
+        if row is not None and row.value is not None and str(row.value).strip() != "":
+            return _truthy_flag(row.value)
+    except Exception as ex:
+        logger.warning("Could not read quality-gate admin setting: %s", ex)
+
     new_val = os.getenv("RAG_ANSWER_QUALITY_GATE_ENABLED")
     if new_val is not None:
-        return new_val.lower() in ("true", "1", "yes")
+        return _truthy_flag(new_val)
     old_val = os.getenv("RAG_LECTURE_FAILSAFE_ENABLED")
     if old_val is not None:
         logger.warning(
-            "RAG_LECTURE_FAILSAFE_ENABLED is deprecated; use RAG_ANSWER_QUALITY_GATE_ENABLED."
+            "RAG_LECTURE_FAILSAFE_ENABLED is deprecated; use RAG_ANSWER_QUALITY_GATE_ENABLED "
+            "or the admin LLM Settings toggle."
         )
-        return old_val.lower() in ("true", "1", "yes")
+        return _truthy_flag(old_val)
     return True  # new default: on
 
 
