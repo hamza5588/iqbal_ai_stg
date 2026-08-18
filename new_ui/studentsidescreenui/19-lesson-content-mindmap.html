@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson Content - Iqbal AI</title>
+<style>
+  :root{
+    --green-900:#0a4a2c;
+    --green-700:#166534;
+    --green-600:#1c7c3e;
+    --green-500:#2f9e4f;
+    --mint:#eef6f0;
+    --mint-2:#f3f8f5;
+    --gray-500:#6b7280;
+    --gray-400:#9ca3af;
+    --gray-300:#d1d5db;
+    --dark:#1f2430;
+    --red:#c0504d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#eef0ee;color:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+
+  .modal{
+    width:100%;max-width:1560px;
+    background:#fff;border-radius:20px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.10);
+    overflow:hidden;
+  }
+
+  header{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:22px 30px 18px;gap:16px;
+  }
+  .header-left{display:flex;align-items:center;gap:14px;}
+  .doc-icon{
+    width:44px;height:52px;background:var(--green-700);border-radius:5px 12px 5px 5px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;
+    position:relative;
+  }
+  .doc-icon svg{width:22px;height:22px;}
+  .header-left h1{font-size:26px;font-weight:800;color:var(--dark);}
+  .header-left .sub{font-size:14.5px;color:var(--gray-500);margin-top:2px;}
+  .close-x{
+    width:38px;height:38px;border-radius:50%;
+    border:1px solid #eee;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--dark);flex-shrink:0;
+  }
+
+  .toolbar-wrap{padding:0 30px 24px;}
+  .toolbar{
+    background:#0a0c0a;border-radius:40px;
+    display:flex;align-items:center;justify-content:center;gap:0;
+    padding:6px 8px;max-width:900px;margin:0 auto;
+  }
+  .tab{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:10px;
+    padding:14px 24px;color:#9ba09c;font-weight:600;font-size:15px;cursor:pointer;
+    position:relative;
+  }
+  .tab.active{color:var(--green-500);}
+  .tab.active::after{
+    content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
+    width:70%;height:2px;background:var(--green-500);
+  }
+  .tab-divider{width:1px;height:24px;background:#2a2d2a;}
+
+  .content-area{padding:0 30px 30px;}
+  .lesson-panel{border:1px solid #eee;border-radius:18px;overflow:hidden;}
+  .lesson-head{
+    display:flex;align-items:center;gap:12px;padding:22px 26px;border-bottom:1px solid #f0f0f0;
+  }
+  .lesson-head .icon{
+    width:34px;height:34px;border-radius:8px;background:var(--green-700);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .lesson-head h2{font-size:19px;font-weight:800;color:var(--dark);}
+
+  .mindmap{padding:36px 26px 30px;}
+  .mindmap h3{text-align:center;font-size:26px;font-weight:800;color:var(--dark);margin-bottom:12px;}
+  .mindmap .desc{text-align:center;color:var(--gray-500);font-size:15px;margin-bottom:36px;}
+
+  .map-grid{
+    display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;
+    gap:0 90px;max-width:1240px;margin:0 auto;position:relative;min-height:480px;
+  }
+  .node-card{
+    border:1px solid #eee;border-radius:14px;overflow:hidden;background:#fff;
+    box-shadow:0 4px 16px rgba(0,0,0,0.03);position:relative;z-index:2;
+  }
+  .node-card .node-top{
+    display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--mint);
+  }
+  .num-badge{
+    width:26px;height:26px;border-radius:50%;background:var(--green-600);
+    color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .node-icon{width:24px;height:24px;flex-shrink:0;color:var(--green-700);}
+  .node-top h4{font-size:16.5px;font-weight:800;color:var(--dark);}
+  .node-body{padding:18px;font-size:14px;color:#333;line-height:1.65;overflow-wrap:break-word;}
+
+  .node-1{grid-column:1;grid-row:1;align-self:start;}
+  .node-2{grid-column:2;grid-row:1;align-self:start;}
+  .node-3{grid-column:1/3;justify-self:center;grid-row:2;width:60%;min-width:280px;align-self:start;margin-top:20px;}
+
+  .center-oval{
+    position:absolute;top:140px;left:50%;transform:translate(-50%,-50%);
+    width:150px;height:125px;border-radius:50%;
+    background:var(--mint);border:6px solid #fff;box-shadow:0 4px 14px rgba(0,0,0,0.05);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    z-index:3;
+  }
+  .center-oval svg{width:34px;height:34px;color:var(--green-700);}
+  .center-oval span{font-size:17px;font-weight:800;color:var(--dark);}
+
+  .connector-svg{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;}
+  .mobile-label{display:none;}
+
+  .info-bar{
+    display:flex;align-items:center;gap:12px;background:var(--mint-2);
+    padding:16px 24px;font-size:14.5px;color:#333;margin:0 26px 26px;border-radius:10px;
+  }
+  .info-bar .i-badge{
+    width:22px;height:22px;border-radius:50%;background:var(--green-600);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;
+  }
+
+  .footer-bar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 26px 26px;gap:16px;flex-wrap:wrap;
+  }
+  .ask-btn{
+    display:flex;align-items:center;gap:10px;
+    background:var(--green-700);color:#fff;border:none;border-radius:10px;
+    padding:14px 26px;font-size:15.5px;font-weight:700;cursor:pointer;
+  }
+  .export-btns{display:flex;gap:14px;}
+  .export-btn{
+    display:flex;align-items:center;gap:8px;
+    border-radius:10px;padding:13px 22px;font-size:15px;font-weight:700;cursor:pointer;background:#fff;
+  }
+  .export-btn.docx{border:1.5px solid var(--green-600);color:var(--green-700);}
+  .export-btn.ppt{border:1.5px solid var(--red);color:var(--red);}
+
+  @media(max-width:900px){
+    .map-grid{grid-template-columns:1fr;min-height:auto;}
+    .node-1,.node-2,.node-3{grid-column:1;grid-row:auto;width:100%;margin-top:0;}
+    .mobile-label{grid-column:1;}
+    .node-2{margin-top:20px;}
+    .node-3{margin-top:20px;}
+    .center-oval{display:none;}
+    .connector-svg{display:none;}
+    .mobile-label{
+      display:flex;align-items:center;justify-content:center;gap:8px;
+      color:var(--green-700);font-weight:800;font-size:15px;margin:16px 0;
+    }
+  }
+  @media(max-width:560px){
+    header{padding:18px 18px 14px;flex-wrap:wrap;}
+    .header-left h1{font-size:20px;}
+    .toolbar-wrap{padding:0 14px 18px;}
+    .toolbar{border-radius:20px;flex-wrap:wrap;padding:8px;}
+    .tab{padding:10px 12px;font-size:13px;flex:1 1 auto;}
+    .tab-divider{display:none;}
+    .content-area{padding:0 14px 20px;}
+    .mindmap{padding:24px 14px;}
+    .mindmap h3{font-size:20px;}
+    .footer-bar{flex-direction:column;align-items:stretch;}
+    .export-btns{flex-direction:column;}
+    .ask-btn{justify-content:center;}
+  }
+</style>
+</head>
+<body>
+  <div class="modal">
+    <header>
+      <div class="header-left">
+        <div class="doc-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" fill="#fff"/><path d="M8 12h8M8 15h8M8 9h4" stroke="#166534" stroke-width="1.4"/></svg>
+        </div>
+        <div>
+          <h1>Quadratic equation All Merged Document</h1>
+          <div class="sub">General &bull; Grade General</div>
+        </div>
+      </div>
+      <div class="close-x">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+    </header>
+
+    <div class="toolbar-wrap">
+      <div class="toolbar">
+        <div class="tab active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#2f9e4f" stroke-width="1.6"/><path d="M8 12h8M8 15h8M8 9h4" stroke="#2f9e4f" stroke-width="1.4"/></svg>
+          Lesson Content
+        </div>
+        <div class="tab-divider"></div>
+        <div class="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M2 4.5A2.5 2.5 0 014.5 2H11v20H4.5A2.5 2.5 0 012 19.5v-15zM22 4.5A2.5 2.5 0 0019.5 2H13v20h6.5a2.5 2.5 0 002.5-2.5v-15z" stroke="#cfd4d0" stroke-width="1.5"/></svg>
+          Student View
+        </div>
+        <div class="tab-divider"></div>
+        <div class="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#cfd4d0" stroke-width="1.6"/><path d="M10 8l6 4-6 4V8z" fill="#cfd4d0"/></svg>
+          Lecture
+        </div>
+      </div>
+    </div>
+
+    <div class="content-area">
+      <div class="lesson-panel">
+        <div class="lesson-head">
+          <div class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M2 4.5A2.5 2.5 0 014.5 2H11v20H4.5A2.5 2.5 0 012 19.5v-15zM22 4.5A2.5 2.5 0 0019.5 2H13v20h6.5a2.5 2.5 0 002.5-2.5v-15z" stroke="#fff" stroke-width="1.5"/></svg>
+          </div>
+          <h2>Lesson Content</h2>
+        </div>
+
+        <div class="mindmap">
+          <h3>Understanding PDF Formats</h3>
+          <div class="desc">Yes, that's correct. A PDF document may contain different formats of content, including:</div>
+
+          <div class="map-grid">
+            <svg class="connector-svg" viewBox="0 0 1240 480" preserveAspectRatio="none">
+              <path d="M575,55 C640,55 640,110 545,140" stroke="#a8d1b6" stroke-width="2.5" fill="none"/>
+              <path d="M665,55 C600,55 600,110 695,140" stroke="#a8d1b6" stroke-width="2.5" fill="none"/>
+              <path d="M620,203 C620,220 620,220 620,235" stroke="#a8d1b6" stroke-width="2.5" fill="none"/>
+            </svg>
+
+            <div class="node-card node-1">
+              <div class="node-top">
+                <div class="num-badge">01</div>
+                <svg class="node-icon" viewBox="0 0 24 24" fill="none"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#166534" stroke-width="1.6"/><path d="M8 12h8M8 15h8" stroke="#166534" stroke-width="1.4"/></svg>
+                <h4>Text-based Content</h4>
+              </div>
+              <div class="node-body">This is directly editable and searchable text that can be easily extracted.</div>
+            </div>
+
+            <div class="mobile-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#166534" stroke-width="1.6"/><path d="M8 12h8M8 15h8" stroke="#166534" stroke-width="1.4"/></svg>
+              PDF Formats
+            </div>
+
+            <div class="node-card node-2">
+              <div class="node-top">
+                <div class="num-badge">02</div>
+                <svg class="node-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke="#166534" stroke-width="1.6"/><circle cx="9" cy="10" r="1.6" stroke="#166534" stroke-width="1.4"/><path d="M4 17l5-5 4 4 3-3 4 4" stroke="#166534" stroke-width="1.4"/></svg>
+                <h4>Scanned Content</h4>
+              </div>
+              <div class="node-body">These are images of text that have been digitized from physical documents. They require OCR (Optical Character Recognition) to convert the images into machine-readable text.</div>
+            </div>
+
+            <div class="node-card node-3">
+              <div class="node-top">
+                <div class="num-badge">03</div>
+                <svg class="node-icon" viewBox="0 0 24 24" fill="none"><path d="M6 2h7l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#166534" stroke-width="1.5"/><rect x="7" y="12" width="7" height="5" rx="1" stroke="#166534" stroke-width="1.2"/></svg>
+                <h4>Mixed Content</h4>
+              </div>
+              <div class="node-body">A PDF may contain both text and scanned images, which can complicate text extraction.</div>
+            </div>
+
+            <div class="center-oval">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#166534" stroke-width="1.6"/><path d="M8 12h8M8 15h8" stroke="#166534" stroke-width="1.4"/></svg>
+              <span>PDF Formats</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-bar">
+          <div class="i-badge">i</div>
+          Depending on how the PDF was created, the text extraction process may vary, and some content may not be recognized or retrievable without OCR.
+        </div>
+
+        <div class="footer-bar">
+          <button class="ask-btn">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#fff" stroke-width="1.6"/></svg>
+            Ask Question
+          </button>
+          <div class="export-btns">
+            <button class="export-btn docx">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="#166534" stroke-width="1.6"/><path d="M14 2v6h6" stroke="#166534" stroke-width="1.6"/></svg>
+              DOCX
+            </button>
+            <button class="export-btn ppt">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="#c0504d" stroke-width="1.6"/><path d="M14 2v6h6" stroke="#c0504d" stroke-width="1.6"/></svg>
+              PPT
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

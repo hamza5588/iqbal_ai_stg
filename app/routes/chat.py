@@ -1151,7 +1151,7 @@ def student_dashboard():
         return redirect('/admin/')
     if role == 'teacher':
         return redirect(url_for('chat.teacher_dashboard'))
-    return render_template('student_dashboard.html')
+    return render_template('student_dashboard/student_dashboard.html')
 
 
 def _render_legacy_chat():

@@ -2955,6 +2955,128 @@
         opacity: 1;
       }
     }
+
+    /* ===== New UI: Top toolbar (replaces sidebar) — matches new_ui/studentsidescreenui/20-chat-with-lesson.html ===== */
+    .tt-header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 28px; border-bottom:1px solid #eee; flex-wrap:wrap; gap:14px; background:#fff;
+    }
+    .tt-header .tt-logo img{ height:38px; }
+    .tt-user{ display:flex; align-items:center; gap:14px; }
+    .tt-avatar{
+      width:38px; height:38px; border-radius:50%; background:#166534; color:#fff;
+      display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0; cursor:pointer;
+    }
+    .tt-user-info{ display:flex; flex-direction:column; line-height:1.25; }
+    .tt-user-info b{ font-size:14px; color:#111; }
+    .tt-user-info span{ font-size:12px; color:#166534; font-weight:600; }
+    .tt-logout{ color:#6b7280; cursor:pointer; margin-left:2px; padding:6px; border-radius:8px; }
+    .tt-logout:hover{ background:#fef2f2; color:#dc2626; }
+
+    .tt-toolbar-wrap{ padding:16px 20px 0; background:#fff; }
+    .tt-toolbar{
+      position:relative; display:flex; align-items:center; justify-content:center;
+      background:#0a0a0a; border-radius:40px; padding:6px; gap:0; flex-wrap:wrap; max-width:820px; margin:0 auto;
+    }
+    .tt-tabs{ display:flex; align-items:center; width:100%; }
+    .tt-tab{
+      flex:1; display:flex; align-items:center; justify-content:center; gap:8px; color:#a8aca8; font-size:14.5px;
+      font-weight:600; cursor:pointer; background:none; border:none; padding:12px 18px; border-radius:30px; white-space:nowrap;
+    }
+    .tt-tab:hover{ color:#fff; }
+    .tt-tab.active, .tt-tab.active-tab{ background:#1c7c3e; color:#fff; border-left:none; }
+    .tt-chat-history-wrap{ position:relative; display:flex; flex:1; }
+    .tt-chat-history-wrap .tt-tab{ width:100%; }
+    .tt-chevron{ transition:transform .2s ease; font-size:11px; }
+    .tt-chevron.open{ transform:rotate(180deg); }
+
+    #chatHistoryDropdown.tt-chat-dropdown{
+      position:absolute; top:calc(100% + 12px); left:50%; transform:translateX(-50%);
+      width:320px; max-width:88vw; background:#fff; border-radius:16px;
+      box-shadow:0 12px 40px rgba(0,0,0,0.18); padding:16px 0; z-index:150;
+    }
+    .tt-dropdown-label{ font-size:11.5px; font-weight:800; color:#3b5bdb; letter-spacing:.6px; padding:0 20px 10px; }
+    #chatHistoryDropdown .tt-dropdown-list{ max-height:340px; overflow-y:auto; padding:0 8px; }
+    #chatHistoryDropdown .chat-history-item{ padding:10px 12px; border-radius:10px; border-left:none; margin-bottom:2px; }
+    #chatHistoryDropdown .chat-history-item:hover{ background:#f4f4f2; }
+    #chatHistoryDropdown .chat-history-item.active{ background:#eaf7ee; border-left:none; }
+    .tt-dropdown-footer{ text-align:center; padding-top:10px; margin-top:6px; border-top:1px solid #f0f0f0; }
+    .tt-dropdown-footer a{ color:#1c7c3e; font-weight:700; font-size:13.5px; text-decoration:none; cursor:pointer; }
+
+    @media(max-width:900px){
+      .tt-header{ padding:12px 16px; }
+      .tt-toolbar-wrap{ padding:12px 12px 0; }
+      .tt-toolbar{ padding:8px; border-radius:22px; }
+      .tt-tab{ font-size:12px; gap:5px; padding:10px 8px; }
+      #chatHistoryDropdown.tt-chat-dropdown{ left:0; transform:none; width:100%; max-width:320px; }
+    }
+    @media(max-width:520px){
+      .tt-user-info{ display:none; }
+    }
+
+    /* ===== New UI: Chat with Lesson — pinned lesson sidebar + chat column ===== */
+    .stu-lesson-sidebar{ background:#fff; padding:0; }
+    .stu-back-link{
+      display:flex; align-items:center; gap:6px; color:#166534; font-weight:700;
+      font-size:14.5px; margin-bottom:20px; cursor:pointer;
+    }
+    .stu-back-link:hover{ text-decoration:underline; }
+    .stu-pinned-label{ color:#1c7c3e; font-size:12px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
+    .stu-ls-title{ font-size:18px; font-weight:800; color:#1f2430; margin-bottom:6px; line-height:1.3; }
+    .stu-ls-meta{ font-size:13px; color:#6b7280; margin-bottom:16px; }
+    .stu-divider{ border:none; border-top:1px solid #eee; margin:16px 0; }
+    .stu-ls-content{ font-size:13.5px; color:#333; line-height:1.7; }
+    .stu-ls-content p{ margin-bottom:10px; }
+    .stu-ls-content strong, .stu-ls-content b{ color:#166534; }
+
+    .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; }
+    .stu-chat-head{ padding:0 0 16px; text-align:center; position:relative; border-bottom:1px solid #f5f5f5; margin-bottom:18px; }
+    .stu-chat-head h1{ font-size:22px; font-weight:800; color:#1f2430; }
+    .stu-chat-head .stu-sub{ font-size:14px; color:#6b7280; margin-top:4px; }
+    .stu-chat-head .stu-pinned-tag{
+      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:13px; margin-top:10px;
+    }
+    .stu-chat-close{
+      position:absolute; top:-6px; right:0;
+      width:34px; height:34px; border-radius:50%; border:1px solid #eee;
+      display:flex; align-items:center; justify-content:center; color:#166534; cursor:pointer; background:#fff;
+    }
+    .stu-chat-close:hover{ background:#f3faf5; }
+
+    .stu-recent-bar{
+      display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid #eee; overflow-x:auto; margin-top:12px;
+    }
+    .stu-recent-label{ font-size:13.5px; color:#6b7280; flex-shrink:0; }
+    .stu-conv-pill{
+      display:flex; align-items:center; gap:7px; padding:9px 16px; border-radius:8px;
+      font-size:13px; font-weight:600; white-space:nowrap; flex-shrink:0; cursor:pointer; color:#333; border:1px solid transparent;
+    }
+    .stu-conv-pill:hover{ background:#f4f4f2; }
+    .stu-conv-pill.active{ background:#1c7c3e; color:#fff; }
+
+    /* Input bar as one rounded pill — matches new_ui .input-row */
+    #chatInputArea .tt-input-bar{ border:1px solid #eee; border-radius:40px; padding:8px 18px; }
+    #chatInputArea .tt-round-icon{
+      width:40px; height:40px; border-radius:50%; border:1px solid #d1d5db;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#fff;
+    }
+    #chatInputArea .tt-round-icon:hover{ background:#f9fafb; }
+    #chatInputArea .tt-input-mid{ padding:6px 0; }
+    #chatInputArea .tt-message-input{ border:none !important; box-shadow:none !important; padding:6px 0; }
+    #chatInputArea .tt-send-btn{ width:36px; height:36px; border-radius:50%; background:#166534 !important; color:#fff !important; }
+    #chatInputArea .tt-send-btn:hover{ background:#125129 !important; }
+
+    /* Chat bubble palette — matches teacher_dashboard.html's new_ui treatment */
+    #chatMessages .chat-message-avatar{ border-radius:50%; }
+    #chatMessages .chat-message-avatar img{ border-radius:50%; }
+    #chatMessages .chat-message.assistant .chat-message-avatar{ background:#fff; border:1.5px solid #2f9e4f; padding:2px; }
+    #chatMessages .chat-message.user .chat-message-avatar{ background:#166534; border:1.5px solid #166534; color:#fff; font-weight:800; }
+    #chatMessages .chat-message.assistant .chat-message-content{ background:#fff; border:1px solid #eee; border-radius:16px; box-shadow:0 4px 16px rgba(0,0,0,0.03); }
+    #chatMessages .chat-message.user .chat-message-content{ background:#166534; border-radius:14px; border-bottom-right-radius:4px; }
+
+    @media(max-width:768px){
+      .stu-lesson-sidebar{ border-bottom:1px solid #eee; padding-bottom:16px; margin-bottom:16px; }
+    }
   </style>
   <!-- MathJax v3: configure TeX delimiters and skip code blocks; disable automatic typeset -->
   <script>
@@ -3021,168 +3143,70 @@
     </div>
   </div>
 
-  <!-- Mobile overlay -->
-  <div id="mobileOverlay" class="mobile-overlay" onclick="toggleMobileSidebar()"></div>
+  <!-- Main Container: top toolbar (matches new_ui/studentsidescreenui/20-chat-with-lesson.html) + main content -->
+  <div class="flex flex-col h-screen w-screen overflow-hidden">
 
-  <!-- Main Container -->
-  <div class="flex h-screen w-screen overflow-hidden">
-
-    <!-- Sidebar - ChatGPT Style -->
-    <aside id="sidebar" class="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex">
-        <!-- Sidebar Header - Logo + Collapse Button -->
-        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="Logo" class="w-10 h-10 rounded-md object-contain"/>
-            <div class="sb-hide-when-collapsed">
-              <h2 class="text-lg font-bold text-gray-900">Student Portal</h2>
-              <p class="text-xs text-gray-500">Welcome</p>
-            </div>
-            <div class="sb-show-when-collapsed hidden">
-              <div class="w-8 h-8 flex items-center justify-center text-white font-semibold">G</div>
-            </div>
-          </div>
+    <!-- Top Header: logo + user info -->
+    <header class="tt-header">
+      <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
+      <div class="tt-user">
+        <div class="tt-avatar" id="userAvatar" onclick="openSettings()">{{ (session.get('username') or 'Student')[:1] | upper }}</div>
+        <div class="tt-user-info">
+          <b id="userName">{{ session.get('username', 'Student') }}</b>
+          <span>Student</span>
         </div>
-
-      <!-- My Lessons Button -->
-      <div class="px-4 mb-4">
-        <button id="lessonsTabBtn" onclick="showMyLessonsPage()"
-          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all duration-200 active-tab">
-          <div class="flex items-center gap-3">
-            <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium sb-hide-when-collapsed">My Lessons</span>
-          </div>
-          <i class="fas fa-chevron-right text-gray-400 text-sm sb-hide-when-collapsed"></i>
-        </button>
-      </div>
-
-      <!-- Chat History - Dynamically populated by renderChatSidebar() -->
-      <div class="flex-1 p-4 overflow-y-auto custom-scrollbar" id="chatHistoryContainer">
-        <!-- Empty containers that will be populated dynamically -->
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 sb-hide-when-collapsed">Today</h3>
-          <div id="todayChats" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 sb-hide-when-collapsed">Yesterday</h3>
-          <div id="yesterdayChats" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 sb-hide-when-collapsed">Previous 7 Days</h3>
-          <div id="weekChats" class="space-y-1"></div>
+        <div class="tt-logout" onclick="logout()" title="Logout">
+          <i class="fas fa-sign-out-alt"></i>
         </div>
       </div>
+    </header>
 
-      <!-- Sidebar Footer - Avatar and Logout in same row -->
-      <div class="p-4 border-t border-gray-200">
-        <div class="flex items-center justify-between">
-          <!-- User Avatar -->
-          <div class="flex items-center gap-3">
-            <div
-              class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold cursor-pointer"
-              id="userAvatar" onclick="openSettings()">
-              {{ (session.get('username') or 'Student')[:1] | upper }}
-            </div>
-            <div class="sb-hide-when-collapsed">
-              <p class="text-sm font-medium text-gray-900" id="userName">
-                {{ session.get('username', 'Student') }}
-              </p>
-              <p class="text-xs text-gray-500">Student</p>
-            </div>
-          </div>
-
-          <!-- Logout Button -->
-          <button onclick="logout()"
-            class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
-            title="Logout">
-            <i class="fas fa-sign-out-alt"></i>
+    <!-- Toolbar: Chat with Lesson / My Lessons / Chat History dropdown -->
+    <div class="tt-toolbar-wrap">
+      <div class="tt-toolbar">
+        <div class="tt-tabs">
+          <button id="chatTabBtn" class="tt-tab" onclick="showChatTab()">
+            <i class="fas fa-comment-dots"></i>
+            Chat with Lesson
           </button>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Mobile Sidebar -->
-    <aside id="mobileSidebar"
-      class="mobile-sidebar w-64 bg-white border-r border-gray-200 flex flex-col md:hidden overflow-y-auto">
-      <!-- Close Button -->
-      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-gray-900">Menu</h2>
-        <button onclick="toggleMobileSidebar()"
-          class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-700">
-          <i class="fas fa-times text-xl"></i>
-        </button>
-      </div>
-
-      <!-- My Lessons Button -->
-      <div class="px-4 mb-4">
-        <button id="lessonsTabBtn" onclick="showMyLessonsPage(); toggleMobileSidebar();"
-          class="w-full py-2.5 px-3 flex items-center justify-between text-gray-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all duration-200 active-tab">
-          <div class="flex items-center gap-3">
-            <i class="fas fa-book-open w-5 text-primary-500"></i>
-            <span class="font-medium">My Lessons</span>
-          </div>
-          <i class="fas fa-chevron-right text-gray-400 text-sm"></i>
-        </button>
-      </div>
-
-      <!-- Chat History -->
-      <div class="flex-1 p-4 overflow-y-auto custom-scrollbar" id="chatHistoryContainer-mobile">
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Today</h3>
-          <div id="todayChats-mobile" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Yesterday</h3>
-          <div id="yesterdayChats-mobile" class="space-y-1"></div>
-        </div>
-
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Previous 7 Days</h3>
-          <div id="weekChats-mobile" class="space-y-1"></div>
-        </div>
-      </div>
-
-      <!-- Sidebar Footer -->
-      <div class="p-4 border-t border-gray-200">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold cursor-pointer"
-              id="userAvatarMobile" onclick="openSettings(); toggleMobileSidebar();">
-              {{ (session.get('username') or 'Student')[:1] | upper }}
-            </div>
-            <div>
-              <p class="text-sm font-medium text-gray-900" id="userNameMobile">
-                {{ session.get('username', 'Student') }}
-              </p>
-              <p class="text-xs text-gray-500">Student</p>
-            </div>
-          </div>
-
-          <button onclick="logout(); toggleMobileSidebar();"
-            class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
-            title="Logout">
-            <i class="fas fa-sign-out-alt"></i>
+          <button id="lessonsTabBtn" class="tt-tab active-tab" onclick="showMyLessonsPage()">
+            <i class="fas fa-book-open"></i>
+            My Lessons
           </button>
+          <div class="tt-chat-history-wrap">
+            <button id="chatHistoryBtn" class="tt-tab tt-chat-history" type="button" onclick="toggleChatHistoryDropdown(event)">
+              <i class="fas fa-clock"></i>
+              <span id="ttHistoryLabel">Today</span>
+              <i id="chatHistoryChevron" class="fas fa-chevron-down tt-chevron"></i>
+            </button>
+
+            <div id="chatHistoryDropdown" class="dropdown-menu tt-chat-dropdown">
+              <div class="tt-dropdown-label">CHAT HISTORY</div>
+              <div class="tt-dropdown-list" id="chatHistoryContainer">
+                <div class="mb-2">
+                  <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-1">Today</h3>
+                  <div id="todayChats" class="space-y-1"></div>
+                </div>
+                <div class="mb-2">
+                  <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-1">Yesterday</h3>
+                  <div id="yesterdayChats" class="space-y-1"></div>
+                </div>
+                <div class="mb-2">
+                  <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-1">Previous 7 Days</h3>
+                  <div id="weekChats" class="space-y-1"></div>
+                </div>
+              </div>
+              <div class="tt-dropdown-footer">
+                <a onclick="closeAllDropdowns(); showMyLessonsPage();">View all conversations</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </aside>
+    </div>
 
-    <!-- Main content -->
-    <main class="flex-1 flex flex-col min-h-0">
-
-      <!-- Mobile Header with Hamburger Menu -->
-      <div
-        class="md:hidden sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-40">
-        <button onclick="toggleMobileSidebar()"
-          class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-700">
-          <i class="fas fa-bars text-xl"></i>
-        </button>
-        <h1 class="font-bold text-lg text-gray-900">Student Mode</h1>
-        <div class="w-8"></div>
-      </div>
+    <!-- Main content: min-h-0 so flex child can shrink and chat area scrolls; input stays at bottom -->
+    <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
 
       <!-- Chat Area — default to lessons list on login (not empty chat) -->
       <section id="chatArea" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar">
@@ -3221,44 +3245,39 @@
             <div id="voiceText" class="mt-2 text-sm text-gray-700"></div>
           </div>
 
-          <!-- Modern Input Container - Mobile Optimized -->
-          <div class="flex items-center gap-1 md:gap-3 flex-wrap md:flex-nowrap">
+          <!-- Modern Input Container - matches new_ui/studentsidescreenui/20-chat-with-lesson.html .input-row -->
+          <div class="flex items-center gap-2 md:gap-3 tt-input-bar">
             <!-- Mic/Speaker Icons (Left Outside) -->
             <div class="flex items-center gap-2 flex-shrink-0">
               <!-- Microphone Button -->
               <button id="micBtn" onclick="toggleVoiceInput()"
-                class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100 touch-target"
+                class="tt-round-icon text-gray-600 hover:text-primary-600 transition-colors"
                 title="Voice input" aria-label="Voice input">
-                <i class="fas fa-microphone text-lg md:text-xl"></i>
+                <i class="fas fa-microphone"></i>
               </button>
 
               <!-- Speaker Button -->
               <button id="speakerBtn" onclick="toggleTextToSpeech()"
-                class="text-gray-600 hover:text-primary-600 transition-colors p-2 rounded-lg hover:bg-gray-100 touch-target"
+                class="tt-round-icon text-gray-600 hover:text-primary-600 transition-colors"
                 title="Text to speech" aria-label="Text to speech">
-                <i class="fas fa-volume-up text-lg md:text-xl"></i>
+                <i class="fas fa-volume-up"></i>
               </button>
             </div>
 
-            <!-- Main Input Area (Clean, Mobile-Friendly) -->
-            <div class="flex-1 bg-transparent flex items-end gap-2 md:gap-3 px-2 md:px-5 py-2 md:py-3 min-w-0">
-              <!-- Text Input - Improved for mobile -->
+            <!-- Main Input Area (Clean, Borderless) -->
+            <div class="flex-1 bg-transparent flex items-center gap-3 tt-input-mid">
+              <!-- Text Input -->
               <textarea id="messageInput" placeholder="Type message..."
-                class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm md:text-base text-gray-800 placeholder-gray-500 resize-none focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all duration-200"
+                class="flex-1 bg-transparent text-gray-800 placeholder-gray-500 text-base resize-none focus:outline-none transition-colors tt-message-input"
                 rows="1" aria-label="Chat message input" oninput="autoResizeTextarea(this)"
                 onkeydown="handleKeyDown(event)" style="max-height: 120px;"></textarea>
 
               <!-- Send Button (Inside Input Area) -->
               <button id="sendBtn" onclick="sendMessage()"
-                class="flex items-center justify-center p-2 md:p-2.5 rounded-lg text-white bg-primary-500 hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex-shrink-0 touch-target hover:scale-105 active:scale-95"
+                class="flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0 tt-send-btn"
                 title="Send message (Ctrl+Enter)" aria-label="Send message" disabled>
-                <i class="fas fa-arrow-up text-base md:text-lg"></i>
+                <i class="fas fa-arrow-up"></i>
               </button>
-            </div>
-
-            <!-- Action Buttons (Right Side - Compact on mobile) -->
-            <div class="flex items-center gap-1 md:gap-4 flex-shrink-0">
-              <!-- Download Chat Button (hidden on mobile) -->
             </div>
           </div>
         </div>
@@ -3286,13 +3305,13 @@
         class="bg-white rounded-xl md:rounded-2xl w-[95%] md:w-full mx-auto max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col">
         
         <!-- Header - Compact -->
-        <div class="bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500 text-white px-6 md:px-10 py-5 md:py-6">
+        <div class="text-white px-6 md:px-10 py-5 md:py-6" style="background:linear-gradient(90deg,#0e5c2f,#1f9c46 60%,#2fae52)">
           <div class="flex items-start justify-between gap-4 mb-3">
             <div class="flex items-start gap-3 flex-1">
-              
+
               <div class="flex-1 min-w-0">
                 <h2 class="text-2xl md:text-3xl font-bold text-white mb-1 line-clamp-2 leading-tight" id="viewLessonTitle">Lesson Title</h2>
-                <p class="text-blue-100 text-sm md:text-base font-medium whitespace-nowrap" id="viewLessonSubtitle">Subject • Grade Level</p>
+                <p class="text-blue-100/95 text-sm md:text-base font-medium whitespace-nowrap" id="viewLessonSubtitle">Subject • Grade Level</p>
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
@@ -3312,7 +3331,7 @@
           <div class="max-w-4xl mx-auto">
             <div class="bg-white rounded-xl border border-gray-100 p-6 md:p-8 shadow-sm">
               <div class="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
-                <div class="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center text-primary-600">
+                <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#e6f4ea;color:#166534;">
                   <i class="fas fa-scroll text-lg"></i>
                 </div>
                 <h3 class="text-lg md:text-xl font-bold text-gray-800">Lesson Content</h3>
@@ -3328,7 +3347,7 @@
         <!-- Footer with Actions -->
         <div class="border-t border-gray-200 bg-white px-6 md:px-10 py-5 md:py-6">
           <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <button onclick="openLessonChat()" class="w-full sm:w-auto bg-gradient-to-r from-primary-600 to-primary-500 text-white px-6 py-3 rounded-lg hover:from-primary-700 hover:to-primary-600 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 font-semibold">
+            <button onclick="openLessonChat()" class="w-full sm:w-auto text-white px-6 py-3 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 font-semibold" style="background:linear-gradient(90deg,#166534,#1c7c3e);" onmouseover="this.style.opacity='0.92'" onmouseout="this.style.opacity='1'">
               <i class="fas fa-comment-dots text-lg text-white"></i>
               <span>Ask Question</span>
             </button>
@@ -3496,7 +3515,7 @@
         return `
         <div class="chat-message assistant animate-fade-in">
           <div class="chat-message-avatar">
-            <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
           </div>
           <div class="chat-message-content">
             <h4 class="font-display font-semibold text-surface-900 mb-2">Welcome to Student Portal!</h4>
@@ -4182,6 +4201,22 @@
         });
       }
 
+      // Toggle the top-toolbar "Chat History" pill dropdown (new_ui top toolbar)
+      function toggleChatHistoryDropdown(event) {
+        if (event) event.stopPropagation();
+        const dropdown = document.getElementById('chatHistoryDropdown');
+        const chev = document.getElementById('chatHistoryChevron');
+        if (!dropdown) return;
+        const isOpen = dropdown.classList.contains('show');
+        closeAllDropdowns();
+        if (!isOpen) {
+          dropdown.classList.add('show');
+          if (chev) chev.classList.add('open');
+        } else if (chev) {
+          chev.classList.remove('open');
+        }
+      }
+
       function getLessonThreadSignature(lessonCtx) {
         if (!lessonCtx) return '';
         const content = String(lessonCtx.content || '');
@@ -4267,6 +4302,31 @@
         }
       }
 
+      // Recent-conversations pill bar (new_ui): most recent lesson-bound chats, current one highlighted.
+      function buildRecentConvPillsHtml(currentChatId) {
+        let lessonBindings = {};
+        try {
+          lessonBindings = JSON.parse(localStorage.getItem('Student_chat_lesson_bindings') || '{}') || {};
+        } catch (e) {
+          lessonBindings = {};
+        }
+        const lessonChats = (chatHistory || []).filter(function (c) {
+          return !!(lessonBindings[String(c.id)] || lessonBindings[c.id]);
+        });
+        lessonChats.sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+        const top = lessonChats.slice(0, 5);
+        if (!top.length) return '';
+        return top.map(function (c) {
+          const isActive = String(c.id) === String(currentChatId);
+          const title = escapeHtml(c.title || 'Conversation');
+          const dateStr = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : '';
+          const label = isActive ? title : (dateStr ? `${title} &bull; ${dateStr}` : title);
+          return `<div class="stu-conv-pill${isActive ? ' active' : ''}" onclick="loadChat('${c.id}')" title="${title}">
+              <i class="fas fa-folder"></i> ${label}
+            </div>`;
+        }).join('');
+      }
+
       // Build chat layout for a given chatId (adds lesson panel only if bound to that chat)
       async function renderChatLayoutForChat(chatId) {
         const chatArea = document.getElementById('chatArea');
@@ -4284,16 +4344,17 @@
         if (lessonCtx && window.innerWidth > 768) {
           const lessonPanel = document.createElement('div');
           lessonPanel.id = 'lessonContextPanel';
-          lessonPanel.className = 'w-full md:w-1/3 md:flex-shrink-0 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm flex flex-col h-fit md:sticky md:top-6 order-first md:order-none';
+          lessonPanel.className = 'stu-lesson-sidebar w-full md:w-[300px] md:flex-shrink-0 md:border-r md:border-gray-100 md:pr-6 overflow-y-auto md:max-h-[calc(100vh-220px)] order-first md:order-none';
           lessonPanel.innerHTML = `
-            <div class="bg-gradient-to-r from-primary-600 to-primary-500 text-white px-4 py-3">
-              <h3 class="font-bold text-lg">${lessonCtx.title}</h3>
-              <p class="text-sm text-blue-100">${lessonCtx.subject} • Grade ${lessonCtx.grade}</p>
+            <div class="stu-back-link" onclick="showMyLessonsPage()">
+              <i class="fas fa-chevron-left"></i> My Lessons
             </div>
-            <div class="flex-1 overflow-y-auto px-4 py-4 max-h-[400px] md:max-h-[70vh]">
-              <div id="lessonContextContent" class="text-gray-700 leading-relaxed space-y-4">
-                ${formatLessonContentForView(lessonCtx.content || '')}
-              </div>
+            <div class="stu-pinned-label">PINNED LESSON</div>
+            <div class="stu-ls-title">${escapeHtml(lessonCtx.title || 'Lesson')}</div>
+            <div class="stu-ls-meta">${escapeHtml(lessonCtx.subject || 'Subject')} &bull; Grade ${escapeHtml(lessonCtx.grade || 'N/A')}</div>
+            <hr class="stu-divider">
+            <div id="lessonContextContent" class="stu-ls-content">
+              ${formatLessonContentForView(lessonCtx.content || '')}
             </div>
           `;
           chatArea.appendChild(lessonPanel);
@@ -4308,6 +4369,24 @@
           }
         }
 
+        // Chat column: head (Conversation with Lesson) + messages + recent-conversations bar
+        const chatCol = document.createElement('div');
+        chatCol.className = 'stu-chat-col w-full min-w-0';
+
+        const chatHead = document.createElement('div');
+        chatHead.className = 'stu-chat-head';
+        chatHead.innerHTML = lessonCtx ? `
+            <div class="stu-chat-close" onclick="showMyLessonsPage()" title="Close"><i class="fas fa-times"></i></div>
+            <h1>${escapeHtml(formatStudentConversationTitle(lessonCtx.title))}</h1>
+            <div class="stu-sub">${escapeHtml(lessonCtx.title || 'Lesson')}</div>
+            <div class="stu-pinned-tag"><i class="fas fa-thumbtack"></i> Lesson pinned</div>
+          ` : `
+            <div class="stu-chat-close" onclick="showMyLessonsPage()" title="Close"><i class="fas fa-times"></i></div>
+            <h1>Chat</h1>
+            <div class="stu-sub">Ask a question to get started</div>
+          `;
+        chatCol.appendChild(chatHead);
+
         // Messages wrapper
         const messagesWrapper = document.createElement('div');
         messagesWrapper.id = 'messagesWrapper';
@@ -4318,7 +4397,17 @@
         chatMessages.id = 'chatMessages';
         chatMessages.className = 'w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6 mb-0';
         messagesWrapper.appendChild(chatMessages);
-        chatArea.appendChild(messagesWrapper);
+        chatCol.appendChild(messagesWrapper);
+
+        const recentPillsHtml = buildRecentConvPillsHtml(chatId);
+        if (recentPillsHtml) {
+          const recentBar = document.createElement('div');
+          recentBar.className = 'stu-recent-bar';
+          recentBar.innerHTML = '<div class="stu-recent-label">Recent conversations</div>' + recentPillsHtml;
+          chatCol.appendChild(recentBar);
+        }
+
+        chatArea.appendChild(chatCol);
 
         // Load messages for this chat from DB
         let storedMessages = [];
@@ -4364,7 +4453,7 @@
             const rendered = isLessonMetaBlock ? (content || '') : formatRichContent(content || '');
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
-                <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+                <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
               </div>
               <div class="chat-message-content">${rendered}</div>
             `;
@@ -5489,9 +5578,15 @@
 
         await startNewChat();
         if (!currentChatId) return;
-        await renderChatLayoutForChat(currentChatId);
-        // Bind the lesson to this newly created chat
+        // Bind the lesson to this newly created chat BEFORE rendering the layout, so the
+        // pinned-lesson sidebar and chat header (which read window.currentLessonContext) show
+        // immediately instead of only after the next re-render.
         bindLessonToChatSession(lesson);
+        setStudentActiveView('chat');
+        deactivateAllTabs();
+        const chatTabBtnEl2 = document.getElementById('chatTabBtn');
+        if (chatTabBtnEl2) chatTabBtnEl2.classList.add('active-tab');
+        await renderChatLayoutForChat(currentChatId);
         // Clear any placeholder/welcome content in the freshly built chat before pinning lesson
         const chatMessages = document.getElementById('chatMessages');
         if (chatMessages) {
@@ -6106,6 +6201,9 @@
       // ════════════════════════════════════════════════════════════════════════════════
       async function loadChat(chatId) {
         setStudentActiveView('chat');
+        deactivateAllTabs();
+        const chatTabBtnEl = document.getElementById('chatTabBtn');
+        if (chatTabBtnEl) chatTabBtnEl.classList.add('active-tab');
         const normalizedChatId = String(chatId || '');
         if (!normalizedChatId) return;
 
@@ -6826,7 +6924,7 @@
         
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+          <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
         </div>
       `;
         messageDiv.appendChild(contentDiv);
@@ -6932,7 +7030,7 @@
         typingDiv.className = 'chat-message assistant animate-fade-in';
         typingDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -7022,7 +7120,7 @@
         successMsg.className = 'chat-message assistant animate-fade-in';
         successMsg.innerHTML = `
         <div class="chat-message-avatar">
-          <img src="{{ url_for('static', filename='teacher/assets/midLogo.png') }}" alt="AI Assistant">
+          <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
         </div>
         <div class="chat-message-content">
           <div class="flex items-center gap-2">
@@ -7289,8 +7387,8 @@
         if (window.innerWidth >= 768) {
           const sidebar = document.getElementById('mobileSidebar');
           const overlay = document.getElementById('mobileOverlay');
-          sidebar.classList.remove('open');
-          overlay.classList.remove('open');
+          if (sidebar) sidebar.classList.remove('open');
+          if (overlay) overlay.classList.remove('open');
         }
         closeAllDropdowns();
       });
