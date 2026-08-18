@@ -2962,8 +2962,9 @@
       display:flex; align-items:center; justify-content:space-between;
       padding:14px 28px; border-bottom:1px solid #eee; flex-wrap:wrap; gap:14px; background:#fff;
     }
+    .tt-header .tt-logo{ flex-shrink:0; }
     .tt-header .tt-logo img{ height:38px; }
-    .tt-user{ display:flex; align-items:center; gap:14px; }
+    .tt-user{ display:flex; align-items:center; gap:14px; flex-shrink:0; }
     .tt-avatar{
       width:38px; height:38px; border-radius:50%; background:#166534; color:#fff;
       display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0; cursor:pointer;
@@ -3004,15 +3005,165 @@
     .tt-dropdown-footer{ text-align:center; padding-top:10px; margin-top:6px; border-top:1px solid #f0f0f0; }
     .tt-dropdown-footer a{ color:#1c7c3e; font-weight:700; font-size:13.5px; text-decoration:none; cursor:pointer; }
 
+    .svl-header-search{
+      display:none;
+      align-items:center;
+      gap:10px;
+      flex:1;
+      min-width:200px;
+      max-width:560px;
+      margin:0 12px;
+      background:#fff;
+      border:1px solid #d1d5db;
+      border-radius:999px;
+      padding:10px 18px;
+    }
+    .svl-header-search.is-visible{ display:flex; }
+    .svl-header-search i{ color:#9ca3af; font-size:13px; flex-shrink:0; }
+    .svl-header-search input{
+      border:none !important; outline:none; width:100%;
+      font-size:13.5px; font-family:inherit; background:transparent !important; color:#111;
+      box-shadow:none !important; padding:0;
+    }
+    .svl-header-search input:focus{
+      border:none !important; box-shadow:none !important; background:transparent !important;
+    }
+
+    /* ===== Student View Lessons list (replaces old blue table) ===== */
+    .svl-wrap{
+      font-family:'Segoe UI',Arial,sans-serif;
+      color:#111;
+      max-width:980px;
+      margin:0 auto;
+      padding:8px 8px 36px;
+    }
+    .svl-page-head{ margin-bottom:22px; }
+    .svl-page-head h1{ font-size:28px; font-weight:800; margin:0 0 6px; letter-spacing:-0.02em; }
+    .svl-page-head p{ margin:0; color:#6b7280; font-size:14.5px; }
+    .svl-card-stack{ position:relative; }
+    .svl-card-stack::before{
+      content:'';
+      position:absolute;
+      left:16px; right:16px; bottom:-10px;
+      height:18px;
+      background:#f3f4f6;
+      border-radius:0 0 22px 22px;
+      z-index:0;
+    }
+    .svl-card{
+      position:relative;
+      z-index:1;
+      background:#fff;
+      border-radius:28px;
+      box-shadow:0 18px 40px rgba(15,23,42,0.08);
+      overflow:hidden;
+    }
+    .svl-card-accent{
+      position:absolute;
+      top:0; right:0;
+      width:0; height:0;
+      border-style:solid;
+      border-width:0 52px 52px 0;
+      border-color:transparent #1c7c3e transparent transparent;
+      pointer-events:none;
+    }
+    .svl-row{
+      display:flex;
+      align-items:center;
+      gap:20px;
+      padding:22px 28px;
+      border-bottom:1px dashed #e5e7eb;
+    }
+    .svl-row:last-child{ border-bottom:none; }
+    .svl-art{
+      width:72px; height:72px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .svl-art svg{ width:64px; height:64px; }
+    .svl-info{ flex:1; min-width:0; }
+    .svl-title-row{
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;
+    }
+    .svl-title-row h3{
+      font-size:20px; font-weight:800; margin:0; color:#111; line-height:1.2;
+    }
+    .svl-version{
+      display:inline-flex; align-items:center;
+      background:#dbeafe; color:#1d4ed8;
+      border-radius:999px; padding:2px 10px;
+      font-size:12px; font-weight:700;
+    }
+    .svl-time{
+      margin-left:auto;
+      display:inline-flex; align-items:center; gap:6px;
+      color:#9ca3af; font-size:12.5px; white-space:nowrap;
+    }
+    .svl-meta{
+      display:flex; gap:36px; flex-wrap:wrap;
+    }
+    .svl-meta div{ min-width:90px; }
+    .svl-meta label{
+      display:block; color:#9ca3af; font-size:10px;
+      letter-spacing:.6px; text-transform:uppercase; margin-bottom:3px; font-weight:700;
+    }
+    .svl-meta span{ font-size:13.5px; color:#222; font-weight:600; }
+    .svl-actions{
+      display:flex; align-items:center; gap:10px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end;
+    }
+    .svl-btn-view{
+      display:inline-flex; align-items:center; gap:10px;
+      background:#111; color:#fff; border:none;
+      border-radius:999px; padding:6px 16px 6px 6px;
+      font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit; white-space:nowrap;
+    }
+    .svl-btn-view span.svl-eye{
+      width:32px; height:32px; border-radius:50%; background:#22c55e;
+      display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:13px;
+    }
+    .svl-btn-view:hover{ opacity:.92; }
+    .svl-btn-ppt,
+    .svl-btn-chat{
+      display:inline-flex; align-items:center; gap:6px;
+      background:#fff; border-radius:999px; padding:8px 14px;
+      font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; white-space:nowrap;
+    }
+    .svl-btn-ppt{ border:1.5px solid #2563eb; color:#2563eb; }
+    .svl-btn-chat{ border:1.5px solid #1c7c3e; color:#166534; }
+    .svl-btn-ppt:hover, .svl-btn-chat:hover{ background:#f8fafc; }
+    .svl-empty{
+      padding:48px 24px; text-align:center; color:#6b7280; font-size:14.5px;
+    }
+    .svl-pagination{
+      display:flex; justify-content:center; align-items:center; gap:14px;
+      margin:26px 0 8px;
+    }
+    .svl-page-btn{
+      border:1px solid #d1d5db; background:#fff; color:#374151;
+      padding:8px 16px; border-radius:8px; font-size:13px; cursor:pointer; font-family:inherit;
+    }
+    .svl-page-btn:disabled{ opacity:.45; cursor:default; }
+    .svl-page-info{ font-size:13px; color:#6b7280; }
+
     @media(max-width:900px){
       .tt-header{ padding:12px 16px; }
       .tt-toolbar-wrap{ padding:12px 12px 0; }
       .tt-toolbar{ padding:8px; border-radius:22px; }
       .tt-tab{ font-size:12px; gap:5px; padding:10px 8px; }
       #chatHistoryDropdown.tt-chat-dropdown{ left:0; transform:none; width:100%; max-width:320px; }
+      .svl-header-search{
+        order:3; flex-basis:100%; max-width:none; margin:0;
+      }
+      .svl-row{ flex-wrap:wrap; gap:14px; padding:18px 16px; }
+      .svl-actions{ width:100%; justify-content:flex-start; }
+      .svl-time{ margin-left:0; }
     }
     @media(max-width:520px){
       .tt-user-info{ display:none; }
+      .svl-page-head h1{ font-size:22px; }
+      .svl-art{ width:56px; height:56px; }
+      .svl-art svg{ width:48px; height:48px; }
+      .svl-title-row h3{ font-size:17px; }
+      .svl-meta{ gap:16px; }
     }
 
     /* ===== New UI: Chat with Lesson — pinned lesson sidebar + chat column ===== */
@@ -3150,6 +3301,13 @@
     <!-- Top Header: logo + user info -->
     <header class="tt-header">
       <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
+      <div class="svl-header-search is-visible" id="studentLessonSearchWrap">
+        <i class="fas fa-search"></i>
+        <input type="text"
+               id="lessonSearch"
+               placeholder="Search lessons by title, subject, or grade..."
+               oninput="filterLessons(this.value)">
+      </div>
       <div class="tt-user">
         <div class="tt-avatar" id="userAvatar" onclick="openSettings()">{{ (session.get('username') or 'Student')[:1] | upper }}</div>
         <div class="tt-user-info">
@@ -3212,10 +3370,10 @@
       <!-- Chat Area — default to lessons list on login (not empty chat) -->
       <section id="chatArea" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar">
         <div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6">
-          <div class="max-w-6xl mx-auto">
-            <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
-              <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View and Manage Lesson</h1>
-              <p class="text-primary-100 text-sm md:text-base">Loading lessons...</p>
+          <div class="svl-wrap">
+            <div class="svl-page-head">
+              <h1>View Lessons</h1>
+              <p>Loading lessons...</p>
             </div>
           </div>
         </div>
@@ -3496,6 +3654,10 @@
 
       function setStudentActiveView(view) {
         studentActiveView = (view === 'chat') ? 'chat' : 'lessons';
+        const searchWrap = document.getElementById('studentLessonSearchWrap');
+        if (searchWrap) {
+          searchWrap.classList.toggle('is-visible', studentActiveView === 'lessons');
+        }
         try {
           localStorage.setItem(STUDENT_ACTIVE_VIEW_KEY, studentActiveView);
         } catch (e) {
@@ -3542,7 +3704,7 @@
             <div class="mt-4 p-3 bg-primary-50 rounded-lg border border-primary-100">
               <p class="text-primary-700 text-sm">
                 <i class="fas fa-lightbulb mr-2"></i>
-                <strong>Tip:</strong> Open a lesson from View and Manage Lesson, then tap Ask Question to chat about it.
+                <strong>Tip:</strong> Open a lesson from View Lessons, then tap Ask Question to chat about it.
               </p>
             </div>
           </div>
@@ -3708,10 +3870,10 @@
         <div class="max-w-2xl mx-auto p-8 h-full flex flex-col items-center justify-center text-center">
           <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
           <h2 class="text-2xl font-bold text-gray-700 mb-2">No active lesson chat</h2>
-          <p class="text-gray-500 mb-6">Open a lesson from View and Manage Lesson, then use Ask Question to start chatting.</p>
+          <p class="text-gray-500 mb-6">Open a lesson from View Lessons, then use Ask Question to start chatting.</p>
           <button onclick="showMyLessonsPage()" class="bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 transition-colors font-medium">
             <i class="fas fa-book-open mr-2"></i>
-            View and Manage Lesson
+            View Lessons
           </button>
         </div>
       `;
@@ -4620,10 +4782,10 @@
         if (chatMessages) {
           chatMessages.removeAttribute('data-active-thread-id');
           chatMessages.innerHTML = `
-          <div class="max-w-6xl mx-auto">
-            <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
-              <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View and Manage Lesson</h1>
-              <p class="text-primary-100 text-sm md:text-base">Loading lessons...</p>
+          <div class="svl-wrap">
+            <div class="svl-page-head">
+              <h1>View Lessons</h1>
+              <p>Loading lessons...</p>
             </div>
           </div>
         `;
@@ -4684,102 +4846,77 @@
             subject: lesson.focus_area || lesson.subject || 'General',
             grade: lesson.grade_level || lesson.grade || 'General',
             createdBy: lesson.teacher_name || lesson.createdBy || 'Teacher',
-            versions: `<span class="version-badge">v${lesson.version || 1}</span>`,
+            versionLabel: 'v' + (lesson.version || 1),
             timestamp: timestamp,
             fullDate: date,
             status: lesson.status || 'draft'
           };
         });
 
-        // Clear chat area and show lessons page
-        chatMessages.innerHTML = `
-    <div class="max-w-6xl mx-auto">
-      <!-- Header with Background -->
-      <div class="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
-        <div class="flex flex-col gap-4">
-          <div>
-            <h1 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">View and Manage Lesson</h1>
-            <p class="text-primary-100 text-sm md:text-base">Explore and learn from all available courses</p>
-          </div>
-        </div>
-      </div>
+        const lessonArtSvg = `
+          <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <path d="M10 46V20c8-6 16-4 22 0 6-4 14-6 22 0v26c-8-5-16-3-22 2-6-5-14-7-22-2z" stroke="#1c7c3e" stroke-width="2.2" stroke-linejoin="round"/>
+            <path d="M32 20v28" stroke="#1c7c3e" stroke-width="2.2"/>
+            <path d="M24 30c4-8 14-11 22-6-4 5-11 8-18 9" stroke="#166534" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M42 12l1.1 3.3H47l-2.8 2 1.1 3.3L42 18.7 38.7 20.6l1.1-3.3-2.8-2H41z" fill="#1c7c3e"/>
+          </svg>
+        `;
 
-      <!-- Content Area -->
-      <div class="px-4 md:px-6 lg:px-6">
-      <!-- Search Bar -->
-      <div class="search-container mb-6">
-        <i class="fas fa-search search-icon"></i>
-        <input type="text" 
-               id="lessonSearch" 
-               placeholder="Search lessons by title, subject, or grade..." 
-               class="search-input"
-               value="${lessonSearchTerm}"
-               oninput="filterLessons(this.value)">
+        const lessonRows = formattedLessons.length ? formattedLessons.map(function (lesson) {
+          const id = String(lesson.id || '').replace(/\\/g, '').replace(/'/g, '');
+          const title = escapeHtml(lesson.title);
+          const subject = escapeHtml(lesson.subject);
+          const grade = escapeHtml(lesson.grade);
+          const createdBy = escapeHtml(lesson.createdBy);
+          const timestamp = escapeHtml(lesson.timestamp);
+          const versionLabel = escapeHtml(lesson.versionLabel);
+          return `
+            <div class="svl-row" data-lesson-id="${escapeHtml(id)}">
+              <div class="svl-art">${lessonArtSvg}</div>
+              <div class="svl-info">
+                <div class="svl-title-row">
+                  <h3>${title}</h3>
+                  <span class="svl-version">${versionLabel}</span>
+                  <span class="svl-time"><i class="fas fa-clock"></i> ${timestamp}</span>
+                </div>
+                <div class="svl-meta">
+                  <div><label>Subject</label><span>${subject}</span></div>
+                  <div><label>Grade</label><span>${grade}</span></div>
+                  <div><label>Created by</label><span>${createdBy}</span></div>
+                </div>
+              </div>
+              <div class="svl-actions">
+                <button type="button" class="svl-btn-view" title="View lesson" onclick="viewLesson('${id}')">
+                  <span class="svl-eye"><i class="fas fa-eye"></i></span>
+                  View Lesson
+                </button>
+                <button type="button" class="svl-btn-ppt" title="Download PPT" onclick="downloadLessonPPT('${id}')">
+                  <i class="fas fa-file-powerpoint"></i> PPT
+                </button>
+                <button type="button" class="svl-btn-chat" title="Ask questions about this lesson" onclick="chatWithLesson('${id}')">
+                  <i class="fas fa-comment-dots"></i> Chat
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('') : '<div class="svl-empty">No lessons available yet.</div>';
+
+        chatMessages.innerHTML = `
+    <div class="svl-wrap">
+      <div class="svl-page-head">
+        <h1>View Lessons</h1>
+        <p>Explore and learn from all available courses.</p>
       </div>
-      
-      <!-- Lessons Table -->
-      <div class="lessons-table-container">
-        <table class="lessons-table">
-          <thead>
-            <tr>
-              <th>Lesson Title</th>
-              <th>Subject</th>
-              <th>Grade</th>
-              <th>Created By</th>
-              <th>Versions</th>
-              <th>Timestamp</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-        <tbody id="lessonsTableBody">
-            ${formattedLessons.length ? formattedLessons.map(lesson => `
-              <tr data-lesson-id="${lesson.id}">
-                <td class="font-medium" data-label="Lesson Title">${lesson.title}</td>
-                <td data-label="Subject">${lesson.subject}</td>
-                <td data-label="Grade">${lesson.grade}</td>
-                <td data-label="Created By">${lesson.createdBy}</td>
-                <td data-label="Versions">${lesson.versions}</td>
-                <td data-label="Timestamp">
-                  <div class="timestamp-badge">
-                    <i class="fas fa-clock text-xs"></i>
-                    <span class="timestamp">${lesson.timestamp}</span>
-                  </div>
-                </td>
-                <td data-label="Actions">
-                  <div class="lesson-actions">
-                    <button class="action-btn view-btn" title="View lesson" onclick="viewLesson('${lesson.id}')">
-                      <i class="fas fa-eye"></i>
-                    </button>
-                    <button class="action-btn" style="background: #dcfce7; color: #166534;" title="Ask questions about this lesson" onclick="chatWithLesson('${lesson.id}')">
-                      <i class="fas fa-comment-dots"></i>
-                    </button>
-                    <button class="action-btn" style="background: #dbeafe; color: #1e40af;" title="Download PPT" onclick="downloadLessonPPT('${lesson.id}')">
-                      <i class="fas fa-file-powerpoint"></i>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            `).join('') : `
-              <tr>
-                <td colspan="7" class="py-10 text-center text-gray-500">
-                  No lessons available yet.
-                </td>
-              </tr>
-            `}
-          </tbody>
-        </table>
-        
-        <!-- Pagination -->
-        <div class="pagination">
-          <button class="pagination-btn" onclick="previousPage()" id="prevBtn" disabled>
-            Previous
-          </button>
-          <span class="pagination-info" id="pageInfo">Page 1 of 1</span>
-          <button class="pagination-btn" onclick="nextPage()" id="nextBtn" disabled>
-            Next
-          </button>
+      <div class="svl-card-stack">
+        <div class="svl-card">
+          <div class="svl-card-accent"></div>
+          <div id="lessonsTableBody">${lessonRows}</div>
         </div>
-        </div>
+      </div>
+      <div class="svl-pagination">
+        <button type="button" class="svl-page-btn" onclick="previousPage()" id="prevBtn" disabled>Previous</button>
+        <span class="svl-page-info" id="pageInfo">Page 1 of 1</span>
+        <button type="button" class="svl-page-btn" onclick="nextPage()" id="nextBtn" disabled>Next</button>
       </div>
     </div>
   `;
