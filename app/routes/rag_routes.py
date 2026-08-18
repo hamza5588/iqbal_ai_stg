@@ -17,6 +17,13 @@ from app.utils.rag_service import (
     RAG_SYSTEM_SETTING_KEY_WITH_PDF,
     _get_stored_rag_system_template,
     _substitute_rag_system_placeholders,
+    _rag_chat_streaming_enabled,
+)
+from app.utils.rag_token_sink import (
+    QueueRagTokenSink,
+    get_rag_token_sink,
+    reset_rag_token_sink,
+    set_rag_token_sink,
 )
 from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from app.utils.chat_lock import acquire_chat_lock, release_chat_lock
@@ -27,6 +34,7 @@ from app.services.conversation_summary_service import ConversationSummaryService
 from app.tasks.ingest_tasks import ingest_pdf_task, extract_headings_task
 from langchain_core.messages import HumanMessage
 import logging
+import queue
 import threading
 import uuid
 from datetime import datetime, timedelta
@@ -77,6 +85,20 @@ def _check_and_record_user_chat_rate(user_id):
         history.append(now)
         _user_chat_rate[user_id] = history
     return True, 0
+
+
+def _client_wants_rag_stream(data) -> bool:
+    """True only when the client explicitly asked for SSE. Old clients stay on JSON."""
+    if not isinstance(data, dict):
+        return False
+    value = data.get("stream")
+    if value is True:
+        return True
+    if isinstance(value, (int, float)) and value == 1:
+        return True
+    if isinstance(value, str) and value.strip().lower() in ("true", "1", "yes"):
+        return True
+    return False
 
 
 def _is_transient_db_connection_error(exc: Exception) -> bool:
@@ -1428,6 +1450,7 @@ def chat():
                 'retry_after': lock_wait_seconds,
             }), 429
 
+        sse_owns_lock = False
         try:
             # Prepare config for LangGraph
             max_tool_rounds = max(
@@ -1466,6 +1489,8 @@ def chat():
             except Exception:
                 pass
             # #endregion
+            use_sse = _client_wants_rag_stream(data) and _rag_chat_streaming_enabled()
+            sse_queue = queue.Queue() if use_sse else None
             # Create HumanMessage
             human_message = HumanMessage(content=message)
 
@@ -1479,187 +1504,270 @@ def chat():
                 finally:
                     _db.close()
 
-            # Invoke the chatbot - LangGraph returns the final state
-            # #region agent log
-            try:
-                if enable_debug_file_logs:
-                    with open(_log_path, 'a', encoding='utf-8') as _f:
-                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-            except Exception:
-                pass
-            # #endregion
-            try:
-                state = chatbot.invoke(
-                    {"messages": [human_message]},
-                    config=config
-                )
-            except Exception as invoke_err:
-                if not _is_transient_db_connection_error(invoke_err):
-                    raise
-                logger.warning(
-                    "RAG chat invoke hit transient DB connection error; resetting engine and retrying once. "
-                    "thread_id=%s user_id=%s err=%s",
-                    thread_id,
-                    user_id,
-                    invoke_err,
-                )
+            def _execute_rag_chat_turn():
+                # Invoke the chatbot - LangGraph returns the final state
+                # #region agent log
                 try:
-                    from app.utils.db import reset_db_engine
-                    reset_db_engine()
+                    if enable_debug_file_logs:
+                        with open(_log_path, 'a', encoding='utf-8') as _f:
+                            _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_start", "message": "chatbot.invoke start", "data": {}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
                 except Exception:
-                    logger.warning("Failed to reset DB engine before retry", exc_info=True)
-                state = chatbot.invoke(
-                    {"messages": [human_message]},
-                    config=config
-                )
-            # #region agent log
-            _msgs = state.get("messages", [])
-            try:
-                if enable_debug_file_logs:
-                    with open(_log_path, 'a', encoding='utf-8') as _f:
-                        _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
-            except Exception:
-                pass
-            # #endregion
-
-            def _extract_and_sanitize_response(state_obj):
-                messages_local = state_obj.get("messages", []) if isinstance(state_obj, dict) else []
-                if not messages_local:
-                    content_local = ""
-                else:
-                    last_msg_local = messages_local[-1]
-                    if hasattr(last_msg_local, 'content'):
-                        content_local = last_msg_local.content
-                    elif isinstance(last_msg_local, dict):
-                        content_local = last_msg_local.get('content', str(last_msg_local))
-                    else:
-                        content_local = str(last_msg_local)
-
-                content_local = _strip_lesson_finalization_from_response(content_local)
-                content_local = _strip_tool_names_from_response(content_local)
-                content_local = _strip_internal_reasoning_from_response(content_local)
-                return content_local
-
-            response_content = _extract_and_sanitize_response(state)
-
-            # If model returned an empty/stripped response, do one recovery turn that
-            # explicitly asks the agent to run needed tools and provide the final answer.
-            if not isinstance(response_content, str) or not response_content.strip():
-                logger.warning(
-                    "RAG chat produced empty response after first invoke. Running one recovery invoke. "
-                    "thread_id=%s user_id=%s",
-                    thread_id,
-                    user_id,
-                )
-                recovery_prompt = (
-                    "Your previous response was empty. Re-run the needed tools for the user's last question "
-                    "and provide a final direct answer from the uploaded document. "
-                    "If document evidence is not found, say that clearly."
-                )
+                    pass
+                # #endregion
                 try:
-                    recovery_state = chatbot.invoke(
-                        {"messages": [HumanMessage(content=recovery_prompt)]},
+                    state = chatbot.invoke(
+                        {"messages": [human_message]},
                         config=config
                     )
-                except Exception as recovery_err:
-                    if not _is_transient_db_connection_error(recovery_err):
+                except Exception as invoke_err:
+                    if not _is_transient_db_connection_error(invoke_err):
                         raise
                     logger.warning(
-                        "RAG recovery invoke hit transient DB connection error; resetting engine and retrying once. "
+                        "RAG chat invoke hit transient DB connection error; resetting engine and retrying once. "
                         "thread_id=%s user_id=%s err=%s",
                         thread_id,
                         user_id,
-                        recovery_err,
+                        invoke_err,
                     )
                     try:
                         from app.utils.db import reset_db_engine
                         reset_db_engine()
                     except Exception:
-                        logger.warning("Failed to reset DB engine before recovery retry", exc_info=True)
-                    recovery_state = chatbot.invoke(
-                        {"messages": [HumanMessage(content=recovery_prompt)]},
+                        logger.warning("Failed to reset DB engine before retry", exc_info=True)
+                    state = chatbot.invoke(
+                        {"messages": [human_message]},
                         config=config
                     )
-                response_content = _extract_and_sanitize_response(recovery_state)
+                # #region agent log
+                _msgs = state.get("messages", [])
+                try:
+                    if enable_debug_file_logs:
+                        with open(_log_path, 'a', encoding='utf-8') as _f:
+                            _f.write(_json.dumps({"location": "rag_routes.py:chat:invoke_done", "message": "chatbot.invoke done", "data": {"messages_len": len(_msgs)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4"}) + "\n")
+                except Exception:
+                    pass
+                # #endregion
 
-            # Last-resort fallback to avoid blank frontend messages.
-            if not isinstance(response_content, str) or not response_content.strip():
-                response_content = (
-                    "I could not generate a complete response this time. "
-                    "Please ask again and I will answer directly from your document."
-                )
-
-            # Save messages to database for chat history
-            db_conversation_id = None
-            try:
-                from app.models.models import ConversationModel
-                conversation_model = ConversationModel(user_id)
-                
-                # Priority 1: Use conversation_id from request if provided (most reliable)
-                if conversation_id:
-                    conv = conversation_model.get_conversation_by_id(conversation_id)
-                    if conv:
-                        db_conversation_id = conversation_id
-                        logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
+                def _extract_and_sanitize_response(state_obj):
+                    messages_local = state_obj.get("messages", []) if isinstance(state_obj, dict) else []
+                    if not messages_local:
+                        content_local = ""
                     else:
-                        # Conversation doesn't exist or doesn't belong to user, create new one
-                        db_conversation_id = conversation_model.create_conversation(
-                            title=message[:50] if len(message) > 50 else message
+                        last_msg_local = messages_local[-1]
+                        if hasattr(last_msg_local, 'content'):
+                            content_local = last_msg_local.content
+                        elif isinstance(last_msg_local, dict):
+                            content_local = last_msg_local.get('content', str(last_msg_local))
+                        else:
+                            content_local = str(last_msg_local)
+
+                    content_local = _strip_lesson_finalization_from_response(content_local)
+                    content_local = _strip_tool_names_from_response(content_local)
+                    content_local = _strip_internal_reasoning_from_response(content_local)
+                    return content_local
+
+                response_content = _extract_and_sanitize_response(state)
+
+                # If model returned an empty/stripped response, do one recovery turn that
+                # explicitly asks the agent to run needed tools and provide the final answer.
+                if not isinstance(response_content, str) or not response_content.strip():
+                    logger.warning(
+                        "RAG chat produced empty response after first invoke. Running one recovery invoke. "
+                        "thread_id=%s user_id=%s",
+                        thread_id,
+                        user_id,
+                    )
+                    recovery_prompt = (
+                        "Your previous response was empty. Re-run the needed tools for the user's last question "
+                        "and provide a final direct answer from the uploaded document. "
+                        "If document evidence is not found, say that clearly."
+                    )
+                    try:
+                        recovery_state = chatbot.invoke(
+                            {"messages": [HumanMessage(content=recovery_prompt)]},
+                            config=config
                         )
-                        logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
-                else:
-                    # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
-                    thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
-                    if thread_conv_match:
-                        db_conversation_id = int(thread_conv_match.group(1))
-                        conv = conversation_model.get_conversation_by_id(db_conversation_id)
-                        if not conv:
+                    except Exception as recovery_err:
+                        if not _is_transient_db_connection_error(recovery_err):
+                            raise
+                        logger.warning(
+                            "RAG recovery invoke hit transient DB connection error; resetting engine and retrying once. "
+                            "thread_id=%s user_id=%s err=%s",
+                            thread_id,
+                            user_id,
+                            recovery_err,
+                        )
+                        try:
+                            from app.utils.db import reset_db_engine
+                            reset_db_engine()
+                        except Exception:
+                            logger.warning("Failed to reset DB engine before recovery retry", exc_info=True)
+                        recovery_state = chatbot.invoke(
+                            {"messages": [HumanMessage(content=recovery_prompt)]},
+                            config=config
+                        )
+                    response_content = _extract_and_sanitize_response(recovery_state)
+
+                # Last-resort fallback to avoid blank frontend messages.
+                if not isinstance(response_content, str) or not response_content.strip():
+                    response_content = (
+                        "I could not generate a complete response this time. "
+                        "Please ask again and I will answer directly from your document."
+                    )
+
+                _sink = get_rag_token_sink()
+                if _sink is not None:
+                    try:
+                        _sink.on_replace(response_content)
+                    except Exception:
+                        logger.warning("token sink on_replace after sanitize failed", exc_info=True)
+
+                # Save messages to database for chat history
+                db_conversation_id = None
+                try:
+                    from app.models.models import ConversationModel
+                    conversation_model = ConversationModel(user_id)
+                    
+                    # Priority 1: Use conversation_id from request if provided (most reliable)
+                    if conversation_id:
+                        conv = conversation_model.get_conversation_by_id(conversation_id)
+                        if conv:
+                            db_conversation_id = conversation_id
+                            logger.info(f"Using provided conversation_id: {conversation_id} for thread {thread_id}")
+                        else:
+                            # Conversation doesn't exist or doesn't belong to user, create new one
                             db_conversation_id = conversation_model.create_conversation(
                                 title=message[:50] if len(message) > 50 else message
                             )
-                        logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                            logger.info(f"Created new conversation {db_conversation_id} (provided conversation_id {conversation_id} was invalid)")
                     else:
-                        db_conversation_id = conversation_model.create_conversation(
-                            title=message[:50] if len(message) > 50 else message
-                        )
-                        logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
-                
-                # Save user message
-                conversation_model.save_message(
-                    conversation_id=db_conversation_id,
-                    message=message,
-                    role='user'
-                )
-                
-                # Save AI response
-                conversation_model.save_message(
-                    conversation_id=db_conversation_id,
-                    message=response_content,
-                    role='bot'  # Database constraint requires 'bot' not 'assistant'
-                )
-                
-                logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
-            except Exception as save_error:
-                # Don't fail the request if saving to database fails
-                logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
+                        # Extract conversation_id from thread_id (format: user_{user_id}_conv_{conversation_id})
+                        thread_conv_match = re.search(r'user_\d+_conv_(\d+)', thread_id)
+                        if thread_conv_match:
+                            db_conversation_id = int(thread_conv_match.group(1))
+                            conv = conversation_model.get_conversation_by_id(db_conversation_id)
+                            if not conv:
+                                db_conversation_id = conversation_model.create_conversation(
+                                    title=message[:50] if len(message) > 50 else message
+                                )
+                            logger.info("Extracted conversation_id %s from thread_id %s", db_conversation_id, thread_id)
+                        else:
+                            db_conversation_id = conversation_model.create_conversation(
+                                title=message[:50] if len(message) > 50 else message
+                            )
+                            logger.info("Created new conversation %s for thread %s", db_conversation_id, thread_id)
+                    
+                    # Save user message
+                    conversation_model.save_message(
+                        conversation_id=db_conversation_id,
+                        message=message,
+                        role='user'
+                    )
+                    
+                    # Save AI response
+                    conversation_model.save_message(
+                        conversation_id=db_conversation_id,
+                        message=response_content,
+                        role='bot'  # Database constraint requires 'bot' not 'assistant'
+                    )
+                    
+                    logger.info(f"Saved RAG chat messages to conversation {db_conversation_id} for thread {thread_id}")
+                except Exception as save_error:
+                    # Don't fail the request if saving to database fails
+                    logger.error(f"Failed to save RAG chat messages to database: {str(save_error)}", exc_info=True)
 
-            # #region agent log
-            try:
-                if enable_debug_file_logs:
-                    with open(_log_path, 'a', encoding='utf-8') as _f:
-                        _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
-            except Exception:
-                pass
-            # #endregion
-            return jsonify({
-                'success': True,
-                'message': response_content,
-                'thread_id': thread_id,
-                'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-                'has_document': thread_has_document(thread_id)
-            })
+                # #region agent log
+                try:
+                    if enable_debug_file_logs:
+                        with open(_log_path, 'a', encoding='utf-8') as _f:
+                            _f.write(_json.dumps({"location": "rag_routes.py:chat:return_success", "message": "returning success", "data": {"response_len": len(response_content)}, "timestamp": __import__('time').time() * 1000, "sessionId": "debug-session", "hypothesisId": "H4,H5"}) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                return {
+                    'success': True,
+                    'message': response_content,
+                    'thread_id': thread_id,
+                    'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
+                    'has_document': thread_has_document(thread_id)
+                }
+
+            if sse_queue is not None:
+                sse_owns_lock = True
+                app_obj = current_app._get_current_object()
+                sink = QueueRagTokenSink(sse_queue)
+
+                def _sse_worker():
+                    with app_obj.app_context():
+                        sink_token = set_rag_token_sink(sink)
+                        try:
+                            payload = _execute_rag_chat_turn()
+                            done_evt = {"type": "done"}
+                            done_evt.update(payload)
+                            sse_queue.put(done_evt)
+                        except GroqRateLimitError as rl_exc:
+                            sse_queue.put({
+                                "type": "error",
+                                "error": "The AI service is temporarily rate limited. Please wait and try again.",
+                                "code": rl_exc.info.kind,
+                                "retry_after": rl_exc.info.retry_after,
+                            })
+                        except GroqBusyError:
+                            sse_queue.put({
+                                "type": "error",
+                                "error": "The AI service is temporarily at capacity. Please try again in a moment.",
+                                "code": "SERVICE_AT_CAPACITY",
+                                "retry_after": 10,
+                            })
+                        except Exception as exc:
+                            logger.error("Error in RAG chat stream worker: %s", exc, exc_info=True)
+                            sse_queue.put({
+                                "type": "error",
+                                "error": "Failed to process chat. Please try again.",
+                                "code": "INTERNAL_ERROR",
+                            })
+                        finally:
+                            reset_rag_token_sink(sink_token)
+                            try:
+                                from app.utils.db import close_db
+                                close_db()
+                            except Exception:
+                                pass
+                            sse_queue.put(None)
+
+                worker = threading.Thread(target=_sse_worker, name="rag-chat-sse", daemon=True)
+                worker.start()
+
+                def generate():
+                    try:
+                        while True:
+                            try:
+                                ev = sse_queue.get(timeout=15)
+                            except queue.Empty:
+                                yield ": keepalive\n\n"
+                                continue
+                            if ev is None:
+                                break
+                            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                    finally:
+                        worker.join(timeout=620)
+                        release_chat_lock(chat_lock_handle)
+
+                return Response(
+                    stream_with_context(generate()),
+                    mimetype="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache, no-transform",
+                        "X-Accel-Buffering": "no",
+                        "Connection": "keep-alive",
+                    },
+                )
+
+            payload = _execute_rag_chat_turn()
+            return jsonify(payload)
         finally:
-            release_chat_lock(chat_lock_handle)
+            if not sse_owns_lock:
+                release_chat_lock(chat_lock_handle)
 
     except GroqRateLimitError as rl_exc:
         logger.warning(

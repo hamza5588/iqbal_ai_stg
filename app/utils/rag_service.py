@@ -4562,10 +4562,139 @@ _ANSWER_QUALITY_GATE_DEFAULT_INTENTS = (
 
 
 ANSWER_QUALITY_GATE_SETTING_KEY = "rag_answer_quality_gate_enabled"
+RAG_CHAT_STREAMING_SETTING_KEY = "rag_chat_streaming_enabled"
 
 
 def _truthy_flag(value: Optional[str]) -> bool:
     return str(value or "").strip().lower() in ("true", "1", "yes")
+
+
+def _rag_chat_streaming_enabled() -> bool:
+    """Admin SystemSettings wins when set. Else env RAG_CHAT_STREAMING_ENABLED. Default off."""
+    try:
+        db = get_db()
+        row = db.query(SystemSettings).filter(
+            SystemSettings.key == RAG_CHAT_STREAMING_SETTING_KEY
+        ).first()
+        if row is not None and row.value is not None and str(row.value).strip() != "":
+            return _truthy_flag(row.value)
+    except Exception as ex:
+        logger.warning("Could not read RAG chat streaming admin setting: %s", ex)
+    env_val = os.getenv("RAG_CHAT_STREAMING_ENABLED")
+    if env_val is not None:
+        return _truthy_flag(env_val)
+    return False
+
+
+def _token_sink_from_config(config: Any):
+    """Prefer the request-thread ContextVar so LangGraph never serializes the sink."""
+    try:
+        from app.utils.rag_token_sink import get_rag_token_sink
+        sink = get_rag_token_sink()
+        if sink is not None:
+            return sink
+    except Exception:
+        pass
+    if not isinstance(config, dict):
+        return None
+    conf = config.get("configurable")
+    if not isinstance(conf, dict):
+        return None
+    return conf.get("rag_token_sink")
+
+
+def _message_chunk_text(chunk: Any) -> str:
+    content = getattr(chunk, "content", None)
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                if part.get("type") in ("text", None) or "text" in part:
+                    parts.append(str(part.get("text") or ""))
+        return "".join(parts)
+    return ""
+
+
+def _chunk_has_tool_signal(chunk: Any) -> bool:
+    if getattr(chunk, "tool_call_chunks", None):
+        return True
+    if getattr(chunk, "tool_calls", None):
+        return True
+    additional = getattr(chunk, "additional_kwargs", None) or {}
+    if isinstance(additional, dict) and additional.get("tool_calls"):
+        return True
+    return False
+
+
+def _ai_message_from_stream_result(assembled: Any) -> AIMessage:
+    if isinstance(assembled, AIMessage) and not assembled.__class__.__name__.endswith("Chunk"):
+        return assembled
+    content = getattr(assembled, "content", "") or ""
+    tool_calls = list(getattr(assembled, "tool_calls", None) or [])
+    additional = dict(getattr(assembled, "additional_kwargs", None) or {})
+    msg_id = getattr(assembled, "id", None)
+    kwargs = {"content": content, "tool_calls": tool_calls, "additional_kwargs": additional}
+    if msg_id:
+        kwargs["id"] = msg_id
+    return AIMessage(**kwargs)
+
+
+def _invoke_llm_maybe_stream(llm: Any, messages: List[BaseMessage], config: Any, provider: str) -> AIMessage:
+    """invoke() when no token sink is attached; otherwise stream content deltas.
+
+    If streaming throws, fall back to invoke() so the turn still completes like today.
+    Tool-call rounds retract any speculative tokens so the UI never shows tool JSON.
+    """
+    sink = _token_sink_from_config(config)
+    if sink is None:
+        return llm.invoke(messages, config=config)
+
+    streamed_any = False
+    try:
+        assembled = None
+        saw_tool = False
+        for chunk in llm.stream(messages, config=config):
+            assembled = chunk if assembled is None else assembled + chunk
+            if _chunk_has_tool_signal(chunk):
+                saw_tool = True
+                if streamed_any:
+                    try:
+                        sink.on_retract()
+                    except Exception:
+                        logger.warning("token sink on_retract failed", exc_info=True)
+                    streamed_any = False
+                continue
+            piece = _message_chunk_text(chunk)
+            if piece and not saw_tool:
+                try:
+                    sink.on_token(piece)
+                    streamed_any = True
+                except Exception:
+                    logger.warning("token sink on_token failed", exc_info=True)
+        if assembled is None:
+            logger.warning("LLM stream produced no chunks; falling back to invoke")
+            return llm.invoke(messages, config=config)
+        response = _ai_message_from_stream_result(assembled)
+        if getattr(response, "tool_calls", None) and streamed_any:
+            try:
+                sink.on_retract()
+            except Exception:
+                logger.warning("token sink on_retract failed", exc_info=True)
+        return response
+    except Exception as ex:
+        logger.warning("LLM stream failed, falling back to invoke: %s", ex, exc_info=True)
+        if streamed_any:
+            try:
+                sink.on_retract()
+            except Exception:
+                pass
+        return llm.invoke(messages, config=config)
 
 
 def _answer_quality_gate_enabled() -> bool:
@@ -6063,9 +6192,9 @@ def _chat_invoke_llm_with_retry(
             if attempt == 0:
                 _set_chat_progress(thread_id_str, "✍️ Composing your answer...")
             if force_flat_qwen_turn or tool_round_limit_reached or mode_flags[1] or own_answer_followup_active or meta_conversation_active:
-                response = user_llm.invoke(messages, config=config)
+                response = _invoke_llm_maybe_stream(user_llm, messages, config, provider)
             else:
-                response = user_llm_with_tools.invoke(messages, config=config)
+                response = _invoke_llm_maybe_stream(user_llm_with_tools, messages, config, provider)
             _mark_step("llm_invoke")
             if provider == "groq":
                 groq_rate_limiter.record_success()
@@ -6108,6 +6237,12 @@ def _chat_invoke_llm_with_retry(
                     token_pressure_active=mode_flags[1],
                     _mark_step=_mark_step,
                 )
+                sink = _token_sink_from_config(config)
+                if sink is not None:
+                    try:
+                        sink.on_replace(response_content)
+                    except Exception:
+                        logger.warning("token sink on_replace failed", exc_info=True)
 
             response = _chat_handle_lesson_state_and_persistence(
                 response=response,

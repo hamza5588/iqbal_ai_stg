@@ -9678,6 +9678,151 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         window.currentRAGConversationId = window.currentRAGConversationId || null;
       }
 
+      function createStreamingAssistantBubble() {
+        const chatMessages = document.getElementById('chatMessages');
+        const wasNearBottom = isChatNearBottom();
+        removeTypingIndicator();
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message assistant animate-fade-in rag-stream-draft';
+        var imgUrl = "{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}";
+        messageDiv.innerHTML = `
+        <div class="chat-message-avatar">
+          <img src="${imgUrl}" alt="AI Assistant" onerror="this.onerror=null; this.src=''; this.innerHTML='<i class=\\'fas fa-graduation-cap\\'></i>'; this.classList.add('flex', 'items-center', 'justify-center')">
+        </div>
+        <div class="chat-message-content" style="white-space:pre-wrap"></div>
+      `;
+        chatMessages.appendChild(messageDiv);
+        if (wasNearBottom) scrollToBottom();
+        return {
+          messageDiv: messageDiv,
+          contentEl: messageDiv.querySelector('.chat-message-content'),
+          wasNearBottom: wasNearBottom,
+          draftText: ''
+        };
+      }
+
+      function setStreamingAssistantText(draft, text) {
+        if (!draft || !draft.contentEl) return;
+        draft.contentEl.textContent = text || '';
+      }
+
+      function finalizeStreamingAssistantBubble(draft, aiResponse) {
+        var formatted = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
+          ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
+        draft.contentEl.classList.add('markdown-content', 'tex2jax_process');
+        draft.contentEl.style.whiteSpace = '';
+        draft.contentEl.innerHTML = formatted;
+        draft.messageDiv.classList.remove('rag-stream-draft');
+        if (draft.wasNearBottom && typeof scrollMessageToTop === 'function') {
+          scrollMessageToTop(draft.messageDiv);
+        }
+        if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+          TeacherChatFormatter.processRenderedContent(draft.contentEl);
+        }
+        if (!currentChatId) currentChatId = 'chat1';
+        appendMessageToChat(currentChatId, 'assistant', formatted);
+        if (isTextToSpeechActive) {
+          const plain = formatted.replace(/<[^>]*>/g, '').trim();
+          if (plain) {
+            fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ text: plain }) })
+              .then(function (r) { return r.ok ? r.blob() : null; })
+              .then(function (blob) {
+                if (!blob || !isTextToSpeechActive) return;
+                if (ttsAudio) {
+                  try {
+                    ttsAudio.pause();
+                    ttsAudio.currentTime = 0;
+                  } catch (e) {}
+                  ttsAudio = null;
+                }
+                if (ttsObjectUrl) {
+                  try {
+                    URL.revokeObjectURL(ttsObjectUrl);
+                  } catch (e) {}
+                  ttsObjectUrl = null;
+                }
+                ttsObjectUrl = URL.createObjectURL(blob);
+                ttsAudio = new Audio(ttsObjectUrl);
+                ttsAudio.onended = function () {
+                  if (ttsObjectUrl) {
+                    try {
+                      URL.revokeObjectURL(ttsObjectUrl);
+                    } catch (e) {}
+                    ttsObjectUrl = null;
+                  }
+                  ttsAudio = null;
+                };
+                ttsAudio.play().catch(function () {});
+              })
+              .catch(function () {});
+          }
+        }
+      }
+
+      async function consumeTeacherRagChatSse(response, hooks) {
+        if (!response.body || !response.body.getReader) {
+          throw new Error('Streaming is not supported in this browser.');
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let donePayload = null;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let sep;
+          while ((sep = buffer.indexOf('\n\n')) >= 0) {
+            const rawEvent = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            const lines = rawEvent.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              if (!line || line.charAt(0) === ':') continue;
+              if (line.indexOf('data:') !== 0) continue;
+              const jsonStr = line.slice(5).trim();
+              if (!jsonStr || jsonStr === '[DONE]') continue;
+              let evt;
+              try { evt = JSON.parse(jsonStr); } catch (parseErr) { continue; }
+              if (!evt || !evt.type) continue;
+              if (evt.type === 'token') {
+                if (hooks && typeof hooks.onToken === 'function') hooks.onToken(evt.text || '');
+              } else if (evt.type === 'retract') {
+                if (hooks && typeof hooks.onRetract === 'function') hooks.onRetract();
+              } else if (evt.type === 'replace') {
+                if (hooks && typeof hooks.onReplace === 'function') hooks.onReplace(evt.text || '');
+              } else if (evt.type === 'done') {
+                donePayload = evt;
+              } else if (evt.type === 'error') {
+                const err = new Error(evt.error || 'Failed to get response from the server.');
+                err.sseError = evt;
+                throw err;
+              }
+            }
+          }
+        }
+        if (buffer.trim()) {
+          const lines = buffer.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line || line.charAt(0) === ':') continue;
+            if (line.indexOf('data:') !== 0) continue;
+            const jsonStr = line.slice(5).trim();
+            if (!jsonStr || jsonStr === '[DONE]') continue;
+            let evt;
+            try { evt = JSON.parse(jsonStr); } catch (parseErr) { continue; }
+            if (!evt || !evt.type) continue;
+            if (evt.type === 'done') donePayload = evt;
+            else if (evt.type === 'error') {
+              const err = new Error(evt.error || 'Failed to get response from the server.');
+              err.sseError = evt;
+              throw err;
+            }
+          }
+        }
+        return donePayload;
+      }
+
       // Send message - integrated with POST /api/rag/chat (real PDF/RAG backend)
       async function sendMessage() {
         const input = document.getElementById('messageInput');
@@ -9732,7 +9877,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const body = {
             message: message,
             thread_id: window.currentRAGThreadId || null,
-            conversation_id: window.currentRAGConversationId || (typeof currentChatId === 'number' ? currentChatId : null)
+            conversation_id: window.currentRAGConversationId || (typeof currentChatId === 'number' ? currentChatId : null),
+            stream: true
           };
           const response = await fetch('/api/rag/chat', {
             method: 'POST',
@@ -9759,41 +9905,95 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             addAssistantMessage('Error: ' + (err.error || 'Failed to get response from the server.'));
             return;
           }
-          const data = await response.json();
-          // If the user has since switched away from the chat this request was
-          // sent for, don't let a late-arriving answer land in whatever chat is
-          // now open, and don't let it overwrite currentRAGThreadId/currentLessonMarkdown
-          // (which belong to the now-active chat, not this one).
-          const staleChatSwitch = currentChatId !== requestChatId;
-          if (data.error) {
-            if (!staleChatSwitch) addAssistantMessage('Error: ' + data.error);
-            return;
+
+          async function applyTeacherChatSuccess(data, streamDraft) {
+            const staleChatSwitch = currentChatId !== requestChatId;
+            if (data.error) {
+              if (streamDraft && streamDraft.messageDiv && streamDraft.messageDiv.parentNode) {
+                streamDraft.messageDiv.remove();
+              }
+              if (!staleChatSwitch) addAssistantMessage('Error: ' + data.error);
+              return;
+            }
+            var aiResponse = data.message || 'No response received.';
+            if (staleChatSwitch) {
+              if (streamDraft && streamDraft.messageDiv && streamDraft.messageDiv.parentNode) {
+                streamDraft.messageDiv.remove();
+              }
+              appendMessageToChat(requestChatId, 'assistant', aiResponse);
+              return;
+            }
+            if (data.thread_id) {
+              window.currentRAGThreadId = data.thread_id;
+              try { localStorage.setItem('teacher_currentRAGThreadId', data.thread_id); } catch (e) {}
+            }
+            if (data.conversation_id) {
+              window.currentRAGConversationId = data.conversation_id;
+              try { localStorage.setItem('teacher_currentRAGConversationId', data.conversation_id); } catch (e) {}
+            }
+            if (window.currentRAGThreadId && aiResponse) {
+              currentLessonMarkdown = aiResponse;
+            }
+            if (streamDraft && streamDraft.contentEl && streamDraft.messageDiv && streamDraft.messageDiv.parentNode) {
+              finalizeStreamingAssistantBubble(streamDraft, aiResponse);
+            } else {
+              var formatted = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
+                ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
+              addAssistantMessage(formatted);
+            }
+            await refreshSaveLessonAvailability();
           }
-          var aiResponse = data.message || 'No response received.';
-          if (staleChatSwitch) {
-            // Still record it against the chat it actually belongs to, just not on screen.
-            appendMessageToChat(requestChatId, 'assistant', aiResponse);
-            return;
+
+          const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+          if (contentType.indexOf('text/event-stream') !== -1) {
+            var streamDraft = null;
+            try {
+              var donePayload = await consumeTeacherRagChatSse(response, {
+                onToken: function(text) {
+                  if (currentChatId !== requestChatId) return;
+                  if (!streamDraft) streamDraft = createStreamingAssistantBubble();
+                  streamDraft.draftText += text || '';
+                  setStreamingAssistantText(streamDraft, streamDraft.draftText);
+                  if (isChatNearBottom()) scrollToBottom();
+                },
+                onRetract: function() {
+                  if (streamDraft) {
+                    streamDraft.draftText = '';
+                    setStreamingAssistantText(streamDraft, '');
+                  }
+                  if (currentChatId === requestChatId) showTypingIndicator();
+                },
+                onReplace: function(text) {
+                  if (currentChatId !== requestChatId) return;
+                  if (!streamDraft) streamDraft = createStreamingAssistantBubble();
+                  streamDraft.draftText = text || '';
+                  removeTypingIndicator();
+                  setStreamingAssistantText(streamDraft, streamDraft.draftText);
+                }
+              });
+              if (!donePayload) {
+                throw new Error('No response received.');
+              }
+              await applyTeacherChatSuccess(donePayload, streamDraft);
+            } catch (sseErr) {
+              if (streamDraft && streamDraft.messageDiv && streamDraft.messageDiv.parentNode) {
+                streamDraft.messageDiv.remove();
+              }
+              if (sseErr && sseErr.sseError && sseErr.sseError.retry_after != null) {
+                removeLastUserMessage();
+                input.value = message;
+                autoResizeTextarea(input);
+                if (typeof showToast === 'function') {
+                  showToast(sseErr.sseError.error || 'Please wait for the current response.', 'warning', 4000);
+                }
+                return;
+              }
+              throw sseErr;
+            }
+          } else {
+            const data = await response.json();
+            await applyTeacherChatSuccess(data, null);
           }
-          if (data.thread_id) {
-            window.currentRAGThreadId = data.thread_id;
-            try { localStorage.setItem('teacher_currentRAGThreadId', data.thread_id); } catch (e) {}
-          }
-          if (data.conversation_id) {
-            window.currentRAGConversationId = data.conversation_id;
-            try { localStorage.setItem('teacher_currentRAGConversationId', data.conversation_id); } catch (e) {}
-          }
-          // Keep currentLessonMarkdown in sync with the actual AI lesson (so Save stores the real lesson, not
-          // the template). Always sync on any active RAG thread turn - a length/shape heuristic here
-          // previously skipped short but legitimate lesson edits (e.g. "I've added that equation"),
-          // so Save could persist a stale prior turn instead of the teacher's most recent change.
-          if (window.currentRAGThreadId && aiResponse) {
-            currentLessonMarkdown = aiResponse;
-          }
-          var formatted = (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse)
-            ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
-          addAssistantMessage(formatted);
-          await refreshSaveLessonAvailability();
         } catch (e) {
           if (currentChatId === requestChatId) {
             const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');

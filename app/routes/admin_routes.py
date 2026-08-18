@@ -26,9 +26,11 @@ from app.utils.rag_service import (
     ANSWER_QUALITY_GATE_SETTING_KEY,
     DEFAULT_RAG_CHAT_SYSTEM_BODY_NO_PDF,
     DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF,
+    RAG_CHAT_STREAMING_SETTING_KEY,
     RAG_SYSTEM_SETTING_KEY_NO_PDF,
     RAG_SYSTEM_SETTING_KEY_WITH_PDF,
     _answer_quality_gate_enabled,
+    _rag_chat_streaming_enabled,
 )
 from sqlalchemy import or_, func, desc, cast, Date
 from datetime import datetime, timedelta
@@ -929,6 +931,7 @@ def get_llm_settings():
                 'groq_allow_user_model_selection',
                 'openai_allow_user_model_selection',
                 ANSWER_QUALITY_GATE_SETTING_KEY,
+                RAG_CHAT_STREAMING_SETTING_KEY,
             ])
         ).all()
         
@@ -947,6 +950,7 @@ def get_llm_settings():
             'groq_allow_user_model_selection': settings_dict.get('groq_allow_user_model_selection', 'false').lower() == 'true',
             'openai_allow_user_model_selection': settings_dict.get('openai_allow_user_model_selection', 'false').lower() == 'true',
             'rag_answer_quality_gate_enabled': _answer_quality_gate_enabled(),
+            'rag_chat_streaming_enabled': _rag_chat_streaming_enabled(),
             'available_models': {
                 'groq': get_groq_available_models(),
                 'openai': OPENAI_MODELS
@@ -1035,6 +1039,14 @@ def update_llm_settings():
                 ANSWER_QUALITY_GATE_SETTING_KEY,
                 enabled,
                 'Run extra answer-quality check/rewrite after RAG chat turns',
+            )
+
+        if 'rag_chat_streaming_enabled' in data:
+            enabled = 'true' if data['rag_chat_streaming_enabled'] else 'false'
+            set_setting(
+                RAG_CHAT_STREAMING_SETTING_KEY,
+                enabled,
+                'Stream RAG chat tokens to the UI when the client requests stream=true',
             )
         
         db.commit()

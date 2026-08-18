@@ -539,6 +539,20 @@
                     </div>
                 </div>
 
+                <!-- RAG chat streaming -->
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Chat Streaming</h3>
+                    <p class="text-gray-600 mb-4">When on, teacher chat can show the answer as it is written. When off, chat waits for the full answer and uses the original response path (including equation formatting). Leave this off unless you want live streaming.</p>
+                    <div class="flex items-start">
+                        <input type="checkbox" id="rag-chat-streaming" 
+                            class="mt-1 mr-2 text-[#05B0FC] focus:ring-[#05B0FC]">
+                        <label for="rag-chat-streaming" class="text-sm text-gray-700">
+                            Enable chat streaming
+                            <span class="block text-xs text-gray-500 mt-1">Off by default. Off = existing full-response chat. On = stream tokens, then apply the same markdown and equation formatting when the answer is complete. Takes effect on the next chat message after you save — no restart needed.</span>
+                        </label>
+                    </div>
+                </div>
+
                 <!-- Save Button -->
                 <div class="flex justify-end">
                     <button onclick="saveLLMSettings()"
@@ -1487,6 +1501,10 @@
                     document.getElementById('groq-default-model').value = settings.groq_default_model;
                     document.getElementById('groq-allow-user-selection').checked = settings.groq_allow_user_model_selection;
                     document.getElementById('rag-answer-quality-gate').checked = settings.rag_answer_quality_gate_enabled !== false;
+                    var streamingEl = document.getElementById('rag-chat-streaming');
+                    if (streamingEl) {
+                        streamingEl.checked = settings.rag_chat_streaming_enabled === true;
+                    }
                 }
             } catch (error) {
                 console.error('Error loading LLM settings:', error);
@@ -1510,7 +1528,10 @@
                 groq_api_key: document.getElementById('groq-api-key').value.trim(),
                 groq_default_model: document.getElementById('groq-default-model').value,
                 groq_allow_user_model_selection: document.getElementById('groq-allow-user-selection').checked,
-                rag_answer_quality_gate_enabled: document.getElementById('rag-answer-quality-gate').checked
+                rag_answer_quality_gate_enabled: document.getElementById('rag-answer-quality-gate').checked,
+                rag_chat_streaming_enabled: document.getElementById('rag-chat-streaming')
+                    ? document.getElementById('rag-chat-streaming').checked
+                    : false
             };
 
             // Only include API keys if they were provided (non-empty)
