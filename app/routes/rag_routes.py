@@ -19,7 +19,8 @@ from app.utils.rag_service import (
     _substitute_rag_system_placeholders,
 )
 from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
-from app.utils.chat_lock import acquire_chat_lock, release_chat_lock
+from app.utils.chat_lock import acquire_chat_lock, release_chat_lock, force_release_chat_lock
+from app.utils.chat_cancel import ChatTurnCancelled, start_chat_run, request_cancel, is_chat_run_cancelled
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
@@ -1100,6 +1101,22 @@ def chat_progress(thread_id):
     return jsonify(get_progress(thread_id))
 
 
+@bp.route('/chat/cancel', methods=['POST'])
+@login_required
+def cancel_chat():
+    """Cancel an in-flight RAG chat turn so the teacher can leave the thread and ask again."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    data = request.get_json(silent=True) or {}
+    thread_id = (data.get('thread_id') or request.form.get('thread_id') or '').strip()
+    if not thread_id or not _validate_thread_id(thread_id, session['user_id']):
+        return jsonify({'error': 'Invalid thread'}), 403
+    request_cancel(thread_id)
+    force_release_chat_lock(thread_id)
+    logger.info("RAG chat cancel requested by user_id=%s thread_id=%s", session['user_id'], thread_id)
+    return jsonify({'success': True, 'cancelled': True})
+
+
 @bp.route('/chat', methods=['POST'])
 @login_required
 def chat():
@@ -1452,7 +1469,8 @@ def chat():
             )
             config = {
                 "configurable": {
-                    "thread_id": thread_id
+                    "thread_id": thread_id,
+                    "rag_chat_run_id": start_chat_run(thread_id),
                 },
                 # Defensive: keep recursion bounded under load while allowing deeper tool loops.
                 "recursion_limit": runtime_recursion_limit
@@ -1521,6 +1539,9 @@ def chat():
             except Exception:
                 pass
             # #endregion
+            run_id = (config.get("configurable") or {}).get("rag_chat_run_id")
+            if is_chat_run_cancelled(thread_id, run_id):
+                raise ChatTurnCancelled(thread_id)
 
             def _extract_and_sanitize_response(state_obj):
                 messages_local = state_obj.get("messages", []) if isinstance(state_obj, dict) else []
@@ -1661,6 +1682,9 @@ def chat():
         finally:
             release_chat_lock(chat_lock_handle)
 
+    except ChatTurnCancelled:
+        logger.info("RAG chat cancelled by user for thread_id=%s", locals().get("thread_id"))
+        return jsonify({'success': False, 'cancelled': True}), 200
     except GroqRateLimitError as rl_exc:
         logger.warning(
             "RAG chat: Groq rate limit for user %s — %s retry_after=%ds",
@@ -1679,6 +1703,10 @@ def chat():
             'retry_after': 10,
         }), 503
     except Exception as e:
+        cause = getattr(e, "__cause__", None) or getattr(e, "__context__", None)
+        if isinstance(e, ChatTurnCancelled) or isinstance(cause, ChatTurnCancelled):
+            logger.info("RAG chat cancelled by user for thread_id=%s", locals().get("thread_id"))
+            return jsonify({'success': False, 'cancelled': True}), 200
         # #region agent log
         try:
             if enable_debug_file_logs:

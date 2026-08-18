@@ -5163,6 +5163,33 @@
 
       // Request in flight: block second message and keep Send disabled until response is received
       window.teacherChatRequestInFlight = false;
+      window._teacherChatAbortController = null;
+      window._teacherChatCancelledByNav = false;
+
+      function cancelInFlightTeacherChat() {
+        if (!window.teacherChatRequestInFlight && !window._teacherChatAbortController) {
+          return;
+        }
+        window._teacherChatCancelledByNav = true;
+        var threadId = window.currentRAGThreadId || null;
+        if (window._teacherChatAbortController) {
+          try { window._teacherChatAbortController.abort(); } catch (e) {}
+          window._teacherChatAbortController = null;
+        }
+        window.teacherChatRequestInFlight = false;
+        try { updateSendButton(); } catch (e) {}
+        try { stopChatProgressPolling(); } catch (e) {}
+        try { removeTypingIndicator(); } catch (e) {}
+        if (threadId) {
+          fetch('/api/rag/chat/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            keepalive: true,
+            body: JSON.stringify({ thread_id: threadId })
+          }).catch(function () {});
+        }
+      }
 
       // Update send button state (disabled when waiting for response or when input is empty)
       function updateSendButton() {
@@ -5230,6 +5257,7 @@
 
       // Show Create Lesson Wizard (2-step process)
       function showCreateLessonWizard() {
+        cancelInFlightTeacherChat();
         console.log('showCreateLessonWizard called');
 
         // Prevent body scrolling when modal opens
@@ -6365,6 +6393,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       // Show My Lessons Page (API-integrated: fetches from /api/lessons/my_lessons)
       async function showMyLessonsPage() {
+        cancelInFlightTeacherChat();
         stopTextToSpeechSession();
         // Deactivate all tabs, then activate lessons tab
         deactivateAllTabs();
@@ -8393,6 +8422,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       function startNewChat() {
+        cancelInFlightTeacherChat();
         // ════════════════════════════════════════════════════════════════════════════════
         // SPECIFICATION #3: CHAT FINALIZATION
         // Finalize current chat before creating new one
@@ -8462,6 +8492,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Load only that chat's messages, clear previous context
       // ════════════════════════════════════════════════════════════════════════════════
       function loadChat(chatId) {
+        cancelInFlightTeacherChat();
         window._loadChatPromise = Promise.resolve();
         window._loadChatResolve = null;
         // Ensure "My Lessons" is not highlighted while a chat is open.
@@ -9690,6 +9721,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         window.teacherChatRequestInFlight = true;
+        window._teacherChatCancelledByNav = false;
         updateSendButton();
 
         // Capture which chat this request belongs to. If the user switches to a
@@ -9728,6 +9760,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           // real answer. 310000 leaves gunicorn's own timeout as the first thing to fire, so a
           // genuine backend timeout still returns a real error response instead of racing it.
           const controller = new AbortController();
+          window._teacherChatAbortController = controller;
           const timeoutId = setTimeout(() => controller.abort(), 310000);
           const body = {
             message: message,
@@ -9764,6 +9797,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           // sent for, don't let a late-arriving answer land in whatever chat is
           // now open, and don't let it overwrite currentRAGThreadId/currentLessonMarkdown
           // (which belong to the now-active chat, not this one).
+          if (data.cancelled || window._teacherChatCancelledByNav) {
+            return;
+          }
           const staleChatSwitch = currentChatId !== requestChatId;
           if (data.error) {
             if (!staleChatSwitch) addAssistantMessage('Error: ' + data.error);
@@ -9795,6 +9831,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           addAssistantMessage(formatted);
           await refreshSaveLessonAvailability();
         } catch (e) {
+          if (window._teacherChatCancelledByNav) {
+            return;
+          }
           if (currentChatId === requestChatId) {
             const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
             addAssistantMessage(isAbort
@@ -9802,6 +9841,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               : 'Error: ' + (e.message || 'Network error. Please try again.'));
           }
         } finally {
+          window._teacherChatAbortController = null;
           window.teacherChatRequestInFlight = false;
           updateSendButton();
           stopChatProgressPolling();
@@ -10999,6 +11039,7 @@ Align everything with the lesson objectives and do not invent missing informatio
 
       // Simple RAG prompt modal (same behavior as legacy chat.html)
       function showRAGPromptModal() {
+        cancelInFlightTeacherChat();
         const modal = document.getElementById('ragPromptModal');
         if (!modal) return;
         // Close other large modals so prompt is focused

@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from app.utils.db import get_db
 from app.utils.encryption import decrypt_api_key
 from app.utils.chat_progress import set_progress as _set_chat_progress
+from app.utils.chat_cancel import ChatTurnCancelled, is_chat_run_cancelled
 from app.models.database_models import RAGPrompt, RAGThread, RAGChunk, RAGHeading, SystemSettings
 from app.config import Config
 logger = logging.getLogger(__name__)
@@ -4564,6 +4565,20 @@ _ANSWER_QUALITY_GATE_DEFAULT_INTENTS = (
 ANSWER_QUALITY_GATE_SETTING_KEY = "rag_answer_quality_gate_enabled"
 
 
+def _raise_if_chat_cancelled(config: Any) -> None:
+    """Stop this graph step if the teacher cancelled / left the chat for this run."""
+    if not isinstance(config, dict):
+        conf = getattr(config, "configurable", None) or {}
+    else:
+        conf = config.get("configurable") or {}
+    thread_id = conf.get("thread_id") if isinstance(conf, dict) else None
+    run_id = conf.get("rag_chat_run_id") if isinstance(conf, dict) else None
+    if not thread_id or not run_id:
+        return
+    if is_chat_run_cancelled(str(thread_id), str(run_id)):
+        raise ChatTurnCancelled(str(thread_id))
+
+
 def _truthy_flag(value: Optional[str]) -> bool:
     return str(value or "").strip().lower() in ("true", "1", "yes")
 
@@ -4638,6 +4653,7 @@ def _answer_quality_gate_eval_and_maybe_regenerate(
     not short filler, so the filler heuristic would routinely miss the failure mode it was
     built to catch there.
     """
+    _raise_if_chat_cancelled(config)
     is_lesson_mode = is_lesson_creation_turn or router_intent == "lesson_generation"
 
     if meta_conversation_active:
@@ -4742,6 +4758,7 @@ def _answer_quality_gate_eval_and_maybe_regenerate(
         ]
         regen_messages = _trim_messages_for_token_budget(regen_messages, max_input_tokens=max_input_tokens)
         try:
+            _raise_if_chat_cancelled(config)
             if provider == "groq":
                 groq_rate_limiter.wait_if_needed()
             regen = user_llm.invoke(regen_messages, config=config)
@@ -6025,6 +6042,7 @@ def _chat_invoke_llm_with_retry(
     effective_max_attempts = max_attempts if provider != "groq" else min(max_attempts, 3)
     logger.debug("Using %s max attempts for provider %s", effective_max_attempts, provider)
     for attempt in range(effective_max_attempts):
+        _raise_if_chat_cancelled(config)
         if attempt == 0:
             current_max = initial_max_messages
         elif attempt == 1:
@@ -6058,6 +6076,7 @@ def _chat_invoke_llm_with_retry(
             messages.insert(insert_at, HumanMessage(content=fallback_q))
 
         try:
+            _raise_if_chat_cancelled(config)
             if provider == "groq":
                 groq_rate_limiter.wait_if_needed()
             if attempt == 0:
@@ -6083,6 +6102,7 @@ def _chat_invoke_llm_with_retry(
             except Exception:
                 pass
             _mark_step("extract_response")
+            _raise_if_chat_cancelled(config)
 
             if (
                 isinstance(response, AIMessage)
@@ -6109,6 +6129,7 @@ def _chat_invoke_llm_with_retry(
                     _mark_step=_mark_step,
                 )
 
+            _raise_if_chat_cancelled(config)
             response = _chat_handle_lesson_state_and_persistence(
                 response=response,
                 response_content=response_content,
@@ -6133,6 +6154,8 @@ def _chat_invoke_llm_with_retry(
             _write_speed_log("chat_node", thread_id_str, perf_steps, perf_started)
             return {"messages": [response]}
 
+        except ChatTurnCancelled:
+            raise
         except Exception as e:
             if provider == "groq":
                 groq_rate_limiter.release_slot()
@@ -6437,6 +6460,7 @@ def chat_node(state: ChatState, config=None):
         tid = config.get("configurable", {}).get("thread_id")
         if tid:
             thread_id_str = str(tid)
+    _raise_if_chat_cancelled(config)
     _mark_step("resolve_thread_id")
     _set_chat_progress(thread_id_str, "🤔 Thinking about your question...")
 
@@ -6683,7 +6707,14 @@ def _tool_router(state: ChatState):
 
 graph = StateGraph(ChatState)
 graph.add_node("chat_node", chat_node)
-graph.add_node("tools", tool_node)
+
+
+def _tools_node_with_cancel(state: ChatState, config=None):
+    _raise_if_chat_cancelled(config)
+    return tool_node.invoke(state, config)
+
+
+graph.add_node("tools", _tools_node_with_cancel)
 
 graph.add_edge(START, "chat_node")
 graph.add_conditional_edges(

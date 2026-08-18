@@ -146,3 +146,26 @@ def release_chat_lock(handle: Any) -> None:
         logger.warning("Chat lock: release attempted after auto-expiry (turn exceeded %ss)", _LOCK_AUTO_EXPIRE_SECONDS)
     except Exception as exc:
         logger.debug("Chat lock: release failed (non-fatal): %s", exc)
+
+
+def force_release_chat_lock(key: str) -> None:
+    """Drop the lock for `key` from another request (user cancelled / left the chat).
+
+    The in-flight turn still has to notice the cancel flag and stop writing; this only
+    unblocks a follow-up question so the UI is not stuck locked with no progress.
+    """
+    if not key:
+        return
+    client = _get_redis_client()
+    if client is not None:
+        try:
+            client.delete(f"chat_lock:{key}")
+        except Exception as exc:
+            logger.debug("Chat lock: force release redis delete failed for key=%s: %s", key, exc)
+    with _fallback_locks_guard:
+        py_lock = _fallback_locks.get(key)
+    if py_lock is not None and py_lock.locked():
+        try:
+            py_lock.release()
+        except RuntimeError:
+            pass
