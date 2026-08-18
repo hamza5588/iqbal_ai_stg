@@ -8,6 +8,7 @@ import requests
 import secrets
 from datetime import datetime, timedelta
 from app.config import Config
+import smtplib
 from app.utils.mailer import MailConfigError, send_email
 from app.utils.openai_realtime import create_realtime_client_secret
 from app.utils.routes import get_default_route_by_role
@@ -99,6 +100,12 @@ def register_email():
             return render_template(
                 'register_email/register_email.html',
                 error="Email is not configured on this server. Please contact support."
+            )
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error("Email registration SMTP authentication failed: %s", e, exc_info=True)
+            return render_template(
+                'register_email/register_email.html',
+                error="Failed to send verification email"
             )
         except Exception as e:
             logger.error("Email registration send error: %s", e, exc_info=True)

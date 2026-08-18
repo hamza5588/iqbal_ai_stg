@@ -32,6 +32,13 @@ def _cfg(key: str, default=None):
         return default
 
 
+def _clean_cred(value) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        text = text[1:-1].strip()
+    return text
+
+
 def _truthy(value) -> bool:
     if isinstance(value, bool):
         return value
@@ -43,18 +50,18 @@ def _truthy(value) -> bool:
 def _sender_address() -> str:
     raw = _cfg("MAIL_DEFAULT_SENDER") or _cfg("MAIL_USERNAME") or ""
     if isinstance(raw, (tuple, list)) and len(raw) >= 2:
-        return str(raw[1]).strip()
+        return _clean_cred(raw[1])
     _, addr = parseaddr(str(raw))
-    return (addr or str(raw)).strip()
+    return _clean_cred(addr or raw)
 
 
 def _from_header() -> str:
     raw = _cfg("MAIL_DEFAULT_SENDER") or _cfg("MAIL_USERNAME") or ""
     if isinstance(raw, (tuple, list)) and len(raw) >= 2:
-        name, addr = str(raw[0]).strip(), str(raw[1]).strip()
+        name, addr = str(raw[0]).strip(), _clean_cred(raw[1])
         return formataddr((name, addr)) if addr else ""
     name, addr = parseaddr(str(raw))
-    email = (addr or str(raw)).strip()
+    email = _clean_cred(addr or raw)
     if not email:
         return ""
     return formataddr((name or "Iqbal AI", email))
@@ -148,10 +155,12 @@ def send_email(subject: str, recipients: Sequence[str] | str, body: str) -> None
         return
 
     to_list = _recipients(recipients)
-    username = str(_cfg("MAIL_USERNAME") or "").strip()
-    password = str(_cfg("MAIL_PASSWORD") or "").strip()
+    username = _clean_cred(_cfg("MAIL_USERNAME"))
+    password = _clean_cred(_cfg("MAIL_PASSWORD"))
     if not username or not password:
         raise MailConfigError("MAIL_USERNAME / MAIL_PASSWORD is not configured.")
+    if "@" not in username:
+        logger.warning("MAIL_USERNAME %r has no @; Namecheap requires the full mailbox address", username)
 
     envelope_from = _sender_address()
     if not envelope_from:
@@ -179,6 +188,17 @@ def send_email(subject: str, recipients: Sequence[str] | str, body: str) -> None
             )
             logger.info("Email sent via %s:%s (%s) to %s", server, port, mode, to_list)
             return
+        except smtplib.SMTPAuthenticationError as exc:
+            logger.error(
+                "SMTP auth failed for mailbox %s via %s:%s (%s): %s",
+                username,
+                server,
+                port,
+                mode,
+                exc,
+            )
+            # Same username/password will fail on the fallback port too.
+            raise
         except Exception as exc:
             logger.warning(
                 "SMTP %s:%s (%s) failed: %s",

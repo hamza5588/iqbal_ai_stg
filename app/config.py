@@ -9,11 +9,18 @@ if os.path.isfile(_load_env_path):
     load_dotenv(_load_env_path, override=True)
 
 def _env_str(key: str, default: str = "") -> str:
-    """Read an env var, treating missing/blank values as unset."""
+    """Read an env var, treating missing/blank values as unset.
+
+    Docker/.env values are often wrapped in quotes; those quotes become part of
+    MAIL_USERNAME / MAIL_PASSWORD and Namecheap then returns SMTP 535.
+    """
     val = os.getenv(key)
     if val is None or not str(val).strip():
         return default
-    return str(val).strip()
+    text = str(val).strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        text = text[1:-1].strip()
+    return text
 
 
 def _env_bool(key: str, default: bool) -> bool:
