@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat with Lesson - Iqbal AI</title>
+<style>
+  :root{
+    --green-900:#0a4a2c;
+    --green-700:#166534;
+    --green-600:#1c7c3e;
+    --green-500:#2f9e4f;
+    --mint:#eef6f0;
+    --mint-2:#f3f8f5;
+    --gray-500:#6b7280;
+    --gray-400:#9ca3af;
+    --gray-300:#d1d5db;
+    --dark:#1f2430;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111;}
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 30px;flex-wrap:wrap;gap:16px;
+  }
+  .logo img{height:44px;}
+
+  .toolbar{
+    flex:1;max-width:800px;
+    background:#212121;border-radius:40px;
+    display:flex;align-items:center;padding:6px;gap:0;
+  }
+  .tab{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+    padding:12px 18px;color:#a8aca8;font-weight:600;font-size:14.5px;cursor:pointer;
+    border-radius:30px;white-space:nowrap;
+  }
+  .tab.active{background:var(--green-600);color:#fff;}
+
+  .user{display:flex;align-items:center;gap:12px;}
+  .avatar{
+    width:38px;height:38px;border-radius:50%;
+    background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;
+  }
+  .user-info{display:flex;flex-direction:column;line-height:1.2;}
+  .user-info b{font-size:14.5px;}
+  .user-info span{font-size:12px;color:var(--gray-500);}
+  .logout-ic{color:var(--gray-500);margin-left:4px;cursor:pointer;}
+
+  .layout{display:flex;border-top:1px solid #eee;}
+  .sidebar{
+    width:340px;flex-shrink:0;padding:24px 24px 0;border-right:1px solid #eee;
+  }
+  .back-link{
+    display:flex;align-items:center;gap:6px;color:var(--green-700);font-weight:700;
+    font-size:14.5px;margin-bottom:22px;cursor:pointer;
+  }
+  .pinned-label{
+    color:var(--green-600);font-size:12px;font-weight:800;letter-spacing:.6px;margin-bottom:10px;
+  }
+  .sidebar h2{font-size:19px;font-weight:800;color:var(--dark);margin-bottom:6px;line-height:1.3;}
+  .sidebar .meta{font-size:13px;color:var(--gray-500);margin-bottom:18px;}
+  .divider{border:none;border-top:1px solid #eee;margin:16px 0;}
+
+  .sidebar h3{font-size:16px;font-weight:800;color:var(--dark);margin-bottom:14px;}
+  .mini-steps{margin-bottom:16px;}
+  .mini-step{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;}
+  .mini-num{color:var(--green-600);font-weight:800;font-size:13px;width:20px;flex-shrink:0;}
+  .mini-dot{width:6px;height:6px;border-radius:50%;background:var(--green-600);margin-top:6px;flex-shrink:0;}
+  .mini-text{font-size:13.5px;color:#333;}
+
+  .sidebar .para{font-size:13px;color:#333;line-height:1.6;margin-bottom:12px;}
+  .sidebar .para b{color:var(--green-700);}
+
+  .chat-col{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .chat-head{
+    padding:22px 30px 16px;text-align:center;position:relative;border-bottom:1px solid #f5f5f5;
+  }
+  .chat-head h1{font-size:24px;font-weight:800;color:var(--dark);}
+  .chat-head .sub{font-size:14.5px;color:var(--gray-500);margin-top:4px;}
+  .chat-head .pinned{
+    display:inline-flex;align-items:center;gap:6px;color:var(--green-600);font-weight:700;font-size:13.5px;margin-top:10px;
+  }
+  .chat-close{
+    position:absolute;top:20px;right:26px;
+    width:36px;height:36px;border-radius:50%;
+    border:1px solid #eee;display:flex;align-items:center;justify-content:center;
+    color:var(--green-700);cursor:pointer;
+  }
+
+  .messages{flex:1;padding:26px 30px;position:relative;}
+  .timeline-track{
+    position:absolute;left:calc(340px + 0px);
+  }
+
+  .today-label{color:var(--green-600);font-weight:700;font-size:14px;margin-bottom:20px;}
+
+  .msg-row{display:flex;gap:16px;align-items:flex-start;margin-bottom:20px;}
+  .msg-avatar{width:40px;height:40px;flex-shrink:0;}
+  .msg-bubble{max-width:640px;}
+  .msg-bubble p{font-size:15px;color:#222;line-height:1.7;}
+  .msg-bubble p b{color:var(--green-700);}
+  .msg-time{font-size:12.5px;color:var(--gray-400);margin-top:10px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;display:inline-block;}
+
+  .recent-bar{
+    display:flex;align-items:center;gap:14px;padding:16px 30px;border-top:1px solid #eee;overflow-x:auto;
+  }
+  .recent-label{font-size:14px;color:var(--gray-500);flex-shrink:0;}
+  .conv-pill{
+    display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;
+    font-size:13.5px;font-weight:600;white-space:nowrap;flex-shrink:0;cursor:pointer;
+  }
+  .conv-pill.active{background:var(--green-600);color:#fff;}
+  .conv-pill:not(.active){color:#333;border:1px solid transparent;}
+
+  .input-row{
+    display:flex;align-items:center;gap:14px;padding:16px 30px 24px;flex-wrap:wrap;
+  }
+  .round-icon{
+    width:44px;height:44px;border-radius:50%;border:1.5px solid var(--green-600);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;color:var(--green-700);
+  }
+  .msg-input{
+    flex:1;border:1px solid var(--gray-300);border-radius:30px;
+    padding:14px 22px;font-size:15px;outline:none;min-width:200px;
+  }
+  .send-btn{
+    width:48px;height:48px;border-radius:50%;background:var(--green-700);border:none;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  }
+
+  @media(max-width:960px){
+    .layout{flex-direction:column;}
+    .sidebar{width:100%;border-right:none;border-bottom:1px solid #eee;padding-bottom:20px;}
+  }
+  @media(max-width:640px){
+    header{padding:14px 16px;flex-direction:column;align-items:stretch;}
+    .toolbar{max-width:none;}
+    .tab{font-size:12.5px;padding:10px;gap:4px;}
+    .user{justify-content:center;}
+    .sidebar{padding:18px 16px 0;}
+    .chat-head{padding:18px 16px 14px;}
+    .chat-head h1{font-size:19px;}
+    .chat-close{top:14px;right:14px;}
+    .messages{padding:18px 16px;}
+    .msg-bubble p{font-size:14px;}
+    .recent-bar{padding:14px 16px;}
+    .input-row{padding:14px 16px 18px;}
+    .msg-input{padding:12px 18px;font-size:14px;}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo"><img src="assets/logo.png" alt="Iqbal AI"></div>
+
+    <div class="toolbar">
+      <div class="tab active">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#fff" stroke-width="1.6"/></svg>
+        Chat with Lesson
+      </div>
+      <div class="tab">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M2 4.5A2.5 2.5 0 014.5 2H11v20H4.5A2.5 2.5 0 012 19.5v-15zM22 4.5A2.5 2.5 0 0019.5 2H13v20h6.5a2.5 2.5 0 002.5-2.5v-15z" stroke="#a8aca8" stroke-width="1.5"/></svg>
+        My Lessons
+      </div>
+      <div class="tab">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#a8aca8" stroke-width="1.6"/><path d="M12 7v5l3 3" stroke="#a8aca8" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Today &bull; 06:22 PM
+      </div>
+    </div>
+
+    <div class="user">
+      <div class="avatar">S</div>
+      <div class="user-info">
+        <b>Student</b>
+        <span>Student</span>
+      </div>
+      <div class="logout-ic">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="back-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        My Lessons
+      </div>
+
+      <div class="pinned-label">PINNED LESSON</div>
+      <h2>Quadratic equation All Merged Document</h2>
+      <div class="meta">Subject &bull; Grade N/A</div>
+
+      <hr class="divider">
+
+      <h3>Understanding PDF Formats</h3>
+      <div class="mini-steps">
+        <div class="mini-step">
+          <div class="mini-num">01</div>
+          <div class="mini-dot"></div>
+          <div class="mini-text">Text-based &mdash; editable and searchable</div>
+        </div>
+        <div class="mini-step">
+          <div class="mini-num">02</div>
+          <div class="mini-dot"></div>
+          <div class="mini-text">Scanned &mdash; requires OCR</div>
+        </div>
+        <div class="mini-step">
+          <div class="mini-num">03</div>
+          <div class="mini-dot"></div>
+          <div class="mini-text">Mixed &mdash; text and scanned images</div>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="para"><b>1. Text-based Content:</b> This is directly editable and searchable text that can be easily extracted.</div>
+      <div class="para"><b>2. Scanned Content:</b> These are images of text that have been digitized from physical documents. They require OCR (Optical Character Recognition) to convert the images into machine-readable text.</div>
+      <div class="para"><b>3. Mixed Content:</b> A PDF may contain both text and scanned images, which can complicate text extraction.</div>
+      <div class="para">Depending on how the PDF was created, the text extraction process may vary, and some content may not be recognized or retrievable without OCR.</div>
+    </div>
+
+    <div class="chat-col">
+      <div class="chat-head">
+        <div class="chat-close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h1>Conversation with Lesson</h1>
+        <div class="sub">Quadratic equation All Merged Document</div>
+        <div class="pinned">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5L12 2z" fill="#1c7c3e"/></svg>
+          Lesson pinned
+        </div>
+      </div>
+
+      <div class="messages">
+        <div class="today-label">Today</div>
+        <div class="msg-row">
+          <img class="msg-avatar" src="assets/logo-icon.png" alt="" style="object-fit:contain;">          <div class="msg-bubble">
+            <p>Thanks for opening this lesson! &#128214; I'm now familiar with all the content. Feel free to ask questions about <b>"Quadratic equation All Merged Document"</b> and I'll explain using only what's in this lesson.</p>
+            <div class="msg-time">06:22 PM</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="recent-bar">
+        <div class="recent-label">Recent conversations</div>
+        <div class="conv-pill active">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="#fff" stroke-width="1.6"/></svg>
+          Quadratic equation
+        </div>
+        <div class="conv-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="#166534" stroke-width="1.6"/></svg>
+          Thermal study &bull; 7/25/2026
+        </div>
+        <div class="conv-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="#166534" stroke-width="1.6"/></svg>
+          Cerm final &bull; 7/23/2026
+        </div>
+      </div>
+
+      <div class="input-row">
+        <div class="round-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 10v1a7 7 0 0014 0v-1M12 18v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div class="round-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M15.5 8.5a5 5 0 010 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <input type="text" class="msg-input" placeholder="Type message...">
+        <button class="send-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
