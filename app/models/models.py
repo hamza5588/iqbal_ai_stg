@@ -691,7 +691,9 @@ class LessonModel:
                 parent_lesson_id=root_lesson_id,
                 draft_content=None,  # New version starts with empty draft
                 lesson_id=root_lesson['lesson_id'],  # Use same lesson_id as root
-                parent_version_id=original_lesson_id  # Set parent version (the one we branched from)
+                parent_version_id=original_lesson_id,  # Set parent version (the one we branched from)
+                rag_thread_id=original_lesson.get('rag_thread_id'),
+                conversation_id=original_lesson.get('conversation_id'),
             )
 
             # Mark the specific source version (original_lesson_id) as having a child version
@@ -743,13 +745,11 @@ class LessonModel:
             result = []
             for lesson in lessons:
                 lesson_dict = LessonModel._lesson_to_dict(lesson, include_teacher_name=True)
-                
-                if lesson_dict['id'] == lesson_id and lesson_dict.get('parent_lesson_id') is None:
-                    lesson_dict['version'] = 1
-                    lesson_dict['is_original'] = True
-                else:
-                    lesson_dict['is_original'] = False
-                
+                # Prefer version_number: the older `version` column stays 1 on every row,
+                # so the View Lesson dropdown would otherwise label every version as v1
+                # and switching versions would keep showing the same content.
+                lesson_dict['version'] = lesson_dict.get('version_number') or lesson_dict.get('version') or 1
+                lesson_dict['is_original'] = lesson_dict.get('parent_lesson_id') is None
                 result.append(lesson_dict)
             
             logger.info(f"get_lesson_versions for lesson {lesson_id}: found {len(result)} versions")

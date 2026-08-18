@@ -6632,16 +6632,23 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           const forModal = {
             id: lesson.id,
-            title: lesson.title,
-            subject: lesson.focus_area || lesson.focusArea,
-            grade: lesson.grade_level || lesson.gradeLevel,
+            title: targetVersion.title || lesson.title,
+            subject: targetVersion.focus_area || lesson.focus_area || lesson.focusArea,
+            grade: targetVersion.grade_level || lesson.grade_level || lesson.gradeLevel,
             content: targetVersion.content || lesson.content,
-            created_at: lesson.created_at || targetVersion.created_at,
-            createdAt: lesson.created_at || targetVersion.created_at,
+            created_at: targetVersion.created_at || lesson.created_at,
+            createdAt: targetVersion.created_at || lesson.created_at,
             version: viewedVersionNum,
             versionLessonId: targetVersion.id || lesson.id,
             versions: sortedVersions.map(function(v) {
-              return { version: v.version_number || v.version || 1, createdAt: v.created_at, content: v.content };
+              return {
+                id: v.id,
+                version: v.version_number || v.version || 1,
+                createdAt: v.created_at,
+                content: v.content,
+                title: v.title,
+                summary: v.summary,
+              };
             }),
             status: lesson.status || 'draft',
             isLatestVersion: isLatestVersion,
@@ -6663,6 +6670,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       function renderLessonMarkdown(el, markdownText, emptyHtml) {
         if (!el) return;
         const raw = (markdownText == null) ? '' : String(markdownText);
+        el._lessonRenderGen = (el._lessonRenderGen || 0) + 1;
+        const renderGen = el._lessonRenderGen;
         if (!raw.trim()) {
           el.innerHTML = emptyHtml || '';
           return;
@@ -6683,9 +6692,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
-          TeacherChatFormatter.processRenderedContent(el);
+          TeacherChatFormatter.processRenderedContent(el).then(function () {
+            if (el._lessonRenderGen !== renderGen) return;
+            syncExpandedLessonPreviewFromCurrent();
+          });
         } else if (typeof window.typesetMathIn === 'function') {
-          window.typesetMathIn(el).catch(function () {});
+          window.typesetMathIn(el).then(function () {
+            if (el._lessonRenderGen !== renderGen) return;
+            syncExpandedLessonPreviewFromCurrent();
+          }).catch(function () {});
         }
       }
 
@@ -7601,13 +7616,20 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         });
         if (!target) return;
 
-        // Update preview content
+        // Update preview content AND title: a new topic saved in the same chat becomes
+        // v2 with its own title/content. Leaving the v2 title in place made v1 look
+        // like the same Nature-of-Roots lesson.
+        const titleEl = document.getElementById('viewLessonTitle');
+        if (titleEl && (target.title || (window.currentViewedLessonData && window.currentViewedLessonData.title))) {
+          titleEl.textContent = target.title || window.currentViewedLessonData.title || 'Untitled Lesson';
+        }
         const currentEl = document.getElementById('viewLessonCurrent');
         if (currentEl) renderLessonMarkdown(currentEl, target.content || '');
         syncExpandedLessonPreviewFromCurrent();
         if (window.currentViewedLessonData) {
           window.currentViewedLessonData.versionLessonId = target.id || window.currentViewedLessonData.versionLessonId;
           window.currentViewedLessonData.content = target.content || '';
+          window.currentViewedLessonData.title = target.title || window.currentViewedLessonData.title;
           window.currentViewedLessonData.summary = target.summary || null;
           window.currentViewedLessonData.version = versionNumber;
         }

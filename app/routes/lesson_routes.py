@@ -521,10 +521,14 @@ def create_lesson_simple():
         # same chat). Match against every row for this thread, not just the newest, so a
         # re-save of A after B exists still updates A instead of inserting a third copy.
         existing_lesson = None
+        latest_on_thread = None
+        thread_lessons = []
         if rag_thread_id:
-            for candidate in LessonModel.get_lessons_by_rag_thread_id(
+            thread_lessons = LessonModel.get_lessons_by_rag_thread_id(
                 session['user_id'], rag_thread_id
-            ):
+            )
+            latest_on_thread = thread_lessons[0] if thread_lessons else None
+            for candidate in thread_lessons:
                 if is_likely_same_lesson(candidate.get('content'), content):
                     existing_lesson = candidate
                     break
@@ -554,6 +558,37 @@ def create_lesson_simple():
                 'id': lesson_id,
                 'message': 'Lesson updated successfully',
                 'updated_existing': True,
+            })
+
+        # A different lesson in the same chat: keep the first row intact and insert a
+        # new VERSION of that family so View Lesson v1/v2 each keep their own content.
+        # A fully independent root here made two My Lessons cards that both still opened
+        # looking like the latest chat draft.
+        if latest_on_thread:
+            new_lesson_id = LessonModel.create_new_version(
+                original_lesson_id=latest_on_thread['id'],
+                teacher_id=session['user_id'],
+                title=title,
+                summary=summary or f"Lesson on {focus_area} for {grade_level}",
+                learning_objectives='',
+                focus_area=focus_area,
+                grade_level=grade_level,
+                content=content,
+                is_public=True,
+            )
+            if not new_lesson_id:
+                return jsonify({'error': 'Failed to save new lesson version'}), 500
+            if rag_thread_id or lesson_conversation_id:
+                LessonModel(new_lesson_id).update_lesson(
+                    rag_thread_id=rag_thread_id,
+                )
+            lesson = LessonModel.get_lesson_by_id(new_lesson_id)
+            return jsonify({
+                'success': True,
+                'lesson': lesson,
+                'id': new_lesson_id,
+                'message': 'New lesson version saved successfully',
+                'new_version': True,
             })
 
         # Check if lesson title already exists for this teacher
