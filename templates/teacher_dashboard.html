@@ -6617,10 +6617,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const sortedVersions = versions.slice().sort((a, b) => (b.version_number || b.version || 0) - (a.version_number || a.version || 0));
           window.currentLessonVersions = sortedVersions;
 
-          // Resolve which version to display
+          // Show the lesson the teacher clicked — not the newest sibling in a
+          // version family. Same-chat photosynthesis vs water cycle are separate
+          // lessons; opening one must not display the other's saved content.
           const latestVersion = sortedVersions[0] || lesson;
           const latestVersionNum = latestVersion.version_number || latestVersion.version || 1;
-          let targetVersion = latestVersion;
+          let targetVersion = sortedVersions.find(function(v) {
+            return String(v.id) === String(lessonId);
+          }) || lesson;
           if (selectedVersionNumber != null) {
             const found = sortedVersions.find(function(v) {
               return (v.version_number || v.version || 1) === selectedVersionNumber;
