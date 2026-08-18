@@ -10,6 +10,7 @@ from app.utils.chat_lock import acquire_chat_lock, release_chat_lock
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
 from sqlalchemy import func, or_, desc
+import difflib
 import logging
 import os
 from io import BytesIO
@@ -30,6 +31,29 @@ _lesson_qa_user_rate = {}
 _lesson_qa_rate_lock = threading.Lock()
 _lesson_qa_redis_client = None
 _lesson_qa_redis_lock = threading.Lock()
+
+# Below this similarity ratio, two lesson contents are treated as different lessons
+# rather than an edited version of the same one (see _is_likely_same_lesson). Measured
+# against real lesson-shaped markdown: a lightly-edited re-save ("add an example") scores
+# ~0.94-0.98, while two genuinely different lessons (different topic, same markdown
+# structure/headings) score well under 0.1 - so the gap leaves wide margin at 0.6.
+_LESSON_RESAVE_SIMILARITY_THRESHOLD = 0.6
+
+
+def _is_likely_same_lesson(existing_content: str, new_content: str) -> bool:
+    """Heuristic: is `new_content` an edited version of `existing_content`, or a different lesson?
+
+    Uses difflib's real ratio() (actual longest-matching-block comparison), not quick_ratio()
+    - quick_ratio only compares character-frequency histograms, which two markdown lessons
+    share heavily (headings, bullets, whitespace) regardless of topic, and so can't tell an
+    edit apart from an unrelated lesson.
+    """
+    existing_content = (existing_content or '').strip()
+    new_content = (new_content or '').strip()
+    if not existing_content or not new_content:
+        return False
+    ratio = difflib.SequenceMatcher(None, existing_content, new_content, autojunk=True).ratio()
+    return ratio >= _LESSON_RESAVE_SIMILARITY_THRESHOLD
 
 
 def _normalize_faq_question_text(question: str) -> str:
@@ -503,16 +527,25 @@ def create_lesson_simple():
         if not content:
             return jsonify({'error': 'Content is required'}), 400
 
-        # Re-save detection: if this thread already has a saved lesson, update it in place
-        # instead of creating a duplicate. Without this, editing a lesson via chat after it
-        # was already saved once ("please add the example as well") never reached "My
-        # Lessons"/"View Lesson" - they kept showing the original pre-edit content forever,
-        # since this endpoint always created a brand-new row and never looked one up first
-        # (confirmed live).
+        # Re-save detection: if this thread already has a saved lesson AND the content being
+        # saved now is clearly an edited version of that same lesson (not a different, new
+        # lesson generated later in the same chat), update it in place instead of creating a
+        # duplicate. Without this, editing a lesson via chat after it was already saved once
+        # ("please add the example as well") never reached "My Lessons"/"View Lesson" - they
+        # kept showing the original pre-edit content forever, since this endpoint always
+        # created a brand-new row and never looked one up first (confirmed live).
+        #
+        # Matching purely on rag_thread_id is not enough: every turn in the same chat shares
+        # the same thread id, so a teacher asking for a second, unrelated lesson later in the
+        # same chat would otherwise silently overwrite the first saved lesson. A content
+        # similarity check distinguishes "same lesson, lightly edited" (very high similarity)
+        # from "a different lesson" (low similarity) before deciding to update vs insert.
         existing_lesson = (
             LessonModel.get_lesson_by_rag_thread_id(session['user_id'], rag_thread_id)
             if rag_thread_id else None
         )
+        if existing_lesson and not _is_likely_same_lesson(existing_lesson.get('content'), content):
+            existing_lesson = None
         if existing_lesson:
             # Deliberately keep the EXISTING title rather than the incoming one: the frontend's
             # client-side uniqueness check (getUniqueLessonTitle in teacher_dashboard.html) has
