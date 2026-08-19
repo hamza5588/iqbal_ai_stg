@@ -285,6 +285,28 @@
       overflow-x: hidden;
       flex: 1 1 auto;
       padding-bottom: 0;
+      padding-left: 1% !important;
+      padding-right: 1% !important;
+      width: 100% !important;
+      box-sizing: border-box;
+    }
+
+    #chatMessages,
+    #lessonsContent {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-sizing: border-box;
+    }
+
+    #chatArea .max-w-6xl,
+    #chatArea .mx-auto,
+    #lessonsArea .max-w-6xl,
+    #lessonsArea .mx-auto {
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
     }
 
 
@@ -377,14 +399,16 @@
 
     /* User avatar (right side) */
     .chat-message.user .chat-message-avatar {
-      background: white;
-      border: 2px solid #0ea5e9;
+      background: #166534;
+      border: 2px solid #166534;
+      color: #fff;
+      font-weight: 800;
     }
 
     /* Assistant avatar (left side) */
     .chat-message.assistant .chat-message-avatar {
       background: white;
-      border: 2px solid #ec4899;
+      border: 2px solid #2f9e4f;
     }
 
     .chat-message-content {
@@ -397,9 +421,11 @@
 
     /* User message content (right side) */
     .chat-message.user .chat-message-content {
-      background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+      background: #166534;
       color: white;
-      border-bottom-left-radius: 0.25rem;
+      margin-left: auto;
+      border-radius: 14px;
+      border-bottom-right-radius: 4px;
     }
 
     /* Sidebar collapse (desktop only) - Improved Design */
@@ -473,8 +499,8 @@
     }
 
     .chat-history-item.active {
-      background: #e0f2fe;
-      border-left: 3px solid #0ea5e9;
+      background: #eaf7ee;
+      border-left: 3px solid #1c7c3e;
     }
 
     /* Tab Button Active State */
@@ -1345,7 +1371,7 @@
         max-height: none;
         overflow-y: hidden;
         overflow-x: hidden;
-        padding-bottom: 2.5rem;
+        padding-bottom: 0.75rem;
       }
 
       @media (max-width: 768px) {
@@ -1418,8 +1444,12 @@
 
     /* Desktop-only spacing for chat area and input */
     @media (min-width: 1024px) {
-      #chatArea {
-        padding: 2.5rem 3rem !important;
+      #chatArea:not(.stu-chat-layout) {
+        padding: 1.25rem 1.5% !important;
+      }
+
+      #chatArea.stu-chat-layout {
+        padding: 8px 12px 0 !important;
       }
 
       #chatMessages {
@@ -1759,13 +1789,105 @@
       z-index: 9999 !important;
     }
 
-    /* Ensure modal displays even with Tailwind conflicts */
     #viewLessonModal.visible-modal {
       display: flex !important;
       visibility: visible !important;
       opacity: 1 !important;
       pointer-events: auto !important;
       z-index: 9999 !important;
+    }
+
+    /* Student View Lesson modal — matches new_ui/studentsidescreenui/19-lesson-content-mindmap.html */
+    #viewLessonModal .svc-modal{
+      width:96%; max-width:1560px; max-height:92vh;
+      background:#fff; border-radius:20px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.12);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    #viewLessonModal .svc-header{
+      display:flex; align-items:flex-start; justify-content:space-between;
+      padding:20px 28px 14px; gap:16px; flex-shrink:0;
+    }
+    #viewLessonModal .svc-header-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+    #viewLessonModal .svc-doc-icon{
+      width:44px; height:52px; background:#166534; border-radius:5px 12px 5px 5px;
+      display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0; font-size:18px;
+    }
+    #viewLessonModal .svc-header h1{
+      font-size:24px; font-weight:800; color:#1f2430; line-height:1.25; margin:0;
+    }
+    #viewLessonModal .svc-sub{ font-size:14px; color:#6b7280; margin-top:2px; }
+    #viewLessonModal .svc-close{
+      width:38px; height:38px; border-radius:50%; border:1px solid #eee; background:#fff;
+      display:flex; align-items:center; justify-content:center; cursor:pointer; color:#1f2430; flex-shrink:0;
+    }
+    #viewLessonModal .svc-close:hover{ background:#f3f4f6; }
+    #viewLessonModal .svc-toolbar-wrap{ padding:0 28px 18px; flex-shrink:0; }
+    #viewLessonModal .svc-toolbar{
+      background:#0a0c0a; border-radius:40px;
+      display:flex; align-items:center; justify-content:center;
+      padding:6px 8px; max-width:900px; margin:0 auto;
+    }
+    #viewLessonModal .svc-tab{
+      flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+      padding:12px 18px; color:#9ba09c; font-weight:600; font-size:14.5px;
+      background:none; border:none; position:relative; white-space:nowrap;
+    }
+    #viewLessonModal .svc-tab.active{ color:#2f9e4f; }
+    #viewLessonModal .svc-tab.active::after{
+      content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%);
+      width:70%; height:2px; background:#2f9e4f;
+    }
+    #viewLessonModal .svc-tab-divider{ width:1px; height:22px; background:#2a2d2a; flex-shrink:0; }
+    #viewLessonModal .svc-content{
+      flex:1; min-height:0; padding:0 28px 22px; display:flex; flex-direction:column;
+    }
+    #viewLessonModal .svc-panel{
+      flex:1; min-height:0; display:flex; flex-direction:column;
+      border:1px solid #eee; border-radius:18px; overflow:hidden; background:#fff;
+    }
+    #viewLessonModal .svc-panel-head{
+      display:flex; align-items:center; gap:12px; padding:16px 22px;
+      border-bottom:1px solid #f0f0f0; flex-shrink:0;
+    }
+    #viewLessonModal .svc-panel-icon{
+      width:34px; height:34px; border-radius:8px; background:#166534; color:#fff;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    #viewLessonModal .svc-panel-head h2{ font-size:18px; font-weight:800; color:#1f2430; margin:0; }
+    #viewLessonModal .svc-body{
+      flex:1; min-height:0; overflow-y:auto; padding:20px 24px 8px;
+    }
+    #viewLessonModal .svc-footer{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 22px 18px; gap:12px; flex-wrap:wrap; flex-shrink:0;
+    }
+    #viewLessonModal .svc-ask{
+      display:flex; align-items:center; gap:10px;
+      background:#166534; color:#fff; border:none; border-radius:10px;
+      padding:13px 24px; font-size:15px; font-weight:700; cursor:pointer;
+    }
+    #viewLessonModal .svc-ask:hover{ background:#125129; }
+    #viewLessonModal .svc-exports{ display:flex; gap:12px; }
+    #viewLessonModal .svc-docx, #viewLessonModal .svc-ppt{
+      display:flex; align-items:center; gap:8px; border-radius:10px;
+      padding:12px 20px; font-size:14.5px; font-weight:700; cursor:pointer; background:#fff;
+    }
+    #viewLessonModal .svc-docx{ border:1.5px solid #1c7c3e; color:#166534; }
+    #viewLessonModal .svc-ppt{ border:1.5px solid #c0504d; color:#c0504d; }
+    #viewLessonModal .svc-docx:hover{ background:#f3faf5; }
+    #viewLessonModal .svc-ppt:hover{ background:#fdf4f4; }
+    @media(max-width:700px){
+      #viewLessonModal .svc-header{ padding:16px 16px 10px; }
+      #viewLessonModal .svc-header h1{ font-size:18px; }
+      #viewLessonModal .svc-toolbar-wrap, #viewLessonModal .svc-content{ padding-left:14px; padding-right:14px; }
+      #viewLessonModal .svc-toolbar{ border-radius:18px; flex-wrap:wrap; }
+      #viewLessonModal .svc-tab{ padding:10px 10px; font-size:12.5px; }
+      #viewLessonModal .svc-tab-divider{ display:none; }
+      #viewLessonModal .svc-footer{ flex-direction:column; align-items:stretch; }
+      #viewLessonModal .svc-ask{ justify-content:center; }
+      #viewLessonModal .svc-exports{ justify-content:stretch; }
+      #viewLessonModal .svc-docx, #viewLessonModal .svc-ppt{ flex:1; justify-content:center; }
     }
 
     .view-lesson-grid {
@@ -2280,8 +2402,8 @@
 
     .version-badge {
       padding: 0.25rem 0.5rem;
-      background: #dbeafe;
-      color: #1e40af;
+      background: #dcfce7;
+      color: #166534;
       border-radius: 0.375rem;
       font-size: 0.75rem;
       font-weight: 600;
@@ -2782,8 +2904,8 @@
     }
 
     .chat-history-item.active {
-      background: #e0f2fe;
-      border-left: 3px solid #0ea5e9;
+      background: #eaf7ee;
+      border-left: 3px solid #1c7c3e;
     }
 
     /* Add these styles to your existing CSS */
@@ -3002,8 +3124,6 @@
     #chatHistoryDropdown .chat-history-item{ padding:10px 12px; border-radius:10px; border-left:none; margin-bottom:2px; }
     #chatHistoryDropdown .chat-history-item:hover{ background:#f4f4f2; }
     #chatHistoryDropdown .chat-history-item.active{ background:#eaf7ee; border-left:none; }
-    .tt-dropdown-footer{ text-align:center; padding-top:10px; margin-top:6px; border-top:1px solid #f0f0f0; }
-    .tt-dropdown-footer a{ color:#1c7c3e; font-weight:700; font-size:13.5px; text-decoration:none; cursor:pointer; }
 
     /* ===== My Lessons list — matches teacher dashboard cards ===== */
     .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; }
@@ -3061,44 +3181,61 @@
     }
 
     /* ===== New UI: Chat with Lesson — pinned lesson sidebar + chat column ===== */
-    .stu-lesson-sidebar{ background:#fff; padding:0; }
+    .stu-lesson-sidebar{
+      background:#fff; padding:18px 22px 28px;
+      border-right:1px solid #eee;
+    }
     .stu-back-link{
       display:flex; align-items:center; gap:6px; color:#166534; font-weight:700;
-      font-size:14.5px; margin-bottom:20px; cursor:pointer;
+      font-size:14.5px; margin-bottom:18px; cursor:pointer;
     }
     .stu-back-link:hover{ text-decoration:underline; }
-    .stu-pinned-label{ color:#1c7c3e; font-size:12px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
-    .stu-ls-title{ font-size:18px; font-weight:800; color:#1f2430; margin-bottom:6px; line-height:1.3; }
-    .stu-ls-meta{ font-size:13px; color:#6b7280; margin-bottom:16px; }
-    .stu-divider{ border:none; border-top:1px solid #eee; margin:16px 0; }
-    .stu-ls-content{ font-size:13.5px; color:#333; line-height:1.7; }
-    .stu-ls-content p{ margin-bottom:10px; }
+    .stu-pinned-label{ color:#1c7c3e; font-size:11.5px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
+    .stu-ls-title{ font-size:17px; font-weight:800; color:#1f2430; margin-bottom:4px; line-height:1.3; }
+    .stu-ls-meta{ font-size:12.5px; color:#6b7280; margin-bottom:12px; }
+    .stu-divider{ border:none; border-top:1px solid #eee; margin:12px 0 14px; }
+    .stu-ls-content{ font-size:13.5px; color:#333; line-height:1.65; }
+    .stu-ls-content p{ margin:0 0 10px; }
     .stu-ls-content strong, .stu-ls-content b{ color:#166534; }
+    .stu-ls-content h1, .stu-ls-content h2, .stu-ls-content h3, .stu-ls-content h4{
+      color:#1f2430; font-weight:800; line-height:1.3; margin:12px 0 8px;
+    }
+    .stu-ls-content h1{ font-size:1.15rem; }
+    .stu-ls-content h2{ font-size:1.05rem; }
+    .stu-ls-content h3, .stu-ls-content h4{ font-size:0.98rem; }
 
-    .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; }
-    .stu-chat-head{ padding:0 0 16px; text-align:center; position:relative; border-bottom:1px solid #f5f5f5; margin-bottom:18px; }
-    .stu-chat-head h1{ font-size:22px; font-weight:800; color:#1f2430; }
-    .stu-chat-head .stu-sub{ font-size:14px; color:#6b7280; margin-top:4px; }
+    .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; background:#fff; }
+    #chatArea.stu-chat-layout{
+      min-height:0; gap:0 !important; padding:8px 10px 0 !important; background:#fff;
+    }
+    #chatArea.stu-chat-layout #messagesWrapper{
+      flex:1; min-height:0; overflow-y:auto; padding:16px 20px 12px;
+    }
+    #chatArea.stu-chat-layout #lessonContextPanel{ min-height:0; max-height:100%; }
+    .stu-chat-head{
+      padding:6px 44px 14px; text-align:center; position:relative;
+      border-bottom:1px solid #f0f0f0; margin:0; flex-shrink:0;
+    }
+    .stu-chat-head h1{ font-size:20px; font-weight:800; color:#1f2430; letter-spacing:-0.2px; }
+    .stu-chat-head .stu-sub{ font-size:13.5px; color:#6b7280; margin-top:4px; }
     .stu-chat-head .stu-pinned-tag{
-      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:13px; margin-top:10px;
+      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:12.5px; margin-top:8px;
     }
     .stu-chat-close{
-      position:absolute; top:-6px; right:0;
+      position:absolute; top:2px; right:4px;
       width:34px; height:34px; border-radius:50%; border:1px solid #eee;
       display:flex; align-items:center; justify-content:center; color:#166534; cursor:pointer; background:#fff;
     }
+    /* Lesson body lives in the left sidebar; do not repeat it inside the chat thread. */
+    #chatArea:has(#lessonContextPanel) .lesson-thread-pin {
+      display: none !important;
+    }
     .stu-chat-close:hover{ background:#f3faf5; }
 
-    .stu-recent-bar{
-      display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid #eee; overflow-x:auto; margin-top:12px;
+    #chatArea.stu-chat-layout .chat-message{ margin-bottom:1.1rem; }
+    #chatArea.stu-chat-layout .chat-message.assistant .chat-message-content{
+      max-width: min(720px, 100%);
     }
-    .stu-recent-label{ font-size:13.5px; color:#6b7280; flex-shrink:0; }
-    .stu-conv-pill{
-      display:flex; align-items:center; gap:7px; padding:9px 16px; border-radius:8px;
-      font-size:13px; font-weight:600; white-space:nowrap; flex-shrink:0; cursor:pointer; color:#333; border:1px solid transparent;
-    }
-    .stu-conv-pill:hover{ background:#f4f4f2; }
-    .stu-conv-pill.active{ background:#1c7c3e; color:#fff; }
 
     /* Input bar as one rounded pill — matches new_ui .input-row */
     #chatInputArea .tt-input-bar{ border:1px solid #eee; border-radius:40px; padding:8px 18px; }
@@ -3109,8 +3246,8 @@
     #chatInputArea .tt-round-icon:hover{ background:#f9fafb; }
     #chatInputArea .tt-input-mid{ padding:6px 0; }
     #chatInputArea .tt-message-input{ border:none !important; box-shadow:none !important; padding:6px 0; }
-    #chatInputArea .tt-send-btn{ width:36px; height:36px; border-radius:50%; background:#166534 !important; color:#fff !important; }
-    #chatInputArea .tt-send-btn:hover{ background:#125129 !important; }
+    #chatInputArea .tt-send-btn{ width:36px; height:36px; border-radius:50%; background:#d0f73a !important; color:#1a1a1a !important; }
+    #chatInputArea .tt-send-btn:hover{ background:#c3ea2c !important; }
 
     /* Chat bubble palette — matches teacher_dashboard.html's new_ui treatment */
     #chatMessages .chat-message-avatar{ border-radius:50%; }
@@ -3242,9 +3379,6 @@
                   <div id="weekChats" class="space-y-1"></div>
                 </div>
               </div>
-              <div class="tt-dropdown-footer">
-                <a onclick="closeAllDropdowns(); showMyLessonsPage();">View all conversations</a>
-              </div>
             </div>
           </div>
         </div>
@@ -3255,8 +3389,8 @@
     <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
 
       <!-- Chat Area — default to lessons list on login (not empty chat) -->
-      <section id="chatArea" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar">
-        <div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6">
+      <section id="chatArea" class="flex-1 min-h-0 p-4 md:p-6 overflow-y-auto custom-scrollbar">
+        <div id="chatMessages" class="w-full space-y-3 md:space-y-6">
           <div class="mll-wrap">
             <div class="mll-page-head">
               <div>
@@ -3270,14 +3404,14 @@
 
       <!-- Lessons Area (separate from chat to avoid scroll/position bleed) -->
       <section id="lessonsArea" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar hidden">
-        <div id="lessonsContent" class="w-full max-w-6xl mx-auto px-2 md:px-4">
+        <div id="lessonsContent" class="w-full">
           <!-- Lessons content is injected here -->
         </div>
       </section>
 
 
       <!-- Chat input hidden until a lesson chat is opened -->
-      <div id="chatInputArea" class="sticky bottom-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200 shadow-lg md:shadow-xl transition-all duration-300" style="display: none;">
+      <div id="chatInputArea" class="flex-shrink-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200" style="display: none;">
         <div class="max-w-4xl mx-auto px-2 md:px-4">
           <!-- Voice Input Status (hidden by default) -->
           <div id="voiceStatus" class="voice-status rounded-lg p-3 mb-3 hidden bg-blue-50 border border-blue-200 animate-pulse">
@@ -3315,7 +3449,7 @@
             <!-- Main Input Area (Clean, Borderless) -->
             <div class="flex-1 bg-transparent flex items-center gap-3 tt-input-mid">
               <!-- Text Input -->
-              <textarea id="messageInput" placeholder="Type message..."
+              <textarea id="messageInput" placeholder="Ask a question about this lesson..."
                 class="flex-1 bg-transparent text-gray-800 placeholder-gray-500 text-base resize-none focus:outline-none transition-colors tt-message-input"
                 rows="1" aria-label="Chat message input" oninput="autoResizeTextarea(this)"
                 onkeydown="handleKeyDown(event)" style="max-height: 120px;"></textarea>
@@ -3346,69 +3480,54 @@
   </div>
   <!-- End of main flex container -->
 
-    <!-- View Lesson Modal - Enhanced Student Experience -->
+    <!-- View Lesson Modal — matches new_ui/studentsidescreenui/19-lesson-content-mindmap.html -->
     <div id="viewLessonModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110] overflow-y-auto py-4 md:py-8 hidden backdrop-blur-sm">
-      <div
-        class="bg-white rounded-xl md:rounded-2xl w-[95%] md:w-full mx-auto max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col">
-        
-        <!-- Header - Compact -->
-        <div class="text-white px-6 md:px-10 py-5 md:py-6" style="background:linear-gradient(90deg,#0e5c2f,#1f9c46 60%,#2fae52)">
-          <div class="flex items-start justify-between gap-4 mb-3">
-            <div class="flex items-start gap-3 flex-1">
-
-              <div class="flex-1 min-w-0">
-                <h2 class="text-2xl md:text-3xl font-bold text-white mb-1 line-clamp-2 leading-tight" id="viewLessonTitle">Lesson Title</h2>
-                <p class="text-blue-100/95 text-sm md:text-base font-medium whitespace-nowrap" id="viewLessonSubtitle">Subject • Grade Level</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <button onclick="closeViewLessonModal()" class="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center bg-white bg-opacity-20 hover:bg-opacity-30 transition-all flex-shrink-0 hover:scale-110">
-                <i class="fas fa-times text-lg md:text-xl text-white"></i>
-              </button>
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110] overflow-y-auto py-3 md:py-6 hidden backdrop-blur-sm">
+      <div class="svc-modal">
+        <header class="svc-header">
+          <div class="svc-header-left">
+            <div class="svc-doc-icon"><i class="fas fa-file-alt"></i></div>
+            <div class="min-w-0">
+              <h1 id="viewLessonTitle">Lesson Title</h1>
+              <div class="svc-sub" id="viewLessonSubtitle">Subject • Grade</div>
             </div>
           </div>
-          <div class="flex flex-wrap gap-2 justify-between md:justify-start">
-            <span class="px-2.5 py-1 bg-white bg-opacity-20 backdrop-blur-sm text-white rounded-full text-xs font-medium border border-white border-opacity-30">📖 Student View</span>
-            <span class="px-2.5 py-1 bg-white bg-opacity-20 backdrop-blur-sm text-white rounded-full text-xs font-medium border border-white border-opacity-30">🎓 Lecture</span>
-          </div>
-        </div>
+          <button type="button" onclick="closeViewLessonModal()" class="svc-close" title="Close" aria-label="Close">
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
 
-        <!-- Content -->
-        <div class="flex-1 overflow-y-auto px-6 md:px-10 py-6 md:py-8 bg-gray-50">
-          <div class="max-w-4xl mx-auto">
-            <div class="bg-white rounded-xl border border-gray-100 p-6 md:p-8 shadow-sm">
-              <div class="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
-                <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#e6f4ea;color:#166534;">
-                  <i class="fas fa-scroll text-lg"></i>
-                </div>
-                <h3 class="text-lg md:text-xl font-bold text-gray-800">Lesson Content</h3>
-              </div>
-              
-              <div id="viewLessonCurrent" class="prose prose-sm md:prose-base max-w-none text-gray-700 leading-relaxed space-y-4 markdown-content">
-                <p class="text-gray-500 italic">Loading content...</p>
-              </div>
-            </div>
+        <div class="svc-toolbar-wrap">
+          <div class="svc-toolbar">
+            <div class="svc-tab active"><i class="fas fa-file-alt"></i> Lesson Content</div>
+            <div class="svc-tab-divider"></div>
+            <div class="svc-tab"><i class="fas fa-book-open"></i> Student View</div>
+            <div class="svc-tab-divider"></div>
+            <div class="svc-tab"><i class="fas fa-play"></i> Lecture</div>
           </div>
         </div>
 
-        <!-- Footer with Actions -->
-        <div class="border-t border-gray-200 bg-white px-6 md:px-10 py-5 md:py-6">
-          <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <button onclick="openLessonChat()" class="w-full sm:w-auto text-white px-6 py-3 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 font-semibold" style="background:linear-gradient(90deg,#166534,#1c7c3e);" onmouseover="this.style.opacity='0.92'" onmouseout="this.style.opacity='1'">
-              <i class="fas fa-comment-dots text-lg text-white"></i>
-              <span>Ask Question</span>
-            </button>
-
-            <div class="flex flex-row flex-wrap sm:flex-row items-center gap-3 w-full sm:w-auto">
-              <button onclick="downloadLessonDocx(window.currentViewLessonId)" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg transition-colors shadow-sm hover:shadow-md flex items-center justify-center gap-2 font-medium text-sm">
-                <i class="fas fa-file-word text-emerald-100"></i>
-                <span class="hidden md:inline">DOCX</span>
+        <div class="svc-content">
+          <div class="svc-panel">
+            <div class="svc-panel-head">
+              <div class="svc-panel-icon"><i class="fas fa-book-open"></i></div>
+              <h2>Lesson Content</h2>
+            </div>
+            <div id="viewLessonCurrent" class="svc-body prose prose-sm md:prose-base max-w-none text-gray-700 markdown-content lesson-content-formatted">
+              <p class="text-gray-500 italic">Loading content...</p>
+            </div>
+            <div class="svc-footer">
+              <button type="button" onclick="openLessonChat()" class="svc-ask">
+                <i class="fas fa-comment-dots"></i> Ask Question
               </button>
-              <button onclick="downloadLessonPPT(window.currentViewLessonId)" class="flex-1 sm:flex-none bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-lg transition-colors shadow-sm hover:shadow-md flex items-center justify-center gap-2 font-medium text-sm">
-                <i class="fas fa-file-powerpoint text-rose-100"></i>
-                <span class="hidden md:inline">PPT</span>
-              </button>
+              <div class="svc-exports">
+                <button type="button" onclick="downloadLessonDocx(window.currentViewLessonId)" class="svc-docx">
+                  <i class="fas fa-file-word"></i> DOCX
+                </button>
+                <button type="button" onclick="downloadLessonPPT(window.currentViewLessonId)" class="svc-ppt">
+                  <i class="fas fa-file-powerpoint"></i> PPT
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3559,6 +3678,27 @@
         }
       }
 
+      function getStudentAvatarHtml() {
+        const avatarEl = document.getElementById('userAvatar');
+        const initial = (avatarEl && avatarEl.textContent)
+          ? avatarEl.textContent.trim().charAt(0).toUpperCase()
+          : 'S';
+        return `<div class="w-full h-full flex items-center justify-center">${escapeHtml(initial)}</div>`;
+      }
+
+      function getLessonChatWelcomeHtml(lessonCtx) {
+        const title = escapeHtml((lessonCtx && lessonCtx.title) || 'this lesson');
+        return `
+        <div class="chat-message assistant animate-fade-in">
+          <div class="chat-message-avatar">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
+          </div>
+          <div class="chat-message-content">
+            <p>Thanks for opening this lesson! I'm now familiar with all the content. Feel free to ask questions about <strong>"${title}"</strong> and I'll explain using only what's in this lesson.</p>
+          </div>
+        </div>`;
+      }
+
       function getStudentWelcomeMessageHtml() {
         return `
         <div class="chat-message assistant animate-fade-in">
@@ -3586,10 +3726,10 @@
                 <span>Track your learning progress</span>
               </li>
             </ul>
-            <div class="mt-4 p-3 bg-primary-50 rounded-lg border border-primary-100">
-              <p class="text-primary-700 text-sm">
+            <div class="mt-4 p-3 rounded-lg border" style="background:#f3faf5;border-color:#dcfce7;">
+              <p class="text-sm" style="color:#166534;">
                 <i class="fas fa-lightbulb mr-2"></i>
-                <strong>Tip:</strong> Open a lesson from My Lessons, then tap Ask Question to chat about it.
+                <strong>Tip:</strong> Open a lesson from My Lessons, then tap Chat to ask questions about it.
               </p>
             </div>
           </div>
@@ -3755,8 +3895,8 @@
         <div class="max-w-2xl mx-auto p-8 h-full flex flex-col items-center justify-center text-center">
           <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
           <h2 class="text-2xl font-bold text-gray-700 mb-2">No active lesson chat</h2>
-          <p class="text-gray-500 mb-6">Open a lesson from My Lessons, then use Ask Question to start chatting.</p>
-          <button onclick="showMyLessonsPage()" class="bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 transition-colors font-medium">
+          <p class="text-gray-500 mb-6">Open a lesson from My Lessons, then use Chat to start asking questions.</p>
+          <button onclick="showMyLessonsPage()" class="text-white px-6 py-2.5 rounded-lg font-medium" style="background:#1c7c3e;">
             <i class="fas fa-book-open mr-2"></i>
             My Lessons
           </button>
@@ -4298,10 +4438,10 @@
                data-lesson-title="${safeTitle}"
                data-lesson-subject="${safeSubject}"
                data-lesson-grade="${safeGrade}"
-               class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-            <div class="font-semibold text-blue-800">📚 Lesson: ${safeTitle}</div>
-            <div class="text-xs text-blue-700 mt-1">${safeSubject} • Grade ${safeGrade}</div>
-            <div class="text-xs text-blue-600 mt-2 italic">This lesson remains pinned for this thread.</div>
+               class="rounded-xl p-4 mb-4" style="background:#f3faf5;border:1px solid #dcfce7;">
+            <div class="font-semibold" style="color:#166534;">Lesson: ${safeTitle}</div>
+            <div class="text-xs mt-1" style="color:#15803d;">${safeSubject} • Grade ${safeGrade}</div>
+            <div class="text-xs mt-2 italic" style="color:#166534;">This lesson remains pinned for this thread.</div>
             <div class="lesson-thread-content mt-3">${contentHtml}</div>
           </div>
         `;
@@ -4320,7 +4460,8 @@
           : null;
 
         const existingPins = chatMessages.querySelectorAll('.lesson-thread-pin');
-        if (!lessonCtx) {
+        const lessonSidebarVisible = !!document.getElementById('lessonContextPanel');
+        if (!lessonCtx || lessonSidebarVisible) {
           existingPins.forEach(function (pin) { pin.remove(); });
           return;
         }
@@ -4350,31 +4491,6 @@
         }
       }
 
-      // Recent-conversations pill bar (new_ui): most recent lesson-bound chats, current one highlighted.
-      function buildRecentConvPillsHtml(currentChatId) {
-        let lessonBindings = {};
-        try {
-          lessonBindings = JSON.parse(localStorage.getItem('Student_chat_lesson_bindings') || '{}') || {};
-        } catch (e) {
-          lessonBindings = {};
-        }
-        const lessonChats = (chatHistory || []).filter(function (c) {
-          return !!(lessonBindings[String(c.id)] || lessonBindings[c.id]);
-        });
-        lessonChats.sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
-        const top = lessonChats.slice(0, 5);
-        if (!top.length) return '';
-        return top.map(function (c) {
-          const isActive = String(c.id) === String(currentChatId);
-          const title = escapeHtml(c.title || 'Conversation');
-          const dateStr = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : '';
-          const label = isActive ? title : (dateStr ? `${title} &bull; ${dateStr}` : title);
-          return `<div class="stu-conv-pill${isActive ? ' active' : ''}" onclick="loadChat('${c.id}')" title="${title}">
-              <i class="fas fa-folder"></i> ${label}
-            </div>`;
-        }).join('');
-      }
-
       // Build chat layout for a given chatId (adds lesson panel only if bound to that chat)
       async function renderChatLayoutForChat(chatId) {
         const chatArea = document.getElementById('chatArea');
@@ -4382,7 +4498,7 @@
 
         // Ensure layout container classes
         chatArea.style.display = 'flex';
-        chatArea.className = 'flex-1 overflow-hidden custom-scrollbar flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6';
+        chatArea.className = 'flex-1 min-h-0 overflow-hidden custom-scrollbar flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 stu-chat-layout';
 
         // Clear existing content
         chatArea.innerHTML = '';
@@ -4392,7 +4508,7 @@
         if (lessonCtx && window.innerWidth > 768) {
           const lessonPanel = document.createElement('div');
           lessonPanel.id = 'lessonContextPanel';
-          lessonPanel.className = 'stu-lesson-sidebar w-full md:w-[300px] md:flex-shrink-0 md:border-r md:border-gray-100 md:pr-6 overflow-y-auto md:max-h-[calc(100vh-220px)] order-first md:order-none';
+          lessonPanel.className = 'stu-lesson-sidebar w-full md:w-[340px] md:flex-shrink-0 overflow-y-auto min-h-0 order-first md:order-none';
           lessonPanel.innerHTML = `
             <div class="stu-back-link" onclick="showMyLessonsPage()">
               <i class="fas fa-chevron-left"></i> My Lessons
@@ -4419,13 +4535,13 @@
 
         // Chat column: head (Conversation with Lesson) + messages + recent-conversations bar
         const chatCol = document.createElement('div');
-        chatCol.className = 'stu-chat-col w-full min-w-0';
+        chatCol.className = 'stu-chat-col w-full min-w-0 flex-1';
 
         const chatHead = document.createElement('div');
         chatHead.className = 'stu-chat-head';
         chatHead.innerHTML = lessonCtx ? `
             <div class="stu-chat-close" onclick="showMyLessonsPage()" title="Close"><i class="fas fa-times"></i></div>
-            <h1>${escapeHtml(formatStudentConversationTitle(lessonCtx.title))}</h1>
+            <h1>Conversation with Lesson</h1>
             <div class="stu-sub">${escapeHtml(lessonCtx.title || 'Lesson')}</div>
             <div class="stu-pinned-tag"><i class="fas fa-thumbtack"></i> Lesson pinned</div>
           ` : `
@@ -4439,21 +4555,13 @@
         const messagesWrapper = document.createElement('div');
         messagesWrapper.id = 'messagesWrapper';
         // Allow natural height on mobile to avoid large bottom gap; still scroll when overflow
-        messagesWrapper.className = 'w-full overflow-y-auto custom-scrollbar flex flex-col pb-0';
+        messagesWrapper.className = 'w-full flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col pb-0';
 
         const chatMessages = document.createElement('div');
         chatMessages.id = 'chatMessages';
-        chatMessages.className = 'w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6 mb-0';
+        chatMessages.className = 'w-full space-y-3 md:space-y-6 mb-0';
         messagesWrapper.appendChild(chatMessages);
         chatCol.appendChild(messagesWrapper);
-
-        const recentPillsHtml = buildRecentConvPillsHtml(chatId);
-        if (recentPillsHtml) {
-          const recentBar = document.createElement('div');
-          recentBar.className = 'stu-recent-bar';
-          recentBar.innerHTML = '<div class="stu-recent-label">Recent conversations</div>' + recentPillsHtml;
-          chatCol.appendChild(recentBar);
-        }
 
         chatArea.appendChild(chatCol);
 
@@ -4492,7 +4600,7 @@
             const rendered = formatRichContent(content || '');
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
-                <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
+                ${getStudentAvatarHtml()}
               </div>
               <div class="chat-message-content">${rendered}</div>
             `;
@@ -4514,7 +4622,9 @@
         if (storedMessages && storedMessages.length > 0) {
           storedMessages.forEach(msg => renderMsg(msg.role, msg.content));
           applyRenderedFormatting(chatMessages);
-        } else if (!lessonCtx) {
+        } else if (lessonCtx) {
+          chatMessages.innerHTML = getLessonChatWelcomeHtml(lessonCtx);
+        } else {
           // Keep welcome message consistent across new/reloaded chats.
           chatMessages.innerHTML = getStudentWelcomeMessageHtml();
         }
@@ -4655,8 +4765,8 @@
         if (chatArea) {
           // Reset to a clean single-column lessons container to avoid stale overlap.
           chatArea.style.display = 'block';
-          chatArea.className = 'flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar';
-          chatArea.innerHTML = '<div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6"></div>';
+          chatArea.className = 'flex-1 min-h-0 p-4 md:p-6 overflow-y-auto custom-scrollbar';
+          chatArea.innerHTML = '<div id="chatMessages" class="w-full space-y-3 md:space-y-6"></div>';
         }
 
         // Fetch lessons from API (no dummy/localStorage lessons)
@@ -5118,7 +5228,7 @@
           // Populate subtitle (subject + grade)
           const subtitleEl = document.getElementById('viewLessonSubtitle');
           if (subtitleEl) {
-            subtitleEl.textContent = `📚 ${lesson.subject || 'General'} • Grade ${lesson.grade || 'N/A'}`;
+            subtitleEl.textContent = `${lesson.subject || 'General'} • Grade ${lesson.grade || 'N/A'}`;
           }
 
           // Populate lesson content with teacher-equivalent formatting pipeline
@@ -6303,13 +6413,16 @@
         // Rebuild chat UI and render messages for this chat (messages from DB)
         await renderChatLayoutForChat(chatId);
 
-        // After the UI is built, asynchronously restore the bound lesson (if any)
-        // from the database so that this chat continues to use the same lesson
-        // context when asking questions.
+        // After the UI is built, restore the bound lesson (if any) from the
+        // database, then rebuild the layout so the side panel appears the same
+        // way it does when opening Chat from My Lessons.
         try {
           await restoreLessonContextForChat(chatId);
         } catch (e) {
           console.warn('restoreLessonContextForChat error', e);
+        }
+        if (window.currentLessonContext && String(window.currentLessonContext.chatId) === String(chatId)) {
+          await renderChatLayoutForChat(chatId);
         }
         ensurePinnedLessonContentForChat(chatId);
 
@@ -6924,7 +7037,7 @@
         const rendered = formatRichContent(message || '');
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
+          ${getStudentAvatarHtml()}
         </div>
         <div class="chat-message-content">${rendered}</div>
       `;
@@ -6948,7 +7061,10 @@
         const contentDiv = document.createElement('div');
         contentDiv.className = 'chat-message-content';
         const isLessonMetaBlock = typeof message === 'string' && message.indexOf('id="current-lesson-metadata"') !== -1;
-        contentDiv.innerHTML = isLessonMetaBlock ? String(message || '') : formatRichContent(message || '');
+        if (isLessonMetaBlock) {
+          return;
+        }
+        contentDiv.innerHTML = formatRichContent(message || '');
         
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">

@@ -1715,9 +1715,9 @@
       box-sizing: border-box;
     }
     #viewLessonModal .vl-enhance-btn {
-      background: var(--vl-lime-500); color: #1a1a1a; border: none; padding: 9px 18px;
-      border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
-      display: flex; align-items: center; gap: 8px; white-space: nowrap;
+      background: var(--vl-lime-500); color: #1a1a1a; border: none; padding: 9px 12px;
+      border-radius: 8px; font-weight: 700; font-size: 12.5px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
     }
     #viewLessonModal .vl-enhance-btn:hover { opacity: .92; }
     #viewLessonModal .vl-enhance-btn:disabled { opacity: .6; cursor: not-allowed; }
@@ -1751,7 +1751,10 @@
     }
     #viewLessonModal .vl-save-draft-btn:hover { background: #f3faf5; }
     #viewLessonModal .vl-draft-actions {
-      display: flex; align-items: stretch; gap: 8px;
+      display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px;
+    }
+    #viewLessonModal .vl-draft-actions .vl-enhance-btn {
+      flex: 1 1 100%; width: 100%;
     }
     #viewLessonModal .vl-draft-actions .vl-save-draft-btn,
     #viewLessonModal .vl-draft-actions .vl-finalize-btn {
@@ -4196,9 +4199,6 @@
                 </div>
               </div>
             </div>
-            <button onclick="applyPromptToLessonDraft()" class="vl-enhance-btn">
-              <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
-            </button>
           </div>
           <div id="olderVersionNoticeSlot" class="vl-older-notice-slot hidden" aria-live="polite"></div>
 
@@ -4214,6 +4214,9 @@
             <div id="viewLessonDraft" contenteditable="true" class="vl-draft-editor" style="white-space: pre-wrap;"
               placeholder="Draft will appear here after applying AI or making manual edits..."></div>
             <div class="vl-draft-actions">
+              <button type="button" onclick="applyPromptToLessonDraft()" class="vl-enhance-btn">
+                <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
+              </button>
               <button type="button" onclick="saveLessonDraftVisible()" class="vl-save-draft-btn">
                 <i class="fas fa-floppy-disk"></i> Save Draft
               </button>
@@ -7141,18 +7144,25 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             </div>
             <div class="text-xs mt-0.5 text-gray-500">${dateStr}</div>
           </div>
-          ${!isLatest ? `<button onclick="event.stopPropagation(); loadVersionIntoDraft('${lesson.id}', ${vNum})"
+          <button onclick="event.stopPropagation(); loadVersionIntoDraft('${lesson.id}', ${vNum})"
                          class="flex-shrink-0 px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-700 border border-gray-200 rounded transition-colors"
-                         title="Load into draft editor">Edit</button>` : ''}
+                         title="Load into draft editor">Edit</button>
         </div>
       </div>`;
             }).join('');
           } else {
             latestVersion = { version: lesson.version || 1, createdAt: lesson.createdAt || new Date().toISOString() };
             versionsHtml = `<div class="view-lesson-version-item current" style="cursor:default">
-              <strong>v1</strong>
-              <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full ml-1">Current</span>
-              <div class="text-xs mt-0.5 text-gray-500">Only version</div>
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                  <strong>v1</strong>
+                  <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full ml-1">Current</span>
+                  <div class="text-xs mt-0.5 text-gray-500">Only version</div>
+                </div>
+                <button onclick="event.stopPropagation(); loadVersionIntoDraft('${lesson.id}', ${lesson.version || 1})"
+                        class="flex-shrink-0 px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-700 border border-gray-200 rounded transition-colors"
+                        title="Load into draft editor">Edit</button>
+              </div>
             </div>`;
           }
 
@@ -7638,16 +7648,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       function loadVersionIntoDraft(lessonId, versionNumber) {
         const versions = window.currentLessonVersions || [];
-        if (!versions.length) {
-          showToast('Version history not available for this lesson.', 'error', 2000);
-          return;
-        }
-
         const version = versions.find(function (v) {
           return (v.version_number || v.version || 1) === versionNumber;
         });
 
-        const versionContent = version && version.content ? version.content : null;
+        let versionContent = version && version.content ? version.content : null;
+        if (!versionContent && window.currentViewedLessonData && window.currentViewedLessonData.content) {
+          const currentV = window.currentViewedLessonData.version || 1;
+          if (currentV === versionNumber) {
+            versionContent = window.currentViewedLessonData.content;
+          }
+        }
 
         if (versionContent) {
           const draftTextarea = document.getElementById('viewLessonDraft');
@@ -7659,7 +7670,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           saveLessonDraftVisible();
           showToast(`✅ Loaded v${versionNumber} into draft editor. Make your changes and click "Finalize" to create a new version.`, 'success', 3500);
         } else {
-          showToast('Version content not found.', 'error', 2000);
+          showToast(versions.length ? 'Version content not found.' : 'Version history not available for this lesson.', 'error', 2000);
         }
       }
 
