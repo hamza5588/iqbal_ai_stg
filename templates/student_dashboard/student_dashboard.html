@@ -1444,8 +1444,12 @@
 
     /* Desktop-only spacing for chat area and input */
     @media (min-width: 1024px) {
-      #chatArea {
-        padding: 2.5rem 3rem !important;
+      #chatArea:not(.stu-chat-layout) {
+        padding: 1.25rem 1.5% !important;
+      }
+
+      #chatArea.stu-chat-layout {
+        padding: 8px 12px 0 !important;
       }
 
       #chatMessages {
@@ -3085,32 +3089,48 @@
     }
 
     /* ===== New UI: Chat with Lesson — pinned lesson sidebar + chat column ===== */
-    .stu-lesson-sidebar{ background:#fff; padding:0; }
+    .stu-lesson-sidebar{
+      background:#fff; padding:18px 22px 28px;
+      border-right:1px solid #eee;
+    }
     .stu-back-link{
       display:flex; align-items:center; gap:6px; color:#166534; font-weight:700;
-      font-size:14.5px; margin-bottom:20px; cursor:pointer;
+      font-size:14.5px; margin-bottom:18px; cursor:pointer;
     }
     .stu-back-link:hover{ text-decoration:underline; }
-    .stu-pinned-label{ color:#1c7c3e; font-size:12px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
-    .stu-ls-title{ font-size:18px; font-weight:800; color:#1f2430; margin-bottom:6px; line-height:1.3; }
-    .stu-ls-meta{ font-size:13px; color:#6b7280; margin-bottom:16px; }
-    .stu-divider{ border:none; border-top:1px solid #eee; margin:16px 0; }
-    .stu-ls-content{ font-size:13.5px; color:#333; line-height:1.7; }
-    .stu-ls-content p{ margin-bottom:10px; }
+    .stu-pinned-label{ color:#1c7c3e; font-size:11.5px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
+    .stu-ls-title{ font-size:17px; font-weight:800; color:#1f2430; margin-bottom:4px; line-height:1.3; }
+    .stu-ls-meta{ font-size:12.5px; color:#6b7280; margin-bottom:12px; }
+    .stu-divider{ border:none; border-top:1px solid #eee; margin:12px 0 14px; }
+    .stu-ls-content{ font-size:13.5px; color:#333; line-height:1.65; }
+    .stu-ls-content p{ margin:0 0 10px; }
     .stu-ls-content strong, .stu-ls-content b{ color:#166534; }
+    .stu-ls-content h1, .stu-ls-content h2, .stu-ls-content h3, .stu-ls-content h4{
+      color:#1f2430; font-weight:800; line-height:1.3; margin:12px 0 8px;
+    }
+    .stu-ls-content h1{ font-size:1.15rem; }
+    .stu-ls-content h2{ font-size:1.05rem; }
+    .stu-ls-content h3, .stu-ls-content h4{ font-size:0.98rem; }
 
-    .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
-    #chatArea.stu-chat-layout{ min-height:0; }
-    #chatArea.stu-chat-layout #messagesWrapper{ flex:1; min-height:0; overflow-y:auto; }
+    .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; background:#fff; }
+    #chatArea.stu-chat-layout{
+      min-height:0; gap:0 !important; padding:8px 10px 0 !important; background:#fff;
+    }
+    #chatArea.stu-chat-layout #messagesWrapper{
+      flex:1; min-height:0; overflow-y:auto; padding:16px 20px 12px;
+    }
     #chatArea.stu-chat-layout #lessonContextPanel{ min-height:0; max-height:100%; }
-    .stu-chat-head{ padding:0 0 16px; text-align:center; position:relative; border-bottom:1px solid #f5f5f5; margin-bottom:18px; }
-    .stu-chat-head h1{ font-size:22px; font-weight:800; color:#1f2430; }
-    .stu-chat-head .stu-sub{ font-size:14px; color:#6b7280; margin-top:4px; }
+    .stu-chat-head{
+      padding:6px 44px 14px; text-align:center; position:relative;
+      border-bottom:1px solid #f0f0f0; margin:0; flex-shrink:0;
+    }
+    .stu-chat-head h1{ font-size:20px; font-weight:800; color:#1f2430; letter-spacing:-0.2px; }
+    .stu-chat-head .stu-sub{ font-size:13.5px; color:#6b7280; margin-top:4px; }
     .stu-chat-head .stu-pinned-tag{
-      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:13px; margin-top:10px;
+      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:12.5px; margin-top:8px;
     }
     .stu-chat-close{
-      position:absolute; top:-6px; right:0;
+      position:absolute; top:2px; right:4px;
       width:34px; height:34px; border-radius:50%; border:1px solid #eee;
       display:flex; align-items:center; justify-content:center; color:#166534; cursor:pointer; background:#fff;
     }
@@ -3120,16 +3140,10 @@
     }
     .stu-chat-close:hover{ background:#f3faf5; }
 
-    .stu-recent-bar{
-      display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid #eee; overflow-x:auto; margin-top:12px;
+    #chatArea.stu-chat-layout .chat-message{ margin-bottom:1.1rem; }
+    #chatArea.stu-chat-layout .chat-message.assistant .chat-message-content{
+      max-width: min(720px, 100%);
     }
-    .stu-recent-label{ font-size:13.5px; color:#6b7280; flex-shrink:0; }
-    .stu-conv-pill{
-      display:flex; align-items:center; gap:7px; padding:9px 16px; border-radius:8px;
-      font-size:13px; font-weight:600; white-space:nowrap; flex-shrink:0; cursor:pointer; color:#333; border:1px solid transparent;
-    }
-    .stu-conv-pill:hover{ background:#f4f4f2; }
-    .stu-conv-pill.active{ background:#1c7c3e; color:#fff; }
 
     /* Input bar as one rounded pill — matches new_ui .input-row */
     #chatInputArea .tt-input-bar{ border:1px solid #eee; border-radius:40px; padding:8px 18px; }
@@ -4400,31 +4414,6 @@
         }
       }
 
-      // Recent-conversations pill bar (new_ui): most recent lesson-bound chats, current one highlighted.
-      function buildRecentConvPillsHtml(currentChatId) {
-        let lessonBindings = {};
-        try {
-          lessonBindings = JSON.parse(localStorage.getItem('Student_chat_lesson_bindings') || '{}') || {};
-        } catch (e) {
-          lessonBindings = {};
-        }
-        const lessonChats = (chatHistory || []).filter(function (c) {
-          return !!(lessonBindings[String(c.id)] || lessonBindings[c.id]);
-        });
-        lessonChats.sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
-        const top = lessonChats.slice(0, 5);
-        if (!top.length) return '';
-        return top.map(function (c) {
-          const isActive = String(c.id) === String(currentChatId);
-          const title = escapeHtml(c.title || 'Conversation');
-          const dateStr = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : '';
-          const label = isActive ? title : (dateStr ? `${title} &bull; ${dateStr}` : title);
-          return `<div class="stu-conv-pill${isActive ? ' active' : ''}" onclick="loadChat('${c.id}')" title="${title}">
-              <i class="fas fa-folder"></i> ${label}
-            </div>`;
-        }).join('');
-      }
-
       // Build chat layout for a given chatId (adds lesson panel only if bound to that chat)
       async function renderChatLayoutForChat(chatId) {
         const chatArea = document.getElementById('chatArea');
@@ -4442,7 +4431,7 @@
         if (lessonCtx && window.innerWidth > 768) {
           const lessonPanel = document.createElement('div');
           lessonPanel.id = 'lessonContextPanel';
-          lessonPanel.className = 'stu-lesson-sidebar w-full md:w-[320px] md:flex-shrink-0 md:border-r md:border-gray-100 md:pr-6 overflow-y-auto min-h-0 order-first md:order-none';
+          lessonPanel.className = 'stu-lesson-sidebar w-full md:w-[340px] md:flex-shrink-0 overflow-y-auto min-h-0 order-first md:order-none';
           lessonPanel.innerHTML = `
             <div class="stu-back-link" onclick="showMyLessonsPage()">
               <i class="fas fa-chevron-left"></i> My Lessons
@@ -4475,7 +4464,7 @@
         chatHead.className = 'stu-chat-head';
         chatHead.innerHTML = lessonCtx ? `
             <div class="stu-chat-close" onclick="showMyLessonsPage()" title="Close"><i class="fas fa-times"></i></div>
-            <h1>${escapeHtml(formatStudentConversationTitle(lessonCtx.title))}</h1>
+            <h1>Conversation with Lesson</h1>
             <div class="stu-sub">${escapeHtml(lessonCtx.title || 'Lesson')}</div>
             <div class="stu-pinned-tag"><i class="fas fa-thumbtack"></i> Lesson pinned</div>
           ` : `
@@ -4496,14 +4485,6 @@
         chatMessages.className = 'w-full space-y-3 md:space-y-6 mb-0';
         messagesWrapper.appendChild(chatMessages);
         chatCol.appendChild(messagesWrapper);
-
-        const recentPillsHtml = buildRecentConvPillsHtml(chatId);
-        if (recentPillsHtml) {
-          const recentBar = document.createElement('div');
-          recentBar.className = 'stu-recent-bar';
-          recentBar.innerHTML = '<div class="stu-recent-label">Recent conversations</div>' + recentPillsHtml;
-          chatCol.appendChild(recentBar);
-        }
 
         chatArea.appendChild(chatCol);
 
