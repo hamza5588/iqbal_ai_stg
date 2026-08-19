@@ -377,14 +377,16 @@
 
     /* User avatar (right side) */
     .chat-message.user .chat-message-avatar {
-      background: white;
-      border: 2px solid #0ea5e9;
+      background: #166534;
+      border: 2px solid #166534;
+      color: #fff;
+      font-weight: 800;
     }
 
     /* Assistant avatar (left side) */
     .chat-message.assistant .chat-message-avatar {
       background: white;
-      border: 2px solid #ec4899;
+      border: 2px solid #2f9e4f;
     }
 
     .chat-message-content {
@@ -397,9 +399,11 @@
 
     /* User message content (right side) */
     .chat-message.user .chat-message-content {
-      background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+      background: #166534;
       color: white;
-      border-bottom-left-radius: 0.25rem;
+      margin-left: auto;
+      border-radius: 14px;
+      border-bottom-right-radius: 4px;
     }
 
     /* Sidebar collapse (desktop only) - Improved Design */
@@ -473,8 +477,8 @@
     }
 
     .chat-history-item.active {
-      background: #e0f2fe;
-      border-left: 3px solid #0ea5e9;
+      background: #eaf7ee;
+      border-left: 3px solid #1c7c3e;
     }
 
     /* Tab Button Active State */
@@ -1345,7 +1349,7 @@
         max-height: none;
         overflow-y: hidden;
         overflow-x: hidden;
-        padding-bottom: 2.5rem;
+        padding-bottom: 0.75rem;
       }
 
       @media (max-width: 768px) {
@@ -2280,8 +2284,8 @@
 
     .version-badge {
       padding: 0.25rem 0.5rem;
-      background: #dbeafe;
-      color: #1e40af;
+      background: #dcfce7;
+      color: #166534;
       border-radius: 0.375rem;
       font-size: 0.75rem;
       font-weight: 600;
@@ -2782,8 +2786,8 @@
     }
 
     .chat-history-item.active {
-      background: #e0f2fe;
-      border-left: 3px solid #0ea5e9;
+      background: #eaf7ee;
+      border-left: 3px solid #1c7c3e;
     }
 
     /* Add these styles to your existing CSS */
@@ -3002,8 +3006,6 @@
     #chatHistoryDropdown .chat-history-item{ padding:10px 12px; border-radius:10px; border-left:none; margin-bottom:2px; }
     #chatHistoryDropdown .chat-history-item:hover{ background:#f4f4f2; }
     #chatHistoryDropdown .chat-history-item.active{ background:#eaf7ee; border-left:none; }
-    .tt-dropdown-footer{ text-align:center; padding-top:10px; margin-top:6px; border-top:1px solid #f0f0f0; }
-    .tt-dropdown-footer a{ color:#1c7c3e; font-weight:700; font-size:13.5px; text-decoration:none; cursor:pointer; }
 
     /* ===== My Lessons list — matches teacher dashboard cards ===== */
     .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; }
@@ -3075,7 +3077,10 @@
     .stu-ls-content p{ margin-bottom:10px; }
     .stu-ls-content strong, .stu-ls-content b{ color:#166534; }
 
-    .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; }
+    .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
+    #chatArea.stu-chat-layout{ min-height:0; }
+    #chatArea.stu-chat-layout #messagesWrapper{ flex:1; min-height:0; overflow-y:auto; }
+    #chatArea.stu-chat-layout #lessonContextPanel{ min-height:0; max-height:100%; }
     .stu-chat-head{ padding:0 0 16px; text-align:center; position:relative; border-bottom:1px solid #f5f5f5; margin-bottom:18px; }
     .stu-chat-head h1{ font-size:22px; font-weight:800; color:#1f2430; }
     .stu-chat-head .stu-sub{ font-size:14px; color:#6b7280; margin-top:4px; }
@@ -3086,6 +3091,10 @@
       position:absolute; top:-6px; right:0;
       width:34px; height:34px; border-radius:50%; border:1px solid #eee;
       display:flex; align-items:center; justify-content:center; color:#166534; cursor:pointer; background:#fff;
+    }
+    /* Lesson body lives in the left sidebar; do not repeat it inside the chat thread. */
+    #chatArea:has(#lessonContextPanel) .lesson-thread-pin {
+      display: none !important;
     }
     .stu-chat-close:hover{ background:#f3faf5; }
 
@@ -3109,8 +3118,8 @@
     #chatInputArea .tt-round-icon:hover{ background:#f9fafb; }
     #chatInputArea .tt-input-mid{ padding:6px 0; }
     #chatInputArea .tt-message-input{ border:none !important; box-shadow:none !important; padding:6px 0; }
-    #chatInputArea .tt-send-btn{ width:36px; height:36px; border-radius:50%; background:#166534 !important; color:#fff !important; }
-    #chatInputArea .tt-send-btn:hover{ background:#125129 !important; }
+    #chatInputArea .tt-send-btn{ width:36px; height:36px; border-radius:50%; background:#d0f73a !important; color:#1a1a1a !important; }
+    #chatInputArea .tt-send-btn:hover{ background:#c3ea2c !important; }
 
     /* Chat bubble palette — matches teacher_dashboard.html's new_ui treatment */
     #chatMessages .chat-message-avatar{ border-radius:50%; }
@@ -3242,9 +3251,6 @@
                   <div id="weekChats" class="space-y-1"></div>
                 </div>
               </div>
-              <div class="tt-dropdown-footer">
-                <a onclick="closeAllDropdowns(); showMyLessonsPage();">View all conversations</a>
-              </div>
             </div>
           </div>
         </div>
@@ -3255,7 +3261,7 @@
     <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
 
       <!-- Chat Area — default to lessons list on login (not empty chat) -->
-      <section id="chatArea" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar">
+      <section id="chatArea" class="flex-1 min-h-0 p-4 md:p-6 overflow-y-auto custom-scrollbar">
         <div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6">
           <div class="mll-wrap">
             <div class="mll-page-head">
@@ -3277,7 +3283,7 @@
 
 
       <!-- Chat input hidden until a lesson chat is opened -->
-      <div id="chatInputArea" class="sticky bottom-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200 shadow-lg md:shadow-xl transition-all duration-300" style="display: none;">
+      <div id="chatInputArea" class="flex-shrink-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200" style="display: none;">
         <div class="max-w-4xl mx-auto px-2 md:px-4">
           <!-- Voice Input Status (hidden by default) -->
           <div id="voiceStatus" class="voice-status rounded-lg p-3 mb-3 hidden bg-blue-50 border border-blue-200 animate-pulse">
@@ -3315,7 +3321,7 @@
             <!-- Main Input Area (Clean, Borderless) -->
             <div class="flex-1 bg-transparent flex items-center gap-3 tt-input-mid">
               <!-- Text Input -->
-              <textarea id="messageInput" placeholder="Type message..."
+              <textarea id="messageInput" placeholder="Ask a question about this lesson..."
                 class="flex-1 bg-transparent text-gray-800 placeholder-gray-500 text-base resize-none focus:outline-none transition-colors tt-message-input"
                 rows="1" aria-label="Chat message input" oninput="autoResizeTextarea(this)"
                 onkeydown="handleKeyDown(event)" style="max-height: 120px;"></textarea>
@@ -3559,6 +3565,27 @@
         }
       }
 
+      function getStudentAvatarHtml() {
+        const avatarEl = document.getElementById('userAvatar');
+        const initial = (avatarEl && avatarEl.textContent)
+          ? avatarEl.textContent.trim().charAt(0).toUpperCase()
+          : 'S';
+        return `<div class="w-full h-full flex items-center justify-center">${escapeHtml(initial)}</div>`;
+      }
+
+      function getLessonChatWelcomeHtml(lessonCtx) {
+        const title = escapeHtml((lessonCtx && lessonCtx.title) || 'this lesson');
+        return `
+        <div class="chat-message assistant animate-fade-in">
+          <div class="chat-message-avatar">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-icon-green.png') }}" alt="AI Assistant">
+          </div>
+          <div class="chat-message-content">
+            <p>Thanks for opening this lesson! I'm now familiar with all the content. Feel free to ask questions about <strong>"${title}"</strong> and I'll explain using only what's in this lesson.</p>
+          </div>
+        </div>`;
+      }
+
       function getStudentWelcomeMessageHtml() {
         return `
         <div class="chat-message assistant animate-fade-in">
@@ -3586,10 +3613,10 @@
                 <span>Track your learning progress</span>
               </li>
             </ul>
-            <div class="mt-4 p-3 bg-primary-50 rounded-lg border border-primary-100">
-              <p class="text-primary-700 text-sm">
+            <div class="mt-4 p-3 rounded-lg border" style="background:#f3faf5;border-color:#dcfce7;">
+              <p class="text-sm" style="color:#166534;">
                 <i class="fas fa-lightbulb mr-2"></i>
-                <strong>Tip:</strong> Open a lesson from My Lessons, then tap Ask Question to chat about it.
+                <strong>Tip:</strong> Open a lesson from My Lessons, then tap Chat to ask questions about it.
               </p>
             </div>
           </div>
@@ -3755,8 +3782,8 @@
         <div class="max-w-2xl mx-auto p-8 h-full flex flex-col items-center justify-center text-center">
           <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
           <h2 class="text-2xl font-bold text-gray-700 mb-2">No active lesson chat</h2>
-          <p class="text-gray-500 mb-6">Open a lesson from My Lessons, then use Ask Question to start chatting.</p>
-          <button onclick="showMyLessonsPage()" class="bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 transition-colors font-medium">
+          <p class="text-gray-500 mb-6">Open a lesson from My Lessons, then use Chat to start asking questions.</p>
+          <button onclick="showMyLessonsPage()" class="text-white px-6 py-2.5 rounded-lg font-medium" style="background:#1c7c3e;">
             <i class="fas fa-book-open mr-2"></i>
             My Lessons
           </button>
@@ -4298,10 +4325,10 @@
                data-lesson-title="${safeTitle}"
                data-lesson-subject="${safeSubject}"
                data-lesson-grade="${safeGrade}"
-               class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-            <div class="font-semibold text-blue-800">📚 Lesson: ${safeTitle}</div>
-            <div class="text-xs text-blue-700 mt-1">${safeSubject} • Grade ${safeGrade}</div>
-            <div class="text-xs text-blue-600 mt-2 italic">This lesson remains pinned for this thread.</div>
+               class="rounded-xl p-4 mb-4" style="background:#f3faf5;border:1px solid #dcfce7;">
+            <div class="font-semibold" style="color:#166534;">Lesson: ${safeTitle}</div>
+            <div class="text-xs mt-1" style="color:#15803d;">${safeSubject} • Grade ${safeGrade}</div>
+            <div class="text-xs mt-2 italic" style="color:#166534;">This lesson remains pinned for this thread.</div>
             <div class="lesson-thread-content mt-3">${contentHtml}</div>
           </div>
         `;
@@ -4320,7 +4347,8 @@
           : null;
 
         const existingPins = chatMessages.querySelectorAll('.lesson-thread-pin');
-        if (!lessonCtx) {
+        const lessonSidebarVisible = !!document.getElementById('lessonContextPanel');
+        if (!lessonCtx || lessonSidebarVisible) {
           existingPins.forEach(function (pin) { pin.remove(); });
           return;
         }
@@ -4382,7 +4410,7 @@
 
         // Ensure layout container classes
         chatArea.style.display = 'flex';
-        chatArea.className = 'flex-1 overflow-hidden custom-scrollbar flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6';
+        chatArea.className = 'flex-1 min-h-0 overflow-hidden custom-scrollbar flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 stu-chat-layout';
 
         // Clear existing content
         chatArea.innerHTML = '';
@@ -4392,7 +4420,7 @@
         if (lessonCtx && window.innerWidth > 768) {
           const lessonPanel = document.createElement('div');
           lessonPanel.id = 'lessonContextPanel';
-          lessonPanel.className = 'stu-lesson-sidebar w-full md:w-[300px] md:flex-shrink-0 md:border-r md:border-gray-100 md:pr-6 overflow-y-auto md:max-h-[calc(100vh-220px)] order-first md:order-none';
+          lessonPanel.className = 'stu-lesson-sidebar w-full md:w-[320px] md:flex-shrink-0 md:border-r md:border-gray-100 md:pr-6 overflow-y-auto min-h-0 order-first md:order-none';
           lessonPanel.innerHTML = `
             <div class="stu-back-link" onclick="showMyLessonsPage()">
               <i class="fas fa-chevron-left"></i> My Lessons
@@ -4419,7 +4447,7 @@
 
         // Chat column: head (Conversation with Lesson) + messages + recent-conversations bar
         const chatCol = document.createElement('div');
-        chatCol.className = 'stu-chat-col w-full min-w-0';
+        chatCol.className = 'stu-chat-col w-full min-w-0 flex-1';
 
         const chatHead = document.createElement('div');
         chatHead.className = 'stu-chat-head';
@@ -4439,7 +4467,7 @@
         const messagesWrapper = document.createElement('div');
         messagesWrapper.id = 'messagesWrapper';
         // Allow natural height on mobile to avoid large bottom gap; still scroll when overflow
-        messagesWrapper.className = 'w-full overflow-y-auto custom-scrollbar flex flex-col pb-0';
+        messagesWrapper.className = 'w-full flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col pb-0';
 
         const chatMessages = document.createElement('div');
         chatMessages.id = 'chatMessages';
@@ -4492,7 +4520,7 @@
             const rendered = formatRichContent(content || '');
             msgDiv.innerHTML = `
               <div class="chat-message-avatar">
-                <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
+                ${getStudentAvatarHtml()}
               </div>
               <div class="chat-message-content">${rendered}</div>
             `;
@@ -4514,7 +4542,9 @@
         if (storedMessages && storedMessages.length > 0) {
           storedMessages.forEach(msg => renderMsg(msg.role, msg.content));
           applyRenderedFormatting(chatMessages);
-        } else if (!lessonCtx) {
+        } else if (lessonCtx) {
+          chatMessages.innerHTML = getLessonChatWelcomeHtml(lessonCtx);
+        } else {
           // Keep welcome message consistent across new/reloaded chats.
           chatMessages.innerHTML = getStudentWelcomeMessageHtml();
         }
@@ -4655,7 +4685,7 @@
         if (chatArea) {
           // Reset to a clean single-column lessons container to avoid stale overlap.
           chatArea.style.display = 'block';
-          chatArea.className = 'flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar';
+          chatArea.className = 'flex-1 min-h-0 p-4 md:p-6 overflow-y-auto custom-scrollbar';
           chatArea.innerHTML = '<div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6"></div>';
         }
 
@@ -6303,13 +6333,16 @@
         // Rebuild chat UI and render messages for this chat (messages from DB)
         await renderChatLayoutForChat(chatId);
 
-        // After the UI is built, asynchronously restore the bound lesson (if any)
-        // from the database so that this chat continues to use the same lesson
-        // context when asking questions.
+        // After the UI is built, restore the bound lesson (if any) from the
+        // database, then rebuild the layout so the side panel appears the same
+        // way it does when opening Chat from My Lessons.
         try {
           await restoreLessonContextForChat(chatId);
         } catch (e) {
           console.warn('restoreLessonContextForChat error', e);
+        }
+        if (window.currentLessonContext && String(window.currentLessonContext.chatId) === String(chatId)) {
+          await renderChatLayoutForChat(chatId);
         }
         ensurePinnedLessonContentForChat(chatId);
 
@@ -6924,7 +6957,7 @@
         const rendered = formatRichContent(message || '');
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
+          ${getStudentAvatarHtml()}
         </div>
         <div class="chat-message-content">${rendered}</div>
       `;
@@ -6948,7 +6981,10 @@
         const contentDiv = document.createElement('div');
         contentDiv.className = 'chat-message-content';
         const isLessonMetaBlock = typeof message === 'string' && message.indexOf('id="current-lesson-metadata"') !== -1;
-        contentDiv.innerHTML = isLessonMetaBlock ? String(message || '') : formatRichContent(message || '');
+        if (isLessonMetaBlock) {
+          return;
+        }
+        contentDiv.innerHTML = formatRichContent(message || '');
         
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">

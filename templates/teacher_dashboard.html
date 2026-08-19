@@ -7144,18 +7144,25 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             </div>
             <div class="text-xs mt-0.5 text-gray-500">${dateStr}</div>
           </div>
-          ${!isLatest ? `<button onclick="event.stopPropagation(); loadVersionIntoDraft('${lesson.id}', ${vNum})"
+          <button onclick="event.stopPropagation(); loadVersionIntoDraft('${lesson.id}', ${vNum})"
                          class="flex-shrink-0 px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-700 border border-gray-200 rounded transition-colors"
-                         title="Load into draft editor">Edit</button>` : ''}
+                         title="Load into draft editor">Edit</button>
         </div>
       </div>`;
             }).join('');
           } else {
             latestVersion = { version: lesson.version || 1, createdAt: lesson.createdAt || new Date().toISOString() };
             versionsHtml = `<div class="view-lesson-version-item current" style="cursor:default">
-              <strong>v1</strong>
-              <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full ml-1">Current</span>
-              <div class="text-xs mt-0.5 text-gray-500">Only version</div>
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                  <strong>v1</strong>
+                  <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full ml-1">Current</span>
+                  <div class="text-xs mt-0.5 text-gray-500">Only version</div>
+                </div>
+                <button onclick="event.stopPropagation(); loadVersionIntoDraft('${lesson.id}', ${lesson.version || 1})"
+                        class="flex-shrink-0 px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-700 border border-gray-200 rounded transition-colors"
+                        title="Load into draft editor">Edit</button>
+              </div>
             </div>`;
           }
 
@@ -7641,16 +7648,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       function loadVersionIntoDraft(lessonId, versionNumber) {
         const versions = window.currentLessonVersions || [];
-        if (!versions.length) {
-          showToast('Version history not available for this lesson.', 'error', 2000);
-          return;
-        }
-
         const version = versions.find(function (v) {
           return (v.version_number || v.version || 1) === versionNumber;
         });
 
-        const versionContent = version && version.content ? version.content : null;
+        let versionContent = version && version.content ? version.content : null;
+        if (!versionContent && window.currentViewedLessonData && window.currentViewedLessonData.content) {
+          const currentV = window.currentViewedLessonData.version || 1;
+          if (currentV === versionNumber) {
+            versionContent = window.currentViewedLessonData.content;
+          }
+        }
 
         if (versionContent) {
           const draftTextarea = document.getElementById('viewLessonDraft');
@@ -7662,7 +7670,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           saveLessonDraftVisible();
           showToast(`✅ Loaded v${versionNumber} into draft editor. Make your changes and click "Finalize" to create a new version.`, 'success', 3500);
         } else {
-          showToast('Version content not found.', 'error', 2000);
+          showToast(versions.length ? 'Version content not found.' : 'Version history not available for this lesson.', 'error', 2000);
         }
       }
 
