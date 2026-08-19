@@ -285,6 +285,28 @@
       overflow-x: hidden;
       flex: 1 1 auto;
       padding-bottom: 0;
+      padding-left: 1% !important;
+      padding-right: 1% !important;
+      width: 100% !important;
+      box-sizing: border-box;
+    }
+
+    #chatMessages,
+    #lessonsContent {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-sizing: border-box;
+    }
+
+    #chatArea .max-w-6xl,
+    #chatArea .mx-auto,
+    #lessonsArea .max-w-6xl,
+    #lessonsArea .mx-auto {
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
     }
 
 
@@ -3262,7 +3284,7 @@
 
       <!-- Chat Area — default to lessons list on login (not empty chat) -->
       <section id="chatArea" class="flex-1 min-h-0 p-4 md:p-6 overflow-y-auto custom-scrollbar">
-        <div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6">
+        <div id="chatMessages" class="w-full space-y-3 md:space-y-6">
           <div class="mll-wrap">
             <div class="mll-page-head">
               <div>
@@ -3276,7 +3298,7 @@
 
       <!-- Lessons Area (separate from chat to avoid scroll/position bleed) -->
       <section id="lessonsArea" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar hidden">
-        <div id="lessonsContent" class="w-full max-w-6xl mx-auto px-2 md:px-4">
+        <div id="lessonsContent" class="w-full">
           <!-- Lessons content is injected here -->
         </div>
       </section>
@@ -4471,7 +4493,7 @@
 
         const chatMessages = document.createElement('div');
         chatMessages.id = 'chatMessages';
-        chatMessages.className = 'w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6 mb-0';
+        chatMessages.className = 'w-full space-y-3 md:space-y-6 mb-0';
         messagesWrapper.appendChild(chatMessages);
         chatCol.appendChild(messagesWrapper);
 
@@ -4686,7 +4708,7 @@
           // Reset to a clean single-column lessons container to avoid stale overlap.
           chatArea.style.display = 'block';
           chatArea.className = 'flex-1 min-h-0 p-4 md:p-6 overflow-y-auto custom-scrollbar';
-          chatArea.innerHTML = '<div id="chatMessages" class="w-full max-w-6xl mx-auto px-2 md:px-4 space-y-3 md:space-y-6"></div>';
+          chatArea.innerHTML = '<div id="chatMessages" class="w-full space-y-3 md:space-y-6"></div>';
         }
 
         // Fetch lessons from API (no dummy/localStorage lessons)
