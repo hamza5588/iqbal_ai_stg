@@ -3159,6 +3159,26 @@
     .elm-btn-cancel{ background:#2b2b2b; border:none; color:#eee; padding:10px 18px; border-radius:8px; font-weight:600; font-size:13px; display:flex; align-items:center; gap:8px; cursor:pointer; }
     .elm-btn-save:hover, .elm-btn-cancel:hover{ opacity:.9; }
 
+    /* Unique lesson-name prompt when a second lesson in the same thread reuses a name */
+    #lessonNameConflictModal {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      position: fixed;
+      inset: 0;
+      z-index: 200020;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(5, 20, 22, 0.55);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+    #lessonNameConflictModal.lncm-visible { display: flex !important; }
+    #lessonNameConflictModal .elm-modal { max-width: 480px; }
+    #lessonNameConflictError { color: #dc2626; font-size: 12.5px; font-weight: 600; margin-top: 8px; }
+    #lessonNameConflictInput.lncm-invalid { border-color: #dc2626 !important; }
+    #lessonNameConflictSaveBtn:disabled { opacity: 0.55; cursor: default; }
+
     /* ===== New UI: My Lessons list (inside #chatMessages) ===== */
     .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; }
     .mll-page-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; gap:16px; flex-wrap:wrap; }
@@ -4148,6 +4168,45 @@
             class="flex-1 bg-gray-200 text-gray-800 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors">
             Close
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unique lesson name when saving a second lesson in the same thread -->
+    <div id="lessonNameConflictModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="lessonNameConflictTitle">
+      <div class="elm-modal">
+        <div class="elm-head">
+          <button type="button" class="elm-close-x" id="lessonNameConflictCloseBtn" aria-label="Close">
+            <i class="fas fa-times"></i>
+          </button>
+          <div class="elm-head-row">
+            <div class="elm-head-icon"><i class="fas fa-book"></i></div>
+            <div>
+              <h1 id="lessonNameConflictTitle">Choose a unique lesson name</h1>
+              <p>A lesson with this name already exists in this conversation. Enter a different name to save the new lesson.</p>
+            </div>
+          </div>
+        </div>
+        <div class="elm-body">
+          <div class="elm-field">
+            <div class="elm-field-icon"><i class="fas fa-heading"></i></div>
+            <div class="elm-field-content">
+              <label for="lessonNameConflictInput">Lesson name</label>
+              <input type="text" id="lessonNameConflictInput" maxlength="255" autocomplete="off" placeholder="Enter a unique lesson name">
+              <p id="lessonNameConflictError" class="hidden"></p>
+            </div>
+          </div>
+        </div>
+        <div class="elm-footer">
+          <div class="elm-footer-logo">
+            <img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI">
+          </div>
+          <div class="elm-footer-btns">
+            <button type="button" class="elm-btn-cancel" id="lessonNameConflictCancelBtn">Cancel</button>
+            <button type="button" class="elm-btn-save" id="lessonNameConflictSaveBtn">
+              <i class="fas fa-check"></i> Save / Generate
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -10340,22 +10399,156 @@ To continue your learning journey:
         return threadPart + '::' + titlePart + '::' + contentPart;
       }
 
-      function getUniqueLessonTitle(baseTitle) {
-        const cleanedBase = String(baseTitle || '').trim() || ('Lesson ' + new Date().toLocaleDateString());
-        const usedTitles = getUsedLessonTitles();
-        const usedLookup = new Set(usedTitles.map(function (t) { return String(t || '').trim().toLowerCase(); }));
+      function isLessonNameConflictResponse(response, data) {
+        if (!data) return false;
+        if (data.name_conflict || data.code === 'LESSON_NAME_CONFLICT') return true;
+        return !!(response && response.status === 409);
+      }
 
-        if (!usedLookup.has(cleanedBase.toLowerCase())) {
-          return cleanedBase;
+      async function checkLessonSaveNameConflict(title, lessonContent) {
+        const cleaned = String(title || '').trim();
+        if (!cleaned) {
+          return { conflict: true, empty_title: true, would_update: false };
         }
+        try {
+          const res = await fetch('/api/lessons/check_save_conflict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: cleaned,
+              content: String(lessonContent || ''),
+              rag_thread_id: window.currentRAGThreadId || null,
+              thread_id: window.currentRAGThreadId || null
+            })
+          });
+          const data = await res.json().catch(function () { return {}; });
+          if (data && data.empty_title) {
+            return { conflict: true, empty_title: true, would_update: false };
+          }
+          if (res.ok) {
+            return {
+              conflict: !!data.conflict,
+              would_update: !!data.would_update,
+              empty_title: false
+            };
+          }
+          return { conflict: false, checkFailed: true, would_update: false };
+        } catch (e) {
+          console.warn('Could not pre-check lesson name uniqueness:', e);
+          return { conflict: false, checkFailed: true, would_update: false };
+        }
+      }
 
-        let counter = 1;
-        let candidate = cleanedBase + ' - Lesson Saved';
-        while (usedLookup.has(candidate.toLowerCase())) {
-          counter += 1;
-          candidate = cleanedBase + ' - Lesson Saved ' + counter;
+      function setLessonNameConflictError(message) {
+        const errorEl = document.getElementById('lessonNameConflictError');
+        const input = document.getElementById('lessonNameConflictInput');
+        if (errorEl) {
+          errorEl.textContent = message || '';
+          errorEl.classList.toggle('hidden', !message);
         }
-        return candidate;
+        if (input) {
+          input.classList.toggle('lncm-invalid', !!message);
+        }
+      }
+
+      function closeLessonNameConflictModal() {
+        const modal = document.getElementById('lessonNameConflictModal');
+        if (!modal) return;
+        modal.classList.remove('lncm-visible');
+        modal.classList.add('hidden');
+        setLessonNameConflictError('');
+      }
+
+      function showLessonNameConflictModal(currentName, lessonContent) {
+        return new Promise(function (resolve) {
+          const modal = document.getElementById('lessonNameConflictModal');
+          const input = document.getElementById('lessonNameConflictInput');
+          const saveBtn = document.getElementById('lessonNameConflictSaveBtn');
+          const cancelBtn = document.getElementById('lessonNameConflictCancelBtn');
+          const closeBtn = document.getElementById('lessonNameConflictCloseBtn');
+          if (!modal || !input || !saveBtn) {
+            resolve(null);
+            return;
+          }
+
+          let settled = false;
+          function finish(result) {
+            if (settled) return;
+            settled = true;
+            saveBtn.removeEventListener('click', onSave);
+            if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+            if (closeBtn) closeBtn.removeEventListener('click', onCancel);
+            input.removeEventListener('keydown', onKey);
+            modal.removeEventListener('click', onBackdrop);
+            closeLessonNameConflictModal();
+            resolve(result);
+          }
+
+          function onCancel() {
+            finish(null);
+          }
+
+          async function onSave() {
+            const value = String(input.value || '').trim();
+            if (!value) {
+              setLessonNameConflictError('Please enter a lesson name.');
+              input.focus();
+              return;
+            }
+            saveBtn.disabled = true;
+            const check = await checkLessonSaveNameConflict(value, lessonContent);
+            saveBtn.disabled = false;
+            if (check.empty_title) {
+              setLessonNameConflictError('Please enter a lesson name.');
+              input.focus();
+              return;
+            }
+            if (check.conflict) {
+              setLessonNameConflictError('This lesson name already exists in this conversation. Please choose a different name.');
+              input.focus();
+              return;
+            }
+            finish(value);
+          }
+
+          function onKey(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onSave();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              onCancel();
+            }
+          }
+
+          function onBackdrop(e) {
+            if (e.target === modal) onCancel();
+          }
+
+          setLessonNameConflictError('');
+          input.value = String(currentName || '').trim();
+          modal.classList.remove('hidden');
+          modal.classList.add('lncm-visible');
+          saveBtn.addEventListener('click', onSave);
+          if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+          if (closeBtn) closeBtn.addEventListener('click', onCancel);
+          input.addEventListener('keydown', onKey);
+          modal.addEventListener('click', onBackdrop);
+          setTimeout(function () { input.focus(); input.select(); }, 0);
+        });
+      }
+
+      async function resolveUniqueLessonTitleForSave(baseTitle, lessonContent) {
+        let title = String(baseTitle || '').trim() || ('Lesson ' + new Date().toLocaleDateString());
+        const check = await checkLessonSaveNameConflict(title, lessonContent);
+        if (check.empty_title) {
+          return showLessonNameConflictModal('', lessonContent);
+        }
+        if (!check.conflict) {
+          return title;
+        }
+        return showLessonNameConflictModal(title, lessonContent);
       }
 
       async function saveLessonToMyLessons(pdfDataOverride, lessonContentOverride) {
@@ -10381,7 +10574,11 @@ To continue your learning journey:
           return;
         }
 
-        const finalTitle = getUniqueLessonTitle(baseTitle);
+        let finalTitle = await resolveUniqueLessonTitleForSave(baseTitle, lessonContent);
+        if (!finalTitle) {
+          return;
+        }
+
         const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
         const gradeLevel = (pdfData && pdfData.grade) ? String(pdfData.grade) : (pdfData && pdfData.gradeLevel) || 'General';
         const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
@@ -10389,41 +10586,46 @@ To continue your learning journey:
         showToast('Saving lesson to My Lessons...', 'info', 2000);
 
         try {
-          const response = await fetch('/api/lessons/create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              title: finalTitle,
-              content: lessonContent,
-              focus_area: focusArea,
-              grade_level: gradeLevel,
-              summary: summary,
-              // Preserve PDF retrieval linkage for student Ask Question flow.
-              // lesson_routes.create_lesson_simple accepts either rag_thread_id or thread_id.
-              rag_thread_id: window.currentRAGThreadId || null,
-              thread_id: window.currentRAGThreadId || null,
-              // Store the active conversation so the lesson view can load the conversation summary.
-              conversation_id: window.currentRAGConversationId || null
-            })
-          });
+          while (true) {
+            const response = await fetch('/api/lessons/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                title: finalTitle,
+                content: lessonContent,
+                focus_area: focusArea,
+                grade_level: gradeLevel,
+                summary: summary,
+                // Preserve PDF retrieval linkage for student Ask Question flow.
+                // lesson_routes.create_lesson_simple accepts either rag_thread_id or thread_id.
+                rag_thread_id: window.currentRAGThreadId || null,
+                thread_id: window.currentRAGThreadId || null,
+                // Store the active conversation so the lesson view can load the conversation summary.
+                conversation_id: window.currentRAGConversationId || null
+              })
+            });
 
-          const data = await response.json().catch(function() { return {}; });
+            const data = await response.json().catch(function() { return {}; });
 
-          if (response.ok && data && data.success) {
-            savedSignatures.push(lessonSignature);
-            persistSavedLessonSignatures(savedSignatures);
-            const usedTitles = getUsedLessonTitles();
-            usedTitles.push(finalTitle);
-            persistUsedLessonTitles(usedTitles);
-            try {
-              localStorage.setItem(_teacherScopedStorageKey(LESSON_SAVE_META_KEY), JSON.stringify({ chatId: String(currentChatId || ''), signature: lessonSignature }));
-            } catch (e) {}
+            if (response.ok && data && data.success) {
+              savedSignatures.push(lessonSignature);
+              persistSavedLessonSignatures(savedSignatures);
+              const usedTitles = getUsedLessonTitles();
+              usedTitles.push(finalTitle);
+              persistUsedLessonTitles(usedTitles);
+              try {
+                localStorage.setItem(_teacherScopedStorageKey(LESSON_SAVE_META_KEY), JSON.stringify({ chatId: String(currentChatId || ''), signature: lessonSignature }));
+              } catch (e) {}
 
-            showToast(`✅ Lesson "${finalTitle}" saved to My Lessons!`, 'success', 3000);
+              if (pdfData && typeof pdfData === 'object') {
+                pdfData.title = finalTitle;
+              }
 
-            // Display full lesson with formatting
-            const lessonHTML = `
+              showToast(`✅ Lesson "${finalTitle}" saved to My Lessons!`, 'success', 3000);
+
+              // Display full lesson with formatting
+              const lessonHTML = `
         <div style="background: #f9fafb; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb;">
           <h3 style="color: #10b981; font-size: 1.2rem; margin: 0 0 1rem 0;"><strong>✅ Lesson Created & Saved!</strong></h3>
           
@@ -10450,15 +10652,25 @@ To continue your learning journey:
         </div>
       `;
 
-            addAssistantMessage(lessonHTML);
+              addAssistantMessage(lessonHTML);
 
-            // Clear the current PDF data (both memory and storage)
-            currentPDFData = null;
-            currentLessonMarkdown = null;
-            clearPDFDataFromStorage();
-            setSaveLessonButtonsVisible(false);
-          } else {
+              // Clear the current PDF data (both memory and storage)
+              currentPDFData = null;
+              currentLessonMarkdown = null;
+              clearPDFDataFromStorage();
+              setSaveLessonButtonsVisible(false);
+              return;
+            }
+
+            if (isLessonNameConflictResponse(response, data)) {
+              const renamed = await showLessonNameConflictModal(finalTitle, lessonContent);
+              if (!renamed) return;
+              finalTitle = renamed;
+              continue;
+            }
+
             showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
+            return;
           }
         } catch (e) {
           console.error('Save lesson error:', e);
