@@ -348,7 +348,7 @@ def test_create_lesson_simple_updates_existing_row_for_same_thread():
     m = re.search(r"def create_lesson_simple\(\):.*?\n@bp\.route", LESSON_ROUTES_SRC, re.S)
     assert m, "create_lesson_simple body not found"
     body = m.group(0)
-    assert "get_lesson_by_rag_thread_id" in body
+    assert "_find_existing_same_lesson_in_thread" in body
     assert "updated_existing" in body
     # Re-save must not overwrite the real title with the frontend's auto-suffix.
     update_call = re.search(r"LessonModel\(existing_lesson\['id'\]\)\.update_lesson\((.*?)\)", body, re.S)

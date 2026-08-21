@@ -782,21 +782,35 @@ class LessonModel:
             raise
 
     @staticmethod
-    def check_title_exists(teacher_id: int, title: str, exclude_lesson_id: int = None) -> bool:
-        """Check if a lesson title already exists for a teacher"""
+    def check_title_exists(teacher_id: int, title: str, exclude_lesson_id: int = None,
+                           rag_thread_id: str = None) -> bool:
+        """Check if a lesson title already exists for a teacher.
+
+        When ``rag_thread_id`` is provided, uniqueness is scoped to that chat
+        thread (``thread_id`` + lesson name). The same title may be reused in a
+        different thread. When omitted, the check stays teacher-wide so other
+        create/edit flows keep their existing uniqueness behavior.
+        """
         try:
+            cleaned = (title or "").strip()
+            if not cleaned:
+                return False
             db = get_db()
             query = db.query(DBLesson).filter(
                 and_(
                     DBLesson.teacher_id == teacher_id,
-                    func.lower(DBLesson.title) == func.lower(title.strip())
+                    func.lower(DBLesson.title) == func.lower(cleaned)
                 )
             )
-            
+
+            thread_id = (rag_thread_id or "").strip() or None
+            if thread_id:
+                query = query.filter(DBLesson.rag_thread_id == thread_id)
+
             # Exclude a specific lesson ID (useful for updates/edits)
             if exclude_lesson_id:
                 query = query.filter(DBLesson.id != exclude_lesson_id)
-            
+
             return query.count() > 0
         except Exception as e:
             logger.error(f"Error checking title existence: {str(e)}")
