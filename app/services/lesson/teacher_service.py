@@ -2928,6 +2928,10 @@ Please provide an improved version of the lesson content that addresses the user
         s = re.sub(r"_\{([^{}]+)\}", r"_\1", s)
         s = re.sub(r"\\[a-zA-Z]+", "", s)
         s = s.replace("{", "").replace("}", "")
+        sup = str.maketrans("0123456789+-=n()", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼ⁿ⁽⁾")
+        sub = str.maketrans("0123456789+-=aeox()", "₀₁₂₃₄₅₆₇₈₉₊₋₌ₐₑₒₓ₍₎")
+        s = re.sub(r"\^([0-9n]+)", lambda m: m.group(1).translate(sup), s)
+        s = re.sub(r"_([0-9aeox]+)", lambda m: m.group(1).translate(sub), s)
         s = re.sub(r"\s+", " ", s)
         return s.strip()
 
@@ -3238,8 +3242,6 @@ Please provide an improved version of the lesson content that addresses the user
             content_layout_idx = 1 if len(prs.slide_layouts) > 1 else 0
             max_bullets_per_slide = 5
             max_chars_per_slide = 400
-
-            def apply_title_style(slide_title, title_text: str, size: int = 34) -> None:
 
             def apply_title_style(slide_title, title_text: str, size: int = 34) -> None:
                 if not slide_title:

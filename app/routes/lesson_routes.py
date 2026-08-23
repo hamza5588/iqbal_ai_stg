@@ -1910,7 +1910,7 @@ def save_lesson_draft(lesson_id):
         data = request.get_json()
         draft_content = data.get('draft_content', '')
         draft_norm = (draft_content or '').strip().lower()
-        if (not draft_norm or 'draft will appear here' in draft_norm:
+        if not draft_norm or 'draft will appear here' in draft_norm:
             return jsonify({'error': 'Draft is empty. Apply AI enhancement before saving.'}), 400
         
         success = LessonModel.save_draft_content(lesson_id, draft_content)
