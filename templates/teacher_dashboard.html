@@ -217,9 +217,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
-  <!-- highlight.js: Code highlighting -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <!-- highlight.js / pdf.js / MathJax are deferred until chat or view-lesson (see ensureHeavyDashboardLibs) -->
 
   <!-- Chat response formatter (marked + DOMPurify + KaTeX + highlight.js) -->
   <script src="{{ url_for('static', filename='teacher/js/chat-response-formatter.js') }}"></script>
@@ -230,9 +228,6 @@
   <script src="{{ url_for('static', filename='teacher/js/backend-formatter.js') }}"></script>
   <!-- Markdown Examples (demo helper functions) -->
   <script src="{{ url_for('static', filename='teacher/js/markdown-examples.js') }}"></script>
-
-  <!-- PDF.js (for in-browser PDF text extraction) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
   <!-- Google Fonts (same as login page) -->
   <link
@@ -1862,6 +1857,31 @@
       margin: 0.5rem 0;
     }
 
+    /* Match chat-bubble math layout so equations typeset correctly in lesson view */
+    #viewLessonCurrent mjx-container[display="true"],
+    #viewLessonCurrent .katex-display,
+    #expandedLessonPreviewContent mjx-container[display="true"],
+    #expandedLessonPreviewContent .katex-display {
+      overflow-x: auto;
+      overflow-y: hidden;
+      margin: 0.75rem 0;
+      padding-bottom: 0.125rem;
+      display: block;
+      text-align: center;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    #viewLessonCurrent mjx-container:not([display="true"]),
+    #viewLessonCurrent .katex:not(.katex-display),
+    #expandedLessonPreviewContent mjx-container:not([display="true"]),
+    #expandedLessonPreviewContent .katex:not(.katex-display) {
+      display: inline-block;
+      vertical-align: middle;
+    }
+    #viewLessonCurrent mjx-container[jax="CHTML"] {
+      font-size: 1.02em;
+    }
+
     #expandedLessonPreviewModal {
       display: none;
     }
@@ -3160,29 +3180,29 @@
     .elm-btn-save:hover, .elm-btn-cancel:hover{ opacity:.9; }
 
     /* ===== New UI: My Lessons list (inside #chatMessages) ===== */
-    .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; }
+    .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; width:100%; max-width:100%; box-sizing:border-box; }
     .mll-page-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; gap:16px; flex-wrap:wrap; }
     .mll-page-head h1{ font-size:24px; font-weight:800; margin-bottom:4px; }
     .mll-page-head p{ color:#6b7280; font-size:13.5px; }
     .mll-search-box{ display:flex; align-items:center; gap:8px; border:1px solid #d1d5db; border-radius:8px; padding:9px 14px; min-width:260px; background:#fff; }
     .mll-search-box i{ color:#9ca3af; font-size:13px; }
     .mll-search-box input{ border:none; outline:none; font-size:13.5px; flex:1; font-family:inherit; }
-    .mll-lesson-card{ display:flex; border:1px solid #eee; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.03); background:#fff; }
-    .mll-lesson-bar{ width:32px; background:#0a4a2c; color:#fff; font-size:10.5px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg); padding:10px 0; flex-shrink:0; }
-    .mll-lesson-body{ flex:1; min-width:0; padding:16px 20px; }
+    .mll-lesson-card{ display:flex; width:100%; border:1px solid #eee; border-radius:12px; margin-bottom:16px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.03); background:#fff; min-height:148px; }
+    .mll-lesson-bar{ width:34px; background:#0a4a2c; color:#fff; font-size:11px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg); padding:10px 0; flex-shrink:0; }
+    .mll-lesson-body{ flex:1; min-width:0; padding:18px 22px; }
     .mll-lesson-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px; }
-    .mll-lesson-title{ display:flex; align-items:center; gap:10px; min-width:0; }
-    .mll-icon-badge{ width:28px; height:28px; border-radius:8px; background:#166534; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
-    .mll-lesson-title h3{ font-size:15.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mll-lesson-title{ display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
+    .mll-icon-badge{ width:30px; height:30px; border-radius:8px; background:#166534; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex-shrink:0; }
+    .mll-lesson-title h3{ font-size:16.5px; font-weight:700; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; line-height:1.3; }
     .mll-lesson-meta-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
-    .mll-time-ago{ font-size:11.5px; color:#6b7280; white-space:nowrap; }
-    .mll-lesson-info{ display:flex; gap:40px; margin-bottom:14px; flex-wrap:wrap; }
+    .mll-time-ago{ font-size:12px; color:#6b7280; white-space:nowrap; }
+    .mll-lesson-info{ display:flex; gap:50px; margin-bottom:14px; flex-wrap:wrap; }
     .mll-lesson-info div{ font-size:12px; }
-    .mll-lesson-info label{ display:block; color:#9ca3af; font-size:10px; letter-spacing:.5px; text-transform:uppercase; margin-bottom:2px; }
-    .mll-lesson-info span{ font-size:12.5px; color:#222; }
-    .mll-actions-label{ font-size:10px; color:#9ca3af; letter-spacing:.5px; text-transform:uppercase; margin-bottom:8px; }
-    .mll-actions{ display:flex; gap:16px; flex-wrap:wrap; }
-    .mll-actions a{ display:flex; align-items:center; gap:5px; font-size:12px; font-weight:600; cursor:pointer; }
+    .mll-lesson-info label{ display:block; color:#9ca3af; font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; margin-bottom:2px; }
+    .mll-lesson-info span{ font-size:13px; color:#222; }
+    .mll-actions-label{ font-size:10.5px; color:#9ca3af; letter-spacing:.5px; text-transform:uppercase; margin-bottom:8px; }
+    .mll-actions{ display:flex; gap:18px; flex-wrap:wrap; }
+    .mll-actions a{ display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600; cursor:pointer; }
     .mll-actions a.mll-view, .mll-actions a.mll-edit{ color:#2563eb; }
     .mll-actions a.mll-word{ color:#15803d; }
     .mll-actions a.mll-ppt{ color:#c2410c; }
@@ -3539,17 +3559,56 @@
       }
     };
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-
+  <!-- MathJax script is loaded on demand via ensureHeavyDashboardLibs -->
   <script>
+    function loadScriptOnce(src) {
+      window._deferredLibPromises = window._deferredLibPromises || {};
+      if (window._deferredLibPromises[src]) return window._deferredLibPromises[src];
+      window._deferredLibPromises[src] = new Promise(function (resolve, reject) {
+        var el = document.createElement('script');
+        el.src = src;
+        el.async = true;
+        el.onload = function () { resolve(); };
+        el.onerror = function () { reject(new Error('Failed to load ' + src)); };
+        document.head.appendChild(el);
+      });
+      return window._deferredLibPromises[src];
+    }
+    function loadStylesheetOnce(href) {
+      if (document.querySelector('link[data-deferred-href="' + href + '"]')) return;
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.setAttribute('data-deferred-href', href);
+      document.head.appendChild(link);
+    }
+    window.ensureHeavyDashboardLibs = function () {
+      if (window._heavyDashboardLibsPromise) return window._heavyDashboardLibsPromise;
+      loadStylesheetOnce('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css');
+      window._heavyDashboardLibsPromise = Promise.all([
+        loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'),
+        loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js'),
+        loadScriptOnce('https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js')
+      ]).catch(function (err) {
+        console.warn('Deferred dashboard library load failed', err);
+      });
+      return window._heavyDashboardLibsPromise;
+    };
+
     // Typeset only a newly-inserted element (returns a Promise)
     window.typesetMathIn = function (node) {
-      if (!window.MathJax || !node) return Promise.resolve();
-      try {
-        return MathJax.typesetPromise([node]);
-      } catch (err) {
-        return Promise.reject(err);
+      if (!node) return Promise.resolve();
+      function run() {
+        if (!window.MathJax || !window.MathJax.typesetPromise) return Promise.resolve();
+        try {
+          return MathJax.typesetPromise([node]);
+        } catch (err) {
+          return Promise.reject(err);
+        }
       }
+      if (window.MathJax && window.MathJax.typesetPromise) return run();
+      if (window.ensureHeavyDashboardLibs) return window.ensureHeavyDashboardLibs().then(run);
+      return Promise.resolve();
     };
 
     // Helper: insert HTML into a container and typeset that inserted fragment
@@ -4199,6 +4258,9 @@
                 </div>
               </div>
             </div>
+            <button type="button" id="applyAiEnhancementBtn" onclick="applyPromptToLessonDraft()" class="vl-enhance-btn">
+              <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
+            </button>
           </div>
           <div id="olderVersionNoticeSlot" class="vl-older-notice-slot hidden" aria-live="polite"></div>
 
@@ -4211,12 +4273,9 @@
             <textarea id="viewLessonPrompt"
               placeholder="Describe how you want the lesson improved (e.g. simplify language, add examples, align to a standard)..."></textarea>
             <label>Draft (AI‑enhanced or manual edits)</label>
-            <div id="viewLessonDraft" contenteditable="true" class="vl-draft-editor" style="white-space: pre-wrap;"
+            <div id="viewLessonDraft" contenteditable="false" aria-readonly="true" class="vl-draft-editor" style="white-space: pre-wrap;"
               placeholder="Draft will appear here after applying AI or making manual edits..."></div>
             <div class="vl-draft-actions">
-              <button type="button" onclick="applyPromptToLessonDraft()" class="vl-enhance-btn">
-                <i class="fas fa-wand-magic-sparkles"></i>Apply AI Enhancement
-              </button>
               <button type="button" onclick="saveLessonDraftVisible()" class="vl-save-draft-btn">
                 <i class="fas fa-floppy-disk"></i> Save Draft
               </button>
@@ -4250,7 +4309,7 @@
               </button>
             </div>
             <div class="vl-card-body">
-              <div id="viewLessonCurrent">
+              <div id="viewLessonCurrent" class="markdown-content lesson-content-formatted tex2jax_process">
                 <p class="text-gray-500 italic">Content preview will appear here...</p>
               </div>
             </div>
@@ -4353,7 +4412,7 @@
           </div>
         </div>
         <div class="expanded-lesson-content-wrap">
-          <div id="expandedLessonPreviewContent" class="space-y-2">
+          <div id="expandedLessonPreviewContent" class="space-y-2 markdown-content lesson-content-formatted tex2jax_process">
             <p class="text-gray-500 italic">Lesson content will appear here...</p>
           </div>
         </div>
@@ -4802,8 +4861,8 @@
           }, 500);
         }
 
-        // Load user info from API and set teacher name; redirect if not teacher
-        loadTeacherUserInfo().then(function() {
+        // Load user info, chat history, and My Lessons in parallel so login is not a waterfall.
+        var userInfoReady = loadTeacherUserInfo().then(function() {
           const userNameEl = document.getElementById('userName');
           const userAvatarEl = document.getElementById('userAvatar');
           const userNameMobile = document.getElementById('userNameMobile');
@@ -4819,17 +4878,16 @@
         }).catch(function() {
           window.location.href = '/';
         });
-
-        // Initialize chat state per specification #6
-        // If chat history exists, load most recent chat
-        // If no chats, show empty state
-        initializeChatState();
-
-        // Load any existing PDF/Lesson data from previous session
-        loadPDFDataFromStorage();
-
-        // Initialize with My Lessons tab (not Chat tab)
+        userInfoReady.then(function () {
+          initializeChatState();
+        });
         showMyLessonsPage();
+        loadPDFDataFromStorage();
+        if (window.requestIdleCallback) {
+          window.requestIdleCallback(function () { window.ensureHeavyDashboardLibs(); }, { timeout: 2500 });
+        } else {
+          setTimeout(function () { window.ensureHeavyDashboardLibs(); }, 1500);
+        }
 
         // Setup textarea auto-resize and validation
         const textarea = document.getElementById('messageInput');
@@ -6552,13 +6610,31 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       // Pass selectedVersionNumber to open at a specific version (default = latest).
       async function viewLesson(lessonId, selectedVersionNumber) {
         if (!lessonId) { showToast('No lesson ID provided', 'error'); return; }
+        if (window.ensureHeavyDashboardLibs) {
+          window.ensureHeavyDashboardLibs();
+        }
+        const titleEl = document.getElementById('viewLessonTitle');
+        const currentEl = document.getElementById('viewLessonCurrent');
+        if (titleEl) titleEl.textContent = 'Loading lesson...';
+        if (currentEl) {
+          currentEl.innerHTML = '<p class="text-gray-500 italic"><i class="fas fa-spinner fa-spin mr-2"></i>Loading lesson content...</p>';
+        }
+        showViewLessonModal();
         try {
           const response = await fetch('/api/lessons/lesson/' + lessonId + '/view', { method: 'GET', credentials: 'include' });
-          if (!response.ok) { showToast('Failed to load lesson', 'error'); return; }
+          if (!response.ok) {
+            closeViewLessonModal();
+            showToast('Failed to load lesson', 'error');
+            return;
+          }
           const data = await response.json();
           const lesson = data.lesson;
           const versions = data.versions || [];
-          if (!lesson) { showToast('Lesson not found', 'error'); return; }
+          if (!lesson) {
+            closeViewLessonModal();
+            showToast('Lesson not found', 'error');
+            return;
+          }
           const sortedVersions = versions.slice().sort((a, b) => (b.version_number || b.version || 0) - (a.version_number || a.version || 0));
           window.currentLessonVersions = sortedVersions;
 
@@ -6608,9 +6684,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             summary: targetVersion.summary || lesson.summary || null,
           };
           await populateViewLessonModal(forModal);
-          showViewLessonModal();
         } catch (err) {
           console.error('viewLesson error:', err);
+          closeViewLessonModal();
           showToast('Error loading lesson: ' + (err.message || 'Unknown'), 'error');
         }
       }
@@ -6631,7 +6707,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        el.classList.add('tex2jax_process');
+        el.classList.add('tex2jax_process', 'markdown-content', 'lesson-content-formatted');
         if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
           el.innerHTML = TeacherChatFormatter.formatChatResponse(raw);
         } else if (typeof marked !== 'undefined' && marked.parse) {
@@ -6687,6 +6763,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         modal.style.opacity = '1';
         modal.style.pointerEvents = 'auto';
         document.body.style.overflow = 'hidden';
+        const expandedEl = document.getElementById('expandedLessonPreviewContent');
+        if (expandedEl && typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+          TeacherChatFormatter.processRenderedContent(expandedEl);
+        } else if (expandedEl && typeof window.typesetMathIn === 'function') {
+          window.typesetMathIn(expandedEl).catch(function () {});
+        }
       }
 
       function syncExpandedConversationSummaryFromCurrent() {
@@ -6805,14 +6887,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function isPlaceholderDraftText(text) {
+        const t = String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        return !t || t.indexOf('draft will appear here') !== -1;
+      }
+
       function clearViewLessonDraftEditor() {
         const draftEl = document.getElementById('viewLessonDraft');
         if (draftEl) {
-          renderLessonMarkdown(
-            draftEl,
-            '',
-            '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
-          );
+          draftEl.innerHTML = '';
         }
         const promptEl = document.getElementById('viewLessonPrompt');
         if (promptEl) promptEl.value = '';
@@ -6870,6 +6953,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         try {
           if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
             target.innerHTML = TeacherChatFormatter.formatChatResponse(String(text));
+            target.classList.add('markdown-content', 'tex2jax_process');
+            if (TeacherChatFormatter.processRenderedContent) {
+              TeacherChatFormatter.processRenderedContent(target);
+            }
             syncExpandedConversationSummaryFromCurrent();
             return;
           }
@@ -6924,6 +7011,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         try {
           if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
             target.innerHTML = TeacherChatFormatter.formatChatResponse(summary);
+            target.classList.add('markdown-content', 'tex2jax_process');
+            if (TeacherChatFormatter.processRenderedContent) {
+              TeacherChatFormatter.processRenderedContent(target);
+            }
             return;
           }
         } catch (e) { /* fall through to pre-wrap fallback */ }
@@ -7099,13 +7190,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             } catch (e) {
               console.warn('get_draft error:', e);
             }
-            renderLessonMarkdown(
-              draftTextarea,
-              draftValue,
-              '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
-            );
-            // Finalize button should be hidden until user edits the draft.
-            setFinalizeButtonVisible(false);
+            if (isPlaceholderDraftText(draftValue)) {
+              draftValue = '';
+            }
+            if (draftValue) {
+              renderLessonMarkdown(draftTextarea, draftValue);
+            } else {
+              draftTextarea.innerHTML = '';
+            }
+            setFinalizeButtonVisible(!!draftValue);
             draftTextarea.oninput = function () {
               setFinalizeButtonVisible(true);
             };
@@ -7140,7 +7233,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             <div class="flex items-center gap-1.5">
               <strong>v${vNum}</strong>
               ${isLatest ? '<span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">Current</span>' : ''}
-              ${isViewing && !isLatest ? '<span class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Viewing</span>' : ''}
+              ${isViewing && !isLatest ? '<span class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold vl-viewing-badge">Viewing</span>' : ''}
             </div>
             <div class="text-xs mt-0.5 text-gray-500">${dateStr}</div>
           </div>
@@ -7321,6 +7414,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           window.scrollTo(0, 0);
           console.log('📺 Step 8: Scrolled to top');
           
+          // Re-typeset math after the modal is visible. MathJax/KaTeX produce
+          // broken layout if they run while #viewLessonModal is still display:none.
+          const currentEl = document.getElementById('viewLessonCurrent');
+          if (currentEl && typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+            TeacherChatFormatter.processRenderedContent(currentEl);
+          } else if (currentEl && typeof window.typesetMathIn === 'function') {
+            window.typesetMathIn(currentEl).catch(function () {});
+          }
+
           // Step 8: Final verification
           setTimeout(() => {
             const finalComputed = window.getComputedStyle(modal);
@@ -7331,6 +7433,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             console.log('   - offsetHeight:', modal.offsetHeight);
             console.log('   - offsetWidth:', modal.offsetWidth);
             console.log('   - getBoundingClientRect:', modal.getBoundingClientRect());
+            if (currentEl && typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.processRenderedContent) {
+              TeacherChatFormatter.processRenderedContent(currentEl);
+            }
           }, 100);
           
           console.log('✅ Modal display sequence completed');
@@ -7367,6 +7472,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         renderLessonSummaryText(null);
         setOlderVersionNotice(false);
         clearViewLessonDraftEditor();
+        if (window.currentViewLessonId && typeof _versionSelectedMap !== 'undefined') {
+          delete _versionSelectedMap[window.currentViewLessonId];
+        }
+        window.currentViewingVersion = null;
+        window.currentViewingVersionIsLatest = null;
 
         // Only show chat input area if Chat tab is currently active
         const chatTabBtn = document.getElementById('chatTabBtn');
@@ -7402,7 +7512,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
-        const btn = document.querySelector('#viewLessonModal button[onclick="applyPromptToLessonDraft()"]');
+        const btn = document.getElementById('applyAiEnhancementBtn')
+          || document.querySelector('#viewLessonModal button[onclick="applyPromptToLessonDraft()"]');
         let originalHtml = null;
         if (btn) {
           originalHtml = btn.innerHTML;
@@ -7454,6 +7565,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         const draftEl = document.getElementById('viewLessonDraft');
         const draftContent = draftEl ? (draftEl.innerText || '').trim() : '';
+        if (isPlaceholderDraftText(draftContent)) {
+          showToast('Draft is empty. Apply AI enhancement before saving.', 'warning', 3000);
+          return;
+        }
 
         try {
           const response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
@@ -7482,8 +7597,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         const draftEl = document.getElementById('viewLessonDraft');
         const draftContent = (draftEl ? draftEl.innerText : '').trim();
-        if (!draftContent) {
-          showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
+        if (isPlaceholderDraftText(draftContent)) {
+          showToast('Draft is empty. Please apply AI enhancement before finalizing.', 'warning', 3000);
           return;
         }
 
@@ -7609,15 +7724,26 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             + (isLatest ? 'v' + versionNumber + ' (Current)' : 'v' + versionNumber + ' (Older)');
         }
 
-        // Highlight the selected version in the list
+        // Highlight the selected version in the list and keep the Viewing badge in sync
         document.querySelectorAll('#viewLessonVersions .view-lesson-version-item').forEach(function(el) {
           el.classList.remove('current');
+          var badge = el.querySelector('.vl-viewing-badge');
+          if (badge) badge.remove();
         });
         const versionItems = document.querySelectorAll('#viewLessonVersions .view-lesson-version-item');
         sortedVersions.forEach(function(v, idx) {
           const vNum = v.version_number || v.version || 1;
           if (vNum === versionNumber && versionItems[idx]) {
             versionItems[idx].classList.add('current');
+            if (!isLatest) {
+              var titleRow = versionItems[idx].querySelector('strong') && versionItems[idx].querySelector('strong').parentElement;
+              if (titleRow && !titleRow.querySelector('.vl-viewing-badge')) {
+                var span = document.createElement('span');
+                span.className = 'text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold vl-viewing-badge';
+                span.textContent = 'Viewing';
+                titleRow.appendChild(span);
+              }
+            }
           }
         });
 
@@ -8520,7 +8646,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             messageDiv.className = 'chat-message user animate-fade-in';
             messageDiv.innerHTML = `
             <div class="chat-message-avatar">
-              <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
+              <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">${escapeHtml(getTeacherAvatarInitial())}</div>
             </div>
             <div class="chat-message-content">${escapeHtml(content)}</div>
           `;
@@ -9316,6 +9442,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         try {
+          if (window.ensureHeavyDashboardLibs) {
+            await window.ensureHeavyDashboardLibs();
+          }
+          if (window.pdfjsLib) {
+            try {
+              pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+            } catch (e) {}
+          }
           const arrayBuffer = await file.arrayBuffer();
 
           if (!window.pdfjsLib) {
@@ -9690,6 +9824,41 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       // Send message - integrated with POST /api/rag/chat (real PDF/RAG backend)
+      var _lastFailedChatMessage = '';
+
+      function retryLastFailedChatMessage() {
+        var inputEl = document.getElementById('messageInput');
+        if (!_lastFailedChatMessage || window.teacherChatRequestInFlight || !inputEl) return;
+        inputEl.value = _lastFailedChatMessage;
+        autoResizeTextarea(inputEl);
+        updateSendButton();
+        sendMessage();
+      }
+
+      function buildChatFailureHtml(text) {
+        var safe = (typeof escapeHtml === 'function') ? escapeHtml(text || 'Request failed. Please try again.') : String(text || 'Request failed. Please try again.');
+        return '<div class="message-warning"><p style="margin:0 0 0.75rem 0;">' + safe + '</p>' +
+          '<button type="button" onclick="retryLastFailedChatMessage()" style="background:#0ea5e9;color:#fff;padding:0.5rem 1rem;border:none;border-radius:0.5rem;cursor:pointer;font-weight:500;">Retry</button></div>';
+      }
+
+      function describeChatHttpError(status, err) {
+        var code = (err && err.code) || '';
+        var retryAfter = err && err.retry_after;
+        if (code === 'USER_RATE_LIMITED') {
+          return err.error || ('Too many requests. Please wait' + (retryAfter ? (' ' + retryAfter + ' seconds') : '') + ' and try again.');
+        }
+        if (code === 'CONCURRENT_REQUEST_TIMEOUT') {
+          return err.error || 'Your previous message is still being generated. Please wait for it to finish, then retry.';
+        }
+        if (code === 'TPM_RATE_LIMITED' || code === 'RPD_EXHAUSTED') {
+          return err.error || 'The AI service hit a rate limit. Please wait a moment and retry.';
+        }
+        if (status === 503 || code === 'SERVICE_AT_CAPACITY') {
+          return err.error || 'The AI service is temporarily at capacity. Please try again in a moment.';
+        }
+        return (err && err.error) || 'Failed to get a response from the server. Please try again.';
+      }
+
       async function sendMessage() {
         const input = document.getElementById('messageInput');
         const message = input.value.trim();
@@ -9756,18 +9925,15 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           if (!response.ok) {
             const err = await response.json().catch(function() { return {}; });
-            // Busy/throttled is not a failed turn - the previous answer is still coming.
-            // Surface it as a transient toast and hand the text back so nothing is lost.
-            if (response.status === 429) {
-              removeLastUserMessage();
-              input.value = message;
-              autoResizeTextarea(input);
-              if (typeof showToast === 'function') {
-                showToast(err.error || 'Please wait for the current response.', 'warning', 4000);
-              }
-              return;
+            stopChatProgressPolling();
+            removeTypingIndicator();
+            _lastFailedChatMessage = message;
+            removeLastUserMessage();
+            input.value = message;
+            autoResizeTextarea(input);
+            if (currentChatId === requestChatId) {
+              addAssistantMessage(buildChatFailureHtml(describeChatHttpError(response.status, err)));
             }
-            addAssistantMessage('Error: ' + (err.error || 'Failed to get response from the server.'));
             return;
           }
           const data = await response.json();
@@ -9781,9 +9947,21 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             return;
           }
           var aiResponse = data.message || 'No response received.';
+          var looksRateLimited = (data.code === 'TPM_RATE_LIMITED' || data.code === 'RPD_EXHAUSTED')
+            || /token limit exceeded|rate limit reached/i.test(aiResponse);
           if (staleChatSwitch) {
             // Still record it against the chat it actually belongs to, just not on screen.
             appendMessageToChat(requestChatId, 'assistant', aiResponse);
+            return;
+          }
+          if (looksRateLimited) {
+            stopChatProgressPolling();
+            removeTypingIndicator();
+            _lastFailedChatMessage = message;
+            addAssistantMessage(buildChatFailureHtml(
+              aiResponse.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+              || 'The AI service is rate limited. Please wait and retry.'
+            ));
             return;
           }
           if (data.thread_id) {
@@ -9887,13 +10065,21 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       // Add user message on LEFT side
+      function getTeacherAvatarInitial() {
+        var fromInfo = (window.teacherUserInfo && (window.teacherUserInfo.username || window.teacherUserInfo.email)) || '';
+        var fromEl = document.getElementById('userAvatar');
+        var raw = fromInfo || (fromEl && fromEl.textContent) || 'T';
+        var initial = String(raw).trim().charAt(0).toUpperCase();
+        return /[A-Z0-9]/i.test(initial) ? initial : 'T';
+      }
+
       function addUserMessage(message) {
         const chatMessages = document.getElementById('chatMessages');
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message user animate-fade-in';
         messageDiv.innerHTML = `
         <div class="chat-message-avatar">
-          <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">G</div>
+          <div class="w-full h-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold">${escapeHtml(getTeacherAvatarInitial())}</div>
         </div>
         <div class="chat-message-content">${escapeHtml(message)}</div>
       `;
@@ -11335,7 +11521,18 @@ Align everything with the lesson objectives and do not invent missing informatio
             showToast(msg, 'error', 5000);
             return;
           }
-          if (pre) pre.textContent = data.full_combined_preview || '';
+          if (pre) {
+            var previewText = data.full_combined_preview || '';
+            if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
+              pre.innerHTML = TeacherChatFormatter.formatChatResponse(previewText);
+              pre.classList.add('markdown-content', 'tex2jax_process');
+              if (TeacherChatFormatter.processRenderedContent) {
+                TeacherChatFormatter.processRenderedContent(pre);
+              }
+            } else {
+              pre.textContent = previewText;
+            }
+          }
           if (noteEl && data.note) noteEl.textContent = data.note;
           if (wrap) wrap.classList.remove('hidden');
           showToast('Full system prompt is shown below (read-only).', 'success', 3500);
@@ -12086,7 +12283,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         <div id="ragSystemPromptPreviewWrap" class="sp-preview-wrap hidden">
           <label class="sp-preview-label">Full system prompt (read-only)</label>
           <p id="ragSystemPromptPreviewNote" class="sp-preview-note"></p>
-          <pre id="ragFullSystemPromptReadonly" class="sp-preview-pre"></pre>
+          <div id="ragFullSystemPromptReadonly" class="sp-preview-pre markdown-content tex2jax_process"></div>
         </div>
 
         <hr class="sp-hr">
