@@ -18,10 +18,23 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('auth', __name__)
 
 
+def _host_is_raw_ip(host: str) -> bool:
+    hostname = (host or "").split(":")[0].strip("[]")
+    parts = hostname.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        return all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
+    except ValueError:
+        return False
+
+
 def _public_origin() -> str:
-    """Host the user should open from an emailed link (proxy-aware)."""
-    forwarded_host = request.headers.get('X-Forwarded-Host')
-    if forwarded_host:
+    """Host the user should open from an emailed link (proxy-aware). Never returns a raw IP."""
+    canonical = (os.getenv('SERVER_URL') or getattr(Config, 'SERVER_URL', '') or 'https://iqbalai.com').rstrip('/')
+
+    forwarded_host = (request.headers.get('X-Forwarded-Host') or '').split(',')[0].strip()
+    if forwarded_host and not _host_is_raw_ip(forwarded_host):
         scheme = request.headers.get('X-Forwarded-Proto', 'https')
         return f"{scheme}://{forwarded_host}".rstrip('/')
 
@@ -33,10 +46,13 @@ def _public_origin() -> str:
         or 'localhost' in host
         or '127.0.0.1' in host
     )
-    server_url = (os.getenv('SERVER_URL') or getattr(Config, 'SERVER_URL', '') or '').rstrip('/')
-    if not is_local and server_url:
-        return server_url
-    return (request.url_root or '').rstrip('/')
+    if not is_local and canonical and not _host_is_raw_ip(canonical.replace('https://', '').replace('http://', '')):
+        return canonical
+    origin = (request.url_root or '').rstrip('/')
+    origin_host = origin.split('://', 1)[-1].split('/', 1)[0]
+    if _host_is_raw_ip(origin_host):
+        return canonical
+    return origin
 
 
 def _verification_link(token: str) -> str:

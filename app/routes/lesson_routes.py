@@ -1909,6 +1909,9 @@ def save_lesson_draft(lesson_id):
         
         data = request.get_json()
         draft_content = data.get('draft_content', '')
+        draft_norm = (draft_content or '').strip().lower()
+        if (not draft_norm or 'draft will appear here' in draft_norm:
+            return jsonify({'error': 'Draft is empty. Apply AI enhancement before saving.'}), 400
         
         success = LessonModel.save_draft_content(lesson_id, draft_content)
         
@@ -2107,7 +2110,7 @@ def finalize_lesson_version(lesson_id):
         # Get draft content
         draft_content = LessonModel.get_draft_content(lesson_id)
         
-        if not draft_content.strip():
+        if not draft_content.strip() or 'draft will appear here' in draft_content.strip().lower():
             return jsonify({'error': 'No draft content to finalize. Apply a prompt first.'}), 400
         
         # Extract actual text content from JSON if needed
@@ -2141,7 +2144,7 @@ def finalize_lesson_version(lesson_id):
             original_lesson_id=lesson_id,
             teacher_id=session['user_id'],
             title=lesson['title'],
-            summary=lesson['summary'],
+            summary='',
             learning_objectives=lesson['learning_objectives'],
             focus_area=lesson['focus_area'],
             grade_level=lesson['grade_level'],
@@ -2157,6 +2160,16 @@ def finalize_lesson_version(lesson_id):
         if lesson.get('rag_thread_id'):
             new_lesson_model.update_lesson(rag_thread_id=lesson['rag_thread_id'])
             logger.info("Copied rag_thread_id %s to finalized lesson %s", lesson['rag_thread_id'], new_lesson_id)
+
+        # Generate a summary for THIS version's content (do not copy the previous version).
+        try:
+            lesson_service = LessonService(api_key=None)
+            summary_result = lesson_service.get_lesson_summary(new_lesson_id)
+            generated_summary = (summary_result.get('summary') or '').strip()
+            if generated_summary:
+                new_lesson_model.update_lesson(summary=generated_summary)
+        except Exception as summary_err:
+            logger.warning("Failed to regenerate summary for new version %s: %s", new_lesson_id, summary_err)
         
         # Delete FAISS index after storing in database
         try:
