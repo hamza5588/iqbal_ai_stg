@@ -54,6 +54,7 @@ def test_missing_thread_id_returns_error():
 def test_no_headings_available_returns_error_not_crash(monkeypatch):
     monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
     monkeypatch.setattr(rag_service, "_get_thread_topics", lambda tid: _topics())
+    monkeypatch.setattr(rag_service, "_try_semantic_chunks_for_query", lambda *a, **k: [])
 
     result = rag_service.teach_topic_tool.invoke({"topic": "Quadratic Equations", "thread_id": "user_1_abc"})
     assert "error" in result
@@ -247,3 +248,135 @@ def test_many_matched_sections_are_capped_not_dumped_whole(monkeypatch):
 
 def test_registered_in_tools_list_for_llm_binding():
     assert rag_service.teach_topic_tool in rag_service.tools
+
+
+def test_footer_offset_table_matches_validated_corpus():
+    """CIE / Versa / Sacred qualify; Alpha (conf 0.07 / votes 3) does not."""
+    cie = {}
+    for i in range(11):
+        cie[10 + i] = (10 + i) - 3
+    for i in range(9):
+        cie[200 + i] = 50 + i * 3
+    cie_stats = rag_service._derive_footer_offset(cie)
+    assert cie_stats["offset"] == -3
+    assert cie_stats["votes"] == 11
+    assert abs(cie_stats["confidence"] - 0.55) < 0.02
+    assert rag_service._footer_offset_qualifies(cie_stats)
+
+    versa = {10 + i: (10 + i) + 32 for i in range(52)}
+    for i in range(4):
+        versa[900 + i] = i + 1
+    versa_stats = rag_service._derive_footer_offset(versa)
+    assert versa_stats["offset"] == 32
+    assert versa_stats["votes"] == 52
+    assert versa_stats["confidence"] >= 0.5
+    assert rag_service._footer_offset_qualifies(versa_stats)
+
+    sacred = {i: i for i in range(1, 221)}
+    sacred_stats = rag_service._derive_footer_offset(sacred)
+    assert sacred_stats["offset"] == 0
+    assert sacred_stats["votes"] == 220
+    assert sacred_stats["confidence"] == 1.0
+    assert rag_service._footer_offset_qualifies(sacred_stats)
+    assert rag_service._logical_map_from_offset(0, 220) == {}
+
+    alpha = {10: 12, 20: 21, 30: 40}
+    for i in range(40):
+        alpha[1000 + i] = 7 + (i % 17)
+    alpha_stats = rag_service._derive_footer_offset(alpha)
+    assert alpha_stats["votes"] <= 4 or alpha_stats["confidence"] < 0.5
+    mapping, meta = rag_service._qualify_footer_logical_map(alpha, num_pages=100, thread_id="t_alpha")
+    assert mapping == {}
+    assert meta["page_map_unusable"] is True
+
+
+def test_offset_resolution_applied_before_page_ranges(monkeypatch):
+    """Printed 14/16 must become physical 11/13 before section end is computed."""
+    monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
+    monkeypatch.setattr(rag_service, "_page_map_is_unusable", lambda tid: False)
+    monkeypatch.setattr(
+        rag_service, "_resolve_requested_page",
+        lambda page_requested, thread_id: (int(page_requested) - 3, "logical_page_map"),
+    )
+    monkeypatch.setattr(
+        rag_service, "_get_thread_topics",
+        lambda tid: _topics(
+            ("Forces and motion", 12),
+            ("Measuring length and time", 14),
+            ("Density", 16),
+        ),
+    )
+    monkeypatch.setattr(
+        rag_service, "_get_thread_metadata_from_db",
+        lambda tid: {"num_pages": 47, "filename": "CIE PHYSICS.pdf"},
+    )
+    monkeypatch.setattr(
+        "app.utils.rag_vectorstore.query_chunks_by_page_range",
+        _chunks_for_range({11: ["length and time body on physical page 11"]}),
+    )
+
+    result = rag_service.teach_topic_tool.invoke(
+        {"topic": "Measuring length and time", "thread_id": "user_1_abc"}
+    )
+    section = next(s for s in result["matched_sections"] if "Measuring length" in s["heading"])
+    assert section["page_start"] == 11
+    assert section["page_end"] == 12
+    assert section["chunks_found"] == 1
+    assert "physical page 11" in section["content"][0]
+
+
+def test_out_of_range_topic_returns_excerpt_status(monkeypatch):
+    monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
+    monkeypatch.setattr(rag_service, "_page_map_is_unusable", lambda tid: False)
+    monkeypatch.setattr(
+        rag_service, "_resolve_requested_page",
+        lambda page_requested, thread_id: (int(page_requested) - 3, "logical_page_map"),
+    )
+    monkeypatch.setattr(
+        rag_service, "_get_thread_topics",
+        lambda tid: _topics(
+            ("Measuring length and time", 14),
+            ("Logic Gates 1 and 2", 238),
+        ),
+    )
+    monkeypatch.setattr(
+        rag_service, "_get_thread_metadata_from_db",
+        lambda tid: {"num_pages": 47, "filename": "CIE PHYSICS.pdf"},
+    )
+
+    result = rag_service.teach_topic_tool.invoke(
+        {"topic": "Logic Gates 1 and 2", "thread_id": "user_1_abc"}
+    )
+    assert result["matched_sections"] == []
+    assert result.get("status") == "in_contents_not_in_this_upload"
+    assert "excerpt" in result["message"].lower()
+    assert "rag_tool" not in result["message"]
+    assert "teach_topic_tool" not in result["message"]
+    related = {r["heading"] for r in result.get("related_not_covered") or []}
+    assert "Logic Gates 1 and 2" not in related
+
+
+def test_none_page_heading_not_silently_demoted_to_related(monkeypatch):
+    monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
+    monkeypatch.setattr(rag_service, "_page_map_is_unusable", lambda tid: False)
+    monkeypatch.setattr(
+        rag_service, "_get_thread_topics",
+        lambda tid: _topics(
+            ("Measuring length and time", None),
+            ("Density", 20),
+        ),
+    )
+    monkeypatch.setattr(
+        rag_service, "_get_thread_metadata_from_db",
+        lambda tid: {"num_pages": 47, "filename": "CIE PHYSICS.pdf"},
+    )
+    monkeypatch.setattr(rag_service, "_try_semantic_chunks_for_query", lambda *a, **k: [])
+
+    result = rag_service.teach_topic_tool.invoke(
+        {"topic": "Measuring length and time", "thread_id": "user_1_abc"}
+    )
+    related = {r["heading"] for r in result.get("related_not_covered") or []}
+    assert "Measuring length and time" not in related
+    unresolved = {r["heading"] for r in result.get("unresolved_matches") or []}
+    assert "Measuring length and time" in unresolved
+    assert result.get("status") == "matched_heading_without_page"
