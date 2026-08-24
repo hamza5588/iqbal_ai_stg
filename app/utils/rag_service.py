@@ -202,6 +202,15 @@ _thread_ingest_profiles = {}
 _thread_ingest_profiles_lock = Lock()
 _thread_page_label_maps = {}
 _thread_page_label_maps_lock = Lock()
+_thread_page_map_meta = {}
+_PAGE_MAP_OFFSET_MIN_CONF = 0.5
+_PAGE_MAP_OFFSET_MIN_VOTES = 5
+_HEADING_OUTLINE_MIN_ENTRIES = 5
+_HEADING_OUTLINE_MAX_GAP = 0.25
+_HEADING_FONT_DENSITY_MIN = 0.10
+_HEADING_LOW_TEXT_TOTAL_CHARS = 5000
+_HEADING_LOW_TEXT_CHARS_PER_PAGE = 120
+_HEADING_BODY_SCAN_PAGE_CAP = 400
 
 
 def _activate_short_mode(thread_id: Optional[str], reason: str = "token_limit"):
@@ -1330,18 +1339,54 @@ def _logical_page_map_json_path(thread_id: str) -> Path:
     return UPLOADED_FILES_DIR / f"{str(thread_id)}_logical_page_map.json"
 
 
-def _save_logical_page_map_to_disk(thread_id: str, mapping: Dict[int, int]) -> None:
-    if not thread_id or not mapping:
+def _save_logical_page_map_to_disk(thread_id: str, mapping: Dict[int, int], meta: Optional[dict] = None) -> None:
+    if not thread_id:
+        return
+    meta = dict(meta or {})
+    if not mapping and not meta.get("page_map_unusable"):
         return
     try:
         path = _logical_page_map_json_path(thread_id)
         payload = {
-            "logical_to_physical": {str(k): int(v) for k, v in sorted(mapping.items())},
+            "logical_to_physical": {str(k): int(v) for k, v in sorted((mapping or {}).items())},
             "updated_at": time.time(),
+            "page_map_unusable": bool(meta.get("page_map_unusable")),
+            "offset": meta.get("offset"),
+            "confidence": meta.get("confidence"),
+            "votes": meta.get("votes"),
         }
         path.write_text(json.dumps(payload, indent=0), encoding="utf-8")
     except Exception as e:
         logger.debug("Could not save logical page map for thread %s: %s", thread_id, e)
+
+
+def _cache_thread_page_map_meta(thread_id: str, meta: Optional[dict]) -> None:
+    if not thread_id:
+        return
+    with _thread_page_label_maps_lock:
+        _thread_page_map_meta[str(thread_id)] = dict(meta or {})
+
+
+def _get_cached_thread_page_map_meta(thread_id: str) -> dict:
+    if not thread_id:
+        return {}
+    with _thread_page_label_maps_lock:
+        meta = _thread_page_map_meta.get(str(thread_id), {})
+    return dict(meta) if isinstance(meta, dict) else {}
+
+
+def _page_map_is_unusable(thread_id: str) -> bool:
+    meta = _get_cached_thread_page_map_meta(thread_id)
+    if meta.get("page_map_unusable"):
+        return True
+    path = _logical_page_map_json_path(thread_id)
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return bool(data.get("page_map_unusable"))
+    except Exception:
+        return False
 
 
 def _load_logical_page_map_from_disk(thread_id: str) -> Dict[int, int]:
@@ -1353,6 +1398,15 @@ def _load_logical_page_map_from_disk(thread_id: str) -> Dict[int, int]:
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        meta = {
+            "page_map_unusable": bool(data.get("page_map_unusable")),
+            "offset": data.get("offset"),
+            "confidence": data.get("confidence"),
+            "votes": data.get("votes"),
+        }
+        _cache_thread_page_map_meta(thread_id, meta)
+        if meta["page_map_unusable"]:
+            return {}
         raw = data.get("logical_to_physical") or {}
         out: Dict[int, int] = {}
         for k, v in raw.items():
@@ -1490,14 +1544,96 @@ def _merge_logical_page_maps(a: Dict[int, int], b: Dict[int, int]) -> Dict[int, 
     return out
 
 
+def _derive_footer_offset(printed_to_physical: Dict[int, int]) -> dict:
+    """
+    Derive a constant printed→physical offset from footer pairs.
+    offset = physical - printed (CIE printed 10 → physical 7 is offset -3).
+    Must reuse the same footer numbers produced by _extract_printed_number_from_footer_text.
+    """
+    if not printed_to_physical:
+        return {"offset": None, "votes": 0, "confidence": 0.0, "total": 0}
+    counts: Dict[int, int] = {}
+    for printed, physical in printed_to_physical.items():
+        try:
+            off = int(physical) - int(printed)
+        except (TypeError, ValueError):
+            continue
+        counts[off] = counts.get(off, 0) + 1
+    if not counts:
+        return {"offset": None, "votes": 0, "confidence": 0.0, "total": 0}
+    offset, votes = max(counts.items(), key=lambda kv: (kv[1], -abs(kv[0])))
+    total = sum(counts.values())
+    return {
+        "offset": int(offset),
+        "votes": int(votes),
+        "confidence": float(votes) / float(total) if total else 0.0,
+        "total": int(total),
+    }
+
+
+def _footer_offset_qualifies(stats: dict) -> bool:
+    if not stats or stats.get("offset") is None:
+        return False
+    return (
+        float(stats.get("confidence") or 0.0) >= _PAGE_MAP_OFFSET_MIN_CONF
+        and int(stats.get("votes") or 0) >= _PAGE_MAP_OFFSET_MIN_VOTES
+    )
+
+
+def _logical_map_from_offset(offset: int, num_pages: int) -> Dict[int, int]:
+    """Dense printed→physical map. Offset 0 is a no-op (empty map → passthrough)."""
+    if not num_pages or int(num_pages) <= 0 or int(offset) == 0:
+        return {}
+    out: Dict[int, int] = {}
+    for physical in range(1, int(num_pages) + 1):
+        printed = physical - int(offset)
+        if printed > 0:
+            out[printed] = physical
+    return out
+
+
+def _qualify_footer_logical_map(
+    footer_map: Dict[int, int],
+    num_pages: Optional[int],
+    thread_id: Optional[str] = None,
+) -> Tuple[Dict[int, int], dict]:
+    """
+    Accept a footer-derived offset only when confidence >= 0.5 and votes >= 5.
+    Otherwise mark the thread page_map_unusable and return an empty map.
+    """
+    stats = _derive_footer_offset(footer_map or {})
+    meta = {
+        "offset": stats.get("offset"),
+        "confidence": stats.get("confidence"),
+        "votes": stats.get("votes"),
+        "page_map_unusable": False,
+    }
+    if not _footer_offset_qualifies(stats):
+        meta["page_map_unusable"] = True
+        if thread_id:
+            _cache_thread_page_map_meta(thread_id, meta)
+        return {}, meta
+    pages = int(num_pages) if num_pages else 0
+    mapping = _logical_map_from_offset(int(stats["offset"]), pages)
+    if thread_id:
+        _cache_thread_page_map_meta(thread_id, meta)
+    return mapping, meta
+
+
 def _build_combined_logical_page_map(thread_id: str) -> Dict[int, int]:
     """
     Logical printed page -> physical PDF page.
-    Uses (in order): persisted JSON from ingest, then live merge of footer text + /PageLabels.
+    Footer offset is applied only when confidence >= 0.5 and votes >= 5.
+    Offset 0 (printed == physical) is a no-op.
     """
     disk_map = _load_logical_page_map_from_disk(thread_id)
+    disk_meta = _get_cached_thread_page_map_meta(thread_id)
+    if disk_meta.get("page_map_unusable"):
+        return {}
     if disk_map:
         return disk_map
+    if disk_meta and disk_meta.get("offset") == 0 and _footer_offset_qualifies(disk_meta):
+        return {}
     pdf_path = _find_uploaded_pdf_for_thread(thread_id)
     if not pdf_path:
         return {}
@@ -1506,16 +1642,20 @@ def _build_combined_logical_page_map(thread_id: str) -> Dict[int, int]:
     except ImportError:
         return {}
     native: Dict[int, int] = {}
+    num_pages = 0
     try:
         doc = fitz.open(str(pdf_path))
+        num_pages = int(doc.page_count or 0)
         native = _build_native_label_map_fitz(doc)
         doc.close()
     except Exception as e:
         logger.debug("combined map: native labels failed for %s: %s", thread_id, e)
     footer = _build_footer_printed_map_fitz(str(pdf_path))
-    merged = _merge_logical_page_maps(footer, native)
+    qualified, meta = _qualify_footer_logical_map(footer, num_pages, thread_id)
+    merged = _merge_logical_page_maps(qualified, native)
+    _save_logical_page_map_to_disk(thread_id, merged, meta)
     if merged:
-        _save_logical_page_map_to_disk(thread_id, merged)
+        _cache_thread_page_label_map(thread_id, merged)
     return merged
 
 
@@ -1531,6 +1671,9 @@ def _resolve_requested_page(page_requested: int, thread_id: str) -> Tuple[int, s
     if page_requested == 0:
         return 1, "ui_zero_alias"
     if page_requested < 0:
+        return page_requested, "physical_passthrough"
+
+    if _page_map_is_unusable(thread_id):
         return page_requested, "physical_passthrough"
 
     cached_map = _get_cached_thread_page_label_map(thread_id)
@@ -2155,21 +2298,26 @@ def ingest_pdf(
                 "total_pages": num_pages,
             }
         combined_logical_map = dict(ingest_page_label_map)
+        page_map_meta = {"page_map_unusable": False, "offset": 0, "confidence": 1.0, "votes": 0}
         try:
             import fitz  # PyMuPDF
             footer_m = _build_footer_printed_map_fitz(temp_path)
             doc_fitz = fitz.open(temp_path)
             try:
                 native_m = _build_native_label_map_fitz(doc_fitz)
+                footer_pages = int(doc_fitz.page_count or num_pages or 0)
             finally:
                 doc_fitz.close()
-            m1 = _merge_logical_page_maps(footer_m, native_m)
+            qualified_footer, page_map_meta = _qualify_footer_logical_map(
+                footer_m, footer_pages, thread_id_str
+            )
+            m1 = _merge_logical_page_maps(qualified_footer, native_m)
             combined_logical_map = _merge_logical_page_maps(m1, ingest_page_label_map)
         except Exception as e:
             logger.debug("Could not build combined logical page map at ingest: %s", e)
-        if combined_logical_map:
+        if combined_logical_map or page_map_meta.get("page_map_unusable"):
             _cache_thread_page_label_map(thread_id_str, combined_logical_map)
-            _save_logical_page_map_to_disk(thread_id_str, combined_logical_map)
+            _save_logical_page_map_to_disk(thread_id_str, combined_logical_map, page_map_meta)
 
         # Tables extracted by PyPDFLoader/PyMuPDFLoader come back as a flat
         # run of tokens with no row/column relationship (e.g. a grade table
@@ -2524,6 +2672,170 @@ def get_page_tool(page: int, thread_id: str) -> dict:
     }
 
 import re
+
+
+def _page_docs_text_stats(page_docs: List[Document]) -> dict:
+    total_chars = 0
+    page_nums: List[int] = []
+    for d in page_docs or []:
+        total_chars += len(d.page_content or "")
+        p = d.metadata.get("page") or d.metadata.get("page_number")
+        try:
+            page_nums.append(int(p))
+        except (TypeError, ValueError):
+            continue
+    n_pages = max(page_nums) if page_nums else len(page_docs or [])
+    n_pages = max(int(n_pages or 0), len(page_docs or []), 1)
+    return {
+        "total_chars": int(total_chars),
+        "num_pages": int(n_pages),
+        "chars_per_page": float(total_chars) / float(n_pages) if n_pages else 0.0,
+    }
+
+
+def _outline_gap(pages: List[int], num_pages: int) -> float:
+    """Largest consecutive gap in the outline, as a fraction of the document."""
+    if not num_pages or int(num_pages) <= 0:
+        return 1.0
+    n = int(num_pages)
+    uniq = sorted({int(p) for p in (pages or []) if p is not None and 1 <= int(p) <= n})
+    if not uniq:
+        return 1.0
+    seq = [1] + uniq + [n]
+    compact = [seq[0]]
+    for x in seq[1:]:
+        if x != compact[-1]:
+            compact.append(x)
+    gaps = [compact[i + 1] - compact[i] for i in range(len(compact) - 1)]
+    return (max(gaps) / float(n)) if gaps else 1.0
+
+
+def _read_embedded_outline(pdf_path: str) -> Tuple[List[dict], float, int]:
+    """PyMuPDF get_toc(): physical pages, hierarchical. Empty when the catalog has no outline."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return [], 1.0, 0
+    try:
+        doc = fitz.open(str(pdf_path))
+        toc = doc.get_toc() or []
+        n = int(doc.page_count or 0)
+        doc.close()
+    except Exception as e:
+        logger.debug("embedded outline read failed for %s: %s", pdf_path, e)
+        return [], 1.0, 0
+    topics: List[dict] = []
+    pages: List[int] = []
+    for item in toc:
+        if not item or len(item) < 3:
+            continue
+        level, title, page = item[0], item[1], item[2]
+        name = str(title or "").strip()
+        if not name:
+            continue
+        try:
+            p = int(page)
+        except (TypeError, ValueError):
+            p = None
+        topics.append({"topic": name, "page": p, "level": int(level) if level else 1})
+        if p is not None:
+            pages.append(p)
+    return topics, _outline_gap(pages, n), n
+
+
+def _font_heading_density(pdf_path: str) -> float:
+    """
+    Fraction of pages that have at least one heading-like span (larger than body or bold).
+    Do not use word-likeness / clean-ratio — measured backwards on real data.
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return 0.0
+    try:
+        doc = fitz.open(str(pdf_path))
+    except Exception as e:
+        logger.debug("font heading density failed for %s: %s", pdf_path, e)
+        return 0.0
+    heading_pages = 0
+    n = int(doc.page_count or 0)
+    try:
+        for i in range(n):
+            page = doc.load_page(i)
+            data = page.get_text("dict") or {}
+            sizes: List[float] = []
+            spans = []
+            for block in data.get("blocks", []):
+                for line in block.get("lines", []) if isinstance(block, dict) else []:
+                    for span in line.get("spans", []) if isinstance(line, dict) else []:
+                        text = (span.get("text") or "").strip()
+                        size = float(span.get("size") or 0)
+                        if text:
+                            sizes.append(size)
+                            spans.append(span)
+            if not sizes:
+                continue
+            sizes_sorted = sorted(sizes)
+            median = sizes_sorted[len(sizes_sorted) // 2]
+            has_heading = False
+            for span in spans:
+                text = (span.get("text") or "").strip()
+                if len(text) < 3:
+                    continue
+                size = float(span.get("size") or 0)
+                flags = int(span.get("flags") or 0)
+                bold = bool(flags & 16)
+                if size >= median * 1.25 or (bold and size >= median * 1.05):
+                    has_heading = True
+                    break
+            if has_heading:
+                heading_pages += 1
+    finally:
+        doc.close()
+    return float(heading_pages) / float(n) if n else 0.0
+
+
+def _toc_coverage_is_thin(topics: List[dict], num_pages: Optional[int], thread_id: str) -> bool:
+    """True when a TOC should be supplemented with a body scan (excerpt / sparse coverage)."""
+    if not topics:
+        return True
+    pages = int(num_pages) if num_pages else 0
+    in_excerpt = 0
+    physical_pages: List[int] = []
+    for t in topics:
+        raw = t.get("page")
+        if raw is None or raw == "":
+            continue
+        try:
+            printed = int(raw)
+        except (TypeError, ValueError):
+            continue
+        resolved, _method = _resolve_requested_page(printed, str(thread_id))
+        if pages and not (1 <= int(resolved) <= pages):
+            continue
+        in_excerpt += 1
+        physical_pages.append(int(resolved))
+    if in_excerpt < 5:
+        return True
+    if in_excerpt / max(len(topics), 1) < 0.5:
+        return True
+    if pages and _outline_gap(physical_pages, pages) > _HEADING_OUTLINE_MAX_GAP:
+        return True
+    return False
+
+
+def _sample_pages_for_body_scan(page_docs: List[Document]) -> List[Document]:
+    """Full scan up to 400 pages; sample above that so LLM cost stays bounded."""
+    docs = list(page_docs or [])
+    if len(docs) <= _HEADING_BODY_SCAN_PAGE_CAP:
+        return docs
+    step = max(1, int(round(len(docs) / float(_HEADING_BODY_SCAN_PAGE_CAP))))
+    sampled = docs[::step]
+    if sampled[-1] is not docs[-1]:
+        sampled.append(docs[-1])
+    return sampled
+
+
 def _extract_topics_with_ai(page_docs: List[Document], user_id: int, thread_id: str) -> dict:
     """
     Helper function to use AI for extracting topics from document pages.
@@ -2534,8 +2846,49 @@ def _extract_topics_with_ai(page_docs: List[Document], user_id: int, thread_id: 
     3. If no TOC, scan all pages in batches to extract headings
     """
     try:
+        stats = _page_docs_text_stats(page_docs)
+        llm_calls = 0
+        if (
+            stats["total_chars"] < _HEADING_LOW_TEXT_TOTAL_CHARS
+            and stats["chars_per_page"] < _HEADING_LOW_TEXT_CHARS_PER_PAGE
+        ):
+            logger.info(
+                "Skipping heading extraction for thread_id=%s (low text: %s chars, %.1f chars/page)",
+                thread_id, stats["total_chars"], stats["chars_per_page"],
+            )
+            return {
+                "topics": [],
+                "method": "skip_low_text",
+                "topics_count": 0,
+                "heading_tier": "skip_low_text",
+                "llm_calls": 0,
+            }
+
+        pdf_path = _find_uploaded_pdf_for_thread(thread_id)
+        if pdf_path:
+            outline_topics, outline_gap, outline_pages = _read_embedded_outline(str(pdf_path))
+            if (
+                len(outline_topics) >= _HEADING_OUTLINE_MIN_ENTRIES
+                and outline_gap <= _HEADING_OUTLINE_MAX_GAP
+            ):
+                logger.info(
+                    "Using embedded PDF outline for thread_id=%s entries=%s gap=%.3f",
+                    thread_id, len(outline_topics), outline_gap,
+                )
+                return {
+                    "topics": [{"topic": t["topic"], "page": t["page"]} for t in outline_topics],
+                    "method": "embedded_outline",
+                    "topics_count": len(outline_topics),
+                    "heading_tier": "T1",
+                    "llm_calls": 0,
+                    "outline_gap": outline_gap,
+                    "outline_pages": outline_pages,
+                }
+
         # Get LLM instance for topic extraction (use user_id so admin/system API key is used)
         user_llm = get_rag_llm(user_id=user_id)
+
+        toc_topics: List[dict] = []
         
         # Phase 1: Check for TOC in early pages (first 10 pages)
         early_pages = [d for d in page_docs[:10] if d.metadata.get("page", 0) <= 10]
@@ -2579,6 +2932,7 @@ Important:
 """
                 
                 try:
+                    llm_calls += 1
                     response = user_llm.invoke(toc_check_prompt)
                     response_text = response.content if hasattr(response, 'content') else str(response)
                     
@@ -2630,26 +2984,57 @@ Important:
                                 topics.append({"topic": name, "page": page})
                         if topics:
                             logger.info(f"Found TOC with {len(topics)} topics using AI")
-                            return {
-                                "topics": topics,
-                                "method": "ai_toc_extraction",
-                                "topics_count": len(topics)
-                            }
+                            toc_topics = topics
                 except Exception as e:
                     logger.warning(f"Error in AI TOC extraction: {e}, falling back to heading extraction")
         
-        # Phase 2: No TOC found, extract headings from all pages using AI
-        logger.info("No TOC found, extracting headings from all pages using AI")
+        if toc_topics and not _toc_coverage_is_thin(toc_topics, stats["num_pages"], str(thread_id)):
+            return {
+                "topics": toc_topics,
+                "method": "ai_toc_extraction",
+                "topics_count": len(toc_topics),
+                "heading_tier": "T2",
+                "llm_calls": llm_calls,
+            }
+
+        if pdf_path and not toc_topics:
+            density = _font_heading_density(str(pdf_path))
+            if density < _HEADING_FONT_DENSITY_MIN:
+                logger.info(
+                    "Skipping body-scan headings for thread_id=%s (flat prose density=%.3f)",
+                    thread_id, density,
+                )
+                return {
+                    "topics": [],
+                    "method": "skip_flat_prose",
+                    "topics_count": 0,
+                    "heading_tier": "skip_flat_prose",
+                    "llm_calls": llm_calls,
+                    "font_heading_density": density,
+                }
+
+        # Phase 2: TOC missing or thin — extract headings from pages using AI
+        logger.info(
+            "Extracting headings from document body for thread_id=%s toc_topics=%s",
+            thread_id, len(toc_topics),
+        )
         
         # Process pages in batches to avoid token limits
         batch_size = 3  # Process 3 pages at a time
         all_headings = []
         seen_headings = set()
+        for t in toc_topics:
+            name = str(t.get("topic") or t.get("heading") or "").strip()
+            if not name:
+                continue
+            seen_headings.add(name.lower().strip())
+            all_headings.append({"topic": name, "page": t.get("page")})
         batches_attempted = 0
         batches_failed = 0
+        page_docs_for_scan = _sample_pages_for_body_scan(page_docs)
 
-        for i in range(0, len(page_docs), batch_size):
-            batch = page_docs[i:i + batch_size]
+        for i in range(0, len(page_docs_for_scan), batch_size):
+            batch = page_docs_for_scan[i:i + batch_size]
             batch_texts = []
             batch_pages = []
             
@@ -2690,6 +3075,7 @@ Important:
 """
             
             try:
+                llm_calls += 1
                 response = user_llm.invoke(heading_extraction_prompt)
                 response_text = response.content if hasattr(response, 'content') else str(response)
                 
@@ -2761,6 +3147,14 @@ Important:
         # not mark headings_ready=True with a misleading 0-heading result. A partial failure
         # (some batches succeeded) still returns normally with whatever was found.
         if batches_attempted > 0 and batches_failed == batches_attempted:
+            if toc_topics:
+                return {
+                    "topics": toc_topics,
+                    "method": "ai_toc_extraction",
+                    "topics_count": len(toc_topics),
+                    "heading_tier": "T2",
+                    "llm_calls": llm_calls,
+                }
             raise RuntimeError(
                 f"All {batches_attempted} heading-extraction batch(es) failed for thread_id={thread_id}"
             )
@@ -2779,10 +3173,17 @@ Important:
 
         logger.info(f"AI extracted {len(all_headings)} headings from document")
 
+        method = "ai_heading_extraction"
+        tier = "T3"
+        if toc_topics:
+            method = "ai_toc_plus_body_scan"
+            tier = "T2_T3"
         return {
             "topics": all_headings,
-            "method": "ai_heading_extraction",
-            "topics_count": len(all_headings)
+            "method": method,
+            "topics_count": len(all_headings),
+            "heading_tier": tier,
+            "llm_calls": llm_calls,
         }
         
     except Exception as e:
@@ -3349,6 +3750,40 @@ _TEACH_TOPIC_MATCH_THRESHOLD = float(os.getenv("RAG_TEACH_TOPIC_MATCH_THRESHOLD"
 _TEACH_TOPIC_MAX_CHUNKS = int(os.getenv("RAG_TEACH_TOPIC_MAX_CHUNKS", "80"))
 _TEACH_TOPIC_MAX_SECTIONS = int(os.getenv("RAG_TEACH_TOPIC_MAX_SECTIONS", "10"))
 
+_TEACH_TOPIC_HEADINGS_BUILDING_MSG = (
+    "The document outline is still being extracted. I'll search the uploaded text directly "
+    "in the meantime — this is not a wait or a blocked state."
+)
+_TEACH_TOPIC_EXCERPT_MSG = (
+    "This topic is listed in the document's contents, but its pages are not in this uploaded excerpt."
+)
+_TEACH_TOPIC_GK_OFFER = (
+    "I can answer from general knowledge instead if you want that — say so explicitly. "
+    "That answer would not be grounded in the uploaded document."
+)
+
+
+def _try_semantic_chunks_for_query(thread_id: str, user_id: int, query: str, limit: int = 12) -> List[dict]:
+    """Locate sections by text overlap when page numbers cannot be trusted or headings are pending."""
+    try:
+        from app.utils.rag_vectorstore import query_all_chunks
+        rows = query_all_chunks(thread_id=str(thread_id), user_id=user_id) or []
+    except Exception:
+        return []
+    q = (query or "").strip().lower()
+    tokens = _normalize_topic_text(query)
+    hits: List[dict] = []
+    for r in rows:
+        text = r.get("text") or ""
+        low = text.lower()
+        if q and q in low:
+            hits.append(r)
+        elif tokens and sum(1 for t in tokens if t in low) >= max(1, (len(tokens) + 1) // 2):
+            hits.append(r)
+        if len(hits) >= limit:
+            break
+    return hits
+
 
 @tool
 def teach_topic_tool(topic: str, thread_id: str) -> dict:
@@ -3400,58 +3835,214 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
     topics_result = _get_thread_topics(thread_id)
     all_headings = topics_result.get("topics") or []
     if not all_headings:
-        return {
-            "error": (
-                "No document outline/headings available yet for this thread "
-                f"(method={topics_result.get('method')}). Try again shortly, or fall back to rag_tool."
-            ),
+        semantic_rows = _try_semantic_chunks_for_query(str(thread_id), user_id, topic_q)
+        content = [_strip_metadata_like_lines(r.get("text", "")) for r in semantic_rows if (r.get("text") or "").strip()]
+        payload = {
+            "status": "headings_building",
+            "message": _TEACH_TOPIC_HEADINGS_BUILDING_MSG,
             "matched_sections": [],
             "related_not_covered": [],
-            "total_chunks_retrieved": 0,
+            "total_chunks_retrieved": len(content),
             "truncated": False,
         }
-
-    # Sort headings by page (None pages last) — this order defines section boundaries.
-    ordered = sorted(
-        [h for h in all_headings if h.get("heading" if "heading" in h else "topic")],
-        key=lambda h: (h.get("page") is None, h.get("page") if h.get("page") is not None else 0),
-    )
+        if content:
+            payload["matched_sections"] = [{
+                "heading": topic_q,
+                "page_start": None,
+                "page_end": None,
+                "chunks_found": len(content),
+                "content": content,
+                "source": "headings_pending_semantic",
+            }]
+            return payload
+        payload["error"] = _TEACH_TOPIC_HEADINGS_BUILDING_MSG
+        return payload
 
     thread_meta = _get_thread_metadata_from_db(str(thread_id)) or {}
     num_pages = thread_meta.get("num_pages") or thread_meta.get("pages") or thread_meta.get("documents")
+    try:
+        num_pages_int = int(num_pages) if num_pages is not None else None
+    except (TypeError, ValueError):
+        num_pages_int = None
     source_file = thread_meta.get("filename") or "PDF"
+    map_unusable = _page_map_is_unusable(str(thread_id))
+
+    resolved_headings = []
+    for h in all_headings:
+        heading_text = h.get("topic") or h.get("heading") or ""
+        if not heading_text:
+            continue
+        raw_page = h.get("page")
+        physical = None
+        unresolved_reason = None
+        if raw_page is None or raw_page == "":
+            unresolved_reason = "no_page"
+        else:
+            try:
+                printed = int(raw_page)
+            except (TypeError, ValueError):
+                unresolved_reason = "no_page"
+                printed = None
+            if printed is not None:
+                if printed <= 0:
+                    unresolved_reason = "no_page"
+                else:
+                    # Always resolve start AND later use the same physical space for page_end.
+                    resolved, _method = _resolve_requested_page(printed, str(thread_id))
+                    if num_pages_int and not (1 <= int(resolved) <= num_pages_int):
+                        physical = None
+                        unresolved_reason = "out_of_excerpt"
+                    elif int(resolved) <= 0:
+                        physical = None
+                        unresolved_reason = "no_page"
+                    else:
+                        physical = int(resolved)
+        resolved_headings.append({
+            "heading": heading_text,
+            "printed_page": raw_page,
+            "page": physical,
+            "unresolved_reason": unresolved_reason,
+        })
+
+    # Section boundaries are computed entirely in physical page space.
+    ordered = sorted(
+        resolved_headings,
+        key=lambda h: (h.get("page") is None, h.get("page") if h.get("page") is not None else 0),
+    )
 
     query_norm = topic_q.lower().strip()
     query_tokens = _normalize_topic_text(topic_q)
 
     matched: List[dict] = []
     related_not_covered: List[dict] = []
-    for idx, h in enumerate(ordered):
-        heading_text = h.get("topic") or h.get("heading") or ""
+    out_of_excerpt_matches: List[dict] = []
+    unresolved_matches: List[dict] = []
+    in_file_for_bounds = [h for h in ordered if h.get("page") is not None]
+    for h in ordered:
+        heading_text = h["heading"]
         page = h.get("page")
         score = _topic_match_score(query_norm, query_tokens, heading_text)
         if score <= 0:
             continue
-        if page is None:
-            # Can't derive a page range for this heading; only usable as a "related" pointer.
-            if score < _TEACH_TOPIC_MATCH_THRESHOLD:
-                related_not_covered.append({"heading": heading_text, "page": None, "score": round(score, 2)})
-            continue
         if score < _TEACH_TOPIC_MATCH_THRESHOLD:
-            related_not_covered.append({"heading": heading_text, "page": page, "score": round(score, 2)})
+            related_not_covered.append({
+                "heading": heading_text,
+                "page": page if page is not None else h.get("printed_page"),
+                "score": round(score, 2),
+            })
+            continue
+        if h.get("unresolved_reason") == "out_of_excerpt":
+            out_of_excerpt_matches.append({
+                "heading": heading_text,
+                "page": h.get("printed_page"),
+                "score": round(score, 2),
+            })
+            continue
+        if page is None:
+            # Strong match with no usable page — never silently drop or demote to "related".
+            unresolved_matches.append({
+                "heading": heading_text,
+                "page": None,
+                "score": round(score, 2),
+            })
             continue
 
-        # Section end = page right before the next heading in document order, or last page.
-        page_end = int(num_pages) if num_pages else page
-        for later in ordered[idx + 1:]:
+        page_end = num_pages_int if num_pages_int else page
+        for later in in_file_for_bounds:
             later_page = later.get("page")
             if later_page is not None and later_page > page:
                 page_end = later_page - 1
                 break
-        page_end = max(page_end, page)
-        matched.append({"heading": heading_text, "page_start": page, "page_end": page_end, "score": score})
+        if num_pages_int:
+            page_end = min(int(page_end), num_pages_int)
+        page_end = max(int(page_end), int(page))
+        matched.append({
+            "heading": heading_text,
+            "page_start": int(page),
+            "page_end": int(page_end),
+            "score": score,
+        })
+
+    if map_unusable and matched:
+        # Printed TOC numbers cannot be trusted; locate the matched headings semantically.
+        semantic_matched = []
+        for section in matched:
+            rows = _try_semantic_chunks_for_query(str(thread_id), user_id, section["heading"])
+            if not rows:
+                unresolved_matches.append({
+                    "heading": section["heading"],
+                    "page": None,
+                    "score": round(section["score"], 2),
+                })
+                continue
+            content = [_strip_metadata_like_lines(r.get("text", "")) for r in rows if (r.get("text") or "").strip()]
+            pages = [r.get("page") for r in rows if r.get("page") is not None]
+            semantic_matched.append({
+                "heading": section["heading"],
+                "page_start": min(pages) if pages else None,
+                "page_end": max(pages) if pages else None,
+                "score": section["score"],
+                "prefetched_content": content,
+                "prefetched_rows": rows,
+            })
+        matched = semantic_matched
+
+    if not matched and out_of_excerpt_matches:
+        return {
+            "matched_sections": [],
+            "related_not_covered": related_not_covered,
+            "out_of_excerpt_matches": out_of_excerpt_matches,
+            "total_chunks_retrieved": 0,
+            "truncated": False,
+            "source_file": source_file,
+            "num_pages": num_pages,
+            "status": "in_contents_not_in_this_upload",
+            "message": _TEACH_TOPIC_EXCERPT_MSG,
+        }
+
+    if not matched and unresolved_matches:
+        semantic_rows = []
+        if map_unusable:
+            semantic_rows = _try_semantic_chunks_for_query(str(thread_id), user_id, topic_q)
+        if semantic_rows:
+            content = [_strip_metadata_like_lines(r.get("text", "")) for r in semantic_rows if (r.get("text") or "").strip()]
+            return {
+                "matched_sections": [{
+                    "heading": topic_q,
+                    "page_start": None,
+                    "page_end": None,
+                    "chunks_found": len(content),
+                    "content": content,
+                    "source": "semantic_page_map_unusable",
+                }],
+                "related_not_covered": related_not_covered,
+                "unresolved_matches": unresolved_matches,
+                "total_chunks_retrieved": len(content),
+                "truncated": False,
+                "source_file": source_file,
+                "num_pages": num_pages,
+                "status": "semantic_fallback_unusable_page_map",
+            }
+        nearest = [r["heading"] for r in related_not_covered[:5]]
+        nearest_txt = (", ".join(nearest) + ". ") if nearest else ""
+        return {
+            "matched_sections": [],
+            "related_not_covered": related_not_covered,
+            "unresolved_matches": unresolved_matches,
+            "total_chunks_retrieved": 0,
+            "truncated": False,
+            "source_file": source_file,
+            "num_pages": num_pages,
+            "status": "matched_heading_without_page",
+            "message": (
+                f"'{topic_q}' matches a heading in the document but that heading has no usable page in this upload. "
+                f"{nearest_txt}{_TEACH_TOPIC_GK_OFFER}"
+            ),
+        }
 
     if not matched:
+        nearest = [r["heading"] for r in related_not_covered[:5]]
+        nearest_txt = (" Closest headings: " + ", ".join(nearest) + ".") if nearest else ""
         return {
             "matched_sections": [],
             "related_not_covered": related_not_covered,
@@ -3459,9 +4050,10 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
             "truncated": False,
             "source_file": source_file,
             "num_pages": num_pages,
+            "status": "topic_absent",
             "message": (
-                f"No section headings matched topic '{topic_q}'. "
-                "Consider using rag_tool for a general search instead."
+                f"This topic does not appear in the uploaded document.{nearest_txt} "
+                f"{_TEACH_TOPIC_GK_OFFER}"
             ),
         }
 
@@ -3488,15 +4080,23 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
         if total_chunks >= _TEACH_TOPIC_MAX_CHUNKS:
             truncated = True
             break
-        rows = query_chunks_by_page_range(
-            thread_id=str(thread_id), user_id=user_id,
-            start_page=section["page_start"], end_page=section["page_end"],
-        )
+        if section.get("prefetched_content") is not None:
+            rows = section.get("prefetched_rows") or []
+            content = section.get("prefetched_content") or []
+        elif section.get("page_start") is None or section.get("page_end") is None:
+            rows = _try_semantic_chunks_for_query(str(thread_id), user_id, section["heading"])
+            content = [_strip_metadata_like_lines(r.get("text", "")) for r in rows if r.get("text", "").strip()]
+        else:
+            rows = query_chunks_by_page_range(
+                thread_id=str(thread_id), user_id=user_id,
+                start_page=section["page_start"], end_page=section["page_end"],
+            )
+            content = [_strip_metadata_like_lines(r.get("text", "")) for r in rows if r.get("text", "").strip()]
         remaining = _TEACH_TOPIC_MAX_CHUNKS - total_chunks
         if len(rows) > remaining:
             rows = rows[:remaining]
+            content = content[:remaining]
             truncated = True
-        content = [_strip_metadata_like_lines(r.get("text", "")) for r in rows if r.get("text", "").strip()]
         total_chunks += len(rows)
         matched_sections_out.append({
             "heading": section["heading"],
@@ -3526,8 +4126,8 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
         result["message"] = (
             f"Topic '{topic_q}' matched {len(additional_sections_not_included) + len(matched_sections_out)} "
             f"sections — more than fit in one response. Showing the {len(matched_sections_out)} most relevant; "
-            "see additional_sections_not_included for the rest. If the teacher wants a section not shown, "
-            "call teach_topic_tool again with a more specific topic (e.g. that section's own heading)."
+            "see additional_sections_not_included for the rest. If you want a section that was not shown, "
+            "ask for that section by its heading name."
         )
     return result
 

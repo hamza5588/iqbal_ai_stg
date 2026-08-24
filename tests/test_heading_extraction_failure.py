@@ -53,6 +53,7 @@ def _page_docs(n, start_page=11):
 
 def test_all_batches_failing_raises_instead_of_returning_empty(monkeypatch):
     monkeypatch.setattr(rag_service, "get_rag_llm", lambda user_id=None: _AlwaysRaisesLLM())
+    monkeypatch.setattr(rag_service, "_find_uploaded_pdf_for_thread", lambda tid: None)
 
     # 6 pages / batch_size 3 = 2 batches, both will fail.
     with pytest.raises(Exception):
@@ -66,6 +67,7 @@ def test_partial_batch_failure_still_returns_normally_with_found_headings(monkey
         '[{"heading": "Chapter 2: Results", "page": 14}]',
     ]
     monkeypatch.setattr(rag_service, "get_rag_llm", lambda user_id=None: _ScriptedLLM(script))
+    monkeypatch.setattr(rag_service, "_find_uploaded_pdf_for_thread", lambda tid: None)
 
     result = rag_service._extract_topics_with_ai(_page_docs(6), user_id=1, thread_id="user_1_abc")
 
@@ -77,6 +79,7 @@ def test_successful_extraction_with_genuinely_no_headings_does_not_raise(monkeyp
     # LLM calls succeed but find nothing - this must NOT be treated as a failure.
     script = ["[]", "[]"]
     monkeypatch.setattr(rag_service, "get_rag_llm", lambda user_id=None: _ScriptedLLM(script))
+    monkeypatch.setattr(rag_service, "_find_uploaded_pdf_for_thread", lambda tid: None)
 
     result = rag_service._extract_topics_with_ai(_page_docs(6), user_id=1, thread_id="user_1_abc")
 
