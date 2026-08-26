@@ -2682,9 +2682,18 @@
     }
 
     /* Tighter spacing between paragraphs inside chat bubbles */
+    #chatMessages .chat-message-content p,
     .chat-message-content p {
-      margin-top: 0.1rem;
-      margin-bottom: 0.1rem;
+      margin-top: 0.55rem;
+      margin-bottom: 0.55rem;
+    }
+    #chatMessages .chat-message-content p:first-child,
+    .chat-message-content p:first-child {
+      margin-top: 0;
+    }
+    #chatMessages .chat-message-content p:last-child,
+    .chat-message-content p:last-child {
+      margin-bottom: 0;
     }
 
     .chat-message-content strong {
@@ -3139,16 +3148,16 @@
     .mll-search-box input:focus{
       border:none !important; box-shadow:none !important; background:transparent !important;
     }
-    .mll-lesson-card{ display:flex; border:1px solid #eee; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.03); background:#fff; }
+    .mll-lesson-card{ display:flex; width:100%; border:1px solid #eee; border-radius:12px; margin-bottom:16px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.03); background:#fff; min-height:148px; }
     .mll-lesson-bar{ width:32px; background:#0a4a2c; color:#fff; font-size:10.5px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg); padding:10px 0; flex-shrink:0; }
-    .mll-lesson-body{ flex:1; min-width:0; padding:16px 20px; }
-    .mll-lesson-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px; }
+    .mll-lesson-body{ flex:1; min-width:0; padding:14px 18px; display:flex; flex-direction:column; justify-content:space-between; gap:8px; }
+    .mll-lesson-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:10px; }
     .mll-lesson-title{ display:flex; align-items:center; gap:10px; min-width:0; }
     .mll-icon-badge{ width:28px; height:28px; border-radius:8px; background:#166534; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
     .mll-lesson-title h3{ font-size:15.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .mll-lesson-meta-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
     .mll-time-ago{ font-size:11.5px; color:#6b7280; white-space:nowrap; }
-    .mll-lesson-info{ display:flex; gap:40px; margin-bottom:14px; flex-wrap:wrap; }
+    .mll-lesson-info{ display:flex; gap:28px; margin-bottom:10px; flex-wrap:wrap; }
     .mll-lesson-info div{ font-size:12px; }
     .mll-lesson-info label{ display:block; color:#9ca3af; font-size:10px; letter-spacing:.5px; text-transform:uppercase; margin-bottom:2px; }
     .mll-lesson-info span{ font-size:12.5px; color:#222; }
@@ -3190,7 +3199,8 @@
       font-size:14.5px; margin-bottom:18px; cursor:pointer;
     }
     .stu-back-link:hover{ text-decoration:underline; }
-    .stu-pinned-label{ color:#1c7c3e; font-size:11.5px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
+    .stu-pinned-label{ color:#1c7c3e; font-size:11.5px; font-weight:800; letter-spacing:.6px; margin-bottom:4px; }
+    .stu-pinned-help{ font-size:12px; color:#6b7280; line-height:1.4; margin-bottom:10px; }
     .stu-ls-title{ font-size:17px; font-weight:800; color:#1f2430; margin-bottom:4px; line-height:1.3; }
     .stu-ls-meta{ font-size:12.5px; color:#6b7280; margin-bottom:12px; }
     .stu-divider{ border:none; border-top:1px solid #eee; margin:12px 0 14px; }
@@ -3203,23 +3213,32 @@
     .stu-ls-content h1{ font-size:1.15rem; }
     .stu-ls-content h2{ font-size:1.05rem; }
     .stu-ls-content h3, .stu-ls-content h4{ font-size:0.98rem; }
+    .stu-ls-content .katex-display,
+    .stu-ls-content mjx-container[display="true"]{
+      margin: 0.75rem 0;
+      overflow-x: auto;
+      max-width: 100%;
+    }
 
     .stu-chat-col{ flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; background:#fff; }
     #chatArea.stu-chat-layout{
-      min-height:0; gap:0 !important; padding:8px 10px 0 !important; background:#fff;
+      min-height:0; gap:0 !important; padding:4px 10px 0 !important; background:#fff;
     }
     #chatArea.stu-chat-layout #messagesWrapper{
-      flex:1; min-height:0; overflow-y:auto; padding:16px 20px 12px;
+      flex:1; min-height:0; overflow-y:auto; padding:10px 20px 12px;
     }
     #chatArea.stu-chat-layout #lessonContextPanel{ min-height:0; max-height:100%; }
     .stu-chat-head{
-      padding:6px 44px 14px; text-align:center; position:relative;
+      padding:4px 44px 8px; text-align:center; position:relative;
       border-bottom:1px solid #f0f0f0; margin:0; flex-shrink:0;
     }
-    .stu-chat-head h1{ font-size:20px; font-weight:800; color:#1f2430; letter-spacing:-0.2px; }
-    .stu-chat-head .stu-sub{ font-size:13.5px; color:#6b7280; margin-top:4px; }
+    .stu-chat-head h1{ font-size:18px; font-weight:800; color:#1f2430; letter-spacing:-0.2px; margin:0; }
+    .stu-chat-head .stu-sub{ font-size:12.5px; color:#6b7280; margin-top:2px; }
     .stu-chat-head .stu-pinned-tag{
-      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:12.5px; margin-top:8px;
+      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:12px; margin-top:4px;
+    }
+    .stu-chat-head .stu-pinned-hint{
+      display:block; font-size:11.5px; color:#6b7280; font-weight:500; margin-top:2px;
     }
     .stu-chat-close{
       position:absolute; top:2px; right:4px;
@@ -3646,6 +3665,9 @@
       let currentChatId = null;
       let isListening = false;
       let speechRecognition = null;
+      let mediaRecorder = null;
+      let mediaStream = null;
+      let audioChunks = [];
       let speechSynthesis = null;
       let isTextToSpeechActive = false;
       let currentChatMenuId = null;
@@ -3980,39 +4002,8 @@
           });
         }
 
-        // Initialize speech recognition if available
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-          speechRecognition = new SpeechRecognition();
-          speechRecognition.continuous = false;
-          speechRecognition.interimResults = true;
-          speechRecognition.lang = 'en-US';
-
-          speechRecognition.onresult = function (event) {
-            const transcript = Array.from(event.results)
-              .map(result => result[0].transcript)
-              .join('');
-            document.getElementById('voiceText').textContent = transcript;
-            textarea.value = transcript;
-            updateSendButton();
-          };
-
-          speechRecognition.onend = function () {
-            if (isListening) {
-              speechRecognition.start();
-            } else {
-              document.getElementById('voiceStatus').classList.add('hidden');
-              document.getElementById('micBtn').innerHTML = '<i class="fas fa-microphone"></i>';
-              document.getElementById('micBtn').classList.remove('active');
-            }
-          };
-
-          speechRecognition.onerror = function (event) {
-            console.error('Speech recognition error:', event.error);
-            stopVoiceInput();
-            alert('Speech recognition error: ' + event.error);
-          };
-        } else {
+        // Mic uses MediaRecorder + POST /api/stt (Whisper), same as teacher.
+        // Browser SpeechRecognition is no longer used for the student mic. else {
           const micBtn = document.getElementById('micBtn');
           if (micBtn) {
             micBtn.disabled = true;
@@ -4514,6 +4505,7 @@
               <i class="fas fa-chevron-left"></i> My Lessons
             </div>
             <div class="stu-pinned-label">PINNED LESSON</div>
+            <div class="stu-pinned-help">Answers in this chat use this lesson&rsquo;s content. The pin keeps the lesson bound to this conversation.</div>
             <div class="stu-ls-title">${escapeHtml(lessonCtx.title || 'Lesson')}</div>
             <div class="stu-ls-meta">${escapeHtml(lessonCtx.subject || 'Subject')} &bull; Grade ${escapeHtml(lessonCtx.grade || 'N/A')}</div>
             <hr class="stu-divider">
@@ -4523,13 +4515,10 @@
           `;
           chatArea.appendChild(lessonPanel);
 
-          if (window.MathJax && window.MathJax.typesetPromise) {
-            setTimeout(() => {
-              const ctxEl = document.getElementById('lessonContextContent');
-              if (ctxEl) {
-                window.MathJax.typesetPromise([ctxEl]).catch(err => console.warn('MathJax processing skipped:', err));
-              }
-            }, 100);
+          const ctxEl = document.getElementById('lessonContextContent');
+          if (ctxEl) {
+            applyRenderedFormatting(ctxEl);
+            setTimeout(function () { applyRenderedFormatting(ctxEl); }, 120);
           }
         }
 
@@ -4543,7 +4532,10 @@
             <div class="stu-chat-close" onclick="showMyLessonsPage()" title="Close"><i class="fas fa-times"></i></div>
             <h1>Conversation with Lesson</h1>
             <div class="stu-sub">${escapeHtml(lessonCtx.title || 'Lesson')}</div>
-            <div class="stu-pinned-tag"><i class="fas fa-thumbtack"></i> Lesson pinned</div>
+            <div class="stu-pinned-tag" title="This lesson stays bound to this chat; answers use its content.">
+              <i class="fas fa-thumbtack"></i> Lesson pinned
+            </div>
+            <span class="stu-pinned-hint">Answers use this lesson&rsquo;s content for this chat.</span>
           ` : `
             <div class="stu-chat-close" onclick="showMyLessonsPage()" title="Close"><i class="fas fa-times"></i></div>
             <h1>Chat</h1>
@@ -4843,7 +4835,7 @@
             subject: lesson.focus_area || lesson.subject || 'General',
             grade: lesson.grade_level || lesson.grade || 'General',
             createdBy: lesson.teacher_name || lesson.createdBy || 'Teacher',
-            versionLabel: 'v' + (lesson.version || 1),
+            versionLabel: 'v' + (lesson.version_number || lesson.version || 1),
             timestamp: timestamp,
             fullDate: date,
             status: lesson.status || 'draft'
@@ -5158,7 +5150,10 @@
       }
 
       function formatRichContent(content) {
-        const normalized = normalizeFormattingInput(content);
+        const stripped = stripTrailingLlmChatter(
+          typeof content === 'string' ? content : String(content || '')
+        );
+        const normalized = normalizeFormattingInput(stripped);
         if (typeof TeacherChatFormatter !== 'undefined' && TeacherChatFormatter.formatChatResponse) {
           return TeacherChatFormatter.formatChatResponse(normalized);
         }
@@ -5183,6 +5178,23 @@
         }
       }
 
+      function stripTrailingLlmChatter(text) {
+        if (!text || typeof text !== 'string') return text || '';
+        let cleaned = text;
+        const patterns = [
+          /\n*\s*Lesson\s+finalized(?:\s+and\s+saved)?\.?\s*$/gi,
+          /\n*\s*I've\s+finalized\s+(?:the\s+)?lesson\.?\s*$/gi,
+          /\n*\s*Would you like me to answer from my own knowledge base\??\s*$/gi,
+          /\n*\s*The answer is not present in the Lesson\.?\s*Would you like me to answer from my own knowledge base\??\s*$/gi,
+          /\n*\s*Let me know if you (?:need|want) anything else\.?\s*$/gi,
+          /\n*\s*Is there anything else (?:I can help|you'd like)[^\n]{0,80}$/gi
+        ];
+        patterns.forEach(function (pat) {
+          cleaned = cleaned.replace(pat, '').trim();
+        });
+        return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+      }
+
       // Format lesson content for view using the same pipeline as teacher chat formatting.
       function formatLessonContentForView(content) {
         if (!content || (typeof content === 'string' && content.trim() === '')) {
@@ -5200,6 +5212,13 @@
           .replace(/^Lesson Title:.*$/gm, '').replace(/^Grade Level:.*$/gm, '').replace(/^Focus Area:.*$/gm, '')
           .replace(/^Subject:.*$/gm, '').replace(/^Topic:.*$/gm, '').replace(/^Duration:.*$/gm, '').replace(/^Materials:.*$/gm, '')
           .replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+        raw = stripTrailingLlmChatter(raw);
+        raw = raw
+          .replace(/^\s*Lesson\s+Finalized\s*$/gim, '')
+          .replace(/^\s*lesson_finalized\s*=\s*(?:true|false)\s*$/gm, '')
+          .replace(/^\s*lesson_title\s*=\s*["'][^"']*["']\s*$/gm, '')
+          .replace(/^\s*last_lesson_text\s*=\s*.*$/gm, '')
+          .trim();
         raw = normalizeLessonPlainTextToMarkdown(raw);
         const html = formatRichContent(raw);
         return '<div class="prose prose-sm md:prose-base max-w-none text-gray-700 leading-relaxed markdown-content lesson-content-formatted">' +
@@ -5288,10 +5307,18 @@
           // Force reflow then final checks
           void modal.offsetHeight;
 
+          // Re-typeset math after the modal is visible. MathJax/KaTeX produce
+          // broken layout if they run while the modal is still display:none.
+          const currentEl = document.getElementById('viewLessonCurrent');
+          if (currentEl) {
+            applyRenderedFormatting(currentEl);
+          }
+
           // Focus the Ask button for keyboard users
           setTimeout(() => {
             const askBtn = modal.querySelector('button[onclick="openLessonChat()"]');
             if (askBtn) askBtn.focus();
+            if (currentEl) applyRenderedFormatting(currentEl);
           }, 120);
 
           // For debugging, log computed styles
@@ -6108,7 +6135,7 @@
           
           <div class="mt-4 text-xs text-gray-500 text-center">
             <p><strong>Lesson:</strong> ${lesson.title}</p>
-            <p><strong>Version:</strong> v${lesson.version || 1}</p>
+            <p><strong>Version:</strong> v${lesson.version_number || lesson.version || 1}</p>
           </div>
           
           <button onclick="this.closest('.fixed').remove()" 
@@ -6676,29 +6703,92 @@
         }
       }
 
-      // Toggle voice input
-      function toggleVoiceInput() {
-        if (!speechRecognition) {
-          alert('Speech recognition is not supported in your browser.');
-          return;
-        }
+      // Toggle voice input: record with MediaRecorder, then send to backend /api/stt (Whisper)
+      async function toggleVoiceInput() {
+        const micBtn = document.getElementById('micBtn');
+        const voiceStatus = document.getElementById('voiceStatus');
+        const voiceText = document.getElementById('voiceText');
+        const textarea = document.getElementById('messageInput');
 
         if (!isListening) {
-          speechRecognition.start();
-          isListening = true;
-          document.getElementById('voiceStatus').classList.remove('hidden');
-          document.getElementById('micBtn').innerHTML = '<i class="fas fa-microphone-slash"></i>';
-          document.getElementById('micBtn').classList.add('active');
+          try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+            mediaRecorder = new MediaRecorder(mediaStream);
+            audioChunks = [];
+            mediaRecorder.ondataavailable = function (e) {
+              if (e.data.size > 0) audioChunks.push(e.data);
+            };
+            mediaRecorder.onstop = async function () {
+              if (mediaStream) {
+                mediaStream.getTracks().forEach(function (t) { t.stop(); });
+                mediaStream = null;
+              }
+              if (audioChunks.length === 0) {
+                if (voiceStatus) voiceStatus.classList.add('hidden');
+                if (micBtn) { micBtn.innerHTML = '<i class="fas fa-microphone"></i>'; micBtn.classList.remove('active'); }
+                isListening = false;
+                return;
+              }
+              const blob = new Blob(audioChunks, { type: mimeType });
+              if (voiceText) voiceText.textContent = 'Transcribing...';
+              try {
+                const fd = new FormData();
+                fd.append('audio', blob, 'audio.webm');
+                const res = await fetch('/api/stt', { method: 'POST', credentials: 'include', body: fd });
+                const data = await res.json().catch(function () { return {}; });
+                if (res.ok && data.text) {
+                  if (textarea) { textarea.value = data.text; updateSendButton(); }
+                  if (voiceText) voiceText.textContent = data.text;
+                  showToast('Voice transcribed', 'success');
+                } else {
+                  if (voiceText) voiceText.textContent = data.error || 'Transcription failed';
+                  showToast(data.error || 'Transcription failed', 'error');
+                }
+              } catch (err) {
+                console.error('STT error:', err);
+                if (voiceText) voiceText.textContent = 'Network error';
+                showToast('Could not reach speech service', 'error');
+              }
+              if (voiceStatus) voiceStatus.classList.add('hidden');
+              if (micBtn) { micBtn.innerHTML = '<i class="fas fa-microphone"></i>'; micBtn.classList.remove('active'); }
+              isListening = false;
+            };
+            mediaRecorder.start();
+            isListening = true;
+            if (voiceStatus) {
+              voiceStatus.classList.remove('hidden');
+              if (voiceText) voiceText.textContent = 'Listening... Speak now. Click mic again to stop.';
+            }
+            if (micBtn) { micBtn.innerHTML = '<i class="fas fa-microphone-slash"></i>'; micBtn.classList.add('active'); }
+          } catch (err) {
+            console.error('Microphone error:', err);
+            showToast('Microphone access denied or not available', 'error');
+          }
         } else {
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+          }
           stopVoiceInput();
         }
       }
 
       // Stop voice input
       function stopVoiceInput() {
-        if (speechRecognition && isListening) {
-          speechRecognition.stop();
-          isListening = false;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          try { mediaRecorder.stop(); } catch (e) {}
+        }
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(function (t) { t.stop(); });
+          mediaStream = null;
+        }
+        isListening = false;
+        const voiceStatus = document.getElementById('voiceStatus');
+        const micBtn = document.getElementById('micBtn');
+        if (voiceStatus) voiceStatus.classList.add('hidden');
+        if (micBtn) {
+          micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+          micBtn.classList.remove('active');
         }
       }
 
@@ -7458,11 +7548,6 @@
       // Show Chat Tab
       function showChatTab() {
         setStudentActiveView('chat');
-        // Check if lesson creation is complete
-        if (!lessonCreationCompleted) {
-          showToast('Please create a lesson first to access the chat feature.', 'warning', 3000);
-          return;
-        }
 
         // Deactivate all tabs, then activate chat tab
         deactivateAllTabs();

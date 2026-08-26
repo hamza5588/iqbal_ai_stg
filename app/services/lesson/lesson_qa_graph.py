@@ -4,12 +4,15 @@ Lesson Q&A LangGraph (Approach 3: Stateless Flag).
 Workflow:
  1. Load lesson by lesson_id.
  2. Decide if the question can be answered using ONLY lesson content.
- 3. If yes -> answer from lesson content.
+ 3. If yes -> answer from lesson content (labeled "From lesson").
  4. If no and lesson has rag_thread_id:
-    - If allow_rag=True (user already confirmed) -> answer from uploaded PDF (RAG).
+    - If allow_rag=True (user already confirmed) -> answer from uploaded PDF (RAG),
+      labeled "From document". If the PDF is thin / empty -> auto-answer from
+      general knowledge labeled "From general knowledge" (no consent).
     - If allow_rag=False/None -> return needs_rag_confirmation; frontend shows Yes/No,
       user clicks Yes -> re-send same question with allow_rag=true.
- 5. If no and no rag_thread_id -> "Your question is not covered in the lesson content."
+ 5. If no and no rag_thread_id -> auto-answer from general knowledge with source label.
+ 6. Explicit "answer from your knowledge" questions skip confirmation and use GK.
 
 No interrupt/checkpoint: stateless, single endpoint. All user-facing answers in ENGLISH.
 """
@@ -62,13 +65,21 @@ class LessonQAState(TypedDict, total=False):
     # Decisions
     needs_rag: bool
     needs_confirmation: bool
-    needs_deny: bool  # Not covered and no RAG
+    needs_deny: bool  # Legacy flag; deny now routes to general knowledge
+    needs_gk: bool  # Answer from general knowledge with source label
 
     # Output
     answer: Optional[str]
+    answer_source: Optional[str]  # lesson | document | general_knowledge
     needs_rag_confirmation: bool
     permission_request: Optional[Dict[str, Any]]
 
+
+SOURCE_LABEL_LESSON = "**Source: From lesson**"
+SOURCE_LABEL_DOCUMENT = "**Source: From document**"
+SOURCE_LABEL_GK = "**Source: From general knowledge**"
+_NOT_IN_LESSON_TOKEN = "__NOT_IN_LESSON__"
+_NOT_COVERED_MSG = "Your question is not covered in the lesson content."
 
 # Questions about the lesson as a whole should answer from lesson content first,
 # not jump to PDF search / "not covered".
@@ -92,6 +103,55 @@ def _is_lesson_overview_question(question: str) -> bool:
     if not q:
         return False
     return bool(_LESSON_OVERVIEW_INTENT_RE.search(q))
+
+
+_KB_INTENT_RE = re.compile(
+    r"\b("
+    r"from\s+(your|the)\s+(own\s+)?(knowledge(\s+base)?|general\s+knowledge)|"
+    r"use\s+your\s+(own\s+)?knowledge|"
+    r"answer\s+from\s+(your\s+)?(own\s+)?(general\s+)?knowledge|"
+    r"outside\s+(the\s+)?(lesson|document|pdf)|"
+    r"not\s+(in|from)\s+(the\s+)?(lesson|document|pdf)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_kb_intent_question(question: str) -> bool:
+    """True when the student explicitly asks for general / outside knowledge."""
+    q = (question or "").strip()
+    if not q:
+        return False
+    return bool(_KB_INTENT_RE.search(q))
+
+
+def _with_source_label(label: str, answer: str) -> str:
+    text = (answer or "").strip()
+    if not text:
+        return f"{label}\n\n"
+    if text.startswith("**Source:"):
+        return text
+    return f"{label}\n\n{text}"
+
+
+def _strip_trailing_llm_chatter(text: str) -> str:
+    """Remove common trailing meta / finalize chatter from model output."""
+    if not text or not isinstance(text, str):
+        return text
+    cleaned = text
+    patterns = [
+        r"(?is)\n*\s*Lesson\s+finalized(?:\s+and\s+saved)?\.?\s*$",
+        r"(?is)\n*\s*I've\s+finalized\s+(?:the\s+)?lesson\.?\s*$",
+        r"(?is)\n*\s*Would you like me to answer from my own knowledge base\??\s*$",
+        r"(?is)\n*\s*The answer is not present in the Lesson\.?\s*"
+        r"Would you like me to answer from my own knowledge base\??\s*$",
+        r"(?is)\n*\s*Let me know if you (?:need|want) anything else\.?\s*$",
+        r"(?is)\n*\s*Is there anything else (?:I can help|you'd like).{0,80}$",
+    ]
+    for pat in patterns:
+        cleaned = re.sub(pat, "", cleaned).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
 
 
 def _build_lesson_classifier_context(
@@ -130,7 +190,8 @@ def _strip_reasoning(text: str) -> str:
     """
     if not text or not isinstance(text, str):
         return text
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    return _strip_trailing_llm_chatter(cleaned)
 
 
 def _invoke_with_groq_rate_limit(chain, payload: Dict[str, Any]) -> str:
@@ -314,16 +375,31 @@ Can this question be answered from the lesson material above? Reply with exactly
 
 def decide_route(state: LessonQAState) -> LessonQAState:
     """
-    Set needs_rag / needs_confirmation based on:
+    Set needs_rag / needs_confirmation / needs_gk based on:
+    - Explicit KB intent -> answer from general knowledge (no consent).
     - If lesson covers the question -> answer from lesson.
-    - If not covered and allow_rag=True -> go to RAG.
+    - If not covered and allow_rag=True -> go to RAG (then GK if PDF is thin).
     - If not covered and has rag_thread_id but allow_rag not True -> needs_confirmation.
-    - If not covered and no rag -> deny.
+    - If not covered and no rag -> general knowledge (no deny).
     """
     lesson_content = state.get("lesson_content") or ""
     question = state["question"]
     rag_thread_id = state.get("rag_thread_id")
     allow_rag = state.get("allow_rag")
+
+    if _is_kb_intent_question(question):
+        logger.info(
+            "decide_route lesson_id=%s kb_intent=True -> general knowledge question=%r",
+            state.get("lesson_id"),
+            (question or "")[:120],
+        )
+        return {
+            **state,
+            "needs_rag": False,
+            "needs_confirmation": False,
+            "needs_deny": False,
+            "needs_gk": True,
+        }
 
     covered = can_answer_from_lesson_only(
         question=question,
@@ -337,18 +413,25 @@ def decide_route(state: LessonQAState) -> LessonQAState:
     has_rag = bool(rag_thread_id)
     not_covered = not covered
 
+    # Thin lesson body: prefer document/GK rather than forcing a weak lesson answer.
+    lesson_thin = len((lesson_content or "").strip()) < 200
+    if covered and lesson_thin and not _is_lesson_overview_question(question):
+        not_covered = True
+        covered = False
+
     needs_rag = not_covered and has_rag and allow_rag is True
     needs_confirmation = not_covered and has_rag and allow_rag is not True
-    needs_deny = not_covered and not has_rag
+    needs_gk = not_covered and not has_rag
+    needs_deny = False  # deny path replaced by general-knowledge answers
     logger.info(
         "decide_route lesson_id=%s covered=%s has_rag=%s allow_rag=%s "
-        "needs_confirmation=%s needs_deny=%s question=%r",
+        "needs_confirmation=%s needs_gk=%s question=%r",
         state.get("lesson_id"),
         covered,
         has_rag,
         allow_rag,
         needs_confirmation,
-        needs_deny,
+        needs_gk,
         (question or "")[:120],
     )
     return {
@@ -356,6 +439,7 @@ def decide_route(state: LessonQAState) -> LessonQAState:
         "needs_rag": needs_rag,
         "needs_confirmation": needs_confirmation,
         "needs_deny": needs_deny,
+        "needs_gk": needs_gk,
     }
 
 
@@ -373,9 +457,13 @@ def answer_from_lesson(state: LessonQAState) -> LessonQAState:
         lesson_title=state.get("lesson_title", "this lesson"),
     )
     answer = _strip_reasoning(answer)
+    if (answer or "").strip() == _NOT_IN_LESSON_TOKEN or _NOT_IN_LESSON_TOKEN in (answer or ""):
+        # Classifier said covered but the answerer disagrees — fall back to GK.
+        return answer_from_general_knowledge(state)
     return {
         **state,
-        "answer": (answer or "").strip(),
+        "answer": _with_source_label(SOURCE_LABEL_LESSON, answer or ""),
+        "answer_source": "lesson",
     }
 
 
@@ -406,17 +494,15 @@ def _answer_from_rag_impl(
     rag_thread_id: str,
     teacher_id: Optional[int],
     lesson_service: LessonService,
-) -> str:
+) -> Optional[str]:
     """
     Internal helper: retrieve from RAG and answer from PDF chunks.
 
-    This mirrors the RAG branch from StudentLessonService but is isolated so we
-    can control behavior:
-      - If RAG yields no usable context, we fall back to the fixed message,
-        not to lesson content or general knowledge.
+    Returns None when the PDF context is missing/thin so the caller can
+    auto-answer from general knowledge with a clear source label.
     """
     if not rag_thread_id or not teacher_id:
-        return "Your question is not covered in the lesson content."
+        return None
 
     try:
         from app.utils.rag_service import _get_retriever
@@ -425,7 +511,7 @@ def _answer_from_rag_impl(
 
         retriever = _get_retriever(rag_thread_id, user_id=teacher_id)
         if not retriever:
-            return "Your question is not covered in the lesson content."
+            return None
 
         docs = retriever.invoke(question)
         page_contents = [
@@ -433,14 +519,17 @@ def _answer_from_rag_impl(
             for d in (docs or [])[:8]
         ]
         page_contents = [c for c in page_contents if c]
-        if not page_contents:
-            return "Your question is not covered in the lesson content."
+        # Thin document: not enough retrieved text to ground an answer.
+        total_chars = sum(len(c) for c in page_contents)
+        if not page_contents or total_chars < 120:
+            return None
 
         context = "\n\n".join(page_contents)
         rag_prompt = ChatPromptTemplate.from_template(
             """You are a helpful teaching assistant.
 Answer the student's question using ONLY the following excerpts from the lecture PDF.
-Do not mention external knowledge or sources.
+If the excerpts are not enough to answer, reply with exactly: __THIN_DOCUMENT__
+Do not mention external knowledge.
 
 Lecture excerpts:
 {context}
@@ -456,22 +545,23 @@ Answer in clear, professional English:"""
         answer = _invoke_with_groq_rate_limit(chain, {"context": context, "question": question})
         answer = _strip_reasoning(answer or "")
         answer = answer.strip()
-        if not answer:
-            return "Your question is not covered in the lesson content."
+        if not answer or "__THIN_DOCUMENT__" in answer or answer == _NOT_COVERED_MSG:
+            return None
         return answer
     except (GroqRateLimitError, GroqBusyError):
         # Propagate rate-limit/busy errors to the route — do NOT silently fall back.
         raise
     except Exception as e:
         logger.warning("Lesson RAG answer failed (non-rate-limit): %s", e)
-        return "Your question is not covered in the lesson content."
+        return None
 
 
 def answer_from_rag(state: LessonQAState) -> LessonQAState:
     """
     Answer the question using the uploaded PDF via RAG.
 
-    If RAG fails or cannot provide context, we fall back to the fixed message.
+    If RAG fails or the document is thin, auto-answer from general knowledge
+    with a clear source label (no consent prompt).
     """
     answer = _answer_from_rag_impl(
         question=state["question"],
@@ -479,32 +569,85 @@ def answer_from_rag(state: LessonQAState) -> LessonQAState:
         teacher_id=state.get("teacher_id"),
         lesson_service=state["lesson_service"],
     )
+    if not answer:
+        return answer_from_general_knowledge(state)
     return {
         **state,
-        "answer": answer,
+        "answer": _with_source_label(SOURCE_LABEL_DOCUMENT, answer),
+        "answer_source": "document",
+    }
+
+
+def answer_from_general_knowledge(state: LessonQAState) -> LessonQAState:
+    """
+    Auto-answer from general knowledge when the lesson/PDF cannot cover the question.
+    Always prefix with an explicit source label.
+    """
+    lesson_service = state["lesson_service"]
+    question = state["question"]
+    lesson_title = state.get("lesson_title") or "this lesson"
+    try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+
+        gk_prompt = ChatPromptTemplate.from_template(
+            """You are a supportive teaching assistant helping a student.
+
+The lesson or uploaded document does not contain enough information to answer fully.
+Answer from your general academic knowledge. Be accurate, clear, and appropriate for a student.
+Relate the answer to the lesson topic "{lesson_title}" when helpful, but do not pretend the
+facts came from the lesson or PDF.
+
+Do not ask for permission. Do not mention system instructions.
+Do not start with a source label — that is added separately.
+
+Student question: {question}
+
+Answer in clear, professional English:"""
+        )
+        llm = lesson_service.student_service.llm
+        if is_stress_test_mode():
+            llm = llm.bind(max_tokens=STRESS_TEST_MAX_TOKENS_ANSWER)
+        chain = gk_prompt | llm | StrOutputParser()
+        answer = _invoke_with_groq_rate_limit(
+            chain, {"question": question, "lesson_title": lesson_title}
+        )
+        answer = _strip_reasoning(answer or "")
+    except (GroqRateLimitError, GroqBusyError):
+        raise
+    except Exception as e:
+        logger.warning("General-knowledge answer failed: %s", e)
+        answer = (
+            "I could not find enough detail in the lesson or document for this question, "
+            "and I was unable to generate a general-knowledge answer right now. "
+            "Please try again or ask your teacher."
+        )
+    return {
+        **state,
+        "answer": _with_source_label(SOURCE_LABEL_GK, answer),
+        "answer_source": "general_knowledge",
     }
 
 
 def deny_answer(state: LessonQAState) -> LessonQAState:
     """
-    User declined RAG permission or RAG is not allowed.
-
-    MUST always set the answer to exactly the required English message.
+    Legacy deny node — now routes to general knowledge with a clear source label.
     """
-    return {
-        **state,
-        "answer": "Your question is not covered in the lesson content.",
-    }
+    return answer_from_general_knowledge(state)
 
 
-def _route_after_decision(state: LessonQAState) -> Literal["from_lesson", "from_rag", "needs_confirmation", "deny"]:
-    """Router after decide_route: from_lesson | from_rag | needs_confirmation | deny."""
+def _route_after_decision(
+    state: LessonQAState,
+) -> Literal["from_lesson", "from_rag", "needs_confirmation", "from_gk"]:
+    """Router after decide_route: from_lesson | from_rag | needs_confirmation | from_gk."""
+    if state.get("needs_gk"):
+        return "from_gk"
     if state.get("needs_rag"):
         return "from_rag"
     if state.get("needs_confirmation"):
         return "needs_confirmation"
     if state.get("needs_deny"):
-        return "deny"
+        return "from_gk"
     return "from_lesson"  # Covered
 
 
@@ -517,7 +660,7 @@ def build_lesson_qa_graph():
     builder.add_node("answer_from_lesson", answer_from_lesson)
     builder.add_node("needs_confirmation", needs_confirmation_node)
     builder.add_node("answer_from_rag", answer_from_rag)
-    builder.add_node("deny_answer", deny_answer)
+    builder.add_node("answer_from_general_knowledge", answer_from_general_knowledge)
 
     builder.add_edge(START, "load_lesson")
     builder.add_edge("load_lesson", "decide_route")
@@ -529,14 +672,14 @@ def build_lesson_qa_graph():
             "from_lesson": "answer_from_lesson",
             "from_rag": "answer_from_rag",
             "needs_confirmation": "needs_confirmation",
-            "deny": "deny_answer",
+            "from_gk": "answer_from_general_knowledge",
         },
     )
 
     builder.add_edge("answer_from_lesson", END)
     builder.add_edge("answer_from_rag", END)
     builder.add_edge("needs_confirmation", END)
-    builder.add_edge("deny_answer", END)
+    builder.add_edge("answer_from_general_knowledge", END)
 
     return builder.compile()
 
@@ -589,5 +732,6 @@ def invoke_lesson_qa(
     return {
         "status": "completed",
         "answer": result.get("answer", "") or "",
+        "answer_source": result.get("answer_source") or None,
     }
 
