@@ -2612,7 +2612,7 @@ Please provide an improved version of the lesson content that addresses the user
 
     def _extract_sections_from_text(self, raw_text: str) -> List[Dict[str, str]]:
         """Parse markdown/plain lesson text into section dictionaries."""
-        content = (raw_text or "").strip()
+        content = self._normalize_pseudo_lecture_markdown(raw_text or "").strip()
         if not content:
             return []
 
@@ -2686,11 +2686,318 @@ Please provide an improved version of the lesson content that addresses the user
 
         return bullets[:max_items]
 
+    def _split_ppt_text_chunks(self, text: str, max_chars: int = 140) -> List[str]:
+        """Split long export text so PPT bullets stay on-slide."""
+        clean = (text or "").strip()
+        if not clean:
+            return []
+        if len(clean) <= max_chars:
+            return [clean]
+        chunks: List[str] = []
+        remaining = clean
+        while remaining:
+            if len(remaining) <= max_chars:
+                chunks.append(remaining)
+                break
+            window = remaining[:max_chars]
+            split_at = max(window.rfind(". "), window.rfind("; "), window.rfind(", "), window.rfind(" "))
+            if split_at < int(max_chars * 0.4):
+                split_at = max_chars
+            piece = remaining[:split_at].strip()
+            if piece:
+                chunks.append(piece)
+            remaining = remaining[split_at:].strip()
+        return chunks
+
+    _MATH_PLACEHOLDER_RE = re.compile(r"zzMATHSTASHzz(\d+)zzENDMATHzz")
+
+    def _protect_math_segments(self, text: str):
+        """Stash LaTeX so markdown cleanup cannot mangle subscripts/underscores."""
+        stash: List[str] = []
+        if not text:
+            return text or "", stash
+
+        def push(match):
+            stash.append(match.group(0))
+            return f"zzMATHSTASHzz{len(stash) - 1}zzENDMATHzz"
+
+        protected = text
+        protected = re.sub(r"\$\$[\s\S]*?\$\$", push, protected)
+        protected = re.sub(r"\\\[[\s\S]*?\\\]", push, protected)
+        protected = re.sub(r"\\\([\s\S]*?\\\)", push, protected)
+        protected = re.sub(r"\$[^$\n]+\$", push, protected)
+        return protected, stash
+
+    def _restore_math_segments(self, text: str, stash: List[str]) -> str:
+        if not text or not stash:
+            return text
+
+        def repl(match):
+            idx = int(match.group(1))
+            if 0 <= idx < len(stash):
+                return stash[idx]
+            return match.group(0)
+
+        return self._MATH_PLACEHOLDER_RE.sub(repl, text)
+
+    _LATEX_SYMBOLS = {
+        "times": "×", "cdot": "·", "pm": "±", "mp": "∓",
+        "leq": "≤", "geq": "≥", "neq": "≠", "approx": "≈",
+        "infty": "∞", "partial": "∂", "sum": "∑", "int": "∫",
+        "pi": "π", "theta": "θ", "alpha": "α", "beta": "β",
+        "gamma": "γ", "delta": "δ", "Delta": "Δ", "lambda": "λ",
+        "mu": "μ", "sigma": "σ", "omega": "ω", "Omega": "Ω",
+        "phi": "φ", "psi": "ψ", "ell": "ℓ", "hbar": "ℏ",
+        "to": "→", "rightarrow": "→", "leftarrow": "←",
+        "le": "≤", "ge": "≥", "ne": "≠",
+        "ldots": "…", "cdots": "⋯",
+        "quad": " ", "qquad": "  ",
+        "left": "", "right": "", "big": "", "Big": "",
+        "mathrm": "", "mathbf": "", "mathit": "", "operatorname": "",
+    }
+
+    def _unwrap_latex_delimiters(self, segment: str):
+        s = (segment or "").strip()
+        if s.startswith("$$") and s.endswith("$$") and len(s) >= 4:
+            return s[2:-2].strip(), True
+        if s.startswith("\\[") and s.endswith("\\]") and len(s) >= 4:
+            return s[2:-2].strip(), True
+        if s.startswith("\\(") and s.endswith("\\)") and len(s) >= 4:
+            return s[2:-2].strip(), False
+        if s.startswith("$") and s.endswith("$") and len(s) >= 2:
+            return s[1:-1].strip(), False
+        return s, False
+
+    def _xml_escape_text(self, value: str) -> str:
+        return (
+            (value or "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    def _omml_text(self, value: str) -> str:
+        if not value:
+            return ""
+        return f'<m:r><m:t xml:space="preserve">{self._xml_escape_text(value)}</m:t></m:r>'
+
+    def _read_latex_group(self, latex: str, index: int):
+        if index < len(latex) and latex[index] == "{":
+            depth = 1
+            j = index + 1
+            while j < len(latex) and depth:
+                if latex[j] == "{":
+                    depth += 1
+                elif latex[j] == "}":
+                    depth -= 1
+                j += 1
+            return latex[index + 1:j - 1], j
+        if index < len(latex) and latex[index] == "\\":
+            j = index + 1
+            while j < len(latex) and latex[j].isalpha():
+                j += 1
+            if j == index + 1 and j < len(latex):
+                j += 1
+            return latex[index:j], j
+        if index < len(latex):
+            return latex[index], index + 1
+        return "", index
+
+    def _latex_to_omml_inner(self, latex: str) -> str:
+        s = (latex or "").replace("\n", " ")
+        parts: List[str] = []
+        buf: List[str] = []
+        i = 0
+
+        def flush_buf():
+            if buf:
+                parts.append(self._omml_text("".join(buf)))
+                buf.clear()
+
+        while i < len(s):
+            ch = s[i]
+            if ch == "{":
+                inner, i = self._read_latex_group(s, i)
+                flush_buf()
+                parts.append(self._latex_to_omml_inner(inner))
+                continue
+            if ch == "}":
+                i += 1
+                continue
+            if ch == "^" or ch == "_":
+                flush_buf()
+                script, i = self._read_latex_group(s, i + 1)
+                tag = "sSup" if ch == "^" else "sSub"
+                child = "m:sup" if ch == "^" else "m:sub"
+                base = parts.pop() if parts else self._omml_text("")
+                parts.append(
+                    f"<m:{tag}><m:e>{base}</m:e>"
+                    f"<{child}>{self._latex_to_omml_inner(script)}</{child}></m:{tag}>"
+                )
+                continue
+            if ch == "\\":
+                j = i + 1
+                while j < len(s) and s[j].isalpha():
+                    j += 1
+                command = s[i + 1:j] if j > i + 1 else (s[j] if j < len(s) else "")
+                if j == i + 1 and j < len(s):
+                    j += 1
+                i = j
+                if command == "frac":
+                    num, i = self._read_latex_group(s, i)
+                    den, i = self._read_latex_group(s, i)
+                    flush_buf()
+                    parts.append(
+                        "<m:f><m:num>"
+                        + self._latex_to_omml_inner(num)
+                        + "</m:num><m:den>"
+                        + self._latex_to_omml_inner(den)
+                        + "</m:den></m:f>"
+                    )
+                    continue
+                if command == "sqrt":
+                    rad, i = self._read_latex_group(s, i)
+                    flush_buf()
+                    parts.append("<m:rad><m:e>" + self._latex_to_omml_inner(rad) + "</m:e></m:rad>")
+                    continue
+                if command in ("text", "mathrm", "mathbf", "textit", "textrm"):
+                    inner, i = self._read_latex_group(s, i)
+                    flush_buf()
+                    parts.append(self._omml_text(inner))
+                    continue
+                if command in self._LATEX_SYMBOLS:
+                    mapped = self._LATEX_SYMBOLS[command]
+                    if mapped:
+                        buf.append(mapped)
+                    continue
+                buf.append(command)
+                continue
+            buf.append(ch)
+            i += 1
+        flush_buf()
+        return "".join(parts) or self._omml_text("")
+
+    def _append_docx_equation(self, paragraph, latex_segment: str) -> bool:
+        """Insert a Word OMML equation; fall back to a math-styled run on failure."""
+        latex, display = self._unwrap_latex_delimiters(latex_segment)
+        if not latex:
+            return False
+        try:
+            from docx.oxml import parse_xml
+            inner = self._latex_to_omml_inner(latex)
+            ns = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"'
+            if display:
+                xml = f"<m:oMathPara {ns}><m:oMath>{inner}</m:oMath></m:oMathPara>"
+            else:
+                xml = f"<m:oMath {ns}>{inner}</m:oMath>"
+            paragraph._p.append(parse_xml(xml))
+            if display:
+                try:
+                    from docx.enum.text import WD_ALIGN_PARAGRAPH
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                except Exception:
+                    pass
+            return True
+        except Exception:
+            logger.warning("DOCX equation conversion failed for latex=%r", latex[:120], exc_info=True)
+            run = paragraph.add_run(latex)
+            try:
+                run.italic = True
+                run.font.name = "Cambria Math"
+            except Exception:
+                pass
+            return False
+
+    def _latex_to_readable(self, latex: str) -> str:
+        """Turn common LaTeX into readable Unicode when a real renderer is unavailable."""
+        s = (latex or "").strip()
+        if not s:
+            return ""
+        for _ in range(8):
+            nxt = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"(\1)/(\2)", s)
+            if nxt == s:
+                break
+            s = nxt
+        s = re.sub(r"\\sqrt\{([^{}]+)\}", r"√(\1)", s)
+        s = re.sub(r"\\text\{([^{}]*)\}", r"\1", s)
+        s = re.sub(r"\\mathrm\{([^{}]*)\}", r"\1", s)
+        for command, symbol in self._LATEX_SYMBOLS.items():
+            s = s.replace("\\" + command, symbol)
+        s = re.sub(r"\\left|\\right", "", s)
+        s = re.sub(r"\^\{([^{}]+)\}", r"^\1", s)
+        s = re.sub(r"_\{([^{}]+)\}", r"_\1", s)
+        s = re.sub(r"\\[a-zA-Z]+", "", s)
+        s = s.replace("{", "").replace("}", "")
+        sup = str.maketrans("0123456789+-=n()", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼ⁿ⁽⁾")
+        sub = str.maketrans("0123456789+-=aeox()", "₀₁₂₃₄₅₆₇₈₉₊₋₌ₐₑₒₓ₍₎")
+        s = re.sub(r"\^([0-9n]+)", lambda m: m.group(1).translate(sup), s)
+        s = re.sub(r"_([0-9aeox]+)", lambda m: m.group(1).translate(sub), s)
+        s = re.sub(r"\s+", " ", s)
+        return s.strip()
+
+    def _replace_math_with_readable(self, text: str) -> str:
+        """Replace LaTeX math delimiters in PPT text with readable equations."""
+        protected, stash = self._protect_math_segments(text or "")
+        if not stash:
+            return text or ""
+
+        def repl(match):
+            idx = int(match.group(1))
+            raw = stash[idx] if 0 <= idx < len(stash) else match.group(0)
+            latex, _display = self._unwrap_latex_delimiters(raw)
+            return self._latex_to_readable(latex) or raw
+
+        return self._MATH_PLACEHOLDER_RE.sub(repl, protected)
+
+    def _normalize_pseudo_lecture_markdown(self, text: str) -> str:
+        """Turn AI lecture markup (**1. Title**, **Term:**) into real markdown headings/lists."""
+        if not text:
+            return ""
+        protected, stash = self._protect_math_segments(text)
+        out: List[str] = []
+        for line in protected.split("\n"):
+            lead_match = re.match(r"^(\s*)", line)
+            lead = lead_match.group(1) if lead_match else ""
+            trimmed = line.strip()
+            if not trimmed:
+                out.append(line)
+                continue
+            if re.match(r"^[-*+]\s+", trimmed) or re.match(r"^#{1,6}\s", trimmed):
+                out.append(line)
+                continue
+            if re.match(r"^zzMATHSTASHzz\d+zzENDMATHzz$", trimmed):
+                out.append(line)
+                continue
+            lecture_title = re.match(r"^\*\*((?:Lecture|Lesson|Topic):\s*.+)\*\*$", trimmed, re.I)
+            if lecture_title:
+                out.append(lead + "# " + lecture_title.group(1).strip())
+                continue
+            numbered = re.match(r"^\*\*(\d+[\.)]\s+.+)\*\*$", trimmed)
+            if numbered:
+                out.append(lead + "## " + numbered.group(1).strip())
+                continue
+            lettered = re.match(r"^\*\*([A-Z][\.)]\s+.+)\*\*$", trimmed)
+            if lettered:
+                out.append(lead + "### " + lettered.group(1).strip())
+                continue
+            term = re.match(r"^\*\*([^*]{1,120}):\*\*(\s*(?:\S.*)?)?$", trimmed)
+            if term:
+                rest = term.group(2) or ""
+                out.append(lead + "- **" + term.group(1).strip() + ":**" + rest)
+                continue
+            whole_bold = re.match(r"^\*\*([^*]{1,100})\*\*$", trimmed)
+            if whole_bold and not re.search(r"[.!?]$", whole_bold.group(1).strip()):
+                out.append(lead + "## " + whole_bold.group(1).strip())
+                continue
+            out.append(line)
+        return self._restore_math_segments("\n".join(out), stash)
+
     def _clean_markdown_text(self, text: str) -> str:
-        """Remove markdown markers while preserving readable text."""
+        """Remove markdown markers while preserving readable text and LaTeX."""
         clean = (text or "").strip()
         if not clean:
             return ""
+        clean, stash = self._protect_math_segments(clean)
         clean = re.sub(r"^#{1,6}\s*", "", clean)
         clean = re.sub(r"^>\s*", "", clean)
         clean = re.sub(r"(```|`)", "", clean)
@@ -2698,7 +3005,7 @@ Please provide an improved version of the lesson content that addresses the user
         clean = re.sub(r"__(.*?)__", r"\1", clean)
         clean = re.sub(r"\*(.*?)\*", r"\1", clean)
         clean = re.sub(r"_(.*?)_", r"\1", clean)
-        return clean.strip()
+        return self._restore_math_segments(clean.strip(), stash)
 
     def _is_markdown_table_delimiter(self, line: str) -> bool:
         """Check whether a line is a markdown table alignment separator."""
@@ -2716,8 +3023,13 @@ Please provide an improved version of the lesson content that addresses the user
     def _parse_markdown_blocks(self, text: str) -> List[Dict[str, Any]]:
         """Parse markdown-like content into semantic blocks."""
         blocks: List[Dict[str, Any]] = []
-        lines = (text or "").splitlines()
+        normalized = self._normalize_pseudo_lecture_markdown(text or "")
+        protected, math_stash = self._protect_math_segments(normalized)
+        lines = protected.splitlines()
         i = 0
+
+        def restore(value: str) -> str:
+            return self._restore_math_segments(value, math_stash)
 
         while i < len(lines):
             raw = lines[i].rstrip()
@@ -2731,8 +3043,13 @@ Please provide an improved version of the lesson content that addresses the user
                 blocks.append({
                     "type": "heading",
                     "level": len(heading_match.group(1)),
-                    "text": self._clean_markdown_text(heading_match.group(2)),
+                    "text": restore(heading_match.group(2).strip()),
                 })
+                i += 1
+                continue
+
+            if re.match(r"^zzMATHSTASHzz\d+zzENDMATHzz$", stripped):
+                blocks.append({"type": "paragraph", "text": restore(stripped)})
                 i += 1
                 continue
 
@@ -2741,14 +3058,14 @@ Please provide an improved version of the lesson content that addresses the user
                 and "|" in stripped
                 and self._is_markdown_table_delimiter(lines[i + 1].strip())
             ):
-                headers = self._split_markdown_table_row(stripped)
+                headers = self._split_markdown_table_row(restore(stripped))
                 i += 2  # Skip header + delimiter row
                 rows: List[List[str]] = []
                 while i < len(lines):
                     row_line = lines[i].strip()
                     if not row_line or "|" not in row_line:
                         break
-                    rows.append(self._split_markdown_table_row(row_line))
+                    rows.append(self._split_markdown_table_row(restore(row_line)))
                     i += 1
                 if headers and rows:
                     blocks.append({"type": "table", "headers": headers, "rows": rows})
@@ -2756,7 +3073,7 @@ Please provide an improved version of the lesson content that addresses the user
 
             bullet_match = re.match(r"^(?:[-*•]\s+|\d+[.)]\s+)(.+)$", stripped)
             if bullet_match:
-                blocks.append({"type": "bullet", "text": self._clean_markdown_text(bullet_match.group(1))})
+                blocks.append({"type": "bullet", "text": restore(bullet_match.group(1).strip())})
                 i += 1
                 continue
 
@@ -2771,6 +3088,8 @@ Please provide an improved version of the lesson content that addresses the user
                     break
                 if re.match(r"^(?:[-*•]\s+|\d+[.)]\s+).+$", candidate):
                     break
+                if re.match(r"^zzMATHSTASHzz\d+zzENDMATHzz$", candidate):
+                    break
                 if (
                     i + 1 < len(lines)
                     and "|" in candidate
@@ -2780,7 +3099,7 @@ Please provide an improved version of the lesson content that addresses the user
                 paragraph_lines.append(candidate)
                 i += 1
 
-            paragraph_text = self._clean_markdown_text(" ".join(paragraph_lines))
+            paragraph_text = restore(" ".join(paragraph_lines)).strip()
             if paragraph_text:
                 blocks.append({"type": "paragraph", "text": paragraph_text})
 
@@ -2793,28 +3112,32 @@ Please provide an improved version of the lesson content that addresses the user
             paragraph.add_run("")
             return
 
-        token_pattern = r"(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)"
-        tokens = re.split(token_pattern, source)
+        protected, stash = self._protect_math_segments(source)
+        token_pattern = r"(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|zzMATHSTASHzz\d+zzENDMATHzz)"
+        tokens = re.split(token_pattern, protected)
         for token in tokens:
             if not token:
                 continue
+            if self._MATH_PLACEHOLDER_RE.fullmatch(token):
+                self._append_docx_equation(paragraph, self._restore_math_segments(token, stash))
+                continue
             if token.startswith("**") and token.endswith("**"):
-                run = paragraph.add_run(token[2:-2])
+                run = paragraph.add_run(self._restore_math_segments(token[2:-2], stash))
                 run.bold = True
                 continue
             if token.startswith("__") and token.endswith("__"):
-                run = paragraph.add_run(token[2:-2])
+                run = paragraph.add_run(self._restore_math_segments(token[2:-2], stash))
                 run.bold = True
                 continue
             if token.startswith("*") and token.endswith("*"):
-                run = paragraph.add_run(token[1:-1])
+                run = paragraph.add_run(self._restore_math_segments(token[1:-1], stash))
                 run.italic = True
                 continue
             if token.startswith("_") and token.endswith("_"):
-                run = paragraph.add_run(token[1:-1])
+                run = paragraph.add_run(self._restore_math_segments(token[1:-1], stash))
                 run.italic = True
                 continue
-            paragraph.add_run(token)
+            paragraph.add_run(self._restore_math_segments(token, stash))
 
     def _get_export_branding(self) -> Dict[str, Any]:
         """Return branding configuration used by DOCX and PPT exporters."""
@@ -2843,6 +3166,9 @@ Please provide an improved version of the lesson content that addresses the user
             os.path.join(project_root, "app", "static", "logo.png"),
             os.path.join(project_root, "app", "static", "images", "logo.png"),
             os.path.join(project_root, "static", "logo.png"),
+            os.path.join(project_root, "static", "images", "logo.png"),
+            os.path.join(project_root, "static", "images", "iqbal-ai-logo.png"),
+            os.path.join(project_root, "static", "images", "iqbal-ai-logo-light.png"),
         ])
 
         for path in candidate_paths:
@@ -2886,6 +3212,15 @@ Please provide an improved version of the lesson content that addresses the user
             if not any(s.get("content", "").strip() == full_content for s in normalized_sections):
                 normalized_sections.append({"heading": "Additional Content", "content": full_content})
 
+        # Download path sends one dummy "Lesson Content" section; split it on real headings.
+        if (
+            len(normalized_sections) == 1
+            and normalized_sections[0].get("heading") in ("Lesson Content", "Section")
+        ):
+            split_sections = self._extract_sections_from_text(normalized_sections[0].get("content", ""))
+            if split_sections:
+                normalized_sections = split_sections
+
         prepared["sections"] = normalized_sections
         return prepared
 
@@ -2908,7 +3243,8 @@ Please provide an improved version of the lesson content that addresses the user
 
             title_layout_idx = 0
             content_layout_idx = 1 if len(prs.slide_layouts) > 1 else 0
-            max_bullets_per_slide = 6
+            max_bullets_per_slide = 5
+            max_chars_per_slide = 400
 
             def apply_title_style(slide_title, title_text: str, size: int = 34) -> None:
                 if not slide_title:
@@ -2931,13 +3267,31 @@ Please provide an improved version of the lesson content that addresses the user
                 apply_title_style(slide.shapes.title, title_text, size=size)
 
             def add_bullet_slides(title: str, bullets: List[str]) -> None:
-                if not bullets:
+                fitted: List[str] = []
+                for bullet in bullets:
+                    fitted.extend(self._split_ppt_text_chunks(str(bullet), max_chars=140))
+                if not fitted:
                     return
 
-                for chunk_start in range(0, len(bullets), max_bullets_per_slide):
-                    chunk = bullets[chunk_start:chunk_start + max_bullets_per_slide]
-                    part = (chunk_start // max_bullets_per_slide) + 1
-                    total_parts = (len(bullets) + max_bullets_per_slide - 1) // max_bullets_per_slide
+                packed: List[List[str]] = []
+                current: List[str] = []
+                current_chars = 0
+                for item in fitted:
+                    item_len = len(item)
+                    if current and (
+                        len(current) >= max_bullets_per_slide
+                        or current_chars + item_len > max_chars_per_slide
+                    ):
+                        packed.append(current)
+                        current = []
+                        current_chars = 0
+                    current.append(item)
+                    current_chars += item_len
+                if current:
+                    packed.append(current)
+
+                total_parts = len(packed)
+                for part, chunk in enumerate(packed, start=1):
                     slide_title = title if total_parts == 1 else f"{title} (Part {part}/{total_parts})"
 
                     slide = prs.slides.add_slide(prs.slide_layouts[content_layout_idx])
@@ -2956,14 +3310,21 @@ Please provide an improved version of the lesson content that addresses the user
                     tf.word_wrap = True
                     tf.vertical_anchor = MSO_ANCHOR.TOP
 
+                    total_chars = sum(len(b) for b in chunk)
+                    font_size = 18
+                    if total_chars > 280 or any(len(b) > 110 for b in chunk):
+                        font_size = 16
+                    if total_chars > 360 or len(chunk) >= max_bullets_per_slide:
+                        font_size = 14
+
                     for idx, bullet in enumerate(chunk):
                         p = tf.paragraphs[0] if idx == 0 else tf.add_paragraph()
-                        p.text = bullet
+                        p.text = self._replace_math_with_readable(bullet)
                         p.level = 0
                         p.alignment = PP_ALIGN.LEFT
-                        p.space_after = Pt(7)
+                        p.space_after = Pt(6)
                         p.font.name = "Calibri"
-                        p.font.size = Pt(20 if idx == 0 else 18)
+                        p.font.size = Pt(font_size)
                         p.font.color.rgb = brand_muted
 
             def add_table_slides(title: str, headers: List[str], rows: List[List[str]]) -> None:
@@ -3085,7 +3446,7 @@ Please provide an improved version of the lesson content that addresses the user
                 if not section_bullets and section_content.strip():
                     section_bullets = [self._clean_markdown_text(section_content.strip())[:220]]
                 if section_bullets:
-                    add_bullet_slides(section_title, section_bullets[:24])
+                    add_bullet_slides(section_title, section_bullets)
 
             add_bullet_slides("Key Concepts", prepared["key_concepts"])
             add_bullet_slides("Background Prerequisites", prepared["background_prerequisites"])

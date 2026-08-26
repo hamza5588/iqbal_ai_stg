@@ -612,6 +612,35 @@ def _is_lesson_creation_request(text: str) -> bool:
     return any(re.search(pattern, normalized) for pattern in lesson_intent_patterns)
 
 
+def _extract_lesson_topic_from_query(text: str) -> str:
+    """
+    Deterministically parse a topic out of 'create a lesson on X' style requests.
+    Falls back to the cleaned query when no on/about/for clause is present.
+    """
+    if not text:
+        return ""
+    cleaned = re.sub(r"\s+", " ", str(text).strip())
+    cleaned = re.sub(
+        r"\s+(from|using|in)\s+(the\s+)?(uploaded\s+)?(doc|document|pdf|file)\b.*$",
+        "",
+        cleaned,
+        flags=re.I,
+    ).strip()
+    patterns = (
+        r"(?:create|generate|make|write|build|prepare|give|need|want|teach)\b.{0,60}?"
+        r"\b(?:lesson\s*plan|lesson|lecture)\b\s+(?:on|about|covering|for|regarding|titled)\s+(.+)$",
+        r"\b(?:lesson\s*plan|lesson|lecture)\s+(?:on|about|covering|for|regarding)\s+(.+)$",
+    )
+    for pat in patterns:
+        match = re.search(pat, cleaned, flags=re.I)
+        if match:
+            topic = match.group(1).strip(" .,:;\"'")
+            topic = re.sub(r"^(a|an|the)\s+", "", topic, flags=re.I).strip()
+            if topic:
+                return topic
+    return cleaned
+
+
 _OWN_ANSWER_FOLLOWUP_PATTERNS = (
     r"\bexplain\s+why\b",
     r"\bhow\s+did\s+you\s+get\b",
@@ -652,7 +681,7 @@ def _find_last_substantive_ai_answer(messages: List[BaseMessage]) -> str:
     tool_calls, and long enough to be an actual answer rather than a short status line).
 
     The length floor matters: the immediately-preceding AIMessage after finalizing a lesson is
-    a short confirmation like "Lesson finalized and saved. You can download it now." - without
+    a short confirmation like "Lesson finalized and saved. Please click on the save button below to save it." - without
     skipping that, a follow-up like "explain why 2x" right after finalizing would inject the
     confirmation instead of the actual lesson content the user is asking about (confirmed
     live: this was the reason the first version of the own-answer-followup fix still didn't
@@ -1546,6 +1575,60 @@ def _resolve_requested_page(page_requested: int, thread_id: str) -> Tuple[int, s
     return page_requested, "physical_passthrough"
 
 
+def _normalize_heading_page(page, thread_id: str, num_pages=None) -> Optional[int]:
+    """
+    Map a TOC/printed page onto a physical PDF page.
+    Returns None when the number cannot be verified against the document length.
+    """
+    if page is None or page == "":
+        return None
+    try:
+        page_int = int(page)
+    except (TypeError, ValueError):
+        return None
+    if page_int <= 0:
+        return None
+
+    physical_pages = None
+    try:
+        if num_pages is not None and str(num_pages).strip() != "":
+            physical_pages = int(num_pages)
+    except (TypeError, ValueError):
+        physical_pages = None
+    if physical_pages is None or physical_pages <= 0:
+        thread_meta = _get_thread_metadata_from_db(str(thread_id)) or {}
+        for key in ("num_pages", "pages", "documents"):
+            try:
+                if thread_meta.get(key) is not None:
+                    physical_pages = int(thread_meta.get(key))
+                    break
+            except (TypeError, ValueError):
+                continue
+
+    if physical_pages and 1 <= page_int <= physical_pages:
+        return page_int
+
+    resolved, method = _resolve_requested_page(page_int, str(thread_id))
+    if physical_pages and 1 <= int(resolved) <= physical_pages:
+        return int(resolved)
+    if (not physical_pages) and int(resolved) > 0:
+        return int(resolved)
+    logger.info(
+        "Dropping unverified heading page=%s resolved=%s method=%s num_pages=%s thread_id=%s",
+        page_int, resolved, method, physical_pages, thread_id,
+    )
+    return None
+
+
+def _normalize_topic_list_pages(topics, thread_id: str, num_pages=None) -> List[dict]:
+    out: List[dict] = []
+    for item in topics or []:
+        row = dict(item)
+        row["page"] = _normalize_heading_page(row.get("page"), thread_id, num_pages)
+        out.append(row)
+    return out
+
+
 def _write_speed_log(section: str, thread_id: Optional[str], steps: list[tuple[str, float]], started_at: float) -> None:
     """Append per-step timing to speed.txt for PDF query performance analysis."""
     if not steps:
@@ -1896,6 +1979,58 @@ def _sanitize_pdf_text(text: str) -> str:
     return text
 
 
+_EXTRACT_QUALITY_WARN = float(os.getenv("RAG_EXTRACT_QUALITY_WARN", "0.55"))
+_EXTRACT_QUALITY_FAIL = float(os.getenv("RAG_EXTRACT_QUALITY_FAIL", "0.12"))
+
+
+def _score_extracted_text_quality(docs: List[Document]) -> Dict[str, float]:
+    """
+    Heuristic 0–1 score for extracted PDF text quality (issue #24).
+    Uses chars/page, alphanumeric density, and the share of TOC-like/sparse pages.
+    """
+    if not docs:
+        return {"score": 0.0, "chars_per_page": 0.0, "alnum_density": 0.0, "toc_like_ratio": 1.0}
+
+    page_texts = [(d.page_content or "") for d in docs]
+    n = max(1, len(page_texts))
+    total_chars = sum(len(t) for t in page_texts)
+    chars_per_page = total_chars / n
+
+    alnum = 0
+    nonspace = 0
+    toc_like = 0
+    for text in page_texts:
+        alnum += sum(1 for c in text if c.isalnum())
+        nonspace += sum(1 for c in text if not c.isspace())
+        stripped = text.strip()
+        if not stripped:
+            toc_like += 1
+            continue
+        lower = stripped.lower()
+        dot_leaders = len(re.findall(r"\.{4,}|…{2,}", stripped))
+        lines = [ln.strip() for ln in stripped.splitlines() if ln.strip()]
+        line_count = max(1, len(lines))
+        short_lines = sum(1 for ln in lines if len(ln) < 40)
+        if (
+            "table of contents" in lower
+            or (dot_leaders >= 5 and len(stripped) < 1500)
+            or (short_lines / line_count >= 0.7 and len(stripped) < 800)
+        ):
+            toc_like += 1
+
+    alnum_density = (alnum / nonspace) if nonspace else 0.0
+    toc_like_ratio = toc_like / n
+    char_score = min(1.0, chars_per_page / 800.0)
+    density_score = min(1.0, alnum_density / 0.75) if alnum_density else 0.0
+    score = max(0.0, min(1.0, 0.45 * char_score + 0.35 * density_score + 0.20 * (1.0 - toc_like_ratio)))
+    return {
+        "score": round(score, 3),
+        "chars_per_page": round(chars_per_page, 1),
+        "alnum_density": round(alnum_density, 3),
+        "toc_like_ratio": round(toc_like_ratio, 3),
+    }
+
+
 def ingest_pdf(
     file_bytes: bytes,
     thread_id: str,
@@ -2219,6 +2354,29 @@ def ingest_pdf(
             except Exception as e:
                 logger.debug("Could not run table-aware extraction pass: %s", e)
 
+        extraction_quality = _score_extracted_text_quality(docs)
+        extraction_quality_warning = None
+        logger.info(
+            "PDF extraction quality thread_id=%s score=%s chars_per_page=%s alnum_density=%s toc_like_ratio=%s",
+            thread_id_str,
+            extraction_quality.get("score"),
+            extraction_quality.get("chars_per_page"),
+            extraction_quality.get("alnum_density"),
+            extraction_quality.get("toc_like_ratio"),
+        )
+        if extraction_quality["score"] < _EXTRACT_QUALITY_FAIL:
+            raise ValueError(
+                "This PDF's extracted text quality is too low to use for lessons "
+                f"(score {extraction_quality['score']}). The file may be scanned, image-heavy, "
+                "or badly encoded. Try a text-based export or OCR."
+            )
+        if extraction_quality["score"] < _EXTRACT_QUALITY_WARN:
+            extraction_quality_warning = (
+                f"Extracted text quality looks low (score {extraction_quality['score']:.2f} of 1.00). "
+                "Tables, sidebars, or layout in this PDF may not have converted cleanly, which can "
+                "hurt topic lists and lesson generation. If answers look messy, try a cleaner PDF export."
+            )
+
         # Export extracted text as markdown for user download (## Page N + content per page)
         # NOTE: rstrip() strips a *character set*, not a suffix — e.g.
         # "Chapter_1_pdf.pdf".rstrip(".pdf") wrongly yields "Chapter_1_".
@@ -2388,7 +2546,9 @@ def ingest_pdf(
         _elapsed_seconds = round(time.time() - _start_time, 2)
         _send_progress("complete", 100, f"PDF processing complete! Processed {num_pages} pages in {_elapsed_seconds}s.")
 
-        combined_warning = " ".join(w for w in (partial_content_warning, mixed_content_warning) if w) or None
+        combined_warning = " ".join(
+            w for w in (partial_content_warning, mixed_content_warning, extraction_quality_warning) if w
+        ) or None
 
         return {
             "thread_id": thread_id_str,
@@ -2536,6 +2696,15 @@ def _extract_topics_with_ai(page_docs: List[Document], user_id: int, thread_id: 
     try:
         # Get LLM instance for topic extraction (use user_id so admin/system API key is used)
         user_llm = get_rag_llm(user_id=user_id)
+
+        page_nums: List[int] = []
+        for d in page_docs or []:
+            p = d.metadata.get("page") or d.metadata.get("page_number")
+            try:
+                page_nums.append(int(p))
+            except (TypeError, ValueError):
+                continue
+        physical_page_count = max(page_nums) if page_nums else len(page_docs or [])
         
         # Phase 1: Check for TOC in early pages (first 10 pages)
         early_pages = [d for d in page_docs[:10] if d.metadata.get("page", 0) <= 10]
@@ -2573,6 +2742,8 @@ Important:
 - "page" for each topic is the page number printed next to THAT topic in the TOC text itself
   (e.g. the number after the dots/tabs in "Chapter 2 ......... 12" is 12) - NOT the page the
   TOC listing is printed on (that's "toc_page", used only as a fallback below).
+- The PDF has {physical_page_count} physical pages. If a TOC lists a page number larger than
+  {physical_page_count}, set that topic's page to null instead of copying the printed number.
 - Remove page numbers, dots, and formatting from topic names
 - Keep topic names clean and meaningful
 - If no TOC is found, set "has_toc": false and "topics": []
@@ -2855,7 +3026,7 @@ def _persist_headings_for_thread(thread_id: str, user_id: int, topics: List[dict
             heading_text = _clean_heading_candidate(item.get("topic") or item.get("heading"))
             if not heading_text:
                 continue
-            page = item.get("page")
+            page = _normalize_heading_page(item.get("page"), thread_id)
             normalized = heading_text.lower()[:max_heading_len]
             db.add(
                 RAGHeading(
@@ -3061,7 +3232,11 @@ def _get_thread_topics(thread_id: str) -> dict:
                 .all()
             )
             if existing_headings:
-                topics = [{"topic": h.heading, "page": h.page} for h in existing_headings]
+                topics = _normalize_topic_list_pages(
+                    [{"topic": h.heading, "page": h.page} for h in existing_headings],
+                    thread_id,
+                    getattr(thread_row, "num_pages", None),
+                )
                 try:
                     thread_row.headings_ready = True
                     thread_row.headings_count = len(topics)
@@ -3125,7 +3300,11 @@ def _get_thread_topics(thread_id: str) -> dict:
             .all()
         )
 
-        topics = [{"topic": h.heading, "page": h.page} for h in headings] if headings else []
+        topics = _normalize_topic_list_pages(
+            [{"topic": h.heading, "page": h.page} for h in headings] if headings else [],
+            thread_id,
+            getattr(thread_row, "num_pages", None),
+        )
         if not topics:
             logger.info(
                 "Headings marked ready but none found for thread_id=%s user_id=%s",
@@ -3340,6 +3519,7 @@ def _topic_match_score(query_norm: str, query_tokens: set, heading_text: str) ->
 
 
 _TEACH_TOPIC_MATCH_THRESHOLD = float(os.getenv("RAG_TEACH_TOPIC_MATCH_THRESHOLD", "0.5"))
+_TEACH_TOPIC_MIN_BODY_CHARS = int(os.getenv("RAG_TEACH_TOPIC_MIN_BODY_CHARS", "300"))
 # Bounded so a broad topic that matches most of a document (e.g. a document that is itself
 # entirely about that topic) can't return so much content in one tool result that it overflows
 # the model's context and stalls the agent loop (observed live: 34 matched sections / 55 chunks
@@ -3411,15 +3591,22 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
             "truncated": False,
         }
 
-    # Sort headings by page (None pages last) — this order defines section boundaries.
-    ordered = sorted(
-        [h for h in all_headings if h.get("heading" if "heading" in h else "topic")],
-        key=lambda h: (h.get("page") is None, h.get("page") if h.get("page") is not None else 0),
-    )
-
     thread_meta = _get_thread_metadata_from_db(str(thread_id)) or {}
     num_pages = thread_meta.get("num_pages") or thread_meta.get("pages") or thread_meta.get("documents")
     source_file = thread_meta.get("filename") or "PDF"
+
+    # Sort headings by verified physical page (None pages last) — this order defines section boundaries.
+    normalized_headings = []
+    for h in all_headings:
+        if not (h.get("heading") or h.get("topic")):
+            continue
+        row = dict(h)
+        row["page"] = _normalize_heading_page(row.get("page"), thread_id, num_pages)
+        normalized_headings.append(row)
+    ordered = sorted(
+        normalized_headings,
+        key=lambda h: (h.get("page") is None, h.get("page") if h.get("page") is not None else 0),
+    )
 
     query_norm = topic_q.lower().strip()
     query_tokens = _normalize_topic_text(topic_q)
@@ -3521,14 +3708,24 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
         "source_file": source_file,
         "num_pages": num_pages,
     }
+    body_chars = sum(len(c) for s in matched_sections_out for c in (s.get("content") or []))
+    if total_chunks == 0 or body_chars < _TEACH_TOPIC_MIN_BODY_CHARS:
+        result["insufficient_body"] = True
+        result["message"] = (
+            f"Topic '{topic_q}' did not return enough document body text to teach from "
+            f"({body_chars} characters). Do not invent a lecture from general knowledge, "
+            "and do not cite page numbers that were not returned. Tell the teacher the "
+            "uploaded document does not have enough content on this topic."
+        )
     if additional_sections_not_included:
         result["additional_sections_not_included"] = additional_sections_not_included
-        result["message"] = (
-            f"Topic '{topic_q}' matched {len(additional_sections_not_included) + len(matched_sections_out)} "
-            f"sections — more than fit in one response. Showing the {len(matched_sections_out)} most relevant; "
-            "see additional_sections_not_included for the rest. If the teacher wants a section not shown, "
-            "call teach_topic_tool again with a more specific topic (e.g. that section's own heading)."
-        )
+        if not result.get("insufficient_body"):
+            result["message"] = (
+                f"Topic '{topic_q}' matched {len(additional_sections_not_included) + len(matched_sections_out)} "
+                f"sections — more than fit in one response. Showing the {len(matched_sections_out)} most relevant; "
+                "see additional_sections_not_included for the rest. If the teacher wants a section not shown, "
+                "call teach_topic_tool again with a more specific topic (e.g. that section's own heading)."
+            )
     return result
 
 
@@ -3741,34 +3938,37 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
 
 def _prefetch_lecture_evidence_for_chat(thread_id: str, user_query: str) -> str:
     """
-    P0-5: Run outline + multi-pass retrieval server-side so lecture generation has evidence
-    even when the model skips tool calls.
+    P0-5 / issue #20: outline + teach_topic_tool for the parsed lesson topic.
+    Do not prefetch via rag_tool (top-k) — that caused index-only / wrong-topic lectures.
     """
     max_c = int(os.getenv("RAG_PREFETCH_MAX_CHARS", "100000"))
     blocks: List[str] = []
     uq = (user_query or "").strip()
     if not uq:
         return ""
+    topic = _extract_lesson_topic_from_query(uq) or uq
     try:
         outline = list_topics_whole_doc_tool.invoke({"thread_id": thread_id})
         blocks.append("### Document structure (planning)\n" + json.dumps(outline, default=str)[:20000])
     except Exception as e:
         logger.warning("lecture prefetch list_topics failed: %s", e, exc_info=True)
     try:
-        primary = rag_tool.invoke({"query": uq, "thread_id": thread_id})
-        if isinstance(primary, str) and primary.strip():
-            blocks.append("### Primary retrieval\n" + primary)
-    except Exception as e:
-        logger.warning("lecture prefetch primary rag_tool failed: %s", e, exc_info=True)
-    if os.getenv("RAG_LECTURE_PREFETCH_SECOND_RAG", "true").lower() in ("true", "1", "yes"):
-        try:
-            secondary = rag_tool.invoke(
-                {"query": f"background prerequisites context: {uq}", "thread_id": thread_id}
+        taught = teach_topic_tool.invoke({"topic": topic, "thread_id": thread_id})
+        if taught:
+            blocks.append(
+                "### Topic-matched sections (teach_topic_tool)\n"
+                + json.dumps(taught, default=str)[:max_c]
             )
-            if isinstance(secondary, str) and secondary.strip():
-                blocks.append("### Supplementary retrieval\n" + secondary)
-        except Exception as e:
-            logger.warning("lecture prefetch secondary rag_tool failed: %s", e, exc_info=True)
+            if isinstance(taught, dict) and (
+                taught.get("insufficient_body") or not taught.get("matched_sections")
+            ):
+                blocks.append(
+                    "### Instruction\nThe matched document body is insufficient. Do not use general "
+                    "knowledge to invent a lecture, and do not fabricate page citations. Tell the "
+                    "teacher this document does not have enough content on the requested topic."
+                )
+    except Exception as e:
+        logger.warning("lecture prefetch teach_topic_tool failed: %s", e, exc_info=True)
     out = "\n\n".join(blocks)
     if len(out) > max_c:
         out = out[:max_c] + "\n... [prefetch truncated]"
@@ -4409,6 +4609,7 @@ Apply only to SUBSTANTIVE answers that state document facts, deliver lecture bod
 • Is every factual claim in the answer supported by the RETURNED EVIDENCE, with honest citations or clear attribution to the document?
 • If evidence does not support a claim, the answer must follow fallback_behavior: state when content is not in the document and only then offer general knowledge as your product rules describe.
 • If evidence WAS returned but the answer is generic filler that never engages with it (e.g. "let me know if you have more questions" instead of using the evidence), that fails the check.
+• If the user asked for a lesson/lecture and the evidence contains equations, formulas, or worked examples, the answer must include them (or an equivalent complete treatment). Omitting them fails the check unless the user asked for a short answer.
 
 Do not apply these checks to pure UNDERSPECIFIED clarification questions: if the assistant output is only a short clarification question to the user (not a substantive answer), set is_underspecified_clarification=true and passed=true.
 </quality_check>
@@ -5060,6 +5261,7 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "- You may use multiple tool calls in one turn when needed (for example long lectures, full-document summaries, or multi-part questions).\n"
     "- For short factual questions, keep answers concise unless the user asks for more detail.\n"
     "- For lectures, long explanations, or document summaries the user requests, answer in full; do not artificially limit length.\n"
+    "- When generating a lesson or lecture from retrieved document evidence, include EVERY equation, formula, and worked example present in that evidence unless the user explicitly asked for a short answer. Omitting equations or examples from the retrieved sections is a quality failure.\n"
     "- If the answer is not found in the uploaded document, respond with: "
     "\"The answer is not present in the document. Would you like me to answer from my own knowledge base?\"\n"
     "- If the user agrees, you may answer from general knowledge.\n"
@@ -5897,7 +6099,7 @@ def _chat_handle_lesson_state_and_persistence(
     # kept window - which can be an older turn's finalize_lesson_tool round that still fit in
     # the budget. That reordering made an old "save this lesson" call look like it happened
     # after the CURRENT human message, forcing every later unrelated reply in the thread to be
-    # overwritten with "Lesson finalized and saved. You can download it now." - confirmed live.
+    # overwritten with "Lesson finalized and saved. Please click on the save button below to save it." - confirmed live.
     scope_source = turn_scope_messages if turn_scope_messages is not None else messages
     last_human_idx = -1
     for i in range(len(scope_source) - 1, -1, -1):
@@ -5967,7 +6169,7 @@ def _chat_handle_lesson_state_and_persistence(
         # (or refused) the real DB write, so the visible reply is forced to match that
         # outcome exactly - the model's own wording is never trusted for a save/fail claim.
         if finalize_tool_result.get("success"):
-            response.content = "Lesson finalized and saved. You can download it now."
+            response.content = "Lesson finalized and saved. Please click on the save button below to save it."
             _mark_step("finalize_lesson_tool_success")
         else:
             response.content = (
