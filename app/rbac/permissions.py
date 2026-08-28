@@ -44,6 +44,15 @@ class Permissions(str, Enum):
     CREATE_CONVERSATION = "create_conversation"  # Create conversations (all roles)
     VIEW_MY_CONVERSATIONS = "view_my_conversations"  # View own conversations (all roles)
     VIEW_ALL_CONVERSATIONS = "view_all_conversations"  # View all conversations (admin)
+
+    # LMS permissions
+    MANAGE_CLASS = "manage_class"
+    CREATE_QUIZ = "create_quiz"
+    CREATE_DIAGNOSTIC = "create_diagnostic"
+    ASSIGN_QUIZ = "assign_quiz"
+    VIEW_CLASS_PERFORMANCE = "view_class_performance"
+    MANAGE_QUESTION_BANK = "manage_question_bank"
+    TAKE_ASSESSMENT = "take_assessment"
     
     def __str__(self):
         return self.value
@@ -57,6 +66,7 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.EDIT_MY_PROFILE,
         Permissions.CREATE_CONVERSATION,
         Permissions.VIEW_MY_CONVERSATIONS,
+        Permissions.TAKE_ASSESSMENT,
     },
     
     Role.TEACHER: {
@@ -72,6 +82,12 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.EDIT_MY_PROFILE,
         Permissions.CREATE_CONVERSATION,
         Permissions.VIEW_MY_CONVERSATIONS,
+        Permissions.MANAGE_CLASS,
+        Permissions.CREATE_QUIZ,
+        Permissions.CREATE_DIAGNOSTIC,
+        Permissions.ASSIGN_QUIZ,
+        Permissions.VIEW_CLASS_PERFORMANCE,
+        Permissions.MANAGE_QUESTION_BANK,
     },
     
     Role.ADMIN: {
@@ -101,6 +117,13 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.CREATE_CONVERSATION,
         Permissions.VIEW_MY_CONVERSATIONS,
         Permissions.VIEW_ALL_CONVERSATIONS,
+        Permissions.MANAGE_CLASS,
+        Permissions.CREATE_QUIZ,
+        Permissions.CREATE_DIAGNOSTIC,
+        Permissions.ASSIGN_QUIZ,
+        Permissions.VIEW_CLASS_PERFORMANCE,
+        Permissions.MANAGE_QUESTION_BANK,
+        Permissions.TAKE_ASSESSMENT,
     }
 }
 

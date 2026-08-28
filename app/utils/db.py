@@ -256,6 +256,7 @@ def init_db(app):
     from app.load_testing.models import (
         TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog
     )
+    import app.models.lms_models  # noqa: F401 — register LMS tables on Base.metadata
     from sqlalchemy import inspect
     import time
     
