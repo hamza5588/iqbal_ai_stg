@@ -700,11 +700,21 @@ def get_my_lessons():
 def browse_lessons():
     """Browse public lessons for students with server-side pagination."""
     try:
+        from app.services.lms import curriculum_service, lesson_topic_service
+
         grade_level = request.args.get('grade_level')
         focus_area = request.args.get('focus_area')
+        topic_id = request.args.get('topic_id', type=int)
+        topic_slug = (request.args.get('topic_slug') or '').strip()
+        topic_subject = request.args.get('topic_subject', 'Math')
         page = request.args.get('page', default=1, type=int)
         per_page = request.args.get('per_page', default=10, type=int)
         search_term = (request.args.get('q') or '').strip() or None
+
+        if not topic_id and topic_slug:
+            topic = curriculum_service.get_topic_by_slug(topic_subject, topic_slug)
+            if topic:
+                topic_id = topic.id
 
         result = LessonModel.get_public_latest_lessons_paginated(
             grade_level=grade_level,
@@ -712,14 +722,18 @@ def browse_lessons():
             page=page,
             per_page=per_page,
             search_term=search_term,
+            topic_id=topic_id,
         )
+        lessons = lesson_topic_service.enrich_lessons_with_topics(result['lessons'])
         return jsonify({
             'success': True,
-            'lessons': result['lessons'],
+            'lessons': lessons,
             'page': result['page'],
             'per_page': result['per_page'],
             'total': result['total'],
             'total_pages': result['total_pages'],
+            'topic_id': topic_id,
+            'topic_slug': topic_slug or None,
         })
     except Exception as e:
         logger.error(f"Error browsing lessons: {str(e)}", exc_info=True)
@@ -955,6 +969,13 @@ def update_lesson(lesson_id):
             content=content_to_save,
             is_public=data.get('is_public')
         )
+
+        if success and 'topic_ids' in data:
+            from app.services.lms import lesson_topic_service
+
+            topic_ids = data.get('topic_ids') or []
+            if isinstance(topic_ids, list):
+                lesson_topic_service.set_lesson_topics(lesson_id, [int(t) for t in topic_ids])
         
         if success:
             return jsonify({

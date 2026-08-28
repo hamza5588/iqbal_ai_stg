@@ -3143,6 +3143,9 @@
     .lms-card-list { margin:8px 0 0; padding:0; list-style:none; font-size:.875rem; color:#475569; }
     .lms-card-list li { padding:4px 0; border-bottom:1px solid #f1f5f9; }
     .lms-onboarding-banner { background:#fef3c7; border:1px solid #fcd34d; border-radius:12px; padding:14px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+    .lms-topic-filter { display:flex; align-items:center; gap:8px; margin-top:10px; }
+    .lms-topic-filter select { border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:.875rem; min-width:180px; }
+    .lms-topic-badge { display:inline-block; background:#e0f2fe; color:#0369a1; font-size:.75rem; padding:2px 8px; border-radius:9999px; margin-right:4px; }
     .mll-page-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; gap:16px; flex-wrap:wrap; }
     .mll-page-head h1{ font-size:24px; font-weight:800; margin-bottom:4px; }
     .mll-page-head p{ color:#6b7280; font-size:13.5px; }
@@ -3982,6 +3985,7 @@
         // Load sidebar chat history in the background so a slow/failed
         // conversations request cannot leave the user on an empty chat.
         setStudentActiveView('lessons');
+        await loadLmsTopicsForFilter();
         showMyLessonsPage();
         initializeChatState().catch(function (err) {
           console.error('Failed to initialize student chat sidebar', err);
@@ -4665,13 +4669,26 @@
       let _studentLessonsCache = [];
       let studentLessonsTotalPages = 1;
       let studentLessonsTotalCount = 0;
+      let lmsTopicFilterSlug = '';
+      let lmsTopicsCache = [];
 
-      async function fetchStudentLessonsPage(page, perPage, searchTerm) {
+      async function loadLmsTopicsForFilter() {
+        try {
+          const res = await fetch('/api/lms/topics?subject=Math', { credentials: 'include' });
+          const body = await res.json();
+          lmsTopicsCache = body.data || body || [];
+        } catch (e) {
+          lmsTopicsCache = [];
+        }
+      }
+
+      async function fetchStudentLessonsPage(page, perPage, searchTerm, topicSlug) {
         const params = new URLSearchParams({
           page: String(page || 1),
           per_page: String(perPage || lessonsPerPage)
         });
         if (searchTerm) params.set('q', String(searchTerm).trim());
+        if (topicSlug) params.set('topic_slug', topicSlug);
         const response = await fetch('/api/lessons/browse_lessons?' + params.toString(), { method: 'GET', credentials: 'include' });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data || data.success !== true) {
@@ -4805,7 +4822,7 @@
         `;
         }
 
-        fetchStudentLessonsPage(currentPage, lessonsPerPage, lessonSearchTerm)
+        fetchStudentLessonsPage(currentPage, lessonsPerPage, lessonSearchTerm, lmsTopicFilterSlug)
           .then(payload => {
             if (studentActiveView !== 'lessons' || requestId !== lessonsRenderRequestId) return;
             lessons = (payload && payload.lessons) || [];
@@ -4863,9 +4880,17 @@
             versionLabel: 'v' + (lesson.version || 1),
             timestamp: timestamp,
             fullDate: date,
-            status: lesson.status || 'draft'
+            status: lesson.status || 'draft',
+            topics: lesson.topics || []
           };
         });
+
+        const topicOptions = ['<option value="">All topics</option>'].concat(
+          (lmsTopicsCache || []).map(function (t) {
+            const sel = lmsTopicFilterSlug === t.slug ? ' selected' : '';
+            return '<option value="' + escapeHtml(t.slug) + '"' + sel + '>' + escapeHtml(t.name) + '</option>';
+          })
+        ).join('');
 
         const searchValue = escapeHtml(lessonSearchTerm || '');
         const lessonCards = formattedLessons.length ? formattedLessons.map(function (lesson) {
@@ -4878,6 +4903,9 @@
           const versionLabel = escapeHtml(lesson.versionLabel);
           const letter = (lesson.title || '?').charAt(0).toUpperCase();
           const lessonNo = String(lesson.no).padStart(2, '0');
+          const topicBadges = (lesson.topics || []).map(function (t) {
+            return '<span class="lms-topic-badge">' + escapeHtml(t.name) + '</span>';
+          }).join('');
           return `
           <div class="mll-lesson-card" data-lesson-id="${escapeHtml(id)}">
             <div class="mll-lesson-bar">LESSON ${lessonNo}</div>
@@ -4892,6 +4920,7 @@
                   <span class="mll-time-ago"><i class="fas fa-rotate-right"></i> ${timestamp}</span>
                 </div>
               </div>
+              ${topicBadges ? '<div style="margin:6px 0 0 2px;">' + topicBadges + '</div>' : ''}
               <div class="mll-lesson-info">
                 <div><label>Subject</label><span>${subject}</span></div>
                 <div><label>Grade</label><span>${grade}</span></div>
@@ -4924,6 +4953,10 @@
                  placeholder="Search lessons by title, subject, or grade..."
                  value="${searchValue}"
                  oninput="filterLessons(this.value)">
+        </div>
+        <div class="lms-topic-filter">
+          <label for="lmsTopicFilter" style="font-size:.875rem;color:#64748b;">Topic:</label>
+          <select id="lmsTopicFilter" onchange="onLmsTopicFilterChange(this.value)">${topicOptions}</select>
         </div>
       </div>
 
@@ -6209,6 +6242,12 @@
       // Search filter (updates term, resets to first page, re-renders)
       function filterLessons(searchTerm) {
         lessonSearchTerm = (searchTerm || '').trim().toLowerCase();
+        currentPage = 1;
+        showMyLessonsPage();
+      }
+
+      function onLmsTopicFilterChange(slug) {
+        lmsTopicFilterSlug = slug || '';
         currentPage = 1;
         showMyLessonsPage();
       }

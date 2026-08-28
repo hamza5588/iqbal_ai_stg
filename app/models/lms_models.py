@@ -64,6 +64,25 @@ class TopicPrerequisite(Base):
     )
 
 
+class LessonTopic(Base):
+    """Join table linking lessons to curriculum topics."""
+
+    __tablename__ = "lesson_topics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    lesson_id = Column(
+        Integer, ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    topic_id = Column(
+        Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("lesson_id", "topic_id", name="uq_lesson_topic"),
+    )
+
+
 class Question(Base):
     __tablename__ = "questions"
 

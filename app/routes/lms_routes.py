@@ -635,6 +635,37 @@ def my_dashboard():
     return json_success(student_profile_service.get_student_dashboard(_current_user_id()))
 
 
+@bp.route("/lessons/<int:lesson_id>/topics", methods=["GET", "PUT"])
+@login_required
+def lesson_topics(lesson_id: int):
+    from app.models.models import LessonModel
+    from app.services.lms import lesson_topic_service
+
+    lesson = LessonModel.get_lesson_by_id(lesson_id)
+    if not lesson:
+        return json_error("Lesson not found", code="not_found", status=404)
+
+    uid = _current_user_id()
+    role = _current_role()
+    if lesson.get("teacher_id") != uid and role != "admin":
+        if role != "student" or not lesson.get("is_public"):
+            return json_error("Forbidden", code="forbidden", status=403)
+
+    if request.method == "GET":
+        topics = lesson_topic_service.get_lesson_topics(lesson_id)
+        return json_success(
+            [{"id": t.id, "name": t.name, "slug": t.slug, "subject": t.subject} for t in topics]
+        )
+
+    if lesson.get("teacher_id") != uid:
+        return json_error("Forbidden", code="forbidden", status=403)
+
+    body = request.get_json(silent=True) or {}
+    topic_ids = body.get("topic_ids") or []
+    lesson_topic_service.set_lesson_topics(lesson_id, [int(t) for t in topic_ids])
+    return json_success({"lesson_id": lesson_id, "topic_ids": topic_ids})
+
+
 @bp.route("/students/me/progress", methods=["GET"])
 @login_required
 def my_progress():

@@ -504,10 +504,13 @@ class LessonModel:
         focus_area: str = None,
         page: int = 1,
         per_page: int = 10,
-        search_term: str = None
+        search_term: str = None,
+        topic_id: int = None,
     ) -> Dict[str, Any]:
         """Get latest public lessons with DB-level pagination (one row per logical lesson)."""
         try:
+            from app.models.lms_models import LessonTopic
+
             db = get_db()
             page = max(1, int(page or 1))
             per_page = max(1, min(100, int(per_page or 10)))
@@ -524,6 +527,10 @@ class LessonModel:
                 filtered = filtered.filter(DBLesson.grade_level == grade_level)
             if focus_area:
                 filtered = filtered.filter(DBLesson.focus_area == focus_area)
+            if topic_id:
+                filtered = filtered.join(
+                    LessonTopic, LessonTopic.lesson_id == DBLesson.id
+                ).filter(LessonTopic.topic_id == topic_id)
             if search_term:
                 term = f"%{search_term.strip()}%"
                 filtered = filtered.filter(
