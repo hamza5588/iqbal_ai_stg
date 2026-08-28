@@ -88,8 +88,10 @@ def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -
 
 def submit_attempt(attempt_id: int) -> dict:
     attempt = get_attempt(attempt_id)
+    if attempt.status == "submitted":
+        return get_attempt_results(attempt_id)
     if attempt.status != "in_progress":
-        raise LMSValidationError("Attempt already submitted")
+        raise LMSValidationError("Attempt is not in progress")
 
     db = get_db()
     assessment = get_assessment(attempt.assessment_id)
@@ -136,10 +138,33 @@ def submit_attempt(attempt_id: int) -> dict:
 
     performance_service.update_topic_scores_from_attempt(attempt_id)
 
+    if attempt.assignment_id:
+        from app.services.lms import assignment_service
+
+        assignment_service.mark_submission_complete(
+            attempt.assignment_id, attempt.student_id, attempt_id
+        )
+
     return {
         "attempt_id": attempt.id,
         "score": correct,
         "max_score": max_score,
         "score_percent": round(100.0 * correct / max_score, 2),
         "topic_breakdown": list(topic_breakdown.values()),
+    }
+
+
+def get_attempt_results(attempt_id: int) -> dict:
+    """Return scored attempt summary (idempotent)."""
+    attempt = get_attempt(attempt_id)
+    if attempt.status != "submitted":
+        raise LMSValidationError("Attempt not yet submitted")
+    max_score = attempt.max_score or 1.0
+    score = attempt.score or 0.0
+    return {
+        "attempt_id": attempt.id,
+        "score": score,
+        "max_score": max_score,
+        "score_percent": round(100.0 * score / max_score, 2) if max_score else 0.0,
+        "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
     }

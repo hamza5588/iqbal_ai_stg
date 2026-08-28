@@ -1,10 +1,11 @@
-"""LMS API routes — Phase 1 foundation."""
+"""LMS API routes — Phase 1 foundation + Phase 3 quiz/PDF."""
 from flask import Blueprint, request, session
 
 from app.rbac.permissions import Permissions, has_permission
 from app.services.lms import (
     assessment_service,
     assignment_service,
+    attempt_service,
     class_service,
     curriculum_service,
     learning_path_service,
@@ -12,6 +13,8 @@ from app.services.lms import (
     question_bank_service,
 )
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, LMSError
+from app.services.quiz.pipeline import run_pdf_quiz_pipeline
+from app.tasks.quiz_pdf_tasks import enqueue_or_run_pdf_quiz
 from app.utils.auth import login_required
 from app.utils.lms_api import json_error, json_success
 
@@ -188,6 +191,287 @@ def class_students(class_id: int):
     return json_success([{"student_id": e.student_id, "enrolled_at": e.enrolled_at.isoformat()} for e in enrollments])
 
 
+def _validate_thread_id(thread_id: str, user_id: int) -> bool:
+    return bool(thread_id) and thread_id.startswith(f"user_{user_id}_")
+
+
+@bp.route("/quizzes/from-pdf", methods=["POST"])
+@login_required
+def create_quiz_from_pdf():
+    """Upload Q&A PDF and run PDF→MCQ pipeline (async when Celery available)."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+
+    title = (request.form.get("title") or "Untitled Quiz").strip()
+    assessment_type = request.form.get("assessment_type", "quiz")
+    topic_id = request.form.get("topic_id", type=int)
+    async_mode = request.form.get("async", "true").lower() != "false"
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return json_error("PDF file is required", code="validation_error")
+
+    a = assessment_service.create_assessment(
+        created_by=_current_user_id(),
+        title=title.strip(),
+        assessment_type=assessment_type if assessment_type in ("quiz", "diagnostic") else "quiz",
+        creation_mode="pdf_qa_auto",
+    )
+
+    file_bytes = file.read()
+    if not file_bytes:
+        return json_error("Empty file", code="validation_error")
+
+    result = enqueue_or_run_pdf_quiz(
+        assessment_id=a.id,
+        file_bytes=file_bytes,
+        filename=file.filename,
+        user_id=_current_user_id(),
+        topic_id=topic_id,
+        async_mode=async_mode,
+    )
+    status = 202 if result.get("async") else 200
+    return json_success({"assessment_id": a.id, **result}, status=status)
+
+
+@bp.route("/quizzes/<int:quiz_id>/process-pdf", methods=["POST"])
+@login_required
+def process_quiz_pdf(quiz_id: int):
+    """Re-run pipeline on an existing assessment using an ingested RAG thread."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+
+    body = request.get_json(silent=True) or {}
+    thread_id = body.get("thread_id") or request.form.get("thread_id")
+    topic_id = body.get("topic_id")
+    if not thread_id or not _validate_thread_id(thread_id, _current_user_id()):
+        return json_error("Valid thread_id is required", code="validation_error")
+
+    try:
+        result = run_pdf_quiz_pipeline(
+            assessment_id=quiz_id,
+            rag_thread_id=thread_id,
+            user_id=_current_user_id(),
+            topic_id=topic_id,
+        )
+        return json_success(result)
+    except Exception as e:
+        return json_error(str(e), code="pipeline_error", status=500)
+
+
+@bp.route("/quizzes/<int:quiz_id>/pdf-status", methods=["GET"])
+@login_required
+def quiz_pdf_status(quiz_id: int):
+    try:
+        return json_success(assessment_service.get_pdf_processing_status(quiz_id))
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/quizzes/<int:quiz_id>/preview", methods=["GET"])
+@login_required
+def quiz_preview(quiz_id: int):
+    """Teacher preview with full MCQ details including correct answers."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    try:
+        data = assessment_service.get_assessment_with_questions(quiz_id, include_answers=True)
+        assessment = assessment_service.get_assessment(quiz_id)
+        if assessment.created_by != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        return json_success(data)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/quizzes/from-pdf/<int:source_id>/finalize", methods=["POST"])
+@login_required
+def finalize_pdf_quiz(source_id: int):
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    try:
+        a = assessment_service.finalize_pdf_quiz(source_id, _current_user_id())
+        return json_success({"id": a.id, "status": a.status, "creation_mode": a.creation_mode})
+    except (LMSNotFoundError, LMSValidationError) as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/quizzes/<int:quiz_id>/questions/<int:question_id>/regenerate", methods=["POST"])
+@login_required
+def regenerate_quiz_question(quiz_id: int, question_id: int):
+    """Regenerate distractors for a single PDF-sourced question."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+
+    from app.services.quiz.mcq_converter import convert_pair_to_mcq, mcq_to_question_fields
+    from app.services.quiz.models import QuestionAnswerPair
+
+    q = question_bank_service.get_question(question_id)
+    if not q.correct_answer_raw:
+        return json_error("Question has no source answer to regenerate from", code="validation_error")
+
+    pair = QuestionAnswerPair(
+        question_number=q.source_question_number or question_id,
+        question_text=q.question_text,
+        question_latex=q.question_latex,
+        answer_text=q.correct_answer_raw,
+    )
+    try:
+        mcq = convert_pair_to_mcq(pair)
+        fields = mcq_to_question_fields(mcq)
+        updated = question_bank_service.update_question(
+            question_id,
+            question_text=fields["question_text"],
+            question_latex=fields["question_latex"],
+            options=fields["options"],
+            correct_option_index=fields["correct_option_index"],
+            explanation=fields["explanation"],
+            extraction_confidence=fields["extraction_confidence"],
+        )
+        return json_success(question_bank_service.question_to_dict(updated))
+    except Exception as e:
+        return json_error(str(e), code="regenerate_error", status=500)
+
+
+@bp.route("/quizzes/<int:quiz_id>/start", methods=["POST"])
+@login_required
+def start_quiz_attempt(quiz_id: int):
+    if _current_role() != "student":
+        return json_error("Only students can start quiz attempts", code="forbidden", status=403)
+
+    body = request.get_json(silent=True) or {}
+    assignment_id = body.get("assignment_id")
+    try:
+        attempt = attempt_service.start_attempt(
+            student_id=_current_user_id(),
+            assessment_id=quiz_id,
+            assignment_id=assignment_id,
+        )
+        if assignment_id:
+            assignment_service.link_attempt_to_submission(
+                assignment_id, _current_user_id(), attempt.id
+            )
+        return json_success(
+            {
+                "attempt_id": attempt.id,
+                "assessment_id": quiz_id,
+                "status": attempt.status,
+                "max_score": attempt.max_score,
+            },
+            status=201,
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/attempts/<int:attempt_id>/questions", methods=["GET"])
+@login_required
+def get_attempt_questions(attempt_id: int):
+    try:
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id() and _current_role() != "teacher":
+            return json_error("Forbidden", code="forbidden", status=403)
+        questions = attempt_service.get_delivery_questions(attempt_id)
+        return json_success({"attempt_id": attempt_id, "questions": questions})
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/attempts/<int:attempt_id>/answer", methods=["POST"])
+@login_required
+def save_attempt_answer(attempt_id: int):
+    if _current_role() != "student":
+        return json_error("Only students can submit answers", code="forbidden", status=403)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        answer = attempt_service.save_answer(
+            attempt_id,
+            int(body["question_id"]),
+            int(body["selected_option_index"]),
+        )
+        return json_success({"saved": True, "question_id": answer.question_id})
+    except (KeyError, TypeError, ValueError) as e:
+        return json_error(str(e), code="validation_error")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/attempts/<int:attempt_id>/submit", methods=["POST"])
+@login_required
+def submit_attempt(attempt_id: int):
+    if _current_role() != "student":
+        return json_error("Only students can submit attempts", code="forbidden", status=403)
+
+    try:
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        result = attempt_service.submit_attempt(attempt_id)
+        return json_success(result)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/attempts/<int:attempt_id>/results", methods=["GET"])
+@login_required
+def get_attempt_results(attempt_id: int):
+    try:
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id() and _current_role() != "teacher":
+            return json_error("Forbidden", code="forbidden", status=403)
+        return json_success(attempt_service.get_attempt_results(attempt_id))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/students/me/assignments", methods=["GET"])
+@login_required
+def my_assignments():
+    if _current_role() != "student":
+        return json_error("Student only", code="forbidden", status=403)
+    return json_success(assignment_service.list_assignments_for_student(_current_user_id()))
+
+
+@bp.route("/diagnostics/from-pdf", methods=["POST"])
+@login_required
+def create_diagnostic_from_pdf():
+    """Same as quiz PDF flow but assessment_type=diagnostic."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+
+    title = request.form.get("title") or "Diagnostic Assessment"
+    topic_id = request.form.get("topic_id", type=int)
+    file = request.files.get("file")
+    if not file:
+        return json_error("PDF file is required", code="validation_error")
+
+    a = assessment_service.create_assessment(
+        created_by=_current_user_id(),
+        title=title.strip(),
+        assessment_type="diagnostic",
+        creation_mode="pdf_qa_auto",
+    )
+    result = enqueue_or_run_pdf_quiz(
+        assessment_id=a.id,
+        file_bytes=file.read(),
+        filename=file.filename,
+        user_id=_current_user_id(),
+        topic_id=topic_id,
+    )
+    status = 202 if result.get("async") else 200
+    return json_success({"assessment_id": a.id, **result}, status=status)
+
+
 @bp.route("/quizzes", methods=["GET", "POST"])
 @login_required
 def quizzes():
@@ -216,7 +500,12 @@ def quizzes():
 @login_required
 def get_quiz(quiz_id: int):
     try:
-        return json_success(assessment_service.get_assessment_with_questions(quiz_id))
+        include_answers = _current_role() == "teacher" and has_permission(
+            _current_role(), Permissions.CREATE_QUIZ
+        )
+        return json_success(
+            assessment_service.get_assessment_with_questions(quiz_id, include_answers=include_answers)
+        )
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 

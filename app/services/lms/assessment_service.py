@@ -171,8 +171,33 @@ def list_assessments_by_teacher(
     return q.order_by(Assessment.updated_at.desc()).all()
 
 
-def get_assessment_with_questions(assessment_id: int) -> dict:
+def get_assessment_with_questions(assessment_id: int, include_answers: bool = False) -> dict:
+    from app.services.lms import question_bank_service
+
     assessment = get_assessment(assessment_id)
+    questions_out = []
+    for aq in sorted(assessment.questions, key=lambda x: x.sort_order):
+        item = {"sort_order": aq.sort_order, "question_id": aq.question_id}
+        if include_answers:
+            try:
+                q = question_bank_service.get_question(aq.question_id)
+                item["question"] = question_bank_service.question_to_dict(q)
+            except LMSNotFoundError:
+                pass
+        questions_out.append(item)
+
+    pdf_status = None
+    if assessment.pdf_source:
+        src = assessment.pdf_source
+        pdf_status = {
+            "source_id": src.id,
+            "rag_thread_id": src.rag_thread_id,
+            "original_filename": src.original_filename,
+            "extraction_status": src.extraction_status,
+            "overall_confidence": src.overall_confidence,
+            "error_message": src.error_message,
+        }
+
     return {
         "id": assessment.id,
         "title": assessment.title,
@@ -183,11 +208,41 @@ def get_assessment_with_questions(assessment_id: int) -> dict:
         "time_limit_minutes": assessment.time_limit_minutes,
         "overall_confidence": assessment.overall_confidence,
         "requires_review": assessment.requires_review,
-        "questions": [
-            {
-                "sort_order": aq.sort_order,
-                "question_id": aq.question_id,
-            }
-            for aq in sorted(assessment.questions, key=lambda x: x.sort_order)
-        ],
+        "pdf_source": pdf_status,
+        "questions": questions_out,
     }
+
+
+def get_pdf_processing_status(assessment_id: int) -> dict:
+    assessment = get_assessment(assessment_id)
+    if not assessment.pdf_source:
+        return {"assessment_id": assessment_id, "extraction_status": "none"}
+    src = assessment.pdf_source
+    return {
+        "assessment_id": assessment_id,
+        "source_id": src.id,
+        "extraction_status": src.extraction_status,
+        "overall_confidence": src.overall_confidence,
+        "error_message": src.error_message,
+        "question_count": len(assessment.questions),
+        "requires_review": assessment.requires_review,
+    }
+
+
+def finalize_pdf_quiz(source_id: int, teacher_id: int) -> Assessment:
+    """Mark PDF-generated quiz ready for publish after pipeline completes."""
+    db = get_db()
+    source = db.query(QuizPdfSource).filter(QuizPdfSource.id == source_id).first()
+    if not source:
+        raise LMSNotFoundError(f"PDF source {source_id} not found")
+    assessment = get_assessment(source.assessment_id)
+    if assessment.created_by != teacher_id:
+        raise LMSValidationError("Not authorized")
+    if source.extraction_status != "completed":
+        raise LMSValidationError("PDF extraction not completed")
+    if not assessment.questions:
+        raise LMSValidationError("No questions attached")
+    assessment.creation_mode = "pdf_qa_auto"
+    db.commit()
+    db.refresh(assessment)
+    return assessment

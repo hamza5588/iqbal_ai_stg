@@ -12110,6 +12110,146 @@ Align everything with the lesson objectives and do not invent missing informatio
     </div>
   </div>
 
+  <!-- LMS Quiz Hub (Phase 3) -->
+  <button type="button" id="lmsQuizHubBtn" onclick="openLmsQuizHub()"
+    style="position:fixed;bottom:24px;right:24px;z-index:9999;background:#166534;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
+    LMS Quizzes
+  </button>
+  <div id="lmsQuizHubModal" class="hidden" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;overflow:auto;padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-size:1.25rem;font-weight:700;margin:0;">PDF → MCQ Quiz Builder</h2>
+        <button type="button" onclick="closeLmsQuizHub()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+      </div>
+      <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)">
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Quiz title</label>
+        <input id="lmsQuizTitle" type="text" required placeholder="Chapter 5 Post Test"
+          style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Q&amp;A PDF</label>
+        <input id="lmsQuizPdfFile" type="file" accept=".pdf,application/pdf" required
+          style="width:100%;margin-bottom:12px;">
+        <button type="submit" id="lmsQuizSubmitBtn"
+          style="background:#166534;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;">
+          Upload &amp; Generate MCQs
+        </button>
+      </form>
+      <div id="lmsQuizStatus" style="margin-top:16px;font-size:.875rem;color:#475569;"></div>
+      <div id="lmsQuizPreview" style="margin-top:16px;"></div>
+      <div id="lmsQuizActions" style="margin-top:16px;display:none;gap:8px;">
+        <button type="button" onclick="publishLmsQuiz()"
+          style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;">
+          Publish Quiz
+        </button>
+      </div>
+    </div>
+  </div>
+  <script>
+    let _lmsCurrentAssessmentId = null;
+    let _lmsPollTimer = null;
+
+    function openLmsQuizHub() {
+      document.getElementById('lmsQuizHubModal').classList.remove('hidden');
+    }
+    function closeLmsQuizHub() {
+      document.getElementById('lmsQuizHubModal').classList.add('hidden');
+      stopLmsPoll();
+    }
+    function stopLmsPoll() {
+      if (_lmsPollTimer) { clearInterval(_lmsPollTimer); _lmsPollTimer = null; }
+    }
+    async function submitLmsPdfQuiz(e) {
+      e.preventDefault();
+      const title = document.getElementById('lmsQuizTitle').value.trim();
+      const file = document.getElementById('lmsQuizPdfFile').files[0];
+      if (!file) return;
+      const btn = document.getElementById('lmsQuizSubmitBtn');
+      const status = document.getElementById('lmsQuizStatus');
+      btn.disabled = true;
+      status.textContent = 'Uploading PDF and starting conversion...';
+      const fd = new FormData();
+      fd.append('title', title);
+      fd.append('file', file);
+      try {
+        const res = await fetch('/api/lms/quizzes/from-pdf', { method: 'POST', body: fd, credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.message || 'Upload failed');
+        _lmsCurrentAssessmentId = data.data?.assessment_id || data.assessment_id;
+        status.textContent = data.data?.async ? 'Processing in background...' : 'Conversion complete.';
+        startLmsPoll();
+      } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    function startLmsPoll() {
+      stopLmsPoll();
+      if (!_lmsCurrentAssessmentId) return;
+      _lmsPollTimer = setInterval(pollLmsQuizStatus, 2000);
+      pollLmsQuizStatus();
+    }
+    async function pollLmsQuizStatus() {
+      if (!_lmsCurrentAssessmentId) return;
+      const statusEl = document.getElementById('lmsQuizStatus');
+      const previewEl = document.getElementById('lmsQuizPreview');
+      const actionsEl = document.getElementById('lmsQuizActions');
+      try {
+        const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/pdf-status', { credentials: 'include' });
+        const body = await res.json();
+        const d = body.data || body;
+        statusEl.textContent = 'Status: ' + (d.extraction_status || 'unknown') +
+          (d.overall_confidence != null ? ' | Confidence: ' + Math.round(d.overall_confidence * 100) + '%' : '') +
+          (d.question_count ? ' | Questions: ' + d.question_count : '');
+        if (d.extraction_status === 'completed') {
+          stopLmsPoll();
+          await loadLmsQuizPreview();
+          actionsEl.style.display = 'flex';
+        } else if (d.extraction_status === 'failed') {
+          stopLmsPoll();
+          statusEl.textContent = 'Failed: ' + (d.error_message || 'Unknown error');
+        }
+      } catch (err) {
+        statusEl.textContent = 'Poll error: ' + err.message;
+      }
+    }
+    async function loadLmsQuizPreview() {
+      const previewEl = document.getElementById('lmsQuizPreview');
+      const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/preview', { credentials: 'include' });
+      const body = await res.json();
+      const d = body.data || body;
+      if (!d.questions || !d.questions.length) {
+        previewEl.innerHTML = '<p>No questions yet.</p>';
+        return;
+      }
+      previewEl.innerHTML = d.questions.map(function (item, idx) {
+        const q = item.question || {};
+        const opts = (q.options || []).map(function (o) {
+          return '<li>' + o.label + '. ' + escapeHtml(o.text) + '</li>';
+        }).join('');
+        return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;">' +
+          '<strong>Q' + (idx + 1) + '.</strong> ' + escapeHtml(q.question_text || '') +
+          '<ul style="margin:8px 0 0 16px;">' + opts + '</ul></div>';
+      }).join('');
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        MathJax.typesetPromise([previewEl]).catch(function () {});
+      }
+    }
+    async function publishLmsQuiz() {
+      if (!_lmsCurrentAssessmentId) return;
+      const statusEl = document.getElementById('lmsQuizStatus');
+      try {
+        const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/publish', {
+          method: 'POST', credentials: 'include'
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || body.message || 'Publish failed');
+        statusEl.textContent = 'Quiz published successfully.';
+      } catch (err) {
+        statusEl.textContent = 'Publish error: ' + err.message;
+      }
+    }
+  </script>
+
 </body>
 
 </html>

@@ -14,6 +14,7 @@ celery = Celery(
     include=[
         'app.tasks.ingest_tasks',
         'app.tasks.load_test_tasks',
+        'app.tasks.quiz_pdf_tasks',
     ],
 )
 
