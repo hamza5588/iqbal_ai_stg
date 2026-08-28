@@ -12110,6 +12110,85 @@ Align everything with the lesson objectives and do not invent missing informatio
     </div>
   </div>
 
+  <!-- LMS Classes Hub (Phase 2) -->
+  <button type="button" onclick="openLmsClassHub()"
+    style="position:fixed;bottom:88px;right:24px;z-index:9999;background:#475569;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
+    LMS Classes
+  </button>
+  <div id="lmsClassHubModal" class="hidden" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;overflow:auto;padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-size:1.25rem;font-weight:700;margin:0;">Manage Classes</h2>
+        <button type="button" onclick="closeLmsClassHub()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+      </div>
+      <form id="lmsCreateClassForm" onsubmit="submitLmsCreateClass(event)" style="margin-bottom:20px;padding:16px;background:#f8fafc;border-radius:8px;">
+        <h3 style="font-weight:600;margin:0 0 12px;">Create New Class</h3>
+        <input id="lmsClassName" type="text" required placeholder="Class name" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+        <input id="lmsClassGrade" type="text" placeholder="Grade level (optional)" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+        <button type="submit" style="background:#166534;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;">Create Class</button>
+      </form>
+      <div id="lmsClassList"><p style="color:#64748b;">Loading classes...</p></div>
+    </div>
+  </div>
+  <script>
+    function openLmsClassHub() {
+      document.getElementById('lmsClassHubModal').classList.remove('hidden');
+      loadLmsTeacherClasses();
+    }
+    function closeLmsClassHub() {
+      document.getElementById('lmsClassHubModal').classList.add('hidden');
+    }
+    async function loadLmsTeacherClasses() {
+      const el = document.getElementById('lmsClassList');
+      try {
+        const res = await fetch('/api/lms/classes/mine', { credentials: 'include' });
+        const body = await res.json();
+        const classes = body.data || body || [];
+        if (!classes.length) {
+          el.innerHTML = '<p style="color:#64748b;">No classes yet. Create one above.</p>';
+          return;
+        }
+        el.innerHTML = await Promise.all(classes.map(async function (c) {
+          let roster = [];
+          try {
+            const rRes = await fetch('/api/lms/classes/' + c.id + '/students', { credentials: 'include' });
+            const rBody = await rRes.json();
+            roster = rBody.data || rBody || [];
+          } catch (e) { roster = []; }
+          const rosterHtml = roster.length
+            ? roster.map(function (s) { return '<li>Student #' + s.student_id + '</li>'; }).join('')
+            : '<li>No students enrolled</li>';
+          return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:10px;">' +
+            '<strong>' + escapeHtml(c.name) + '</strong>' +
+            (c.grade_level ? ' <span style="color:#64748b;font-size:.875rem;">(' + escapeHtml(c.grade_level) + ')</span>' : '') +
+            '<div style="margin:8px 0;font-size:.875rem;"><span style="color:#64748b;">Join code:</span> <code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-weight:700;">' + escapeHtml(c.join_code) + '</code></div>' +
+            '<div style="font-size:.875rem;color:#64748b;margin-bottom:4px;">Students (' + roster.length + '):</div>' +
+            '<ul style="margin:0;padding-left:18px;font-size:.875rem;">' + rosterHtml + '</ul></div>';
+        })).then(function (html) { return html.join(''); });
+      } catch (err) {
+        el.innerHTML = '<p style="color:#dc2626;">Failed to load classes.</p>';
+      }
+    }
+    async function submitLmsCreateClass(e) {
+      e.preventDefault();
+      const name = document.getElementById('lmsClassName').value.trim();
+      const grade = document.getElementById('lmsClassGrade').value.trim();
+      try {
+        const res = await fetch('/api/lms/classes', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, grade_level: grade || null })
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || 'Create failed');
+        document.getElementById('lmsCreateClassForm').reset();
+        loadLmsTeacherClasses();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+  </script>
+
   <!-- LMS Quiz Hub (Phase 3) -->
   <button type="button" id="lmsQuizHubBtn" onclick="openLmsQuizHub()"
     style="position:fixed;bottom:24px;right:24px;z-index:9999;background:#166534;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">

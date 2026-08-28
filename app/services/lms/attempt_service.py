@@ -138,6 +138,13 @@ def submit_attempt(attempt_id: int) -> dict:
 
     performance_service.update_topic_scores_from_attempt(attempt_id)
 
+    if assessment.assessment_type == "diagnostic":
+        from app.services.lms import student_profile_service
+
+        student_profile_service.mark_diagnostic_complete(
+            attempt.student_id, assessment_id=assessment.id
+        )
+
     if attempt.assignment_id:
         from app.services.lms import assignment_service
 

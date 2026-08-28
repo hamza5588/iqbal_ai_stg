@@ -3127,6 +3127,22 @@
 
     /* ===== My Lessons list — matches teacher dashboard cards ===== */
     .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; }
+
+    /* LMS Overview (Phase 2) */
+    .lms-overview { margin-bottom: 24px; }
+    .lms-overview-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+    .lms-overview-head h2 { font-size:1.25rem; font-weight:700; margin:0; color:#0f172a; }
+    .lms-overview-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .lms-btn { border:none; border-radius:8px; padding:8px 14px; font-weight:600; font-size:.875rem; cursor:pointer; }
+    .lms-btn-primary { background:#0284c7; color:#fff; }
+    .lms-btn-secondary { background:#e2e8f0; color:#334155; }
+    .lms-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+    .lms-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; }
+    .lms-card-label { font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:#64748b; margin-bottom:4px; }
+    .lms-card-value { font-size:1.5rem; font-weight:700; color:#0f172a; }
+    .lms-card-list { margin:8px 0 0; padding:0; list-style:none; font-size:.875rem; color:#475569; }
+    .lms-card-list li { padding:4px 0; border-bottom:1px solid #f1f5f9; }
+    .lms-onboarding-banner { background:#fef3c7; border:1px solid #fcd34d; border-radius:12px; padding:14px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
     .mll-page-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; gap:16px; flex-wrap:wrap; }
     .mll-page-head h1{ font-size:24px; font-weight:800; margin-bottom:4px; }
     .mll-page-head p{ color:#6b7280; font-size:13.5px; }
@@ -3970,6 +3986,7 @@
         initializeChatState().catch(function (err) {
           console.error('Failed to initialize student chat sidebar', err);
         });
+        initLmsOnboardingGate();
 
         // Setup textarea auto-resize and validation
         const textarea = document.getElementById('messageInput');
@@ -4894,6 +4911,7 @@
 
         chatMessages.innerHTML = `
     <div class="mll-wrap">
+      <div id="lmsOverviewSection"><p style="color:#64748b;font-size:.875rem;">Loading LMS overview...</p></div>
       <div class="mll-page-head">
         <div>
           <h1>My Lessons</h1>
@@ -4923,6 +4941,7 @@
 
         // Initialize pagination based on backend totals
         updatePagination();
+        loadLmsStudentDashboard();
 
         // Always start lessons view at the top after render
         const chatAreaEl = document.getElementById('chatArea');
@@ -7594,7 +7613,122 @@
       })();
     </script>
 
+  <!-- LMS Phase 2: onboarding + join class -->
+  <div id="lmsJoinClassModal" class="hidden" style="position:fixed;inset:0;z-index:10001;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-size:1.125rem;font-weight:700;margin:0;">Join a Class</h2>
+        <button type="button" onclick="closeLmsJoinClassModal()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+      </div>
+      <p style="font-size:.875rem;color:#64748b;margin-bottom:12px;">Enter the join code from your teacher.</p>
+      <input id="lmsJoinCodeInput" type="text" placeholder="e.g. AB12CD34" maxlength="12"
+        style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;margin-bottom:12px;text-transform:uppercase;">
+      <div id="lmsJoinClassError" style="color:#dc2626;font-size:.875rem;margin-bottom:8px;"></div>
+      <button type="button" onclick="submitLmsJoinClass()"
+        style="width:100%;background:#0284c7;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">
+        Join Class
+      </button>
+    </div>
+  </div>
+  <div id="lmsOnboardingModal" class="hidden" style="position:fixed;inset:0;z-index:10002;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:24px;">
+      <h2 style="font-size:1.25rem;font-weight:700;margin:0 0 8px;">Welcome to IqbalAI LMS</h2>
+      <p style="color:#64748b;font-size:.9375rem;margin-bottom:16px;">Join your class with a code from your teacher, or complete a diagnostic assessment to personalize your learning path.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" onclick="closeLmsOnboardingModal(); openLmsJoinClassModal();"
+          style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">Join Class</button>
+        <button type="button" onclick="closeLmsOnboardingModal(); openLmsStudentHub();"
+          style="background:#166534;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">View Assignments / Quizzes</button>
+        <button type="button" onclick="closeLmsOnboardingModal();"
+          style="background:#e2e8f0;color:#334155;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">Skip for now</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    function openLmsJoinClassModal() {
+      document.getElementById('lmsJoinClassModal').classList.remove('hidden');
+      document.getElementById('lmsJoinClassError').textContent = '';
+    }
+    function closeLmsJoinClassModal() {
+      document.getElementById('lmsJoinClassModal').classList.add('hidden');
+    }
+    function closeLmsOnboardingModal() {
+      document.getElementById('lmsOnboardingModal').classList.add('hidden');
+    }
+    async function submitLmsJoinClass() {
+      const code = (document.getElementById('lmsJoinCodeInput').value || '').trim().toUpperCase();
+      const errEl = document.getElementById('lmsJoinClassError');
+      if (!code) { errEl.textContent = 'Please enter a join code.'; return; }
+      try {
+        const res = await fetch('/api/lms/classes/join', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ join_code: code })
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || body.error || 'Invalid join code');
+        closeLmsJoinClassModal();
+        closeLmsOnboardingModal();
+        if (typeof showToast === 'function') showToast('Joined class successfully!', 'success', 3000);
+        loadLmsStudentDashboard();
+      } catch (err) {
+        errEl.textContent = err.message;
+      }
+    }
+    async function initLmsOnboardingGate() {
+      try {
+        const res = await fetch('/api/lms/students/me/onboarding-status', { credentials: 'include' });
+        const body = await res.json();
+        const d = body.data || body;
+        if (d.needs_onboarding) {
+          document.getElementById('lmsOnboardingModal').classList.remove('hidden');
+        }
+      } catch (e) { /* best effort */ }
+    }
+    async function loadLmsStudentDashboard() {
+      const el = document.getElementById('lmsOverviewSection');
+      if (!el) return;
+      try {
+        const res = await fetch('/api/lms/students/me/dashboard', { credentials: 'include' });
+        const body = await res.json();
+        const d = body.data || body;
+        const weak = (d.weak_topics || []).map(function (t) {
+          return '<li>Topic #' + t.topic_id + ' — ' + Math.round(t.score_percent) + '%</li>';
+        }).join('') || '<li>No weak topics yet</li>';
+        const pending = (d.pending_assignments || []).map(function (a) {
+          return '<li>' + escapeHtml(a.title) + ' (' + a.status + ')</li>';
+        }).join('') || '<li>No pending quizzes</li>';
+        const progress = d.overall_progress != null ? Math.round(d.overall_progress) + '%' : '0%';
+        const banner = (d.onboarding && d.onboarding.needs_onboarding)
+          ? '<div class="lms-onboarding-banner"><span>Complete onboarding: join a class or take your diagnostic.</span><button class="lms-btn lms-btn-primary" onclick="openLmsJoinClassModal()">Join Class</button></div>'
+          : '';
+        el.innerHTML = banner + `
+          <div class="lms-overview">
+            <div class="lms-overview-head">
+              <h2>LMS Overview</h2>
+              <div class="lms-overview-actions">
+                <button class="lms-btn lms-btn-secondary" onclick="openLmsJoinClassModal()">Join Class</button>
+                <button class="lms-btn lms-btn-primary" onclick="openLmsStudentHub()">My Quizzes</button>
+              </div>
+            </div>
+            <div class="lms-cards">
+              <div class="lms-card"><div class="lms-card-label">Overall Progress</div><div class="lms-card-value">${progress}</div></div>
+              <div class="lms-card"><div class="lms-card-label">Pending Quizzes</div><div class="lms-card-value">${(d.pending_assignments || []).length}</div><ul class="lms-card-list">${pending}</ul></div>
+              <div class="lms-card"><div class="lms-card-label">Weak Topics</div><div class="lms-card-value">${(d.weak_topics || []).length}</div><ul class="lms-card-list">${weak}</ul></div>
+              <div class="lms-card"><div class="lms-card-label">My Classes</div><div class="lms-card-value">${(d.classes || []).length}</div><ul class="lms-card-list">${(d.classes || []).map(function(c){ return '<li>' + escapeHtml(c.name) + '</li>'; }).join('') || '<li>Not enrolled yet</li>'}</ul></div>
+            </div>
+          </div>`;
+      } catch (err) {
+        el.innerHTML = '';
+      }
+    }
+  </script>
+
   <!-- LMS Student Quiz (Phase 3) -->
+  <button type="button" onclick="openLmsJoinClassModal()"
+    style="position:fixed;bottom:88px;right:24px;z-index:9999;background:#475569;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
+    Join Class
+  </button>
   <button type="button" onclick="openLmsStudentHub()"
     style="position:fixed;bottom:24px;right:24px;z-index:9999;background:#0284c7;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
     My Quizzes

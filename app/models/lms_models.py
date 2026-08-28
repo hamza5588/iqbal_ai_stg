@@ -469,3 +469,27 @@ class AssignmentSubmission(Base):
             name="check_assignment_submission_status",
         ),
     )
+
+
+class StudentProfile(Base):
+    """Extended LMS state for students (onboarding, diagnostic, learning path)."""
+
+    __tablename__ = "student_profiles"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    diagnostic_completed = Column(Boolean, nullable=False, default=False, server_default="false")
+    diagnostic_completed_at = Column(DateTime, nullable=True)
+    diagnostic_assessment_id = Column(
+        Integer, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True
+    )
+    current_learning_path_id = Column(
+        Integer, ForeignKey("learning_paths.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )

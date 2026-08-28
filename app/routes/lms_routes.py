@@ -11,6 +11,7 @@ from app.services.lms import (
     learning_path_service,
     performance_service,
     question_bank_service,
+    student_profile_service,
 )
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, LMSError
 from app.services.quiz.pipeline import run_pdf_quiz_pipeline
@@ -582,6 +583,56 @@ def publish_assignment(assignment_id: int):
         return json_success({"id": a.id, "status": a.status})
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
+
+
+@bp.route("/classes/mine", methods=["GET"])
+@login_required
+def my_classes():
+    uid = _current_user_id()
+    role = _current_role()
+    if role == "teacher":
+        denied = _require_permission(Permissions.MANAGE_CLASS)
+        if denied:
+            return denied
+        classes_list = class_service.list_teacher_classes(uid)
+        return json_success(
+            [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "description": c.description,
+                    "grade_level": c.grade_level,
+                    "join_code": c.join_code,
+                    "student_count": len(class_service.list_class_students(c.id)),
+                }
+                for c in classes_list
+            ]
+        )
+    if role != "student":
+        return json_error("Forbidden", code="forbidden", status=403)
+    classes_list = class_service.list_student_classes(uid)
+    return json_success(
+        [
+            {"id": c.id, "name": c.name, "description": c.description, "grade_level": c.grade_level}
+            for c in classes_list
+        ]
+    )
+
+
+@bp.route("/students/me/onboarding-status", methods=["GET"])
+@login_required
+def my_onboarding_status():
+    if _current_role() != "student":
+        return json_error("Student only", code="forbidden", status=403)
+    return json_success(student_profile_service.get_onboarding_status(_current_user_id()))
+
+
+@bp.route("/students/me/dashboard", methods=["GET"])
+@login_required
+def my_dashboard():
+    if _current_role() != "student":
+        return json_error("Student only", code="forbidden", status=403)
+    return json_success(student_profile_service.get_student_dashboard(_current_user_id()))
 
 
 @bp.route("/students/me/progress", methods=["GET"])

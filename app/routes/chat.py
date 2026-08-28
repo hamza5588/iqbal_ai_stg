@@ -1151,7 +1151,17 @@ def student_dashboard():
         return redirect('/admin/')
     if role == 'teacher':
         return redirect(url_for('chat.teacher_dashboard'))
-    return render_template('student_dashboard/student_dashboard.html')
+    from app.services.lms import student_profile_service
+
+    lms_onboarding = {}
+    try:
+        lms_onboarding = student_profile_service.get_onboarding_status(session['user_id'])
+    except Exception as e:
+        logger.warning("Failed to load LMS onboarding status: %s", e)
+    return render_template(
+        'student_dashboard/student_dashboard.html',
+        lms_onboarding=lms_onboarding,
+    )
 
 
 def _render_legacy_chat():
