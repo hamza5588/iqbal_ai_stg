@@ -1,0 +1,41 @@
+/**
+ * Binds dashboard UI components to admin platform theme CSS variables.
+ */
+.tt-avatar { background: var(--primary-color) !important; }
+.tt-user-info span { color: var(--primary-color) !important; }
+.tt-create-btn { background: var(--primary-600) !important; }
+.tt-create-btn:hover { background: var(--primary-color) !important; }
+.tt-dropdown-footer a { color: var(--primary-600) !important; }
+#chatHistoryDropdown .chat-history-item.active { background: var(--green-50) !important; }
+.mll-lesson-bar { background: var(--green-900) !important; }
+.mll-icon-badge { background: var(--primary-color) !important; }
+#chatMessages .chat-message.user .chat-message-avatar,
+#chatMessages .chat-message.user .chat-message-content {
+  background: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}
+#chatMessages .chat-message.assistant .chat-message-avatar { border-color: var(--green-500) !important; }
+.wizard-step-indicator.completed { background: var(--primary-600) !important; }
+.lms-btn-primary { background: var(--primary-color) !important; }
+.lms-path-step.completed .lms-path-check {
+  background: var(--primary-600) !important;
+  border-color: var(--primary-600) !important;
+}
+.bg-green-50 { background-color: var(--primary-50) !important; }
+.bg-green-100 { background-color: var(--primary-100) !important; }
+.bg-green-600 { background-color: var(--primary-600) !important; }
+.text-green-600 { color: var(--primary-600) !important; }
+.text-green-700 { color: var(--primary-700) !important; }
+.text-green-800 { color: var(--primary-800) !important; }
+.text-green-900 { color: var(--primary-900) !important; }
+.border-green-200 { border-color: var(--primary-100) !important; }
+.border-green-300 { border-color: var(--primary-300) !important; }
+.border-green-500 { border-color: var(--primary-color) !important; }
+.hover\:text-green-800:hover { color: var(--primary-800) !important; }
+.hover\:bg-green-100:hover { background-color: var(--primary-50) !important; }
+.in-app-confirm-icon-wrap { background: var(--primary-600) !important; }
+.in-app-confirm-ok { background: var(--primary-600) !important; border-color: var(--theme-accent-bright) !important; }
+.in-app-confirm-footer { background: var(--brand-bar) !important; }
+.tt-icon-pair span { background: var(--theme-accent-bright) !important; }
+.from-green-50 { --tw-gradient-from: var(--primary-50) var(--tw-gradient-from-position) !important; }
+.to-emerald-50 { --tw-gradient-to: var(--primary-50) var(--tw-gradient-to-position) !important; }

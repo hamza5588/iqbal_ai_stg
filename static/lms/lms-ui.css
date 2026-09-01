@@ -1,9 +1,5 @@
-/* IqbalAI LMS — green theme interactive components */
+/* IqbalAI LMS — theme colors from platform_theme_head.html (:root vars) */
 :root {
-  --lms-green: #166534;
-  --lms-green-dark: #14532d;
-  --lms-green-light: #dcfce7;
-  --lms-green-muted: #f0fdf4;
   --lms-border: #e2e8f0;
   --lms-text: #0f172a;
   --lms-muted: #64748b;
@@ -11,6 +7,11 @@
   --lms-warning: #ca8a04;
   --lms-radius: 12px;
   --lms-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
+  /* Brand colors (--lms-green*) set by admin platform theme partial */
+  --lms-green: var(--primary-color, #166534);
+  --lms-green-dark: var(--primary-600, #14532d);
+  --lms-green-light: var(--primary-100, #dcfce7);
+  --lms-green-muted: var(--primary-50, #f0fdf4);
 }
 
 /* Floating action buttons */
@@ -46,6 +47,14 @@
 }
 .lms-fab-secondary { background: #fff; color: var(--lms-green); border: 2px solid var(--lms-green); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
 .lms-fab-secondary:hover { background: var(--lms-green-muted); }
+
+.lms-diag-timer {
+  font-size: 1.125rem;
+  padding: 4px 12px;
+  background: var(--lms-green-muted);
+  border-radius: 8px;
+  border: 1px solid #86efac;
+}
 
 /* Modal shell */
 .lms-modal-backdrop {
@@ -113,6 +122,19 @@
   justify-content: flex-end;
   flex-wrap: wrap;
 }
+.lms-quiz-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.lms-quiz-nav-start,
+.lms-quiz-nav-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 /* Buttons & inputs */
 .lms-btn {
@@ -175,6 +197,62 @@
 .lms-badge-yellow { background: #fef9c3; color: #854d0e; }
 .lms-badge-red { background: #fee2e2; color: var(--lms-danger); }
 .lms-badge-blue { background: #e0f2fe; color: #0369a1; }
+.lms-struggling-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.lms-student-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 220px;
+}
+.lms-badge-muted { background: #f1f5f9; color: #64748b; }
+.lms-expand-cell { min-width: 180px; vertical-align: top; }
+.lms-expand-details { display: inline-block; max-width: 100%; }
+.lms-expand-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.lms-expand-summary::-webkit-details-marker { display: none; }
+.lms-expand-summary::marker { content: ''; }
+.lms-expand-hint {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+.lms-expand-details[open] .lms-expand-hint { display: none; }
+.lms-expand-list {
+  margin: 8px 0 0;
+  padding: 8px 12px 8px 24px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: #7f1d1d;
+  max-width: min(320px, 100%);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.lms-expand-list li + li { margin-top: 4px; }
+.lms-expand-item-ok { color: #166534; }
+.lms-expand-item-warn { color: #854d0e; }
+.lms-expand-item-bad { color: #991b1b; font-weight: 600; }
+.lms-expand-item-info { color: #0369a1; }
+.lms-expand-item-muted { color: #64748b; }
+.lms-class-roster-preview {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 0.875rem;
+  color: #334155;
+}
+.lms-class-roster-preview li + li { margin-top: 2px; }
 
 /* Tabs */
 .lms-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--lms-border); margin-bottom: 16px; flex-wrap: wrap; }
@@ -338,7 +416,7 @@
 .lms-progress-bar {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--lms-green), #22c55e);
+  background: linear-gradient(90deg, var(--lms-green), var(--primary-400));
   border-radius: 9999px;
   transition: width 0.25s ease;
 }

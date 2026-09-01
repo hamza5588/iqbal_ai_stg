@@ -155,6 +155,13 @@ def run_pdf_quiz_pipeline(
             assessment.description = json.dumps(meta, ensure_ascii=False)
         db.commit()
 
+        if assessment.assessment_type == "diagnostic":
+            try:
+                from app.services.lms.diagnostic_timer_service import estimate_question_times
+                estimate_question_times(assessment_id)
+            except Exception as timer_exc:
+                logger.warning("Diagnostic timer estimation failed: %s", timer_exc)
+
         return {
             "assessment_id": assessment_id,
             "source_id": source.id,

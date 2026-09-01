@@ -38,6 +38,8 @@ from app.tasks.quiz_pdf_tasks import enqueue_or_run_pdf_quiz
 
 from app.utils.db import get_db
 
+from app.utils.diagnostic_upload_progress import set_progress as _set_upload_progress
+
 from app.utils.rag_service import _get_thread_topics, extract_and_store_headings_for_thread, ingest_pdf
 
 
@@ -90,11 +92,11 @@ def _get_pdf_source_for_thread(thread_id: str, teacher_id: int) -> QuizPdfSource
 
 
 
-def _assert_diagnostic_owner(assessment_id: int, teacher_id: int) -> Assessment:
+def _assert_diagnostic_owner(assessment_id: int, user_id: int, is_admin: bool = False) -> Assessment:
 
     assessment = assessment_service.get_assessment(assessment_id)
 
-    if assessment.created_by != teacher_id:
+    if not is_admin and assessment.created_by != user_id:
 
         raise LMSValidationError("Not authorized")
 
@@ -108,13 +110,34 @@ def _assert_diagnostic_owner(assessment_id: int, teacher_id: int) -> Assessment:
 
 
 
-def _ingest_target_pdf(teacher_id: int, file_bytes: bytes, filename: str) -> str:
+def _ingest_target_pdf(
+    teacher_id: int,
+    file_bytes: bytes,
+    filename: str,
+    *,
+    progress_job_id: str | None = None,
+    pdf_index: int = 0,
+    pdf_total: int = 1,
+) -> str:
 
     if not file_bytes:
 
         raise LMSValidationError("Target content PDF is empty")
 
     thread_id = _new_lms_thread_id(teacher_id)
+
+    label = f"target PDF {pdf_index + 1}/{pdf_total}"
+    base_pct = 10 + int((pdf_index / max(pdf_total, 1)) * 40)
+    _set_upload_progress(
+        progress_job_id,
+        base_pct,
+        f"Ingesting {label}: {filename}",
+        stage="target_ingest",
+    )
+
+    def _ingest_progress(step: str, progress: int, message: str) -> None:
+        mapped = base_pct + int(max(0, min(100, progress)) * 0.18)
+        _set_upload_progress(progress_job_id, mapped, message or f"Ingesting {label}...", stage="target_ingest")
 
     ingest_pdf(
 
@@ -126,6 +149,15 @@ def _ingest_target_pdf(teacher_id: int, file_bytes: bytes, filename: str) -> str
 
         user_id=teacher_id,
 
+        progress_callback=_ingest_progress if progress_job_id else None,
+
+    )
+
+    _set_upload_progress(
+        progress_job_id,
+        base_pct + 20,
+        f"Extracting headings from {label}...",
+        stage="target_headings",
     )
 
     try:
@@ -166,11 +198,15 @@ def upload_diagnostic_bundle(
 
     target_filename: str,
 
+    target_files: Optional[List[Dict[str, Any]]] = None,
+
+    progress_job_id: Optional[str] = None,
+
 ) -> dict:
 
     """
 
-    Upload diagnostic Q&A PDF (questions + answer key) and target content PDF (Learning Chat).
+    Upload diagnostic Q&A PDF (questions + answer key) and target content PDF(s) (Learning Chat).
 
     """
 
@@ -178,11 +214,15 @@ def upload_diagnostic_bundle(
 
         raise LMSValidationError("Diagnostic Q&A PDF is empty")
 
-    if not target_file_bytes:
+    targets: List[Dict[str, Any]] = list(target_files or [])
+    if not targets:
+        if not target_file_bytes:
+            raise LMSValidationError("At least one target content PDF is required for Learning Chat")
+        targets = [{"bytes": target_file_bytes, "filename": target_filename}]
+    elif target_file_bytes:
+        targets.insert(0, {"bytes": target_file_bytes, "filename": target_filename})
 
-        raise LMSValidationError("Target content PDF is required for Learning Chat")
-
-
+    _set_upload_progress(progress_job_id, 5, "Creating diagnostic assessment...", stage="create")
 
     assessment = assessment_service.create_assessment(
 
@@ -196,21 +236,42 @@ def upload_diagnostic_bundle(
 
     )
 
+    target_thread_ids = []
+    target_filenames = []
+    total_targets = len([t for t in targets if t.get("bytes")])
+    processed_targets = 0
+    for idx, tgt in enumerate(targets):
+        tbytes = tgt.get("bytes") or b""
+        tfname = tgt.get("filename") or f"target_{idx + 1}.pdf"
+        if not tbytes:
+            continue
+        thread_id = _ingest_target_pdf(
+            teacher_id,
+            tbytes,
+            tfname,
+            progress_job_id=progress_job_id,
+            pdf_index=processed_targets,
+            pdf_total=max(total_targets, 1),
+        )
+        processed_targets += 1
+        assessment_service.add_target_pdf(
+            assessment.id,
+            target_rag_thread_id=thread_id,
+            target_original_filename=tfname,
+            sort_order=idx,
+        )
+        target_thread_ids.append(thread_id)
+        target_filenames.append(tfname)
 
+    if not target_thread_ids:
+        raise LMSValidationError("At least one target content PDF is required for Learning Chat")
 
-    target_thread_id = _ingest_target_pdf(teacher_id, target_file_bytes, target_filename)
-
-    assessment_service.link_target_pdf(
-
-        assessment.id,
-
-        target_rag_thread_id=target_thread_id,
-
-        target_original_filename=target_filename,
-
+    _set_upload_progress(
+        progress_job_id,
+        55,
+        f"Processing diagnostic Q&A PDF ({diagnostic_filename})...",
+        stage="qa_pdf",
     )
-
-
 
     pipeline_result = enqueue_or_run_pdf_quiz(
 
@@ -224,7 +285,11 @@ def upload_diagnostic_bundle(
 
         async_mode=False,
 
+        progress_job_id=progress_job_id,
+
     )
+
+    _set_upload_progress(progress_job_id, 92, "Finalizing diagnostic...", stage="finalize")
 
 
 
@@ -242,8 +307,10 @@ def upload_diagnostic_bundle(
     meta = {
         **existing_meta,
         "diagnostic_pdf_type": "qa",
-        "target_rag_thread_id": target_thread_id,
-        "target_filename": target_filename,
+        "target_rag_thread_id": target_thread_ids[0],
+        "target_filename": target_filenames[0],
+        "target_rag_thread_ids": target_thread_ids,
+        "target_filenames": target_filenames,
     }
     assessment.description = json.dumps(meta, ensure_ascii=False)
 
@@ -251,7 +318,13 @@ def upload_diagnostic_bundle(
 
     db.commit()
 
-
+    _set_upload_progress(
+        progress_job_id,
+        100,
+        "Diagnostic processing complete.",
+        stage="complete",
+        done=True,
+    )
 
     return {
 
@@ -259,7 +332,11 @@ def upload_diagnostic_bundle(
 
         "thread_id": pipeline_result.get("thread_id"),
 
-        "target_thread_id": target_thread_id,
+        "target_thread_id": target_thread_ids[0],
+
+        "target_thread_ids": target_thread_ids,
+
+        "target_filenames": target_filenames,
 
         "title": assessment.title,
 
@@ -385,21 +462,23 @@ def upload_target_pdf(
 
     assessment_id: int,
 
-    teacher_id: int,
+    user_id: int,
 
     file_bytes: bytes,
 
     filename: str,
 
+    is_admin: bool = False,
+
 ) -> dict:
 
-    """Attach or replace target content PDF on an existing diagnostic."""
+    """Attach an additional target content PDF to an existing diagnostic."""
 
-    assessment = _assert_diagnostic_owner(assessment_id, teacher_id)
+    assessment = _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
 
-    target_thread_id = _ingest_target_pdf(teacher_id, file_bytes, filename)
+    target_thread_id = _ingest_target_pdf(user_id, file_bytes, filename)
 
-    assessment_service.link_target_pdf(
+    entry = assessment_service.add_target_pdf(
 
         assessment_id,
 
@@ -412,21 +491,19 @@ def upload_target_pdf(
 
 
     meta = {}
-
     if assessment.description:
-
         try:
-
             meta = json.loads(assessment.description)
-
+            if not isinstance(meta, dict):
+                meta = {}
         except (json.JSONDecodeError, TypeError):
-
             meta = {}
 
+    all_targets = assessment_service.list_target_pdfs(assessment_id)
     meta["target_rag_thread_id"] = target_thread_id
-
     meta["target_filename"] = filename
-
+    meta["target_rag_thread_ids"] = [t["rag_thread_id"] for t in all_targets]
+    meta["target_filenames"] = [t.get("original_filename") or "target.pdf" for t in all_targets]
     assessment.description = json.dumps(meta, ensure_ascii=False)
 
     db = get_db()
@@ -439,11 +516,56 @@ def upload_target_pdf(
 
         "assessment_id": assessment_id,
 
+        "target_pdf_id": entry.id,
+
         "target_thread_id": target_thread_id,
 
         "target_filename": filename,
 
+        "target_pdfs": assessment_service.list_target_pdfs(assessment_id),
+
     }
+
+
+def remove_target_pdf_entry(
+    assessment_id: int,
+    user_id: int,
+    target_pdf_id: int,
+    is_admin: bool = False,
+) -> dict:
+    """Remove a target content PDF from a diagnostic."""
+    assessment = _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
+    assessment_service.remove_target_pdf(assessment_id, target_pdf_id)
+    all_targets = assessment_service.list_target_pdfs(assessment_id)
+    meta = {}
+    if assessment.description:
+        try:
+            parsed = json.loads(assessment.description)
+            if isinstance(parsed, dict):
+                meta = parsed
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+    if all_targets:
+        meta["target_rag_thread_id"] = all_targets[0]["rag_thread_id"]
+        meta["target_filename"] = all_targets[0].get("original_filename")
+        meta["target_rag_thread_ids"] = [t["rag_thread_id"] for t in all_targets]
+        meta["target_filenames"] = [t.get("original_filename") or "target.pdf" for t in all_targets]
+    else:
+        meta.pop("target_rag_thread_id", None)
+        meta.pop("target_filename", None)
+        meta["target_rag_thread_ids"] = []
+        meta["target_filenames"] = []
+    assessment.description = json.dumps(meta, ensure_ascii=False)
+    get_db().commit()
+    return {
+        "assessment_id": assessment_id,
+        "target_pdfs": all_targets,
+    }
+
+
+def list_diagnostic_target_pdfs(assessment_id: int, user_id: int, is_admin: bool = False) -> List[dict]:
+    _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
+    return assessment_service.list_target_pdfs(assessment_id)
 
 
 
@@ -481,23 +603,26 @@ def list_pdf_topics(thread_id: str, teacher_id: int) -> dict:
 
 
 
-def list_target_pdf_topics(assessment_id: int, teacher_id: int) -> dict:
+def list_target_pdf_topics(assessment_id: int, user_id: int, is_admin: bool = False) -> dict:
 
-    assessment = _assert_diagnostic_owner(assessment_id, teacher_id)
+    assessment = _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
 
-    src = assessment.pdf_source
+    targets = assessment_service.list_target_pdfs(assessment_id)
+    if not targets:
+        src = assessment.pdf_source
+        if not src or not src.target_rag_thread_id:
+            raise LMSValidationError("No target content PDF uploaded yet")
+        result = _get_thread_topics(src.target_rag_thread_id)
+        if result.get("error"):
+            raise LMSValidationError(result["error"])
+        return result
 
-    if not src or not src.target_rag_thread_id:
-
-        raise LMSValidationError("No target content PDF uploaded yet")
-
-    result = _get_thread_topics(src.target_rag_thread_id)
-
-    if result.get("error"):
-
-        raise LMSValidationError(result["error"])
-
-    return result
+    combined_topics = []
+    for tgt in targets:
+        result = _get_thread_topics(tgt["rag_thread_id"])
+        for entry in result.get("topics") or []:
+            combined_topics.append({**entry, "source_filename": tgt.get("original_filename")})
+    return {"topics": combined_topics}
 
 
 
@@ -507,15 +632,17 @@ def generate_diagnostic_questions(
 
     assessment_id: int,
 
-    teacher_id: int,
+    user_id: int,
 
     topic_selections: List[Dict[str, Any]],
+
+    is_admin: bool = False,
 
 ) -> dict:
 
     """Legacy pdf_ai flow — generate MCQs from content PDF sections."""
 
-    assessment = _assert_diagnostic_owner(assessment_id, teacher_id)
+    assessment = _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
 
     if not assessment.pdf_source or not assessment.pdf_source.rag_thread_id:
 
@@ -599,7 +726,7 @@ def generate_diagnostic_questions(
 
         try:
 
-            section_text = get_section_text(thread_id, teacher_id, topic_name, page)
+            section_text = get_section_text(thread_id, user_id, topic_name, page)
 
             mcqs = generate_mcqs_from_content(section_text, topic_name, count)
 
@@ -609,7 +736,7 @@ def generate_diagnostic_questions(
 
                 q = question_bank_service.create_question(
 
-                    created_by=teacher_id,
+                    created_by=user_id,
 
                     question_text=fields["question_text"],
 
@@ -729,15 +856,17 @@ def generate_diagnostic_questions(
 
 
 
-def get_diagnostic_status(assessment_id: int, teacher_id: int) -> dict:
+def get_diagnostic_status(assessment_id: int, user_id: int, is_admin: bool = False) -> dict:
 
-    _assert_diagnostic_owner(assessment_id, teacher_id)
+    _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
 
     status = assessment_service.get_pdf_processing_status(assessment_id)
 
     status["assessment_type"] = "diagnostic"
 
     status["has_target_pdf"] = assessment_service.has_target_pdf(assessment_id)
+
+    status["target_pdfs"] = assessment_service.list_target_pdfs(assessment_id)
 
     src = assessment_service.get_assessment(assessment_id).pdf_source
 

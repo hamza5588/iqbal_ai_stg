@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 
 from app.models.lms_models import AssessmentAttempt, DeficiencyChatSession, StudentProfile
 from app.services.lms import assessment_service, tutor_service
-from app.services.lms.diagnostic_service import get_teacher_diagnostic_for_student
+from app.services.lms.diagnostic_service import get_default_diagnostic
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
 from app.services.lms.path_generator import get_weak_topics
 from app.services.lms.performance_service import analyze_attempt
@@ -21,65 +21,96 @@ logger = logging.getLogger(__name__)
 PRACTICE_QUESTIONS_PER_WEAK_AREA = 2
 
 
+def _get_target_threads(assessment_id: int) -> List[dict]:
+    """Return all target PDF threads for a diagnostic."""
+    targets = assessment_service.list_target_pdfs(assessment_id)
+    if targets:
+        return targets
+    assessment = assessment_service.get_assessment(assessment_id)
+    src = assessment.pdf_source
+    if src and src.target_rag_thread_id:
+        return [{"rag_thread_id": src.target_rag_thread_id, "original_filename": src.target_original_filename}]
+    return []
+
+
 def _resolve_target_pdf_context(student_id: int) -> Tuple[Optional[str], Optional[int], Optional[int]]:
-    """Return (target_rag_thread_id, teacher_id, diagnostic_assessment_id)."""
+    """Return (primary target_rag_thread_id, owner_id, diagnostic_assessment_id)."""
     db = get_db()
     profile = db.query(StudentProfile).filter(StudentProfile.user_id == student_id).first()
     if profile and profile.diagnostic_assessment_id:
         try:
             assessment = assessment_service.get_assessment(profile.diagnostic_assessment_id)
-            src = assessment.pdf_source
-            if src and src.target_rag_thread_id:
-                return src.target_rag_thread_id, assessment.created_by, assessment.id
+            targets = _get_target_threads(assessment.id)
+            if targets:
+                return targets[0]["rag_thread_id"], assessment.created_by, assessment.id
         except LMSNotFoundError:
             pass
 
-    teacher_diag = get_teacher_diagnostic_for_student(student_id)
-    if teacher_diag and teacher_diag.pdf_source and teacher_diag.pdf_source.target_rag_thread_id:
-        return (
-            teacher_diag.pdf_source.target_rag_thread_id,
-            teacher_diag.created_by,
-            teacher_diag.id,
-        )
+    platform_diag = get_default_diagnostic()
+    if platform_diag:
+        targets = _get_target_threads(platform_diag.id)
+        if targets:
+            return targets[0]["rag_thread_id"], platform_diag.created_by, platform_diag.id
     return None, None, None
 
 
-def _match_target_section(weak_area_name: str, target_thread_id: str) -> str:
-    """Pick the best target PDF heading for a weak area label."""
+def _resolve_all_target_threads(student_id: int) -> Tuple[List[str], Optional[int], Optional[int]]:
+    """Return (all target thread ids, owner_id, diagnostic_assessment_id)."""
+    db = get_db()
+    profile = db.query(StudentProfile).filter(StudentProfile.user_id == student_id).first()
+    if profile and profile.diagnostic_assessment_id:
+        try:
+            assessment = assessment_service.get_assessment(profile.diagnostic_assessment_id)
+            targets = _get_target_threads(assessment.id)
+            if targets:
+                return [t["rag_thread_id"] for t in targets], assessment.created_by, assessment.id
+        except LMSNotFoundError:
+            pass
+    platform_diag = get_default_diagnostic()
+    if platform_diag:
+        targets = _get_target_threads(platform_diag.id)
+        if targets:
+            return [t["rag_thread_id"] for t in targets], platform_diag.created_by, platform_diag.id
+    return [], None, None
+
+
+def _match_target_section(weak_area_name: str, target_thread_ids: List[str]) -> Tuple[str, str]:
+    """Pick the best target PDF heading across all target PDFs. Returns (section, thread_id)."""
     name = (weak_area_name or "").strip()
     if not name:
-        return name
-    topics = _get_thread_topics(target_thread_id).get("topics") or []
-    if not topics:
-        return name
+        return name, target_thread_ids[0] if target_thread_ids else ""
 
     name_lower = name.lower()
     best = None
     best_score = 0
-    for entry in topics:
-        heading = (entry.get("topic") or entry.get("heading") or "").strip()
-        if not heading:
-            continue
-        h_lower = heading.lower()
-        if name_lower in h_lower or h_lower in name_lower:
-            score = min(len(name_lower), len(h_lower))
+    best_thread = target_thread_ids[0] if target_thread_ids else ""
+
+    for thread_id in target_thread_ids:
+        topics = _get_thread_topics(thread_id).get("topics") or []
+        for entry in topics:
+            heading = (entry.get("topic") or entry.get("heading") or "").strip()
+            if not heading:
+                continue
+            h_lower = heading.lower()
+            score = 0
+            if name_lower in h_lower or h_lower in name_lower:
+                score = min(len(name_lower), len(h_lower))
+            else:
+                score = len(set(name_lower.split()) & set(h_lower.split()))
             if score > best_score:
                 best_score = score
                 best = heading
-        else:
-            overlap = len(set(name_lower.split()) & set(h_lower.split()))
-            if overlap > best_score:
-                best_score = overlap
-                best = heading
-    return best or name
+                best_thread = thread_id
+    return (best or name), best_thread
 
 
-def _mcq_to_queue_item(mcq, topic_id: int, topic_name: str, pdf_section: str) -> dict:
+def _mcq_to_queue_item(mcq, topic_id: int, topic_name: str, pdf_section: str, rag_thread_id: str) -> dict:
     options = [{"label": o.label, "text": o.text} for o in mcq.options]
     return {
         "topic_id": topic_id,
         "topic_name": topic_name,
         "pdf_section": pdf_section,
+        "rag_thread_id": rag_thread_id,
         "question_text": mcq.question_text,
         "question_latex": mcq.question_latex,
         "options": options,
@@ -95,19 +126,27 @@ def _mcq_to_queue_item(mcq, topic_id: int, topic_name: str, pdf_section: str) ->
 
 def _build_question_queue(
     weak_topics: List[dict],
-    target_thread_id: str,
+    target_thread_ids: List[str],
     rag_owner_id: int,
 ) -> List[dict]:
-    """Generate Learning Chat MCQs from the teacher's target content PDF only."""
+    """Generate Learning Chat MCQs from target content PDF(s)."""
     queue: List[dict] = []
     seen_texts: set[str] = set()
 
     for entry in weak_topics:
         topic_id = entry.get("topic_id") or 0
         topic_name = (entry.get("topic_name") or "Practice area").strip()
-        pdf_section = _match_target_section(topic_name, target_thread_id)
+        pdf_section, thread_id = _match_target_section(topic_name, target_thread_ids)
 
-        section_text = get_section_text(target_thread_id, rag_owner_id, pdf_section)
+        section_text = get_section_text(thread_id, rag_owner_id, pdf_section)
+        if not section_text.strip():
+            for alt_thread in target_thread_ids:
+                if alt_thread == thread_id:
+                    continue
+                section_text = get_section_text(alt_thread, rag_owner_id, pdf_section)
+                if section_text.strip():
+                    thread_id = alt_thread
+                    break
         if not section_text.strip():
             logger.warning("No target PDF text for weak area %s (section %s)", topic_name, pdf_section)
             continue
@@ -117,7 +156,7 @@ def _build_question_queue(
                 section_text, pdf_section, PRACTICE_QUESTIONS_PER_WEAK_AREA
             )
             for mcq in mcqs:
-                item = _mcq_to_queue_item(mcq, topic_id, topic_name, pdf_section)
+                item = _mcq_to_queue_item(mcq, topic_id, topic_name, pdf_section, thread_id)
                 key = (item.get("question_text") or "")[:120].lower()
                 if key and key not in seen_texts:
                     seen_texts.add(key)
@@ -217,13 +256,14 @@ def _latest_diagnostic_attempt(student_id: int, assessment_id: int) -> Optional[
 
 
 def start_session(student_id: int, force_new: bool = False) -> dict:
-    """Start Learning Chat — questions generated from teacher target PDF."""
-    target_thread_id, rag_owner_id, diag_id = _resolve_target_pdf_context(student_id)
+    """Start Learning Chat — questions generated from target PDF(s)."""
+    target_thread_ids, rag_owner_id, diag_id = _resolve_all_target_threads(student_id)
+    target_thread_id = target_thread_ids[0] if target_thread_ids else None
 
     if not target_thread_id or not rag_owner_id:
         raise LMSValidationError(
-            "Your teacher has not uploaded the target content PDF yet. "
-            "Learning Chat uses a separate unit/chapter PDF with study material for weak areas."
+            "No target content PDF has been uploaded yet. "
+            "Learning Chat uses study material PDFs for weak areas — ask your admin."
         )
 
     if force_new:
@@ -249,11 +289,11 @@ def start_session(student_id: int, force_new: bool = False) -> dict:
             if analysis.get("weak_topics"):
                 weak = analysis["weak_topics"]
 
-    queue = _build_question_queue(weak, target_thread_id, rag_owner_id)
+    queue = _build_question_queue(weak, target_thread_ids, rag_owner_id)
     if not queue:
         raise LMSValidationError(
-            "Could not generate questions from the teacher's target PDF for your weak areas. "
-            "Ask your teacher to check the target content PDF covers those topics."
+            "Could not generate questions from the target PDF(s) for your weak areas. "
+            "Ask your admin to check the target content PDFs cover those topics."
         )
 
     weak_payload = [
@@ -384,10 +424,21 @@ def explain_with_tutor(
 
     pdf_excerpt = ""
     pdf_section = (current_q or {}).get("pdf_section") or (current_q or {}).get("topic_name") or ""
-    if session.rag_thread_id and session.rag_owner_id and pdf_section:
+    thread_for_excerpt = (current_q or {}).get("rag_thread_id") or session.rag_thread_id
+    if thread_for_excerpt and session.rag_owner_id and pdf_section:
         pdf_excerpt = get_section_text(
-            session.rag_thread_id, session.rag_owner_id, pdf_section, max_chars=4000
+            thread_for_excerpt, session.rag_owner_id, pdf_section, max_chars=4000
         )
+        if not pdf_excerpt.strip():
+            diag_id = session.diagnostic_assessment_id
+            if diag_id:
+                for alt_thread in _get_target_threads(diag_id):
+                    alt_id = alt_thread.get("rag_thread_id")
+                    if not alt_id or alt_id == thread_for_excerpt:
+                        continue
+                    pdf_excerpt = get_section_text(alt_id, session.rag_owner_id, pdf_section, max_chars=4000)
+                    if pdf_excerpt.strip():
+                        break
 
     tutor_state = _load_tutor_state(session)
     assist_level = min(max(int(tutor_state.get("assist_level") or 1), 1), 5)

@@ -1,16 +1,68 @@
 /** Student LMS — diagnostic, learning path actions */
 (function () {
-  var diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {} };
+  var diagState = {
+    assessmentId: null,
+    attemptId: null,
+    questions: [],
+    current: 0,
+    answers: {},
+    expiresAt: null,
+    remainingSeconds: null,
+    timerInterval: null
+  };
 
   function ensureDiagnosticModal() {
     if (document.getElementById('lmsDiagnosticModal')) return;
     var html = '<div id="lmsDiagnosticModal" class="lms-modal-backdrop" onclick="if(event.target===this)closeLmsDiagnostic()">' +
       '<div class="lms-modal lms-modal-lg">' +
       '<div class="lms-modal-header"><h2>Diagnostic Assessment</h2>' +
+      '<div id="lmsDiagTimer" class="lms-diag-timer" style="display:none;margin-left:auto;margin-right:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--primary-color);"></div>' +
       '<button type="button" class="lms-modal-close" onclick="closeLmsDiagnostic()">&times;</button></div>' +
       '<div class="lms-modal-body" id="lmsDiagBody"><div class="lms-spinner"></div></div>' +
       '</div></div>';
     document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  function clearDiagTimer() {
+    if (diagState.timerInterval) {
+      clearInterval(diagState.timerInterval);
+      diagState.timerInterval = null;
+    }
+  }
+
+  function formatTime(secs) {
+    var m = Math.floor(secs / 60);
+    var s = secs % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function updateTimerDisplay() {
+    var el = document.getElementById('lmsDiagTimer');
+    if (!el || diagState.remainingSeconds == null) return;
+    if (diagState.remainingSeconds <= 60) {
+      el.style.color = '#dc2626';
+    }
+    el.textContent = formatTime(diagState.remainingSeconds);
+    el.style.display = 'block';
+  }
+
+  function startDiagTimer() {
+    clearDiagTimer();
+    if (diagState.remainingSeconds == null && !diagState.expiresAt) return;
+    updateTimerDisplay();
+    diagState.timerInterval = setInterval(function () {
+      if (diagState.expiresAt) {
+        var rem = Math.max(0, Math.floor((new Date(diagState.expiresAt).getTime() - Date.now()) / 1000));
+        diagState.remainingSeconds = rem;
+      } else if (diagState.remainingSeconds != null) {
+        diagState.remainingSeconds = Math.max(0, diagState.remainingSeconds - 1);
+      }
+      updateTimerDisplay();
+      if (diagState.remainingSeconds <= 0) {
+        clearDiagTimer();
+        submitLmsDiagnostic(true);
+      }
+    }, 1000);
   }
 
   window.openLmsDiagnostic = async function () {
@@ -20,39 +72,36 @@
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Loading diagnostic...</p>';
     try {
       var diag = await lmsApi('/api/lms/diagnostics/default');
-      if (diag.diagnostic_completed) {
-        body.innerHTML = '<div class="lms-card"><p>You already completed this diagnostic' +
-          (diag.title ? ': <strong>' + escapeHtml(diag.title) + '</strong>' : '') + '.</p>' +
-          '<button type="button" class="lms-btn lms-btn-primary" onclick="retakeLmsDiagnostic(' + diag.id + ')">Retake Diagnostic</button></div>';
+      if (diag.diagnostic_completed || diag.any_diagnostic_completed) {
+        body.innerHTML = '<div class="lms-card"><p>You have already completed the diagnostic assessment' +
+          (diag.title ? ': <strong>' + escapeHtml(diag.title) + '</strong>' : '') +
+          '.</p><p class="lms-status" style="margin-top:8px;">Retakes are not allowed. Continue with your learning path or Learning Chat.</p></div>';
         return;
       }
-      var subtitle = diag.source === 'teacher'
-        ? 'From your teacher'
-        : 'Platform diagnostic';
-      await startDiagnosticQuiz(diag.id, diag.title || 'Diagnostic Assessment', diag.question_count, subtitle);
+      await startDiagnosticQuiz(diag.id, diag.title || 'Diagnostic Assessment', diag.question_count, 'Platform diagnostic', diag.time_limit_minutes);
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>' +
-        '<p class="lms-status">Ask your teacher for a class assignment, or contact admin to seed the diagnostic.</p>';
+        '<p class="lms-status">Contact your admin to upload the diagnostic assessment.</p>';
     }
   };
 
   window.closeLmsDiagnostic = function () {
+    clearDiagTimer();
     lmsCloseModal('lmsDiagnosticModal');
-    diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {} };
+    diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {}, expiresAt: null, remainingSeconds: null, timerInterval: null };
   };
 
-  window.retakeLmsDiagnostic = function (assessmentId) {
-    startDiagnosticQuiz(assessmentId, 'Diagnostic Assessment', null);
-  };
-
-  async function startDiagnosticQuiz(assessmentId, title, qCount, subtitle) {
+  async function startDiagnosticQuiz(assessmentId, title, qCount, subtitle, timeLimitMinutes) {
     diagState.assessmentId = assessmentId;
     var body = document.getElementById('lmsDiagBody');
     body.innerHTML = '<p class="lms-status">Starting ' + escapeHtml(title) + '...</p>' +
-      (subtitle ? '<p class="lms-status" style="margin-top:4px;">' + escapeHtml(subtitle) + '</p>' : '');
+      (subtitle ? '<p class="lms-status" style="margin-top:4px;">' + escapeHtml(subtitle) + '</p>' : '') +
+      (timeLimitMinutes ? '<p class="lms-status" style="margin-top:4px;">Time limit: ~' + timeLimitMinutes + ' minutes (AI-calculated per question)</p>' : '');
     try {
       var start = await lmsApi('/api/lms/quizzes/' + assessmentId + '/start', { method: 'POST' });
       diagState.attemptId = start.attempt_id;
+      diagState.expiresAt = start.expires_at || null;
+      diagState.remainingSeconds = start.remaining_seconds != null ? start.remaining_seconds : null;
       var qData = await lmsApi('/api/lms/attempts/' + start.attempt_id + '/questions');
       diagState.questions = qData.questions || qData || [];
       diagState.current = 0;
@@ -62,6 +111,7 @@
         return;
       }
       renderDiagnosticQuestion();
+      startDiagTimer();
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }
@@ -74,23 +124,36 @@
     var item = diagState.questions[idx];
     var q = item.question || item;
     var pct = Math.round(100 * (idx + 1) / total);
+    var qSecs = item.time_limit_seconds || q.time_limit_seconds;
+    var diff = item.difficulty || q.difficulty || '';
     var opts = (q.options || []).map(function (o, oi) {
       var sel = diagState.answers[idx] === oi ? ' selected' : '';
       return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDiagOption(' + idx + ',' + oi + ')">' +
         '<strong>' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</strong> ' + escapeHtml(o.text || '') + '</button>';
     }).join('');
-    var nav = '';
-    if (idx > 0) nav += '<button type="button" class="lms-btn lms-btn-secondary" onclick="prevDiagQuestion()">Back</button> ';
+    var backBtn = idx > 0
+      ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="prevDiagQuestion()">Back</button>'
+      : '';
+    var forwardBtn = '';
     if (idx < total - 1) {
-      nav += '<button type="button" class="lms-btn lms-btn-primary" onclick="nextDiagQuestion()"' +
+      forwardBtn = '<button type="button" class="lms-btn lms-btn-primary" onclick="nextDiagQuestion()"' +
         (diagState.answers[idx] === undefined ? ' disabled' : '') + '>Next</button>';
     } else {
-      nav += '<button type="button" class="lms-btn lms-btn-primary" onclick="submitLmsDiagnostic()"' +
+      forwardBtn = '<button type="button" class="lms-btn lms-btn-primary" onclick="submitLmsDiagnostic()"' +
         (diagState.answers[idx] === undefined ? ' disabled' : '') + '>Submit Diagnostic</button>';
     }
+    var nav =
+      '<div class="lms-quiz-nav">' +
+      '<div class="lms-quiz-nav-start">' + backBtn + '</div>' +
+      '<div class="lms-quiz-nav-end">' + forwardBtn + '</div>' +
+      '</div>';
+    var meta = '<p class="lms-status">Question ' + (idx + 1) + ' of ' + total;
+    if (diff) meta += ' &middot; ' + escapeHtml(diff);
+    if (qSecs) meta += ' &middot; ~' + qSecs + 's suggested';
+    meta += '</p>';
     body.innerHTML =
       '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
-      '<p class="lms-status">Question ' + (idx + 1) + ' of ' + total + '</p>' +
+      meta +
       '<h3 style="font-size:1rem;font-weight:700;margin:12px 0;">' + escapeHtml(q.question_text || '') + '</h3>' +
       opts +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' + nav + '</div>';
@@ -108,9 +171,11 @@
     if (diagState.current > 0) { diagState.current--; renderDiagnosticQuestion(); }
   };
 
-  window.submitLmsDiagnostic = async function () {
+  window.submitLmsDiagnostic = async function (autoSubmit) {
+    clearDiagTimer();
     var body = document.getElementById('lmsDiagBody');
-    body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Scoring your diagnostic...</p>';
+    body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">' +
+      (autoSubmit ? 'Time expired — submitting your answers...' : 'Scoring your diagnostic...') + '</p>';
     try {
       for (var i = 0; i < diagState.questions.length; i++) {
         var item = diagState.questions[i];
@@ -136,6 +201,8 @@
 
   function renderDiagnosticResults(result) {
     var body = document.getElementById('lmsDiagBody');
+    var timerEl = document.getElementById('lmsDiagTimer');
+    if (timerEl) timerEl.style.display = 'none';
     var score = result.score_percent != null ? Math.round(result.score_percent) : '—';
     var weak = result.weak_topics || [];
     var strong = result.strong_topics || [];
@@ -151,11 +218,11 @@
       : '';
     body.innerHTML =
       '<div style="text-align:center;margin-bottom:20px;">' +
-      '<div style="font-size:2.5rem;font-weight:800;color:#166534;">' + score + '%</div>' +
+      '<div style="font-size:2.5rem;font-weight:800;color:var(--primary-color);">' + score + '%</div>' +
       '<p class="lms-status">Overall diagnostic score</p></div>' +
       (weak.length ? '<h4 style="color:#991b1b;margin:0 0 8px;">Areas to improve</h4><div class="lms-topic-grid">' + weakHtml + '</div>' : '') +
-      (strong.length ? '<h4 style="color:#166534;margin:16px 0 8px;">Strong areas</h4><div class="lms-topic-grid">' + strongHtml + '</div>' : '') +
-      (weak.length ? '<p class="lms-status" style="margin-top:12px;">Practice weak areas in Learning Chat — questions from your teacher\'s PDF, one at a time.</p>' : '') +
+      (strong.length ? '<h4 style="color:var(--primary-color);margin:16px 0 8px;">Strong areas</h4><div class="lms-topic-grid">' + strongHtml + '</div>' : '') +
+      (weak.length ? '<p class="lms-status" style="margin-top:12px;">Practice weak areas in Learning Chat — one question at a time.</p>' : '') +
       '<div class="lms-modal-footer" style="border:none;padding-top:20px;display:flex;gap:8px;flex-wrap:wrap;">' +
       (weak.length ? '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>' : '') +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button></div>';
@@ -236,7 +303,6 @@
       '<ol class="lms-path-steps">' + steps + '</ol></div>';
   };
 
-  /* Patch renderLmsLearningPath if on student dashboard */
   document.addEventListener('DOMContentLoaded', function () {
     if (typeof renderLmsLearningPath === 'function') {
       window._renderLmsLearningPathOriginal = renderLmsLearningPath;

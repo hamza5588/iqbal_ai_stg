@@ -1,0 +1,29 @@
+{# Theme-aware logo — variants: dark-on-light | light | dark | icon #}
+{% set logo_variant = variant|default('dark-on-light') %}
+{% set logo_height = height|default('38px') %}
+{% set logo_class = class|default('') %}
+
+{% if logo_variant == 'icon' %}
+<span class="iqbal-logo iqbal-logo--icon {{ logo_class }}" style="--iqbal-logo-h: {{ logo_height }};" role="img" aria-label="Iqbal AI"></span>
+
+{% elif logo_variant == 'dark' %}
+<span class="iqbal-logo iqbal-logo--dark {{ logo_class }}" style="--iqbal-logo-h: {{ logo_height }};" role="img" aria-label="Iqbal AI - Intelligent Learning Platform">
+  <span class="iqbal-logo__icon" aria-hidden="true"></span>
+  <span class="iqbal-logo__wordmark" aria-hidden="true">
+    <span class="iqbal-logo__title"><span class="iqbal-logo__iqbal">IQBAL</span><span class="iqbal-logo__ai">AI</span></span>
+    <span class="iqbal-logo__tagline">Intelligent Learning Platform</span>
+  </span>
+</span>
+
+{% elif logo_variant == 'dark-on-light' %}
+<span class="iqbal-logo iqbal-logo--dark-on-light {{ logo_class }}" style="--iqbal-logo-h: {{ logo_height }};" role="img" aria-label="Iqbal AI - Intelligent Learning Platform">
+  <span class="iqbal-logo__icon" aria-hidden="true"></span>
+  <span class="iqbal-logo__wordmark" aria-hidden="true">
+    <span class="iqbal-logo__title"><span class="iqbal-logo__iqbal">IQBAL</span><span class="iqbal-logo__ai">AI</span></span>
+    <span class="iqbal-logo__tagline">Intelligent Learning Platform</span>
+  </span>
+</span>
+
+{% else %}
+<span class="iqbal-logo iqbal-logo--light {{ logo_class }}" style="--iqbal-logo-h: {{ logo_height }};" role="img" aria-label="Iqbal AI - Intelligent Learning Platform"></span>
+{% endif %}

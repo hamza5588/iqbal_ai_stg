@@ -22,13 +22,15 @@ from app.services.lms import deficiency_chat_service
 from app.services.lms.diagnostic_pdf_service import (
     generate_diagnostic_questions,
     get_diagnostic_status,
+    list_diagnostic_target_pdfs,
     list_pdf_topics,
     list_target_pdf_topics,
+    remove_target_pdf_entry,
     upload_diagnostic_bundle,
     upload_diagnostic_pdf,
     upload_target_pdf,
 )
-from app.services.lms.diagnostic_service import get_student_diagnostic_dict
+from app.services.lms.diagnostic_service import get_student_diagnostic_dict, list_admin_diagnostics
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, LMSError
 from app.services.quiz.pipeline import run_pdf_quiz_pipeline
 from app.tasks.quiz_pdf_tasks import enqueue_or_run_pdf_quiz
@@ -50,6 +52,14 @@ def _require_permission(permission: Permissions):
     if not has_permission(_current_role(), permission):
         return json_error("Forbidden", code="forbidden", status=403)
     return None
+
+
+def _is_admin() -> bool:
+    return _current_role() == "admin"
+
+
+def _require_diagnostic_admin():
+    return _require_permission(Permissions.CREATE_DIAGNOSTIC)
 
 
 @bp.route("/health", methods=["GET"])
@@ -503,17 +513,31 @@ def start_quiz_attempt(quiz_id: int):
             assignment_service.link_attempt_to_submission(
                 assignment_id, _current_user_id(), attempt.id
             )
-        return json_success(
-            {
-                "attempt_id": attempt.id,
-                "assessment_id": quiz_id,
-                "status": attempt.status,
-                "max_score": attempt.max_score,
-            },
-            status=201,
-        )
+        payload = {
+            "attempt_id": attempt.id,
+            "assessment_id": quiz_id,
+            "status": attempt.status,
+            "max_score": attempt.max_score,
+        }
+        assessment = assessment_service.get_assessment(quiz_id)
+        if assessment.assessment_type == "diagnostic":
+            timer = attempt_service.get_attempt_timer_info(attempt.id)
+            payload.update(timer)
+        return json_success(payload, status=201)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
+
+
+@bp.route("/attempts/<int:attempt_id>/timer", methods=["GET"])
+@login_required
+def get_attempt_timer(attempt_id: int):
+    try:
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        return json_success(attempt_service.get_attempt_timer_info(attempt_id))
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
 
 
 @bp.route("/attempts/<int:attempt_id>/questions", methods=["GET"])
@@ -591,57 +615,95 @@ def my_assignments():
 @bp.route("/diagnostics/default", methods=["GET"])
 @login_required
 def default_diagnostic():
-    """Active diagnostic for the logged-in student (teacher PDF diagnostic or platform default)."""
+    """Active platform diagnostic for the logged-in student."""
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
     diag = get_student_diagnostic_dict(_current_user_id())
     if not diag:
         return json_error(
-            "No diagnostic available. Ask admin to run: python scripts/seed_default_diagnostic.py",
+            "No diagnostic available. Ask your admin to upload the diagnostic assessment.",
             code="not_found",
             status=404,
         )
     onboarding = student_profile_service.get_onboarding_status(_current_user_id())
     completed_id = onboarding.get("diagnostic_assessment_id")
-    diag["diagnostic_completed"] = bool(
-        onboarding.get("diagnostic_completed") and completed_id == diag["id"]
-    )
+    diag["diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
     diag["any_diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
+    if diag["diagnostic_completed"] and completed_id:
+        diag["completed_assessment_id"] = completed_id
     return json_success(diag)
+
+
+@bp.route("/admin/diagnostics", methods=["GET"])
+@login_required
+def admin_list_diagnostics():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    return json_success(list_admin_diagnostics())
+
+
+@bp.route("/admin/diagnostics/<int:assessment_id>", methods=["DELETE"])
+@login_required
+def admin_remove_diagnostic(assessment_id: int):
+    """Archive a diagnostic so admin can upload a new one."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    try:
+        a = assessment_service.archive_diagnostic(assessment_id)
+        return json_success({"id": a.id, "status": a.status, "title": a.title})
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
 
 
 @bp.route("/diagnostics/from-pdf", methods=["POST"])
 @login_required
 def create_diagnostic_from_pdf():
-    """Upload diagnostic Q&A PDF + target content PDF (Learning Chat source)."""
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    """Upload diagnostic Q&A PDF + target content PDF(s) (Learning Chat source). Admin only."""
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
 
     title = request.form.get("title") or "Diagnostic Assessment"
     diagnostic_file = request.files.get("diagnostic_file") or request.files.get("file")
+    target_files = request.files.getlist("target_files") or request.files.getlist("target_files[]") or request.files.getlist("target_file")
     target_file = request.files.get("target_file")
 
     if not diagnostic_file:
         return json_error("Diagnostic Q&A PDF is required", code="validation_error")
 
     try:
+        extra_targets = []
+        seen_names = set()
+        for tf in target_files:
+            if not tf or not tf.filename:
+                continue
+            fname = tf.filename.strip()
+            if fname.lower() in seen_names:
+                continue
+            seen_names.add(fname.lower())
+            extra_targets.append({"bytes": tf.read(), "filename": fname})
         if target_file and target_file.filename:
-            result = upload_diagnostic_bundle(
-                teacher_id=_current_user_id(),
-                title=title.strip(),
-                diagnostic_file_bytes=diagnostic_file.read(),
-                diagnostic_filename=diagnostic_file.filename or "diagnostic.pdf",
-                target_file_bytes=target_file.read(),
-                target_filename=target_file.filename or "target.pdf",
-            )
-        else:
-            result = upload_diagnostic_pdf(
-                teacher_id=_current_user_id(),
-                title=title.strip(),
-                file_bytes=diagnostic_file.read(),
-                filename=diagnostic_file.filename or "document.pdf",
-            )
+            fname = target_file.filename.strip()
+            if fname.lower() not in seen_names:
+                extra_targets.append({"bytes": target_file.read(), "filename": fname})
+
+        if not extra_targets:
+            return json_error("At least one target content PDF is required", code="validation_error")
+
+        first = extra_targets[0]
+        rest = extra_targets[1:] if len(extra_targets) > 1 else None
+        result = upload_diagnostic_bundle(
+            teacher_id=_current_user_id(),
+            title=title.strip(),
+            diagnostic_file_bytes=diagnostic_file.read(),
+            diagnostic_filename=diagnostic_file.filename or "diagnostic.pdf",
+            target_file_bytes=first["bytes"],
+            target_filename=first["filename"],
+            target_files=rest,
+            progress_job_id=(request.form.get("progress_job_id") or "").strip() or None,
+        )
         return json_success(result, status=201)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
@@ -649,39 +711,99 @@ def create_diagnostic_from_pdf():
         return json_error(str(e), code="upload_error", status=500)
 
 
+@bp.route("/diagnostics/upload-progress/<job_id>", methods=["GET"])
+@login_required
+def diagnostic_upload_progress(job_id: str):
+    """Poll real processing progress for admin diagnostic upload."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.utils.diagnostic_upload_progress import get_progress
+
+    progress = get_progress(job_id)
+    if not progress:
+        return json_success({"percent": 0, "message": "Waiting to start...", "stage": "pending", "done": False})
+    return json_success(progress)
+
+
 @bp.route("/diagnostics/<int:assessment_id>/target-pdf", methods=["POST"])
 @login_required
 def upload_diagnostic_target_pdf(assessment_id: int):
-    """Upload target content PDF for an existing diagnostic."""
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    """Upload additional target content PDF for an existing diagnostic. Admin only."""
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
-    target_file = request.files.get("target_file") or request.files.get("file")
-    if not target_file or not target_file.filename:
-        return json_error("Target content PDF is required", code="validation_error")
+    target_files = request.files.getlist("target_files") or request.files.getlist("target_files[]") or []
+    single = request.files.get("target_file") or request.files.get("file")
+    if single and single.filename:
+        target_files.append(single)
+    if not target_files:
+        return json_error("At least one target content PDF is required", code="validation_error")
     try:
-        result = upload_target_pdf(
-            assessment_id,
-            _current_user_id(),
-            target_file.read(),
-            target_file.filename or "target.pdf",
-        )
-        return json_success(result)
+        results = []
+        seen_names = set()
+        for tf in target_files:
+            if not tf or not tf.filename:
+                continue
+            fname = tf.filename.strip()
+            if fname.lower() in seen_names:
+                continue
+            seen_names.add(fname.lower())
+            results.append(
+                upload_target_pdf(
+                    assessment_id,
+                    _current_user_id(),
+                    tf.read(),
+                    fname or "target.pdf",
+                    is_admin=True,
+                )
+            )
+        if not results:
+            return json_error("No valid PDF files were uploaded", code="validation_error")
+        return json_success({"uploaded": results, "target_pdfs": list_diagnostic_target_pdfs(assessment_id, _current_user_id(), is_admin=True)})
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
     except Exception as e:
         return json_error(str(e), code="upload_error", status=500)
 
 
+@bp.route("/diagnostics/<int:assessment_id>/target-pdf/<int:target_pdf_id>", methods=["DELETE"])
+@login_required
+def delete_diagnostic_target_pdf(assessment_id: int, target_pdf_id: int):
+    """Remove a target content PDF from a diagnostic. Admin only."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    try:
+        result = remove_target_pdf_entry(assessment_id, _current_user_id(), target_pdf_id, is_admin=True)
+        return json_success(result)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/target-pdfs", methods=["GET"])
+@login_required
+def list_diagnostic_target_pdfs_route(assessment_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    try:
+        return json_success(list_diagnostic_target_pdfs(assessment_id, _current_user_id(), is_admin=True))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
 @bp.route("/diagnostics/<int:assessment_id>/target-topics", methods=["GET"])
 @login_required
 def diagnostic_target_topics(assessment_id: int):
     """List headings from the target content PDF."""
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
     try:
-        return json_success(list_target_pdf_topics(assessment_id, _current_user_id()))
+        return json_success(list_target_pdf_topics(assessment_id, _current_user_id(), is_admin=True))
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error", status=403)
 
@@ -690,7 +812,7 @@ def diagnostic_target_topics(assessment_id: int):
 @login_required
 def diagnostic_pdf_topics(thread_id: str):
     """List RAG headings from uploaded diagnostic PDF (A-316)."""
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
     try:
@@ -703,14 +825,14 @@ def diagnostic_pdf_topics(thread_id: str):
 @login_required
 def generate_diagnostic(assessment_id: int):
     """Generate MCQs from selected PDF topics (A-318)."""
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
     body = request.get_json(silent=True) or {}
     selections = body.get("topics") or body.get("selections") or []
     try:
         result = generate_diagnostic_questions(
-            assessment_id, _current_user_id(), selections
+            assessment_id, _current_user_id(), selections, is_admin=True
         )
         return json_success(result)
     except LMSValidationError as e:
@@ -722,11 +844,11 @@ def generate_diagnostic(assessment_id: int):
 @bp.route("/diagnostics/<int:assessment_id>/status", methods=["GET"])
 @login_required
 def diagnostic_status(assessment_id: int):
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
     try:
-        return json_success(get_diagnostic_status(assessment_id, _current_user_id()))
+        return json_success(get_diagnostic_status(assessment_id, _current_user_id(), is_admin=True))
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error", status=403)
     except LMSNotFoundError as e:
@@ -736,14 +858,12 @@ def diagnostic_status(assessment_id: int):
 @bp.route("/diagnostics/<int:assessment_id>/preview", methods=["GET"])
 @login_required
 def diagnostic_preview(assessment_id: int):
-    """Teacher preview of generated diagnostic questions (A-319)."""
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    """Admin preview of generated diagnostic questions (A-319)."""
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
     try:
         assessment = assessment_service.get_assessment(assessment_id)
-        if assessment.created_by != _current_user_id():
-            return json_error("Forbidden", code="forbidden", status=403)
         if assessment.assessment_type != "diagnostic":
             return json_error("Not a diagnostic assessment", code="validation_error", status=400)
         data = assessment_service.get_assessment_with_questions(
@@ -757,17 +877,20 @@ def diagnostic_preview(assessment_id: int):
 @bp.route("/diagnostics/<int:assessment_id>/publish", methods=["POST"])
 @login_required
 def publish_diagnostic(assessment_id: int):
-    denied = _require_permission(Permissions.CREATE_QUIZ)
+    denied = _require_diagnostic_admin()
     if denied:
         return denied
     try:
         assessment = assessment_service.get_assessment(assessment_id)
-        if assessment.created_by != _current_user_id():
-            return json_error("Forbidden", code="forbidden", status=403)
         if assessment.assessment_type != "diagnostic":
             return json_error("Not a diagnostic assessment", code="validation_error", status=400)
         a = assessment_service.publish_assessment(assessment_id)
-        return json_success({"id": a.id, "status": a.status, "title": a.title})
+        return json_success({
+            "id": a.id,
+            "status": a.status,
+            "title": a.title,
+            "time_limit_minutes": a.time_limit_minutes,
+        })
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
     except LMSNotFoundError as e:

@@ -96,6 +96,7 @@ class Question(Base):
     correct_answer_raw = Column(Text, nullable=True)
     explanation = Column(Text, nullable=True)
     difficulty = Column(String(20), nullable=False, default="medium", server_default="medium")
+    time_limit_seconds = Column(Integer, nullable=True)
     source_type = Column(
         String(32), nullable=False, default="manual", server_default="manual"
     )
@@ -206,6 +207,12 @@ class Assessment(Base):
     pdf_source = relationship(
         "QuizPdfSource", back_populates="assessment", uselist=False, cascade="all, delete-orphan"
     )
+    target_pdfs = relationship(
+        "DiagnosticTargetPdf",
+        back_populates="assessment",
+        cascade="all, delete-orphan",
+        order_by="DiagnosticTargetPdf.sort_order",
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -312,6 +319,23 @@ class QuizPdfSource(Base):
     )
 
 
+class DiagnosticTargetPdf(Base):
+    """Multiple target content PDFs per diagnostic (Learning Chat source)."""
+
+    __tablename__ = "diagnostic_target_pdfs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    assessment_id = Column(
+        Integer, ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    rag_thread_id = Column(String(255), nullable=False, index=True)
+    original_filename = Column(String(512), nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    assessment = relationship("Assessment", back_populates="target_pdfs")
+
+
 class PdfQaExtraction(Base):
     __tablename__ = "pdf_qa_extractions"
 
@@ -341,6 +365,7 @@ class AssessmentAttempt(Base):
     max_score = Column(Float, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     submitted_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
 
     answers = relationship(
         "AttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"

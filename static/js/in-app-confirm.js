@@ -5,7 +5,7 @@
  * Usage: const ok = await showInAppConfirm(message, { title, confirmLabel, cancelLabel, iconClass });
  */
 (function (global) {
-  const STYLE_ID = 'in-app-confirm-styles';
+  const STYLE_ID = 'in-app-confirm-styles-v2';
   const ROOT_ID = 'inAppConfirmBanner';
 
   const STYLES = `
@@ -43,7 +43,7 @@
       width: 54px;
       height: 54px;
       border-radius: 14px;
-      background: #1c7c3e;
+      background: var(--primary-600, #1c7c3e);
       color: #fff;
       display: flex;
       align-items: center;
@@ -66,7 +66,7 @@
       line-height: 1.45;
     }
     .in-app-confirm-footer {
-      background: #051416;
+      background: var(--brand-bar, #051416);
       padding: 16px 28px;
       display: flex;
       justify-content: flex-end;
@@ -87,8 +87,8 @@
       font-weight: 600;
     }
     .in-app-confirm-ok {
-      background: #1c7c3e;
-      border: 1.5px solid #d0f73a;
+      background: var(--primary-600, #1c7c3e);
+      border: 1.5px solid var(--theme-accent-bright, #d0f73a);
       color: #fff;
       font-weight: 700;
     }

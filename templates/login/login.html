@@ -4,26 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login | Iqbal AI - Intelligent Learning Platform</title>
+{% include 'partials/platform_theme_head.html' %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --green-dark:#0e5c2f;
-    --green:#1f9c46;
-    --green-light:#e7f6ec;
-    --green-mid:#2fae52;
     --text-dark:#16241c;
     --text-muted:#5c6b62;
     --white:#ffffff;
-    --border-soft:#bfdccb;
     --error:#dc2626;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
     font-family:'Inter', 'Segoe UI', Arial, sans-serif;
     background:
-      linear-gradient(160deg, rgba(250,253,251,0.94), rgba(223,242,230,0.94)),
+      linear-gradient(160deg, var(--green-light), var(--green-50)),
       url('{{ url_for('static', filename='images/forgot-password-bg.jpg') }}') center/cover no-repeat fixed;
     color:var(--text-dark);
   }
@@ -72,10 +68,8 @@
     gap:10px;
     color:#fff;
   }
-  .logo-img{
-    height:44px;
-    width:auto;
-    object-fit:contain;
+  .brand .iqbal-logo{
+    --iqbal-logo-h: 44px;
   }
   .header-actions{display:flex; gap:12px;}
   .btn{
@@ -220,7 +214,7 @@
   .input-wrap input::placeholder{ color:#9fb3a7; }
   .input-wrap input:focus{
     border-color:var(--green-mid);
-    box-shadow:0 0 0 3px rgba(31,156,70,0.12);
+    box-shadow:0 0 0 3px var(--theme-shadow-focus);
   }
   .input-wrap input.field-invalid{
     border-color:var(--error);
@@ -292,7 +286,7 @@
   }
   .signin-btn:hover{
     transform:translateY(-1px);
-    box-shadow:0 6px 18px rgba(31,156,70,0.35);
+    box-shadow:0 6px 18px var(--theme-shadow-btn);
   }
   .signin-btn:disabled{
     opacity:0.75;
@@ -324,8 +318,10 @@
     gap:10px;
     margin-bottom:70px;
   }
-  .panel-right .brand-block .logo-img{
-    height:52px;
+  .panel-right .brand-block .logo-img,
+  .panel-right .brand-block .iqbal-logo{
+    --iqbal-logo-h: 52px;
+    height: 52px;
   }
 
   .join-card{
@@ -413,7 +409,7 @@
 <header>
   <div class="header-bar">
     <div class="brand">
-      <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI" class="logo-img">
+      {% with variant='dark', height='44px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
     </div>
     <div class="header-actions">
       <a class="btn btn-outline" href="{{ url_for('auth.login') }}">LOG IN</a>
@@ -509,7 +505,7 @@
   <!-- RIGHT: Join us -->
   <section class="panel panel-right">
     <div class="brand-block">
-      <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI" class="logo-img">
+      {% with variant='dark', height='44px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
     </div>
 
     <div class="join-card">

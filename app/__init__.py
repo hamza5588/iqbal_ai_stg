@@ -308,6 +308,24 @@ def create_app():
     for name, func in TEMPLATE_HELPERS.items():
         app.jinja_env.globals[name] = func
 
+    @app.context_processor
+    def inject_platform_theme():
+        try:
+            from app.services.theme_service import theme_to_css_block
+            return {"platform_theme_css": theme_to_css_block()}
+        except Exception:
+            return {"platform_theme_css": ""}
+
+    @app.route("/api/platform-theme")
+    def platform_theme_api():
+        from app.services.theme_service import get_platform_theme, list_theme_presets
+        from flask import jsonify
+        return jsonify({
+            "success": True,
+            "theme": get_platform_theme(),
+            "presets": list_theme_presets(),
+        })
+
     # ------------------------------------------------------------------
     # Canonical HTTPS enforcement
     # ------------------------------------------------------------------

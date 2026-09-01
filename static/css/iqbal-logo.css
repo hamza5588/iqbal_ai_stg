@@ -1,0 +1,181 @@
+/**
+ * Theme-aware Iqbal AI logo — uses alpha masks for crisp, full-opacity branding.
+ */
+.iqbal-logo {
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+/* Full horizontal logo mask (auth pages, compact spots) */
+.iqbal-logo--light {
+  height: var(--iqbal-logo-h, 38px);
+  width: calc(var(--iqbal-logo-h, 38px) * 2.985);
+  max-width: 100%;
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-color) 55%, var(--primary-400) 100%);
+  -webkit-mask-image: var(--iqbal-logo-light-mask);
+  mask-image: var(--iqbal-logo-light-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* Icon only (badges, compact spots) */
+.iqbal-logo--icon {
+  height: var(--iqbal-logo-h, 44px);
+  width: calc(var(--iqbal-logo-h, 44px) * 0.957);
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-color) 55%, var(--primary-400) 100%);
+  -webkit-mask-image: var(--iqbal-logo-icon-mask);
+  mask-image: var(--iqbal-logo-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* Dark backgrounds: white IQBAL + themed icon & AI */
+.iqbal-logo--dark {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--iqbal-logo-h, 44px) * 0.22);
+  height: var(--iqbal-logo-h, 44px);
+  font-family: "Poppins", "Inter", "Segoe UI", sans-serif;
+}
+
+.iqbal-logo--dark .iqbal-logo__icon {
+  height: 100%;
+  width: calc(var(--iqbal-logo-h, 44px) * 0.957);
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-color) 55%, var(--primary-400) 100%);
+  -webkit-mask-image: var(--iqbal-logo-icon-mask);
+  mask-image: var(--iqbal-logo-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  flex-shrink: 0;
+}
+
+.iqbal-logo--dark .iqbal-logo__wordmark {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.05;
+  min-width: 0;
+}
+
+.iqbal-logo--dark .iqbal-logo__title {
+  font-size: calc(var(--iqbal-logo-h, 44px) * 0.52);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.iqbal-logo--dark .iqbal-logo__iqbal {
+  color: #fff;
+}
+
+.iqbal-logo--dark .iqbal-logo__ai {
+  background: linear-gradient(135deg, var(--primary-400) 0%, var(--primary-color) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.iqbal-logo--dark .iqbal-logo__tagline {
+  margin-top: 2px;
+  font-size: calc(var(--iqbal-logo-h, 44px) * 0.17);
+  font-weight: 600;
+  color: var(--primary-300);
+  white-space: nowrap;
+}
+
+/* Light backgrounds: dark IQBAL + themed icon & AI (recommended for headers) */
+.iqbal-logo--dark-on-light {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--iqbal-logo-h, 44px) * 0.22);
+  height: var(--iqbal-logo-h, 44px);
+  font-family: "Poppins", "Inter", "Segoe UI", sans-serif;
+}
+
+.iqbal-logo--dark-on-light .iqbal-logo__icon {
+  height: 100%;
+  width: calc(var(--iqbal-logo-h, 44px) * 0.957);
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-color) 55%, var(--primary-400) 100%);
+  -webkit-mask-image: var(--iqbal-logo-icon-mask);
+  mask-image: var(--iqbal-logo-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  flex-shrink: 0;
+}
+
+.iqbal-logo--dark-on-light .iqbal-logo__wordmark {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.05;
+}
+
+.iqbal-logo--dark-on-light .iqbal-logo__title {
+  font-size: calc(var(--iqbal-logo-h, 44px) * 0.52);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.iqbal-logo--dark-on-light .iqbal-logo__iqbal {
+  color: #111827;
+}
+
+.iqbal-logo--dark-on-light .iqbal-logo__ai {
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-color) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.iqbal-logo--dark-on-light .iqbal-logo__tagline {
+  margin-top: 2px;
+  font-size: calc(var(--iqbal-logo-h, 44px) * 0.17);
+  font-weight: 600;
+  color: var(--primary-600);
+  white-space: nowrap;
+}
+
+/* Legacy wrappers */
+.tt-logo .iqbal-logo,
+.vl-topbar-logo .iqbal-logo,
+.elm-footer-logo .iqbal-logo,
+.logo-badge .iqbal-logo,
+.logo .iqbal-logo,
+.brand .iqbal-logo,
+.brand-block .iqbal-logo {
+  display: inline-flex;
+}
+
+.logo-badge .iqbal-logo--icon {
+  --iqbal-logo-h: 66px;
+}
+
+.tt-header .tt-logo .iqbal-logo--dark-on-light {
+  --iqbal-logo-h: 38px;
+}
+
+@media (max-width: 640px) {
+  .iqbal-logo--dark-on-light .iqbal-logo__tagline {
+    display: none;
+  }
+}
+

@@ -8,7 +8,7 @@
   <title>Student Dashboard | Iqbal AI - Secure Learning Platform</title>
 
   <!-- Global Theme Colors CSS -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}" />
+  {% include 'partials/platform_theme_head.html' %}
 
   <!-- Markdown Styles -->
   <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/markdown-styles.css') }}" />
@@ -27,16 +27,16 @@
           },
           colors: {
             primary: {
-              50: "#f0f9ff",
-              100: "#e0f2fe",
-              200: "#bae6fd",
-              300: "#7dd3fc",
-              400: "#38bdf8",
-              500: "#0ea5e9",
-              600: "#0284c7",
-              700: "#0369a1",
-              800: "#075985",
-              900: "#0c4a6e",
+              50: "var(--primary-50)",
+              100: "var(--primary-100)",
+              200: "var(--primary-100)",
+              300: "var(--primary-300)",
+              400: "var(--primary-400)",
+              500: "var(--primary-color)",
+              600: "var(--primary-600)",
+              700: "var(--primary-700)",
+              800: "var(--primary-800)",
+              900: "var(--primary-900)",
             },
             secondary: {
               50: "#f8fafc",
@@ -63,16 +63,28 @@
               900: "#831843",
             },
             success: {
-              50: "#f0fdf4",
-              100: "#dcfce7",
-              200: "#bbf7d0",
-              300: "#86efac",
-              400: "#4ade80",
-              500: "#22c55e",
-              600: "#16a34a",
-              700: "#15803d",
-              800: "#166534",
-              900: "#14532d",
+              50: "var(--primary-50)",
+              100: "var(--primary-100)",
+              200: "var(--primary-100)",
+              300: "var(--primary-300)",
+              400: "var(--primary-400)",
+              500: "var(--primary-color)",
+              600: "var(--primary-600)",
+              700: "var(--primary-700)",
+              800: "var(--primary-800)",
+              900: "var(--primary-900)",
+            },
+            green: {
+              50: "var(--primary-50)",
+              100: "var(--primary-100)",
+              200: "var(--primary-100)",
+              300: "var(--primary-300)",
+              400: "var(--primary-400)",
+              500: "var(--primary-color)",
+              600: "var(--primary-600)",
+              700: "var(--primary-700)",
+              800: "var(--primary-800)",
+              900: "var(--primary-900)",
             },
             warning: {
               50: "#fffbeb",
@@ -399,8 +411,8 @@
 
     /* User avatar (right side) */
     .chat-message.user .chat-message-avatar {
-      background: #166534;
-      border: 2px solid #166534;
+      background: var(--primary-color);
+      border: 2px solid var(--primary-color);
       color: #fff;
       font-weight: 800;
     }
@@ -408,7 +420,7 @@
     /* Assistant avatar (left side) */
     .chat-message.assistant .chat-message-avatar {
       background: white;
-      border: 2px solid #2f9e4f;
+      border: 2px solid var(--green-500);
     }
 
     .chat-message-content {
@@ -421,7 +433,7 @@
 
     /* User message content (right side) */
     .chat-message.user .chat-message-content {
-      background: #166534;
+      background: var(--primary-color);
       color: white;
       margin-left: auto;
       border-radius: 14px;
@@ -499,8 +511,8 @@
     }
 
     .chat-history-item.active {
-      background: #eaf7ee;
-      border-left: 3px solid #1c7c3e;
+      background: var(--green-50);
+      border-left: 3px solid var(--primary-600);
     }
 
     /* Tab Button Active State */
@@ -1078,7 +1090,7 @@
     }
 
     .wizard-step-indicator.completed {
-      background: #16a34a;
+      background: var(--primary-600);
       color: white;
     }
 
@@ -1152,7 +1164,7 @@
     }
 
     .info-box.success {
-      background: #f0fdf4;
+      background: var(--green-muted);
       border-color: #bbf7d0;
     }
 
@@ -1201,9 +1213,9 @@
 
     /* Success/Error Message Styling */
     .message-success {
-      background: #f0fdf4;
+      background: var(--green-muted);
       border: 1px solid #bbf7d0;
-      color: #166534;
+      color: var(--primary-color);
       padding: 1rem;
       border-radius: 0.5rem;
       margin-bottom: 1rem;
@@ -1825,7 +1837,7 @@
     }
     #viewLessonModal .svc-header-left{ display:flex; align-items:center; gap:14px; min-width:0; }
     #viewLessonModal .svc-doc-icon{
-      width:44px; height:52px; background:#166534; border-radius:5px 12px 5px 5px;
+      width:44px; height:52px; background:var(--primary-color); border-radius:5px 12px 5px 5px;
       display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0; font-size:18px;
     }
     #viewLessonModal .svc-header h1{
@@ -1848,10 +1860,10 @@
       padding:12px 18px; color:#9ba09c; font-weight:600; font-size:14.5px;
       background:none; border:none; position:relative; white-space:nowrap;
     }
-    #viewLessonModal .svc-tab.active{ color:#2f9e4f; }
+    #viewLessonModal .svc-tab.active{ color:var(--green-500); }
     #viewLessonModal .svc-tab.active::after{
       content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%);
-      width:70%; height:2px; background:#2f9e4f;
+      width:70%; height:2px; background:var(--green-500);
     }
     #viewLessonModal .svc-tab-divider{ width:1px; height:22px; background:#2a2d2a; flex-shrink:0; }
     #viewLessonModal .svc-content{
@@ -1866,7 +1878,7 @@
       border-bottom:1px solid #f0f0f0; flex-shrink:0;
     }
     #viewLessonModal .svc-panel-icon{
-      width:34px; height:34px; border-radius:8px; background:#166534; color:#fff;
+      width:34px; height:34px; border-radius:8px; background:var(--primary-color); color:#fff;
       display:flex; align-items:center; justify-content:center; flex-shrink:0;
     }
     #viewLessonModal .svc-panel-head h2{ font-size:18px; font-weight:800; color:#1f2430; margin:0; }
@@ -1879,7 +1891,7 @@
     }
     #viewLessonModal .svc-ask{
       display:flex; align-items:center; gap:10px;
-      background:#166534; color:#fff; border:none; border-radius:10px;
+      background:var(--primary-color); color:#fff; border:none; border-radius:10px;
       padding:13px 24px; font-size:15px; font-weight:700; cursor:pointer;
     }
     #viewLessonModal .svc-ask:hover{ background:#125129; }
@@ -1888,9 +1900,9 @@
       display:flex; align-items:center; gap:8px; border-radius:10px;
       padding:12px 20px; font-size:14.5px; font-weight:700; cursor:pointer; background:#fff;
     }
-    #viewLessonModal .svc-docx{ border:1.5px solid #1c7c3e; color:#166534; }
+    #viewLessonModal .svc-docx{ border:1.5px solid var(--primary-600); color:var(--primary-color); }
     #viewLessonModal .svc-ppt{ border:1.5px solid #c0504d; color:#c0504d; }
-    #viewLessonModal .svc-docx:hover{ background:#f3faf5; }
+    #viewLessonModal .svc-docx:hover{ background:var(--green-50); }
     #viewLessonModal .svc-ppt:hover{ background:#fdf4f4; }
     @media(max-width:700px){
       #viewLessonModal .svc-header{ padding:16px 16px 10px; }
@@ -2323,8 +2335,8 @@
     }
 
     .duplicate-btn {
-      background: #f0fdf4;
-      color: #16a34a;
+      background: var(--green-muted);
+      color: var(--primary-600);
     }
 
     .pagination {
@@ -2417,8 +2429,8 @@
 
     .version-badge {
       padding: 0.25rem 0.5rem;
-      background: #dcfce7;
-      color: #166534;
+      background: var(--green-light);
+      color: var(--primary-color);
       border-radius: 0.375rem;
       font-size: 0.75rem;
       font-weight: 600;
@@ -2573,9 +2585,9 @@
     }
 
     .alert-success {
-      background: #f0fdf4;
+      background: var(--green-muted);
       border: 1px solid #bbf7d0;
-      color: #166534;
+      color: var(--primary-color);
     }
 
     .alert-error {
@@ -2660,8 +2672,8 @@
     }
 
     .badge-success {
-      background: #dcfce7;
-      color: #166534;
+      background: var(--green-light);
+      color: var(--primary-color);
     }
 
     .badge-danger {
@@ -2919,8 +2931,8 @@
     }
 
     .chat-history-item.active {
-      background: #eaf7ee;
-      border-left: 3px solid #1c7c3e;
+      background: var(--green-50);
+      border-left: 3px solid var(--primary-600);
     }
 
     /* Add these styles to your existing CSS */
@@ -3100,15 +3112,16 @@
       padding:14px 28px; border-bottom:1px solid #eee; flex-wrap:wrap; gap:14px; background:#fff;
     }
     .tt-header .tt-logo{ flex-shrink:0; }
-    .tt-header .tt-logo img{ height:38px; }
+    .tt-header .tt-logo .iqbal-logo,
+    .tt-header .tt-logo img{ height:38px; min-width:max-content; }
     .tt-user{ display:flex; align-items:center; gap:14px; flex-shrink:0; }
     .tt-avatar{
-      width:38px; height:38px; border-radius:50%; background:#166534; color:#fff;
+      width:38px; height:38px; border-radius:50%; background:var(--primary-color); color:#fff;
       display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0; cursor:pointer;
     }
     .tt-user-info{ display:flex; flex-direction:column; line-height:1.25; }
     .tt-user-info b{ font-size:14px; color:#111; }
-    .tt-user-info span{ font-size:12px; color:#166534; font-weight:600; }
+    .tt-user-info span{ font-size:12px; color:var(--primary-color); font-weight:600; }
     .tt-logout{ color:#6b7280; cursor:pointer; margin-left:2px; padding:6px; border-radius:8px; }
     .tt-logout:hover{ background:#fef2f2; color:#dc2626; }
 
@@ -3123,7 +3136,7 @@
       font-weight:600; cursor:pointer; background:none; border:none; padding:12px 18px; border-radius:30px; white-space:nowrap;
     }
     .tt-tab:hover{ color:#fff; }
-    .tt-tab.active, .tt-tab.active-tab{ background:#1c7c3e; color:#fff; border-left:none; }
+    .tt-tab.active, .tt-tab.active-tab{ background:var(--primary-600); color:#fff; border-left:none; }
     .tt-chat-history-wrap{ position:relative; display:flex; flex:1; }
     .tt-chat-history-wrap .tt-tab{ width:100%; }
     .tt-chevron{ transition:transform .2s ease; font-size:11px; }
@@ -3138,7 +3151,7 @@
     #chatHistoryDropdown .tt-dropdown-list{ max-height:340px; overflow-y:auto; padding:0 8px; }
     #chatHistoryDropdown .chat-history-item{ padding:10px 12px; border-radius:10px; border-left:none; margin-bottom:2px; }
     #chatHistoryDropdown .chat-history-item:hover{ background:#f4f4f2; }
-    #chatHistoryDropdown .chat-history-item.active{ background:#eaf7ee; border-left:none; }
+    #chatHistoryDropdown .chat-history-item.active{ background:var(--green-50); border-left:none; }
 
     /* ===== My Lessons list — matches teacher dashboard cards ===== */
     .mll-wrap{ font-family:'Segoe UI',Arial,sans-serif; color:#111; padding:6px 2px 30px; }
@@ -3149,7 +3162,7 @@
     .lms-overview-head h2 { font-size:1.25rem; font-weight:700; margin:0; color:#0f172a; }
     .lms-overview-actions { display:flex; gap:8px; flex-wrap:wrap; }
     .lms-btn { border:none; border-radius:8px; padding:8px 14px; font-weight:600; font-size:.875rem; cursor:pointer; }
-    .lms-btn-primary { background:#166534; color:#fff; }
+    .lms-btn-primary { background:var(--primary-color); color:#fff; }
     .lms-btn-secondary { background:#e2e8f0; color:#334155; }
     .lms-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
     .lms-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; }
@@ -3164,9 +3177,9 @@
     .lms-path-steps { list-style:none; margin:0; padding:0; }
     .lms-path-step { display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid #f1f5f9; }
     .lms-path-step:last-child { border-bottom:none; }
-    .lms-path-step.current { background:#f0fdf4; margin:0 -8px; padding:10px 8px; border-radius:8px; }
+    .lms-path-step.current { background:var(--green-muted); margin:0 -8px; padding:10px 8px; border-radius:8px; }
     .lms-path-check { width:22px; height:22px; border-radius:50%; border:2px solid #cbd5e1; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:.75rem; color:#fff; }
-    .lms-path-step.completed .lms-path-check { background:#16a34a; border-color:#16a34a; }
+    .lms-path-step.completed .lms-path-check { background:var(--primary-600); border-color:var(--primary-600); }
     .lms-path-step.current .lms-path-check { border-color:#0284c7; background:#0284c7; }
     .lms-path-step-body { flex:1; min-width:0; }
     .lms-path-step-title { font-weight:600; font-size:.875rem; color:#0f172a; }
@@ -3188,11 +3201,11 @@
       border:none !important; box-shadow:none !important; background:transparent !important;
     }
     .mll-lesson-card{ display:flex; border:1px solid #eee; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.03); background:#fff; }
-    .mll-lesson-bar{ width:32px; background:#0a4a2c; color:#fff; font-size:10.5px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg); padding:10px 0; flex-shrink:0; }
+    .mll-lesson-bar{ width:32px; background:var(--green-900); color:#fff; font-size:10.5px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg); padding:10px 0; flex-shrink:0; }
     .mll-lesson-body{ flex:1; min-width:0; padding:16px 20px; }
     .mll-lesson-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px; }
     .mll-lesson-title{ display:flex; align-items:center; gap:10px; min-width:0; }
-    .mll-icon-badge{ width:28px; height:28px; border-radius:8px; background:#166534; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+    .mll-icon-badge{ width:28px; height:28px; border-radius:8px; background:var(--primary-color); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
     .mll-lesson-title h3{ font-size:15.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .mll-lesson-meta-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
     .mll-time-ago{ font-size:11.5px; color:#6b7280; white-space:nowrap; }
@@ -3204,7 +3217,7 @@
     .mll-actions{ display:flex; gap:16px; flex-wrap:wrap; }
     .mll-actions a{ display:flex; align-items:center; gap:5px; font-size:12px; font-weight:600; cursor:pointer; }
     .mll-actions a.mll-view{ color:#2563eb; }
-    .mll-actions a.mll-word{ color:#15803d; }
+    .mll-actions a.mll-word{ color:var(--primary-700); }
     .mll-actions a.mll-ppt{ color:#c2410c; }
     .mll-actions a.mll-ask{ color:#a16207; }
     .mll-empty{ padding:28px 16px; text-align:center; color:#6b7280; font-size:14px; }
@@ -3234,17 +3247,17 @@
       border-right:1px solid #eee;
     }
     .stu-back-link{
-      display:flex; align-items:center; gap:6px; color:#166534; font-weight:700;
+      display:flex; align-items:center; gap:6px; color:var(--primary-color); font-weight:700;
       font-size:14.5px; margin-bottom:18px; cursor:pointer;
     }
     .stu-back-link:hover{ text-decoration:underline; }
-    .stu-pinned-label{ color:#1c7c3e; font-size:11.5px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
+    .stu-pinned-label{ color:var(--primary-600); font-size:11.5px; font-weight:800; letter-spacing:.6px; margin-bottom:8px; }
     .stu-ls-title{ font-size:17px; font-weight:800; color:#1f2430; margin-bottom:4px; line-height:1.3; }
     .stu-ls-meta{ font-size:12.5px; color:#6b7280; margin-bottom:12px; }
     .stu-divider{ border:none; border-top:1px solid #eee; margin:12px 0 14px; }
     .stu-ls-content{ font-size:13.5px; color:#333; line-height:1.65; }
     .stu-ls-content p{ margin:0 0 10px; }
-    .stu-ls-content strong, .stu-ls-content b{ color:#166534; }
+    .stu-ls-content strong, .stu-ls-content b{ color:var(--primary-color); }
     .stu-ls-content h1, .stu-ls-content h2, .stu-ls-content h3, .stu-ls-content h4{
       color:#1f2430; font-weight:800; line-height:1.3; margin:12px 0 8px;
     }
@@ -3267,18 +3280,18 @@
     .stu-chat-head h1{ font-size:20px; font-weight:800; color:#1f2430; letter-spacing:-0.2px; }
     .stu-chat-head .stu-sub{ font-size:13.5px; color:#6b7280; margin-top:4px; }
     .stu-chat-head .stu-pinned-tag{
-      display:inline-flex; align-items:center; gap:6px; color:#1c7c3e; font-weight:700; font-size:12.5px; margin-top:8px;
+      display:inline-flex; align-items:center; gap:6px; color:var(--primary-600); font-weight:700; font-size:12.5px; margin-top:8px;
     }
     .stu-chat-close{
       position:absolute; top:2px; right:4px;
       width:34px; height:34px; border-radius:50%; border:1px solid #eee;
-      display:flex; align-items:center; justify-content:center; color:#166534; cursor:pointer; background:#fff;
+      display:flex; align-items:center; justify-content:center; color:var(--primary-color); cursor:pointer; background:#fff;
     }
     /* Lesson body lives in the left sidebar; do not repeat it inside the chat thread. */
     #chatArea:has(#lessonContextPanel) .lesson-thread-pin {
       display: none !important;
     }
-    .stu-chat-close:hover{ background:#f3faf5; }
+    .stu-chat-close:hover{ background:var(--green-50); }
 
     #chatArea.stu-chat-layout .chat-message{ margin-bottom:1.1rem; }
     #chatArea.stu-chat-layout .chat-message.assistant .chat-message-content{
@@ -3294,16 +3307,16 @@
     #chatInputArea .tt-round-icon:hover{ background:#f9fafb; }
     #chatInputArea .tt-input-mid{ padding:6px 0; }
     #chatInputArea .tt-message-input{ border:none !important; box-shadow:none !important; padding:6px 0; }
-    #chatInputArea .tt-send-btn{ width:36px; height:36px; border-radius:50%; background:#d0f73a !important; color:#1a1a1a !important; }
+    #chatInputArea .tt-send-btn{ width:36px; height:36px; border-radius:50%; background:var(--theme-accent-bright) !important; color:#1a1a1a !important; }
     #chatInputArea .tt-send-btn:hover{ background:#c3ea2c !important; }
 
     /* Chat bubble palette — matches teacher_dashboard.html's new_ui treatment */
     #chatMessages .chat-message-avatar{ border-radius:50%; }
     #chatMessages .chat-message-avatar img{ border-radius:50%; }
-    #chatMessages .chat-message.assistant .chat-message-avatar{ background:#fff; border:1.5px solid #2f9e4f; padding:2px; }
-    #chatMessages .chat-message.user .chat-message-avatar{ background:#166534; border:1.5px solid #166534; color:#fff; font-weight:800; }
+    #chatMessages .chat-message.assistant .chat-message-avatar{ background:#fff; border:1.5px solid var(--green-500); padding:2px; }
+    #chatMessages .chat-message.user .chat-message-avatar{ background:var(--primary-color); border:1.5px solid var(--primary-color); color:#fff; font-weight:800; }
     #chatMessages .chat-message.assistant .chat-message-content{ background:#fff; border:1px solid #eee; border-radius:16px; box-shadow:0 4px 16px rgba(0,0,0,0.03); }
-    #chatMessages .chat-message.user .chat-message-content{ background:#166534; border-radius:14px; border-bottom-right-radius:4px; }
+    #chatMessages .chat-message.user .chat-message-content{ background:var(--primary-color); border-radius:14px; border-bottom-right-radius:4px; }
 
     @media(max-width:768px){
       .stu-lesson-sidebar{ border-bottom:1px solid #eee; padding-bottom:16px; margin-bottom:16px; }
@@ -3379,7 +3392,7 @@
 
     <!-- Top Header: logo + user info -->
     <header class="tt-header">
-      <div class="tt-logo"><img src="{{ url_for('static', filename='images/iqbal-ai-logo-light.png') }}" alt="Iqbal AI"></div>
+      <div class="tt-logo">{% with variant='dark-on-light', height='38px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}</div>
       <div class="tt-user">
         <div class="tt-avatar" id="userAvatar" onclick="openSettings()">{{ (session.get('username') or 'Student')[:1] | upper }}</div>
         <div class="tt-user-info">
@@ -3774,8 +3787,8 @@
                 <span>Track your learning progress</span>
               </li>
             </ul>
-            <div class="mt-4 p-3 rounded-lg border" style="background:#f3faf5;border-color:#dcfce7;">
-              <p class="text-sm" style="color:#166534;">
+            <div class="mt-4 p-3 rounded-lg border" style="background:var(--green-50);border-color:var(--green-light);">
+              <p class="text-sm" style="color:var(--primary-color);">
                 <i class="fas fa-lightbulb mr-2"></i>
                 <strong>Tip:</strong> Open a lesson from My Lessons, then tap Chat to ask questions about it.
               </p>
@@ -3944,7 +3957,7 @@
           <i class="fas fa-book-open text-6xl text-gray-300 mb-4"></i>
           <h2 class="text-2xl font-bold text-gray-700 mb-2">No active lesson chat</h2>
           <p class="text-gray-500 mb-6">Open a lesson from My Lessons, then use Chat to start asking questions.</p>
-          <button onclick="showMyLessonsPage()" class="text-white px-6 py-2.5 rounded-lg font-medium" style="background:#1c7c3e;">
+          <button onclick="showMyLessonsPage()" class="text-white px-6 py-2.5 rounded-lg font-medium" style="background:var(--primary-600);">
             <i class="fas fa-book-open mr-2"></i>
             My Lessons
           </button>
@@ -4488,10 +4501,10 @@
                data-lesson-title="${safeTitle}"
                data-lesson-subject="${safeSubject}"
                data-lesson-grade="${safeGrade}"
-               class="rounded-xl p-4 mb-4" style="background:#f3faf5;border:1px solid #dcfce7;">
-            <div class="font-semibold" style="color:#166534;">Lesson: ${safeTitle}</div>
-            <div class="text-xs mt-1" style="color:#15803d;">${safeSubject} • Grade ${safeGrade}</div>
-            <div class="text-xs mt-2 italic" style="color:#166534;">This lesson remains pinned for this thread.</div>
+               class="rounded-xl p-4 mb-4" style="background:var(--green-50);border:1px solid var(--green-light);">
+            <div class="font-semibold" style="color:var(--primary-color);">Lesson: ${safeTitle}</div>
+            <div class="text-xs mt-1" style="color:var(--primary-700);">${safeSubject} • Grade ${safeGrade}</div>
+            <div class="text-xs mt-2 italic" style="color:var(--primary-color);">This lesson remains pinned for this thread.</div>
             <div class="lesson-thread-content mt-3">${contentHtml}</div>
           </div>
         `;
@@ -5861,7 +5874,7 @@
         if (recommendationsEl) {
           recommendationsEl.innerHTML = recommendations.map((rec, idx) => `
             <div class="recommendation-card" data-id="${idx}">
-              <div class="recommendation-icon" style="background: linear-gradient(135deg, ${['#fef3c7', '#dbeafe', '#dbeafe', '#fce7f3', '#dcfce7'][idx]}, ${['#fed7aa', '#bae6fd', '#bae6fd', '#fbcfe8', '#bbf7d0'][idx]});">
+              <div class="recommendation-icon" style="background: linear-gradient(135deg, ${['#fef3c7', '#dbeafe', '#dbeafe', '#fce7f3', 'var(--green-light)'][idx]}, ${['#fed7aa', '#bae6fd', '#bae6fd', '#fbcfe8', '#bbf7d0'][idx]});">
                 ${rec.icon}
               </div>
               <h4>${rec.title}</h4>
@@ -7924,7 +7937,7 @@
     function renderLmsQuestion() {
       const el = document.getElementById('lmsQuizTaking');
       if (_lmsCurrentQ >= _lmsQuizQuestions.length) {
-        el.innerHTML = '<button type="button" onclick="submitLmsQuiz()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;">Submit Quiz</button>';
+        el.innerHTML = '<button type="button" onclick="submitLmsQuiz()" style="background:var(--primary-600);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;">Submit Quiz</button>';
         return;
       }
       const q = _lmsQuizQuestions[_lmsCurrentQ];

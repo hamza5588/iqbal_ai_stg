@@ -1,13 +1,15 @@
 """Assessment and quiz service."""
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
-from app.models.lms_models import Assessment, AssessmentQuestion, PdfQaExtraction, QuizPdfSource
+from app.models.lms_models import Assessment, AssessmentQuestion, DiagnosticTargetPdf, PdfQaExtraction, QuizPdfSource
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
 from app.utils.db import get_db
 
 CONFIDENCE_PUBLISH_MIN = 0.60
+logger = logging.getLogger(__name__)
 
 
 def create_assessment(
@@ -109,6 +111,83 @@ def link_pdf_source(
     return source
 
 
+def add_target_pdf(
+    assessment_id: int,
+    target_rag_thread_id: str,
+    target_original_filename: Optional[str] = None,
+    sort_order: Optional[int] = None,
+) -> DiagnosticTargetPdf:
+    """Add a target content PDF to a diagnostic (supports multiple files)."""
+    db = get_db()
+    get_assessment(assessment_id)
+    if sort_order is None:
+        existing = (
+            db.query(DiagnosticTargetPdf)
+            .filter(DiagnosticTargetPdf.assessment_id == assessment_id)
+            .count()
+        )
+        sort_order = existing
+    entry = DiagnosticTargetPdf(
+        assessment_id=assessment_id,
+        rag_thread_id=target_rag_thread_id,
+        original_filename=target_original_filename,
+        sort_order=sort_order,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    # Keep legacy single-column fields in sync with first target PDF only
+    if sort_order == 0:
+        link_target_pdf(assessment_id, target_rag_thread_id, target_original_filename)
+    return entry
+
+
+def list_target_pdfs(assessment_id: int) -> List[dict]:
+    db = get_db()
+    rows = (
+        db.query(DiagnosticTargetPdf)
+        .filter(DiagnosticTargetPdf.assessment_id == assessment_id)
+        .order_by(DiagnosticTargetPdf.sort_order, DiagnosticTargetPdf.id)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "rag_thread_id": r.rag_thread_id,
+            "original_filename": r.original_filename,
+            "sort_order": r.sort_order,
+        }
+        for r in rows
+    ]
+
+
+def remove_target_pdf(assessment_id: int, target_pdf_id: int) -> None:
+    db = get_db()
+    row = (
+        db.query(DiagnosticTargetPdf)
+        .filter(
+            DiagnosticTargetPdf.id == target_pdf_id,
+            DiagnosticTargetPdf.assessment_id == assessment_id,
+        )
+        .first()
+    )
+    if not row:
+        raise LMSNotFoundError("Target PDF not found")
+    db.delete(row)
+    db.commit()
+    # Refresh legacy column from remaining targets
+    remaining = list_target_pdfs(assessment_id)
+    src = db.query(QuizPdfSource).filter(QuizPdfSource.assessment_id == assessment_id).first()
+    if src:
+        if remaining:
+            src.target_rag_thread_id = remaining[0]["rag_thread_id"]
+            src.target_original_filename = remaining[0]["original_filename"]
+        else:
+            src.target_rag_thread_id = None
+            src.target_original_filename = None
+        db.commit()
+
+
 def link_target_pdf(
     assessment_id: int,
     target_rag_thread_id: str,
@@ -130,6 +209,14 @@ def link_target_pdf(
 
 
 def has_target_pdf(assessment_id: int) -> bool:
+    db = get_db()
+    count = (
+        db.query(DiagnosticTargetPdf)
+        .filter(DiagnosticTargetPdf.assessment_id == assessment_id)
+        .count()
+    )
+    if count > 0:
+        return True
     assessment = get_assessment(assessment_id)
     src = assessment.pdf_source
     return bool(src and src.target_rag_thread_id)
@@ -182,10 +269,57 @@ def publish_assessment(assessment_id: int) -> Assessment:
         raise LMSValidationError(reason or "Cannot publish assessment")
     db = get_db()
     assessment = get_assessment(assessment_id)
+
+    if assessment.assessment_type == "diagnostic":
+        from app.services.lms.diagnostic_timer_service import estimate_question_times
+
+        try:
+            estimate_question_times(assessment_id)
+        except Exception as exc:
+            logger.warning("Timer estimation on publish failed: %s", exc)
+        # Archive other published diagnostics (only one active platform diagnostic)
+        others = (
+            db.query(Assessment)
+            .filter(
+                Assessment.assessment_type == "diagnostic",
+                Assessment.status == "published",
+                Assessment.id != assessment_id,
+            )
+            .all()
+        )
+        for other in others:
+            other.status = "archived"
+
     assessment.status = "published"
     db.commit()
     db.refresh(assessment)
     return assessment
+
+
+def archive_diagnostic(assessment_id: int) -> Assessment:
+    """Archive a diagnostic so admin can upload a new one."""
+    db = get_db()
+    assessment = get_assessment(assessment_id)
+    if assessment.assessment_type != "diagnostic":
+        raise LMSValidationError("Not a diagnostic assessment")
+    assessment.status = "archived"
+    db.commit()
+    db.refresh(assessment)
+    return assessment
+
+
+def get_active_platform_diagnostic() -> Optional[Assessment]:
+    """Return the single published platform diagnostic."""
+    db = get_db()
+    return (
+        db.query(Assessment)
+        .filter(
+            Assessment.assessment_type == "diagnostic",
+            Assessment.status == "published",
+        )
+        .order_by(Assessment.updated_at.desc(), Assessment.id.desc())
+        .first()
+    )
 
 
 def list_assessments_by_teacher(

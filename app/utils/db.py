@@ -388,6 +388,26 @@ def init_db(app):
             except Exception as e:
                 logger.warning("quiz_pdf_sources target PDF migration warning: %s", e)
                 db.rollback()
+
+            # Migration: diagnostic multi-target PDFs, question timer, attempt expiry
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "questions" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("questions")]
+                    if "time_limit_seconds" not in columns:
+                        logger.info("Adding time_limit_seconds to questions...")
+                        db.execute(text("ALTER TABLE questions ADD COLUMN time_limit_seconds INTEGER"))
+                        db.commit()
+                if "assessment_attempts" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("assessment_attempts")]
+                    if "expires_at" not in columns:
+                        logger.info("Adding expires_at to assessment_attempts...")
+                        db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN expires_at TIMESTAMP"))
+                        db.commit()
+            except Exception as e:
+                logger.warning("diagnostic timer migration warning: %s", e)
+                db.rollback()
             
             # Migration: Add ingest failure-tracking columns to rag_threads
             try:

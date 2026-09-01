@@ -74,7 +74,7 @@
     if (data.completed || !data.current_question) {
       body.innerHTML =
         '<div style="text-align:center;padding:24px;">' +
-        '<div style="font-size:2rem;font-weight:800;color:#166534;">Done!</div>' +
+        '<div style="font-size:2rem;font-weight:800;color:var(--primary-color);">Done!</div>' +
         '<p class="lms-status">You completed ' + (data.correct_count || 0) + ' / ' + (data.total_questions || 0) + ' correctly.</p>' +
         '<button type="button" class="lms-btn lms-btn-primary" onclick="closeDeficiencyChat()">Close</button></div>';
       if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();

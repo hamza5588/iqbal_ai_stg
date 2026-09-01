@@ -2,16 +2,34 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from app.models.lms_models import AssessmentAttempt, AttemptAnswer, Question
+from app.models.lms_models import AssessmentAttempt, AttemptAnswer, Question, StudentProfile
 from app.services.lms.assessment_service import get_assessment
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
 from app.services.lms.mcq_utils import options_from_json
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
+
+
+def _student_completed_diagnostic(student_id: int, assessment_id: int) -> bool:
+    db = get_db()
+    profile = db.query(StudentProfile).filter(StudentProfile.user_id == student_id).first()
+    if profile and profile.diagnostic_completed:
+        return True
+    submitted = (
+        db.query(AssessmentAttempt)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.assessment_id == assessment_id,
+            AssessmentAttempt.status == "submitted",
+        )
+        .first()
+    )
+    return submitted is not None
+
 
 def start_attempt(
     student_id: int,
@@ -22,6 +40,12 @@ def start_attempt(
     if assessment.status != "published":
         raise LMSValidationError("Assessment is not published")
 
+    if assessment.assessment_type == "diagnostic":
+        if _student_completed_diagnostic(student_id, assessment_id):
+            raise LMSValidationError(
+                "You have already completed the diagnostic assessment. Retakes are not allowed."
+            )
+
     db = get_db()
     attempt = AssessmentAttempt(
         student_id=student_id,
@@ -30,10 +54,23 @@ def start_attempt(
         status="in_progress",
         max_score=float(len(assessment.questions)),
     )
+
+    if assessment.assessment_type == "diagnostic":
+        from app.services.lms.diagnostic_timer_service import compute_attempt_deadline
+
+        total_seconds = compute_attempt_deadline(assessment_id)
+        attempt.expires_at = datetime.utcnow() + timedelta(seconds=total_seconds)
+
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
     return attempt
+
+
+def _check_attempt_expired(attempt: AssessmentAttempt) -> None:
+    if attempt.expires_at and attempt.status == "in_progress":
+        if datetime.utcnow() > attempt.expires_at:
+            raise LMSValidationError("Diagnostic time has expired")
 
 
 def get_attempt(attempt_id: int) -> AssessmentAttempt:
@@ -47,6 +84,7 @@ def get_attempt(attempt_id: int) -> AssessmentAttempt:
 def get_delivery_questions(attempt_id: int) -> List[dict]:
     """Return questions without correct answers for student delivery."""
     attempt = get_attempt(attempt_id)
+    _check_attempt_expired(attempt)
     assessment = get_assessment(attempt.assessment_id)
     db = get_db()
     result = []
@@ -63,15 +101,36 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
                 "question_latex": q.question_latex,
                 "options": safe_opts,
                 "sort_order": aq.sort_order,
+                "difficulty": q.difficulty,
+                "time_limit_seconds": q.time_limit_seconds,
             }
         )
     return result
+
+
+def get_attempt_timer_info(attempt_id: int) -> dict:
+    """Return timer metadata for an in-progress diagnostic attempt."""
+    attempt = get_attempt(attempt_id)
+    assessment = get_assessment(attempt.assessment_id)
+    remaining = None
+    if attempt.expires_at:
+        delta = (attempt.expires_at - datetime.utcnow()).total_seconds()
+        remaining = max(0, int(delta))
+    return {
+        "attempt_id": attempt.id,
+        "assessment_type": assessment.assessment_type,
+        "expires_at": attempt.expires_at.isoformat() if attempt.expires_at else None,
+        "remaining_seconds": remaining,
+        "time_limit_minutes": assessment.time_limit_minutes,
+        "is_expired": remaining == 0 if remaining is not None else False,
+    }
 
 
 def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -> AttemptAnswer:
     attempt = get_attempt(attempt_id)
     if attempt.status != "in_progress":
         raise LMSValidationError("Attempt is not in progress")
+    _check_attempt_expired(attempt)
 
     db = get_db()
     answer = (
@@ -95,8 +154,16 @@ def submit_attempt(attempt_id: int) -> dict:
     if attempt.status != "in_progress":
         raise LMSValidationError("Attempt is not in progress")
 
-    db = get_db()
     assessment = get_assessment(attempt.assessment_id)
+    expired = (
+        attempt.expires_at
+        and datetime.utcnow() > attempt.expires_at
+        and assessment.assessment_type == "diagnostic"
+    )
+    if expired:
+        logger.info("Auto-submitting expired diagnostic attempt %s", attempt_id)
+
+    db = get_db()
     question_ids = [aq.question_id for aq in assessment.questions]
     questions = db.query(Question).filter(Question.id.in_(question_ids)).all()
     q_by_id = {q.id: q for q in questions}

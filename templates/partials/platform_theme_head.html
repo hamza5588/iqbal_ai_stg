@@ -1,0 +1,10 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/theme-colors.css') }}">
+<style id="iqbal-platform-theme">{{ platform_theme_css | safe }}</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/platform-theme-bindings.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-logo.css') }}">
+<style>
+  :root {
+    --iqbal-logo-light-mask: url("{{ url_for('static', filename='images/iqbal-ai-logo-light-mask.png') }}");
+    --iqbal-logo-icon-mask: url("{{ url_for('static', filename='images/iqbal-ai-icon-mask.png') }}");
+  }
+</style>

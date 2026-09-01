@@ -1049,6 +1049,50 @@ def update_llm_settings():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ==================== PLATFORM THEME (BRANDING) ====================
+
+@bp.route('/settings/theme', methods=['GET'])
+@login_required
+@admin_only
+def get_platform_theme_settings():
+    """Get platform color theme and available presets (admin only)."""
+    try:
+        from app.services.theme_service import get_platform_theme, list_theme_presets
+        return jsonify({
+            'success': True,
+            'theme': get_platform_theme(),
+            'presets': list_theme_presets(),
+        })
+    except Exception as e:
+        logger.error("Error getting platform theme: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/settings/theme', methods=['PUT'])
+@login_required
+@admin_only
+def update_platform_theme_settings():
+    """Set platform-wide color theme for all users (admin only)."""
+    try:
+        from app.services.theme_service import set_platform_theme
+        data = request.get_json(silent=True) or {}
+        theme = set_platform_theme(
+            preset=data.get('preset'),
+            primary=data.get('primary'),
+            updated_by=session.get('user_id'),
+        )
+        return jsonify({
+            'success': True,
+            'message': 'Platform theme updated successfully',
+            'theme': theme,
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        logger.error("Error updating platform theme: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ==================== USER MODEL SELECTION ====================
 
 @bp.route('/settings/user-model', methods=['GET'])

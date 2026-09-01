@@ -4,19 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Create Your Account | Iqbal AI</title>
+{% include 'partials/platform_theme_head.html' %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --green-dark:#0e5c2f;
-  --green:#1f9c46;
-  --green-mid:#2fae52;
-  --green-light:#e7f6ec;
-  --green-pale:#d9f2e2;
   --text-dark:#16241c;
   --text-muted:#5c6b62;
-  --border-soft:#bfdccb;
   --error:#dc2626;
 }
 *{box-sizing:border-box; margin:0; padding:0;}
@@ -43,7 +38,8 @@ a{ text-decoration:none; }
   display:flex; align-items:center; justify-content:center;
   z-index:5; border:6px solid #fff;
 }
-.logo-badge img{ width:66px; height:66px; object-fit:contain; }
+.logo-badge img,
+.logo-badge .iqbal-logo{ width:66px; height:66px; object-fit:contain; }
 
 .card{ background:var(--green-light); border-radius:28px; padding:70px 44px 40px; text-align:center; }
 
@@ -88,7 +84,7 @@ h1.title span{ color:var(--green); font-weight:700; }
   font-family:'Inter',sans-serif; outline:none; color:var(--text-dark);
 }
 .input-wrap input::placeholder{ color:#9fb3a7; }
-.input-wrap input:focus{ border-color:var(--green-mid); box-shadow:0 0 0 3px rgba(31,156,70,0.12); }
+.input-wrap input:focus{ border-color:var(--green-mid); box-shadow:0 0 0 3px var(--theme-shadow-focus); }
 .input-wrap input.field-invalid{ border-color:var(--error); }
 .field-hint{ color:var(--error); font-size:0.78rem; margin-bottom:10px; display:none; }
 .field-hint.show{ display:block; }
@@ -99,7 +95,7 @@ h1.title span{ color:var(--green); font-weight:700; }
   gap:8px; transition:transform .15s ease, box-shadow .2s ease; width:100%;
 }
 .btn-primary{ background:linear-gradient(90deg,var(--green-dark),var(--green-mid)); color:#fff; }
-.btn-primary:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(31,156,70,0.35); }
+.btn-primary:hover{ transform:translateY(-1px); box-shadow:0 6px 18px var(--theme-shadow-btn); }
 .btn-primary:disabled{ opacity:0.75; cursor:default; transform:none; }
 
 #form-error{
@@ -141,7 +137,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 <body>
 <div class="page-wrap">
   <div class="logo-badge">
-    <img src="{{ url_for('static', filename='images/iqbal-ai-logo.png') }}" alt="Iqbal AI">
+    {% with variant='icon' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
   </div>
   <div class="card">
 

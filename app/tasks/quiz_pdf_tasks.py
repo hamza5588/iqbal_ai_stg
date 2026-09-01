@@ -9,7 +9,6 @@ from datetime import datetime
 
 from app.celery_app import celery
 from app.services.quiz.pipeline import run_pdf_quiz_pipeline
-from app.utils.rag_service import ingest_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +63,8 @@ def process_pdf_quiz_task(
         except Exception as exc:
             logger.warning("Failed to update quiz task progress: %s", exc)
 
+    from app.utils.rag_service import ingest_pdf
+
     ingest_pdf(
         file_bytes=file_bytes,
         thread_id=thread_id,
@@ -93,6 +94,7 @@ def enqueue_or_run_pdf_quiz(
     user_id: int,
     topic_id: int | None = None,
     async_mode: bool = True,
+    progress_job_id: str | None = None,
 ) -> dict:
     """
     Save file to temp path and enqueue Celery task, or run synchronously if async unavailable.
@@ -122,13 +124,30 @@ def enqueue_or_run_pdf_quiz(
         except Exception as exc:
             logger.warning("Celery unavailable, running PDF quiz pipeline synchronously: %s", exc)
 
-    ingest_pdf(file_bytes=file_bytes, thread_id=thread_id, filename=filename, user_id=user_id)
+    from app.utils.rag_service import ingest_pdf
+    from app.utils.diagnostic_upload_progress import set_progress as _set_upload_progress
+
+    _set_upload_progress(progress_job_id, 58, "Ingesting diagnostic Q&A PDF...", stage="qa_ingest")
+
+    def _qa_progress(step: str, progress: int, message: str) -> None:
+        mapped = 58 + int(max(0, min(100, progress)) * 0.12)
+        _set_upload_progress(progress_job_id, mapped, message or "Ingesting diagnostic Q&A PDF...", stage="qa_ingest")
+
+    ingest_pdf(
+        file_bytes=file_bytes,
+        thread_id=thread_id,
+        filename=filename,
+        user_id=user_id,
+        progress_callback=_qa_progress if progress_job_id else None,
+    )
+    _set_upload_progress(progress_job_id, 72, "Extracting questions and answers...", stage="qa_extract")
     result = run_pdf_quiz_pipeline(
         assessment_id=assessment_id,
         rag_thread_id=thread_id,
         user_id=user_id,
         topic_id=topic_id,
     )
+    _set_upload_progress(progress_job_id, 88, "Saving generated questions...", stage="qa_save")
     try:
         os.unlink(temp_path)
     except OSError:

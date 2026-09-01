@@ -5,7 +5,6 @@ import base64
 import logging
 import os
 from app.celery_app import celery
-from app.utils.rag_service import ingest_pdf, extract_and_store_headings_for_thread
 from app.utils.llm_gateway import (
     LlmTelemetryContext,
     reset_llm_telemetry_context,
@@ -54,6 +53,8 @@ def _run_ingest_in_context(self, file_path: str, thread_id: str, filename: str, 
             self.update_state(state='PROCESSING', meta={'step': step, 'progress': progress, 'message': message})
         except Exception as e:
             logger.warning(f"Error updating task progress: {e}")
+
+    from app.utils.rag_service import ingest_pdf
 
     result = ingest_pdf(
         file_bytes=file_bytes,
@@ -193,73 +194,71 @@ def extract_headings_task(self, thread_id: str, user_id: int):
     Celery task to extract headings/topics for a thread and store them in the database.
     Runs inside a Flask application context so get_db() and other app utilities work.
     """
-    from app import create_app
+    try:
+        from app.utils.rag_service import extract_and_store_headings_for_thread
 
-    app = create_app()
-    with app.app_context():
+        self.update_state(
+            state='PROCESSING',
+            meta={
+                'step': 'init',
+                'progress': 0,
+                'message': 'Starting heading extraction...'
+            },
+        )
+        _ts = (
+            "load_test"
+            if os.getenv("LOAD_TEST_MODE", "false").lower() in ("true", "1", "yes")
+            else "production"
+        )
+        _tok = set_llm_telemetry_context(
+            LlmTelemetryContext(
+                user_id=user_id,
+                user_role=None,
+                workflow="rag_heading_extraction",
+                traffic_source=_ts,
+                thread_id=thread_id,
+                celery_task_name="extract_headings_task",
+            )
+        )
         try:
-            self.update_state(
-                state='PROCESSING',
-                meta={
-                    'step': 'init',
-                    'progress': 0,
-                    'message': 'Starting heading extraction...'
-                },
+            result = extract_and_store_headings_for_thread(
+                thread_id=thread_id,
+                user_id=user_id,
             )
-            _ts = (
-                "load_test"
-                if os.getenv("LOAD_TEST_MODE", "false").lower() in ("true", "1", "yes")
-                else "production"
-            )
-            _tok = set_llm_telemetry_context(
-                LlmTelemetryContext(
-                    user_id=user_id,
-                    user_role=None,
-                    workflow="rag_heading_extraction",
-                    traffic_source=_ts,
-                    thread_id=thread_id,
-                    celery_task_name="extract_headings_task",
-                )
-            )
-            try:
-                result = extract_and_store_headings_for_thread(
-                    thread_id=thread_id,
-                    user_id=user_id,
-                )
-            finally:
-                reset_llm_telemetry_context(_tok)
-            headings_count = result.get('topics_count', 0)
-            self.update_state(
-                state='SUCCESS',
-                meta={
-                    'step': 'complete',
-                    'progress': 100,
-                    'message': f'Extracted {headings_count} headings',
-                },
-            )
-            return {
-                'success': True,
-                'thread_id': thread_id,
-                'user_id': user_id,
-                'headings_count': headings_count,
-            }
-        except Exception as e:
-            error_msg = f'Failed to extract headings: {str(e)}'
-            exc_type = type(e).__name__
-            logger.error(error_msg, exc_info=True)
-            self.update_state(
-                state='FAILURE',
-                meta={
-                    'error': error_msg,
-                    'message': error_msg,
-                    'exc_type': exc_type,
-                    'exc_message': str(e),
-                },
-            )
-            return {
-                'success': False,
+        finally:
+            reset_llm_telemetry_context(_tok)
+        headings_count = result.get('topics_count', 0)
+        self.update_state(
+            state='SUCCESS',
+            meta={
+                'step': 'complete',
+                'progress': 100,
+                'message': f'Extracted {headings_count} headings',
+            },
+        )
+        return {
+            'success': True,
+            'thread_id': thread_id,
+            'user_id': user_id,
+            'headings_count': headings_count,
+        }
+    except Exception as e:
+        error_msg = f'Failed to extract headings: {str(e)}'
+        exc_type = type(e).__name__
+        logger.error(error_msg, exc_info=True)
+        self.update_state(
+            state='FAILURE',
+            meta={
                 'error': error_msg,
-                'thread_id': thread_id,
-                'user_id': user_id,
+                'message': error_msg,
                 'exc_type': exc_type,
-            }
+                'exc_message': str(e),
+            },
+        )
+        return {
+            'success': False,
+            'error': error_msg,
+            'thread_id': thread_id,
+            'user_id': user_id,
+            'exc_type': exc_type,
+        }

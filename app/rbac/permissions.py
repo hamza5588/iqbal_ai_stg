@@ -84,7 +84,6 @@ ROLE_PERMISSIONS: dict[Role, Set[Permissions]] = {
         Permissions.VIEW_MY_CONVERSATIONS,
         Permissions.MANAGE_CLASS,
         Permissions.CREATE_QUIZ,
-        Permissions.CREATE_DIAGNOSTIC,
         Permissions.ASSIGN_QUIZ,
         Permissions.VIEW_CLASS_PERFORMANCE,
         Permissions.MANAGE_QUESTION_BANK,

@@ -2,13 +2,14 @@
 <html lang="en">
 
 <head>
+    {% include 'partials/platform_theme_head.html' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
-            myblue: '#05B0FC',
+            myblue: 'var(--iqbal-primary, #05B0FC)',
           },
           fontFamily: {
             inter: ['Inter', 'sans-serif'],
@@ -960,8 +961,7 @@
         <div id="sidebar"
             class="w-52 sm:w-60 lg:w-68 xl:w-[220px] bg-white shadow-md p-2 sm:p-3 fixed md:static top-0 left-0 h-full md:h-auto transform -translate-x-full md:translate-x-0 transition-transform duration-300 z-40">
       <div class="flex justify-between items-center">
-                <img src="{{ url_for('static', filename='images/logo.png') }}"
-                    class="w-20 sm:w-24 lg:w-28 xl:w-32 h-6 sm:h-8 lg:h-10" alt="">
+                {% with variant='dark-on-light', height='32px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
                 <button onclick="hideSidebar()" class="mt-2 sm:mt-4 hover:bg-gray-100 p-1 rounded">
           <img src="{{ url_for('static', filename='images/slider.png') }}" alt="">
         </button>
@@ -2303,9 +2303,9 @@ async function initializeApp() {
             if (!sidebar) return;
             
             // Update logo size to be more compact
-            const logo = sidebar.querySelector('img[src*="logo.png"]');
+            const logo = sidebar.querySelector('.iqbal-logo');
             if (logo) {
-                logo.className = 'w-20 sm:w-24 lg:w-28 xl:w-32 h-6 sm:h-8 lg:h-10';
+                logo.style.setProperty('--iqbal-logo-h', '32px');
             }
             
             // Update New Chat button to be more compact
@@ -9871,7 +9871,7 @@ async function initializeApp() {
         
         sidebar.innerHTML = `
             <div class="flex justify-between items-center">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" class="w-20 sm:w-24 lg:w-28 xl:w-32 h-6 sm:h-8 lg:h-10" alt="">
+                {% with variant='dark-on-light', height='32px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
                 <button onclick="hideSidebar()" class="mt-2 sm:mt-4 hover:bg-gray-100 p-1 rounded">
                     <img src="{{ url_for('static', filename='images/slider.png') }}" alt="">
                 </button>

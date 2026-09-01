@@ -23,7 +23,7 @@
     div.style.marginBottom = '16px';
     div.style.background = '#fff';
     var labels = (profile.teaching_grade_labels || []).join(', ') || 'Not set';
-    div.innerHTML = '<h3 style="font-weight:700;margin:0 0 8px;color:#166534;">Your Teaching Grades</h3>' +
+    div.innerHTML = '<h3 style="font-weight:700;margin:0 0 8px;color:var(--primary-color);">Your Teaching Grades</h3>' +
       '<p class="lms-status">Currently assigned: <strong>' + escapeHtml(labels) + '</strong></p>' +
       '<div class="lms-field"><label class="lms-label">Update grades you teach (comma-separated, e.g. 8,9)</label>' +
       '<input id="lmsTeacherGradesInput" class="lms-input" placeholder="8" value="' + escapeHtml((profile.teaching_grades || []).join(',')) + '"></div>' +
@@ -45,14 +45,6 @@
       patchClassCreateForm();
     } catch (err) {
       lmsShowToast(err.message, 'error');
-    }
-  };
-    if (typeof loadLmsTeacherClasses === 'function') {
-      var orig = loadLmsTeacherClasses;
-      window.loadLmsTeacherClasses = async function () {
-        await orig.apply(this, arguments);
-        enhanceClassListCards();
-      };
     }
   };
 
@@ -208,13 +200,19 @@
         el.innerHTML = await Promise.all(classes.map(async function (c) {
           var roster = [];
           try { roster = await lmsApi('/api/lms/classes/' + c.id + '/students'); } catch (e) { roster = []; }
+          var rosterPreview = roster.length
+            ? '<ul class="lms-class-roster-preview">' + roster.map(function (s) {
+              return '<li>' + escapeHtml(s.username || s.email || ('Student #' + s.student_id)) + '</li>';
+            }).join('') + '</ul>'
+            : '<p class="lms-status" style="margin-top:8px;">No students enrolled yet.</p>';
           return '<div class="lms-card" data-lms-class-id="' + c.id + '" data-class-name="' + escapeHtml(c.name) + '" data-join-code="' + escapeHtml(c.join_code) + '" data-grade="' + escapeHtml(c.grade_level || '') + '">' +
             '<div class="lms-card-head">' +
             '<div><span class="lms-card-title">' + escapeHtml(c.name) + '</span> ' +
             (c.grade_level ? '<span class="lms-badge lms-badge-green">' + c.grade_level + 'th Grade</span>' : '') +
-            '<div class="lms-status" style="margin-top:6px;">Join code: <code style="background:#f0fdf4;padding:2px 8px;border-radius:4px;font-weight:700;color:#166534;">' + escapeHtml(c.join_code) + '</code></div></div>' +
+            '<div class="lms-status" style="margin-top:6px;">Join code: <code style="background:#f0fdf4;padding:2px 8px;border-radius:4px;font-weight:700;color:var(--primary-color);">' + escapeHtml(c.join_code) + '</code></div></div>' +
             '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsOpenClassDetail(' + c.id + ',\'' + escapeHtml(c.name).replace(/'/g, "\\'") + '\',\'' + escapeHtml(c.join_code) + '\',\'' + escapeHtml(c.grade_level || '') + '\')">Manage</button></div>' +
-            '<p class="lms-status" style="margin-top:8px;">' + roster.length + ' student(s) enrolled</p></div>';
+            '<div class="lms-status" style="margin-top:8px;">Students (' + roster.length + '):</div>' +
+            rosterPreview + '</div>';
         })).then(function (html) { return html.join(''); });
       } catch (err) {
         el.innerHTML = '<p class="lms-error">Failed to load classes.</p>';

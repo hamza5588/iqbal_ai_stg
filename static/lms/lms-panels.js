@@ -67,12 +67,75 @@
     }
   };
 
-  /* ── Analytics dashboard ── */
+  function renderExpandableBadgeList(count, hint, itemsHtml, badgeClass) {
+    if (!count) return '—';
+    var badge = badgeClass || 'lms-badge-red';
+    return '<details class="lms-expand-details">' +
+      '<summary class="lms-expand-summary">' +
+      '<span class="lms-badge ' + badge + '">' + count + '</span>' +
+      '<span class="lms-expand-hint">' + escapeHtml(hint) + '</span>' +
+      '</summary>' +
+      '<ul class="lms-expand-list">' + itemsHtml + '</ul></details>';
+  }
+
+  function renderWeakTopicsCell(student) {
+    var topics = student.weak_topics || [];
+    var count = student.weak_topic_count || topics.length || 0;
+    if (!count) return '—';
+    var list = topics.map(function (t) {
+      var score = t.score_percent != null ? ' · ' + Math.round(t.score_percent) + '%' : '';
+      return '<li>' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + score + '</li>';
+    }).join('');
+    return renderExpandableBadgeList(count, 'Click to view topics', list);
+  }
+
+  function renderTopicStrugglingCell(topic) {
+    var students = topic.weak_students || [];
+    var count = topic.weak_student_count || students.length || 0;
+    if (!count) return '—';
+    var list = students.map(function (s) {
+      var score = s.score_percent != null ? ' · ' + Math.round(s.score_percent) + '%' : '';
+      return '<li>' + escapeHtml(s.username || ('#' + s.student_id)) + score + '</li>';
+    }).join('');
+    var hint = count === 1 ? '1 student · click to view' : count + ' students · click to view';
+    return renderExpandableBadgeList(count, hint, list);
+  }
+
+  function renderQuizStudentScoresCell(quiz) {
+    var students = quiz.student_results || [];
+    if (!students.length) return '—';
+    var submitted = students.filter(function (s) { return s.status === 'submitted'; }).length;
+    var list = students.map(function (s) {
+      var name = escapeHtml(s.username || ('#' + s.student_id));
+      var itemClass = 'lms-expand-item-muted';
+      var label = name + ': Not submitted';
+      if (s.status === 'submitted' && s.score_percent != null) {
+        label = name + ': ' + ((s.score != null && s.max_score != null)
+          ? (s.score + '/' + s.max_score + ' · ' + s.score_percent + '%')
+          : (s.score_percent + '%'));
+        if (s.score_percent >= 70) itemClass = 'lms-expand-item-ok';
+        else if (s.score_percent >= 50) itemClass = 'lms-expand-item-warn';
+        else itemClass = 'lms-expand-item-bad';
+      } else if (s.status === 'in_progress') {
+        label = name + ': In progress';
+        itemClass = 'lms-expand-item-info';
+      } else if (s.status === 'overdue') {
+        label = name + ': Overdue';
+        itemClass = 'lms-expand-item-bad';
+      }
+      return '<li class="' + itemClass + '">' + label + '</li>';
+    }).join('');
+    var hint = submitted + '/' + students.length + ' submitted · click to view';
+    return renderExpandableBadgeList(students.length, hint, list, 'lms-badge-blue');
+  }
+
   ensureModal('lmsAnalyticsModal', 'Class Analytics', 'lms-modal-xl');
 
   window.openLmsTeacherAnalytics = async function (preselectedClassId) {
+    ensureModal('lmsAnalyticsModal', 'Class Analytics', 'lms-modal-xl');
     lmsOpenModal('lmsAnalyticsModal');
     var body = document.getElementById('lmsAnalyticsModalBody');
+    if (!body) return;
     body.innerHTML = '<div class="lms-spinner"></div>';
     try {
       var classes = await lmsApi('/api/lms/classes/mine');
@@ -118,24 +181,23 @@
       if (tab === 'topics') {
         var topics = await lmsApi('/api/lms/classes/' + classId + '/analytics/topics');
         if (!topics.length) { content.innerHTML = '<p class="lms-status">No topic data yet — students need to complete assessments.</p>'; return; }
-        content.innerHTML = '<table class="lms-table"><thead><tr><th>Topic</th><th>Avg Score</th><th>Struggling</th></tr></thead><tbody>' +
+        content.innerHTML = '<table class="lms-table"><thead><tr><th>Topic</th><th>Avg Score</th><th>Struggling Students</th></tr></thead><tbody>' +
           topics.map(function (t) {
-            var weak = t.weak_student_count || 0;
             return '<tr><td>' + escapeHtml(t.topic_name) + '</td><td>' + (t.avg_score != null ? t.avg_score + '%' : '—') + '</td>' +
-              '<td>' + (weak ? '<span class="lms-badge lms-badge-red">' + weak + ' students</span>' : '—') + '</td></tr>';
+              '<td class="lms-expand-cell">' + renderTopicStrugglingCell(t) + '</td></tr>';
           }).join('') + '</tbody></table>' +
-          (topics.some(function (t) { return (t.weak_student_count || 0) >= 2; })
+          (topics.some(function (t) { return (t.weak_student_count || 0) >= 1; })
             ? '<div class="lms-card" style="margin-top:12px;background:#fef9c3;border-color:#fcd34d"><strong>Insight:</strong> ' +
-              topics.filter(function (t) { return (t.weak_student_count || 0) >= 2; }).map(function (t) {
-                return t.weak_student_count + ' students struggle with ' + t.topic_name;
-              }).join('; ') + '</div>' : '');
+              topics.filter(function (t) { return (t.weak_student_count || 0) >= 1; }).length +
+              ' topic(s) have struggling students. Click the count in each row to see names and scores.</div>' : '');
       } else if (tab === 'quizzes') {
         var quizzes = await lmsApi('/api/lms/classes/' + classId + '/analytics/quizzes');
         content.innerHTML = quizzes.length
-          ? '<table class="lms-table"><thead><tr><th>Assignment</th><th>Completion</th><th>Avg Score</th></tr></thead><tbody>' +
+          ? '<table class="lms-table"><thead><tr><th>Assignment</th><th>Completion</th><th>Avg Score</th><th>Student Scores</th></tr></thead><tbody>' +
             quizzes.map(function (q) {
               return '<tr><td>' + escapeHtml(q.title) + '</td><td>' + (q.completion_percent != null ? q.completion_percent + '%' : '—') + '</td>' +
-                '<td>' + (q.avg_score_percent != null ? q.avg_score_percent + '%' : '—') + '</td></tr>';
+                '<td>' + (q.avg_score_percent != null ? q.avg_score_percent + '%' : '—') + '</td>' +
+                '<td class="lms-expand-cell">' + renderQuizStudentScoresCell(q) + '</td></tr>';
             }).join('') + '</tbody></table>'
           : '<p class="lms-status">No published assignments yet.</p>';
       } else if (tab === 'struggling') {
@@ -145,7 +207,7 @@
             struggling.map(function (s) {
               return '<tr><td>' + escapeHtml(s.username || ('#' + s.student_id)) + '</td>' +
                 '<td>' + (s.overall_progress != null ? Math.round(s.overall_progress) + '%' : '—') + '</td>' +
-                '<td><span class="lms-badge lms-badge-red">' + (s.weak_topic_count || 0) + '</span></td></tr>';
+                '<td class="lms-expand-cell">' + renderWeakTopicsCell(s) + '</td></tr>';
             }).join('') + '</tbody></table>'
           : '<p class="lms-status">No struggling students detected — great job!</p>';
       } else if (tab === 'roster') {
@@ -192,7 +254,7 @@
     if (!practiceSession || !practiceSession.session_id) return;
     var q = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id);
     if (q.completed) {
-      body.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:2rem;color:#166534;">&#10003;</div>' +
+      body.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:2rem;color:var(--primary-color);">&#10003;</div>' +
         '<p><strong>Practice session complete!</strong></p>' +
         '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsCloseModal(\'lmsPracticeModal\')">Done</button></div>';
       return;
