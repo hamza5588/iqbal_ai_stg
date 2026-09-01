@@ -7926,9 +7926,18 @@
         const items = body.data || body || [];
         if (!items.length) { el.innerHTML = '<p>No assignments yet.</p>'; return; }
         el.innerHTML = items.map(function (a) {
+          var action = '';
+          if (a.status === 'submitted' || a.can_start === false) {
+            var score = a.score_percent != null ? ' &middot; ' + a.score_percent + '%' : '';
+            action = '<span style="color:#16a34a;font-weight:600;font-size:.875rem;">Completed' + score + '</span>';
+          } else if (a.status === 'in_progress') {
+            action = '<button type="button" onclick="startLmsQuiz(' + a.quiz_id + ',' + a.assignment_id + ')" style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">Continue</button>';
+          } else {
+            action = '<button type="button" onclick="startLmsQuiz(' + a.quiz_id + ',' + a.assignment_id + ')" style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">Start</button>';
+          }
           return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">' +
             '<div><strong>' + escapeHtml(a.title) + '</strong><br><span style="font-size:.875rem;color:#64748b;">Status: ' + a.status + '</span></div>' +
-            '<button type="button" onclick="startLmsQuiz(' + a.quiz_id + ',' + a.assignment_id + ')" style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">Start</button></div>';
+            action + '</div>';
         }).join('');
       } catch (err) {
         el.innerHTML = '<p>Error: ' + err.message + '</p>';
@@ -7945,7 +7954,13 @@
           body: JSON.stringify({ assignment_id: assignmentId })
         });
         const body = await res.json();
-        if (!res.ok) throw new Error(body.error || body.message || 'Start failed');
+        if (!res.ok) {
+          const errObj = body.error;
+          const msg = (errObj && typeof errObj === 'object' && errObj.message)
+            ? errObj.message
+            : (body.error || body.message || 'Start failed');
+          throw new Error(msg);
+        }
         const d = body.data || body;
         _lmsAttemptId = d.attempt_id;
         if (d.resumed) {
@@ -7953,7 +7968,9 @@
         }
         await loadLmsAttemptQuestions();
       } catch (err) {
-        alert(err.message);
+        var msg = err.message || 'Could not start quiz';
+        if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error');
+        else alert(msg);
       }
     }
     async function loadLmsAttemptQuestions() {

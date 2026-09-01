@@ -31,6 +31,21 @@ def _student_completed_diagnostic(student_id: int, assessment_id: int) -> bool:
     return submitted is not None
 
 
+def _student_completed_quiz(student_id: int, assessment_id: int) -> bool:
+    """True if the student already submitted this quiz (no retakes)."""
+    db = get_db()
+    submitted = (
+        db.query(AssessmentAttempt)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.assessment_id == assessment_id,
+            AssessmentAttempt.status == "submitted",
+        )
+        .first()
+    )
+    return submitted is not None
+
+
 def _find_in_progress_attempt(
     student_id: int,
     assessment_id: int,
@@ -106,6 +121,11 @@ def start_attempt(
                 student_id, assessment_id, existing.id, assignment_id
             )
             return existing, True
+
+    if assessment.assessment_type == "quiz" and _student_completed_quiz(student_id, assessment_id):
+        raise LMSValidationError(
+            "You have already completed this quiz. Retakes are not allowed."
+        )
 
     attempt = AssessmentAttempt(
         student_id=student_id,

@@ -149,16 +149,30 @@ def list_assignments_for_student(student_id: int) -> List[dict]:
             )
             .first()
         )
+        status = sub.status if sub else "not_started"
+        score_pct = None
+        if sub and sub.attempt_id:
+            from app.models.lms_models import AssessmentAttempt
+
+            att = (
+                db.query(AssessmentAttempt)
+                .filter(AssessmentAttempt.id == sub.attempt_id)
+                .first()
+            )
+            if att and att.status == "submitted" and att.max_score:
+                score_pct = round(100.0 * (att.score or 0) / att.max_score, 1)
         result.append(
             {
                 "assignment_id": assignment.id,
                 "title": assignment.title,
                 "quiz_id": assignment.quiz_id,
                 "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
-                "status": sub.status if sub else "not_started",
+                "status": status,
                 "submitted_at": sub.submitted_at.isoformat()
                 if sub and sub.submitted_at
                 else None,
+                "score_percent": score_pct,
+                "can_start": status != "submitted",
             }
         )
     return result
