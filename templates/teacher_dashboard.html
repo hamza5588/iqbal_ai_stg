@@ -12734,7 +12734,30 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
     }
 
+    function _resetLmsQuizModal() {
+      stopLmsPoll();
+      _lmsCurrentAssessmentId = null;
+      const form = document.getElementById('lmsPdfQuizForm');
+      if (form) {
+        form.reset();
+        form.style.display = '';
+      }
+      const status = document.getElementById('lmsQuizStatus');
+      if (status) status.textContent = '';
+      const preview = document.getElementById('lmsQuizPreview');
+      if (preview) preview.innerHTML = '';
+      const actions = document.getElementById('lmsQuizActions');
+      if (actions) {
+        actions.style.display = 'none';
+        const publishBtn = actions.querySelector('button');
+        if (publishBtn) publishBtn.disabled = false;
+      }
+      const btn = document.getElementById('lmsQuizSubmitBtn');
+      if (btn) btn.disabled = false;
+    }
+
     function openLmsQuizHub() {
+      _resetLmsQuizModal();
       _showLmsModal('lmsQuizHubModal');
     }
     function closeLmsQuizHub() {
@@ -12765,7 +12788,6 @@ Align everything with the lesson objectives and do not invent missing informatio
         startLmsPoll();
       } catch (err) {
         status.textContent = 'Error: ' + err.message;
-      } finally {
         btn.disabled = false;
       }
     }
@@ -12797,10 +12819,16 @@ Align everything with the lesson objectives and do not invent missing informatio
           (d.question_count ? ' | Questions: ' + d.question_count : '');
         if (rawStatus === 'completed') {
           stopLmsPoll();
+          const form = document.getElementById('lmsPdfQuizForm');
+          if (form) form.style.display = 'none';
           await loadLmsQuizPreview();
           actionsEl.style.display = 'flex';
         } else if (rawStatus === 'failed') {
           stopLmsPoll();
+          const form = document.getElementById('lmsPdfQuizForm');
+          if (form) form.style.display = '';
+          const submitBtn = document.getElementById('lmsQuizSubmitBtn');
+          if (submitBtn) submitBtn.disabled = false;
           statusEl.textContent = 'Failed: ' + (d.error_message || 'Unknown error');
         }
       } catch (err) {
@@ -12835,15 +12863,25 @@ Align everything with the lesson objectives and do not invent missing informatio
     async function publishLmsQuiz() {
       if (!_lmsCurrentAssessmentId) return;
       const statusEl = document.getElementById('lmsQuizStatus');
+      const actionsEl = document.getElementById('lmsQuizActions');
+      const publishBtn = actionsEl ? actionsEl.querySelector('button') : null;
+      if (publishBtn) publishBtn.disabled = true;
+      statusEl.textContent = 'Publishing quiz...';
       try {
         const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/publish', {
           method: 'POST', credentials: 'include'
         });
         const body = await res.json();
         if (!res.ok) throw new Error(body.error || body.message || 'Publish failed');
-        statusEl.textContent = 'Quiz published successfully.';
+        statusEl.textContent = '';
+        if (typeof lmsShowToast === 'function') {
+          lmsShowToast('Quiz published successfully!');
+        }
+        closeLmsQuizHub();
+        _resetLmsQuizModal();
       } catch (err) {
         statusEl.textContent = 'Publish error: ' + err.message;
+        if (publishBtn) publishBtn.disabled = false;
       }
     }
     document.addEventListener('DOMContentLoaded', function () {
