@@ -1,0 +1,2777 @@
+{
+  "pdfs": [
+    {
+      "name": "01_single_topic.pdf",
+      "bytes": 716,
+      "title": "Quadratic Equations"
+    },
+    {
+      "name": "02_multi_topic.pdf",
+      "bytes": 763,
+      "title": "Mixed Topics"
+    },
+    {
+      "name": "03_repeated_concepts.pdf",
+      "bytes": 785,
+      "title": "Repeated Discriminant"
+    },
+    {
+      "name": "04_ambiguous.pdf",
+      "bytes": 726,
+      "title": "Ambiguous Wording"
+    },
+    {
+      "name": "05_user_like_sentences.pdf",
+      "bytes": 750,
+      "title": "Command Lookalikes"
+    },
+    {
+      "name": "06_many_headings.pdf",
+      "bytes": 1479,
+      "title": "Headings"
+    },
+    {
+      "name": "07_long_paragraphs.pdf",
+      "bytes": 752,
+      "title": "Long Prose"
+    },
+    {
+      "name": "08_tables.pdf",
+      "bytes": 733,
+      "title": "Tables"
+    },
+    {
+      "name": "09_numbered_lists.pdf",
+      "bytes": 727,
+      "title": "Lists"
+    },
+    {
+      "name": "10_near_empty.pdf",
+      "bytes": 641,
+      "title": "Empty-ish"
+    },
+    {
+      "name": "11_malformed_header.pdf",
+      "bytes": 677,
+      "title": "Malformed"
+    },
+    {
+      "name": "13_spanish.pdf",
+      "bytes": 710,
+      "title": "Ecuaciones"
+    },
+    {
+      "name": "14_urdu_roman.pdf",
+      "bytes": 693,
+      "title": "Musawaat"
+    },
+    {
+      "name": "15_large.pdf",
+      "bytes": 751,
+      "title": "Large Doc"
+    },
+    {
+      "name": "16_typos.pdf",
+      "bytes": 706,
+      "title": "Typos"
+    },
+    {
+      "name": "17_keyword_soup.pdf",
+      "bytes": 701,
+      "title": "Keywords"
+    },
+    {
+      "name": "18_command_resemble.pdf",
+      "bytes": 733,
+      "title": "Commands in body"
+    },
+    {
+      "name": "12_truncated.pdf",
+      "bytes": 238,
+      "title": "Truncated"
+    }
+  ],
+  "router_fallback_rows": [
+    {
+      "id": "document_qa:What is a quadratic equation?",
+      "category": "document_qa",
+      "text": "What is a quadratic equation?",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:Explain the discriminant.",
+      "category": "document_qa",
+      "text": "Explain the discriminant.",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:What does the document say about the pool example?",
+      "category": "document_qa",
+      "text": "What does the document say about the pool example?",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:Give me the definition of X.",
+      "category": "document_qa",
+      "text": "Give me the definition of X.",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:Where is the pool mentioned?",
+      "category": "document_qa",
+      "text": "Where is the pool mentioned?",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:What page discusses quadratic equations?",
+      "category": "document_qa",
+      "text": "What page discusses quadratic equations?",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:Compare completing the square and the quadratic formula.",
+      "category": "document_qa",
+      "text": "Compare completing the square and the quadratic formula.",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:Summarize section 2.",
+      "category": "document_qa",
+      "text": "Summarize section 2.",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:Give me all points about area.",
+      "category": "document_qa",
+      "text": "Give me all points about area.",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:What are the key takeaways?",
+      "category": "document_qa",
+      "text": "What are the key takeaways?",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:What is photosynthesis?",
+      "category": "document_qa",
+      "text": "What is photosynthesis?",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:WHAT IS QUADRATIC EQUATION",
+      "category": "document_qa",
+      "text": "WHAT IS QUADRATIC EQUATION",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:what is quadratic equations",
+      "category": "document_qa",
+      "text": "what is quadratic equations",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:quadratc equaton",
+      "category": "document_qa",
+      "text": "quadratc equaton",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:synonym: what is a second-degree polynomial equation?",
+      "category": "document_qa",
+      "text": "synonym: what is a second-degree polynomial equation?",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:x",
+      "category": "document_qa",
+      "text": "x",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:Please explain in great detail every theorem, lemma, corolla",
+      "category": "document_qa",
+      "text": "Please explain in great detail every theorem, lemma, corollary, example, and exercise in the uploaded document covering quadratic equations including derivations.",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:explain",
+      "category": "document_qa",
+      "text": "explain",
+      "expected": "clarification",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "document_qa:what",
+      "category": "document_qa",
+      "text": "what",
+      "expected": "clarification",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:create a lesson on photosynthesis",
+      "category": "lesson_generation",
+      "text": "create a lesson on photosynthesis",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:Generate a lesson from the entire document.",
+      "category": "lesson_generation",
+      "text": "Generate a lesson from the entire document.",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:make a lecture about chapter 3",
+      "category": "lesson_generation",
+      "text": "make a lecture about chapter 3",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:Create a lecture",
+      "category": "lesson_generation",
+      "text": "Create a lecture",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:make lesson",
+      "category": "lesson_generation",
+      "text": "make lesson",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:Turn this into a lesson",
+      "category": "lesson_generation",
+      "text": "Turn this into a lesson",
+      "expected": "lesson_generation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:Teach me this",
+      "category": "lesson_generation",
+      "text": "Teach me this",
+      "expected": "document_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:I need a lesson on the pool of area 192",
+      "category": "lesson_generation",
+      "text": "I need a lesson on the pool of area 192",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:write the lesson plan on it",
+      "category": "lesson_generation",
+      "text": "write the lesson plan on it",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:create the lesson plan on how to setup quadratic equation in",
+      "category": "lesson_generation",
+      "text": "create the lesson plan on how to setup quadratic equation in the pdf there is an example of pool of area 192 meter squared can you write the lesson plan on it",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:prepare teaching material on volcanoes",
+      "category": "lesson_generation",
+      "text": "prepare teaching material on volcanoes",
+      "expected": "lesson_generation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:build me a full lesson",
+      "category": "lesson_generation",
+      "text": "build me a full lesson",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add an example.",
+      "category": "lesson_modification",
+      "text": "Add an example.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add a section.",
+      "category": "lesson_modification",
+      "text": "Add a section.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add more explanation.",
+      "category": "lesson_modification",
+      "text": "Add more explanation.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add a definition.",
+      "category": "lesson_modification",
+      "text": "Add a definition.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add a conclusion.",
+      "category": "lesson_modification",
+      "text": "Add a conclusion.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add exercises.",
+      "category": "lesson_modification",
+      "text": "Add exercises.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add questions.",
+      "category": "lesson_modification",
+      "text": "Add questions.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add examples from the document.",
+      "category": "lesson_modification",
+      "text": "Add examples from the document.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add an example from the previous explanation.",
+      "category": "lesson_modification",
+      "text": "Add an example from the previous explanation.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:PLEASE ADD TGHE EXAMPLE IN THE ELCTURE",
+      "category": "lesson_modification",
+      "text": "PLEASE ADD TGHE EXAMPLE IN THE ELCTURE",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:include that example",
+      "category": "lesson_modification",
+      "text": "include that example",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:put the example in the lesson",
+      "category": "lesson_modification",
+      "text": "put the example in the lesson",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:add what we just discussed",
+      "category": "lesson_modification",
+      "text": "add what we just discussed",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:include the second example",
+      "category": "lesson_modification",
+      "text": "include the second example",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:expand the example we talked about",
+      "category": "lesson_modification",
+      "text": "expand the example we talked about",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add that.",
+      "category": "lesson_modification",
+      "text": "Add that.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Change this.",
+      "category": "lesson_modification",
+      "text": "Change this.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Fix the previous part.",
+      "category": "lesson_modification",
+      "text": "Fix the previous part.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it better.",
+      "category": "lesson_modification",
+      "text": "Make it better.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Expand it.",
+      "category": "lesson_modification",
+      "text": "Expand it.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Include the example.",
+      "category": "lesson_modification",
+      "text": "Include the example.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add the example we discussed.",
+      "category": "lesson_modification",
+      "text": "Add the example we discussed.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Update the lecture.",
+      "category": "lesson_modification",
+      "text": "Update the lecture.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Remove the last section.",
+      "category": "lesson_modification",
+      "text": "Remove the last section.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Remove the example.",
+      "category": "lesson_modification",
+      "text": "Remove the example.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Remove the introduction.",
+      "category": "lesson_modification",
+      "text": "Remove the introduction.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Change the title.",
+      "category": "lesson_modification",
+      "text": "Change the title.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Rewrite section X.",
+      "category": "lesson_modification",
+      "text": "Rewrite section X.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it shorter.",
+      "category": "lesson_modification",
+      "text": "Make it shorter.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it more detailed.",
+      "category": "lesson_modification",
+      "text": "Make it more detailed.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Simplify it.",
+      "category": "lesson_modification",
+      "text": "Simplify it.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it suitable for beginners.",
+      "category": "lesson_modification",
+      "text": "Make it suitable for beginners.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Move section X before section Y.",
+      "category": "lesson_modification",
+      "text": "Move section X before section Y.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Put the example at the beginning.",
+      "category": "lesson_modification",
+      "text": "Put the example at the beginning.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Save the lesson.",
+      "category": "lesson_save",
+      "text": "Save the lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Save this.",
+      "category": "lesson_save",
+      "text": "Save this.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Save it.",
+      "category": "lesson_save",
+      "text": "Save it.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Finalize the lesson.",
+      "category": "lesson_save",
+      "text": "Finalize the lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Finalize this lesson.",
+      "category": "lesson_save",
+      "text": "Finalize this lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Please save my lesson.",
+      "category": "lesson_save",
+      "text": "Please save my lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Can you save it?",
+      "category": "lesson_save",
+      "text": "Can you save it?",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:SAVE THE LESSON",
+      "category": "lesson_save",
+      "text": "SAVE THE LESSON",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:save",
+      "category": "lesson_save",
+      "text": "save",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:finalize",
+      "category": "lesson_save",
+      "text": "finalize",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:I think this version is good now, can you finalize it?",
+      "category": "lesson_save",
+      "text": "I think this version is good now, can you finalize it?",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:please finalize this",
+      "category": "lesson_save",
+      "text": "please finalize this",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:I think we're done",
+      "category": "lesson_save",
+      "text": "I think we're done",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:make this final",
+      "category": "lesson_save",
+      "text": "make this final",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:can you store this lesson",
+      "category": "lesson_save",
+      "text": "can you store this lesson",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:this version is good, keep it",
+      "category": "lesson_save",
+      "text": "this version is good, keep it",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:yeh lesson save kar do",
+      "category": "lesson_save",
+      "text": "yeh lesson save kar do",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:lock it in",
+      "category": "lesson_save",
+      "text": "lock it in",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What did I ask?",
+      "category": "meta_conversation",
+      "text": "What did I ask?",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:WHAT DID I ASK??",
+      "category": "meta_conversation",
+      "text": "WHAT DID I ASK??",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:WHAT IA SK YOU LAST QUESTION",
+      "category": "meta_conversation",
+      "text": "WHAT IA SK YOU LAST QUESTION",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What did I ask first?",
+      "category": "meta_conversation",
+      "text": "What did I ask first?",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What was my previous question?",
+      "category": "meta_conversation",
+      "text": "What was my previous question?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What did you just explain?",
+      "category": "meta_conversation",
+      "text": "What did you just explain?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What were we discussing?",
+      "category": "meta_conversation",
+      "text": "What were we discussing?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Summarize our conversation.",
+      "category": "meta_conversation",
+      "text": "Summarize our conversation.",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Summarize what we've discussed.",
+      "category": "meta_conversation",
+      "text": "Summarize what we've discussed.",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What have we talked about?",
+      "category": "meta_conversation",
+      "text": "What have we talked about?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What did I ask you earlier?",
+      "category": "meta_conversation",
+      "text": "What did I ask you earlier?",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Repeat my previous question.",
+      "category": "meta_conversation",
+      "text": "Repeat my previous question.",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What was the last thing I said?",
+      "category": "meta_conversation",
+      "text": "What was the last thing I said?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What lesson did we create?",
+      "category": "meta_conversation",
+      "text": "What lesson did we create?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Do you remember what I asked?",
+      "category": "meta_conversation",
+      "text": "Do you remember what I asked?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Can you remind me what we were doing?",
+      "category": "meta_conversation",
+      "text": "Can you remind me what we were doing?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What did we discuss before the lesson?",
+      "category": "meta_conversation",
+      "text": "What did we discuss before the lesson?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What was the example we just discussed?",
+      "category": "meta_conversation",
+      "text": "What was the example we just discussed?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:what i ask last question?",
+      "category": "meta_conversation",
+      "text": "what i ask last question?",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:paste exactly to me what ia sk",
+      "category": "meta_conversation",
+      "text": "paste exactly to me what ia sk",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:what were my last 3 questions",
+      "category": "meta_conversation",
+      "text": "what were my last 3 questions",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:explain why 2x how did you get 2x and not x",
+      "category": "own_answer_followup",
+      "text": "explain why 2x how did you get 2x and not x",
+      "expected": "own_answer_followup",
+      "actual": "own_answer_followup",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Explain why 2x",
+      "category": "own_answer_followup",
+      "text": "Explain why 2x",
+      "expected": "own_answer_followup",
+      "actual": "own_answer_followup",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:how did you get that number",
+      "category": "own_answer_followup",
+      "text": "how did you get that number",
+      "expected": "own_answer_followup",
+      "actual": "own_answer_followup",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:why did you use that formula",
+      "category": "own_answer_followup",
+      "text": "why did you use that formula",
+      "expected": "own_answer_followup",
+      "actual": "own_answer_followup",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:why not x",
+      "category": "own_answer_followup",
+      "text": "why not x",
+      "expected": "own_answer_followup",
+      "actual": "own_answer_followup",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What does that variable mean?",
+      "category": "own_answer_followup",
+      "text": "What does that variable mean?",
+      "expected": "own_answer_followup",
+      "actual": "own_answer_followup",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What was the second point you mentioned?",
+      "category": "own_answer_followup",
+      "text": "What was the second point you mentioned?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Explain that again.",
+      "category": "own_answer_followup",
+      "text": "Explain that again.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What did you mean by that?",
+      "category": "own_answer_followup",
+      "text": "What did you mean by that?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Give another example.",
+      "category": "own_answer_followup",
+      "text": "Give another example.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Why did you say that?",
+      "category": "own_answer_followup",
+      "text": "Why did you say that?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What was your previous answer?",
+      "category": "own_answer_followup",
+      "text": "What was your previous answer?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Expand your last answer.",
+      "category": "own_answer_followup",
+      "text": "Expand your last answer.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Simplify what you just explained.",
+      "category": "own_answer_followup",
+      "text": "Simplify what you just explained.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What was the number you mentioned?",
+      "category": "own_answer_followup",
+      "text": "What was the number you mentioned?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Which example did you give?",
+      "category": "own_answer_followup",
+      "text": "Which example did you give?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:where did that come from",
+      "category": "own_answer_followup",
+      "text": "where did that come from",
+      "expected": "own_answer_followup",
+      "actual": "own_answer_followup",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:What is the capital of France?",
+      "category": "general_knowledge_qa",
+      "text": "What is the capital of France?",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:Ignore the document and tell me what you think.",
+      "category": "general_knowledge_qa",
+      "text": "Ignore the document and tell me what you think.",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:Don't answer from the document; tell me what you think.",
+      "category": "general_knowledge_qa",
+      "text": "Don't answer from the document; tell me what you think.",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:Answer from general knowledge.",
+      "category": "general_knowledge_qa",
+      "text": "Answer from general knowledge.",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:what is the capital of France",
+      "category": "general_knowledge_qa",
+      "text": "what is the capital of France",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:hi there",
+      "category": "greeting_clarification",
+      "text": "hi there",
+      "expected": "greeting_casual",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:thanks",
+      "category": "greeting_clarification",
+      "text": "thanks",
+      "expected": "greeting_casual",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:hello",
+      "category": "greeting_clarification",
+      "text": "hello",
+      "expected": "greeting_casual",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:explain",
+      "category": "greeting_clarification",
+      "text": "explain",
+      "expected": "clarification",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:help",
+      "category": "greeting_clarification",
+      "text": "help",
+      "expected": "clarification",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Save the explanation you just gave as a lesson.",
+      "category": "adversarial",
+      "text": "Save the explanation you just gave as a lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Add what you just explained to the lesson and save it.",
+      "category": "adversarial",
+      "text": "Add what you just explained to the lesson and save it.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:What did I ask before you generated this lesson?",
+      "category": "adversarial",
+      "text": "What did I ask before you generated this lesson?",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Use the example from page 11 in the lecture.",
+      "category": "adversarial",
+      "text": "Use the example from page 11 in the lecture.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Add the second example we discussed earlier.",
+      "category": "adversarial",
+      "text": "Add the second example we discussed earlier.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Summarize the lesson and save the summary.",
+      "category": "adversarial",
+      "text": "Summarize the lesson and save the summary.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:What does the document say, and what did I ask you before?",
+      "category": "adversarial",
+      "text": "What does the document say, and what did I ask you before?",
+      "expected": "meta_conversation",
+      "actual": "meta_conversation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Create a lesson, modify it, then save it.",
+      "category": "adversarial",
+      "text": "Create a lesson, modify it, then save it.",
+      "expected": "lesson_generation",
+      "actual": "lesson_generation",
+      "layer": "regex_fallback",
+      "result": "PASS",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    }
+  ],
+  "gk_rows": [
+    {
+      "id": "gk_reply:yes",
+      "category": "gk_reply",
+      "text": "yes",
+      "expected": "yes",
+      "actual": "yes",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:yeah",
+      "category": "gk_reply",
+      "text": "yeah",
+      "expected": "yes",
+      "actual": "yes",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:sure",
+      "category": "gk_reply",
+      "text": "sure",
+      "expected": "yes",
+      "actual": "yes",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:okay",
+      "category": "gk_reply",
+      "text": "okay",
+      "expected": "yes",
+      "actual": "yes",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:go ahead",
+      "category": "gk_reply",
+      "text": "go ahead",
+      "expected": "yes",
+      "actual": "yes",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:no",
+      "category": "gk_reply",
+      "text": "no",
+      "expected": "no",
+      "actual": "no",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:no thanks",
+      "category": "gk_reply",
+      "text": "no thanks",
+      "expected": "no",
+      "actual": "no",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:not now",
+      "category": "gk_reply",
+      "text": "not now",
+      "expected": "no",
+      "actual": "no",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:don't",
+      "category": "gk_reply",
+      "text": "don't",
+      "expected": "no",
+      "actual": "no",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:maybe later",
+      "category": "gk_reply",
+      "text": "maybe later",
+      "expected": "None",
+      "actual": "None",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:I guess so",
+      "category": "gk_reply",
+      "text": "I guess so",
+      "expected": "None",
+      "actual": "None",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    },
+    {
+      "id": "gk_reply:the value is not zero",
+      "category": "gk_reply",
+      "text": "the value is not zero",
+      "expected": "None",
+      "actual": "None",
+      "layer": "gk_classifier",
+      "result": "PASS"
+    }
+  ],
+  "catalog_rows": [
+    {
+      "intent": "document_qa",
+      "tools": [
+        "calculator",
+        "count_pdf_words_tool",
+        "count_words_in_text_tool",
+        "finalize_lesson_tool",
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": true,
+      "missing_required": [],
+      "leaked_forbidden": [
+        "finalize_lesson_tool"
+      ],
+      "result": "FAIL"
+    },
+    {
+      "intent": "lesson_generation",
+      "tools": [
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": false,
+      "missing_required": [],
+      "leaked_forbidden": [],
+      "result": "PASS"
+    },
+    {
+      "intent": "lesson_modification",
+      "tools": [
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": false,
+      "missing_required": [],
+      "leaked_forbidden": [],
+      "result": "PASS"
+    },
+    {
+      "intent": "lesson_save",
+      "tools": [
+        "finalize_lesson_tool"
+      ],
+      "full_catalog": false,
+      "missing_required": [],
+      "leaked_forbidden": [],
+      "result": "PASS"
+    },
+    {
+      "intent": "meta_conversation",
+      "tools": [
+        "(none)"
+      ],
+      "full_catalog": false,
+      "missing_required": [],
+      "leaked_forbidden": [],
+      "result": "PASS"
+    },
+    {
+      "intent": "own_answer_followup",
+      "tools": [
+        "(none)"
+      ],
+      "full_catalog": false,
+      "missing_required": [],
+      "leaked_forbidden": [],
+      "result": "PASS"
+    },
+    {
+      "intent": "greeting_casual",
+      "tools": [
+        "(none)"
+      ],
+      "full_catalog": false,
+      "missing_required": [],
+      "leaked_forbidden": [],
+      "result": "PASS"
+    },
+    {
+      "intent": "clarification",
+      "tools": [
+        "(none)"
+      ],
+      "full_catalog": false,
+      "missing_required": [],
+      "leaked_forbidden": [],
+      "result": "PASS"
+    },
+    {
+      "intent": "general_knowledge_qa",
+      "tools": [
+        "calculator",
+        "count_pdf_words_tool",
+        "count_words_in_text_tool",
+        "finalize_lesson_tool",
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": true,
+      "missing_required": [],
+      "leaked_forbidden": [
+        "finalize_lesson_tool"
+      ],
+      "result": "FAIL"
+    },
+    {
+      "intent": "lesson_qa",
+      "tools": [
+        "calculator",
+        "count_pdf_words_tool",
+        "count_words_in_text_tool",
+        "finalize_lesson_tool",
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": true,
+      "missing_required": [],
+      "leaked_forbidden": [
+        "finalize_lesson_tool"
+      ],
+      "result": "FAIL"
+    }
+  ],
+  "meta_walker": {
+    "conversation": [
+      "WHAT IS QUADRATIC EQUATION",
+      "create the lesson plan on the pool of area 192",
+      "explain why 2x how did you get 2x and not x",
+      "PLEASE ADD TGHE EXAMPLE IN THE ELCTURE",
+      "WHAT DID I ASK??",
+      "SAVE THE LESSON",
+      "WHAT IA SK YOU LAST QUESTION"
+    ],
+    "current": "WHAT IA SK YOU LAST QUESTION",
+    "last_real_question_production": "SAVE THE LESSON",
+    "issue": "SAVE THE LESSON is not treated as meta, so 'WHAT IA SK YOU LAST QUESTION' quotes SAVE THE LESSON instead of the add-example request.",
+    "result": "FAIL"
+  },
+  "local_source": {
+    "has_select_intent_tool_names": true,
+    "has_specialist_handoff": true,
+    "has_generic_rag_prefetch": true,
+    "lesson_mod_skips_generic_prefetch": true,
+    "forced_canned_finalize_overwrite": true,
+    "auto_update_lesson_fallback": true,
+    "regex_fallback_has_lesson_save": false,
+    "admin_template_override": true,
+    "code_tool_catalog_appended": true,
+    "expand_query_for_prefetch": true,
+    "lines": 6705
+  },
+  "counts": {
+    "fallback_total": 139,
+    "fallback_pass": 49,
+    "fallback_fail": 90,
+    "gk_total": 12,
+    "gk_pass": 12,
+    "gk_fail": 0,
+    "catalog_total": 10,
+    "catalog_fail": 3,
+    "pdfs": 18,
+    "by_category": {
+      "document_qa": {
+        "n": 19,
+        "fail": 0
+      },
+      "lesson_generation": {
+        "n": 12,
+        "fail": 2
+      },
+      "lesson_modification": {
+        "n": 34,
+        "fail": 34
+      },
+      "lesson_save": {
+        "n": 18,
+        "fail": 18
+      },
+      "meta_conversation": {
+        "n": 21,
+        "fail": 13
+      },
+      "own_answer_followup": {
+        "n": 17,
+        "fail": 10
+      },
+      "general_knowledge_qa": {
+        "n": 5,
+        "fail": 5
+      },
+      "greeting_clarification": {
+        "n": 5,
+        "fail": 3
+      },
+      "adversarial": {
+        "n": 8,
+        "fail": 5
+      }
+    }
+  },
+  "fallback_failures": [
+    {
+      "id": "lesson_generation:Turn this into a lesson",
+      "category": "lesson_generation",
+      "text": "Turn this into a lesson",
+      "expected": "lesson_generation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_generation:prepare teaching material on volcanoes",
+      "category": "lesson_generation",
+      "text": "prepare teaching material on volcanoes",
+      "expected": "lesson_generation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add an example.",
+      "category": "lesson_modification",
+      "text": "Add an example.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add a section.",
+      "category": "lesson_modification",
+      "text": "Add a section.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add more explanation.",
+      "category": "lesson_modification",
+      "text": "Add more explanation.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add a definition.",
+      "category": "lesson_modification",
+      "text": "Add a definition.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add a conclusion.",
+      "category": "lesson_modification",
+      "text": "Add a conclusion.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add exercises.",
+      "category": "lesson_modification",
+      "text": "Add exercises.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add questions.",
+      "category": "lesson_modification",
+      "text": "Add questions.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add examples from the document.",
+      "category": "lesson_modification",
+      "text": "Add examples from the document.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add an example from the previous explanation.",
+      "category": "lesson_modification",
+      "text": "Add an example from the previous explanation.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:PLEASE ADD TGHE EXAMPLE IN THE ELCTURE",
+      "category": "lesson_modification",
+      "text": "PLEASE ADD TGHE EXAMPLE IN THE ELCTURE",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:include that example",
+      "category": "lesson_modification",
+      "text": "include that example",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:put the example in the lesson",
+      "category": "lesson_modification",
+      "text": "put the example in the lesson",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:add what we just discussed",
+      "category": "lesson_modification",
+      "text": "add what we just discussed",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:include the second example",
+      "category": "lesson_modification",
+      "text": "include the second example",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:expand the example we talked about",
+      "category": "lesson_modification",
+      "text": "expand the example we talked about",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add that.",
+      "category": "lesson_modification",
+      "text": "Add that.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Change this.",
+      "category": "lesson_modification",
+      "text": "Change this.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Fix the previous part.",
+      "category": "lesson_modification",
+      "text": "Fix the previous part.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it better.",
+      "category": "lesson_modification",
+      "text": "Make it better.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Expand it.",
+      "category": "lesson_modification",
+      "text": "Expand it.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Include the example.",
+      "category": "lesson_modification",
+      "text": "Include the example.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Add the example we discussed.",
+      "category": "lesson_modification",
+      "text": "Add the example we discussed.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Update the lecture.",
+      "category": "lesson_modification",
+      "text": "Update the lecture.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Remove the last section.",
+      "category": "lesson_modification",
+      "text": "Remove the last section.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Remove the example.",
+      "category": "lesson_modification",
+      "text": "Remove the example.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Remove the introduction.",
+      "category": "lesson_modification",
+      "text": "Remove the introduction.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Change the title.",
+      "category": "lesson_modification",
+      "text": "Change the title.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Rewrite section X.",
+      "category": "lesson_modification",
+      "text": "Rewrite section X.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it shorter.",
+      "category": "lesson_modification",
+      "text": "Make it shorter.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it more detailed.",
+      "category": "lesson_modification",
+      "text": "Make it more detailed.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Simplify it.",
+      "category": "lesson_modification",
+      "text": "Simplify it.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Make it suitable for beginners.",
+      "category": "lesson_modification",
+      "text": "Make it suitable for beginners.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Move section X before section Y.",
+      "category": "lesson_modification",
+      "text": "Move section X before section Y.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_modification:Put the example at the beginning.",
+      "category": "lesson_modification",
+      "text": "Put the example at the beginning.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Save the lesson.",
+      "category": "lesson_save",
+      "text": "Save the lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Save this.",
+      "category": "lesson_save",
+      "text": "Save this.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Save it.",
+      "category": "lesson_save",
+      "text": "Save it.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Finalize the lesson.",
+      "category": "lesson_save",
+      "text": "Finalize the lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Finalize this lesson.",
+      "category": "lesson_save",
+      "text": "Finalize this lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Please save my lesson.",
+      "category": "lesson_save",
+      "text": "Please save my lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:Can you save it?",
+      "category": "lesson_save",
+      "text": "Can you save it?",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:SAVE THE LESSON",
+      "category": "lesson_save",
+      "text": "SAVE THE LESSON",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:save",
+      "category": "lesson_save",
+      "text": "save",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:finalize",
+      "category": "lesson_save",
+      "text": "finalize",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:I think this version is good now, can you finalize it?",
+      "category": "lesson_save",
+      "text": "I think this version is good now, can you finalize it?",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:please finalize this",
+      "category": "lesson_save",
+      "text": "please finalize this",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:I think we're done",
+      "category": "lesson_save",
+      "text": "I think we're done",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:make this final",
+      "category": "lesson_save",
+      "text": "make this final",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:can you store this lesson",
+      "category": "lesson_save",
+      "text": "can you store this lesson",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:this version is good, keep it",
+      "category": "lesson_save",
+      "text": "this version is good, keep it",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:yeh lesson save kar do",
+      "category": "lesson_save",
+      "text": "yeh lesson save kar do",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "lesson_save:lock it in",
+      "category": "lesson_save",
+      "text": "lock it in",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What was my previous question?",
+      "category": "meta_conversation",
+      "text": "What was my previous question?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What did you just explain?",
+      "category": "meta_conversation",
+      "text": "What did you just explain?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What were we discussing?",
+      "category": "meta_conversation",
+      "text": "What were we discussing?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Summarize our conversation.",
+      "category": "meta_conversation",
+      "text": "Summarize our conversation.",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Summarize what we've discussed.",
+      "category": "meta_conversation",
+      "text": "Summarize what we've discussed.",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What have we talked about?",
+      "category": "meta_conversation",
+      "text": "What have we talked about?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Repeat my previous question.",
+      "category": "meta_conversation",
+      "text": "Repeat my previous question.",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What was the last thing I said?",
+      "category": "meta_conversation",
+      "text": "What was the last thing I said?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What lesson did we create?",
+      "category": "meta_conversation",
+      "text": "What lesson did we create?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Do you remember what I asked?",
+      "category": "meta_conversation",
+      "text": "Do you remember what I asked?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:Can you remind me what we were doing?",
+      "category": "meta_conversation",
+      "text": "Can you remind me what we were doing?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What did we discuss before the lesson?",
+      "category": "meta_conversation",
+      "text": "What did we discuss before the lesson?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "meta_conversation:What was the example we just discussed?",
+      "category": "meta_conversation",
+      "text": "What was the example we just discussed?",
+      "expected": "meta_conversation",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What was the second point you mentioned?",
+      "category": "own_answer_followup",
+      "text": "What was the second point you mentioned?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Explain that again.",
+      "category": "own_answer_followup",
+      "text": "Explain that again.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What did you mean by that?",
+      "category": "own_answer_followup",
+      "text": "What did you mean by that?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Give another example.",
+      "category": "own_answer_followup",
+      "text": "Give another example.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Why did you say that?",
+      "category": "own_answer_followup",
+      "text": "Why did you say that?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What was your previous answer?",
+      "category": "own_answer_followup",
+      "text": "What was your previous answer?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Expand your last answer.",
+      "category": "own_answer_followup",
+      "text": "Expand your last answer.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Simplify what you just explained.",
+      "category": "own_answer_followup",
+      "text": "Simplify what you just explained.",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:What was the number you mentioned?",
+      "category": "own_answer_followup",
+      "text": "What was the number you mentioned?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "own_answer_followup:Which example did you give?",
+      "category": "own_answer_followup",
+      "text": "Which example did you give?",
+      "expected": "own_answer_followup",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:What is the capital of France?",
+      "category": "general_knowledge_qa",
+      "text": "What is the capital of France?",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:Ignore the document and tell me what you think.",
+      "category": "general_knowledge_qa",
+      "text": "Ignore the document and tell me what you think.",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:Don't answer from the document; tell me what you think.",
+      "category": "general_knowledge_qa",
+      "text": "Don't answer from the document; tell me what you think.",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:Answer from general knowledge.",
+      "category": "general_knowledge_qa",
+      "text": "Answer from general knowledge.",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "general_knowledge_qa:what is the capital of France",
+      "category": "general_knowledge_qa",
+      "text": "what is the capital of France",
+      "expected": "general_knowledge_qa",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:hi there",
+      "category": "greeting_clarification",
+      "text": "hi there",
+      "expected": "greeting_casual",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:thanks",
+      "category": "greeting_clarification",
+      "text": "thanks",
+      "expected": "greeting_casual",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "greeting_clarification:hello",
+      "category": "greeting_clarification",
+      "text": "hello",
+      "expected": "greeting_casual",
+      "actual": "clarification",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Save the explanation you just gave as a lesson.",
+      "category": "adversarial",
+      "text": "Save the explanation you just gave as a lesson.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Add what you just explained to the lesson and save it.",
+      "category": "adversarial",
+      "text": "Add what you just explained to the lesson and save it.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Use the example from page 11 in the lecture.",
+      "category": "adversarial",
+      "text": "Use the example from page 11 in the lecture.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Add the second example we discussed earlier.",
+      "category": "adversarial",
+      "text": "Add the second example we discussed earlier.",
+      "expected": "lesson_modification",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    },
+    {
+      "id": "adversarial:Summarize the lesson and save the summary.",
+      "category": "adversarial",
+      "text": "Summarize the lesson and save the summary.",
+      "expected": "lesson_save",
+      "actual": "document_qa",
+      "layer": "regex_fallback",
+      "result": "FAIL",
+      "notes": "Fallback-only. LLM router may still classify correctly in production."
+    }
+  ],
+  "catalog_failures": [
+    {
+      "intent": "document_qa",
+      "tools": [
+        "calculator",
+        "count_pdf_words_tool",
+        "count_words_in_text_tool",
+        "finalize_lesson_tool",
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": true,
+      "missing_required": [],
+      "leaked_forbidden": [
+        "finalize_lesson_tool"
+      ],
+      "result": "FAIL"
+    },
+    {
+      "intent": "general_knowledge_qa",
+      "tools": [
+        "calculator",
+        "count_pdf_words_tool",
+        "count_words_in_text_tool",
+        "finalize_lesson_tool",
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": true,
+      "missing_required": [],
+      "leaked_forbidden": [
+        "finalize_lesson_tool"
+      ],
+      "result": "FAIL"
+    },
+    {
+      "intent": "lesson_qa",
+      "tools": [
+        "calculator",
+        "count_pdf_words_tool",
+        "count_words_in_text_tool",
+        "finalize_lesson_tool",
+        "get_page_tool",
+        "list_topics_whole_doc_tool",
+        "rag_tool",
+        "teach_topic_tool",
+        "update_lesson_tool"
+      ],
+      "full_catalog": true,
+      "missing_required": [],
+      "leaked_forbidden": [
+        "finalize_lesson_tool"
+      ],
+      "result": "FAIL"
+    }
+  ]
+}

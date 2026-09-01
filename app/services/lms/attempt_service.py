@@ -1,6 +1,7 @@
 """Assessment attempt and scoring service."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -10,6 +11,7 @@ from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
 from app.services.lms.mcq_utils import options_from_json
 from app.utils.db import get_db
 
+logger = logging.getLogger(__name__)
 
 def start_attempt(
     student_id: int,
@@ -134,31 +136,55 @@ def submit_attempt(attempt_id: int) -> dict:
     attempt.submitted_at = datetime.utcnow()
     db.commit()
 
-    from app.services.lms import performance_service
+    from app.services.lms import performance_service, learning_path_service
 
-    performance_service.update_topic_scores_from_attempt(attempt_id)
+    def _post_submit_step(fn):
+        try:
+            fn()
+        except Exception as exc:
+            logger.warning("Post-submit step failed for attempt %s: %s", attempt_id, exc)
+            db.rollback()
+
+    _post_submit_step(lambda: performance_service.update_topic_scores_from_attempt(attempt_id))
+    _post_submit_step(lambda: learning_path_service.refresh_learning_path(attempt.student_id))
+    _post_submit_step(lambda: performance_service.create_snapshot(attempt.student_id))
 
     if assessment.assessment_type == "diagnostic":
-        from app.services.lms import student_profile_service
+        from app.services.lms import deficiency_chat_service, student_profile_service
 
-        student_profile_service.mark_diagnostic_complete(
-            attempt.student_id, assessment_id=assessment.id
+        _post_submit_step(
+            lambda: deficiency_chat_service._close_old_sessions(attempt.student_id)
+        )
+        _post_submit_step(
+            lambda: student_profile_service.mark_diagnostic_complete(
+                attempt.student_id, assessment_id=assessment.id
+            )
         )
 
     if attempt.assignment_id:
         from app.services.lms import assignment_service
 
-        assignment_service.mark_submission_complete(
-            attempt.assignment_id, attempt.student_id, attempt_id
+        _post_submit_step(
+            lambda: assignment_service.mark_submission_complete(
+                attempt.assignment_id, attempt.student_id, attempt_id
+            )
         )
-
-    return {
+    result = {
         "attempt_id": attempt.id,
         "score": correct,
         "max_score": max_score,
         "score_percent": round(100.0 * correct / max_score, 2),
         "topic_breakdown": list(topic_breakdown.values()),
+        "assessment_type": assessment.assessment_type,
     }
+
+    if assessment.assessment_type == "diagnostic":
+        analysis = performance_service.analyze_attempt(attempt_id)
+        result["weak_topics"] = analysis.get("weak_topics", [])
+        result["strong_topics"] = analysis.get("strong_topics", [])
+        result["diagnostic_completed"] = True
+
+    return result
 
 
 def get_attempt_results(attempt_id: int) -> dict:
@@ -168,10 +194,47 @@ def get_attempt_results(attempt_id: int) -> dict:
         raise LMSValidationError("Attempt not yet submitted")
     max_score = attempt.max_score or 1.0
     score = attempt.score or 0.0
-    return {
+    assessment = get_assessment(attempt.assessment_id)
+    result = {
         "attempt_id": attempt.id,
         "score": score,
         "max_score": max_score,
         "score_percent": round(100.0 * score / max_score, 2) if max_score else 0.0,
         "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
+        "assessment_type": assessment.assessment_type,
     }
+    if assessment.assessment_type == "diagnostic":
+        from app.services.lms import performance_service
+
+        analysis = performance_service.analyze_attempt(attempt_id)
+        result["weak_topics"] = analysis.get("weak_topics", [])
+        result["strong_topics"] = analysis.get("strong_topics", [])
+        result["diagnostic_completed"] = True
+    return result
+
+
+def list_student_attempts(student_id: int, limit: int = 50) -> List[dict]:
+    db = get_db()
+    rows = (
+        db.query(AssessmentAttempt)
+        .filter(AssessmentAttempt.student_id == student_id)
+        .order_by(AssessmentAttempt.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for a in rows:
+        pct = None
+        if a.status == "submitted" and a.max_score:
+            pct = round(100.0 * (a.score or 0) / a.max_score, 1)
+        result.append(
+            {
+                "attempt_id": a.id,
+                "assessment_id": a.assessment_id,
+                "assignment_id": a.assignment_id,
+                "status": a.status,
+                "score_percent": pct,
+                "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,
+            }
+        )
+    return result

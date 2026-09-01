@@ -1,0 +1,364 @@
+﻿{
+  "host": "4e7bcff84ccd",
+  "has_llm_usage_events": true,
+  "has_router_decision_events": true,
+  "has_llm_model_pricing": true,
+  "has_user_token_usage": true,
+  "coverage": {
+    "min_at": "2026-08-06T18:46:41.436289",
+    "max_at": "2026-08-19T20:47:27.505916",
+    "n": 6836
+  },
+  "by_traffic": [
+    {
+      "traffic_source": "production",
+      "calls": 6836,
+      "success_calls": 6611,
+      "total_tokens": 15286486,
+      "cost_usd": 2.61493655
+    }
+  ],
+  "token_nulls_prod": {
+    "n": 6836,
+    "success_n": 6611,
+    "fail_n": 225,
+    "null_in": 225,
+    "null_out": 225,
+    "null_tot": 225,
+    "null_cost": 225,
+    "zero_cost": 0,
+    "sum_in": 14571636,
+    "sum_out": 714850,
+    "sum_tot": 15286486,
+    "sum_cost": 2.61493655
+  },
+  "profile": [
+    {
+      "workflow": "rag_heading_extraction",
+      "user_role": null,
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 3793,
+      "success_calls": 3793,
+      "avg_in": 806.0,
+      "avg_out": 35.0,
+      "p95_out": 181.0,
+      "total_tokens": 3190259,
+      "input_tokens": 3056035,
+      "output_tokens": 134224,
+      "cost_usd": 0.53893965
+    },
+    {
+      "workflow": "rag_chat",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 1873,
+      "success_calls": 1873,
+      "avg_in": 4182.0,
+      "avg_out": 216.0,
+      "p95_out": 1043.7999999999997,
+      "total_tokens": 8237093,
+      "input_tokens": 7832739,
+      "output_tokens": 404354,
+      "cost_usd": 1.41752325
+    },
+    {
+      "workflow": "rag_heading_extraction",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 649,
+      "success_calls": 649,
+      "avg_in": 3943.0,
+      "avg_out": 157.0,
+      "p95_out": 577.4000000000046,
+      "total_tokens": 2661167,
+      "input_tokens": 2558981,
+      "output_tokens": 102186,
+      "cost_usd": 0.44515875
+    },
+    {
+      "workflow": "rag_chat",
+      "user_role": null,
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 171,
+      "success_calls": 171,
+      "avg_in": 4183.0,
+      "avg_out": 241.0,
+      "p95_out": 1546.0,
+      "total_tokens": 756654,
+      "input_tokens": 715373,
+      "output_tokens": 41281,
+      "cost_usd": 0.13207455
+    },
+    {
+      "workflow": "unknown",
+      "user_role": null,
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 76,
+      "success_calls": 76,
+      "avg_in": 4600.0,
+      "avg_out": 224.0,
+      "p95_out": 1258.5,
+      "total_tokens": 366598,
+      "input_tokens": 349599,
+      "output_tokens": 16999,
+      "cost_usd": 0.06263925
+    },
+    {
+      "workflow": "legacy_chat",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 25,
+      "success_calls": 25,
+      "avg_in": 1588.0,
+      "avg_out": 491.0,
+      "p95_out": 581.6,
+      "total_tokens": 51967,
+      "input_tokens": 39691,
+      "output_tokens": 12276,
+      "cost_usd": 0.01331925
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 15,
+      "success_calls": 15,
+      "avg_in": 901.0,
+      "avg_out": 187.0,
+      "p95_out": 324.5,
+      "total_tokens": 16331,
+      "input_tokens": 13520,
+      "output_tokens": 2811,
+      "cost_usd": 0.0037146
+    },
+    {
+      "workflow": "rag_chat",
+      "user_role": "teacher",
+      "model": "gpt-3.5-turbo",
+      "provider": "openai",
+      "calls": 5,
+      "success_calls": 5,
+      "avg_in": 130.0,
+      "avg_out": 12.0,
+      "p95_out": 12.0,
+      "total_tokens": 709,
+      "input_tokens": 649,
+      "output_tokens": 60,
+      "cost_usd": 0.0004145
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "student",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 4,
+      "success_calls": 4,
+      "avg_in": 1262.0,
+      "avg_out": 165.0,
+      "p95_out": 309.5,
+      "total_tokens": 5708,
+      "input_tokens": 5049,
+      "output_tokens": 659,
+      "cost_usd": 0.00115275
+    }
+  ],
+  "daily": [
+    {
+      "day": "2026-08-06",
+      "calls": 7,
+      "total_tokens": 18297,
+      "cost_usd": 0.0031896
+    },
+    {
+      "day": "2026-08-11",
+      "calls": 2819,
+      "total_tokens": 924996,
+      "cost_usd": 0.1500038
+    },
+    {
+      "day": "2026-08-12",
+      "calls": 196,
+      "total_tokens": 696670,
+      "cost_usd": 0.1189752
+    },
+    {
+      "day": "2026-08-13",
+      "calls": 165,
+      "total_tokens": 513493,
+      "cost_usd": 0.08844765
+    },
+    {
+      "day": "2026-08-14",
+      "calls": 459,
+      "total_tokens": 1922464,
+      "cost_usd": 0.3252201
+    },
+    {
+      "day": "2026-08-15",
+      "calls": 366,
+      "total_tokens": 1494623,
+      "cost_usd": 0.2513316
+    },
+    {
+      "day": "2026-08-16",
+      "calls": 1274,
+      "total_tokens": 4491062,
+      "cost_usd": 0.7587003
+    },
+    {
+      "day": "2026-08-17",
+      "calls": 452,
+      "total_tokens": 1465925,
+      "cost_usd": 0.25278465
+    },
+    {
+      "day": "2026-08-18",
+      "calls": 753,
+      "total_tokens": 3324620,
+      "cost_usd": 0.595632
+    },
+    {
+      "day": "2026-08-19",
+      "calls": 120,
+      "total_tokens": 434336,
+      "cost_usd": 0.07065165
+    }
+  ],
+  "by_workflow": [
+    {
+      "workflow": "rag_heading_extraction",
+      "calls": 4442,
+      "input_tokens": 5615016,
+      "output_tokens": 236410,
+      "total_tokens": 5851426,
+      "cost_usd": 0.9840984
+    },
+    {
+      "workflow": "rag_chat",
+      "calls": 2049,
+      "input_tokens": 8548761,
+      "output_tokens": 445695,
+      "total_tokens": 8994456,
+      "cost_usd": 1.5500123
+    },
+    {
+      "workflow": "unknown",
+      "calls": 76,
+      "input_tokens": 349599,
+      "output_tokens": 16999,
+      "total_tokens": 366598,
+      "cost_usd": 0.06263925
+    },
+    {
+      "workflow": "legacy_chat",
+      "calls": 25,
+      "input_tokens": 39691,
+      "output_tokens": 12276,
+      "total_tokens": 51967,
+      "cost_usd": 0.01331925
+    },
+    {
+      "workflow": "lesson_api",
+      "calls": 19,
+      "input_tokens": 18569,
+      "output_tokens": 3470,
+      "total_tokens": 22039,
+      "cost_usd": 0.00486735
+    }
+  ],
+  "by_model": [
+    {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "calls": 6606,
+      "input_tokens": 14570987,
+      "output_tokens": 714790,
+      "total_tokens": 15285777,
+      "cost_usd": 2.61452205,
+      "est_cost_usd": 2.6145220499999997
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-3.5-turbo",
+      "calls": 5,
+      "input_tokens": 649,
+      "output_tokens": 60,
+      "total_tokens": 709,
+      "cost_usd": 0.0004145,
+      "est_cost_usd": 0.0004145
+    }
+  ],
+  "router_coverage": {
+    "min_at": "2026-08-16T04:34:32.602084",
+    "max_at": "2026-08-19T13:07:21.737247",
+    "n": 384
+  },
+  "calls_per_turn": {
+    "rag_chat_per_router": 5.828125,
+    "all_llm_per_router": 17.216145833333332,
+    "rag_chat_n": 2238,
+    "router_n": 384
+  },
+  "router_by_intent": [
+    {
+      "intent": "document_qa",
+      "n": 139
+    },
+    {
+      "intent": "lesson_modification",
+      "n": 65
+    },
+    {
+      "intent": "lesson_generation",
+      "n": 60
+    },
+    {
+      "intent": "lesson_save",
+      "n": 51
+    },
+    {
+      "intent": "meta_conversation",
+      "n": 24
+    },
+    {
+      "intent": "clarification",
+      "n": 16
+    },
+    {
+      "intent": "own_answer_followup",
+      "n": 9
+    },
+    {
+      "intent": "greeting_casual",
+      "n": 9
+    },
+    {
+      "intent": "general_knowledge_qa",
+      "n": 6
+    },
+    {
+      "intent": "lesson_qa",
+      "n": 5
+    }
+  ],
+  "pricing": [],
+  "estimated_cost_usd_fallback_rates": 2.61493655,
+  "models_missing_fallback_rate": [],
+  "user_token_usage_columns": [
+    "id",
+    "user_id",
+    "date",
+    "tokens_used",
+    "last_updated"
+  ],
+  "user_token_usage_total": {
+    "n": 16
+  }
+}

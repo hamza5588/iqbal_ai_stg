@@ -1,18 +1,34 @@
-"""LMS API routes — Phase 1 foundation + Phase 3 quiz/PDF."""
-from flask import Blueprint, request, session
+"""LMS API routes — Phases 1–10."""
+from flask import Blueprint, Response, request, session, current_app
 
 from app.rbac.permissions import Permissions, has_permission
 from app.services.lms import (
+    analytics_service,
     assessment_service,
     assignment_service,
     attempt_service,
     class_service,
     curriculum_service,
+    intervention_service,
     learning_path_service,
+    path_generator,
     performance_service,
+    practice_service,
     question_bank_service,
     student_profile_service,
+    tutor_service,
 )
+from app.services.lms import deficiency_chat_service
+from app.services.lms.diagnostic_pdf_service import (
+    generate_diagnostic_questions,
+    get_diagnostic_status,
+    list_pdf_topics,
+    list_target_pdf_topics,
+    upload_diagnostic_bundle,
+    upload_diagnostic_pdf,
+    upload_target_pdf,
+)
+from app.services.lms.diagnostic_service import get_student_diagnostic_dict
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, LMSError
 from app.services.quiz.pipeline import run_pdf_quiz_pipeline
 from app.tasks.quiz_pdf_tasks import enqueue_or_run_pdf_quiz
@@ -74,9 +90,10 @@ def topic_prerequisites(topic_id: int):
 def questions():
     if request.method == "GET":
         topic_id = request.args.get("topic_id", type=int)
+        difficulty = request.args.get("difficulty")
         if not topic_id:
             return json_error("topic_id is required")
-        qs = question_bank_service.list_questions_by_topic(topic_id)
+        qs = question_bank_service.list_questions_by_topic(topic_id, difficulty=difficulty)
         return json_success([question_bank_service.question_to_dict(q) for q in qs])
 
     denied = _require_permission(Permissions.MANAGE_QUESTION_BANK)
@@ -153,14 +170,18 @@ def classes():
     if denied:
         return denied
     body = request.get_json(silent=True) or {}
-    c = class_service.create_class(
-        teacher_id=_current_user_id(),
-        name=body["name"],
-        description=body.get("description"),
-        grade_level=body.get("grade_level"),
-    )
+    try:
+        c = class_service.create_class(
+            teacher_id=_current_user_id(),
+            name=body["name"],
+            description=body.get("description"),
+            grade_level=body.get("grade_level"),
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error", status=400)
     return json_success(
-        {"id": c.id, "name": c.name, "join_code": c.join_code}, status=201
+        {"id": c.id, "name": c.name, "join_code": c.join_code, "grade_level": c.grade_level},
+        status=201,
     )
 
 
@@ -176,20 +197,137 @@ def join_class():
     try:
         enr = class_service.enroll_student(join_code, _current_user_id())
         return json_success({"class_id": enr.class_id, "status": enr.status})
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error", status=400)
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 
 
-@bp.route("/classes/<int:class_id>/students", methods=["GET"])
+@bp.route("/classes/grade-options", methods=["GET"])
 @login_required
-def class_students(class_id: int):
+def grade_options():
+    return json_success(class_service.get_grade_options())
+
+
+@bp.route("/users/me/grade-profile", methods=["GET"])
+@login_required
+def my_grade_profile():
+    from app.services.lms.grade_utils import format_grade_label
+
+    uid = _current_user_id()
+    role = _current_role()
+    if role == "student":
+        g = class_service.get_student_grade(uid)
+        return json_success({"role": role, "grade_level": g, "grade_label": format_grade_label(g)})
+    if role in ("teacher", "admin"):
+        grades = class_service.get_teacher_grades(uid)
+        return json_success({
+            "role": role,
+            "teaching_grades": grades,
+            "teaching_grade_labels": [format_grade_label(g) for g in grades],
+        })
+    return json_success({"role": role})
+
+
+@bp.route("/teachers/me/grades", methods=["PUT"])
+@login_required
+def set_my_teaching_grades():
+    if _current_role() not in ("teacher", "admin"):
+        return json_error("Teachers only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
+    grades = body.get("grades") or body.get("grade_levels") or []
+    if isinstance(grades, str):
+        grades = [g.strip() for g in grades.split(",") if g.strip()]
+    try:
+        user = class_service.set_teacher_grades(_current_user_id(), grades)
+        from app.services.lms.grade_utils import format_grade_label
+        assigned = class_service.get_teacher_grades(user.id)
+        return json_success({
+            "teaching_grades": assigned,
+            "teaching_grade_labels": [format_grade_label(g) for g in assigned],
+        })
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error", status=400)
+
+
+@bp.route("/admin/users/<int:user_id>/grade", methods=["PUT"])
+@login_required
+def admin_set_user_grade(user_id: int):
+    if _current_role() != "admin":
+        return json_error("Admin only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
+    grade = body.get("grade_level") or body.get("grade")
+    role = body.get("role")
+    try:
+        if role == "teacher" or body.get("teaching_grades"):
+            grades = body.get("teaching_grades") or [grade]
+            user = class_service.set_teacher_grades(user_id, grades)
+            return json_success({"user_id": user.id, "class_standard": user.class_standard})
+        user = class_service.set_user_grade(user_id, grade, role="student")
+        return json_success({
+            "user_id": user.id,
+            "grade_level": class_service.get_student_grade(user.id),
+        })
+    except (LMSValidationError, LMSNotFoundError) as e:
+        return json_error(str(e), code="validation_error", status=400)
+
+
+@bp.route("/classes/<int:class_id>/eligible-students", methods=["GET"])
+@login_required
+def eligible_students(class_id: int):
+    denied = _require_permission(Permissions.MANAGE_CLASS)
+    if denied:
+        return denied
+    try:
+        return json_success(class_service.list_eligible_students(class_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/classes/<int:class_id>/students", methods=["GET", "POST"])
+@login_required
+def class_students_manage(class_id: int):
     denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
     if denied:
         return denied
     if not class_service.teacher_owns_class(_current_user_id(), class_id):
         return json_error("Forbidden", code="forbidden", status=403)
-    enrollments = class_service.list_class_students(class_id)
-    return json_success([{"student_id": e.student_id, "enrolled_at": e.enrolled_at.isoformat()} for e in enrollments])
+
+    if request.method == "GET":
+        detailed = request.args.get("detailed", "true").lower() != "false"
+        if detailed:
+            return json_success(class_service.list_class_students_detailed(class_id, _current_user_id()))
+        enrollments = class_service.list_class_students(class_id)
+        return json_success([
+            {"student_id": e.student_id, "enrolled_at": e.enrolled_at.isoformat()}
+            for e in enrollments
+        ])
+
+    denied = _require_permission(Permissions.MANAGE_CLASS)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    student_id = body.get("student_id")
+    if not student_id:
+        return json_error("student_id is required", code="validation_error")
+    try:
+        enr = class_service.teacher_add_student(class_id, int(student_id), _current_user_id())
+        return json_success({"class_id": enr.class_id, "student_id": enr.student_id, "status": enr.status}, status=201)
+    except (LMSValidationError, LMSNotFoundError) as e:
+        return json_error(str(e), code="validation_error", status=400)
+
+
+@bp.route("/classes/<int:class_id>/students/<int:student_id>", methods=["DELETE"])
+@login_required
+def remove_class_student(class_id: int, student_id: int):
+    denied = _require_permission(Permissions.MANAGE_CLASS)
+    if denied:
+        return denied
+    try:
+        class_service.remove_student_from_class(class_id, student_id, _current_user_id())
+        return json_success({"removed": True})
+    except (LMSValidationError, LMSNotFoundError) as e:
+        return json_error(str(e), code="validation_error", status=400)
 
 
 def _validate_thread_id(thread_id: str, user_id: int) -> bool:
@@ -208,6 +346,8 @@ def create_quiz_from_pdf():
     assessment_type = request.form.get("assessment_type", "quiz")
     topic_id = request.form.get("topic_id", type=int)
     async_mode = request.form.get("async", "true").lower() != "false"
+    if not current_app.config.get("USE_CELERY_FOR_INGESTION", False):
+        async_mode = False
 
     file = request.files.get("file")
     if not file or not file.filename:
@@ -224,14 +364,20 @@ def create_quiz_from_pdf():
     if not file_bytes:
         return json_error("Empty file", code="validation_error")
 
-    result = enqueue_or_run_pdf_quiz(
-        assessment_id=a.id,
-        file_bytes=file_bytes,
-        filename=file.filename,
-        user_id=_current_user_id(),
-        topic_id=topic_id,
-        async_mode=async_mode,
-    )
+    try:
+        result = enqueue_or_run_pdf_quiz(
+            assessment_id=a.id,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            user_id=_current_user_id(),
+            topic_id=topic_id,
+            async_mode=async_mode,
+        )
+    except ValueError as e:
+        return json_error(str(e), code="llm_config_error", status=503)
+    except Exception as e:
+        return json_error(str(e), code="pipeline_error", status=500)
+
     status = 202 if result.get("async") else 200
     return json_success({"assessment_id": a.id, **result}, status=status)
 
@@ -442,35 +588,190 @@ def my_assignments():
     return json_success(assignment_service.list_assignments_for_student(_current_user_id()))
 
 
+@bp.route("/diagnostics/default", methods=["GET"])
+@login_required
+def default_diagnostic():
+    """Active diagnostic for the logged-in student (teacher PDF diagnostic or platform default)."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    diag = get_student_diagnostic_dict(_current_user_id())
+    if not diag:
+        return json_error(
+            "No diagnostic available. Ask admin to run: python scripts/seed_default_diagnostic.py",
+            code="not_found",
+            status=404,
+        )
+    onboarding = student_profile_service.get_onboarding_status(_current_user_id())
+    completed_id = onboarding.get("diagnostic_assessment_id")
+    diag["diagnostic_completed"] = bool(
+        onboarding.get("diagnostic_completed") and completed_id == diag["id"]
+    )
+    diag["any_diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
+    return json_success(diag)
+
+
 @bp.route("/diagnostics/from-pdf", methods=["POST"])
 @login_required
 def create_diagnostic_from_pdf():
-    """Same as quiz PDF flow but assessment_type=diagnostic."""
+    """Upload diagnostic Q&A PDF + target content PDF (Learning Chat source)."""
     denied = _require_permission(Permissions.CREATE_QUIZ)
     if denied:
         return denied
 
     title = request.form.get("title") or "Diagnostic Assessment"
-    topic_id = request.form.get("topic_id", type=int)
-    file = request.files.get("file")
-    if not file:
-        return json_error("PDF file is required", code="validation_error")
+    diagnostic_file = request.files.get("diagnostic_file") or request.files.get("file")
+    target_file = request.files.get("target_file")
 
-    a = assessment_service.create_assessment(
-        created_by=_current_user_id(),
-        title=title.strip(),
-        assessment_type="diagnostic",
-        creation_mode="pdf_qa_auto",
-    )
-    result = enqueue_or_run_pdf_quiz(
-        assessment_id=a.id,
-        file_bytes=file.read(),
-        filename=file.filename,
-        user_id=_current_user_id(),
-        topic_id=topic_id,
-    )
-    status = 202 if result.get("async") else 200
-    return json_success({"assessment_id": a.id, **result}, status=status)
+    if not diagnostic_file:
+        return json_error("Diagnostic Q&A PDF is required", code="validation_error")
+
+    try:
+        if target_file and target_file.filename:
+            result = upload_diagnostic_bundle(
+                teacher_id=_current_user_id(),
+                title=title.strip(),
+                diagnostic_file_bytes=diagnostic_file.read(),
+                diagnostic_filename=diagnostic_file.filename or "diagnostic.pdf",
+                target_file_bytes=target_file.read(),
+                target_filename=target_file.filename or "target.pdf",
+            )
+        else:
+            result = upload_diagnostic_pdf(
+                teacher_id=_current_user_id(),
+                title=title.strip(),
+                file_bytes=diagnostic_file.read(),
+                filename=diagnostic_file.filename or "document.pdf",
+            )
+        return json_success(result, status=201)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except Exception as e:
+        return json_error(str(e), code="upload_error", status=500)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/target-pdf", methods=["POST"])
+@login_required
+def upload_diagnostic_target_pdf(assessment_id: int):
+    """Upload target content PDF for an existing diagnostic."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    target_file = request.files.get("target_file") or request.files.get("file")
+    if not target_file or not target_file.filename:
+        return json_error("Target content PDF is required", code="validation_error")
+    try:
+        result = upload_target_pdf(
+            assessment_id,
+            _current_user_id(),
+            target_file.read(),
+            target_file.filename or "target.pdf",
+        )
+        return json_success(result)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except Exception as e:
+        return json_error(str(e), code="upload_error", status=500)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/target-topics", methods=["GET"])
+@login_required
+def diagnostic_target_topics(assessment_id: int):
+    """List headings from the target content PDF."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    try:
+        return json_success(list_target_pdf_topics(assessment_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error", status=403)
+
+
+@bp.route("/diagnostics/pdf/<thread_id>/topics", methods=["GET"])
+@login_required
+def diagnostic_pdf_topics(thread_id: str):
+    """List RAG headings from uploaded diagnostic PDF (A-316)."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    try:
+        return json_success(list_pdf_topics(thread_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error", status=403)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/generate", methods=["POST"])
+@login_required
+def generate_diagnostic(assessment_id: int):
+    """Generate MCQs from selected PDF topics (A-318)."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    selections = body.get("topics") or body.get("selections") or []
+    try:
+        result = generate_diagnostic_questions(
+            assessment_id, _current_user_id(), selections
+        )
+        return json_success(result)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except Exception as e:
+        return json_error(str(e), code="generation_error", status=500)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/status", methods=["GET"])
+@login_required
+def diagnostic_status(assessment_id: int):
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    try:
+        return json_success(get_diagnostic_status(assessment_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error", status=403)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/preview", methods=["GET"])
+@login_required
+def diagnostic_preview(assessment_id: int):
+    """Teacher preview of generated diagnostic questions (A-319)."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    try:
+        assessment = assessment_service.get_assessment(assessment_id)
+        if assessment.created_by != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        if assessment.assessment_type != "diagnostic":
+            return json_error("Not a diagnostic assessment", code="validation_error", status=400)
+        data = assessment_service.get_assessment_with_questions(
+            assessment_id, include_answers=True
+        )
+        return json_success(data)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/publish", methods=["POST"])
+@login_required
+def publish_diagnostic(assessment_id: int):
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    try:
+        assessment = assessment_service.get_assessment(assessment_id)
+        if assessment.created_by != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        if assessment.assessment_type != "diagnostic":
+            return json_error("Not a diagnostic assessment", code="validation_error", status=400)
+        a = assessment_service.publish_assessment(assessment_id)
+        return json_success({"id": a.id, "status": a.status, "title": a.title})
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
 
 
 @bp.route("/quizzes", methods=["GET", "POST"])
@@ -674,6 +975,432 @@ def my_progress():
     overall = performance_service.get_overall_progress(uid)
     path = learning_path_service.get_path_with_items(uid)
     return json_success({"overall_progress": overall, "topics": mastery, "learning_path": path})
+
+
+@bp.route("/students/me/learning-path", methods=["GET", "PUT", "POST"])
+@login_required
+def my_learning_path():
+    uid = _current_user_id()
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+
+    if request.method == "GET":
+        path = learning_path_service.get_path_with_items(uid)
+        if not path and path_generator.has_mastery_data(uid):
+            learning_path_service.generate_learning_path(uid)
+            path = learning_path_service.get_path_with_items(uid)
+        return json_success(path or {"items": [], "message": "No learning path yet. Complete a quiz to generate one."})
+
+    if request.method == "POST":
+        path = learning_path_service.generate_learning_path(uid, force=True)
+        if not path:
+            return json_success({"message": "No weak topics — you're caught up!", "items": []})
+        return json_success(learning_path_service.get_path_with_items(uid))
+
+    body = request.get_json(silent=True) or {}
+    item_id = body.get("item_id")
+    if not item_id:
+        return json_error("item_id is required", code="validation_error")
+
+    path = learning_path_service.get_active_path_for_student(uid)
+    if not path:
+        return json_error("No active learning path", code="not_found", status=404)
+
+    try:
+        row = learning_path_service.mark_item_complete(path.id, int(item_id), uid)
+        return json_success(
+            {
+                "item_id": row.id,
+                "status": row.status,
+                "learning_path": learning_path_service.get_path_with_items(uid),
+            }
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/classes/<int:class_id>", methods=["PUT", "DELETE"])
+@login_required
+def class_detail(class_id: int):
+    denied = _require_permission(Permissions.MANAGE_CLASS)
+    if denied:
+        return denied
+    if request.method == "DELETE":
+        try:
+            c = class_service.archive_class(class_id, _current_user_id())
+            return json_success({"id": c.id, "archived": True})
+        except LMSValidationError as e:
+            return json_error(str(e), code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
+    try:
+        c = class_service.update_class(
+            class_id,
+            _current_user_id(),
+            name=body.get("name"),
+            description=body.get("description"),
+            grade_level=body.get("grade_level"),
+        )
+        return json_success({"id": c.id, "name": c.name})
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/classes/<int:class_id>/roster", methods=["GET"])
+@login_required
+def class_roster(class_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    try:
+        return json_success(analytics_service.get_class_roster_summary(class_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/classes/<int:class_id>/analytics/topics", methods=["GET"])
+@login_required
+def class_topic_analytics(class_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    try:
+        return json_success(analytics_service.aggregate_class_topics(class_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/classes/<int:class_id>/analytics/quizzes", methods=["GET"])
+@login_required
+def class_quiz_analytics(class_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    try:
+        return json_success(analytics_service.get_class_quiz_results(class_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/classes/<int:class_id>/analytics/struggling", methods=["GET"])
+@login_required
+def class_struggling(class_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    try:
+        return json_success(analytics_service.get_struggling_students(class_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/classes/<int:class_id>/export.csv", methods=["GET"])
+@login_required
+def class_export_csv(class_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    try:
+        csv_data = analytics_service.export_class_csv(class_id, _current_user_id())
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment;filename=class_roster.csv"},
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/classes/<int:class_id>/students/<int:student_id>/report", methods=["GET"])
+@login_required
+def student_report(class_id: int, student_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    try:
+        return json_success(
+            analytics_service.get_student_report(student_id, _current_user_id(), class_id)
+        )
+    except (LMSValidationError, LMSNotFoundError) as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/classes/<int:class_id>/assignments/<int:assignment_id>/submissions", methods=["GET"])
+@login_required
+def assignment_submissions(class_id: int, assignment_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    if not class_service.teacher_owns_class(_current_user_id(), class_id):
+        return json_error("Forbidden", code="forbidden", status=403)
+    try:
+        return json_success(
+            assignment_service.list_submissions_for_assignment(assignment_id, _current_user_id())
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+@bp.route("/students/me/attempts", methods=["GET"])
+@login_required
+def my_attempts():
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    return json_success(attempt_service.list_student_attempts(_current_user_id()))
+
+
+@bp.route("/students/me/progress/history", methods=["GET"])
+@login_required
+def my_progress_history():
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    return json_success(analytics_service.get_progress_over_time(_current_user_id()))
+
+
+@bp.route("/tutor/chat", methods=["POST"])
+@login_required
+def student_tutor_chat():
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
+    message = (body.get("message") or "").strip()
+    if not message:
+        return json_error("message is required", code="validation_error")
+    context = tutor_service.build_student_context(
+        _current_user_id(),
+        topic_id=body.get("topic_id"),
+        question_text=body.get("question_text"),
+        attempt_count=int(body.get("attempt_count") or 0),
+    )
+    reply = tutor_service.tutor_chat(
+        message,
+        session.get("groq_api_key", ""),
+        mode="student",
+        context=context,
+        history=body.get("history"),
+    )
+    return json_success({"reply": reply})
+
+
+@bp.route("/teacher/tutor", methods=["POST"])
+@login_required
+def teacher_tutor_chat():
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    message = (body.get("message") or "").strip()
+    if not message:
+        return json_error("message is required", code="validation_error")
+    reply = tutor_service.tutor_chat(
+        message,
+        session.get("groq_api_key", ""),
+        mode="teacher",
+        history=body.get("history"),
+    )
+    return json_success({"reply": reply})
+
+
+@bp.route("/teacher/tutor/save-question", methods=["POST"])
+@login_required
+def teacher_tutor_save_question():
+    denied = _require_permission(Permissions.MANAGE_QUESTION_BANK)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    try:
+        q = question_bank_service.create_question(
+            created_by=_current_user_id(),
+            question_text=body["question_text"],
+            options=body["options"],
+            correct_option_index=int(body["correct_option_index"]),
+            topic_id=body.get("topic_id"),
+            difficulty=body.get("difficulty", "medium"),
+            source_type="ai_tutor",
+        )
+        return json_success(question_bank_service.question_to_dict(q), status=201)
+    except (KeyError, TypeError, ValueError) as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/practice/sessions", methods=["POST"])
+@login_required
+def start_practice():
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
+    try:
+        s = practice_service.start_session(
+            _current_user_id(),
+            topic_id=body.get("topic_id"),
+            question_id=body.get("question_id"),
+        )
+        return json_success({"session_id": s.id}, status=201)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/practice/sessions/<int:session_id>", methods=["GET"])
+@login_required
+def get_practice(session_id: int):
+    try:
+        return json_success(practice_service.get_session_question(session_id))
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/practice/sessions/<int:session_id>/answer", methods=["POST"])
+@login_required
+def practice_answer(session_id: int):
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_success(
+            practice_service.submit_answer(session_id, int(body["selected_option_index"]))
+        )
+    except (KeyError, TypeError, ValueError) as e:
+        return json_error(str(e), code="validation_error")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/practice/sessions/<int:session_id>/hint", methods=["POST"])
+@login_required
+def practice_hint(session_id: int):
+    try:
+        return json_success(practice_service.request_hint(session_id))
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/deficiency/sessions", methods=["POST"])
+@login_required
+def start_deficiency_chat():
+    """Start post-diagnostic learning chat (weak-area questions one-by-one)."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    try:
+        body = request.get_json(silent=True) or {}
+        force_new = bool(body.get("force_new"))
+        return json_success(
+            deficiency_chat_service.start_session(_current_user_id(), force_new=force_new),
+            status=201,
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except Exception as e:
+        return json_error(str(e), code="deficiency_error", status=500)
+
+
+@bp.route("/deficiency/sessions/<int:session_id>", methods=["GET"])
+@login_required
+def get_deficiency_chat(session_id: int):
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    try:
+        return json_success(deficiency_chat_service.get_session(session_id, _current_user_id()))
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/deficiency/sessions/<int:session_id>/answer", methods=["POST"])
+@login_required
+def deficiency_chat_answer(session_id: int):
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_success(
+            deficiency_chat_service.submit_answer(
+                session_id, _current_user_id(), int(body["selected_option_index"])
+            )
+        )
+    except (KeyError, TypeError, ValueError):
+        return json_error("selected_option_index is required", code="validation_error")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/deficiency/sessions/<int:session_id>/pause", methods=["POST"])
+@login_required
+def deficiency_chat_pause(session_id: int):
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    try:
+        return json_success(deficiency_chat_service.pause_session(session_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/deficiency/sessions/<int:session_id>/explain", methods=["POST"])
+@login_required
+def deficiency_chat_explain(session_id: int):
+    """Ask tutor about current weak-area question (PDF-grounded; not main lesson chat)."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
+    message = (body.get("message") or "").strip()
+    if not message:
+        return json_error("message is required", code="validation_error")
+    try:
+        return json_success(
+            deficiency_chat_service.explain_with_tutor(
+                session_id,
+                _current_user_id(),
+                message,
+                api_key=session.get("groq_api_key", ""),
+            )
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/interventions", methods=["GET"])
+@login_required
+def interventions():
+    class_id = request.args.get("class_id", type=int)
+    student_id = request.args.get("student_id", type=int)
+    topic_id = request.args.get("topic_id", type=int)
+    if class_id and _current_role() == "teacher":
+        try:
+            return json_success(intervention_service.recommend_for_class(class_id, _current_user_id()))
+        except LMSValidationError as e:
+            return json_error(str(e), code="forbidden", status=403)
+    if student_id:
+        return json_success(intervention_service.recommend_for_student(student_id, topic_id=topic_id))
+    if _current_role() == "student":
+        return json_success(intervention_service.recommend_for_student(_current_user_id(), topic_id=topic_id))
+    return json_error("class_id or student_id required", code="validation_error")
+
+
+@bp.route("/interventions/auto-assign", methods=["POST"])
+@login_required
+def auto_assign():
+    denied = _require_permission(Permissions.ASSIGN_QUIZ)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    try:
+        result = intervention_service.auto_assign_intervention(
+            _current_user_id(),
+            int(body["class_id"]),
+            int(body["quiz_id"]),
+            body.get("title") or "Intervention Quiz",
+        )
+        return json_success(result, status=201)
+    except (KeyError, TypeError, ValueError) as e:
+        return json_error(str(e), code="validation_error")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/teacher/analytics/pdf-sources", methods=["GET"])
+@login_required
+def pdf_analytics():
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    return json_success(analytics_service.pdf_source_analytics(_current_user_id()))
 
 
 @bp.errorhandler(LMSError)

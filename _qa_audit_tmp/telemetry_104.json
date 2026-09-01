@@ -1,0 +1,494 @@
+﻿{
+  "host": "9b2497bb5383",
+  "has_llm_usage_events": true,
+  "has_router_decision_events": false,
+  "has_llm_model_pricing": true,
+  "has_user_token_usage": true,
+  "coverage": {
+    "min_at": "2026-06-30T11:17:05.419893",
+    "max_at": "2026-08-16T22:20:55.272273",
+    "n": 2341
+  },
+  "by_traffic": [
+    {
+      "traffic_source": "production",
+      "calls": 2341,
+      "success_calls": 1728,
+      "total_tokens": 5224927,
+      "cost_usd": 1.4230053
+    }
+  ],
+  "token_nulls_prod": {
+    "n": 2341,
+    "success_n": 1728,
+    "fail_n": 613,
+    "null_in": 613,
+    "null_out": 613,
+    "null_tot": 613,
+    "null_cost": 688,
+    "zero_cost": 0,
+    "sum_in": 4753648,
+    "sum_out": 471279,
+    "sum_tot": 5224927,
+    "sum_cost": 1.4230053
+  },
+  "profile": [
+    {
+      "workflow": "rag_chat",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 985,
+      "success_calls": 985,
+      "avg_in": 3554.0,
+      "avg_out": 181.0,
+      "p95_out": 607.3999999999999,
+      "total_tokens": 3679390,
+      "input_tokens": 3500856,
+      "output_tokens": 178534,
+      "cost_usd": 0.6322488
+    },
+    {
+      "workflow": "rag_heading_extraction",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 462,
+      "success_calls": 462,
+      "avg_in": 1877.0,
+      "avg_out": 124.0,
+      "p95_out": 361.39999999999986,
+      "total_tokens": 924373,
+      "input_tokens": 867099,
+      "output_tokens": 57274,
+      "cost_usd": 0.16442925
+    },
+    {
+      "workflow": "rag_heading_extraction",
+      "user_role": "teacher",
+      "model": "qwen/qwen3.6-27b",
+      "provider": "groq",
+      "calls": 67,
+      "success_calls": 67,
+      "avg_in": 1168.0,
+      "avg_out": 1651.0,
+      "p95_out": 2048.0,
+      "total_tokens": 188852,
+      "input_tokens": 78232,
+      "output_tokens": 110620,
+      "cost_usd": 0.3787992
+    },
+    {
+      "workflow": "legacy_chat",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 51,
+      "success_calls": 51,
+      "avg_in": 1363.0,
+      "avg_out": 594.0,
+      "p95_out": 976.5,
+      "total_tokens": 99806,
+      "input_tokens": 69496,
+      "output_tokens": 30310,
+      "cost_usd": 0.0286104
+    },
+    {
+      "workflow": "rag_heading_extraction",
+      "user_role": "teacher",
+      "model": "openai/gpt-oss-120b",
+      "provider": "groq",
+      "calls": 36,
+      "success_calls": 36,
+      "avg_in": 1807.0,
+      "avg_out": 410.0,
+      "p95_out": 1470.75,
+      "total_tokens": 79823,
+      "input_tokens": 65055,
+      "output_tokens": 14768,
+      "cost_usd": null
+    },
+    {
+      "workflow": "rag_chat",
+      "user_role": "teacher",
+      "model": "qwen/qwen3.6-27b",
+      "provider": "groq",
+      "calls": 30,
+      "success_calls": 30,
+      "avg_in": 2450.0,
+      "avg_out": 1422.0,
+      "p95_out": 2538.699999999998,
+      "total_tokens": 116169,
+      "input_tokens": 73512,
+      "output_tokens": 42657,
+      "cost_usd": 0.1720782
+    },
+    {
+      "workflow": "unknown",
+      "user_role": null,
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 25,
+      "success_calls": 25,
+      "avg_in": 464.0,
+      "avg_out": 25.0,
+      "p95_out": 43.59999999999998,
+      "total_tokens": 12234,
+      "input_tokens": 11607,
+      "output_tokens": 627,
+      "cost_usd": 0.00211725
+    },
+    {
+      "workflow": "rag_chat",
+      "user_role": "teacher",
+      "model": "openai/gpt-oss-120b",
+      "provider": "groq",
+      "calls": 24,
+      "success_calls": 24,
+      "avg_in": 1578.0,
+      "avg_out": 330.0,
+      "p95_out": 1391.3999999999992,
+      "total_tokens": 45809,
+      "input_tokens": 37881,
+      "output_tokens": 7928,
+      "cost_usd": null
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "student",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 22,
+      "success_calls": 22,
+      "avg_in": 875.0,
+      "avg_out": 171.0,
+      "p95_out": 522.5999999999999,
+      "total_tokens": 23026,
+      "input_tokens": 19255,
+      "output_tokens": 3771,
+      "cost_usd": 0.00515085
+    },
+    {
+      "workflow": "legacy_chat",
+      "user_role": "teacher",
+      "model": "openai/gpt-oss-120b",
+      "provider": "groq",
+      "calls": 8,
+      "success_calls": 8,
+      "avg_in": 1349.0,
+      "avg_out": 1224.0,
+      "p95_out": 1961.6,
+      "total_tokens": 20583,
+      "input_tokens": 10789,
+      "output_tokens": 9794,
+      "cost_usd": null
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "teacher",
+      "model": "openai/gpt-oss-120b",
+      "provider": "groq",
+      "calls": 5,
+      "success_calls": 5,
+      "avg_in": 1702.0,
+      "avg_out": 324.0,
+      "p95_out": 416.59999999999997,
+      "total_tokens": 10130,
+      "input_tokens": 8508,
+      "output_tokens": 1622,
+      "cost_usd": null
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "teacher",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "calls": 4,
+      "success_calls": 4,
+      "avg_in": 1547.0,
+      "avg_out": 278.0,
+      "p95_out": 586.0999999999999,
+      "total_tokens": 7299,
+      "input_tokens": 6189,
+      "output_tokens": 1110,
+      "cost_usd": 0.00159435
+    },
+    {
+      "workflow": "legacy_chat",
+      "user_role": "teacher",
+      "model": "qwen/qwen3.6-27b",
+      "provider": "groq",
+      "calls": 3,
+      "success_calls": 3,
+      "avg_in": 445.0,
+      "avg_out": 2446.0,
+      "p95_out": 2932.4,
+      "total_tokens": 8675,
+      "input_tokens": 1336,
+      "output_tokens": 7339,
+      "cost_usd": 0.0228186
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "student",
+      "model": "qwen/qwen3.6-27b",
+      "provider": "groq",
+      "calls": 2,
+      "success_calls": 2,
+      "avg_in": 465.0,
+      "avg_out": 835.0,
+      "p95_out": 1584.6999999999998,
+      "total_tokens": 2599,
+      "input_tokens": 929,
+      "output_tokens": 1670,
+      "cost_usd": 0.0055674
+    },
+    {
+      "workflow": "unknown",
+      "user_role": null,
+      "model": "qwen/qwen3.6-27b",
+      "provider": "groq",
+      "calls": 1,
+      "success_calls": 1,
+      "avg_in": 220.0,
+      "avg_out": 1372.0,
+      "p95_out": 1372.0,
+      "total_tokens": 1592,
+      "input_tokens": 220,
+      "output_tokens": 1372,
+      "cost_usd": 0.004248
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "teacher",
+      "model": "qwen/qwen3.6-27b",
+      "provider": "groq",
+      "calls": 1,
+      "success_calls": 1,
+      "avg_in": 1200.0,
+      "avg_out": 1541.0,
+      "p95_out": 1541.0,
+      "total_tokens": 2741,
+      "input_tokens": 1200,
+      "output_tokens": 1541,
+      "cost_usd": 0.005343
+    },
+    {
+      "workflow": "unknown",
+      "user_role": null,
+      "model": "openai/gpt-oss-120b",
+      "provider": "groq",
+      "calls": 1,
+      "success_calls": 1,
+      "avg_in": 233.0,
+      "avg_out": 93.0,
+      "p95_out": 93.0,
+      "total_tokens": 326,
+      "input_tokens": 233,
+      "output_tokens": 93,
+      "cost_usd": null
+    },
+    {
+      "workflow": "lesson_api",
+      "user_role": "student",
+      "model": "openai/gpt-oss-120b",
+      "provider": "groq",
+      "calls": 1,
+      "success_calls": 1,
+      "avg_in": 1251.0,
+      "avg_out": 249.0,
+      "p95_out": 249.0,
+      "total_tokens": 1500,
+      "input_tokens": 1251,
+      "output_tokens": 249,
+      "cost_usd": null
+    }
+  ],
+  "daily": [
+    {
+      "day": "2026-06-30",
+      "calls": 3,
+      "total_tokens": 7111,
+      "cost_usd": null
+    },
+    {
+      "day": "2026-07-13",
+      "calls": 14,
+      "total_tokens": 42080,
+      "cost_usd": null
+    },
+    {
+      "day": "2026-07-18",
+      "calls": 2,
+      "total_tokens": 3314,
+      "cost_usd": null
+    },
+    {
+      "day": "2026-07-19",
+      "calls": 19,
+      "total_tokens": 50424,
+      "cost_usd": null
+    },
+    {
+      "day": "2026-07-21",
+      "calls": 5,
+      "total_tokens": 8452,
+      "cost_usd": null
+    },
+    {
+      "day": "2026-07-22",
+      "calls": 716,
+      "total_tokens": 1930934,
+      "cost_usd": 0.76748445
+    },
+    {
+      "day": "2026-07-23",
+      "calls": 157,
+      "total_tokens": 488221,
+      "cost_usd": 0.08801655
+    },
+    {
+      "day": "2026-07-25",
+      "calls": 247,
+      "total_tokens": 765508,
+      "cost_usd": 0.13236225
+    },
+    {
+      "day": "2026-07-31",
+      "calls": 81,
+      "total_tokens": 272987,
+      "cost_usd": 0.04792845
+    },
+    {
+      "day": "2026-08-02",
+      "calls": 68,
+      "total_tokens": 204698,
+      "cost_usd": 0.037137
+    },
+    {
+      "day": "2026-08-05",
+      "calls": 83,
+      "total_tokens": 266316,
+      "cost_usd": 0.04656285
+    },
+    {
+      "day": "2026-08-07",
+      "calls": 122,
+      "total_tokens": 369212,
+      "cost_usd": 0.06510315
+    },
+    {
+      "day": "2026-08-10",
+      "calls": 144,
+      "total_tokens": 541433,
+      "cost_usd": 0.19256805
+    },
+    {
+      "day": "2026-08-11",
+      "calls": 45,
+      "total_tokens": 172219,
+      "cost_usd": 0.02849055
+    },
+    {
+      "day": "2026-08-16",
+      "calls": 22,
+      "total_tokens": 102018,
+      "cost_usd": 0.017352
+    }
+  ],
+  "by_workflow": [
+    {
+      "workflow": "rag_chat",
+      "calls": 1039,
+      "input_tokens": 3612249,
+      "output_tokens": 229119,
+      "total_tokens": 3841368,
+      "cost_usd": 0.804327
+    },
+    {
+      "workflow": "rag_heading_extraction",
+      "calls": 565,
+      "input_tokens": 1010386,
+      "output_tokens": 182662,
+      "total_tokens": 1193048,
+      "cost_usd": 0.54322845
+    },
+    {
+      "workflow": "legacy_chat",
+      "calls": 62,
+      "input_tokens": 81621,
+      "output_tokens": 47443,
+      "total_tokens": 129064,
+      "cost_usd": 0.051429
+    },
+    {
+      "workflow": "lesson_api",
+      "calls": 35,
+      "input_tokens": 37332,
+      "output_tokens": 9963,
+      "total_tokens": 47295,
+      "cost_usd": 0.0176556
+    },
+    {
+      "workflow": "unknown",
+      "calls": 27,
+      "input_tokens": 12060,
+      "output_tokens": 2092,
+      "total_tokens": 14152,
+      "cost_usd": 0.00636525
+    }
+  ],
+  "by_model": [
+    {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "calls": 1549,
+      "input_tokens": 4474502,
+      "output_tokens": 271626,
+      "total_tokens": 4746128,
+      "cost_usd": 0.8341509,
+      "est_cost_usd": 0.8341508999999999
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.6-27b",
+      "calls": 104,
+      "input_tokens": 155429,
+      "output_tokens": 165199,
+      "total_tokens": 320628,
+      "cost_usd": 0.5888544,
+      "est_cost_usd": 0.5888544
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "calls": 75,
+      "input_tokens": 123717,
+      "output_tokens": 34454,
+      "total_tokens": 158171,
+      "cost_usd": null,
+      "est_cost_usd": null
+    }
+  ],
+  "router_coverage": null,
+  "calls_per_turn": null,
+  "pricing": [],
+  "estimated_cost_usd_fallback_rates": 1.4230052999999998,
+  "models_missing_fallback_rate": [
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "calls": 75
+    }
+  ],
+  "user_token_usage_columns": [
+    "id",
+    "user_id",
+    "date",
+    "tokens_used",
+    "last_updated"
+  ],
+  "user_token_usage_total": {
+    "n": 28
+  }
+}

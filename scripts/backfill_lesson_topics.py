@@ -8,6 +8,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from scripts.load_env import describe_database_target, load_project_env
+
+load_project_env()
+
 from app import create_app
 from app.services.lms.lesson_topic_service import backfill_lesson_topics
 
@@ -18,6 +22,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Report matches without writing")
     args = parser.parse_args()
 
+    print(f"Database target: {describe_database_target()}")
     app = create_app()
     with app.app_context():
         result = backfill_lesson_topics(subject=args.subject, dry_run=args.dry_run)

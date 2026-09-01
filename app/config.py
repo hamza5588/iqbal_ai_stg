@@ -52,7 +52,10 @@ class Config:
     # SQLite: sqlite:///instance/chatbot.db or sqlite:////absolute/path/to/chatbot.db
     # MySQL: mysql+pymysql://user:password@localhost/dbname
     # PostgreSQL: postgresql://user:password@localhost/dbname or postgresql+psycopg2://user:password@localhost/dbname
-    DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://myuser:mypassword@localhost:5432/mydatabase')    
+    DATABASE_URL = os.getenv(
+        'DATABASE_URL',
+        'sqlite:///instance/iqbalai_local.db',
+    )
     # SQLAlchemy configuration
     if DATABASE_URL.startswith('sqlite'):
         # Resolve to absolute path and create parent dir so SQLite can open the file
@@ -148,8 +151,15 @@ class Config:
     # Upload then returns immediately with task_id; client polls for status. Avoids gateway timeouts (504)
     # and keeps web workers free for login/chat. Set to false for local dev (no Redis/Celery needed).
     USE_CELERY_FOR_INGESTION = os.getenv('USE_CELERY_FOR_INGESTION', 'false').lower() in ('true', '1')
-    CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+    # Local dev: never require Redis. Production sets USE_CELERY_FOR_INGESTION=true + Redis URLs.
+    _default_broker = 'redis://localhost:6379/0'
+    if not USE_CELERY_FOR_INGESTION:
+        _default_broker = 'memory://'
+    CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', _default_broker)
+    _default_backend = 'redis://localhost:6379/0'
+    if not USE_CELERY_FOR_INGESTION:
+        _default_backend = 'cache+memory://'
+    CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', _default_backend)
     CELERY_ACCEPT_CONTENT = ['json']
     CELERY_TASK_SERIALIZER = 'json'
     CELERY_RESULT_SERIALIZER = 'json'

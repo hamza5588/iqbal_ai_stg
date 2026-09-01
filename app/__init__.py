@@ -249,11 +249,10 @@ def create_app():
     with app.app_context():
         if not skip_db_init:
             init_db(app)
+        # Always ensure default admin exists (lightweight; required for local SQLite login)
+        from app.utils.admin_init import create_default_admin
+        create_default_admin()
         if not skip_extra_startup:
-            # Create default admin account if it doesn't exist
-            from app.utils.admin_init import create_default_admin
-            create_default_admin()
-
             # Initialize Lesson Q&A LangGraph (Postgres checkpointer setup + compile).
             # This MUST run once on startup so that:
             #   - PostgresSaver.setup() creates checkpoint tables, and

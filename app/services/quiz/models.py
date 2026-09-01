@@ -51,6 +51,10 @@ class MCQQuestion(BaseModel):
     options: List[MCQOption]
     correct_option_label: OptionLabel
     explanation: Optional[str] = None
+    learning_concept: Optional[str] = Field(
+        None,
+        description="Short student-friendly concept this question tests (3-8 words, not a document title)",
+    )
     conversion_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
 
     @model_validator(mode="after")

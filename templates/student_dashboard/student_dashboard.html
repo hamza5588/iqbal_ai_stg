@@ -1789,6 +1789,21 @@
       z-index: 9999 !important;
     }
 
+    /* LMS hub modals — inline display:flex must not override .hidden */
+    #lmsJoinClassModal,
+    #lmsOnboardingModal,
+    #lmsStudentModal {
+      display: none !important;
+    }
+
+    #lmsJoinClassModal:not(.hidden),
+    #lmsOnboardingModal:not(.hidden),
+    #lmsStudentModal:not(.hidden) {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+    }
+
     #viewLessonModal.visible-modal {
       display: flex !important;
       visibility: visible !important;
@@ -3134,7 +3149,7 @@
     .lms-overview-head h2 { font-size:1.25rem; font-weight:700; margin:0; color:#0f172a; }
     .lms-overview-actions { display:flex; gap:8px; flex-wrap:wrap; }
     .lms-btn { border:none; border-radius:8px; padding:8px 14px; font-weight:600; font-size:.875rem; cursor:pointer; }
-    .lms-btn-primary { background:#0284c7; color:#fff; }
+    .lms-btn-primary { background:#166534; color:#fff; }
     .lms-btn-secondary { background:#e2e8f0; color:#334155; }
     .lms-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
     .lms-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; }
@@ -3143,6 +3158,20 @@
     .lms-card-list { margin:8px 0 0; padding:0; list-style:none; font-size:.875rem; color:#475569; }
     .lms-card-list li { padding:4px 0; border-bottom:1px solid #f1f5f9; }
     .lms-onboarding-banner { background:#fef3c7; border:1px solid #fcd34d; border-radius:12px; padding:14px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+    /* Learning Path (Phase 4) */
+    .lms-path-panel { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-top:16px; }
+    .lms-path-panel h3 { font-size:1rem; font-weight:700; margin:0 0 12px; color:#0f172a; }
+    .lms-path-steps { list-style:none; margin:0; padding:0; }
+    .lms-path-step { display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid #f1f5f9; }
+    .lms-path-step:last-child { border-bottom:none; }
+    .lms-path-step.current { background:#f0fdf4; margin:0 -8px; padding:10px 8px; border-radius:8px; }
+    .lms-path-check { width:22px; height:22px; border-radius:50%; border:2px solid #cbd5e1; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:.75rem; color:#fff; }
+    .lms-path-step.completed .lms-path-check { background:#16a34a; border-color:#16a34a; }
+    .lms-path-step.current .lms-path-check { border-color:#0284c7; background:#0284c7; }
+    .lms-path-step-body { flex:1; min-width:0; }
+    .lms-path-step-title { font-weight:600; font-size:.875rem; color:#0f172a; }
+    .lms-path-step-meta { font-size:.75rem; color:#64748b; margin-top:2px; text-transform:capitalize; }
+    .lms-path-empty { color:#64748b; font-size:.875rem; }
     .lms-topic-filter { display:flex; align-items:center; gap:8px; margin-top:10px; }
     .lms-topic-filter select { border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:.875rem; min-width:180px; }
     .lms-topic-badge { display:inline-block; background:#e0f2fe; color:#0369a1; font-size:.75rem; padding:2px 8px; border-radius:9999px; margin-right:4px; }
@@ -7653,46 +7682,51 @@
     </script>
 
   <!-- LMS Phase 2: onboarding + join class -->
-  <div id="lmsJoinClassModal" class="hidden" style="position:fixed;inset:0;z-index:10001;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;">
-    <div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:24px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h2 style="font-size:1.125rem;font-weight:700;margin:0;">Join a Class</h2>
-        <button type="button" onclick="closeLmsJoinClassModal()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+  <div id="lmsJoinClassModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsJoinClassModal()">
+    <div class="lms-modal lms-modal-sm">
+      <div class="lms-modal-header">
+        <h2>Join a Class</h2>
+        <button type="button" class="lms-modal-close" onclick="closeLmsJoinClassModal()">&times;</button>
       </div>
-      <p style="font-size:.875rem;color:#64748b;margin-bottom:12px;">Enter the join code from your teacher.</p>
-      <input id="lmsJoinCodeInput" type="text" placeholder="e.g. AB12CD34" maxlength="12"
-        style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;margin-bottom:12px;text-transform:uppercase;">
-      <div id="lmsJoinClassError" style="color:#dc2626;font-size:.875rem;margin-bottom:8px;"></div>
-      <button type="button" onclick="submitLmsJoinClass()"
-        style="width:100%;background:#0284c7;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">
-        Join Class
-      </button>
+      <div class="lms-modal-body">
+        <p class="lms-status" id="lmsJoinGradeHint">Enter the join code from your teacher.</p>
+        <div class="lms-field">
+          <label class="lms-label">Join code</label>
+          <input id="lmsJoinCodeInput" type="text" class="lms-input" placeholder="e.g. AB12CD34" maxlength="12" style="text-transform:uppercase;">
+        </div>
+        <div id="lmsJoinClassError" class="lms-error"></div>
+        <button type="button" class="lms-btn lms-btn-primary" style="width:100%;margin-top:8px;" onclick="submitLmsJoinClass()">Join Class</button>
+      </div>
     </div>
   </div>
-  <div id="lmsOnboardingModal" class="hidden" style="position:fixed;inset:0;z-index:10002;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px;">
-    <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:24px;">
-      <h2 style="font-size:1.25rem;font-weight:700;margin:0 0 8px;">Welcome to IqbalAI LMS</h2>
-      <p style="color:#64748b;font-size:.9375rem;margin-bottom:16px;">Join your class with a code from your teacher, or complete a diagnostic assessment to personalize your learning path.</p>
+  <div id="lmsOnboardingModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsOnboardingModal()">
+    <div class="lms-modal lms-modal-sm">
+      <div class="lms-modal-header"><h2>Welcome to IqbalAI LMS</h2></div>
+      <div class="lms-modal-body">
+      <p class="lms-status" style="margin-bottom:16px;">Join your class with a code from your teacher, or complete a diagnostic assessment to personalize your learning path.</p>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <button type="button" onclick="closeLmsOnboardingModal(); openLmsJoinClassModal();"
-          style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">Join Class</button>
-        <button type="button" onclick="closeLmsOnboardingModal(); openLmsStudentHub();"
-          style="background:#166534;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">View Assignments / Quizzes</button>
-        <button type="button" onclick="closeLmsOnboardingModal();"
-          style="background:#e2e8f0;color:#334155;border:none;border-radius:8px;padding:10px;font-weight:600;cursor:pointer;">Skip for now</button>
+        <button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsOnboardingModal(); openLmsDiagnostic();">Take Diagnostic Assessment</button>
+        <button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsOnboardingModal(); openLmsJoinClassModal();">Join Class</button>
+        <button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsOnboardingModal(); openLmsStudentHub();">View Assignments / Quizzes</button>
+        <button type="button" class="lms-btn lms-btn-ghost" onclick="closeLmsOnboardingModal();">Skip for now</button>
+      </div>
       </div>
     </div>
   </div>
   <script>
     function openLmsJoinClassModal() {
-      document.getElementById('lmsJoinClassModal').classList.remove('hidden');
+      lmsOpenModal('lmsJoinClassModal');
       document.getElementById('lmsJoinClassError').textContent = '';
+      lmsApi('/api/lms/users/me/grade-profile').then(function (p) {
+        var hint = document.getElementById('lmsJoinGradeHint');
+        if (p.grade_label) hint.textContent = 'Your grade: ' + p.grade_label + '. You can only join classes for your grade level.';
+      }).catch(function () {});
     }
     function closeLmsJoinClassModal() {
-      document.getElementById('lmsJoinClassModal').classList.add('hidden');
+      lmsCloseModal('lmsJoinClassModal');
     }
     function closeLmsOnboardingModal() {
-      document.getElementById('lmsOnboardingModal').classList.add('hidden');
+      lmsCloseModal('lmsOnboardingModal');
     }
     async function submitLmsJoinClass() {
       const code = (document.getElementById('lmsJoinCodeInput').value || '').trim().toUpperCase();
@@ -7720,7 +7754,7 @@
         const body = await res.json();
         const d = body.data || body;
         if (d.needs_onboarding) {
-          document.getElementById('lmsOnboardingModal').classList.remove('hidden');
+          lmsOpenModal('lmsOnboardingModal');
         }
       } catch (e) { /* best effort */ }
     }
@@ -7732,14 +7766,17 @@
         const body = await res.json();
         const d = body.data || body;
         const weak = (d.weak_topics || []).map(function (t) {
-          return '<li>Topic #' + t.topic_id + ' — ' + Math.round(t.score_percent) + '%</li>';
+          return '<li>' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + ' — ' + Math.round(t.score_percent) + '% ' + (typeof lmsMasteryBadge === 'function' ? lmsMasteryBadge(t.mastery_status) : '') + '</li>';
         }).join('') || '<li>No weak topics yet</li>';
         const pending = (d.pending_assignments || []).map(function (a) {
           return '<li>' + escapeHtml(a.title) + ' (' + a.status + ')</li>';
         }).join('') || '<li>No pending quizzes</li>';
         const progress = d.overall_progress != null ? Math.round(d.overall_progress) + '%' : '0%';
+        const pathHtml = renderLmsLearningPath(d.learning_path);
         const banner = (d.onboarding && d.onboarding.needs_onboarding)
-          ? '<div class="lms-onboarding-banner"><span>Complete onboarding: join a class or take your diagnostic.</span><button class="lms-btn lms-btn-primary" onclick="openLmsJoinClassModal()">Join Class</button></div>'
+          ? '<div class="lms-onboarding-banner"><span>Complete onboarding: take your diagnostic or join a class.</span>' +
+            '<button class="lms-btn lms-btn-primary" onclick="openLmsDiagnostic()">Take Diagnostic</button>' +
+            '<button class="lms-btn lms-btn-secondary" onclick="openLmsJoinClassModal()">Join Class</button></div>'
           : '';
         el.innerHTML = banner + `
           <div class="lms-overview">
@@ -7756,31 +7793,74 @@
               <div class="lms-card"><div class="lms-card-label">Weak Topics</div><div class="lms-card-value">${(d.weak_topics || []).length}</div><ul class="lms-card-list">${weak}</ul></div>
               <div class="lms-card"><div class="lms-card-label">My Classes</div><div class="lms-card-value">${(d.classes || []).length}</div><ul class="lms-card-list">${(d.classes || []).map(function(c){ return '<li>' + escapeHtml(c.name) + '</li>'; }).join('') || '<li>Not enrolled yet</li>'}</ul></div>
             </div>
+            ${pathHtml}
+            <div class="lms-path-panel"><h3>Quiz History</h3><div id="lmsAttemptHistory"></div></div>
           </div>`;
+        if (typeof loadLmsAttemptHistory === 'function') loadLmsAttemptHistory('lmsAttemptHistory');
       } catch (err) {
         el.innerHTML = '';
       }
     }
+    function renderLmsLearningPath(path) {
+      if (!path || !path.items || !path.items.length) {
+        return '<div class="lms-path-panel"><h3>My Learning Path</h3><p class="lms-path-empty">Complete a quiz to get a personalized learning path based on your weak topics.</p></div>';
+      }
+      const steps = path.items.map(function (item) {
+        const isDone = item.status === 'completed';
+        const isCurrent = !isDone && path.current_step && path.current_step.id === item.id;
+        const cls = 'lms-path-step' + (isDone ? ' completed' : '') + (isCurrent ? ' current' : '');
+        const check = isDone ? '&#10003;' : (isCurrent ? '&#9679;' : '');
+        let action = '';
+        if (isCurrent && !isDone) {
+          action = '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:6px;font-size:.75rem;" onclick="markLmsPathItemComplete(' + item.id + ')">Mark complete</button>';
+        }
+        return '<li class="' + cls + '">' +
+          '<div class="lms-path-check">' + check + '</div>' +
+          '<div class="lms-path-step-body">' +
+          '<div class="lms-path-step-title">' + escapeHtml(item.title || item.label || 'Step') + '</div>' +
+          '<div class="lms-path-step-meta">' + escapeHtml(item.item_type) + '</div>' +
+          action + '</div></li>';
+      }).join('');
+      const pct = path.total_count ? Math.round(100 * (path.completed_count || 0) / path.total_count) : 0;
+      return '<div class="lms-path-panel"><h3>My Learning Path <span style="font-weight:400;color:#64748b;font-size:.875rem;">(' + pct + '% done)</span></h3><ol class="lms-path-steps">' + steps + '</ol></div>';
+    }
+    async function markLmsPathItemComplete(itemId) {
+      try {
+        const res = await fetch('/api/lms/students/me/learning-path', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_id: itemId })
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || body.message || 'Failed');
+        loadLmsStudentDashboard();
+      } catch (err) {
+        if (typeof showToast === 'function') showToast(err.message, 'error', 3000);
+        else alert(err.message);
+      }
+    }
   </script>
 
-  <!-- LMS Student Quiz (Phase 3) -->
-  <button type="button" onclick="openLmsJoinClassModal()"
-    style="position:fixed;bottom:88px;right:24px;z-index:9999;background:#475569;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
-    Join Class
-  </button>
-  <button type="button" onclick="openLmsStudentHub()"
-    style="position:fixed;bottom:24px;right:24px;z-index:9999;background:#0284c7;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
-    My Quizzes
-  </button>
-  <div id="lmsStudentModal" class="hidden" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;">
-    <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;overflow:auto;padding:24px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h2 style="font-size:1.25rem;font-weight:700;margin:0;">Assignments &amp; Quizzes</h2>
-        <button type="button" onclick="closeLmsStudentHub()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+  <!-- LMS Student — green theme FAB bar -->
+  <div class="lms-fab-bar">
+    <button type="button" class="lms-fab" onclick="openLmsTutorPanel('student')">Ask Tutor</button>
+    <button type="button" class="lms-fab" onclick="openLmsPracticePanel()">Practice</button>
+    <button type="button" class="lms-fab" onclick="openLmsDiagnostic()">Diagnostic</button>
+    <button type="button" class="lms-fab lms-fab-secondary" onclick="openLmsJoinClassModal()">Join Class</button>
+    <button type="button" class="lms-fab" onclick="openLmsStudentHub()">My Quizzes</button>
+  </div>
+  <div id="lmsStudentModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsStudentHub()">
+    <div class="lms-modal lms-modal-lg">
+      <div class="lms-modal-header">
+        <h2>Assignments &amp; Quizzes</h2>
+        <button type="button" class="lms-modal-close" onclick="closeLmsStudentHub()">&times;</button>
       </div>
-      <div id="lmsAssignmentList"></div>
-      <div id="lmsQuizTaking" class="hidden" style="margin-top:16px;"></div>
-      <div id="lmsQuizResult" class="hidden" style="margin-top:16px;"></div>
+      <div class="lms-modal-body">
+        <div id="lmsAssignmentList"></div>
+        <div id="lmsQuizTaking" class="hidden" style="margin-top:16px;"></div>
+        <div id="lmsQuizResult" class="hidden" style="margin-top:16px;"></div>
+      </div>
     </div>
   </div>
   <script>
@@ -7790,11 +7870,11 @@
     let _lmsAssignmentId = null;
 
     function openLmsStudentHub() {
-      document.getElementById('lmsStudentModal').classList.remove('hidden');
+      lmsOpenModal('lmsStudentModal');
       loadLmsAssignments();
     }
     function closeLmsStudentHub() {
-      document.getElementById('lmsStudentModal').classList.add('hidden');
+      lmsCloseModal('lmsStudentModal');
     }
     async function loadLmsAssignments() {
       const el = document.getElementById('lmsAssignmentList');
@@ -7882,11 +7962,15 @@
       const resultEl = document.getElementById('lmsQuizResult');
       resultEl.classList.remove('hidden');
       resultEl.innerHTML = '<h3 style="font-weight:700;">Quiz Complete</h3><p>Score: ' + d.score + ' / ' + d.max_score +
-        ' (' + d.score_percent + '%)</p>';
+        ' (' + d.score_percent + '%)</p><p style="font-size:.875rem;color:#64748b;">Your learning path may update based on results.</p>';
       loadLmsAssignments();
+      if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
     }
   </script>
-
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
+  <script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-student.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-deficiency-chat.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}"></script>
 </body>
-
 </html>

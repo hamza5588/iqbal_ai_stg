@@ -1613,6 +1613,23 @@
       z-index: 9999 !important;
     }
 
+    /* LMS hub modals — inline display:flex must not override .hidden */
+    #lmsClassHubModal,
+    #lmsQuizHubModal,
+    #lmsAssignModal,
+    #lmsDiagnosticHubModal {
+      display: none !important;
+    }
+
+    #lmsClassHubModal:not(.hidden),
+    #lmsQuizHubModal:not(.hidden),
+    #lmsAssignModal:not(.hidden),
+    #lmsDiagnosticHubModal:not(.hidden) {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+    }
+
     /* Ensure modal displays even with Tailwind conflicts */
     #viewLessonModal.visible-modal {
       display: flex !important;
@@ -12111,32 +12128,58 @@ Align everything with the lesson objectives and do not invent missing informatio
   </div>
 
   <!-- LMS Classes Hub (Phase 2) -->
-  <button type="button" onclick="openLmsClassHub()"
-    style="position:fixed;bottom:88px;right:24px;z-index:9999;background:#475569;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
-    LMS Classes
-  </button>
-  <div id="lmsClassHubModal" class="hidden" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;">
-    <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;overflow:auto;padding:24px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h2 style="font-size:1.25rem;font-weight:700;margin:0;">Manage Classes</h2>
-        <button type="button" onclick="closeLmsClassHub()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+  <div class="lms-fab-bar">
+    <button type="button" class="lms-fab" onclick="openLmsTutorPanel('teacher')">AI Tutor</button>
+    <button type="button" class="lms-fab" onclick="openLmsTeacherAnalytics()">Analytics</button>
+    <button type="button" class="lms-fab" onclick="openLmsDiagnosticHub()">PDF Diagnostic</button>
+    <button type="button" class="lms-fab" onclick="openLmsQuizHub()">PDF Quiz</button>
+    <button type="button" class="lms-fab lms-fab-secondary" onclick="openLmsAssignModal()">Assign Quiz</button>
+    <button type="button" class="lms-fab" onclick="openLmsClassHub()">Classes</button>
+  </div>
+  <div id="lmsClassHubModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsClassHub()">
+    <div class="lms-modal lms-modal-lg">
+      <div class="lms-modal-header">
+        <h2>Manage Classes</h2>
+        <button type="button" class="lms-modal-close" onclick="closeLmsClassHub()">&times;</button>
       </div>
-      <form id="lmsCreateClassForm" onsubmit="submitLmsCreateClass(event)" style="margin-bottom:20px;padding:16px;background:#f8fafc;border-radius:8px;">
-        <h3 style="font-weight:600;margin:0 0 12px;">Create New Class</h3>
-        <input id="lmsClassName" type="text" required placeholder="Class name" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:8px;">
-        <input id="lmsClassGrade" type="text" placeholder="Grade level (optional)" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:8px;">
-        <button type="submit" style="background:#166534;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;">Create Class</button>
+      <div class="lms-modal-body">
+      <form id="lmsCreateClassForm" onsubmit="submitLmsCreateClass(event)" class="lms-card" style="background:#f0fdf4;border-color:#86efac;margin-bottom:20px;">
+        <h3 style="font-weight:700;margin:0 0 12px;color:#166534;">Create New Class</h3>
+        <div class="lms-field">
+          <label class="lms-label">Class name</label>
+          <input id="lmsClassName" type="text" class="lms-input" required placeholder="Math 8A">
+        </div>
+        <div class="lms-field">
+          <label class="lms-label">Grade level *</label>
+          <input id="lmsClassGrade" type="text" class="lms-input" placeholder="8" required>
+        </div>
+        <button type="submit" class="lms-btn lms-btn-primary">Create Class</button>
       </form>
-      <div id="lmsClassList"><p style="color:#64748b;">Loading classes...</p></div>
+      <div id="lmsClassList"><p class="lms-status">Loading classes...</p></div>
+      </div>
     </div>
   </div>
   <script>
+    function _showLmsModal(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.remove('hidden');
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+    }
+    function _hideLmsModal(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.add('hidden');
+      el.style.display = 'none';
+    }
     function openLmsClassHub() {
-      document.getElementById('lmsClassHubModal').classList.remove('hidden');
+      _showLmsModal('lmsClassHubModal');
       loadLmsTeacherClasses();
     }
     function closeLmsClassHub() {
-      document.getElementById('lmsClassHubModal').classList.add('hidden');
+      _hideLmsModal('lmsClassHubModal');
     }
     async function loadLmsTeacherClasses() {
       const el = document.getElementById('lmsClassList');
@@ -12172,29 +12215,174 @@ Align everything with the lesson objectives and do not invent missing informatio
     async function submitLmsCreateClass(e) {
       e.preventDefault();
       const name = document.getElementById('lmsClassName').value.trim();
-      const grade = document.getElementById('lmsClassGrade').value.trim();
+      const gradeEl = document.getElementById('lmsClassGrade');
+      const grade = gradeEl ? gradeEl.value : '';
       try {
-        const res = await fetch('/api/lms/classes', {
-          method: 'POST', credentials: 'include',
+        await lmsApi('/api/lms/classes', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: name, grade_level: grade || null })
         });
-        const body = await res.json();
-        if (!res.ok) throw new Error((body.error && body.error.message) || 'Create failed');
         document.getElementById('lmsCreateClassForm').reset();
+        lmsShowToast('Class created!');
         loadLmsTeacherClasses();
       } catch (err) {
-        alert(err.message);
+        lmsShowToast(err.message, 'error');
+      }
+    }
+  </script>
+
+  <!-- LMS Assign Quiz (TE-613) -->
+  <div id="lmsAssignModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsAssignModal()">
+    <div style="background:#fff;border-radius:12px;max-width:520px;width:100%;padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-size:1.25rem;font-weight:700;margin:0;">Create Assignment</h2>
+        <button type="button" onclick="closeLmsAssignModal()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+      </div>
+      <form id="lmsAssignForm" onsubmit="submitLmsAssignment(event)">
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Assignment title</label>
+        <input id="lmsAssignTitle" type="text" required placeholder="Week 3 Quiz"
+          style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Class</label>
+        <select id="lmsAssignClass" required style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;"></select>
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Published quiz</label>
+        <select id="lmsAssignQuiz" required style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;"></select>
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Due date (optional)</label>
+        <input id="lmsAssignDue" type="datetime-local"
+          style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
+        <button type="submit" id="lmsAssignSubmitBtn"
+          style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;width:100%;">
+          Create &amp; Publish
+        </button>
+      </form>
+      <div id="lmsAssignStatus" style="margin-top:12px;font-size:.875rem;color:#475569;"></div>
+    </div>
+  </div>
+  <script>
+    function openLmsAssignModal() {
+      _showLmsModal('lmsAssignModal');
+      loadLmsAssignOptions();
+    }
+    function closeLmsAssignModal() {
+      _hideLmsModal('lmsAssignModal');
+    }
+    async function loadLmsAssignOptions() {
+      const classEl = document.getElementById('lmsAssignClass');
+      const quizEl = document.getElementById('lmsAssignQuiz');
+      classEl.innerHTML = '<option value="">Loading...</option>';
+      quizEl.innerHTML = '<option value="">Loading...</option>';
+      try {
+        const [cRes, qRes] = await Promise.all([
+          fetch('/api/lms/classes/mine', { credentials: 'include' }),
+          fetch('/api/lms/quizzes', { credentials: 'include' })
+        ]);
+        const classes = (await cRes.json()).data || [];
+        const quizzes = (await qRes.json()).data || [];
+        classEl.innerHTML = classes.length
+          ? classes.map(function (c) { return '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>'; }).join('')
+          : '<option value="">No classes — create one first</option>';
+        const published = quizzes.filter(function (q) { return q.status === 'published'; });
+        quizEl.innerHTML = published.length
+          ? published.map(function (q) { return '<option value="' + q.id + '">' + escapeHtml(q.title) + '</option>'; }).join('')
+          : '<option value="">No published quizzes — publish one first</option>';
+      } catch (err) {
+        classEl.innerHTML = '<option value="">Error loading</option>';
+        quizEl.innerHTML = '<option value="">Error loading</option>';
+      }
+    }
+    async function submitLmsAssignment(e) {
+      e.preventDefault();
+      const btn = document.getElementById('lmsAssignSubmitBtn');
+      const status = document.getElementById('lmsAssignStatus');
+      const classId = document.getElementById('lmsAssignClass').value;
+      const quizId = document.getElementById('lmsAssignQuiz').value;
+      if (!classId || !quizId) { status.textContent = 'Select class and quiz.'; return; }
+      btn.disabled = true;
+      status.textContent = 'Creating assignment...';
+      try {
+        const dueRaw = document.getElementById('lmsAssignDue').value;
+        const body = {
+          title: document.getElementById('lmsAssignTitle').value.trim(),
+          class_id: parseInt(classId, 10),
+          quiz_id: parseInt(quizId, 10),
+          due_date: dueRaw ? new Date(dueRaw).toISOString() : null
+        };
+        const createRes = await fetch('/api/lms/assignments', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const createBody = await createRes.json();
+        if (!createRes.ok) throw new Error((createBody.error && createBody.error.message) || 'Create failed');
+        const assignmentId = (createBody.data || createBody).id;
+        const pubRes = await fetch('/api/lms/assignments/' + assignmentId + '/publish', {
+          method: 'POST', credentials: 'include'
+        });
+        const pubBody = await pubRes.json();
+        if (!pubRes.ok) throw new Error((pubBody.error && pubBody.error.message) || 'Publish failed');
+        status.textContent = 'Assignment published! Students can see it in My Quizzes.';
+        document.getElementById('lmsAssignForm').reset();
+      } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+      } finally {
+        btn.disabled = false;
       }
     }
   </script>
 
   <!-- LMS Quiz Hub (Phase 3) -->
-  <button type="button" id="lmsQuizHubBtn" onclick="openLmsQuizHub()"
-    style="position:fixed;bottom:24px;right:24px;z-index:9999;background:#166534;color:#fff;border:none;border-radius:9999px;padding:12px 18px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;">
-    LMS Quizzes
-  </button>
-  <div id="lmsQuizHubModal" class="hidden" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;">
+  <div id="lmsDiagnosticHubModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsDiagnosticHub()">
+    <div class="lms-modal lms-modal-lg" onclick="event.stopPropagation()">
+      <div class="lms-modal-header">
+        <h2>PDF Diagnostic Builder</h2>
+        <button type="button" class="lms-modal-close" onclick="closeLmsDiagnosticHub()" aria-label="Close">&times;</button>
+      </div>
+      <div class="lms-modal-body">
+        <div id="lmsDiagStepUpload">
+          <form id="lmsDiagnosticPdfForm" onsubmit="submitLmsDiagnosticPdf(event)">
+            <div class="lms-field">
+              <label class="lms-label" for="lmsDiagTitle">Diagnostic title</label>
+              <input id="lmsDiagTitle" class="lms-input" type="text" required placeholder="e.g. Grade 8 — Unit 1 Diagnostic">
+            </div>
+            <div class="lms-field">
+              <label class="lms-label" for="lmsDiagPdfFile">Diagnostic Q&amp;A PDF</label>
+              <p class="lms-help-text">Questions + answer key only — builds the student diagnostic test.</p>
+              <input id="lmsDiagPdfFile" class="lms-file-input" type="file" accept=".pdf,application/pdf" required>
+            </div>
+            <div class="lms-field">
+              <label class="lms-label" for="lmsDiagTargetPdfFile">Target content PDF</label>
+              <p class="lms-help-text">Full unit notes — powers Learning Chat for weak areas.</p>
+              <input id="lmsDiagTargetPdfFile" class="lms-file-input" type="file" accept=".pdf,application/pdf" required>
+            </div>
+            <div id="lmsDiagProgressWrap" class="lms-progress-wrap">
+              <div class="lms-progress-label">
+                <span id="lmsDiagProgressText">Uploading PDFs...</span>
+                <strong id="lmsDiagProgressPct">0%</strong>
+              </div>
+              <div class="lms-progress"><div id="lmsDiagProgressBar" class="lms-progress-bar"></div></div>
+            </div>
+            <button type="submit" id="lmsDiagUploadBtn" class="lms-btn lms-btn-primary" style="width:100%;margin-top:4px;">
+              Upload Both PDFs &amp; Build Diagnostic
+            </button>
+          </form>
+        </div>
+        <div id="lmsDiagStepTopics" style="display:none;" class="lms-status">
+          Diagnostic questions are extracted from your Q&amp;A PDF. Target PDF is stored for student Learning Chat.
+        </div>
+        <div id="lmsDiagStatus" class="lms-status"></div>
+        <div id="lmsDiagSuccessBanner" class="lms-success-banner">
+          <span class="lms-success-icon">&#10003;</span>
+          <span id="lmsDiagSuccessText">Diagnostic published successfully. Students can now take it.</span>
+        </div>
+        <div id="lmsDiagPreview"></div>
+      </div>
+      <div id="lmsDiagActions" class="lms-modal-footer" style="display:none;">
+        <button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnosticHub()">Close</button>
+        <button type="button" class="lms-btn lms-btn-primary" onclick="publishLmsDiagnostic()">Publish Diagnostic</button>
+      </div>
+    </div>
+  </div>
+  <div id="lmsQuizHubModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsQuizHub()">
     <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;overflow:auto;padding:24px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h2 style="font-size:1.25rem;font-weight:700;margin:0;">PDF → MCQ Quiz Builder</h2>
@@ -12225,12 +12413,317 @@ Align everything with the lesson objectives and do not invent missing informatio
   <script>
     let _lmsCurrentAssessmentId = null;
     let _lmsPollTimer = null;
+    let _lmsDiagAssessmentId = null;
+    let _lmsDiagThreadId = null;
+    let _lmsDiagTopicsPoll = null;
+    let _lmsCurriculumTopics = [];
+
+    const LMS_DIAG_MCQ_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
+
+    function lmsDiagMcqSelectHtml(selected) {
+      return LMS_DIAG_MCQ_OPTIONS.map(function (n) {
+        return '<option value="' + n + '"' + (String(n) === String(selected) ? ' selected' : '') + '>' + n + ' MCQ' + (n > 1 ? 's' : '') + '</option>';
+      }).join('');
+    }
+
+    function lmsDiagCurriculumSelectHtml(selectedId) {
+      if (!_lmsCurriculumTopics.length) {
+        return '<option value="">— Auto-detect —</option>';
+      }
+      var html = '<option value="">— Auto-detect —</option>';
+      _lmsCurriculumTopics.forEach(function (t) {
+        html += '<option value="' + t.id + '"' + (String(t.id) === String(selectedId) ? ' selected' : '') + '>' + escapeHtml(t.name) + '</option>';
+      });
+      return html;
+    }
+
+    async function loadLmsCurriculumTopics() {
+      if (_lmsCurriculumTopics.length) return _lmsCurriculumTopics;
+      try {
+        const res = await fetch('/api/lms/topics?subject=Math', { credentials: 'include' });
+        const body = await res.json();
+        _lmsCurriculumTopics = body.data || body || [];
+      } catch (e) {
+        _lmsCurriculumTopics = [];
+      }
+      return _lmsCurriculumTopics;
+    }
+
+    function lmsDiagSelectAllTopics(checked) {
+      document.querySelectorAll('.lms-diag-topic-cb').forEach(function (cb) {
+        cb.checked = checked;
+        var row = cb.closest('.lms-diag-topic-row');
+        if (row) {
+          row.querySelectorAll('select').forEach(function (sel) { sel.disabled = !checked; });
+        }
+      });
+    }
+
+    function lmsDiagApplyBulkCount(val) {
+      if (!val) return;
+      document.querySelectorAll('.lms-diag-topic-count').forEach(function (sel) {
+        if (!sel.disabled) sel.value = val;
+      });
+    }
+
+    function _setLmsDiagProgress(pct, text) {
+      const wrap = document.getElementById('lmsDiagProgressWrap');
+      const bar = document.getElementById('lmsDiagProgressBar');
+      const pctEl = document.getElementById('lmsDiagProgressPct');
+      const textEl = document.getElementById('lmsDiagProgressText');
+      if (wrap) wrap.classList.add('active');
+      if (bar) bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+      if (textEl && text) textEl.textContent = text;
+    }
+    function _resetLmsDiagProgress() {
+      const wrap = document.getElementById('lmsDiagProgressWrap');
+      const bar = document.getElementById('lmsDiagProgressBar');
+      if (wrap) wrap.classList.remove('active');
+      if (bar) bar.style.width = '0%';
+      const pctEl = document.getElementById('lmsDiagProgressPct');
+      if (pctEl) pctEl.textContent = '0%';
+    }
+    function _resetLmsDiagnosticModal() {
+      _lmsDiagAssessmentId = null;
+      _lmsDiagThreadId = null;
+      const form = document.getElementById('lmsDiagnosticPdfForm');
+      if (form) form.reset();
+      const status = document.getElementById('lmsDiagStatus');
+      if (status) status.textContent = '';
+      const preview = document.getElementById('lmsDiagPreview');
+      if (preview) preview.innerHTML = '';
+      const banner = document.getElementById('lmsDiagSuccessBanner');
+      if (banner) banner.classList.remove('show');
+      const topics = document.getElementById('lmsDiagStepTopics');
+      if (topics) topics.style.display = 'none';
+      const actions = document.getElementById('lmsDiagActions');
+      if (actions) actions.style.display = 'none';
+      _resetLmsDiagProgress();
+      const btn = document.getElementById('lmsDiagUploadBtn');
+      if (btn) { btn.disabled = false; }
+    }
+    function openLmsDiagnosticHub() {
+      _resetLmsDiagnosticModal();
+      _showLmsModal('lmsDiagnosticHubModal');
+    }
+    function closeLmsDiagnosticHub() {
+      _hideLmsModal('lmsDiagnosticHubModal');
+      stopLmsDiagTopicsPoll();
+    }
+    function stopLmsDiagTopicsPoll() {
+      if (_lmsDiagTopicsPoll) { clearInterval(_lmsDiagTopicsPoll); _lmsDiagTopicsPoll = null; }
+    }
+    function submitLmsDiagnosticPdf(e) {
+      e.preventDefault();
+      const title = document.getElementById('lmsDiagTitle').value.trim();
+      const file = document.getElementById('lmsDiagPdfFile').files[0];
+      const targetFile = document.getElementById('lmsDiagTargetPdfFile').files[0];
+      if (!file || !targetFile) { alert('Both Diagnostic Q&A PDF and Target content PDF are required.'); return; }
+      const btn = document.getElementById('lmsDiagUploadBtn');
+      const status = document.getElementById('lmsDiagStatus');
+      const banner = document.getElementById('lmsDiagSuccessBanner');
+      if (banner) banner.classList.remove('show');
+      btn.disabled = true;
+      status.textContent = '';
+      _setLmsDiagProgress(5, 'Preparing upload...');
+      const fd = new FormData();
+      fd.append('title', title);
+      fd.append('diagnostic_file', file);
+      fd.append('target_file', targetFile);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/lms/diagnostics/from-pdf');
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = function (ev) {
+        if (ev.lengthComputable) {
+          const uploadPct = 10 + Math.round((ev.loaded / ev.total) * 55);
+          _setLmsDiagProgress(uploadPct, 'Uploading PDFs...');
+        }
+      };
+      xhr.onload = function () {
+        _setLmsDiagProgress(75, 'Extracting questions...');
+        let body;
+        try { body = JSON.parse(xhr.responseText); } catch (parseErr) {
+          status.textContent = 'Error: Invalid server response';
+          _resetLmsDiagProgress();
+          btn.disabled = false;
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          status.textContent = 'Error: ' + ((body.error && body.error.message) || body.message || 'Upload failed');
+          _resetLmsDiagProgress();
+          btn.disabled = false;
+          return;
+        }
+        _setLmsDiagProgress(100, 'Diagnostic ready!');
+        const d = body.data || body;
+        _lmsDiagAssessmentId = d.assessment_id;
+        _lmsDiagThreadId = d.thread_id;
+        status.textContent = 'Ready — ' + (d.question_count || '?') + ' questions extracted. Target PDF linked for Learning Chat.';
+        document.getElementById('lmsDiagStepTopics').style.display = 'block';
+        document.getElementById('lmsDiagActions').style.display = 'flex';
+        if (_lmsDiagAssessmentId) loadLmsDiagPreview();
+        setTimeout(_resetLmsDiagProgress, 600);
+        btn.disabled = false;
+      };
+      xhr.onerror = function () {
+        status.textContent = 'Error: Network error during upload';
+        _resetLmsDiagProgress();
+        btn.disabled = false;
+      };
+      xhr.send(fd);
+    }
+    function startLmsDiagTopicsPoll() {
+      stopLmsDiagTopicsPoll();
+      if (!_lmsDiagThreadId) return;
+      _lmsDiagTopicsPoll = setInterval(loadLmsDiagTopics, 2500);
+      loadLmsDiagTopics();
+    }
+    async function loadLmsDiagTopics() {
+      if (!_lmsDiagThreadId) return;
+      const status = document.getElementById('lmsDiagStatus');
+      const listEl = document.getElementById('lmsDiagTopicList');
+      try {
+        const res = await fetch('/api/lms/diagnostics/pdf/' + encodeURIComponent(_lmsDiagThreadId) + '/topics', { credentials: 'include' });
+        const body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || 'Failed to load topics');
+        const d = body.data || body;
+        const topics = d.topics || [];
+        if (!topics.length) {
+          status.textContent = d.message || 'Topics still processing — retrying...';
+          return;
+        }
+        stopLmsDiagTopicsPoll();
+        status.textContent = 'Found ' + topics.length + ' topic(s). Select topics, curriculum map, and MCQ counts.';
+        await loadLmsCurriculumTopics();
+        listEl.innerHTML = topics.map(function (t, idx) {
+          const topic = t.topic || t.heading || ('Topic ' + (idx + 1));
+          const page = t.page != null ? t.page : '';
+          const suggested = t.suggested_topic_id || '';
+          return '<div class="lms-diag-topic-row" style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:10px 8px;border-bottom:1px solid #f1f5f9;">' +
+            '<input type="checkbox" class="lms-diag-topic-cb" data-topic="' + escapeHtml(topic) + '" data-page="' + page + '">' +
+            '<div><div style="font-weight:600;font-size:.875rem;">' + escapeHtml(topic) + '</div>' +
+            (page !== '' ? '<div style="color:#64748b;font-size:.75rem;">Page ' + page + '</div>' : '') + '</div>' +
+            '<select class="lms-diag-curriculum-topic" disabled title="Curriculum topic" style="border:1px solid #cbd5e1;border-radius:6px;padding:4px 6px;font-size:.8125rem;min-width:140px;">' +
+            lmsDiagCurriculumSelectHtml(suggested) + '</select>' +
+            '<select class="lms-diag-topic-count" disabled style="border:1px solid #cbd5e1;border-radius:6px;padding:4px 6px;font-size:.8125rem;">' +
+            lmsDiagMcqSelectHtml(2) + '</select></div>';
+        }).join('');
+        listEl.querySelectorAll('.lms-diag-topic-cb').forEach(function (cb) {
+          cb.addEventListener('change', function () {
+            var row = cb.closest('.lms-diag-topic-row');
+            row.querySelectorAll('select').forEach(function (sel) { sel.disabled = !cb.checked; });
+          });
+        });
+      } catch (err) {
+        status.textContent = 'Topic error: ' + err.message;
+      }
+    }
+    async function generateLmsDiagnostic() {
+      if (!_lmsDiagAssessmentId) return;
+      const status = document.getElementById('lmsDiagStatus');
+      const btn = document.getElementById('lmsDiagGenerateBtn');
+      const selections = [];
+      document.querySelectorAll('.lms-diag-topic-cb:checked').forEach(function (cb) {
+        var row = cb.closest('.lms-diag-topic-row');
+        var countEl = row.querySelector('.lms-diag-topic-count');
+        var topicEl = row.querySelector('.lms-diag-curriculum-topic');
+        var payload = {
+          topic: cb.getAttribute('data-topic'),
+          page: cb.getAttribute('data-page') ? parseInt(cb.getAttribute('data-page'), 10) : null,
+          question_count: parseInt(countEl.value, 10) || 2
+        };
+        if (topicEl && topicEl.value) payload.topic_id = parseInt(topicEl.value, 10);
+        selections.push(payload);
+      });
+      if (!selections.length) {
+        status.textContent = 'Select at least one topic.';
+        return;
+      }
+      btn.disabled = true;
+      status.textContent = 'Generating diagnostic questions with AI...';
+      try {
+        const res = await fetch('/api/lms/diagnostics/' + _lmsDiagAssessmentId + '/generate', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topics: selections })
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || 'Generation failed');
+        const d = body.data || body;
+        status.textContent = 'Generated ' + (d.question_count || 0) + ' question(s)' +
+          (d.overall_confidence != null ? ' | Confidence: ' + Math.round(d.overall_confidence * 100) + '%' : '') + '.';
+        await loadLmsDiagPreview();
+        document.getElementById('lmsDiagActions').style.display = 'flex';
+      } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    async function loadLmsDiagPreview() {
+      const previewEl = document.getElementById('lmsDiagPreview');
+      const res = await fetch('/api/lms/diagnostics/' + _lmsDiagAssessmentId + '/preview', { credentials: 'include' });
+      const body = await res.json();
+      const d = body.data || body;
+      if (!d.questions || !d.questions.length) {
+        previewEl.innerHTML = '<p class="lms-status">No questions yet.</p>';
+        return;
+      }
+      previewEl.innerHTML = d.questions.map(function (item, idx) {
+        const q = item.question || {};
+        const opts = (q.options || []).map(function (o, oidx) {
+          var mark = (q.correct_option_index === oidx) ? ' ✓' : '';
+          return '<li>' + o.label + '. ' + escapeHtml(o.text) + mark + '</li>';
+        }).join('');
+        return '<div class="lms-diag-preview-card">' +
+          '<strong>Q' + (idx + 1) + '.</strong> ' + escapeHtml(q.question_text || '') +
+          '<ul>' + opts + '</ul></div>';
+      }).join('');
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        MathJax.typesetPromise([previewEl]).catch(function () {});
+      }
+    }
+    async function publishLmsDiagnostic() {
+      if (!_lmsDiagAssessmentId) return;
+      const statusEl = document.getElementById('lmsDiagStatus');
+      const successBanner = document.getElementById('lmsDiagSuccessBanner');
+      const actionsEl = document.getElementById('lmsDiagActions');
+      const publishBtn = actionsEl ? actionsEl.querySelector('.lms-btn-primary') : null;
+      if (publishBtn) publishBtn.disabled = true;
+      if (successBanner) successBanner.classList.remove('show');
+      statusEl.textContent = 'Publishing diagnostic...';
+      try {
+        const res = await fetch('/api/lms/diagnostics/' + _lmsDiagAssessmentId + '/publish', {
+          method: 'POST', credentials: 'include'
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || 'Publish failed');
+        statusEl.textContent = '';
+        const successText = document.getElementById('lmsDiagSuccessText');
+        if (successText) {
+          successText.textContent = 'Diagnostic published successfully! Students can now take it from their dashboard.';
+        }
+        if (successBanner) successBanner.classList.add('show');
+        if (typeof lmsShowToast === 'function') {
+          lmsShowToast('Diagnostic published successfully!');
+        }
+        setTimeout(function () {
+          closeLmsDiagnosticHub();
+          _resetLmsDiagnosticModal();
+        }, 2200);
+      } catch (err) {
+        statusEl.textContent = 'Publish error: ' + err.message;
+        if (publishBtn) publishBtn.disabled = false;
+      }
+    }
 
     function openLmsQuizHub() {
-      document.getElementById('lmsQuizHubModal').classList.remove('hidden');
+      _showLmsModal('lmsQuizHubModal');
     }
     function closeLmsQuizHub() {
-      document.getElementById('lmsQuizHubModal').classList.add('hidden');
+      _hideLmsModal('lmsQuizHubModal');
       stopLmsPoll();
     }
     function stopLmsPoll() {
@@ -12327,7 +12820,18 @@ Align everything with the lesson objectives and do not invent missing informatio
         statusEl.textContent = 'Publish error: ' + err.message;
       }
     }
+    document.addEventListener('DOMContentLoaded', function () {
+      _hideLmsModal('lmsClassHubModal');
+      _hideLmsModal('lmsQuizHubModal');
+      _hideLmsModal('lmsAssignModal');
+      _hideLmsModal('lmsDiagnosticHubModal');
+    });
   </script>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
+<script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
+<script src="{{ url_for('static', filename='lms/lms-panels.js') }}"></script>
+<script src="{{ url_for('static', filename='lms/lms-teacher-class.js') }}"></script>
 
 </body>
 

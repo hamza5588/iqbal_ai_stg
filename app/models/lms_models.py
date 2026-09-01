@@ -283,6 +283,8 @@ class QuizPdfSource(Base):
     )
     rag_thread_id = Column(String(255), nullable=True, index=True)
     original_filename = Column(String(512), nullable=True)
+    target_rag_thread_id = Column(String(255), nullable=True, index=True)
+    target_original_filename = Column(String(512), nullable=True)
     extraction_status = Column(
         String(32), nullable=False, default="pending", server_default="pending"
     )
@@ -450,6 +452,7 @@ class LearningPathItem(Base):
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")
     status = Column(String(32), nullable=False, default="pending", server_default="pending")
     completed_at = Column(DateTime, nullable=True)
+    label = Column(String(512), nullable=True)
 
     learning_path = relationship("LearningPath", back_populates="items")
 
@@ -461,6 +464,48 @@ class LearningPathItem(Base):
         CheckConstraint(
             "status IN ('pending','in_progress','completed','skipped')",
             name="check_path_item_status",
+        ),
+    )
+
+
+class LearningPathTemplate(Base):
+    """Remediation template for a weak topic (P-401)."""
+
+    __tablename__ = "learning_path_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    topic_id = Column(Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=True, index=True)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="1")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    topic = relationship("Topic")
+    items = relationship(
+        "LearningPathTemplateItem",
+        back_populates="template",
+        cascade="all, delete-orphan",
+        order_by="LearningPathTemplateItem.sort_order",
+    )
+
+
+class LearningPathTemplateItem(Base):
+    __tablename__ = "learning_path_template_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    template_id = Column(
+        Integer, ForeignKey("learning_path_templates.id", ondelete="CASCADE"), nullable=False
+    )
+    item_type = Column(String(32), nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+    label = Column(String(512), nullable=True)
+
+    template = relationship("LearningPathTemplate", back_populates="items")
+
+    __table_args__ = (
+        CheckConstraint(
+            "item_type IN ('lesson','quiz','practice','reassessment')",
+            name="check_template_item_type",
         ),
     )
 
@@ -486,6 +531,86 @@ class AssignmentSubmission(Base):
         CheckConstraint(
             "status IN ('not_started','in_progress','submitted','overdue')",
             name="check_assignment_submission_status",
+        ),
+    )
+
+
+class PracticeSession(Base):
+    """Guided practice session (Phase 5)."""
+
+    __tablename__ = "practice_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    topic_id = Column(Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True)
+    question_id = Column(Integer, ForeignKey("questions.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(32), nullable=False, default="active", server_default="active")
+    hint_level = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )
+
+    attempts = relationship("PracticeAttempt", back_populates="session", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active','completed','abandoned')",
+            name="check_practice_session_status",
+        ),
+    )
+
+
+class PracticeAttempt(Base):
+    __tablename__ = "practice_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(
+        Integer, ForeignKey("practice_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    selected_option_index = Column(Integer, nullable=True)
+    is_correct = Column(Boolean, nullable=True)
+    hint_level_used = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    session = relationship("PracticeSession", back_populates="attempts")
+
+
+class DeficiencyChatSession(Base):
+    """Post-diagnostic chat: one-by-one weak-area questions + PDF-grounded tutor help."""
+
+    __tablename__ = "deficiency_chat_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    diagnostic_assessment_id = Column(
+        Integer, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True
+    )
+    rag_thread_id = Column(String(255), nullable=True)
+    rag_owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    weak_topics_json = Column(Text, nullable=True)
+    questions_json = Column(Text, nullable=False, default="[]")
+    current_index = Column(Integer, nullable=False, default=0, server_default="0")
+    correct_count = Column(Integer, nullable=False, default=0, server_default="0")
+    chat_history_json = Column(Text, nullable=True)
+    status = Column(String(32), nullable=False, default="active", server_default="active")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active','paused','completed')",
+            name="check_deficiency_chat_status",
         ),
     )
 

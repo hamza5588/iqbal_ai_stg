@@ -71,9 +71,12 @@ pdf_ingestion_logs.log
 verify_ingestion_flow.py
 verify_ingestion_pipeline_status.py
 
+# Server runtime copies from 209 (do not commit)
+server_files/
+.env
 docker-compose.yml
-new_ngnix.conf
 nginx.conf
+new_ngnix.conf
 
 # Piper TTS model weights (large binaries — download locally, do not commit)
 piper_models/

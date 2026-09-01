@@ -75,16 +75,17 @@ def get_question(question_id: int) -> Question:
     return q
 
 
-def list_questions_by_topic(topic_id: int, limit: int = 100, offset: int = 0) -> List[Question]:
+def list_questions_by_topic(
+    topic_id: int,
+    limit: int = 100,
+    offset: int = 0,
+    difficulty: Optional[str] = None,
+) -> List[Question]:
     db = get_db()
-    return (
-        db.query(Question)
-        .filter(Question.topic_id == topic_id, Question.is_active.is_(True))
-        .order_by(Question.id.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    q = db.query(Question).filter(Question.topic_id == topic_id, Question.is_active.is_(True))
+    if difficulty:
+        q = q.filter(Question.difficulty == difficulty)
+    return q.order_by(Question.id.desc()).offset(offset).limit(limit).all()
 
 
 def list_questions_by_source(source_type: str, limit: int = 100) -> List[Question]:

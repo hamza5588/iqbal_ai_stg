@@ -12,7 +12,7 @@ from app.services.quiz.models import (
     PairingResult,
     QuestionAnswerPair,
 )
-from app.utils.llm_factory import create_llm
+from app.utils.llm_factory import get_chat_model
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,9 @@ Rules:
 - Handle varied layouts: separate Questions/Answers sections, inline Q&A, numbered lists, etc.
 - Preserve math notation; put LaTeX in the latex fields when appropriate.
 - For each question and answer, capture the number/label as shown (int or str).
+- Extract EVERY numbered answer in the Answers section — do not stop early.
+- When fractions or math are split across lines (e.g. "𝑥 = −" then "1/2"), merge them into one answer text.
+- Include "Solution set: ..." lines as part of the answer text when present.
 - Set format_detected to a short description (e.g. "separate_qa_sections", "inline_numbered").
 - Set confidence 0-1 based on extraction clarity.
 - Add warnings for ambiguous or partial extractions.
@@ -56,6 +59,48 @@ def _normalize_number(value: Union[int, str]) -> str:
     return re.sub(r"[^a-z0-9]", "", str(value).strip().lower())
 
 
+def _prepare_pdf_text_for_extraction(pdf_text: str) -> str:
+    """Clean RAG chunk text before LLM extraction."""
+    text = pdf_text.strip()
+    table_marker = "[Table data, extracted with row/column structure]"
+    if table_marker in text:
+        # Table re-extraction often duplicates and garbles Q&A numbering; prefer plain text.
+        text = text.split(table_marker, 1)[0].strip()
+    return text
+
+
+def _valid_pairs(pairs: List[QuestionAnswerPair]) -> List[QuestionAnswerPair]:
+    return [
+        p
+        for p in pairs
+        if p.is_matched and p.question_text.strip() and p.answer_text.strip()
+    ]
+
+
+def _question_sort_key(pair: QuestionAnswerPair) -> tuple:
+    num = pair.question_number
+    if isinstance(num, int):
+        return (0, num, "")
+    normalized = _normalize_number(num)
+    if normalized.isdigit():
+        return (0, int(normalized), "")
+    return (1, 0, normalized)
+
+
+def _merge_pair_results(primary: PairingResult, secondary: PairingResult) -> PairingResult:
+    """Keep reliable primary pairs; fill gaps from secondary without overwriting."""
+    merged: dict[str, QuestionAnswerPair] = {}
+    for pair in _valid_pairs(primary.pairs):
+        merged[_normalize_number(pair.question_number)] = pair
+    for pair in _valid_pairs(secondary.pairs):
+        key = _normalize_number(pair.question_number)
+        if key not in merged:
+            merged[key] = pair
+    warnings = list(dict.fromkeys(primary.warnings + secondary.warnings))
+    ordered = sorted(merged.values(), key=_question_sort_key)
+    return PairingResult(pairs=ordered, warnings=warnings)
+
+
 def extract_qa_from_text(pdf_text: str) -> PDFExtractionResult:
     """Extract structured Q&A from raw PDF text using LLM structured output."""
     if not pdf_text or not pdf_text.strip():
@@ -64,8 +109,8 @@ def extract_qa_from_text(pdf_text: str) -> PDFExtractionResult:
             warnings=["No text available for extraction"],
         )
 
-    text = pdf_text[:_MAX_TEXT_CHARS]
-    llm = create_llm(temperature=0.1, max_tokens=4096)
+    text = _prepare_pdf_text_for_extraction(pdf_text)[:_MAX_TEXT_CHARS]
+    llm = get_chat_model(temperature=0.1, max_tokens=4096)
     structured = llm.with_structured_output(PDFExtractionResult)
     result: PDFExtractionResult = structured.invoke(_EXTRACTION_PROMPT.format(text=text))
     if not result.warnings:
@@ -126,7 +171,7 @@ def _llm_pair(
     """Use LLM to pair questions and answers when deterministic matching is incomplete."""
     import json
 
-    llm = create_llm(temperature=0.0, max_tokens=4096)
+    llm = get_chat_model(temperature=0.0, max_tokens=4096)
     structured = llm.with_structured_output(PairingResult)
     prompt = _PAIRING_PROMPT.format(
         questions=json.dumps([q.model_dump() for q in questions], ensure_ascii=False),
@@ -141,20 +186,22 @@ def pair_questions_answers(extraction: PDFExtractionResult) -> List[QuestionAnsw
         return []
 
     result = _deterministic_pair(extraction.questions, extraction.answers)
-    matched_q_nums = {_normalize_number(p.question_number) for p in result.pairs if p.is_matched}
+    valid_count = len(_valid_pairs(result.pairs))
 
-    unmatched_questions = [
-        q for q in extraction.questions if _normalize_number(q.number) not in matched_q_nums
-    ]
-    if unmatched_questions and len(result.pairs) < len(extraction.questions):
+    if valid_count < len(extraction.questions):
         try:
             llm_result = _llm_pair(extraction.questions, extraction.answers)
-            if llm_result.pairs:
-                result = llm_result
-                result.warnings = list(set(result.warnings + llm_result.warnings))
+            result = _merge_pair_results(result, llm_result)
         except Exception as exc:
             logger.warning("LLM pairing failed, using deterministic pairs: %s", exc)
             extraction.warnings.append(f"LLM pairing fallback failed: {exc}")
 
     extraction.warnings.extend(result.warnings)
-    return [p for p in result.pairs if p.is_matched and p.question_text and p.answer_text]
+    pairs = _valid_pairs(result.pairs)
+    pairs.sort(key=_question_sort_key)
+    if valid_count < len(extraction.questions) and pairs:
+        missing = len(extraction.questions) - len(pairs)
+        extraction.warnings.append(
+            f"Matched {len(pairs)} of {len(extraction.questions)} questions ({missing} unmatched)"
+        )
+    return pairs

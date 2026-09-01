@@ -7,6 +7,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from scripts.load_env import describe_database_target, load_project_env
+
+load_project_env()
+
 from app import create_app
 from app.services.lms import curriculum_service
 
@@ -20,6 +24,7 @@ MATH_TOPICS = [
 
 
 def main():
+    print(f"Database target: {describe_database_target()}")
     app = create_app()
     with app.app_context():
         created = 0

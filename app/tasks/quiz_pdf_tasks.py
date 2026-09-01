@@ -14,6 +14,20 @@ from app.utils.rag_service import ingest_pdf
 logger = logging.getLogger(__name__)
 
 
+def _celery_async_enabled() -> bool:
+    """True only when USE_CELERY_FOR_INGESTION is set (production/staging)."""
+    try:
+        from flask import has_app_context, current_app
+
+        if has_app_context():
+            return bool(current_app.config.get("USE_CELERY_FOR_INGESTION", False))
+    except Exception:
+        pass
+    from app.config import Config
+
+    return bool(Config.USE_CELERY_FOR_INGESTION)
+
+
 def _new_lms_thread_id(user_id: int) -> str:
     return f"user_{user_id}_lms_{int(datetime.utcnow().timestamp())}_{uuid.uuid4().hex[:8]}"
 
@@ -82,7 +96,11 @@ def enqueue_or_run_pdf_quiz(
 ) -> dict:
     """
     Save file to temp path and enqueue Celery task, or run synchronously if async unavailable.
+    Local dev (USE_CELERY_FOR_INGESTION=false) always runs in-process — no Redis required.
     """
+    if async_mode and not _celery_async_enabled():
+        async_mode = False
+
     thread_id = _new_lms_thread_id(user_id)
     suffix = os.path.splitext(filename)[1] or ".pdf"
     fd, temp_path = tempfile.mkstemp(suffix=suffix)

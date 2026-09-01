@@ -1,0 +1,56 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 933 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 50 720 Tm (Headings) Tj
+1 0 0 1 50 704 Tm () Tj
+1 0 0 1 50 688 Tm (Chapter 1: Topic 1) Tj
+1 0 0 1 50 672 Tm (Chapter 2: Topic 2) Tj
+1 0 0 1 50 656 Tm (Chapter 3: Topic 3) Tj
+1 0 0 1 50 640 Tm (Chapter 4: Topic 4) Tj
+1 0 0 1 50 624 Tm (Chapter 5: Topic 5) Tj
+1 0 0 1 50 608 Tm (Chapter 6: Topic 6) Tj
+1 0 0 1 50 592 Tm (Chapter 7: Topic 7) Tj
+1 0 0 1 50 576 Tm (Chapter 8: Topic 8) Tj
+1 0 0 1 50 560 Tm (Chapter 9: Topic 9) Tj
+1 0 0 1 50 544 Tm (Chapter 10: Topic 10) Tj
+1 0 0 1 50 528 Tm (Chapter 11: Topic 11) Tj
+1 0 0 1 50 512 Tm (Chapter 12: Topic 12) Tj
+1 0 0 1 50 496 Tm (Chapter 13: Topic 13) Tj
+1 0 0 1 50 480 Tm (Chapter 14: Topic 14) Tj
+1 0 0 1 50 464 Tm (Chapter 15: Topic 15) Tj
+1 0 0 1 50 448 Tm (Chapter 16: Topic 16) Tj
+1 0 0 1 50 432 Tm (Chapter 17: Topic 17) Tj
+1 0 0 1 50 416 Tm (Chapter 18: Topic 18) Tj
+1 0 0 1 50 400 Tm (Chapter 19: Topic 19) Tj
+1 0 0 1 50 384 Tm (Chapter 20: Topic 20) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001225 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1295
+%%EOF

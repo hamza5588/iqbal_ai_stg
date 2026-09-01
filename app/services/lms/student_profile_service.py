@@ -63,12 +63,55 @@ def get_onboarding_status(student_id: int) -> dict:
     }
 
 
+def _diagnostic_weak_topics(student_id: int) -> list:
+    from app.services.lms import performance_service
+
+    profile = get_or_create_profile(student_id)
+    if not profile.diagnostic_assessment_id:
+        return []
+    return performance_service.get_diagnostic_weak_topics(
+        student_id, assessment_id=profile.diagnostic_assessment_id
+    )
+
+
 def get_student_dashboard(student_id: int) -> dict:
-    from app.services.lms import learning_path_service, performance_service
+    from app.services.lms import assessment_service, learning_path_service, performance_service, path_generator
+
+    profile = get_or_create_profile(student_id)
+    repaired = False
+    if profile.diagnostic_assessment_id:
+        try:
+            assessment = assessment_service.get_assessment(profile.diagnostic_assessment_id)
+            repaired = performance_service.repair_diagnostic_topic_meta(assessment)
+        except Exception:
+            pass
+
+    # Backfill mastery + learning path when PDF questions lacked topic_id at creation time.
+    if not path_generator.has_mastery_data(student_id) or repaired:
+        performance_service.rebuild_student_mastery(student_id)
+
+    path = learning_path_service.get_path_with_items(student_id)
+    path_stale = bool(
+        path
+        and path.get("items")
+        and (
+            len(path["items"]) > 1
+            or any(it.get("item_type") in ("quiz", "reassessment") for it in path["items"])
+        )
+    )
+    if path_generator.has_mastery_data(student_id):
+        if not path or not path.get("items") or path_stale:
+            learning_path_service.refresh_learning_path(student_id)
 
     onboarding = get_onboarding_status(student_id)
     mastery = performance_service.get_student_mastery(student_id)
-    weak_topics = [m for m in mastery if m.get("mastery_status") == "weak"]
+    weak_topics = _diagnostic_weak_topics(student_id)
+    if not weak_topics:
+        weak_topics = [
+            {**m, "topic_name": m.get("topic_name") or f"Topic #{m['topic_id']}"}
+            for m in mastery
+            if m.get("mastery_status") == "weak"
+        ][:5]
     overall_progress = performance_service.get_overall_progress(student_id)
     learning_path = learning_path_service.get_path_with_items(student_id)
 

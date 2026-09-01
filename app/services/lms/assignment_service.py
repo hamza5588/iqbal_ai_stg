@@ -97,6 +97,37 @@ def list_assignments_for_class(class_id: int) -> List[Assignment]:
     )
 
 
+def list_submissions_for_assignment(assignment_id: int, teacher_id: int) -> List[dict]:
+    db = get_db()
+    assignment = get_assignment(assignment_id)
+    if assignment.teacher_id != teacher_id:
+        raise LMSValidationError("Not authorized")
+    from app.models.lms_models import AssessmentAttempt
+
+    subs = (
+        db.query(AssignmentSubmission)
+        .filter(AssignmentSubmission.assignment_id == assignment_id)
+        .all()
+    )
+    result = []
+    for sub in subs:
+        score_pct = None
+        if sub.attempt_id:
+            att = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == sub.attempt_id).first()
+            if att and att.max_score:
+                score_pct = round(100.0 * (att.score or 0) / att.max_score, 1)
+        result.append(
+            {
+                "student_id": sub.student_id,
+                "status": sub.status,
+                "attempt_id": sub.attempt_id,
+                "score_percent": score_pct,
+                "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+            }
+        )
+    return result
+
+
 def list_assignments_for_student(student_id: int) -> List[dict]:
     db = get_db()
     class_ids = [c.id for c in list_student_classes(student_id)]

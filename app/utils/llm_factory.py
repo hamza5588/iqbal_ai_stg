@@ -29,6 +29,23 @@ except ImportError:
     logger.warning("langchain-groq not available. Groq provider will not work.")
 
 
+def _resolve_stored_api_key(provider: str) -> Optional[str]:
+    """Read and decrypt a provider API key from SystemSettings when env is unset."""
+    try:
+        from app.utils.db import get_db
+        from app.models.database_models import SystemSettings
+
+        db = get_db()
+        setting = db.query(SystemSettings).filter(
+            SystemSettings.key == f"{provider.lower()}_api_key"
+        ).first()
+        if setting and setting.value:
+            return decrypt_api_key(setting.value)
+    except Exception as exc:
+        logger.debug("Could not read stored API key for %s: %s", provider, exc)
+    return None
+
+
 def get_chat_model(user_id: Optional[int] = None, **kwargs):
     """
     Get chat model based on admin settings and user preferences.
@@ -293,11 +310,13 @@ def create_llm(
     # Use provided values or fall back to config defaults
     if provider == 'openai':
         # OpenAI configuration
-        api_key_to_use = api_key or Config.OPENAI_API_KEY
+        api_key_to_use = (
+            api_key or Config.OPENAI_API_KEY or _resolve_stored_api_key("openai")
+        )
         if not api_key_to_use:
             raise ValueError(
-                "OPENAI_API_KEY environment variable is required when LLM_PROVIDER='openai'. "
-                "Please set OPENAI_API_KEY in your environment or .env file."
+                "OPENAI API key is not configured. "
+                "Set OPENAI_API_KEY in .env or configure it in Admin Panel settings."
             )
         
         model = model_name or Config.OPENAI_MODEL
@@ -341,11 +360,13 @@ def create_llm(
                 "Please install it with: pip install langchain-groq"
             )
         
-        api_key_to_use = api_key or os.getenv('GROQ_API_KEY', '')
+        api_key_to_use = (
+            api_key or os.getenv("GROQ_API_KEY", "") or _resolve_stored_api_key("groq")
+        )
         if not api_key_to_use:
             raise ValueError(
-                "GROQ_API_KEY is required when LLM_PROVIDER='groq'. "
-                "Please set GROQ_API_KEY in your environment or provide it via api_key parameter."
+                "GROQ API key is not configured. "
+                "Set GROQ_API_KEY in .env or configure it in Admin Panel settings."
             )
         
         model = model_name or os.getenv('GROQ_MODEL', 'openai/gpt-oss-120b')

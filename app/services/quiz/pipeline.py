@@ -8,6 +8,11 @@ from typing import Optional
 from app.models.lms_models import AssessmentQuestion, QuizPdfSource
 from app.services.lms import assessment_service, question_bank_service
 from app.services.quiz.mcq_converter import convert_pairs_batch, mcq_to_question_fields
+from app.services.quiz.section_topics import (
+    parse_section_topics,
+    question_number_from_label,
+    topic_for_question_number,
+)
 from app.services.quiz.models import PDFExtractionResult
 from app.services.quiz.pdf_extractor import extract_qa_from_text, pair_questions_answers
 from app.services.quiz.thread_text import get_thread_full_text
@@ -61,9 +66,19 @@ def run_pdf_quiz_pipeline(
         extraction: PDFExtractionResult = extract_qa_from_text(text)
         pairs = pair_questions_answers(extraction)
         if not pairs:
-            raise ValueError("No question-answer pairs could be matched")
+            detail = (
+                f"Extracted {len(extraction.questions)} questions and "
+                f"{len(extraction.answers)} answers but could not match any pairs."
+            )
+            if extraction.warnings:
+                detail += " Warnings: " + "; ".join(extraction.warnings[:5])
+            raise ValueError(detail)
 
         batch = convert_pairs_batch(pairs, quiz_title=extraction.title or assessment.title)
+
+        sections = parse_section_topics(text)
+        question_pdf_topics: dict[str, str] = {}
+        question_concepts: dict[str, str] = {}
 
         db = get_db()
         # Clear existing assessment questions on re-process
@@ -87,6 +102,13 @@ def run_pdf_quiz_pipeline(
             )
             created_ids.append(q.id)
             confidences.append(fields.get("extraction_confidence") or 0.85)
+            qnum = question_number_from_label(
+                pairs[idx].question_number if idx < len(pairs) else idx + 1
+            )
+            section_topic = topic_for_question_number(qnum, sections) if sections else None
+            if section_topic:
+                question_pdf_topics[str(q.id)] = section_topic
+                question_concepts[str(q.id)] = section_topic
 
         assessment_service.add_questions(assessment_id, created_ids)
 
@@ -119,6 +141,18 @@ def run_pdf_quiz_pipeline(
         assessment.creation_mode = "pdf_qa_auto"
         if extraction.title and assessment.title.startswith("Untitled"):
             assessment.title = extraction.title
+        if question_pdf_topics:
+            meta = {}
+            if assessment.description:
+                try:
+                    meta = json.loads(assessment.description)
+                except (json.JSONDecodeError, TypeError):
+                    meta = {}
+                if not isinstance(meta, dict):
+                    meta = {}
+            meta["question_pdf_topics"] = question_pdf_topics
+            meta["question_concepts"] = question_concepts
+            assessment.description = json.dumps(meta, ensure_ascii=False)
         db.commit()
 
         return {

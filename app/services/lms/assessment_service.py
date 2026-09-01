@@ -109,6 +109,32 @@ def link_pdf_source(
     return source
 
 
+def link_target_pdf(
+    assessment_id: int,
+    target_rag_thread_id: str,
+    target_original_filename: Optional[str] = None,
+) -> QuizPdfSource:
+    db = get_db()
+    get_assessment(assessment_id)
+    source = (
+        db.query(QuizPdfSource).filter(QuizPdfSource.assessment_id == assessment_id).first()
+    )
+    if not source:
+        source = QuizPdfSource(assessment_id=assessment_id)
+        db.add(source)
+    source.target_rag_thread_id = target_rag_thread_id
+    source.target_original_filename = target_original_filename
+    db.commit()
+    db.refresh(source)
+    return source
+
+
+def has_target_pdf(assessment_id: int) -> bool:
+    assessment = get_assessment(assessment_id)
+    src = assessment.pdf_source
+    return bool(src and src.target_rag_thread_id)
+
+
 def save_pdf_extraction(
     quiz_pdf_source_id: int,
     raw_json: str,
@@ -142,6 +168,8 @@ def can_publish(assessment_id: int) -> tuple[bool, Optional[str]]:
     assessment = get_assessment(assessment_id)
     if not assessment.questions:
         return False, "Assessment has no questions"
+    if assessment.assessment_type == "diagnostic" and not has_target_pdf(assessment_id):
+        return False, "Upload the target content PDF before publishing (used for Learning Chat)"
     if assessment.creation_mode == "pdf_qa_auto" and assessment.overall_confidence is not None:
         if assessment.overall_confidence < CONFIDENCE_PUBLISH_MIN:
             return False, "Confidence too low — manual review required before publish"

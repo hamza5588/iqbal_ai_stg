@@ -256,7 +256,7 @@ def init_db(app):
     from app.load_testing.models import (
         TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog
     )
-    import app.models.lms_models  # noqa: F401 — register LMS tables on Base.metadata
+    from app.models import lms_models  # noqa: F401 — register LMS tables on Base.metadata
     from sqlalchemy import inspect
     import time
     
@@ -356,6 +356,37 @@ def init_db(app):
                             logger.info(f"Updated {len(existing_users)} users with default subscription tier")
             except Exception as e:
                 logger.warning(f"Subscription migration warning: {str(e)}")
+                db.rollback()
+
+            # Migration: learning_path_items.label (P-401)
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "learning_path_items" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("learning_path_items")]
+                    if "label" not in columns:
+                        logger.info("Adding label column to learning_path_items...")
+                        db.execute(text("ALTER TABLE learning_path_items ADD COLUMN label VARCHAR(512)"))
+                        db.commit()
+                        logger.info("learning_path_items.label column added")
+            except Exception as e:
+                logger.warning("learning_path_items migration warning: %s", e)
+                db.rollback()
+
+            # Migration: quiz_pdf_sources target PDF columns (diagnostic learning content)
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "quiz_pdf_sources" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("quiz_pdf_sources")]
+                    if "target_rag_thread_id" not in columns:
+                        logger.info("Adding target PDF columns to quiz_pdf_sources...")
+                        db.execute(text("ALTER TABLE quiz_pdf_sources ADD COLUMN target_rag_thread_id VARCHAR(255)"))
+                        db.execute(text("ALTER TABLE quiz_pdf_sources ADD COLUMN target_original_filename VARCHAR(512)"))
+                        db.commit()
+                        logger.info("quiz_pdf_sources target PDF columns added")
+            except Exception as e:
+                logger.warning("quiz_pdf_sources target PDF migration warning: %s", e)
                 db.rollback()
             
             # Migration: Add ingest failure-tracking columns to rag_threads
