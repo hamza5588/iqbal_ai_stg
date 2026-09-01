@@ -31,6 +31,34 @@ def _new_lms_thread_id(user_id: int) -> str:
     return f"user_{user_id}_lms_{int(datetime.utcnow().timestamp())}_{uuid.uuid4().hex[:8]}"
 
 
+def _shared_upload_dir() -> str:
+    """Directory visible to both web and Celery containers (docker volume ./tmp:/app/tmp)."""
+    candidates = [
+        os.environ.get("PDF_QUIZ_TMP_DIR"),
+        "/app/tmp/pdf_quiz_uploads",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "tmp", "pdf_quiz_uploads")),
+    ]
+    for path in candidates:
+        if not path:
+            continue
+        try:
+            os.makedirs(path, exist_ok=True)
+            return path
+        except OSError:
+            continue
+    fallback = tempfile.gettempdir()
+    os.makedirs(fallback, exist_ok=True)
+    return fallback
+
+
+def _write_shared_temp_file(file_bytes: bytes, filename: str) -> str:
+    suffix = os.path.splitext(filename)[1] or ".pdf"
+    fd, temp_path = tempfile.mkstemp(suffix=suffix, dir=_shared_upload_dir())
+    os.close(fd)
+    with open(temp_path, "wb") as f:
+        f.write(file_bytes)
+    return temp_path
+
 @celery.task(bind=True, name="app.tasks.quiz_pdf_tasks.process_pdf_quiz_task", queue="default")
 def process_pdf_quiz_task(
     self,
@@ -57,43 +85,47 @@ def process_pdf_quiz_task(
     try:
         with open(file_path, "rb") as f:
             file_bytes = f.read()
+
+        def progress_callback(step: str, progress: int, message: str):
+            try:
+                self.update_state(
+                    state="PROCESSING",
+                    meta={"step": step, "progress": progress, "message": message},
+                )
+            except Exception as exc:
+                logger.warning("Failed to update quiz task progress: %s", exc)
+
+        from app.utils.rag_service import ingest_pdf
+
+        ingest_pdf(
+            file_bytes=file_bytes,
+            thread_id=thread_id,
+            filename=filename,
+            progress_callback=progress_callback,
+            user_id=user_id,
+        )
+
+        self.update_state(
+            state="PROCESSING",
+            meta={"step": "convert", "progress": 60, "message": "Converting to MCQs..."},
+        )
+
+        result = run_pdf_quiz_pipeline(
+            assessment_id=assessment_id,
+            rag_thread_id=thread_id,
+            user_id=user_id,
+            topic_id=topic_id,
+        )
+        return {"success": True, **result}
+    except Exception as exc:
+        logger.exception("PDF quiz Celery task failed for assessment %s", assessment_id)
+        _set_pdf_source_status(source.id, "failed", error_message=str(exc))
+        raise
     finally:
         try:
             os.unlink(file_path)
         except OSError:
             pass
-
-    def progress_callback(step: str, progress: int, message: str):
-        try:
-            self.update_state(
-                state="PROCESSING",
-                meta={"step": step, "progress": progress, "message": message},
-            )
-        except Exception as exc:
-            logger.warning("Failed to update quiz task progress: %s", exc)
-
-    from app.utils.rag_service import ingest_pdf
-
-    ingest_pdf(
-        file_bytes=file_bytes,
-        thread_id=thread_id,
-        filename=filename,
-        progress_callback=progress_callback,
-        user_id=user_id,
-    )
-
-    self.update_state(
-        state="PROCESSING",
-        meta={"step": "convert", "progress": 60, "message": "Converting to MCQs..."},
-    )
-
-    result = run_pdf_quiz_pipeline(
-        assessment_id=assessment_id,
-        rag_thread_id=thread_id,
-        user_id=user_id,
-        topic_id=topic_id,
-    )
-    return {"success": True, **result}
 
 
 def enqueue_or_run_pdf_quiz(
@@ -113,11 +145,7 @@ def enqueue_or_run_pdf_quiz(
         async_mode = False
 
     thread_id = _new_lms_thread_id(user_id)
-    suffix = os.path.splitext(filename)[1] or ".pdf"
-    fd, temp_path = tempfile.mkstemp(suffix=suffix)
-    os.close(fd)
-    with open(temp_path, "wb") as f:
-        f.write(file_bytes)
+    temp_path = _write_shared_temp_file(file_bytes, filename)
 
     # Create pdf_source immediately so status polling shows pending/processing (not "none")
     from app.services.lms import assessment_service
