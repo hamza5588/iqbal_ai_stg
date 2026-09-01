@@ -48,7 +48,8 @@ def get_onboarding_status(student_id: int) -> dict:
     assignments = assignment_service.list_assignments_for_student(student_id)
     pending = [a for a in assignments if a.get("status") in ("not_started", "in_progress")]
 
-    needs_onboarding = not profile.diagnostic_completed and len(classes) == 0
+    needs_onboarding = not profile.diagnostic_completed
+    needs_diagnostic = not profile.diagnostic_completed
     return {
         "diagnostic_completed": profile.diagnostic_completed,
         "diagnostic_assessment_id": profile.diagnostic_assessment_id,
@@ -59,6 +60,7 @@ def get_onboarding_status(student_id: int) -> dict:
         "enrolled_class_count": len(classes),
         "pending_assignment_count": len(pending),
         "needs_onboarding": needs_onboarding,
+        "needs_diagnostic": needs_diagnostic,
         "pending_assignments": pending[:10],
     }
 

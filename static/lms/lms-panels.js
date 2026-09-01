@@ -91,7 +91,17 @@
     }
   }
 
+  function lmsBlockUntilDiagnostic() {
+    if (typeof window.lmsStudentNeedsDiagnostic === 'function' && window.lmsStudentNeedsDiagnostic()) {
+      if (typeof lmsShowToast === 'function') lmsShowToast('Complete your diagnostic assessment first.', 'error');
+      if (typeof openLmsDiagnostic === 'function') openLmsDiagnostic();
+      return true;
+    }
+    return false;
+  }
+
   window.openLmsTutorPanel = function (role) {
+    if (lmsBlockUntilDiagnostic()) return;
     tutorRole = role || 'student';
     document.getElementById('lmsTutorModalTitle').textContent = role === 'teacher' ? 'Teaching Assistant' : 'AI Tutor';
     tutorHistory = [];
@@ -300,6 +310,7 @@
   var practiceSession = null;
 
   window.openLmsPracticePanel = async function (topicId) {
+    if (lmsBlockUntilDiagnostic()) return;
     lmsOpenModal('lmsPracticeModal');
     var body = document.getElementById('lmsPracticeModalBody');
     body.innerHTML = '<div class="lms-spinner"></div>';

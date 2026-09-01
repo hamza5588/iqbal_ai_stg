@@ -35,15 +35,36 @@
 
   function ensureDiagnosticModal() {
     if (document.getElementById('lmsDiagnosticModal')) return;
-    var html = '<div id="lmsDiagnosticModal" class="lms-modal-backdrop" onclick="if(event.target===this)closeLmsDiagnostic()">' +
+    var html = '<div id="lmsDiagnosticModal" class="lms-modal-backdrop">' +
       '<div class="lms-modal lms-modal-lg">' +
       '<div class="lms-modal-header"><h2>Diagnostic Assessment</h2>' +
       '<div id="lmsDiagTimer" class="lms-diag-timer" style="display:none;margin-left:auto;margin-right:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--primary-color);"></div>' +
-      '<button type="button" class="lms-modal-close" onclick="closeLmsDiagnostic()">&times;</button></div>' +
+      '<button type="button" class="lms-modal-close" id="lmsDiagCloseBtn" onclick="closeLmsDiagnostic()">&times;</button></div>' +
       '<div class="lms-modal-body" id="lmsDiagBody"><div class="lms-spinner"></div></div>' +
       '</div></div>';
     document.body.insertAdjacentHTML('beforeend', html);
   }
+
+  window.setLmsDiagnosticGate = function (locked) {
+    window._lmsDiagnosticMandatory = !!locked;
+    if (locked) window._lmsDiagnosticAllowClose = false;
+    ensureDiagnosticModal();
+    var modal = document.getElementById('lmsDiagnosticModal');
+    var closeBtn = document.getElementById('lmsDiagCloseBtn');
+    var fab = document.querySelector('.lms-fab-bar');
+    if (modal) {
+      modal.onclick = locked
+        ? null
+        : function (e) { if (e.target === modal) closeLmsDiagnostic(); };
+    }
+    if (closeBtn) closeBtn.style.display = locked ? 'none' : '';
+    if (fab) fab.style.display = locked ? 'none' : '';
+    document.body.classList.toggle('lms-diagnostic-gate-active', locked);
+  };
+
+  window.lmsStudentNeedsDiagnostic = function () {
+    return !!window._lmsNeedsDiagnostic;
+  };
 
   function clearDiagTimer() {
     if (diagState.timerInterval) {
@@ -89,6 +110,7 @@
 
   window.openLmsDiagnostic = async function () {
     ensureDiagnosticModal();
+    if (window._lmsNeedsDiagnostic) setLmsDiagnosticGate(true);
     lmsOpenModal('lmsDiagnosticModal');
     var body = document.getElementById('lmsDiagBody');
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Loading diagnostic...</p>';
@@ -108,6 +130,12 @@
   };
 
   window.closeLmsDiagnostic = async function () {
+    if (window._lmsDiagnosticMandatory && !window._lmsDiagnosticAllowClose) {
+      if (typeof lmsShowToast === 'function') {
+        lmsShowToast('Please complete and submit the diagnostic assessment first.', 'error');
+      }
+      return;
+    }
     if (diagState.attemptId && diagState.questions.length) {
       try { await persistDiagAnswers(); } catch (e) { /* ignore */ }
     }
@@ -265,10 +293,10 @@
       }
       var result = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/submit', { method: 'POST' });
       renderDiagnosticResults(result);
+      window._lmsNeedsDiagnostic = false;
+      window._lmsDiagnosticAllowClose = true;
+      if (typeof setLmsDiagnosticGate === 'function') setLmsDiagnosticGate(false);
       if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
-      if (typeof initLmsOnboardingGate === 'function') {
-        document.getElementById('lmsOnboardingModal') && lmsCloseModal('lmsOnboardingModal');
-      }
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }

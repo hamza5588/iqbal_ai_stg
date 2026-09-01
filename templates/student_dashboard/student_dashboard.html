@@ -7712,22 +7712,24 @@
       </div>
     </div>
   </div>
-  <div id="lmsOnboardingModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsOnboardingModal()">
+  <div id="lmsOnboardingModal" class="lms-modal-backdrop hidden">
     <div class="lms-modal lms-modal-sm">
       <div class="lms-modal-header"><h2>Welcome to IqbalAI LMS</h2></div>
       <div class="lms-modal-body">
-      <p class="lms-status" style="margin-bottom:16px;">Join your class with a code from your teacher, or complete a diagnostic assessment to personalize your learning path.</p>
+      <p class="lms-status" style="margin-bottom:16px;">Before you continue, complete the diagnostic assessment so we can personalize your learning path.</p>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsOnboardingModal(); openLmsDiagnostic();">Take Diagnostic Assessment</button>
-        <button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsOnboardingModal(); openLmsJoinClassModal();">Join Class</button>
-        <button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsOnboardingModal(); openLmsStudentHub();">View Assignments / Quizzes</button>
-        <button type="button" class="lms-btn lms-btn-ghost" onclick="closeLmsOnboardingModal();">Skip for now</button>
+        <button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsOnboardingModal(); openLmsDiagnostic();">Start Diagnostic Assessment</button>
       </div>
       </div>
     </div>
   </div>
   <script>
     function openLmsJoinClassModal() {
+      if (window.lmsStudentNeedsDiagnostic && window.lmsStudentNeedsDiagnostic()) {
+        if (typeof lmsShowToast === 'function') lmsShowToast('Complete your diagnostic assessment first.', 'error');
+        openLmsDiagnostic();
+        return;
+      }
       lmsOpenModal('lmsJoinClassModal');
       document.getElementById('lmsJoinClassError').textContent = '';
       lmsApi('/api/lms/users/me/grade-profile').then(function (p) {
@@ -7766,8 +7768,10 @@
         const res = await fetch('/api/lms/students/me/onboarding-status', { credentials: 'include' });
         const body = await res.json();
         const d = body.data || body;
-        if (d.needs_onboarding) {
-          lmsOpenModal('lmsOnboardingModal');
+        window._lmsNeedsDiagnostic = !d.diagnostic_completed;
+        if (!d.diagnostic_completed) {
+          if (typeof setLmsDiagnosticGate === 'function') setLmsDiagnosticGate(true);
+          openLmsDiagnostic();
         }
       } catch (e) { /* best effort */ }
     }
@@ -7786,19 +7790,20 @@
         }).join('') || '<li>No pending quizzes</li>';
         const progress = d.overall_progress != null ? Math.round(d.overall_progress) + '%' : '0%';
         const pathHtml = renderLmsLearningPath(d.learning_path);
-        const banner = (d.onboarding && d.onboarding.needs_onboarding)
-          ? '<div class="lms-onboarding-banner"><span>Complete onboarding: take your diagnostic or join a class.</span>' +
-            '<button class="lms-btn lms-btn-primary" onclick="openLmsDiagnostic()">Take Diagnostic</button>' +
-            '<button class="lms-btn lms-btn-secondary" onclick="openLmsJoinClassModal()">Join Class</button></div>'
+        const diagDone = d.onboarding && d.onboarding.diagnostic_completed;
+        const banner = !diagDone
+          ? '<div class="lms-onboarding-banner"><span>Complete your diagnostic assessment to unlock the full dashboard.</span>' +
+            '<button class="lms-btn lms-btn-primary" onclick="openLmsDiagnostic()">Take Diagnostic</button></div>'
+          : '';
+        const overviewActions = diagDone
+          ? `<button class="lms-btn lms-btn-secondary" onclick="openLmsJoinClassModal()">Join Class</button>
+                <button class="lms-btn lms-btn-primary" onclick="openLmsStudentHub()">My Quizzes</button>`
           : '';
         el.innerHTML = banner + `
           <div class="lms-overview">
             <div class="lms-overview-head">
               <h2>LMS Overview</h2>
-              <div class="lms-overview-actions">
-                <button class="lms-btn lms-btn-secondary" onclick="openLmsJoinClassModal()">Join Class</button>
-                <button class="lms-btn lms-btn-primary" onclick="openLmsStudentHub()">My Quizzes</button>
-              </div>
+              <div class="lms-overview-actions">${overviewActions}</div>
             </div>
             <div class="lms-cards">
               <div class="lms-card"><div class="lms-card-label">Overall Progress</div><div class="lms-card-value">${progress}</div></div>
@@ -7860,8 +7865,6 @@
     <button type="button" class="lms-fab" onclick="openLmsTutorPanel('student')">Ask Tutor</button>
     <button type="button" class="lms-fab" onclick="openLmsPracticePanel()">Practice</button>
     <button type="button" class="lms-fab" onclick="openLmsDiagnostic()">Diagnostic</button>
-    <button type="button" class="lms-fab lms-fab-secondary" onclick="openLmsJoinClassModal()">Join Class</button>
-    <button type="button" class="lms-fab" onclick="openLmsStudentHub()">My Quizzes</button>
   </div>
   <div id="lmsStudentModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsStudentHub()">
     <div class="lms-modal lms-modal-lg">
@@ -7911,6 +7914,11 @@
     let _lmsAssignmentId = null;
 
     function openLmsStudentHub() {
+      if (window.lmsStudentNeedsDiagnostic && window.lmsStudentNeedsDiagnostic()) {
+        if (typeof lmsShowToast === 'function') lmsShowToast('Complete your diagnostic assessment first.', 'error');
+        openLmsDiagnostic();
+        return;
+      }
       lmsOpenModal('lmsStudentModal');
       loadLmsAssignments();
     }
