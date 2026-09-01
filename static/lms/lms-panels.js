@@ -18,9 +18,12 @@
   function renderTutorChat() {
     var body = document.getElementById('lmsTutorModalBody');
     var msgs = tutorHistory.map(function (m) {
+      var bubble = m.role === 'user'
+        ? escapeHtml(m.text)
+        : lmsFormatRichText(m.text || '');
       return '<div class="lms-chat-msg ' + m.role + '">' +
         '<div class="lms-chat-avatar">' + (m.role === 'user' ? 'You' : 'AI') + '</div>' +
-        '<div class="lms-chat-bubble">' + escapeHtml(m.text) + '</div></div>';
+        '<div class="lms-chat-bubble">' + bubble + '</div></div>';
     }).join('');
     body.innerHTML =
       '<div class="lms-chat-messages" id="lmsTutorMessages">' + (msgs || '<p class="lms-status">Ask a question — I\'ll guide you step-by-step without just giving the answer.</p>') + '</div>' +
@@ -34,6 +37,7 @@
     }
     var box = document.getElementById('lmsTutorMessages');
     if (box) box.scrollTop = box.scrollHeight;
+    lmsTypesetMath(document.getElementById('lmsTutorModalBody'));
   }
 
   window.openLmsTutorPanel = function (role) {
@@ -261,15 +265,15 @@
     }
     var opts = (q.options || []).map(function (o, i) {
       return '<button type="button" class="lms-quiz-option" onclick="submitLmsPracticeAnswer(' + i + ')">' +
-        escapeHtml(o.text || o.label || String(i)) + '</button>';
+        lmsFormatRichText(lmsOptionText(o) || o.label || String(i), { inline: true }) + '</button>';
     }).join('');
     body.innerHTML =
       '<p class="lms-badge lms-badge-green">' + escapeHtml(q.difficulty || 'medium') + '</p>' +
-      '<h3 style="font-size:1rem;margin:12px 0;">' + escapeHtml(q.question_text || '') + '</h3>' +
+      '<h3 style="font-size:1rem;margin:12px 0;">' + lmsFormatRichText(lmsQuestionText(q)) + '</h3>' +
       opts +
       '<div id="lmsPracticeFeedback" style="margin-top:12px;"></div>' +
       '<button type="button" class="lms-btn lms-btn-ghost" style="margin-top:10px;" onclick="requestLmsPracticeHint()">Need a hint?</button>';
-    if (window.MathJax && window.MathJax.typesetPromise) MathJax.typesetPromise([body]).catch(function () {});
+    lmsTypesetMath(body);
   }
 
   window.submitLmsPracticeAnswer = async function (optIdx) {
@@ -282,9 +286,11 @@
         body: JSON.stringify({ selected_option_index: optIdx })
       });
       if (fb) {
-        fb.innerHTML = result.correct
-          ? '<div class="lms-card" style="background:#f0fdf4;border-color:#86efac"><strong>Correct!</strong> ' + escapeHtml(result.feedback || '') + '</div>'
-          : '<div class="lms-card" style="background:#fef2f2;border-color:#fecaca"><strong>Try again.</strong> ' + escapeHtml(result.feedback || result.hint || '') + '</div>';
+        var msg = result.correct
+          ? '<div class="lms-card" style="background:#f0fdf4;border-color:#86efac"><strong>Correct!</strong> ' + lmsFormatRichText(result.feedback || '') + '</div>'
+          : '<div class="lms-card" style="background:#fef2f2;border-color:#fecaca"><strong>Try again.</strong> ' + lmsFormatRichText(result.feedback || result.hint || '') + '</div>';
+        fb.innerHTML = msg;
+        lmsTypesetMath(fb);
       }
       if (result.correct && result.next_question) {
         setTimeout(renderPracticeQuestion, 1200);
@@ -300,7 +306,10 @@
     var fb = document.getElementById('lmsPracticeFeedback');
     try {
       var hint = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id + '/hint', { method: 'POST' });
-      if (fb) fb.innerHTML = '<div class="lms-card" style="background:#fef9c3;border-color:#fcd34d"><strong>Hint:</strong> ' + escapeHtml(hint.hint || hint.message || '') + '</div>';
+      if (fb) {
+        fb.innerHTML = '<div class="lms-card" style="background:#fef9c3;border-color:#fcd34d"><strong>Hint:</strong> ' + lmsFormatRichText(hint.hint || hint.message || '') + '</div>';
+        lmsTypesetMath(fb);
+      }
     } catch (err) {
       if (fb) fb.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }

@@ -7943,14 +7943,12 @@
       const q = _lmsQuizQuestions[_lmsCurrentQ];
       const opts = (q.options || []).map(function (o, idx) {
         return '<label style="display:block;margin:8px 0;cursor:pointer;"><input type="radio" name="lmsOpt" value="' + idx + '"> ' +
-          o.label + '. ' + escapeHtml(o.text) + '</label>';
+          o.label + '. ' + lmsFormatRichText(lmsOptionText(o), { inline: true }) + '</label>';
       }).join('');
       el.innerHTML = '<p><strong>Question ' + (_lmsCurrentQ + 1) + ' of ' + _lmsQuizQuestions.length + '</strong></p>' +
-        '<p>' + escapeHtml(q.question_text) + '</p>' + opts +
+        lmsFormatRichText(lmsQuestionText(q)) + opts +
         '<button type="button" onclick="saveLmsAnswer()" style="margin-top:12px;background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;">Next</button>';
-      if (window.MathJax && window.MathJax.typesetPromise) {
-        MathJax.typesetPromise([el]).catch(function () {});
-      }
+      lmsTypesetMath(el);
     }
     async function saveLmsAnswer() {
       const selected = document.querySelector('input[name="lmsOpt"]:checked');

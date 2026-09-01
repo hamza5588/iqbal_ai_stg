@@ -44,7 +44,8 @@
         : '';
       return '<div class="lms-chat-msg ' + role + '">' +
         '<div class="lms-chat-avatar">' + (role === 'user' ? 'You' : 'AI') + '</div>' +
-        '<div class="lms-chat-bubble">' + levelTag + escapeHtml(m.text) + '</div></div>';
+        '<div class="lms-chat-bubble">' + levelTag +
+        (role === 'user' ? escapeHtml(m.text) : lmsFormatRichText(m.text || '')) + '</div></div>';
     }).join('');
     if (defState.tutorLoading) {
       html += renderTypingIndicator();
@@ -88,7 +89,8 @@
     var opts = (q.options || []).map(function (o, oi) {
       var sel = defState.selectedOption === oi ? ' selected' : '';
       return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDeficiencyOption(' + oi + ')">' +
-        '<strong>' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</strong> ' + escapeHtml(o.text || '') + '</button>';
+        '<strong>' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</strong> ' +
+        lmsFormatRichText(lmsOptionText(o), { inline: true }) + '</button>';
     }).join('');
 
     var tutorLevelHint = data.tutor_assist_label
@@ -116,7 +118,7 @@
       '<p class="lms-status">Question ' + (data.current_index + 1) + ' of ' + data.total_questions +
       (q.topic_name ? ' · <strong>' + escapeHtml(q.topic_name) + '</strong>' : '') + '</p>' +
       (data.has_pdf ? '<p class="lms-status" style="font-size:.75rem;">Questions from teacher target PDF · weak area: ' + escapeHtml((q && q.topic_name) || '') + '</p>' : '<p class="lms-status" style="font-size:.75rem;color:#991b1b;">Teacher has not uploaded target content PDF yet.</p>') +
-      '<h3 style="font-size:1rem;font-weight:700;margin:12px 0;">' + escapeHtml(q.question_text || '') + '</h3>' +
+      '<h3 style="font-size:1rem;font-weight:700;margin:12px 0;">' + lmsFormatRichText(lmsQuestionText(q)) + '</h3>' +
       opts +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;display:flex;flex-wrap:wrap;gap:8px;">' +
       '<button type="button" class="lms-btn lms-btn-primary" onclick="submitDeficiencyAnswer()"' +
@@ -130,7 +132,7 @@
       scrollDeficiencyChatToBottom();
     }
 
-    if (window.MathJax && window.MathJax.typesetPromise) MathJax.typesetPromise([body]).catch(function () {});
+    lmsTypesetMath(body);
   }
 
   window.openDeficiencyChat = async function () {

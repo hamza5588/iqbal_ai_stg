@@ -297,6 +297,15 @@
   display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;
 }
 .lms-chat-msg.user .lms-chat-avatar { background: var(--lms-green); color: #fff; }
+.lms-math-content mjx-container[jax="CHTML"] { display: inline-block; margin: 0 0.1em; }
+.lms-math-content mjx-container[display="true"],
+.lms-math-content .katex-display { margin: 0.5em 0; overflow-x: auto; }
+.lms-math-inline,
+.lms-math-inline p { display: inline; margin: 0; padding: 0; }
+.lms-quiz-option .lms-math-content,
+.lms-quiz-option .lms-math-content p { display: inline; margin: 0; }
+.lms-diag-preview-card .lms-math-content p,
+.lms-diag-preview-card li .lms-math-content p { display: inline; margin: 0; }
 .lms-chat-input-row { display: flex; gap: 8px; align-items: flex-end; }
 .lms-chat-input-row .lms-textarea { flex: 1; min-height: 44px; resize: vertical; }
 .lms-chat-typing {

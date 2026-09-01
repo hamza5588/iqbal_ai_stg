@@ -67,6 +67,65 @@
     return '<span class="lms-badge lms-badge-' + cls + '">' + escapeHtml(status || 'unknown') + '</span>';
   };
 
+  function lmsLooksLikeRawLatex(str) {
+    return /\\(frac|sqrt|text|pm|neq|leq|geq|cdot|times|left|right|alpha|beta|theta|pi|infty|partial|sum|int)\b/.test(str);
+  }
+
+  /** Wrap bare LaTeX / plain math notation so TeacherChatFormatter + MathJax can render it. */
+  global.lmsPrepareMathText = function (text) {
+    if (text == null) return '';
+    var s = String(text).trim();
+    if (!s) return '';
+    if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) return s;
+    if (lmsLooksLikeRawLatex(s)) return '\\(' + s + '\\)';
+    var colon = s.match(/^(.+?:\s*)(.+)$/);
+    if (colon && (/[a-zA-Z0-9]\^/.test(colon[2]) || /\\[a-zA-Z]+/.test(colon[2]) || /[0-9]x[\^²]/.test(colon[2]))) {
+      return colon[1] + '\\(' + colon[2].trim() + '\\)';
+    }
+    if ((/[a-zA-Z0-9]\^/.test(s) || /x²|x³/.test(s)) && /[=+\-*/]/.test(s) && s.length < 200) {
+      return '\\(' + s + '\\)';
+    }
+    return s;
+  };
+
+  global.lmsOptionText = function (opt) {
+    if (!opt) return '';
+    return opt.latex || opt.text || '';
+  };
+
+  global.lmsQuestionText = function (q) {
+    if (!q) return '';
+    return q.question_latex || q.question_text || '';
+  };
+
+  /** Rich HTML for LMS questions, options, and tutor replies (same pipeline as main chatbot). */
+  global.lmsFormatRichText = function (raw, opts) {
+    opts = opts || {};
+    var text = lmsPrepareMathText(raw);
+    var html;
+    if (global.TeacherChatFormatter && typeof global.TeacherChatFormatter.formatChatResponse === 'function') {
+      html = global.TeacherChatFormatter.formatChatResponse(text);
+    } else {
+      html = escapeHtml(text).replace(/\n/g, '<br>');
+    }
+    if (opts.inline) {
+      html = html.replace(/^<p>([\s\S]*)<\/p>$/i, '$1');
+      return '<span class="lms-math-content lms-math-inline">' + html + '</span>';
+    }
+    return '<div class="lms-math-content">' + html + '</div>';
+  };
+
+  global.lmsTypesetMath = function (el) {
+    if (!el) return Promise.resolve();
+    if (global.TeacherChatFormatter && typeof global.TeacherChatFormatter.processRenderedContent === 'function') {
+      return global.TeacherChatFormatter.processRenderedContent(el);
+    }
+    if (global.MathJax && global.MathJax.typesetPromise) {
+      return global.MathJax.typesetPromise([el]).catch(function () {});
+    }
+    return Promise.resolve();
+  };
+
   /* Bridge legacy _showLmsModal */
   global._showLmsModal = global.lmsOpenModal;
   global._hideLmsModal = global.lmsCloseModal;

@@ -12692,15 +12692,13 @@ Align everything with the lesson objectives and do not invent missing informatio
         const q = item.question || {};
         const opts = (q.options || []).map(function (o, oidx) {
           var mark = (q.correct_option_index === oidx) ? ' ✓' : '';
-          return '<li>' + o.label + '. ' + escapeHtml(o.text) + mark + '</li>';
+          return '<li>' + o.label + '. ' + lmsFormatRichText(lmsOptionText(o), { inline: true }) + mark + '</li>';
         }).join('');
         return '<div class="lms-diag-preview-card">' +
-          '<strong>Q' + (idx + 1) + '.</strong> ' + escapeHtml(q.question_text || '') +
+          '<strong>Q' + (idx + 1) + '.</strong> ' + lmsFormatRichText(lmsQuestionText(q), { inline: true }) +
           '<ul>' + opts + '</ul></div>';
       }).join('');
-      if (window.MathJax && window.MathJax.typesetPromise) {
-        MathJax.typesetPromise([previewEl]).catch(function () {});
-      }
+      lmsTypesetMath(previewEl);
     }
     async function publishLmsDiagnostic() {
       if (!_lmsDiagAssessmentId) return;
@@ -12826,15 +12824,13 @@ Align everything with the lesson objectives and do not invent missing informatio
       previewEl.innerHTML = d.questions.map(function (item, idx) {
         const q = item.question || {};
         const opts = (q.options || []).map(function (o) {
-          return '<li>' + o.label + '. ' + escapeHtml(o.text) + '</li>';
+          return '<li>' + o.label + '. ' + lmsFormatRichText(lmsOptionText(o), { inline: true }) + '</li>';
         }).join('');
         return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;">' +
-          '<strong>Q' + (idx + 1) + '.</strong> ' + escapeHtml(q.question_text || '') +
+          '<strong>Q' + (idx + 1) + '.</strong> ' + lmsFormatRichText(lmsQuestionText(q), { inline: true }) +
           '<ul style="margin:8px 0 0 16px;">' + opts + '</ul></div>';
       }).join('');
-      if (window.MathJax && window.MathJax.typesetPromise) {
-        MathJax.typesetPromise([previewEl]).catch(function () {});
-      }
+      lmsTypesetMath(previewEl);
     }
     async function publishLmsQuiz() {
       if (!_lmsCurrentAssessmentId) return;
