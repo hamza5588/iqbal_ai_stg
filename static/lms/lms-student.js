@@ -52,9 +52,10 @@
     }
   }
 
-  function formatTime(secs) {
-    var m = Math.floor(secs / 60);
-    var s = secs % 60;
+  function formatDiagCountdown(secs) {
+    var total = Math.max(0, Math.floor(Number(secs) || 0));
+    var m = Math.floor(total / 60);
+    var s = total % 60;
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
 
@@ -63,20 +64,19 @@
     if (!el || diagState.remainingSeconds == null) return;
     if (diagState.remainingSeconds <= 60) {
       el.style.color = '#dc2626';
+    } else {
+      el.style.color = 'var(--primary-color)';
     }
-    el.textContent = formatTime(diagState.remainingSeconds);
+    el.textContent = formatDiagCountdown(diagState.remainingSeconds);
     el.style.display = 'block';
   }
 
   function startDiagTimer() {
     clearDiagTimer();
-    if (diagState.remainingSeconds == null && !diagState.expiresAt) return;
+    if (diagState.remainingSeconds == null) return;
     updateTimerDisplay();
     diagState.timerInterval = setInterval(function () {
-      if (diagState.expiresAt) {
-        var rem = Math.max(0, Math.floor((new Date(diagState.expiresAt).getTime() - Date.now()) / 1000));
-        diagState.remainingSeconds = rem;
-      } else if (diagState.remainingSeconds != null) {
+      if (diagState.remainingSeconds != null && diagState.remainingSeconds > 0) {
         diagState.remainingSeconds = Math.max(0, diagState.remainingSeconds - 1);
       }
       updateTimerDisplay();
@@ -123,7 +123,11 @@
       var start = await lmsApi('/api/lms/quizzes/' + assessmentId + '/start', { method: 'POST' });
       diagState.attemptId = start.attempt_id;
       diagState.expiresAt = start.expires_at || null;
-      diagState.remainingSeconds = start.remaining_seconds != null ? start.remaining_seconds : null;
+      var rem = start.remaining_seconds;
+      if (rem == null && start.time_limit_minutes != null) {
+        rem = Math.max(0, Math.floor(Number(start.time_limit_minutes) * 60));
+      }
+      diagState.remainingSeconds = rem != null ? Math.max(0, Math.floor(Number(rem))) : null;
       var qData = await lmsApi('/api/lms/attempts/' + start.attempt_id + '/questions');
       diagState.questions = qData.questions || qData || [];
       diagState.current = 0;

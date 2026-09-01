@@ -20,6 +20,11 @@ _DIFFICULTY_SECONDS = {"easy": 45, "medium": 90, "hard": 180}
 _MIN_SECONDS = 15
 _MAX_SECONDS = 300
 _BUFFER_RATIO = 0.10
+_MAX_TOTAL_SECONDS = 3 * 60 * 60  # 3 hour safety cap for a diagnostic attempt
+
+
+def _clamp_seconds(value: int) -> int:
+    return max(_MIN_SECONDS, min(_MAX_SECONDS, int(value)))
 
 
 class QuestionTimeEstimate(BaseModel):
@@ -88,8 +93,8 @@ def _apply_estimates(assessment_id: int, estimates: List[QuestionTimeEstimate]) 
         if not q:
             continue
         q.difficulty = est.difficulty
-        q.time_limit_seconds = est.time_limit_seconds
-        total += est.time_limit_seconds
+        q.time_limit_seconds = _clamp_seconds(est.time_limit_seconds)
+        total += q.time_limit_seconds
     assessment.time_limit_minutes = max(1, int((total * (1 + _BUFFER_RATIO) + 59) // 60))
     db.commit()
     return total
@@ -150,17 +155,27 @@ def compute_attempt_deadline(assessment_id: int) -> int:
     assessment = get_assessment(assessment_id)
     db = get_db()
     total = 0
+    seen_qids = set()
     for aq in sorted(assessment.questions, key=lambda x: x.sort_order):
+        if aq.question_id in seen_qids:
+            continue
+        seen_qids.add(aq.question_id)
         q = db.query(Question).filter(Question.id == aq.question_id).first()
         if not q:
             continue
         if q.time_limit_seconds:
-            total += q.time_limit_seconds
+            total += _clamp_seconds(q.time_limit_seconds)
         else:
             total += _DIFFICULTY_SECONDS.get(q.difficulty, 90)
     if total <= 0:
-        total = (assessment.time_limit_minutes or 30) * 60
-    return int(total * (1 + _BUFFER_RATIO))
+        mins = assessment.time_limit_minutes or 30
+        # Recover from legacy rows that stored total seconds in the minutes column.
+        if mins > 180:
+            total = mins
+        else:
+            total = mins * 60
+    deadline = int(total * (1 + _BUFFER_RATIO))
+    return min(max(deadline, _MIN_SECONDS), _MAX_TOTAL_SECONDS)
 
 
 def get_question_time_limits(assessment_id: int) -> List[dict]:

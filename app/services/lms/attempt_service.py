@@ -119,7 +119,7 @@ def get_attempt_timer_info(attempt_id: int) -> dict:
     return {
         "attempt_id": attempt.id,
         "assessment_type": assessment.assessment_type,
-        "expires_at": attempt.expires_at.isoformat() if attempt.expires_at else None,
+        "expires_at": attempt.expires_at.isoformat() + "Z" if attempt.expires_at else None,
         "remaining_seconds": remaining,
         "time_limit_minutes": assessment.time_limit_minutes,
         "is_expired": remaining == 0 if remaining is not None else False,
