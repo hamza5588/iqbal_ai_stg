@@ -12,7 +12,7 @@ from app.services.quiz.models import (
     PairingResult,
     QuestionAnswerPair,
 )
-from app.utils.llm_factory import get_chat_model
+from app.services.quiz.retry_utils import invoke_structured
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +110,12 @@ def extract_qa_from_text(pdf_text: str) -> PDFExtractionResult:
         )
 
     text = _prepare_pdf_text_for_extraction(pdf_text)[:_MAX_TEXT_CHARS]
+    from app.utils.llm_factory import get_chat_model
+
     llm = get_chat_model(temperature=0.1, max_tokens=4096)
-    structured = llm.with_structured_output(PDFExtractionResult)
-    result: PDFExtractionResult = structured.invoke(_EXTRACTION_PROMPT.format(text=text))
+    result: PDFExtractionResult = invoke_structured(
+        llm, PDFExtractionResult, _EXTRACTION_PROMPT.format(text=text)
+    )
     if not result.warnings:
         result.warnings = []
     if not result.questions:
@@ -171,13 +174,14 @@ def _llm_pair(
     """Use LLM to pair questions and answers when deterministic matching is incomplete."""
     import json
 
-    llm = get_chat_model(temperature=0.0, max_tokens=4096)
-    structured = llm.with_structured_output(PairingResult)
+    from app.utils.llm_factory import get_chat_model
+
     prompt = _PAIRING_PROMPT.format(
         questions=json.dumps([q.model_dump() for q in questions], ensure_ascii=False),
         answers=json.dumps([a.model_dump() for a in answers], ensure_ascii=False),
     )
-    return structured.invoke(prompt)
+    llm = get_chat_model(temperature=0.0, max_tokens=4096)
+    return invoke_structured(llm, PairingResult, prompt)
 
 
 def pair_questions_answers(extraction: PDFExtractionResult) -> List[QuestionAnswerPair]:

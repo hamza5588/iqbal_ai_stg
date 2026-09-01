@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.services.lms.mcq_utils import shuffle_options
 from app.services.quiz.models import MCQBatchResult, MCQQuestion, QuestionAnswerPair
-from app.services.quiz.retry_utils import format_validation_errors, retry_on_validation_error
+from app.services.quiz.retry_utils import format_validation_errors, invoke_structured, retry_on_validation_error
 from app.utils.llm_factory import get_chat_model
 
 logger = logging.getLogger(__name__)
@@ -63,11 +63,12 @@ def _validate_pdf_answer_in_options(mcq: MCQQuestion, pair: QuestionAnswerPair) 
 def convert_pair_to_mcq(pair: QuestionAnswerPair) -> MCQQuestion:
     """Convert a single Q+A pair to a validated MCQ using structured LLM output."""
     llm = get_chat_model(temperature=0.3, max_tokens=2048)
-    structured = llm.with_structured_output(MCQQuestion)
     retry_hint = ""
 
     def _invoke() -> MCQQuestion:
-        mcq: MCQQuestion = structured.invoke(_build_prompt(pair, retry_hint))
+        mcq: MCQQuestion = invoke_structured(
+            llm, MCQQuestion, _build_prompt(pair, retry_hint)
+        )
         return _validate_pdf_answer_in_options(mcq, pair)
 
     def _on_retry(exc: ValidationError, attempt: int) -> None:
