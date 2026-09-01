@@ -45,6 +45,15 @@ def process_pdf_quiz_task(
     self.update_state(state="PROCESSING", meta={"step": "ingest", "progress": 10, "message": "Ingesting PDF..."})
 
     thread_id = thread_id or _new_lms_thread_id(user_id)
+    from app.services.lms import assessment_service
+    from app.services.quiz.pipeline import _set_pdf_source_status
+
+    source = assessment_service.link_pdf_source(
+        assessment_id=assessment_id,
+        rag_thread_id=thread_id,
+        original_filename=filename,
+    )
+    _set_pdf_source_status(source.id, "processing")
     try:
         with open(file_path, "rb") as f:
             file_bytes = f.read()
@@ -109,6 +118,15 @@ def enqueue_or_run_pdf_quiz(
     os.close(fd)
     with open(temp_path, "wb") as f:
         f.write(file_bytes)
+
+    # Create pdf_source immediately so status polling shows pending/processing (not "none")
+    from app.services.lms import assessment_service
+
+    assessment_service.link_pdf_source(
+        assessment_id=assessment_id,
+        rag_thread_id=thread_id,
+        original_filename=filename,
+    )
 
     if async_mode:
         try:

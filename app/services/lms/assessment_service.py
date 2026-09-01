@@ -378,7 +378,10 @@ def get_assessment_with_questions(assessment_id: int, include_answers: bool = Fa
 def get_pdf_processing_status(assessment_id: int) -> dict:
     assessment = get_assessment(assessment_id)
     if not assessment.pdf_source:
-        return {"assessment_id": assessment_id, "extraction_status": "none"}
+        return {
+            "assessment_id": assessment_id,
+            "extraction_status": "pending" if assessment.creation_mode == "pdf_qa_auto" else "none",
+        }
     src = assessment.pdf_source
     return {
         "assessment_id": assessment_id,

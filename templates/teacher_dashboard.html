@@ -12786,14 +12786,22 @@ Align everything with the lesson objectives and do not invent missing informatio
         const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/pdf-status', { credentials: 'include' });
         const body = await res.json();
         const d = body.data || body;
-        statusEl.textContent = 'Status: ' + (d.extraction_status || 'unknown') +
+        const rawStatus = d.extraction_status || 'unknown';
+        const statusLabel = {
+          none: 'starting',
+          pending: 'queued',
+          processing: 'processing',
+          completed: 'completed',
+          failed: 'failed',
+        }[rawStatus] || rawStatus;
+        statusEl.textContent = 'Status: ' + statusLabel +
           (d.overall_confidence != null ? ' | Confidence: ' + Math.round(d.overall_confidence * 100) + '%' : '') +
           (d.question_count ? ' | Questions: ' + d.question_count : '');
-        if (d.extraction_status === 'completed') {
+        if (rawStatus === 'completed') {
           stopLmsPoll();
           await loadLmsQuizPreview();
           actionsEl.style.display = 'flex';
-        } else if (d.extraction_status === 'failed') {
+        } else if (rawStatus === 'failed') {
           stopLmsPoll();
           statusEl.textContent = 'Failed: ' + (d.error_message || 'Unknown error');
         }
