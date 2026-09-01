@@ -79,10 +79,10 @@
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) return s;
     if (lmsLooksLikeRawLatex(s)) return '\\(' + s + '\\)';
     var colon = s.match(/^(.+?:\s*)(.+)$/);
-    if (colon && (/[a-zA-Z0-9]\^/.test(colon[2]) || /\\[a-zA-Z]+/.test(colon[2]) || /[0-9]x[\^²]/.test(colon[2]))) {
+    if (colon && (/[a-zA-Z0-9]\^|\^{/.test(colon[2]) || /\\[a-zA-Z]+/.test(colon[2]) || /[0-9]x[\^²]/.test(colon[2]))) {
       return colon[1] + '\\(' + colon[2].trim() + '\\)';
     }
-    if ((/[a-zA-Z0-9]\^/.test(s) || /x²|x³/.test(s)) && /[=+\-*/]/.test(s) && s.length < 200) {
+    if ((/[a-zA-Z0-9]\^/.test(s) || /\^{/.test(s) || /x²|x³/.test(s)) && /[=+\-*/]/.test(s) && s.length < 200) {
       return '\\(' + s + '\\)';
     }
     return s;
@@ -110,13 +110,14 @@
     }
     if (opts.inline) {
       html = html.replace(/^<p>([\s\S]*)<\/p>$/i, '$1');
-      return '<span class="lms-math-content lms-math-inline">' + html + '</span>';
+      return '<span class="lms-math-content lms-math-inline tex2jax_process">' + html + '</span>';
     }
-    return '<div class="lms-math-content">' + html + '</div>';
+    return '<div class="lms-math-content tex2jax_process">' + html + '</div>';
   };
 
   global.lmsTypesetMath = function (el) {
     if (!el) return Promise.resolve();
+    el.classList.add('tex2jax_process');
     if (global.TeacherChatFormatter && typeof global.TeacherChatFormatter.processRenderedContent === 'function') {
       return global.TeacherChatFormatter.processRenderedContent(el);
     }

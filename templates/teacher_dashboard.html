@@ -12445,6 +12445,8 @@ Align everything with the lesson objectives and do not invent missing informatio
       return _lmsFmtText(text, true);
     }
     function _lmsTypeset(el) {
+      if (!el) return Promise.resolve();
+      el.classList.add('tex2jax_process');
       if (typeof lmsTypesetMath === 'function') return lmsTypesetMath(el);
       if (window.MathJax && window.MathJax.typesetPromise) {
         return window.MathJax.typesetPromise([el]).catch(function () {});
