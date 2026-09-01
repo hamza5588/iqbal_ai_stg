@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from typing import List, Optional
 
 from pydantic import ValidationError
@@ -42,21 +44,45 @@ def _build_prompt(pair: QuestionAnswerPair, retry_hint: str = "") -> str:
     )
 
 
+def _normalize_match_text(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower()
+    text = re.sub(r"solution set:.*", "", text, flags=re.I | re.DOTALL)
+    text = re.sub(r"[^\w\s+\-=/.,]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _answer_matches_options(mcq: MCQQuestion, pair: QuestionAnswerPair) -> bool:
+    answer_parts = [
+        _normalize_match_text(pair.answer_text),
+        _normalize_match_text(pair.answer_latex or ""),
+    ]
+    answer_parts = [p.split("\n")[0].strip() for p in answer_parts if p]
+    if not answer_parts:
+        return True
+
+    option_parts: list[str] = []
+    for opt in mcq.options:
+        option_parts.append(_normalize_match_text(opt.text))
+        if opt.latex:
+            option_parts.append(_normalize_match_text(opt.latex))
+    option_parts = [p for p in option_parts if p]
+
+    for answer in answer_parts:
+        for option in option_parts:
+            if answer in option or option in answer:
+                return True
+            answer_tokens = set(re.findall(r"[\w]+", answer))
+            option_tokens = set(re.findall(r"[\w]+", option))
+            if answer_tokens and len(answer_tokens & option_tokens) >= max(2, len(answer_tokens) // 2):
+                return True
+    return False
+
+
 def _validate_pdf_answer_in_options(mcq: MCQQuestion, pair: QuestionAnswerPair) -> MCQQuestion:
-    answer_lower = pair.answer_text.strip().lower()
-    option_texts = [o.text.strip().lower() for o in mcq.options]
-    if not any(answer_lower in t or t in answer_lower for t in option_texts):
-        raise ValidationError.from_exception_data(
-            "MCQQuestion",
-            [
-                {
-                    "type": "value_error",
-                    "loc": ("options",),
-                    "msg": "PDF answer not found in options",
-                    "input": option_texts,
-                }
-            ],
-        )
+    if not _answer_matches_options(mcq, pair):
+        raise ValueError("PDF answer not found in MCQ options")
     return mcq
 
 
@@ -71,11 +97,11 @@ def convert_pair_to_mcq(pair: QuestionAnswerPair) -> MCQQuestion:
         )
         return _validate_pdf_answer_in_options(mcq, pair)
 
-    def _on_retry(exc: ValidationError, attempt: int) -> None:
+    def _on_retry(exc: ValidationError | ValueError, attempt: int) -> None:
         nonlocal retry_hint
         retry_hint = (
             f"\nPrevious attempt {attempt} failed validation: "
-            f"{format_validation_errors(exc)}. Fix these issues."
+            f"{format_validation_errors(exc) if isinstance(exc, ValidationError) else str(exc)}. Fix these issues."
         )
 
     return retry_on_validation_error(_invoke, max_retries=2, on_retry=_on_retry)
@@ -93,7 +119,7 @@ def convert_pairs_batch(
         try:
             mcq = convert_pair_to_mcq(pair)
             questions.append(mcq)
-        except (ValidationError, Exception) as exc:
+        except (ValidationError, ValueError, Exception) as exc:
             label = f"Q{pair.question_number}"
             failed.append(f"{label}: {exc}")
             logger.warning("MCQ conversion failed for %s: %s", label, exc)

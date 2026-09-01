@@ -90,11 +90,11 @@ def retry_on_validation_error(
     on_retry: Callable[[ValidationError, int], None] | None = None,
 ) -> T:
     """Call fn; on Pydantic ValidationError retry up to max_retries times."""
-    last_error: ValidationError | None = None
+    last_error: ValidationError | ValueError | None = None
     for attempt in range(max_retries + 1):
         try:
             return fn()
-        except ValidationError as exc:
+        except (ValidationError, ValueError) as exc:
             last_error = exc
             if attempt >= max_retries:
                 break

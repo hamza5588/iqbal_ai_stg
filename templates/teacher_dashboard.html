@@ -12815,7 +12815,12 @@ Align everything with the lesson objectives and do not invent missing informatio
       const body = await res.json();
       const d = body.data || body;
       if (!d.questions || !d.questions.length) {
-        previewEl.innerHTML = '<p>No questions yet.</p>';
+        var failMsg = (d.pdf_source && d.pdf_source.error_message) ? d.pdf_source.error_message : '';
+        if (!failMsg && d.warnings && d.warnings.length) {
+          failMsg = d.warnings.join('; ');
+        }
+        previewEl.innerHTML = '<p style="color:#b91c1c;font-weight:600;">No questions generated.</p>' +
+          (failMsg ? '<p style="font-size:.875rem;color:#64748b;margin-top:8px;">' + escapeHtml(failMsg) + '</p>' : '');
         return;
       }
       previewEl.innerHTML = d.questions.map(function (item, idx) {

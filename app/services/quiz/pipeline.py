@@ -112,6 +112,12 @@ def run_pdf_quiz_pipeline(
 
         assessment_service.add_questions(assessment_id, created_ids)
 
+        if pairs and not created_ids:
+            detail = "MCQ conversion failed for all extracted questions."
+            if batch.failed_conversions:
+                detail += " " + "; ".join(batch.failed_conversions[:4])
+            raise ValueError(detail)
+
         overall = (
             sum(confidences) / len(confidences) * 0.5 + extraction.confidence * 0.5
             if confidences
