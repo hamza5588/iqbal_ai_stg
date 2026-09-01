@@ -72,7 +72,7 @@
   }
 
   /** Wrap bare LaTeX / plain math notation so TeacherChatFormatter + MathJax can render it. */
-  global.lmsPrepareMathText = function (text) {
+  function prepareMathText(text) {
     if (text == null) return '';
     var s = String(text).trim();
     if (!s) return '';
@@ -87,21 +87,24 @@
     }
     return s;
   };
+  global.lmsPrepareMathText = prepareMathText;
 
-  global.lmsOptionText = function (opt) {
+  function optionText(opt) {
     if (!opt) return '';
     return opt.latex || opt.text || '';
-  };
+  }
+  global.lmsOptionText = optionText;
 
-  global.lmsQuestionText = function (q) {
+  function questionText(q) {
     if (!q) return '';
     return q.question_latex || q.question_text || '';
-  };
+  }
+  global.lmsQuestionText = questionText;
 
   /** Rich HTML for LMS questions, options, and tutor replies (same pipeline as main chatbot). */
-  global.lmsFormatRichText = function (raw, opts) {
+  function formatRichText(raw, opts) {
     opts = opts || {};
-    var text = lmsPrepareMathText(raw);
+    var text = prepareMathText(raw);
     var html;
     if (global.TeacherChatFormatter && typeof global.TeacherChatFormatter.formatChatResponse === 'function') {
       html = global.TeacherChatFormatter.formatChatResponse(text);
@@ -114,8 +117,9 @@
     }
     return '<div class="lms-math-content tex2jax_process">' + html + '</div>';
   };
+  global.lmsFormatRichText = formatRichText;
 
-  global.lmsTypesetMath = function (el) {
+  function typesetMath(el) {
     if (!el) return Promise.resolve();
     el.classList.add('tex2jax_process');
     if (global.TeacherChatFormatter && typeof global.TeacherChatFormatter.processRenderedContent === 'function') {
@@ -126,6 +130,7 @@
     }
     return Promise.resolve();
   };
+  global.lmsTypesetMath = typesetMath;
 
   /* Bridge legacy _showLmsModal */
   global._showLmsModal = global.lmsOpenModal;

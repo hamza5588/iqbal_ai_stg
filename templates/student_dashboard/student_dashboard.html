@@ -7876,7 +7876,34 @@
       </div>
     </div>
   </div>
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
+  <script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-student.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-deficiency-chat.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}"></script>
   <script>
+    function _lmsFmtText(text, inline) {
+      if (typeof lmsFormatRichText === 'function') {
+        return lmsFormatRichText(text, inline ? { inline: true } : undefined);
+      }
+      return escapeHtml(text == null ? '' : String(text));
+    }
+    function _lmsFmtOption(opt) {
+      return _lmsFmtText((opt && (opt.latex || opt.text)) || '', true);
+    }
+    function _lmsFmtQuestion(q) {
+      return _lmsFmtText((q && (q.question_latex || q.question_text)) || '', false);
+    }
+    function _lmsTypeset(el) {
+      if (!el) return Promise.resolve();
+      if (typeof lmsTypesetMath === 'function') return lmsTypesetMath(el);
+      el.classList.add('tex2jax_process');
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        return window.MathJax.typesetPromise([el]).catch(function () {});
+      }
+      return Promise.resolve();
+    }
+
     let _lmsAttemptId = null;
     let _lmsQuizQuestions = [];
     let _lmsCurrentQ = 0;
@@ -7943,12 +7970,12 @@
       const q = _lmsQuizQuestions[_lmsCurrentQ];
       const opts = (q.options || []).map(function (o, idx) {
         return '<label style="display:block;margin:8px 0;cursor:pointer;"><input type="radio" name="lmsOpt" value="' + idx + '"> ' +
-          o.label + '. ' + lmsFormatRichText(lmsOptionText(o), { inline: true }) + '</label>';
+          o.label + '. ' + _lmsFmtOption(o) + '</label>';
       }).join('');
       el.innerHTML = '<p><strong>Question ' + (_lmsCurrentQ + 1) + ' of ' + _lmsQuizQuestions.length + '</strong></p>' +
-        lmsFormatRichText(lmsQuestionText(q)) + opts +
+        _lmsFmtQuestion(q) + opts +
         '<button type="button" onclick="saveLmsAnswer()" style="margin-top:12px;background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;">Next</button>';
-      lmsTypesetMath(el);
+      _lmsTypeset(el);
     }
     async function saveLmsAnswer() {
       const selected = document.querySelector('input[name="lmsOpt"]:checked');
@@ -7978,10 +8005,5 @@
       if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
     }
   </script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
-  <script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
-  <script src="{{ url_for('static', filename='lms/lms-student.js') }}"></script>
-  <script src="{{ url_for('static', filename='lms/lms-deficiency-chat.js') }}"></script>
-  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}"></script>
 </body>
 </html>

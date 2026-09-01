@@ -1,5 +1,27 @@
 /** Student LMS — diagnostic, learning path actions */
 (function () {
+  function fmtText(text, inline) {
+    if (typeof window.lmsFormatRichText === 'function') {
+      return window.lmsFormatRichText(text, inline ? { inline: true } : undefined);
+    }
+    return escapeHtml(text == null ? '' : String(text));
+  }
+  function fmtOption(opt) {
+    return fmtText((opt && (opt.latex || opt.text)) || '', true);
+  }
+  function fmtQuestion(q) {
+    return fmtText((q && (q.question_latex || q.question_text)) || '', false);
+  }
+  function typeset(el) {
+    if (!el) return Promise.resolve();
+    if (typeof window.lmsTypesetMath === 'function') return window.lmsTypesetMath(el);
+    el.classList.add('tex2jax_process');
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      return window.MathJax.typesetPromise([el]).catch(function () {});
+    }
+    return Promise.resolve();
+  }
+
   var diagState = {
     assessmentId: null,
     attemptId: null,
@@ -130,7 +152,7 @@
       var sel = diagState.answers[idx] === oi ? ' selected' : '';
       return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDiagOption(' + idx + ',' + oi + ')">' +
         '<strong>' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</strong> ' +
-        lmsFormatRichText(lmsOptionText(o), { inline: true }) + '</button>';
+        fmtOption(o) + '</button>';
     }).join('');
     var backBtn = idx > 0
       ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="prevDiagQuestion()">Back</button>'
@@ -155,10 +177,10 @@
     body.innerHTML =
       '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
       meta +
-      '<h3 style="font-size:1rem;font-weight:700;margin:12px 0;">' + lmsFormatRichText(lmsQuestionText(q)) + '</h3>' +
+      '<h3 style="font-size:1rem;font-weight:700;margin:12px 0;">' + fmtQuestion(q) + '</h3>' +
       opts +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' + nav + '</div>';
-    lmsTypesetMath(body);
+    typeset(body);
   }
 
   window.selectDiagOption = function (qIdx, optIdx) {

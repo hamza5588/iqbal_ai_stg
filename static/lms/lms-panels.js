@@ -1,5 +1,27 @@
 /** Interactive LMS panels — tutor, analytics, practice (green theme) */
 (function () {
+  function fmtText(text, inline) {
+    if (typeof window.lmsFormatRichText === 'function') {
+      return window.lmsFormatRichText(text, inline ? { inline: true } : undefined);
+    }
+    return escapeHtml(text == null ? '' : String(text));
+  }
+  function fmtOption(opt) {
+    return fmtText((opt && (opt.latex || opt.text)) || (opt && opt.label) || '', true);
+  }
+  function fmtQuestion(q) {
+    return fmtText((q && (q.question_latex || q.question_text)) || '', false);
+  }
+  function typeset(el) {
+    if (!el) return Promise.resolve();
+    if (typeof window.lmsTypesetMath === 'function') return window.lmsTypesetMath(el);
+    el.classList.add('tex2jax_process');
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      return window.MathJax.typesetPromise([el]).catch(function () {});
+    }
+    return Promise.resolve();
+  }
+
   function ensureModal(id, title, sizeClass) {
     if (document.getElementById(id)) return;
     var html = '<div id="' + id + '" class="lms-modal-backdrop" onclick="if(event.target===this)lmsCloseModal(\'' + id + '\')">' +
@@ -20,7 +42,7 @@
     var msgs = tutorHistory.map(function (m) {
       var bubble = m.role === 'user'
         ? escapeHtml(m.text)
-        : lmsFormatRichText(m.text || '');
+        : fmtText(m.text || '');
       return '<div class="lms-chat-msg ' + m.role + '">' +
         '<div class="lms-chat-avatar">' + (m.role === 'user' ? 'You' : 'AI') + '</div>' +
         '<div class="lms-chat-bubble">' + bubble + '</div></div>';
@@ -37,7 +59,7 @@
     }
     var box = document.getElementById('lmsTutorMessages');
     if (box) box.scrollTop = box.scrollHeight;
-    lmsTypesetMath(document.getElementById('lmsTutorModalBody'));
+    typeset(document.getElementById('lmsTutorModalBody'));
   }
 
   window.openLmsTutorPanel = function (role) {
@@ -265,15 +287,15 @@
     }
     var opts = (q.options || []).map(function (o, i) {
       return '<button type="button" class="lms-quiz-option" onclick="submitLmsPracticeAnswer(' + i + ')">' +
-        lmsFormatRichText(lmsOptionText(o) || o.label || String(i), { inline: true }) + '</button>';
+        (fmtOption(o) || escapeHtml(String(i))) + '</button>';
     }).join('');
     body.innerHTML =
       '<p class="lms-badge lms-badge-green">' + escapeHtml(q.difficulty || 'medium') + '</p>' +
-      '<h3 style="font-size:1rem;margin:12px 0;">' + lmsFormatRichText(lmsQuestionText(q)) + '</h3>' +
+      '<h3 style="font-size:1rem;margin:12px 0;">' + fmtQuestion(q) + '</h3>' +
       opts +
       '<div id="lmsPracticeFeedback" style="margin-top:12px;"></div>' +
       '<button type="button" class="lms-btn lms-btn-ghost" style="margin-top:10px;" onclick="requestLmsPracticeHint()">Need a hint?</button>';
-    lmsTypesetMath(body);
+    typeset(body);
   }
 
   window.submitLmsPracticeAnswer = async function (optIdx) {
@@ -287,10 +309,10 @@
       });
       if (fb) {
         var msg = result.correct
-          ? '<div class="lms-card" style="background:#f0fdf4;border-color:#86efac"><strong>Correct!</strong> ' + lmsFormatRichText(result.feedback || '') + '</div>'
-          : '<div class="lms-card" style="background:#fef2f2;border-color:#fecaca"><strong>Try again.</strong> ' + lmsFormatRichText(result.feedback || result.hint || '') + '</div>';
+          ? '<div class="lms-card" style="background:#f0fdf4;border-color:#86efac"><strong>Correct!</strong> ' + fmtText(result.feedback || '') + '</div>'
+          : '<div class="lms-card" style="background:#fef2f2;border-color:#fecaca"><strong>Try again.</strong> ' + fmtText(result.feedback || result.hint || '') + '</div>';
         fb.innerHTML = msg;
-        lmsTypesetMath(fb);
+        typeset(fb);
       }
       if (result.correct && result.next_question) {
         setTimeout(renderPracticeQuestion, 1200);
@@ -307,8 +329,8 @@
     try {
       var hint = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id + '/hint', { method: 'POST' });
       if (fb) {
-        fb.innerHTML = '<div class="lms-card" style="background:#fef9c3;border-color:#fcd34d"><strong>Hint:</strong> ' + lmsFormatRichText(hint.hint || hint.message || '') + '</div>';
-        lmsTypesetMath(fb);
+        fb.innerHTML = '<div class="lms-card" style="background:#fef9c3;border-color:#fcd34d"><strong>Hint:</strong> ' + fmtText(hint.hint || hint.message || '') + '</div>';
+        typeset(fb);
       }
     } catch (err) {
       if (fb) fb.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
