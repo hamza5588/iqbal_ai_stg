@@ -7907,6 +7907,7 @@
     let _lmsAttemptId = null;
     let _lmsQuizQuestions = [];
     let _lmsCurrentQ = 0;
+    let _lmsSavedAnswers = {};
     let _lmsAssignmentId = null;
 
     function openLmsStudentHub() {
@@ -7947,6 +7948,9 @@
         if (!res.ok) throw new Error(body.error || body.message || 'Start failed');
         const d = body.data || body;
         _lmsAttemptId = d.attempt_id;
+        if (d.resumed) {
+          if (typeof lmsShowToast === 'function') lmsShowToast('Resuming where you left off', 'success');
+        }
         await loadLmsAttemptQuestions();
       } catch (err) {
         alert(err.message);
@@ -7957,7 +7961,8 @@
       const body = await res.json();
       const d = body.data || body;
       _lmsQuizQuestions = d.questions || [];
-      _lmsCurrentQ = 0;
+      _lmsSavedAnswers = d.saved_answers || {};
+      _lmsCurrentQ = d.current_question_index != null ? d.current_question_index : 0;
       document.getElementById('lmsQuizTaking').classList.remove('hidden');
       renderLmsQuestion();
     }
@@ -7968,8 +7973,10 @@
         return;
       }
       const q = _lmsQuizQuestions[_lmsCurrentQ];
+      const savedIdx = _lmsSavedAnswers[_lmsCurrentQ];
       const opts = (q.options || []).map(function (o, idx) {
-        return '<label style="display:block;margin:8px 0;cursor:pointer;"><input type="radio" name="lmsOpt" value="' + idx + '"> ' +
+        const checked = savedIdx === idx ? ' checked' : '';
+        return '<label style="display:block;margin:8px 0;cursor:pointer;"><input type="radio" name="lmsOpt" value="' + idx + '"' + checked + '> ' +
           o.label + '. ' + _lmsFmtOption(o) + '</label>';
       }).join('');
       el.innerHTML = '<p><strong>Question ' + (_lmsCurrentQ + 1) + ' of ' + _lmsQuizQuestions.length + '</strong></p>' +
@@ -7987,6 +7994,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question_id: q.question_id, selected_option_index: parseInt(selected.value, 10) })
       });
+      _lmsSavedAnswers[_lmsCurrentQ] = parseInt(selected.value, 10);
       _lmsCurrentQ++;
       renderLmsQuestion();
     }

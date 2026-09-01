@@ -82,8 +82,6 @@ THEME_PRESETS: Dict[str, Dict[str, str]] = {
 
 DEFAULT_PRESET = "green"
 
-_cache: Optional[Dict[str, Any]] = None
-
 
 def _hex_to_rgb(hex_color: str) -> Optional[Tuple[int, int, int]]:
     m = re.match(r"^#?([a-fA-F0-9]{6})$", (hex_color or "").strip())
@@ -132,15 +130,11 @@ def _normalize_theme(data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return {"preset": preset, **palette}
 
 
-def _invalidate_cache() -> None:
-    global _cache
-    _cache = None
-
-
 def get_platform_theme(use_cache: bool = True) -> Dict[str, Any]:
-    global _cache
-    if use_cache and _cache is not None:
-        return dict(_cache)
+    """Load theme from DB. Per-process cache is intentionally disabled so
+    multi-worker deployments (gunicorn/uwsgi/docker replicas) never serve
+    stale presets after an admin update on another worker."""
+    del use_cache  # kept for API compatibility; always read fresh from DB
 
     db = get_db()
     row = db.query(SystemSettings).filter(SystemSettings.key == THEME_SETTING_KEY).first()
@@ -151,9 +145,7 @@ def get_platform_theme(use_cache: bool = True) -> Dict[str, Any]:
         except (json.JSONDecodeError, TypeError):
             logger.warning("Invalid platform_theme JSON in system_settings")
 
-    theme = _normalize_theme(parsed if isinstance(parsed, dict) else None)
-    _cache = dict(theme)
-    return dict(theme)
+    return _normalize_theme(parsed if isinstance(parsed, dict) else None)
 
 
 def list_theme_presets() -> Dict[str, Dict[str, str]]:
@@ -166,10 +158,13 @@ def set_platform_theme(
     updated_by: Optional[int] = None,
 ) -> Dict[str, Any]:
     preset_key = (preset or DEFAULT_PRESET).strip().lower()
-    if preset_key == "custom":
-        if not primary or not _hex_to_rgb(primary):
-            raise ValueError("Valid primary hex color is required for custom theme")
-        theme = _normalize_theme({"preset": "custom", "primary": primary.strip()})
+    primary_clean = (primary or "").strip()
+
+    # Explicit primary hex always wins (supports preset + primary override in one request).
+    if primary_clean and _hex_to_rgb(primary_clean):
+        theme = _normalize_theme({"preset": "custom", "primary": primary_clean})
+    elif preset_key == "custom":
+        raise ValueError("Valid primary hex color is required for custom theme")
     elif preset_key in THEME_PRESETS:
         theme = _normalize_theme({"preset": preset_key})
     else:
@@ -191,8 +186,7 @@ def set_platform_theme(
             )
         )
     db.commit()
-    _invalidate_cache()
-    return get_platform_theme(use_cache=False)
+    return get_platform_theme()
 
 
 def theme_to_css_block(theme: Optional[Dict[str, Any]] = None) -> str:

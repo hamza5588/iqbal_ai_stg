@@ -36,6 +36,7 @@
   ensureModal('lmsTutorModal', 'AI Tutor', 'lms-modal-md');
   var tutorRole = 'student';
   var tutorHistory = [];
+  var tutorLoading = false;
 
   function renderTutorChat() {
     var body = document.getElementById('lmsTutorModalBody');
@@ -47,13 +48,22 @@
         '<div class="lms-chat-avatar">' + (m.role === 'user' ? 'You' : 'AI') + '</div>' +
         '<div class="lms-chat-bubble">' + bubble + '</div></div>';
     }).join('');
+    var emptyHint = tutorLoading
+      ? '<div class="lms-spinner" style="margin:20px auto"></div>'
+      : '<p class="lms-status">Ask me anything — I\'m your general IqbalAI tutor for any subject.</p>';
+    var clearBtn = tutorHistory.length
+      ? '<button type="button" class="lms-btn lms-btn-ghost" style="margin-bottom:8px;font-size:.8rem;" onclick="clearLmsTutorHistory()">Clear chat history</button>'
+      : '';
     body.innerHTML =
-      '<div class="lms-chat-messages" id="lmsTutorMessages">' + (msgs || '<p class="lms-status">Ask a question — I\'ll guide you step-by-step without just giving the answer.</p>') + '</div>' +
+      clearBtn +
+      '<div class="lms-chat-messages" id="lmsTutorMessages">' + (msgs || emptyHint) + '</div>' +
       '<div class="lms-chat-input-row">' +
-      '<textarea id="lmsTutorInput" class="lms-textarea" rows="2" placeholder="Type your question..."></textarea>' +
-      '<button type="button" class="lms-btn lms-btn-primary" onclick="sendLmsTutorMessage()">Send</button></div>';
+      '<textarea id="lmsTutorInput" class="lms-textarea" rows="2" placeholder="Type your question..."' +
+      (tutorLoading ? ' disabled' : '') + '></textarea>' +
+      '<button type="button" class="lms-btn lms-btn-primary" onclick="sendLmsTutorMessage()"' +
+      (tutorLoading ? ' disabled' : '') + '>Send</button></div>';
     var ta = document.getElementById('lmsTutorInput');
-    if (ta) {
+    if (ta && !tutorLoading) {
       ta.focus();
       ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendLmsTutorMessage(); } };
     }
@@ -62,22 +72,53 @@
     typeset(document.getElementById('lmsTutorModalBody'));
   }
 
+  async function loadTutorHistory() {
+    tutorLoading = true;
+    renderTutorChat();
+    try {
+      var data = await lmsApi('/api/lms/tutor/history?mode=' + encodeURIComponent(tutorRole));
+      tutorHistory = (data.messages || []).map(function (m) {
+        return { role: m.role === 'user' ? 'user' : 'bot', text: m.text || '' };
+      });
+      if (tutorHistory.length) {
+        lmsShowToast('Restored your tutor conversation', 'success');
+      }
+    } catch (err) {
+      tutorHistory = [];
+    } finally {
+      tutorLoading = false;
+      renderTutorChat();
+    }
+  }
+
   window.openLmsTutorPanel = function (role) {
     tutorRole = role || 'student';
     document.getElementById('lmsTutorModalTitle').textContent = role === 'teacher' ? 'Teaching Assistant' : 'AI Tutor';
     tutorHistory = [];
-    renderTutorChat();
     lmsOpenModal('lmsTutorModal');
+    loadTutorHistory();
+  };
+
+  window.clearLmsTutorHistory = async function () {
+    if (!confirm('Clear all AI Tutor chat history?')) return;
+    try {
+      await lmsApi('/api/lms/tutor/history?mode=' + encodeURIComponent(tutorRole), { method: 'DELETE' });
+      tutorHistory = [];
+      renderTutorChat();
+      lmsShowToast('Chat history cleared', 'success');
+    } catch (err) {
+      lmsShowToast(err.message || 'Could not clear history', 'error');
+    }
   };
 
   window.sendLmsTutorMessage = async function () {
+    if (tutorLoading) return;
     var input = document.getElementById('lmsTutorInput');
     var msg = (input && input.value || '').trim();
     if (!msg) return;
     tutorHistory.push({ role: 'user', text: msg });
+    tutorLoading = true;
     renderTutorChat();
-    var box = document.getElementById('lmsTutorMessages');
-    if (box) box.innerHTML += '<div class="lms-chat-msg bot"><div class="lms-chat-avatar">AI</div><div class="lms-chat-bubble"><div class="lms-spinner" style="width:18px;height:18px;margin:0"></div></div></div>';
     try {
       var url = tutorRole === 'teacher' ? '/api/lms/teacher/tutor' : '/api/lms/tutor/chat';
       var data = await lmsApi(url, {
@@ -86,9 +127,10 @@
         body: JSON.stringify({ message: msg })
       });
       tutorHistory.push({ role: 'bot', text: data.reply || data.message || 'No response' });
-      renderTutorChat();
     } catch (err) {
       tutorHistory.push({ role: 'bot', text: 'Error: ' + err.message });
+    } finally {
+      tutorLoading = false;
       renderTutorChat();
     }
   };
@@ -265,8 +307,11 @@
       practiceSession = await lmsApi('/api/lms/practice/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic_id: topicId || null })
+        body: JSON.stringify({ topic_id: topicId || null, force_new: false })
       });
+      if (practiceSession.resumed) {
+        lmsShowToast('Resuming your practice session', 'success');
+      }
       renderPracticeQuestion();
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';

@@ -10,7 +10,28 @@ from app.services.lms.tutor_service import get_hint
 from app.utils.db import get_db
 
 
-def start_session(student_id: int, topic_id: Optional[int] = None, question_id: Optional[int] = None) -> PracticeSession:
+def get_active_session(student_id: int, topic_id: Optional[int] = None) -> Optional[PracticeSession]:
+    db = get_db()
+    q = db.query(PracticeSession).filter(
+        PracticeSession.student_id == student_id,
+        PracticeSession.status == "active",
+    )
+    if topic_id is not None:
+        q = q.filter(PracticeSession.topic_id == topic_id)
+    return q.order_by(PracticeSession.updated_at.desc()).first()
+
+
+def start_session(
+    student_id: int,
+    topic_id: Optional[int] = None,
+    question_id: Optional[int] = None,
+    force_new: bool = False,
+) -> tuple[PracticeSession, bool]:
+    if not force_new:
+        existing = get_active_session(student_id, topic_id)
+        if existing:
+            return existing, True
+
     db = get_db()
     if not question_id and topic_id:
         q = (
@@ -33,7 +54,7 @@ def start_session(student_id: int, topic_id: Optional[int] = None, question_id: 
     db.add(session)
     db.commit()
     db.refresh(session)
-    return session
+    return session, False
 
 
 def get_session(session_id: int) -> PracticeSession:

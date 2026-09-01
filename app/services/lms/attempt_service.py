@@ -31,11 +31,53 @@ def _student_completed_diagnostic(student_id: int, assessment_id: int) -> bool:
     return submitted is not None
 
 
+def _find_in_progress_attempt(
+    student_id: int,
+    assessment_id: int,
+    assignment_id: Optional[int] = None,
+) -> Optional[AssessmentAttempt]:
+    db = get_db()
+    q = (
+        db.query(AssessmentAttempt)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.assessment_id == assessment_id,
+            AssessmentAttempt.status == "in_progress",
+        )
+        .order_by(AssessmentAttempt.started_at.desc())
+    )
+    if assignment_id is not None:
+        q = q.filter(AssessmentAttempt.assignment_id == assignment_id)
+    return q.first()
+
+
+def _abandon_stale_in_progress_attempts(
+    student_id: int,
+    assessment_id: int,
+    keep_attempt_id: int,
+    assignment_id: Optional[int] = None,
+) -> None:
+    """Mark duplicate in-progress attempts as abandoned (legacy data cleanup)."""
+    db = get_db()
+    q = db.query(AssessmentAttempt).filter(
+        AssessmentAttempt.student_id == student_id,
+        AssessmentAttempt.assessment_id == assessment_id,
+        AssessmentAttempt.status == "in_progress",
+        AssessmentAttempt.id != keep_attempt_id,
+    )
+    if assignment_id is not None:
+        q = q.filter(AssessmentAttempt.assignment_id == assignment_id)
+    for row in q.all():
+        row.status = "abandoned"
+    db.commit()
+
+
 def start_attempt(
     student_id: int,
     assessment_id: int,
     assignment_id: Optional[int] = None,
-) -> AssessmentAttempt:
+) -> tuple[AssessmentAttempt, bool]:
+    """Start or resume an attempt. Returns (attempt, resumed)."""
     assessment = get_assessment(assessment_id)
     if assessment.status != "published":
         raise LMSValidationError("Assessment is not published")
@@ -47,6 +89,24 @@ def start_attempt(
             )
 
     db = get_db()
+    existing = _find_in_progress_attempt(student_id, assessment_id, assignment_id)
+    if existing:
+        if assessment.assessment_type == "diagnostic" and existing.expires_at:
+            if datetime.utcnow() > existing.expires_at:
+                logger.info("Auto-submitting expired in-progress diagnostic attempt %s", existing.id)
+                submit_attempt(existing.id)
+                existing = None
+            else:
+                _abandon_stale_in_progress_attempts(
+                    student_id, assessment_id, existing.id, assignment_id
+                )
+                return existing, True
+        elif existing:
+            _abandon_stale_in_progress_attempts(
+                student_id, assessment_id, existing.id, assignment_id
+            )
+            return existing, True
+
     attempt = AssessmentAttempt(
         student_id=student_id,
         assessment_id=assessment_id,
@@ -64,7 +124,7 @@ def start_attempt(
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
-    return attempt
+    return attempt, False
 
 
 def _check_attempt_expired(attempt: AssessmentAttempt) -> None:
@@ -79,6 +139,43 @@ def get_attempt(attempt_id: int) -> AssessmentAttempt:
     if not attempt:
         raise LMSNotFoundError(f"Attempt {attempt_id} not found")
     return attempt
+
+
+def get_attempt_delivery_state(attempt_id: int) -> dict:
+    """Questions plus saved answers and resume position for the student UI."""
+    attempt = get_attempt(attempt_id)
+    if attempt.status != "in_progress":
+        raise LMSValidationError("Attempt is not in progress")
+    _check_attempt_expired(attempt)
+
+    questions = get_delivery_questions(attempt_id)
+    db = get_db()
+    rows = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
+    saved_by_qid = {
+        a.question_id: a.selected_option_index
+        for a in rows
+        if a.selected_option_index is not None
+    }
+
+    saved_answers: dict[int, int] = {}
+    current_index = 0
+    for i, q in enumerate(questions):
+        qid = q["question_id"]
+        if qid in saved_by_qid:
+            saved_answers[i] = saved_by_qid[qid]
+        else:
+            current_index = i
+            break
+    else:
+        if questions:
+            current_index = max(0, len(questions) - 1)
+
+    return {
+        "attempt_id": attempt_id,
+        "questions": questions,
+        "saved_answers": saved_answers,
+        "current_question_index": current_index,
+    }
 
 
 def get_delivery_questions(attempt_id: int) -> List[dict]:

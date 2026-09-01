@@ -504,7 +504,7 @@ def start_quiz_attempt(quiz_id: int):
     body = request.get_json(silent=True) or {}
     assignment_id = body.get("assignment_id")
     try:
-        attempt = attempt_service.start_attempt(
+        attempt, resumed = attempt_service.start_attempt(
             student_id=_current_user_id(),
             assessment_id=quiz_id,
             assignment_id=assignment_id,
@@ -518,6 +518,7 @@ def start_quiz_attempt(quiz_id: int):
             "assessment_id": quiz_id,
             "status": attempt.status,
             "max_score": attempt.max_score,
+            "resumed": resumed,
         }
         assessment = assessment_service.get_assessment(quiz_id)
         if assessment.assessment_type == "diagnostic":
@@ -547,8 +548,21 @@ def get_attempt_questions(attempt_id: int):
         attempt = attempt_service.get_attempt(attempt_id)
         if attempt.student_id != _current_user_id() and _current_role() != "teacher":
             return json_error("Forbidden", code="forbidden", status=403)
+        if attempt.status == "in_progress":
+            state = attempt_service.get_attempt_delivery_state(attempt_id)
+            return json_success({
+                "attempt_id": attempt_id,
+                "questions": state["questions"],
+                "saved_answers": state.get("saved_answers", {}),
+                "current_question_index": state.get("current_question_index", 0),
+            })
         questions = attempt_service.get_delivery_questions(attempt_id)
-        return json_success({"attempt_id": attempt_id, "questions": questions})
+        return json_success({
+            "attempt_id": attempt_id,
+            "questions": questions,
+            "saved_answers": {},
+            "current_question_index": 0,
+        })
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 
@@ -1108,10 +1122,7 @@ def my_learning_path():
         return json_error("Students only", code="forbidden", status=403)
 
     if request.method == "GET":
-        path = learning_path_service.get_path_with_items(uid)
-        if not path and path_generator.has_mastery_data(uid):
-            learning_path_service.generate_learning_path(uid)
-            path = learning_path_service.get_path_with_items(uid)
+        path = learning_path_service.ensure_learning_path(uid)
         return json_success(path or {"items": [], "message": "No learning path yet. Complete a quiz to generate one."})
 
     if request.method == "POST":
@@ -1281,6 +1292,41 @@ def my_progress_history():
     return json_success(analytics_service.get_progress_over_time(_current_user_id()))
 
 
+@bp.route("/tutor/history", methods=["GET"])
+@login_required
+def get_tutor_history():
+    mode = request.args.get("mode", "student")
+    if mode == "teacher" and _current_role() != "teacher":
+        return json_error("Teachers only", code="forbidden", status=403)
+    if mode != "teacher" and _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    from app.services.lms import tutor_memory_service
+
+    messages = tutor_memory_service.get_ui_messages(_current_user_id(), mode=mode)
+    session = tutor_memory_service.get_session_for_user(_current_user_id(), mode=mode)
+    return json_success(
+        {
+            "messages": messages,
+            "has_long_term_memory": bool(session and session.summary_text),
+            "message_count": len(messages),
+        }
+    )
+
+
+@bp.route("/tutor/history", methods=["DELETE"])
+@login_required
+def clear_tutor_history():
+    mode = request.args.get("mode", "student")
+    if mode == "teacher" and _current_role() != "teacher":
+        return json_error("Teachers only", code="forbidden", status=403)
+    if mode != "teacher" and _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    from app.services.lms import tutor_memory_service
+
+    tutor_memory_service.clear_session(_current_user_id(), mode=mode)
+    return json_success({"cleared": True})
+
+
 @bp.route("/tutor/chat", methods=["POST"])
 @login_required
 def student_tutor_chat():
@@ -1296,14 +1342,17 @@ def student_tutor_chat():
         question_text=body.get("question_text"),
         attempt_count=int(body.get("attempt_count") or 0),
     )
-    reply = tutor_service.tutor_chat(
+    from app.services.lms import tutor_memory_service
+
+    result = tutor_memory_service.chat_with_memory(
+        _current_user_id(),
         message,
-        session.get("groq_api_key", ""),
         mode="student",
+        api_key=session.get("groq_api_key", ""),
         context=context,
-        history=body.get("history"),
+        tutor_chat_fn=tutor_service.tutor_chat,
     )
-    return json_success({"reply": reply})
+    return json_success(result)
 
 
 @bp.route("/teacher/tutor", methods=["POST"])
@@ -1316,13 +1365,17 @@ def teacher_tutor_chat():
     message = (body.get("message") or "").strip()
     if not message:
         return json_error("message is required", code="validation_error")
-    reply = tutor_service.tutor_chat(
+    from app.services.lms import tutor_memory_service
+
+    result = tutor_memory_service.chat_with_memory(
+        _current_user_id(),
         message,
-        session.get("groq_api_key", ""),
         mode="teacher",
-        history=body.get("history"),
+        api_key=session.get("groq_api_key", ""),
+        context=None,
+        tutor_chat_fn=tutor_service.tutor_chat,
     )
-    return json_success({"reply": reply})
+    return json_success(result)
 
 
 @bp.route("/teacher/tutor/save-question", methods=["POST"])
@@ -1354,12 +1407,13 @@ def start_practice():
         return json_error("Students only", code="forbidden", status=403)
     body = request.get_json(silent=True) or {}
     try:
-        s = practice_service.start_session(
+        s, resumed = practice_service.start_session(
             _current_user_id(),
             topic_id=body.get("topic_id"),
             question_id=body.get("question_id"),
+            force_new=bool(body.get("force_new")),
         )
-        return json_success({"session_id": s.id}, status=201)
+        return json_success({"session_id": s.id, "resumed": resumed}, status=201)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 

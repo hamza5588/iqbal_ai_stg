@@ -91,7 +91,12 @@ def _resolve_item_title(item_type: str, item_id: int) -> str:
     if item_type == "lesson":
         lesson = db.query(DBLesson).filter(DBLesson.id == item_id).first()
         return lesson.title if lesson and lesson.title else f"Lesson #{item_id}"
-    if item_type in ("quiz", "practice"):
+    if item_type == "practice":
+        if item_id == 0:
+            return "Learning Chat — practice weak areas"
+        quiz = db.query(Assessment).filter(Assessment.id == item_id).first()
+        return quiz.title if quiz and quiz.title else f"Practice #{item_id}"
+    if item_type == "quiz":
         quiz = db.query(Assessment).filter(Assessment.id == item_id).first()
         return quiz.title if quiz and quiz.title else f"Quiz #{item_id}"
     if item_type == "reassessment":
@@ -192,14 +197,49 @@ def generate_learning_path(student_id: int, force: bool = False) -> Optional[Lea
 
 
 def refresh_learning_path(student_id: int) -> Optional[LearningPath]:
-    """Regenerate path after reassessment / quiz submit (P-405)."""
-    if not path_generator.has_mastery_data(student_id):
-        return None
+    """Regenerate path after reassessment / quiz / diagnostic submit (P-405)."""
     weak = path_generator.get_weak_topics(student_id)
-    if not weak:
-        active = get_active_path_for_student(student_id)
-        if active:
-            active.status = "completed"
-            get_db().commit()
-        return active
-    return generate_learning_path(student_id, force=True)
+    if weak:
+        return generate_learning_path(student_id, force=True)
+
+    if not path_generator.has_mastery_data(student_id):
+        return get_active_path_for_student(student_id)
+
+    active = get_active_path_for_student(student_id)
+    if active:
+        active.status = "completed"
+        get_db().commit()
+    return active
+
+
+def ensure_learning_path(student_id: int) -> Optional[dict]:
+    """Return the student's path, creating it when weak topics exist (e.g. after diagnostic)."""
+    from app.services.lms import assessment_service, performance_service
+
+    profile = student_profile_service.get_or_create_profile(student_id)
+    repaired = False
+    if profile.diagnostic_assessment_id:
+        try:
+            assessment = assessment_service.get_assessment(profile.diagnostic_assessment_id)
+            repaired = performance_service.repair_diagnostic_topic_meta(assessment)
+        except Exception:
+            pass
+
+    if not path_generator.has_mastery_data(student_id) or repaired:
+        performance_service.rebuild_student_mastery(student_id)
+
+    path = get_path_with_items(student_id)
+    path_stale = bool(
+        path
+        and path.get("items")
+        and (
+            len(path["items"]) > 1
+            or any(it.get("item_type") in ("quiz", "reassessment") for it in path["items"])
+        )
+    )
+    weak = path_generator.get_weak_topics(student_id)
+    should_have_path = bool(weak) or path_generator.has_mastery_data(student_id)
+    if should_have_path and (not path or not path.get("items") or path_stale):
+        refresh_learning_path(student_id)
+        path = get_path_with_items(student_id)
+    return path

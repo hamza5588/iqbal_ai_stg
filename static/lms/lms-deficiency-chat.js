@@ -157,7 +157,7 @@
     typeset(body);
   }
 
-  window.openDeficiencyChat = async function () {
+  window.openDeficiencyChat = async function (forceNew) {
     ensureDeficiencyModal();
     lmsOpenModal('lmsDeficiencyModal');
     defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
@@ -167,16 +167,29 @@
       var data = await lmsApi('/api/lms/deficiency/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_new: true })
+        body: JSON.stringify({ force_new: forceNew === true })
       });
       defState.sessionId = data.session_id;
+      if (data.tutor_messages && data.tutor_messages.length) {
+        defState.tutorHistory = data.tutor_messages.slice();
+        defState.tutorOpen = true;
+      }
+      if (data.current_index > 0 || data.status === 'paused' || data.resumed) {
+        lmsShowToast('Resuming where you left off', 'success');
+      }
       renderDeficiencyView(data);
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }
   };
 
-  window.closeDeficiencyChat = function () {
+  window.closeDeficiencyChat = async function () {
+    var last = window._lmsDeficiencyLastState;
+    if (defState.sessionId && last && !last.completed) {
+      try {
+        await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/pause', { method: 'POST' });
+      } catch (e) { /* ignore */ }
+    }
     lmsCloseModal('lmsDeficiencyModal');
     defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
   };
@@ -197,7 +210,11 @@
       });
       window._lmsDeficiencyLastState = data;
       defState.selectedOption = null;
-      defState.tutorHistory = [];
+      if (!data.tutor_messages || !data.tutor_messages.length) {
+        defState.tutorHistory = [];
+      } else {
+        defState.tutorHistory = data.tutor_messages.slice();
+      }
       defState.tutorLoading = false;
       if (data.last_answer && !data.last_answer.correct) {
         defState.tutorOpen = true;

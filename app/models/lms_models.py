@@ -662,3 +662,54 @@ class StudentProfile(Base):
         server_default=func.now(),
         server_onupdate=func.now(),
     )
+
+
+class TutorChatSession(Base):
+    """Persistent AI Tutor conversation per user (student or teacher mode)."""
+
+    __tablename__ = "tutor_chat_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    mode = Column(String(16), nullable=False, default="student", server_default="student")
+    summary_text = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )
+
+    messages = relationship(
+        "TutorChatMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="TutorChatMessage.created_at",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "mode", name="uq_tutor_chat_user_mode"),
+        CheckConstraint("mode IN ('student','teacher')", name="check_tutor_chat_mode"),
+    )
+
+
+class TutorChatMessage(Base):
+    """Individual message in an AI Tutor session."""
+
+    __tablename__ = "tutor_chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(
+        Integer, ForeignKey("tutor_chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = Column(String(16), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    session = relationship("TutorChatSession", back_populates="messages")
+
+    __table_args__ = (
+        CheckConstraint("role IN ('user','assistant')", name="check_tutor_chat_msg_role"),
+    )

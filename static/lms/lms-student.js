@@ -107,11 +107,43 @@
     }
   };
 
-  window.closeLmsDiagnostic = function () {
+  window.closeLmsDiagnostic = async function () {
+    if (diagState.attemptId && diagState.questions.length) {
+      try { await persistDiagAnswers(); } catch (e) { /* ignore */ }
+    }
     clearDiagTimer();
     lmsCloseModal('lmsDiagnosticModal');
     diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {}, expiresAt: null, remainingSeconds: null, timerInterval: null };
   };
+
+  async function persistDiagAnswers() {
+    if (!diagState.attemptId) return;
+    for (var i = 0; i < diagState.questions.length; i++) {
+      if (diagState.answers[i] === undefined) continue;
+      var item = diagState.questions[i];
+      var qid = item.question_id || (item.question && item.question.id);
+      if (!qid) continue;
+      await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
+      });
+    }
+  }
+
+  async function saveDiagAnswerAtIndex(qIdx) {
+    if (!diagState.attemptId || diagState.answers[qIdx] === undefined) return;
+    var item = diagState.questions[qIdx];
+    var qid = item.question_id || (item.question && item.question.id);
+    if (!qid) return;
+    try {
+      await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[qIdx] })
+      });
+    } catch (e) { /* ignore */ }
+  }
 
   async function startDiagnosticQuiz(assessmentId, title, qCount, subtitle, timeLimitMinutes) {
     diagState.assessmentId = assessmentId;
@@ -130,8 +162,15 @@
       diagState.remainingSeconds = rem != null ? Math.max(0, Math.floor(Number(rem))) : null;
       var qData = await lmsApi('/api/lms/attempts/' + start.attempt_id + '/questions');
       diagState.questions = qData.questions || qData || [];
-      diagState.current = 0;
       diagState.answers = {};
+      var saved = qData.saved_answers || {};
+      Object.keys(saved).forEach(function (k) {
+        diagState.answers[parseInt(k, 10)] = saved[k];
+      });
+      diagState.current = qData.current_question_index != null ? qData.current_question_index : 0;
+      if (start.resumed) {
+        lmsShowToast('Resuming where you left off', 'success');
+      }
       if (!diagState.questions.length) {
         body.innerHTML = '<p class="lms-error">No questions in this diagnostic.</p>';
         return;
@@ -189,13 +228,22 @@
 
   window.selectDiagOption = function (qIdx, optIdx) {
     diagState.answers[qIdx] = optIdx;
+    saveDiagAnswerAtIndex(qIdx);
     renderDiagnosticQuestion();
   };
   window.nextDiagQuestion = function () {
-    if (diagState.current < diagState.questions.length - 1) { diagState.current++; renderDiagnosticQuestion(); }
+    if (diagState.current < diagState.questions.length - 1) {
+      saveDiagAnswerAtIndex(diagState.current);
+      diagState.current++;
+      renderDiagnosticQuestion();
+    }
   };
   window.prevDiagQuestion = function () {
-    if (diagState.current > 0) { diagState.current--; renderDiagnosticQuestion(); }
+    if (diagState.current > 0) {
+      saveDiagAnswerAtIndex(diagState.current);
+      diagState.current--;
+      renderDiagnosticQuestion();
+    }
   };
 
   window.submitLmsDiagnostic = async function (autoSubmit) {

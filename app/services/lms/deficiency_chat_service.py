@@ -193,6 +193,14 @@ def _session_state(session: DeficiencyChatSession) -> dict:
         pass
     tutor_state = _load_tutor_state(session)
     assist_level = tutor_state.get("assist_level", 1)
+    tutor_messages = []
+    for m in tutor_state.get("messages") or []:
+        role = m.get("role", "")
+        text = m.get("content") or m.get("text") or ""
+        if role == "assistant":
+            tutor_messages.append({"role": "bot", "text": text, "levelLabel": ""})
+        elif role == "user":
+            tutor_messages.append({"role": "user", "text": text})
     return {
         "session_id": session.id,
         "status": session.status,
@@ -205,6 +213,7 @@ def _session_state(session: DeficiencyChatSession) -> dict:
         "pdf_label": "Teacher target content PDF",
         "tutor_assist_level": assist_level,
         "tutor_assist_label": tutor_service.get_deficiency_assist_level_label(assist_level),
+        "tutor_messages": tutor_messages,
         "completed": session.status == "completed",
     }
 
