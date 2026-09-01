@@ -12427,7 +12427,31 @@ Align everything with the lesson objectives and do not invent missing informatio
       </div>
     </div>
   </div>
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
+  <script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
   <script>
+    function _lmsFmtText(text, inline) {
+      if (typeof lmsFormatRichText === 'function') {
+        return lmsFormatRichText(text, inline ? { inline: true } : undefined);
+      }
+      return escapeHtml(text == null ? '' : String(text));
+    }
+    function _lmsFmtOption(opt) {
+      var text = (opt && (opt.latex || opt.text)) || '';
+      return _lmsFmtText(text, true);
+    }
+    function _lmsFmtQuestion(q) {
+      var text = (q && (q.question_latex || q.question_text)) || '';
+      return _lmsFmtText(text, true);
+    }
+    function _lmsTypeset(el) {
+      if (typeof lmsTypesetMath === 'function') return lmsTypesetMath(el);
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        return window.MathJax.typesetPromise([el]).catch(function () {});
+      }
+      return Promise.resolve();
+    }
+
     let _lmsCurrentAssessmentId = null;
     let _lmsPollTimer = null;
     let _lmsDiagAssessmentId = null;
@@ -12692,13 +12716,13 @@ Align everything with the lesson objectives and do not invent missing informatio
         const q = item.question || {};
         const opts = (q.options || []).map(function (o, oidx) {
           var mark = (q.correct_option_index === oidx) ? ' ✓' : '';
-          return '<li>' + o.label + '. ' + lmsFormatRichText(lmsOptionText(o), { inline: true }) + mark + '</li>';
+          return '<li>' + o.label + '. ' + _lmsFmtOption(o) + mark + '</li>';
         }).join('');
         return '<div class="lms-diag-preview-card">' +
-          '<strong>Q' + (idx + 1) + '.</strong> ' + lmsFormatRichText(lmsQuestionText(q), { inline: true }) +
+          '<strong>Q' + (idx + 1) + '.</strong> ' + _lmsFmtQuestion(q) +
           '<ul>' + opts + '</ul></div>';
       }).join('');
-      lmsTypesetMath(previewEl);
+      _lmsTypeset(previewEl);
     }
     async function publishLmsDiagnostic() {
       if (!_lmsDiagAssessmentId) return;
@@ -12852,13 +12876,13 @@ Align everything with the lesson objectives and do not invent missing informatio
       previewEl.innerHTML = d.questions.map(function (item, idx) {
         const q = item.question || {};
         const opts = (q.options || []).map(function (o) {
-          return '<li>' + o.label + '. ' + lmsFormatRichText(lmsOptionText(o), { inline: true }) + '</li>';
+          return '<li>' + o.label + '. ' + _lmsFmtOption(o) + '</li>';
         }).join('');
         return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;">' +
-          '<strong>Q' + (idx + 1) + '.</strong> ' + lmsFormatRichText(lmsQuestionText(q), { inline: true }) +
+          '<strong>Q' + (idx + 1) + '.</strong> ' + _lmsFmtQuestion(q) +
           '<ul style="margin:8px 0 0 16px;">' + opts + '</ul></div>';
       }).join('');
-      lmsTypesetMath(previewEl);
+      _lmsTypeset(previewEl);
     }
     async function publishLmsQuiz() {
       if (!_lmsCurrentAssessmentId) return;
@@ -12892,8 +12916,6 @@ Align everything with the lesson objectives and do not invent missing informatio
     });
   </script>
 
-<link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
-<script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
 <script src="{{ url_for('static', filename='lms/lms-panels.js') }}"></script>
 <script src="{{ url_for('static', filename='lms/lms-teacher-class.js') }}"></script>
 
