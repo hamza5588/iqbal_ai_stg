@@ -67,8 +67,48 @@
     return '<span class="lms-badge lms-badge-' + cls + '">' + escapeHtml(status || 'unknown') + '</span>';
   };
 
+  var _LABEL_ONLY_RE = /^\s*[\(\[]?[A-Da-d][\)\].:]?\s*$/;
+  var _LABEL_PREFIX_RE = /^\s*[\(\[]?([A-Da-d])(?:[\)\].:\-]\s+|\s+(?=\())/;
+
+  function lmsIsLabelOnly(str) {
+    return _LABEL_ONLY_RE.test(String(str || ''));
+  }
+
+  function lmsStripOptionLabelPrefix(str) {
+    var s = String(str || '').trim();
+    if (!s || lmsIsLabelOnly(s)) return s;
+    var stripped = s.replace(_LABEL_PREFIX_RE, '').trim();
+    return stripped || s;
+  }
+
+  function lmsIsBrokenMathBlob(str) {
+    var s = String(str || '').trim();
+    if (!s || /\s/.test(s)) return false;
+    return s.length > 40 && /[A-Za-z]{8,}/.test(s);
+  }
+
   function lmsLooksLikeRawLatex(str) {
-    return /\\(frac|sqrt|text|pm|neq|leq|geq|cdot|times|left|right|alpha|beta|theta|pi|infty|partial|sum|int)\b/.test(str);
+    return /\\(frac|sqrt|text|pm|neq|leq|geq|cdot|times|left|right|alpha|beta|theta|pi|infty|partial|sum|int|dots|ldots|cdots|div|log|sin|cos|tan)\b/.test(str);
+  }
+
+  function lmsLooksLikeMathExpression(str) {
+    var s = String(str || '').trim();
+    if (!s || s.length > 160) return false;
+    if (/\b(which|following|choose|statement|decimal|because|correct|except)\b/i.test(s)) return false;
+    if (lmsLooksLikeRawLatex(s) || /\\(dots|ldots|cdots)\b/.test(s)) return true;
+    var words = s.match(/[A-Za-z]{4,}/g) || [];
+    var mathWords = /^(log|ln|sin|cos|tan|sec|csc|cot|lim|max|min|frac|sqrt|cdot)$/i;
+    if (words.length && !words.every(function (w) { return mathWords.test(w); })) return false;
+    return /[a-zA-Z0-9]\^|\^{|[_^]|[=+\-*/]|\\[a-zA-Z]+/.test(s) || /\blog\b|\bsin\b|\bcos\b/.test(s);
+  }
+
+  function lmsPickDisplayText(text, latex) {
+    var t = lmsStripOptionLabelPrefix(text || '');
+    var l = lmsStripOptionLabelPrefix(latex || '');
+    if (lmsIsBrokenMathBlob(l)) l = '';
+    if (lmsIsLabelOnly(t) && l && !lmsIsLabelOnly(l) && !lmsIsBrokenMathBlob(l)) return l;
+    if (t && !lmsIsLabelOnly(t)) return t;
+    return l || t;
   }
 
   /** Wrap bare LaTeX / plain math notation so TeacherChatFormatter + MathJax can render it. */
@@ -77,27 +117,26 @@
     var s = String(text).trim();
     if (!s) return '';
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) return s;
-    if (lmsLooksLikeRawLatex(s)) return '\\(' + s + '\\)';
+    if (lmsLooksLikeRawLatex(s) && !lmsIsBrokenMathBlob(s)) return '\\(' + s + '\\)';
     var colon = s.match(/^(.+?:\s*)(.+)$/);
-    if (colon && (/[a-zA-Z0-9]\^|\^{/.test(colon[2]) || /\\[a-zA-Z]+/.test(colon[2]) || /[0-9]x[\^²]/.test(colon[2]))) {
+    if (colon && lmsLooksLikeMathExpression(colon[2])) {
       return colon[1] + '\\(' + colon[2].trim() + '\\)';
     }
-    if ((/[a-zA-Z0-9]\^/.test(s) || /\^{/.test(s) || /x²|x³/.test(s)) && /[=+\-*/]/.test(s) && s.length < 200) {
-      return '\\(' + s + '\\)';
-    }
+    if (lmsLooksLikeMathExpression(s)) return '\\(' + s + '\\)';
     return s;
-  };
+  }
   global.lmsPrepareMathText = prepareMathText;
+  global.lmsPickDisplayText = lmsPickDisplayText;
 
   function optionText(opt) {
     if (!opt) return '';
-    return opt.latex || opt.text || '';
+    return lmsPickDisplayText(opt.text, opt.latex);
   }
   global.lmsOptionText = optionText;
 
   function questionText(q) {
     if (!q) return '';
-    return q.question_latex || q.question_text || '';
+    return lmsPickDisplayText(q.question_text, q.question_latex);
   }
   global.lmsQuestionText = questionText;
 

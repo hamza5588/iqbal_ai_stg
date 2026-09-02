@@ -7,10 +7,16 @@
     return escapeHtml(text == null ? '' : String(text));
   }
   function fmtOption(opt) {
-    return fmtText((opt && (opt.latex || opt.text)) || (opt && opt.label) || '', true);
+    var raw = (typeof window.lmsOptionText === 'function')
+      ? window.lmsOptionText(opt)
+      : ((opt && (opt.text || opt.latex || opt.label)) || '');
+    return fmtText(raw, true);
   }
   function fmtQuestion(q) {
-    return fmtText((q && (q.question_latex || q.question_text)) || '', false);
+    var raw = (typeof window.lmsQuestionText === 'function')
+      ? window.lmsQuestionText(q)
+      : ((q && (q.question_text || q.question_latex)) || '');
+    return fmtText(raw, false);
   }
   function typeset(el) {
     if (!el) return Promise.resolve();
@@ -347,7 +353,7 @@
     }).join('');
     body.innerHTML =
       '<p class="lms-badge lms-badge-green">' + escapeHtml(q.difficulty || 'medium') + '</p>' +
-      '<h3 style="font-size:1rem;margin:12px 0;">' + fmtQuestion(q) + '</h3>' +
+      '<h3 class="lms-quiz-stem">' + fmtQuestion(q) + '</h3>' +
       opts +
       '<div id="lmsPracticeFeedback" style="margin-top:12px;"></div>' +
       '<button type="button" class="lms-btn lms-btn-ghost" style="margin-top:10px;" onclick="requestLmsPracticeHint()">Need a hint?</button>';

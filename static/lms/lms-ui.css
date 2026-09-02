@@ -297,6 +297,12 @@
   display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;
 }
 .lms-chat-msg.user .lms-chat-avatar { background: var(--lms-green); color: #fff; }
+.lms-math-content {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  white-space: normal;
+}
 .lms-math-content mjx-container[jax="CHTML"] { display: inline-block; margin: 0 0.1em; }
 .lms-math-content mjx-container[display="true"],
 .lms-math-content .katex-display { margin: 0.5em 0; overflow-x: auto; }
@@ -347,6 +353,15 @@
 .lms-quiz-option.selected { border-color: var(--lms-green); background: var(--lms-green-muted); }
 .lms-quiz-progress { height: 6px; background: #e2e8f0; border-radius: 9999px; margin-bottom: 16px; overflow: hidden; }
 .lms-quiz-progress-bar { height: 100%; background: var(--lms-green); border-radius: 9999px; transition: width 0.3s; }
+.lms-quiz-stem {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  overflow-x: hidden;
+}
 
 /* Topic results */
 .lms-topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }

@@ -7,10 +7,16 @@
     return escapeHtml(text == null ? '' : String(text));
   }
   function fmtOption(opt) {
-    return fmtText((opt && (opt.latex || opt.text)) || '', true);
+    var raw = (typeof window.lmsOptionText === 'function')
+      ? window.lmsOptionText(opt)
+      : ((opt && (opt.text || opt.latex)) || '');
+    return fmtText(raw, true);
   }
   function fmtQuestion(q) {
-    return fmtText((q && (q.question_latex || q.question_text)) || '', false);
+    var raw = (typeof window.lmsQuestionText === 'function')
+      ? window.lmsQuestionText(q)
+      : ((q && (q.question_text || q.question_latex)) || '');
+    return fmtText(raw, false);
   }
   function typeset(el) {
     if (!el) return Promise.resolve();
@@ -140,11 +146,14 @@
       '<p class="lms-status">Question ' + (data.current_index + 1) + ' of ' + data.total_questions +
       (q.topic_name ? ' · <strong>' + escapeHtml(q.topic_name) + '</strong>' : '') + '</p>' +
       (data.has_pdf ? '<p class="lms-status" style="font-size:.75rem;">Questions from teacher target PDF · weak area: ' + escapeHtml((q && q.topic_name) || '') + '</p>' : '<p class="lms-status" style="font-size:.75rem;color:#991b1b;">Teacher has not uploaded target content PDF yet.</p>') +
-      '<h3 style="font-size:1rem;font-weight:700;margin:12px 0;">' + fmtQuestion(q) + '</h3>' +
+      '<h3 class="lms-quiz-stem">' + fmtQuestion(q) + '</h3>' +
       opts +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;display:flex;flex-wrap:wrap;gap:8px;">' +
       '<button type="button" class="lms-btn lms-btn-primary" onclick="submitDeficiencyAnswer()"' +
       (defState.selectedOption === null ? ' disabled' : '') + '>Submit Answer</button>' +
+      (data.last_answer && data.last_answer.correct === false
+        ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="advanceDeficiencyQuestion()">Next question</button>'
+        : '') +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="toggleDeficiencyTutor()">Ask Tutor</button>' +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="pauseDeficiencyChat()">Pause &amp; Exit</button></div>' +
       tutorSection;
@@ -218,10 +227,32 @@
       defState.tutorLoading = false;
       if (data.last_answer && !data.last_answer.correct) {
         defState.tutorOpen = true;
-        lmsShowToast('Incorrect — ask the tutor for help or continue to the next question.', 'error');
-      } else if (data.last_answer && data.last_answer.correct) {
-        lmsShowToast('Correct!', 'success');
+        lmsShowToast('Incorrect — ask the tutor for help, then tap Next question when you are ready.', 'error');
+      } else {
+        defState.tutorOpen = false;
+        defState.tutorHistory = [];
+        if (data.last_answer && data.last_answer.correct) {
+          lmsShowToast('Correct!', 'success');
+        }
       }
+      renderDeficiencyView(data);
+    } catch (err) {
+      if (body) body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
+    }
+  };
+
+  window.advanceDeficiencyQuestion = async function () {
+    if (!defState.sessionId) return;
+    var body = document.getElementById('lmsDeficiencyBody');
+    try {
+      var data = await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/advance', {
+        method: 'POST'
+      });
+      defState.selectedOption = null;
+      defState.tutorOpen = false;
+      defState.tutorHistory = [];
+      defState.tutorLoading = false;
+      window._lmsDeficiencyLastState = data;
       renderDeficiencyView(data);
     } catch (err) {
       if (body) body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';

@@ -1498,6 +1498,18 @@ def deficiency_chat_answer(session_id: int):
         return json_error(str(e), code="validation_error")
 
 
+@bp.route("/deficiency/sessions/<int:session_id>/advance", methods=["POST"])
+@login_required
+def deficiency_chat_advance(session_id: int):
+    """Move to the next Learning Chat question and close the tutor."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    try:
+        return json_success(deficiency_chat_service.advance_session(session_id, _current_user_id()))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
 @bp.route("/deficiency/sessions/<int:session_id>/pause", methods=["POST"])
 @login_required
 def deficiency_chat_pause(session_id: int):

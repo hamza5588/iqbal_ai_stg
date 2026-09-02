@@ -7,10 +7,16 @@
     return escapeHtml(text == null ? '' : String(text));
   }
   function fmtOption(opt) {
-    return fmtText((opt && (opt.latex || opt.text)) || '', true);
+    var raw = (typeof window.lmsOptionText === 'function')
+      ? window.lmsOptionText(opt)
+      : ((opt && (opt.text || opt.latex)) || '');
+    return fmtText(raw, true);
   }
   function fmtQuestion(q) {
-    return fmtText((q && (q.question_latex || q.question_text)) || '', false);
+    var raw = (typeof window.lmsQuestionText === 'function')
+      ? window.lmsQuestionText(q)
+      : ((q && (q.question_text || q.question_latex)) || '');
+    return fmtText(raw, false);
   }
   function typeset(el) {
     if (!el) return Promise.resolve();
@@ -248,7 +254,7 @@
     body.innerHTML =
       '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
       meta +
-      '<h3 style="font-size:1rem;font-weight:700;margin:12px 0;">' + fmtQuestion(q) + '</h3>' +
+      '<h3 class="lms-quiz-stem">' + fmtQuestion(q) + '</h3>' +
       opts +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' + nav + '</div>';
     typeset(body);

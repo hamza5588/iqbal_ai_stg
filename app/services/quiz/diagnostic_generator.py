@@ -26,7 +26,10 @@ Rules:
 - Each question must have exactly 4 unique options labeled A, B, C, D.
 - One clearly correct answer per question grounded in the content.
 - Distractors should reflect common student mistakes.
-- Use the latex field when math notation is needed.
+- Option text must be the FULL choice, never only "A"/"B"/"C"/"D".
+- Do NOT prefix option text with the letter (write "a repeating decimal", not "B (a repeating decimal)").
+- Put LaTeX ONLY in latex fields (\\frac, \\sqrt, \\dots, \\log). Keep question_text and option text readable with normal spaces between words.
+- Never copy a whole English sentence into a latex field with the spaces removed.
 - Set conversion_confidence between 0 and 1 for each question.
 - Set learning_concept to a short student-friendly skill name (3-8 words) for what the question tests — not the PDF heading or document title.
 - Do not invent facts not supported by the content.

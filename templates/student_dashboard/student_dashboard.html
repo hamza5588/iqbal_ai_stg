@@ -7892,10 +7892,16 @@
       return escapeHtml(text == null ? '' : String(text));
     }
     function _lmsFmtOption(opt) {
-      return _lmsFmtText((opt && (opt.latex || opt.text)) || '', true);
+      var raw = (typeof lmsOptionText === 'function')
+        ? lmsOptionText(opt)
+        : ((opt && (opt.text || opt.latex)) || '');
+      return _lmsFmtText(raw, true);
     }
     function _lmsFmtQuestion(q) {
-      return _lmsFmtText((q && (q.question_latex || q.question_text)) || '', false);
+      var raw = (typeof lmsQuestionText === 'function')
+        ? lmsQuestionText(q)
+        : ((q && (q.question_text || q.question_latex)) || '');
+      return _lmsFmtText(raw, false);
     }
     function _lmsTypeset(el) {
       if (!el) return Promise.resolve();

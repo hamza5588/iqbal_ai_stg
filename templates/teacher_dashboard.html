@@ -12437,12 +12437,16 @@ Align everything with the lesson objectives and do not invent missing informatio
       return escapeHtml(text == null ? '' : String(text));
     }
     function _lmsFmtOption(opt) {
-      var text = (opt && (opt.latex || opt.text)) || '';
+      var text = (typeof lmsOptionText === 'function')
+        ? lmsOptionText(opt)
+        : ((opt && (opt.text || opt.latex)) || '');
       return _lmsFmtText(text, true);
     }
     function _lmsFmtQuestion(q) {
-      var text = (q && (q.question_latex || q.question_text)) || '';
-      return _lmsFmtText(text, true);
+      var text = (typeof lmsQuestionText === 'function')
+        ? lmsQuestionText(q)
+        : ((q && (q.question_text || q.question_latex)) || '');
+      return _lmsFmtText(text, false);
     }
     function _lmsTypeset(el) {
       if (!el) return Promise.resolve();

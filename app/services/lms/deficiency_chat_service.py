@@ -8,6 +8,12 @@ from typing import List, Optional, Tuple
 
 from app.models.lms_models import AssessmentAttempt, DeficiencyChatSession, StudentProfile
 from app.services.lms import assessment_service, tutor_service
+from app.services.lms.mcq_utils import (
+    is_label_only,
+    normalize_options,
+    pick_display_fields,
+    resolve_correct_option_index,
+)
 from app.services.lms.diagnostic_service import get_default_diagnostic
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
 from app.services.lms.path_generator import get_weak_topics
@@ -104,20 +110,26 @@ def _match_target_section(weak_area_name: str, target_thread_ids: List[str]) -> 
     return (best or name), best_thread
 
 
-def _mcq_to_queue_item(mcq, topic_id: int, topic_name: str, pdf_section: str, rag_thread_id: str) -> dict:
-    options = [{"label": o.label, "text": o.text} for o in mcq.options]
+def _mcq_to_queue_item(mcq, topic_id: int, topic_name: str, pdf_section: str, rag_thread_id: str) -> Optional[dict]:
+    options = normalize_options(
+        [{"label": o.label, "text": o.text, "latex": getattr(o, "latex", None)} for o in mcq.options]
+    )
+    if any(is_label_only(o.get("text") or "") and is_label_only(o.get("latex") or "") for o in options):
+        return None
+    correct_idx = resolve_correct_option_index(options, mcq.correct_option_label)
+    if correct_idx is None:
+        logger.warning("Skipping MCQ with unresolved correct label %s", mcq.correct_option_label)
+        return None
+    q_text, q_latex = pick_display_fields(mcq.question_text, mcq.question_latex)
     return {
         "topic_id": topic_id,
         "topic_name": topic_name,
         "pdf_section": pdf_section,
         "rag_thread_id": rag_thread_id,
-        "question_text": mcq.question_text,
-        "question_latex": mcq.question_latex,
+        "question_text": q_text or mcq.question_text,
+        "question_latex": q_latex,
         "options": options,
-        "correct_option_index": next(
-            (i for i, o in enumerate(mcq.options) if o.label == mcq.correct_option_label),
-            0,
-        ),
+        "correct_option_index": correct_idx,
         "source": "target_pdf",
         "answered": False,
         "correct": None,
@@ -157,6 +169,8 @@ def _build_question_queue(
             )
             for mcq in mcqs:
                 item = _mcq_to_queue_item(mcq, topic_id, topic_name, pdf_section, thread_id)
+                if not item:
+                    continue
                 key = (item.get("question_text") or "")[:120].lower()
                 if key and key not in seen_texts:
                     seen_texts.add(key)
@@ -341,6 +355,17 @@ def get_session(session_id: int, student_id: int) -> dict:
     return _session_state(session)
 
 
+def _reset_tutor_state(session: DeficiencyChatSession) -> None:
+    session.chat_history_json = json.dumps(
+        {
+            "question_index": session.current_index,
+            "assist_level": 1,
+            "messages": [],
+        },
+        ensure_ascii=False,
+    )
+
+
 def submit_answer(session_id: int, student_id: int, selected_option_index: int) -> dict:
     db = get_db()
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
@@ -356,15 +381,21 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
 
     q = questions[idx]
     is_correct = selected_option_index == q.get("correct_option_index")
-    q["answered"] = True
-    q["correct"] = is_correct
-    if is_correct:
-        session.correct_count += 1
+    already_correct = q.get("correct") is True
 
-    session.current_index = idx + 1
-    if session.current_index >= len(questions):
-        session.status = "completed"
-        _mark_learning_path_chat_complete(student_id)
+    if is_correct:
+        q["answered"] = True
+        q["correct"] = True
+        if not already_correct:
+            session.correct_count += 1
+        session.current_index = idx + 1
+        _reset_tutor_state(session)
+        if session.current_index >= len(questions):
+            session.status = "completed"
+            _mark_learning_path_chat_complete(student_id)
+    else:
+        q["answered"] = True
+        q["correct"] = False
 
     _save_questions(session, questions)
     db.commit()
@@ -374,8 +405,41 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         "correct": is_correct,
         "explanation_available": not is_correct,
         "topic_name": q.get("topic_name"),
+        "stay_on_question": not is_correct,
     }
     return result
+
+
+def advance_session(session_id: int, student_id: int) -> dict:
+    """Skip the current question (after an incorrect attempt) and close the tutor."""
+    db = get_db()
+    session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
+    if not session or session.student_id != student_id:
+        raise LMSValidationError("Not authorized")
+    if session.status not in ("active", "paused"):
+        raise LMSValidationError("Session is not active")
+
+    questions = _load_questions(session)
+    idx = session.current_index
+    if idx >= len(questions):
+        session.status = "completed"
+        _mark_learning_path_chat_complete(student_id)
+        db.commit()
+        return _session_state(session)
+
+    q = questions[idx]
+    if not q.get("answered"):
+        q["answered"] = True
+        q["correct"] = False
+        _save_questions(session, questions)
+
+    session.current_index = idx + 1
+    _reset_tutor_state(session)
+    if session.current_index >= len(questions):
+        session.status = "completed"
+        _mark_learning_path_chat_complete(student_id)
+    db.commit()
+    return _session_state(session)
 
 
 def pause_session(session_id: int, student_id: int) -> dict:

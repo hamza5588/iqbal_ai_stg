@@ -8,8 +8,13 @@ from typing import List, Optional
 
 from pydantic import ValidationError
 
-from app.services.lms.mcq_utils import shuffle_options
-from app.services.quiz.models import MCQBatchResult, MCQQuestion, QuestionAnswerPair
+from app.services.lms.mcq_utils import (
+    parse_answer_label,
+    pick_display_fields,
+    resolve_correct_option_index,
+    shuffle_options,
+)
+from app.services.quiz.models import MCQBatchResult, MCQOption, MCQQuestion, QuestionAnswerPair
 from app.services.quiz.retry_utils import format_validation_errors, invoke_structured, retry_on_validation_error
 from app.utils.llm_factory import get_chat_model
 
@@ -22,8 +27,11 @@ Rules:
 - Generate exactly 3 plausible wrong distractors (common mistakes for math).
 - All 4 options must be unique. No "all of the above" or "none of the above".
 - Assign labels A, B, C, D to options.
+- Option text must be the FULL choice, never only "A"/"B"/"C"/"D".
+- Do NOT prefix option text with the letter (write "a repeating decimal", not "B (a repeating decimal)").
 - Set correct_option_label to the label of the option matching the PDF answer.
-- Preserve math in latex fields when needed for MathJax rendering.
+- Put LaTeX ONLY in latex fields (\\frac, \\sqrt, \\dots). Keep question_text / option text readable with normal spaces.
+- Never copy a whole English sentence into a latex field with the spaces removed.
 - Set conversion_confidence 0-1.
 
 Question: {question}
@@ -86,8 +94,54 @@ def _validate_pdf_answer_in_options(mcq: MCQQuestion, pair: QuestionAnswerPair) 
     return mcq
 
 
+def native_mcq_from_pair(pair: QuestionAnswerPair) -> Optional[MCQQuestion]:
+    """Use already-extracted MCQ options from the PDF instead of inventing new ones."""
+    if not pair.options or len(pair.options) != 4:
+        return None
+    try:
+        opts: list[MCQOption] = []
+        for o in pair.options:
+            label = str(o.label or "").strip().upper()[:1]
+            if label not in ("A", "B", "C", "D"):
+                return None
+            opts.append(MCQOption(label=label, text=o.text, latex=o.latex))
+        if {o.label for o in opts} != {"A", "B", "C", "D"}:
+            return None
+        correct = pair.correct_option_label
+        if not correct:
+            parsed = parse_answer_label(pair.answer_text)
+            correct = parsed if parsed in ("A", "B", "C", "D") else None
+        if not correct:
+            ans_norm = (pair.answer_text or "").strip().lower()
+            ans_latex = (pair.answer_latex or "").strip().lower()
+            for option in opts:
+                opt_norm = option.text.strip().lower()
+                if opt_norm == ans_norm or (ans_norm and ans_norm in opt_norm) or (opt_norm and opt_norm in ans_norm):
+                    correct = option.label
+                    break
+                if ans_latex and (option.latex or "").strip().lower() == ans_latex:
+                    correct = option.label
+                    break
+        if not correct:
+            return None
+        q_text, q_latex = pick_display_fields(pair.question_text, pair.question_latex)
+        return MCQQuestion(
+            question_text=q_text or pair.question_text,
+            question_latex=q_latex,
+            options=opts,
+            correct_option_label=correct,
+            conversion_confidence=0.95,
+        )
+    except (ValidationError, ValueError):
+        return None
+
+
 def convert_pair_to_mcq(pair: QuestionAnswerPair) -> MCQQuestion:
     """Convert a single Q+A pair to a validated MCQ using structured LLM output."""
+    native = native_mcq_from_pair(pair)
+    if native:
+        return native
+
     llm = get_chat_model(temperature=0.3, max_tokens=2048)
     retry_hint = ""
 
@@ -130,11 +184,14 @@ def convert_pairs_batch(
 def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
     """Map MCQQuestion to question_bank_service fields with shuffled options."""
     opts = [{"label": o.label, "text": o.text, "latex": o.latex} for o in mcq.options]
-    correct_idx = next(i for i, o in enumerate(mcq.options) if o.label == mcq.correct_option_label)
+    correct_idx = resolve_correct_option_index(opts, mcq.correct_option_label)
+    if correct_idx is None:
+        raise ValueError("Could not resolve correct option label to an index")
     shuffled, new_correct = shuffle_options(opts, correct_idx)
+    q_text, q_latex = pick_display_fields(mcq.question_text, mcq.question_latex)
     return {
-        "question_text": mcq.question_text,
-        "question_latex": mcq.question_latex,
+        "question_text": q_text or mcq.question_text,
+        "question_latex": q_latex,
         "options": shuffled,
         "correct_option_index": new_correct,
         "explanation": mcq.explanation,
