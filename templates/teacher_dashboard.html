@@ -12145,16 +12145,19 @@ Align everything with the lesson objectives and do not invent missing informatio
 
   <!-- LMS Classes Hub (Phase 2) -->
   <div class="lms-fab-bar">
+    <!-- lms-fab-bar is column-reverse, so DOM order here is the reverse of the
+         visual top-to-bottom order: Add/Manage Classes, Create Quiz, Assign
+         Quiz, Analytics, AI Tutor. -->
     <button type="button" class="lms-fab" onclick="openLmsTutorPanel('teacher')">AI Tutor</button>
     <button type="button" class="lms-fab" onclick="openLmsTeacherAnalytics()">Analytics</button>
-    <button type="button" class="lms-fab" onclick="openLmsQuizHub()">PDF Quiz</button>
     <button type="button" class="lms-fab lms-fab-secondary" onclick="openLmsAssignModal()">Assign Quiz</button>
-    <button type="button" class="lms-fab" onclick="openLmsClassHub()">Classes</button>
+    <button type="button" class="lms-fab" onclick="openLmsQuizHub()">Create Quiz</button>
+    <button type="button" class="lms-fab" onclick="openLmsClassHub()">Add/Manage Classes</button>
   </div>
   <div id="lmsClassHubModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsClassHub()">
     <div class="lms-modal lms-modal-lg">
       <div class="lms-modal-header">
-        <h2>Manage Classes</h2>
+        <h2>Add/Manage Classes</h2>
         <button type="button" class="lms-modal-close" onclick="closeLmsClassHub()">&times;</button>
       </div>
       <div class="lms-modal-body">
