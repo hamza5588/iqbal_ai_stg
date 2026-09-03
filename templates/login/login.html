@@ -444,7 +444,7 @@
       <span id="login-error-text">{% if error %}{{ error }}{% endif %}</span>
     </div>
 
-    <form id="login-form" novalidate>
+    <form id="login-form" novalidate data-wait-message="Signing in...">
       <div class="field-row">
         <label class="field-label" for="email">
           <span class="icon">
@@ -591,7 +591,10 @@
     setFieldError('password', 'password-error', !passwordValid);
     if (!passwordValid) isValid = false;
 
-    if (!isValid) return;
+    if (!isValid) {
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      return;
+    }
 
     hideLoginError();
     submitBtn.disabled = true;
@@ -635,6 +638,7 @@
 
     submitBtn.disabled = false;
     submitBtnText.textContent = 'Sign In';
+    if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
   });
 
   document.getElementById('email').addEventListener('input', function () {

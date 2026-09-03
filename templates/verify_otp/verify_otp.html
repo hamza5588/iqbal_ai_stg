@@ -208,7 +208,7 @@
 
         <div class="resend-row">
           Didn't receive the code?
-          <form id="resend-form" action="{{ url_for('auth.forgot_password') }}" method="POST" style="display:inline;">
+          <form id="resend-form" action="{{ url_for('auth.forgot_password') }}" method="POST" style="display:inline;" data-wait-message="Resending code...">
             <input type="hidden" name="useremail" value="{{ email }}">
             <button type="submit" id="resend-btn" disabled>Resend Code <span id="resend-timer">(60s)</span></button>
           </form>

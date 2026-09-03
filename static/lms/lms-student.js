@@ -333,6 +333,9 @@
     var body = document.getElementById('lmsDiagBody');
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">' +
       (autoSubmit ? 'Time over — closing your diagnostic...' : 'Scoring your diagnostic...') + '</p>';
+    if (typeof showWaitOverlay === 'function') {
+      showWaitOverlay(autoSubmit ? 'Time over — submitting...' : 'Submitting diagnostic...');
+    }
     try {
       if (!autoSubmit) {
         for (var i = 0; i < diagState.questions.length; i++) {
@@ -365,6 +368,8 @@
         return;
       }
       body.innerHTML = '<p class="lms-error">' + escapeHtml(msg) + '</p>';
+    } finally {
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
     }
   };
 

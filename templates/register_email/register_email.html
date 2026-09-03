@@ -178,7 +178,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 
     <div id="form-error" class="{% if error %}show{% endif %}">{% if error %}{{ error }}{% endif %}</div>
 
-    <form class="email-form" id="register-email-form" action="{{ url_for('auth.register_email') }}" method="POST" novalidate>
+    <form class="email-form" id="register-email-form" action="{{ url_for('auth.register_email') }}" method="POST" novalidate data-wait-message="Sending verification email...">
       <label class="field-label" for="useremail">
         <span class="icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/></svg></span>
         Email address

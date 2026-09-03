@@ -113,9 +113,10 @@
   }
 
   function lmsLooksLikeMathLine(s) {
-    s = String(s || '').trim();
+    s = lmsUnsquashEnglish(String(s || '').trim());
     if (!s || s.length > 120) return false;
     if (/^(simplify|find|solve|evaluate|compute|expand|factor)\s*:?\s*$/i.test(s)) return false;
+    if (lmsLooksLikeProse(s)) return false;
     return /[A-Za-z]\d|[A-Za-z]\^|[=+\-×÷·/^_\\()]/.test(s);
   }
 
@@ -147,7 +148,68 @@
 
   var _MATH_WORD_RE = /^(log|ln|sin|cos|tan|sec|csc|cot|lim|max|min|frac|sqrt|cdot|simplify|left|right|text|over|times)$/i;
   var _FRAC_RE = /\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}/g;
-  var _ALG_ISLAND_RE = /(?:[A-Za-z]\^\{[^}]+\}|[A-Za-z]\^\d+|[A-Za-z]\d+)(?:\s*[+\-×÷=]\s*(?:[A-Za-z]\^\{[^}]+\}|[A-Za-z]\^\d+|[A-Za-z]\d+|[A-Za-z]|-?\d+))+/g;
+  var _ALG_TERM = '(?:-?\\d*(?:[A-Za-z](?:\\^\\{[^}]+\\}|\\^\\d+|\\d+)*)+|-?\\d+)';
+  var _ALG_ISLAND_RE = new RegExp(_ALG_TERM + '(?:\\s*[+\\-×÷=]\\s*' + _ALG_TERM + ')+', 'g');
+  var _EXAM_WORDS = [
+    'factorization', 'factorisation', 'polynomials', 'polynomial',
+    'expressions', 'expression', 'statements', 'statement',
+    'coefficients', 'coefficient', 'identities', 'identity',
+    'equations', 'equation', 'fractions', 'fraction', 'decimals',
+    'decimal', 'integers', 'integer', 'numbers', 'number',
+    'incorrect', 'correct', 'following', 'repeating', 'terminating',
+    'irrational', 'rational', 'quadratic', 'standard', 'simplify',
+    'simplified', 'evaluate', 'compute', 'expand', 'factor',
+    'degree', 'product', 'difference', 'quotient', 'remainder',
+    'equivalent', 'positive', 'negative', 'greatest', 'greater',
+    'choose', 'select', 'between', 'without', 'linear', 'cubic',
+    'prime', 'composite', 'complex', 'constant', 'variable',
+    'which', 'what', 'where', 'when', 'this', 'that', 'these',
+    'those', 'each', 'both', 'only', 'also', 'true', 'false',
+    'none', 'find', 'solve', 'given', 'below', 'above', 'after',
+    'before', 'over', 'under', 'into', 'onto', 'from', 'with',
+    'than', 'then', 'such', 'must', 'does', 'have', 'has',
+    'was', 'were', 'are', 'the', 'and', 'for', 'not', 'its',
+    'of', 'is', 'in', 'or', 'an', 'to', 'if'
+  ].sort(function (a, b) { return b.length - a.length || (a < b ? -1 : 1); });
+
+  function lmsUnsquashEnglish(s) {
+    return String(s || '').replace(/[A-Za-z]{10,}/g, function (blob) {
+      var lower = blob.toLowerCase();
+      var parts = [];
+      var i = 0;
+      while (i < lower.length) {
+        var matched = null;
+        for (var w = 0; w < _EXAM_WORDS.length; w++) {
+          var word = _EXAM_WORDS[w];
+          if (lower.slice(i, i + word.length) === word) {
+            matched = word;
+            break;
+          }
+        }
+        if (!matched) {
+          var rest = blob.slice(i);
+          return parts.length ? parts.join(' ') + ' ' + rest : blob;
+        }
+        parts.push(blob.slice(i, i + matched.length));
+        i += matched.length;
+      }
+      return parts.join(' ');
+    }).replace(/([A-Za-z]{4,})(\d)/g, '$1 $2');
+  }
+
+  function lmsUnwrapOuterMathIfProse(s) {
+    s = String(s || '').trim();
+    var inner = null;
+    if (s.indexOf('\\(') === 0 && s.slice(-2) === '\\)' && s.length > 4) inner = s.slice(2, -2).trim();
+    else if (s.indexOf('\\[') === 0 && s.slice(-2) === '\\]' && s.length > 4) inner = s.slice(2, -2).trim();
+    else if (s.indexOf('$$') === 0 && s.slice(-2) === '$$' && s.length > 4) inner = s.slice(2, -2).trim();
+    else if (s.charAt(0) === '$' && s.charAt(s.length - 1) === '$' && s.length > 2 && s.indexOf('$$') !== 0) {
+      inner = s.slice(1, -1).trim();
+    }
+    if (inner == null) return s;
+    var expanded = lmsUnsquashEnglish(inner);
+    return lmsLooksLikeProse(expanded) ? expanded : s;
+  }
 
   function lmsNormalizeMixedPercents(s) {
     s = String(s || '');
@@ -161,17 +223,57 @@
   }
 
   function lmsLooksLikeProse(s) {
-    var words = String(s || '').match(/[A-Za-z]{4,}/g) || [];
+    var words = lmsUnsquashEnglish(String(s || '')).match(/[A-Za-z]{4,}/g) || [];
     var real = words.filter(function (w) { return !_MATH_WORD_RE.test(w); });
     return real.length >= 3;
   }
 
+  function lmsStripMathDelims(s) {
+    return String(s || '').replace(/\\\(|\\\)|\\\[|\\\]/g, '');
+  }
+
+  function lmsReadBraceGroup(s, start) {
+    var depth = 0;
+    var i = start;
+    var n = s.length;
+    while (i < n) {
+      if (s.charAt(i) === '\\' && i + 1 < n) { i += 2; continue; }
+      if (s.charAt(i) === '{') depth++;
+      else if (s.charAt(i) === '}') {
+        depth--;
+        if (depth === 0) return { inner: s.slice(start + 1, i), next: i + 1 };
+      }
+      i++;
+    }
+    return { inner: s.slice(start + 1), next: n };
+  }
+
   function lmsStripInnerMathDelims(s) {
-    // Do not use lmsMapOutsideMath here: nested \( \) inside \frac would be treated
-    // as top-level math and the fraction would never be rewritten.
-    return String(s || '').replace(/\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}/g, function (frac) {
-      return frac.replace(/\\[\(\[]\s*/g, '').replace(/\s*\\[\)\]]/g, '');
-    });
+    // Brace-walk \frac args so nested \( \) cannot leak as red KaTeX errors.
+    s = String(s || '');
+    var out = '';
+    var i = 0;
+    while (i < s.length) {
+      if (s.slice(i, i + 5) === '\\frac') {
+        var j = i + 5;
+        while (j < s.length && /\s/.test(s.charAt(j))) j++;
+        if (s.charAt(j) === '{') {
+          var num = lmsReadBraceGroup(s, j);
+          j = num.next;
+          while (j < s.length && /\s/.test(s.charAt(j))) j++;
+          if (s.charAt(j) === '{') {
+            var den = lmsReadBraceGroup(s, j);
+            out += '\\frac{' + lmsStripInnerMathDelims(lmsStripMathDelims(num.inner)) + '}{' +
+              lmsStripInnerMathDelims(lmsStripMathDelims(den.inner)) + '}';
+            i = den.next;
+            continue;
+          }
+        }
+      }
+      out += s.charAt(i);
+      i++;
+    }
+    return out;
   }
 
   function lmsEscapePercentInMathBody(s) {
@@ -213,10 +315,13 @@
     var t = String(s || '').trim();
     if (!t) return '';
     if (t.normalize) t = t.normalize('NFKC');
+    t = lmsUnwrapOuterMathIfProse(t);
+    t = lmsUnsquashEnglish(t);
     t = t.replace(/−/g, '-');
     t = lmsUnicodeSupersToLatex(t);
     t = lmsImplicitExponents(t);
     t = lmsRecoverStackedFraction(t);
+    t = lmsStripInnerMathDelims(t);
     t = lmsNormalizeMixedPercents(t);
     t = t.replace(/([0-9√π∞°}%])([A-Za-z]{3,})/g, '$1 $2');
     t = t.replace(/(\})([A-Za-z]{3,})/g, '$1 $2');
@@ -234,8 +339,8 @@
   }
 
   function lmsPickDisplayText(text, latex) {
-    var t = lmsStripOptionLabelPrefix(text || '');
-    var l = lmsStripOptionLabelPrefix(latex || '');
+    var t = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(text || '')));
+    var l = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(latex || '')));
     if (lmsIsBrokenMathBlob(l)) l = '';
     if (lmsLooksLikeProse(t)) return lmsRecoverLatex(t) || t;
     var recovered = lmsRecoverLatex(l || t);
@@ -252,9 +357,11 @@
     if (text == null) return '';
     var s = String(text).trim();
     if (!s) return '';
+    s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
-      if (lmsLooksLikeProse(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '))) {
+      var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
+      if (lmsLooksLikeProse(withoutDelims)) {
         return lmsWrapMathIslands(s, inline);
       }
       return lmsMapOutsideMath(s, function (c) { return c; }).replace(/\\\(([\s\S]*?)\\\)/g, function (m, inner) {

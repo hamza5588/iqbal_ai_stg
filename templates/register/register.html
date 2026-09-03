@@ -201,7 +201,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 
     <div id="form-error" class="{% if error %}show{% endif %}">{% if error %}{{ error }}{% endif %}</div>
 
-    <form id="complete-registration-form" action="{{ url_for('auth.register') }}" method="POST" novalidate>
+    <form id="complete-registration-form" action="{{ url_for('auth.register') }}" method="POST" novalidate data-wait-message="Creating your account...">
       <input type="hidden" name="useremail" value="{{ email }}">
 
       <div class="form-grid">
@@ -401,6 +401,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 
     if (!isValid) {
       e.preventDefault();
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       return;
     }
 

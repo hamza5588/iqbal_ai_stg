@@ -7747,6 +7747,7 @@
       const code = (document.getElementById('lmsJoinCodeInput').value || '').trim().toUpperCase();
       const errEl = document.getElementById('lmsJoinClassError');
       if (!code) { errEl.textContent = 'Please enter a join code.'; return; }
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Joining class...');
       try {
         const res = await fetch('/api/lms/classes/join', {
           method: 'POST', credentials: 'include',
@@ -7761,6 +7762,8 @@
         loadLmsStudentDashboard();
       } catch (err) {
         errEl.textContent = err.message;
+      } finally {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }
     }
     async function initLmsOnboardingGate() {
@@ -7960,6 +7963,7 @@
     async function startLmsQuiz(quizId, assignmentId) {
       _lmsAssignmentId = assignmentId;
       document.getElementById('lmsQuizResult').classList.add('hidden');
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Starting quiz...');
       try {
         const res = await fetch('/api/lms/quizzes/' + quizId + '/start', {
           method: 'POST',
@@ -7985,6 +7989,8 @@
         var msg = err.message || 'Could not start quiz';
         if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error');
         else alert(msg);
+      } finally {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }
     }
     async function loadLmsAttemptQuestions() {
@@ -8030,18 +8036,23 @@
       renderLmsQuestion();
     }
     async function submitLmsQuiz() {
-      const res = await fetch('/api/lms/attempts/' + _lmsAttemptId + '/submit', {
-        method: 'POST', credentials: 'include'
-      });
-      const body = await res.json();
-      const d = body.data || body;
-      document.getElementById('lmsQuizTaking').classList.add('hidden');
-      const resultEl = document.getElementById('lmsQuizResult');
-      resultEl.classList.remove('hidden');
-      resultEl.innerHTML = '<h3 style="font-weight:700;">Quiz Complete</h3><p>Score: ' + d.score + ' / ' + d.max_score +
-        ' (' + d.score_percent + '%)</p><p style="font-size:.875rem;color:#64748b;">Your learning path may update based on results.</p>';
-      loadLmsAssignments();
-      if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Submitting quiz...');
+      try {
+        const res = await fetch('/api/lms/attempts/' + _lmsAttemptId + '/submit', {
+          method: 'POST', credentials: 'include'
+        });
+        const body = await res.json();
+        const d = body.data || body;
+        document.getElementById('lmsQuizTaking').classList.add('hidden');
+        const resultEl = document.getElementById('lmsQuizResult');
+        resultEl.classList.remove('hidden');
+        resultEl.innerHTML = '<h3 style="font-weight:700;">Quiz Complete</h3><p>Score: ' + d.score + ' / ' + d.max_score +
+          ' (' + d.score_percent + '%)</p><p class="lms-status">Your learning path may update based on results.</p>';
+        loadLmsAssignments();
+        if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
+      } finally {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      }
     }
   </script>
 </body>

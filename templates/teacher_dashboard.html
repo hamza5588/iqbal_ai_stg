@@ -12158,7 +12158,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         <button type="button" class="lms-modal-close" onclick="closeLmsClassHub()">&times;</button>
       </div>
       <div class="lms-modal-body">
-      <form id="lmsCreateClassForm" onsubmit="submitLmsCreateClass(event)" class="lms-card" style="background:var(--green-muted);border-color:#86efac;margin-bottom:20px;">
+      <form id="lmsCreateClassForm" onsubmit="submitLmsCreateClass(event)" data-wait-message="Creating class..." class="lms-card" style="background:var(--green-muted);border-color:#86efac;margin-bottom:20px;">
         <h3 style="font-weight:700;margin:0 0 12px;color:var(--primary-color);">Create New Class</h3>
         <div class="lms-field">
           <label class="lms-label">Class name</label>
@@ -12257,7 +12257,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         <button type="button" class="lms-modal-close" onclick="closeLmsAssignModal()" aria-label="Close">&times;</button>
       </div>
       <div class="lms-modal-body">
-      <form id="lmsAssignForm" onsubmit="submitLmsAssignment(event)">
+      <form id="lmsAssignForm" onsubmit="submitLmsAssignment(event)" data-wait-message="Publishing assignment...">
         <div class="lms-field">
           <label class="lms-label" for="lmsAssignTitle">Assignment title</label>
           <input id="lmsAssignTitle" class="lms-input" type="text" required placeholder="Week 3 Quiz">
@@ -12363,7 +12363,7 @@ Align everything with the lesson objectives and do not invent missing informatio
       </div>
       <div class="lms-modal-body">
         <div id="lmsDiagStepUpload">
-          <form id="lmsDiagnosticPdfForm" onsubmit="submitLmsDiagnosticPdf(event)">
+          <form id="lmsDiagnosticPdfForm" onsubmit="submitLmsDiagnosticPdf(event)" data-wait-message="Uploading PDFs..." data-wait-sticky>
             <div class="lms-field">
               <label class="lms-label" for="lmsDiagTitle">Diagnostic title</label>
               <input id="lmsDiagTitle" class="lms-input" type="text" required placeholder="e.g. Grade 8 — Unit 1 Diagnostic">
@@ -12413,7 +12413,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         <button type="button" class="lms-modal-close" onclick="closeLmsQuizHub()" aria-label="Close">&times;</button>
       </div>
       <div class="lms-modal-body">
-      <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)">
+      <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)" data-wait-message="Generating quiz questions..." data-wait-sticky>
         <div class="lms-field">
           <label class="lms-label" for="lmsQuizTitle">Quiz title</label>
           <input id="lmsQuizTitle" class="lms-input" type="text" required placeholder="Chapter 5 Post Test">
@@ -12575,7 +12575,11 @@ Align everything with the lesson objectives and do not invent missing informatio
       const title = document.getElementById('lmsDiagTitle').value.trim();
       const file = document.getElementById('lmsDiagPdfFile').files[0];
       const targetFile = document.getElementById('lmsDiagTargetPdfFile').files[0];
-      if (!file || !targetFile) { alert('Both Diagnostic Q&A PDF and Target content PDF are required.'); return; }
+      if (!file || !targetFile) {
+        alert('Both Diagnostic Q&A PDF and Target content PDF are required.');
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
       const btn = document.getElementById('lmsDiagUploadBtn');
       const status = document.getElementById('lmsDiagStatus');
       const banner = document.getElementById('lmsDiagSuccessBanner');
@@ -12603,12 +12607,14 @@ Align everything with the lesson objectives and do not invent missing informatio
           status.textContent = 'Error: Invalid server response';
           _resetLmsDiagProgress();
           btn.disabled = false;
+          if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
           return;
         }
         if (xhr.status < 200 || xhr.status >= 300) {
           status.textContent = 'Error: ' + ((body.error && body.error.message) || body.message || 'Upload failed');
           _resetLmsDiagProgress();
           btn.disabled = false;
+          if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
           return;
         }
         _setLmsDiagProgress(100, 'Diagnostic ready!');
@@ -12621,11 +12627,13 @@ Align everything with the lesson objectives and do not invent missing informatio
         if (_lmsDiagAssessmentId) loadLmsDiagPreview();
         setTimeout(_resetLmsDiagProgress, 600);
         btn.disabled = false;
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       };
       xhr.onerror = function () {
         status.textContent = 'Error: Network error during upload';
         _resetLmsDiagProgress();
         btn.disabled = false;
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       };
       xhr.send(fd);
     }
@@ -12698,6 +12706,7 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
       btn.disabled = true;
       status.textContent = 'Generating diagnostic questions with AI...';
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Generating questions...');
       try {
         const res = await fetch('/api/lms/diagnostics/' + _lmsDiagAssessmentId + '/generate', {
           method: 'POST',
@@ -12716,6 +12725,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         status.textContent = 'Error: ' + err.message;
       } finally {
         btn.disabled = false;
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }
     }
     async function loadLmsDiagPreview() {
@@ -12748,6 +12758,7 @@ Align everything with the lesson objectives and do not invent missing informatio
       if (publishBtn) publishBtn.disabled = true;
       if (successBanner) successBanner.classList.remove('show');
       statusEl.textContent = 'Publishing diagnostic...';
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Publishing diagnostic...');
       try {
         const res = await fetch('/api/lms/diagnostics/' + _lmsDiagAssessmentId + '/publish', {
           method: 'POST', credentials: 'include'
@@ -12770,6 +12781,8 @@ Align everything with the lesson objectives and do not invent missing informatio
       } catch (err) {
         statusEl.textContent = 'Publish error: ' + err.message;
         if (publishBtn) publishBtn.disabled = false;
+      } finally {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }
     }
 
@@ -12802,6 +12815,7 @@ Align everything with the lesson objectives and do not invent missing informatio
     function closeLmsQuizHub() {
       _hideLmsModal('lmsQuizHubModal');
       stopLmsPoll();
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
     }
     function stopLmsPoll() {
       if (_lmsPollTimer) { clearInterval(_lmsPollTimer); _lmsPollTimer = null; }
@@ -12810,7 +12824,10 @@ Align everything with the lesson objectives and do not invent missing informatio
       e.preventDefault();
       const title = document.getElementById('lmsQuizTitle').value.trim();
       const file = document.getElementById('lmsQuizPdfFile').files[0];
-      if (!file) return;
+      if (!file) {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
       const btn = document.getElementById('lmsQuizSubmitBtn');
       const status = document.getElementById('lmsQuizStatus');
       btn.disabled = true;
@@ -12828,9 +12845,8 @@ Align everything with the lesson objectives and do not invent missing informatio
       } catch (err) {
         status.textContent = 'Error: ' + err.message;
         btn.disabled = false;
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }
-    }
-    function startLmsPoll() {
       stopLmsPoll();
       if (!_lmsCurrentAssessmentId) return;
       _lmsPollTimer = setInterval(pollLmsQuizStatus, 2000);
@@ -12862,6 +12878,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           if (form) form.style.display = 'none';
           await loadLmsQuizPreview();
           actionsEl.style.display = 'flex';
+          if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         } else if (rawStatus === 'failed') {
           stopLmsPoll();
           const form = document.getElementById('lmsPdfQuizForm');
@@ -12869,6 +12886,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           const submitBtn = document.getElementById('lmsQuizSubmitBtn');
           if (submitBtn) submitBtn.disabled = false;
           statusEl.textContent = 'Failed: ' + (d.error_message || 'Unknown error');
+          if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         }
       } catch (err) {
         statusEl.textContent = 'Poll error: ' + err.message;
@@ -12906,6 +12924,7 @@ Align everything with the lesson objectives and do not invent missing informatio
       const publishBtn = actionsEl ? actionsEl.querySelector('button') : null;
       if (publishBtn) publishBtn.disabled = true;
       statusEl.textContent = 'Publishing quiz...';
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Publishing quiz...');
       try {
         const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/publish', {
           method: 'POST', credentials: 'include'
@@ -12921,6 +12940,8 @@ Align everything with the lesson objectives and do not invent missing informatio
       } catch (err) {
         statusEl.textContent = 'Publish error: ' + err.message;
         if (publishBtn) publishBtn.disabled = false;
+      } finally {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }
     }
     document.addEventListener('DOMContentLoaded', function () {

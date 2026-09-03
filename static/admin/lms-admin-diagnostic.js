@@ -544,9 +544,16 @@
 
 
 
-    if (!diagFile) { alert('Diagnostic Q&A PDF is required.'); return; }
-
-    if (!targetFiles || !targetFiles.length) { alert('At least one target content PDF is required.'); return; }
+    if (!diagFile) {
+      alert('Diagnostic Q&A PDF is required.');
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      return;
+    }
+    if (!targetFiles || !targetFiles.length) {
+      alert('At least one target content PDF is required.');
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      return;
+    }
 
 
 
@@ -617,6 +624,7 @@
         btn.disabled = false;
 
         resetProgress();
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
 
         return;
 
@@ -629,6 +637,7 @@
         btn.disabled = false;
 
         resetProgress();
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
 
         return;
 
@@ -671,6 +680,7 @@
       btn.disabled = false;
 
       setTimeout(resetProgress, 800);
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
 
     };
 
@@ -689,6 +699,7 @@
       btn.disabled = false;
 
       resetProgress();
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
 
     };
 

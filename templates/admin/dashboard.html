@@ -438,7 +438,7 @@
                 <div id="adminDiagAddTargetsSection" class="bg-white rounded-lg shadow-md p-6 mb-6" style="display:none;">
                     <h3 class="text-xl font-semibold text-gray-800 mb-2">Add Target Content PDFs</h3>
                     <p class="text-sm text-gray-600 mb-4">Upload additional study material PDFs for Learning Chat. Students will use content from all uploaded target PDFs.</p>
-                    <form id="adminDiagAddTargetsForm" onsubmit="submitAdminAddTargetPdfs(event)">
+                    <form id="adminDiagAddTargetsForm" onsubmit="submitAdminAddTargetPdfs(event)" data-wait-message="Uploading PDFs...">
                         <div class="mb-3">
                             <input id="adminDiagAddTargetFiles" type="file" accept=".pdf,application/pdf" multiple
                                 class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
@@ -455,7 +455,7 @@
 
                 <div id="adminDiagUploadSection" class="bg-white rounded-lg shadow-md p-6">
                     <h3 class="text-xl font-semibold text-gray-800 mb-4">Upload Diagnostic</h3>
-                    <form id="adminDiagnosticPdfForm" onsubmit="submitAdminDiagnostic(event)">
+                    <form id="adminDiagnosticPdfForm" onsubmit="submitAdminDiagnostic(event)" data-wait-message="Uploading diagnostic..." data-wait-sticky>
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1" for="adminDiagTitle">Title</label>
                             <input id="adminDiagTitle" type="text" required
@@ -684,7 +684,7 @@
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <form id="create-user-form" onsubmit="createUser(event)">
+                <form id="create-user-form" onsubmit="createUser(event)" data-wait-message="Creating user...">
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Username *</label>
@@ -746,7 +746,7 @@
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <form id="edit-user-form" onsubmit="updateUser(event)">
+                <form id="edit-user-form" onsubmit="updateUser(event)" data-wait-message="Saving user...">
                     <input type="hidden" id="edit-user-id">
                     <div class="space-y-4">
                         <div>
@@ -814,7 +814,7 @@
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <form id="create-coupon-form" onsubmit="createCoupon(event)">
+                <form id="create-coupon-form" onsubmit="createCoupon(event)" data-wait-message="Creating coupon...">
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Coupon Code *</label>

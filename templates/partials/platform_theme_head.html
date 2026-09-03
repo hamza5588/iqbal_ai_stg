@@ -2,6 +2,8 @@
 <style id="iqbal-platform-theme">{{ platform_theme_css | safe }}</style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/platform-theme-bindings.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-logo.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wait-overlay.css') }}">
+<script src="{{ url_for('static', filename='js/wait-overlay.js') }}"></script>
 <style>
   :root {
     --iqbal-logo-light-mask: url("{{ url_for('static', filename='images/iqbal-ai-logo-light-mask.png') }}");
