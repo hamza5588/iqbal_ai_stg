@@ -407,6 +407,7 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
     is_correct = selected_option_index == q.get("correct_option_index")
     already_correct = q.get("correct") is True
 
+    just_completed = False
     if is_correct:
         q["answered"] = True
         q["correct"] = True
@@ -416,13 +417,20 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         _reset_tutor_state(session)
         if session.current_index >= len(questions):
             session.status = "completed"
-            _mark_learning_path_chat_complete(student_id)
+            just_completed = True
     else:
         q["answered"] = True
         q["correct"] = False
 
     _save_questions(session, questions)
     db.commit()
+
+    if just_completed:
+        # Must run after the commit above so questions_json (with this final
+        # answer) is what gets read back - see performance_service docstring.
+        from app.services.lms import performance_service
+        performance_service.update_topic_scores_from_deficiency_session(session_id)
+        _mark_learning_path_chat_complete(student_id)
 
     result = _session_state(session)
     result["last_answer"] = {
@@ -447,8 +455,10 @@ def advance_session(session_id: int, student_id: int) -> dict:
     idx = session.current_index
     if idx >= len(questions):
         session.status = "completed"
-        _mark_learning_path_chat_complete(student_id)
         db.commit()
+        from app.services.lms import performance_service
+        performance_service.update_topic_scores_from_deficiency_session(session_id)
+        _mark_learning_path_chat_complete(student_id)
         return _session_state(session)
 
     q = questions[idx]
@@ -459,10 +469,17 @@ def advance_session(session_id: int, student_id: int) -> dict:
 
     session.current_index = idx + 1
     _reset_tutor_state(session)
-    if session.current_index >= len(questions):
+    just_completed = session.current_index >= len(questions)
+    if just_completed:
         session.status = "completed"
-        _mark_learning_path_chat_complete(student_id)
     db.commit()
+
+    if just_completed:
+        # Must run after the commit above so questions_json (with the skipped
+        # question just marked incorrect) is what gets read back.
+        from app.services.lms import performance_service
+        performance_service.update_topic_scores_from_deficiency_session(session_id)
+        _mark_learning_path_chat_complete(student_id)
     return _session_state(session)
 
 

@@ -175,6 +175,74 @@ def compute_mastery_status(score_percent: float, previous: Optional[float] = Non
     return "needs_practice"
 
 
+def update_topic_scores_from_deficiency_session(session_id: int) -> None:
+    """
+    Feed a completed Learning Chat (deficiency practice) session's results into
+    StudentTopicScore, the same way update_topic_scores_from_attempt() does for
+    a formal quiz/diagnostic attempt.
+
+    Without this, practicing in Learning Chat never moves "Overall Progress" /
+    "Weak Topics" (both read purely from StudentTopicScore) and every mastery
+    check keeps finding the same weak topics — which makes
+    learning_path_service.ensure_learning_path() regenerate an identical
+    "practice weak areas" step right after the student finishes one, no matter
+    how well they did. See app/services/lms/deficiency_chat_service.py, where
+    this is called at session completion.
+    """
+    from app.models.lms_models import DeficiencyChatSession
+
+    db = get_db()
+    session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
+    if not session:
+        return
+
+    try:
+        questions = json.loads(session.questions_json or "[]")
+    except json.JSONDecodeError:
+        return
+
+    by_topic: dict[int, dict] = {}
+    for q in questions:
+        if not q.get("answered"):
+            continue
+        topic_id = q.get("topic_id") or 0
+        if not topic_id:
+            continue
+        bucket = by_topic.setdefault(topic_id, {"correct": 0, "total": 0})
+        bucket["total"] += 1
+        if q.get("correct"):
+            bucket["correct"] += 1
+
+    now = datetime.utcnow()
+    for topic_id, stats in by_topic.items():
+        pct = 100.0 * stats["correct"] / stats["total"] if stats["total"] else 0.0
+        row = (
+            db.query(StudentTopicScore)
+            .filter(
+                StudentTopicScore.student_id == session.student_id,
+                StudentTopicScore.topic_id == topic_id,
+            )
+            .first()
+        )
+        prev = row.score_percent if row else None
+        status = compute_mastery_status(pct, prev)
+        if row:
+            row.score_percent = pct
+            row.mastery_status = status
+            row.last_assessed_at = now
+        else:
+            db.add(
+                StudentTopicScore(
+                    student_id=session.student_id,
+                    topic_id=topic_id,
+                    score_percent=pct,
+                    mastery_status=status,
+                    last_assessed_at=now,
+                )
+            )
+    db.commit()
+
+
 def update_topic_scores_from_attempt(attempt_id: int) -> None:
     db = get_db()
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
