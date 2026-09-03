@@ -30,9 +30,9 @@ Rules:
 - Option text must be the FULL choice, never only "A"/"B"/"C"/"D".
 - Do NOT prefix option text with the letter (write "a repeating decimal", not "B (a repeating decimal)").
 - Set correct_option_label to the label of the option matching the PDF answer.
-- Put LaTeX ONLY in latex fields (\\frac, \\sqrt, \\dots, a^{2}). Keep question_text / option text readable.
-- Flattened PDF exponents like x2 or a3b2 MUST become x^{2} and a^{3}b^{2} in latex.
-- Stacked fractions MUST become \\frac{numerator}{denominator}.
+- Put LaTeX ONLY in latex fields (\\frac, \\sqrt, \\dots, a^{{2}}). Keep question_text / option text readable.
+- Flattened PDF exponents like x2 or a3b2 MUST become x^{{2}} and a^{{3}}b^{{2}} in latex.
+- Stacked fractions MUST become \\frac{{numerator}}{{denominator}}.
 - Never copy a whole English sentence into a latex field with the spaces removed.
 - Set conversion_confidence 0-1.
 - Set preserve_option_order to false (generated distractors may be labeled A–D freely).
