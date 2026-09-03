@@ -353,7 +353,7 @@ def create_quiz_from_pdf():
         return denied
 
     title = (request.form.get("title") or "Untitled Quiz").strip()
-    assessment_type = request.form.get("assessment_type", "quiz")
+    assessment_type = "quiz"
     topic_id = request.form.get("topic_id", type=int)
     async_mode = request.form.get("async", "true").lower() != "false"
     if not current_app.config.get("USE_CELERY_FOR_INGESTION", False):
@@ -366,7 +366,7 @@ def create_quiz_from_pdf():
     a = assessment_service.create_assessment(
         created_by=_current_user_id(),
         title=title.strip(),
-        assessment_type=assessment_type if assessment_type in ("quiz", "diagnostic") else "quiz",
+        assessment_type="quiz",
         creation_mode="pdf_qa_auto",
     )
 
@@ -522,6 +522,8 @@ def start_quiz_attempt(quiz_id: int):
         }
         assessment = assessment_service.get_assessment(quiz_id)
         if assessment.assessment_type == "diagnostic":
+            if getattr(attempt, "timed_out", False):
+                return json_success(attempt_service.get_attempt_results(attempt.id))
             timer = attempt_service.get_attempt_timer_info(attempt.id)
             payload.update(timer)
         return json_success(payload, status=201)
@@ -565,6 +567,8 @@ def get_attempt_questions(attempt_id: int):
         })
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
 
 
 @bp.route("/attempts/<int:attempt_id>/answer", methods=["POST"])
@@ -600,7 +604,9 @@ def submit_attempt(attempt_id: int):
         attempt = attempt_service.get_attempt(attempt_id)
         if attempt.student_id != _current_user_id():
             return json_error("Forbidden", code="forbidden", status=403)
-        result = attempt_service.submit_attempt(attempt_id)
+        body = request.get_json(silent=True) or {}
+        time_expired = bool(body.get("time_expired") or body.get("timed_out"))
+        result = attempt_service.submit_attempt(attempt_id, time_expired=time_expired)
         return json_success(result)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
@@ -639,10 +645,21 @@ def default_diagnostic():
             code="not_found",
             status=404,
         )
+    attempt_service.finalize_expired_diagnostic_if_needed(_current_user_id(), diag["id"])
     onboarding = student_profile_service.get_onboarding_status(_current_user_id())
     completed_id = onboarding.get("diagnostic_assessment_id")
+    latest = attempt_service.get_latest_submitted_attempt(_current_user_id(), diag["id"])
+    timed_out = bool(latest and getattr(latest, "timed_out", False))
     diag["diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
     diag["any_diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
+    diag["diagnostic_timed_out"] = timed_out
+    diag["diagnostic_timeout_message"] = (
+        attempt_service.TIME_OVER_MESSAGE if timed_out else None
+    )
+    if timed_out:
+        diag["score"] = 0
+        diag["score_percent"] = 0
+        diag["message"] = attempt_service.TIME_OVER_MESSAGE
     if diag["diagnostic_completed"] and completed_id:
         diag["completed_assessment_id"] = completed_id
     return json_success(diag)
@@ -924,10 +941,15 @@ def quizzes():
     if denied:
         return denied
     body = request.get_json(silent=True) or {}
+    if body.get("assessment_type") == "diagnostic":
+        return json_error(
+            "Diagnostics are platform-wide and created by admin. Teachers create quizzes only.",
+            code="validation_error",
+        )
     a = assessment_service.create_assessment(
         created_by=_current_user_id(),
         title=body["title"],
-        assessment_type=body.get("assessment_type", "quiz"),
+        assessment_type="quiz",
         description=body.get("description"),
         creation_mode=body.get("creation_mode", "manual"),
         time_limit_minutes=body.get("time_limit_minutes"),
@@ -939,8 +961,28 @@ def quizzes():
 @login_required
 def get_quiz(quiz_id: int):
     try:
-        include_answers = _current_role() == "teacher" and has_permission(
-            _current_role(), Permissions.CREATE_QUIZ
+        assessment = assessment_service.get_assessment(quiz_id)
+        role = _current_role()
+        uid = _current_user_id()
+        if role == "student":
+            if assessment.assessment_type == "diagnostic":
+                platform = assessment_service.get_active_platform_diagnostic()
+                if not platform or platform.id != quiz_id:
+                    return json_error("Forbidden", code="forbidden", status=403)
+            elif assessment.assessment_type == "quiz":
+                if not assignment_service.student_is_assigned_quiz(uid, quiz_id):
+                    return json_error(
+                        "Join your teacher's class with a class code to take this quiz.",
+                        code="forbidden",
+                        status=403,
+                    )
+            else:
+                return json_error("Forbidden", code="forbidden", status=403)
+        elif role == "teacher":
+            if assessment.created_by != uid and assessment.assessment_type != "diagnostic":
+                return json_error("Forbidden", code="forbidden", status=403)
+        include_answers = role == "teacher" and has_permission(
+            role, Permissions.CREATE_QUIZ
         )
         return json_success(
             assessment_service.get_assessment_with_questions(quiz_id, include_answers=include_answers)
@@ -970,8 +1012,17 @@ def publish_quiz(quiz_id: int):
     if denied:
         return denied
     try:
+        assessment = assessment_service.get_assessment(quiz_id)
+        if assessment.assessment_type == "diagnostic":
+            admin_denied = _require_diagnostic_admin()
+            if admin_denied:
+                return admin_denied
+        elif assessment.created_by != _current_user_id() and _current_role() != "admin":
+            return json_error("Forbidden", code="forbidden", status=403)
         a = assessment_service.publish_assessment(quiz_id)
         return json_success({"id": a.id, "status": a.status})
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 

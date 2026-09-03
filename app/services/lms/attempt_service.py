@@ -13,6 +13,10 @@ from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
 
+TIME_OVER_MESSAGE = (
+    "Time over. You have not submitted the diagnostic. You scored 0 marks."
+)
+
 
 def _student_completed_diagnostic(student_id: int, assessment_id: int) -> bool:
     db = get_db()
@@ -87,6 +91,106 @@ def _abandon_stale_in_progress_attempts(
     db.commit()
 
 
+def _attempt_is_expired(attempt: AssessmentAttempt) -> bool:
+    return bool(
+        attempt.expires_at
+        and attempt.status == "in_progress"
+        and datetime.utcnow() >= attempt.expires_at
+    )
+
+
+def get_latest_submitted_attempt(
+    student_id: int, assessment_id: int
+) -> Optional[AssessmentAttempt]:
+    db = get_db()
+    return (
+        db.query(AssessmentAttempt)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.assessment_id == assessment_id,
+            AssessmentAttempt.status == "submitted",
+        )
+        .order_by(AssessmentAttempt.submitted_at.desc(), AssessmentAttempt.id.desc())
+        .first()
+    )
+
+
+def time_over_payload(attempt: AssessmentAttempt) -> dict:
+    max_score = float(attempt.max_score or 0) or 1.0
+    return {
+        "attempt_id": attempt.id,
+        "score": 0.0,
+        "max_score": max_score,
+        "score_percent": 0.0,
+        "timed_out": True,
+        "time_over": True,
+        "diagnostic_completed": True,
+        "message": TIME_OVER_MESSAGE,
+        "assessment_type": "diagnostic",
+        "weak_topics": [],
+        "strong_topics": [],
+    }
+
+
+def finalize_expired_attempt(attempt_id: int) -> dict:
+    """Close an expired diagnostic without a student submit: 0 marks."""
+    attempt = get_attempt(attempt_id)
+    if attempt.status == "submitted":
+        return get_attempt_results(attempt_id)
+    if attempt.status != "in_progress":
+        raise LMSValidationError("Attempt is not in progress")
+
+    assessment = get_assessment(attempt.assessment_id)
+    db = get_db()
+    question_ids = [aq.question_id for aq in assessment.questions]
+    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
+    for ans in answers:
+        ans.is_correct = False
+
+    max_score = float(len(question_ids)) or 1.0
+    attempt.score = 0.0
+    attempt.max_score = max_score
+    attempt.status = "submitted"
+    attempt.submitted_at = datetime.utcnow()
+    attempt.timed_out = True
+    db.commit()
+    logger.info("Finalized expired diagnostic attempt %s with 0 marks", attempt_id)
+
+    from app.services.lms import learning_path_service, performance_service
+
+    def _post_submit_step(fn):
+        try:
+            fn()
+        except Exception as exc:
+            logger.warning("Post-timeout step failed for attempt %s: %s", attempt_id, exc)
+            db.rollback()
+
+    _post_submit_step(lambda: performance_service.update_topic_scores_from_attempt(attempt_id))
+    _post_submit_step(lambda: learning_path_service.refresh_learning_path(attempt.student_id))
+    _post_submit_step(lambda: performance_service.create_snapshot(attempt.student_id))
+
+    if assessment.assessment_type == "diagnostic":
+        from app.services.lms import deficiency_chat_service, student_profile_service
+
+        _post_submit_step(lambda: deficiency_chat_service._close_old_sessions(attempt.student_id))
+        _post_submit_step(
+            lambda: student_profile_service.mark_diagnostic_complete(
+                attempt.student_id, assessment_id=assessment.id
+            )
+        )
+
+    return time_over_payload(attempt)
+
+
+def finalize_expired_diagnostic_if_needed(
+    student_id: int, assessment_id: int, assignment_id: Optional[int] = None
+) -> Optional[dict]:
+    existing = _find_in_progress_attempt(student_id, assessment_id, assignment_id)
+    if existing and _attempt_is_expired(existing):
+        return finalize_expired_attempt(existing.id)
+    return None
+
+
 def start_attempt(
     student_id: int,
     assessment_id: int,
@@ -98,29 +202,38 @@ def start_attempt(
         raise LMSValidationError("Assessment is not published")
 
     if assessment.assessment_type == "diagnostic":
+        from app.services.lms.assessment_service import get_active_platform_diagnostic
+
+        platform = get_active_platform_diagnostic()
+        if not platform or platform.id != assessment_id:
+            raise LMSValidationError("This diagnostic is not available")
+        assignment_id = None
+        timeout = finalize_expired_diagnostic_if_needed(student_id, assessment_id)
+        if timeout:
+            return get_attempt(timeout["attempt_id"]), False
         if _student_completed_diagnostic(student_id, assessment_id):
+            latest = get_latest_submitted_attempt(student_id, assessment_id)
+            if latest and getattr(latest, "timed_out", False):
+                return latest, False
             raise LMSValidationError(
                 "You have already completed the diagnostic assessment. Retakes are not allowed."
             )
+    elif assessment.assessment_type == "quiz":
+        from app.services.lms.assignment_service import resolve_student_quiz_assignment
+
+        assignment_id = resolve_student_quiz_assignment(
+            student_id, assessment_id, assignment_id
+        )
+    else:
+        raise LMSValidationError("Unsupported assessment type")
 
     db = get_db()
     existing = _find_in_progress_attempt(student_id, assessment_id, assignment_id)
     if existing:
-        if assessment.assessment_type == "diagnostic" and existing.expires_at:
-            if datetime.utcnow() > existing.expires_at:
-                logger.info("Auto-submitting expired in-progress diagnostic attempt %s", existing.id)
-                submit_attempt(existing.id)
-                existing = None
-            else:
-                _abandon_stale_in_progress_attempts(
-                    student_id, assessment_id, existing.id, assignment_id
-                )
-                return existing, True
-        elif existing:
-            _abandon_stale_in_progress_attempts(
-                student_id, assessment_id, existing.id, assignment_id
-            )
-            return existing, True
+        _abandon_stale_in_progress_attempts(
+            student_id, assessment_id, existing.id, assignment_id
+        )
+        return existing, True
 
     if assessment.assessment_type == "quiz" and _student_completed_quiz(student_id, assessment_id):
         raise LMSValidationError(
@@ -148,9 +261,9 @@ def start_attempt(
 
 
 def _check_attempt_expired(attempt: AssessmentAttempt) -> None:
-    if attempt.expires_at and attempt.status == "in_progress":
-        if datetime.utcnow() > attempt.expires_at:
-            raise LMSValidationError("Diagnostic time has expired")
+    if _attempt_is_expired(attempt):
+        finalize_expired_attempt(attempt.id)
+        raise LMSValidationError(TIME_OVER_MESSAGE)
 
 
 def get_attempt(attempt_id: int) -> AssessmentAttempt:
@@ -268,7 +381,7 @@ def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -
     return answer
 
 
-def submit_attempt(attempt_id: int) -> dict:
+def submit_attempt(attempt_id: int, time_expired: bool = False) -> dict:
     attempt = get_attempt(attempt_id)
     if attempt.status == "submitted":
         return get_attempt_results(attempt_id)
@@ -276,13 +389,13 @@ def submit_attempt(attempt_id: int) -> dict:
         raise LMSValidationError("Attempt is not in progress")
 
     assessment = get_assessment(attempt.assessment_id)
-    expired = (
-        attempt.expires_at
-        and datetime.utcnow() > attempt.expires_at
-        and assessment.assessment_type == "diagnostic"
+    expired = bool(
+        assessment.assessment_type == "diagnostic"
+        and (time_expired or _attempt_is_expired(attempt))
     )
     if expired:
-        logger.info("Auto-submitting expired diagnostic attempt %s", attempt_id)
+        logger.info("Diagnostic attempt %s ended without submit (time over)", attempt_id)
+        return finalize_expired_attempt(attempt_id)
 
     db = get_db()
     question_ids = [aq.question_id for aq in assessment.questions]
@@ -390,14 +503,24 @@ def get_attempt_results(attempt_id: int) -> dict:
         "score_percent": round(100.0 * score / max_score, 2) if max_score else 0.0,
         "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
         "assessment_type": assessment.assessment_type,
+        "timed_out": bool(getattr(attempt, "timed_out", False)),
     }
+    if getattr(attempt, "timed_out", False):
+        result["time_over"] = True
+        result["score"] = 0.0
+        result["score_percent"] = 0.0
+        result["message"] = TIME_OVER_MESSAGE
     if assessment.assessment_type == "diagnostic":
-        from app.services.lms import performance_service
-
-        analysis = performance_service.analyze_attempt(attempt_id)
-        result["weak_topics"] = analysis.get("weak_topics", [])
-        result["strong_topics"] = analysis.get("strong_topics", [])
         result["diagnostic_completed"] = True
+        if getattr(attempt, "timed_out", False):
+            result["weak_topics"] = []
+            result["strong_topics"] = []
+        else:
+            from app.services.lms import performance_service
+
+            analysis = performance_service.analyze_attempt(attempt_id)
+            result["weak_topics"] = analysis.get("weak_topics", [])
+            result["strong_topics"] = analysis.get("strong_topics", [])
     return result
 
 

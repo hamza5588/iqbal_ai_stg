@@ -26,6 +26,8 @@ def create_assignment(
     quiz = get_assessment(quiz_id)
     if quiz.assessment_type != "quiz":
         raise LMSValidationError("Assignment must reference a quiz assessment")
+    if quiz.created_by != teacher_id:
+        raise LMSValidationError("You can only assign your own quizzes")
     school_class = get_class_by_id(class_id)
     if school_class.teacher_id != teacher_id:
         raise LMSValidationError("Teacher does not own this class")
@@ -210,3 +212,60 @@ def mark_submission_complete(assignment_id: int, student_id: int, attempt_id: in
     sub.status = "submitted"
     sub.submitted_at = datetime.utcnow()
     db.commit()
+
+
+def student_is_assigned_quiz(student_id: int, quiz_id: int) -> bool:
+    """True if the student joined a class that has this published quiz assigned."""
+    class_ids = [c.id for c in list_student_classes(student_id)]
+    if not class_ids:
+        return False
+    db = get_db()
+    row = (
+        db.query(Assignment)
+        .filter(
+            Assignment.quiz_id == quiz_id,
+            Assignment.class_id.in_(class_ids),
+            Assignment.status == "published",
+        )
+        .first()
+    )
+    return row is not None
+
+
+def resolve_student_quiz_assignment(
+    student_id: int,
+    quiz_id: int,
+    assignment_id: Optional[int] = None,
+) -> int:
+    """Return the assignment id this student may use for the quiz."""
+    class_ids = [c.id for c in list_student_classes(student_id)]
+    if not class_ids:
+        raise LMSValidationError(
+            "Join your teacher's class with a class code to take this quiz."
+        )
+    if assignment_id is not None:
+        assignment = get_assignment(int(assignment_id))
+        if assignment.quiz_id != quiz_id:
+            raise LMSValidationError("This assignment does not match the quiz")
+        if assignment.status != "published":
+            raise LMSValidationError("This assignment is not published")
+        if assignment.class_id not in class_ids:
+            raise LMSValidationError(
+                "Join your teacher's class with a class code to take this quiz."
+            )
+        return assignment.id
+    db = get_db()
+    rows = (
+        db.query(Assignment)
+        .filter(
+            Assignment.quiz_id == quiz_id,
+            Assignment.class_id.in_(class_ids),
+            Assignment.status == "published",
+        )
+        .all()
+    )
+    if not rows:
+        raise LMSValidationError(
+            "Join your teacher's class with a class code to take this quiz."
+        )
+    return rows[0].id

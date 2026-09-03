@@ -127,9 +127,51 @@ def recover_latex(text: Optional[str]) -> str:
     s = _unicode_supers_to_latex(s)
     s = implicit_exponents_to_latex(s)
     s = recover_stacked_fraction(s)
+    s = strip_inner_math_delims(s)
+    s = normalize_mixed_percents(s)
+    s = re.sub(r"([0-9√π∞°}%])([A-Za-z]{3,})", r"\1 \2", s)
+    s = re.sub(r"(\})([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"[ \t]+", " ", s)
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
+
+
+_MIXED_FRAC_PCT_RE = re.compile(r"(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}\s*\\?%")
+_MIXED_SPACED_PCT_RE = re.compile(r"(\d+)\s+(\d+)\s+(\d+)\s*%")
+_INNER_FRAC_RE = re.compile(r"\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}")
+
+
+def normalize_mixed_percents(text: str) -> str:
+    """Keep 16 2/3% as a visible slash, not a stacked fraction or 16 2 3 %."""
+    s = _MIXED_FRAC_PCT_RE.sub(r"\1 \2/\3%", text or "")
+    s = _MIXED_SPACED_PCT_RE.sub(r"\1 \2/\3%", s)
+    return s
+
+
+def strip_inner_math_delims(text: str) -> str:
+    """Remove nested \\( \\) inside \\frac{...} that render as red leftover symbols."""
+
+    def repl(match: re.Match[str]) -> str:
+        body = match.group(0)
+        for tok in ("\\(", "\\)", "\\[", "\\]"):
+            body = body.replace(tok, "")
+        return body
+
+    return _INNER_FRAC_RE.sub(repl, text or "")
+
+
+_MATH_VOCAB = {
+    "frac", "sqrt", "cdot", "left", "right", "text", "over", "times",
+    "log", "ln", "sin", "cos", "tan", "sec", "csc", "cot", "exp", "lim",
+    "max", "min", "gcd", "lcm", "mod", "abs", "simplify",
+}
+
+
+def looks_like_prose(text: str) -> bool:
+    """True when a string is an English sentence, not a pure math expression."""
+    words = _ENGLISH_WORD_RE.findall(text or "")
+    real = [w for w in words if w.lower() not in _MATH_VOCAB]
+    return len(real) >= 3
 
 
 def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[str, Optional[str]]:
@@ -138,6 +180,10 @@ def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[st
     latex_s = (latex or "").strip() or None
     if latex_s:
         latex_s = unicodedata.normalize("NFKC", latex_s)
+    if looks_like_prose(text_s):
+        recovered_text = recover_latex(text_s)
+        return recovered_text or text_s, None
+
     recovered = recover_latex(latex_s or text_s)
     if not recovered:
         recovered = recover_latex(text_s)
@@ -145,9 +191,9 @@ def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[st
         return text_s, latex_s
 
     has_tex = "\\frac" in recovered or "^{" in recovered or "\\times" in recovered
-    if has_tex:
+    if has_tex and not looks_like_prose(recovered):
         return recovered, recovered
-    if latex_s and ("\\frac" in latex_s or "^{" in latex_s or "^" in latex_s):
+    if latex_s and ("\\frac" in latex_s or "^{" in latex_s or "^" in latex_s) and not looks_like_prose(text_s):
         return text_s or latex_s, latex_s
     return recovered or text_s, latex_s
 

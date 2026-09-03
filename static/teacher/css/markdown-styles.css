@@ -443,12 +443,26 @@ em {
     border-color: #334155;
   }
 
-  strong {
+  /* Do not recolor LMS / lesson surfaces here — they have their own theme rules. */
+  strong:not(.lms-preview-qnum) {
     color: #f1f5f9;
   }
 
   em {
     color: #cbd5e1;
+  }
+
+  .lms-modal strong,
+  .lms-diag-preview-card strong,
+  .lms-preview-qnum,
+  .lms-math-content strong,
+  .lms-quiz-stem strong {
+    color: #f8fafc !important;
+  }
+  .lms-modal em,
+  .lms-diag-preview-card em,
+  .lms-math-content em {
+    color: #cbd5e1 !important;
   }
 
   /*
@@ -507,4 +521,21 @@ em {
   #viewLessonModal .lesson-content-formatted :is(h1, h2, h3, h4, h5, h6) {
     color: #0f172a !important;
   }
+}
+
+html.dark .lms-modal strong,
+html.dark .lms-diag-preview-card strong,
+html.dark .lms-preview-qnum,
+html.dark .lms-math-content strong,
+.dark .lms-modal strong,
+.dark .lms-diag-preview-card strong,
+.dark .lms-preview-qnum,
+.dark .lms-math-content strong {
+  color: #f8fafc !important;
+}
+html.dark .lms-modal em,
+html.dark .lms-math-content em,
+.dark .lms-modal em,
+.dark .lms-math-content em {
+  color: #cbd5e1 !important;
 }

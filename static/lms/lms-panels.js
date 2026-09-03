@@ -1,8 +1,11 @@
 /** Interactive LMS panels — tutor, analytics, practice (green theme) */
 (function () {
-  function fmtText(text, inline) {
+  function fmtText(text, inline, quiz) {
     if (typeof window.lmsFormatRichText === 'function') {
-      return window.lmsFormatRichText(text, inline ? { inline: true } : undefined);
+      var opts = {};
+      if (inline) opts.inline = true;
+      if (quiz) opts.quiz = true;
+      return window.lmsFormatRichText(text, opts);
     }
     return escapeHtml(text == null ? '' : String(text));
   }
@@ -10,13 +13,13 @@
     var raw = (typeof window.lmsOptionText === 'function')
       ? window.lmsOptionText(opt)
       : ((opt && (opt.text || opt.latex || opt.label)) || '');
-    return fmtText(raw, true);
+    return fmtText(raw, true, true);
   }
   function fmtQuestion(q) {
     var raw = (typeof window.lmsQuestionText === 'function')
       ? window.lmsQuestionText(q)
       : ((q && (q.question_text || q.question_latex)) || '');
-    return fmtText(raw, false);
+    return fmtText(raw, false, true);
   }
   function typeset(el) {
     if (!el) return Promise.resolve();
@@ -271,7 +274,7 @@
               '<td class="lms-expand-cell">' + renderTopicStrugglingCell(t) + '</td></tr>';
           }).join('') + '</tbody></table>' +
           (topics.some(function (t) { return (t.weak_student_count || 0) >= 1; })
-            ? '<div class="lms-card" style="margin-top:12px;background:#fef9c3;border-color:#fcd34d"><strong>Insight:</strong> ' +
+            ? '<div class="lms-card lms-card-warn" style="margin-top:12px;"><strong>Insight:</strong> ' +
               topics.filter(function (t) { return (t.weak_student_count || 0) >= 1; }).length +
               ' topic(s) have struggling students. Click the count in each row to see names and scores.</div>' : '');
       } else if (tab === 'quizzes') {
@@ -371,8 +374,8 @@
       });
       if (fb) {
         var msg = result.correct
-          ? '<div class="lms-card" style="background:#f0fdf4;border-color:#86efac"><strong>Correct!</strong> ' + fmtText(result.feedback || '') + '</div>'
-          : '<div class="lms-card" style="background:#fef2f2;border-color:#fecaca"><strong>Try again.</strong> ' + fmtText(result.feedback || result.hint || '') + '</div>';
+          ? '<div class="lms-card lms-card-ok"><strong>Correct!</strong> ' + fmtText(result.feedback || '') + '</div>'
+          : '<div class="lms-card lms-card-bad"><strong>Try again.</strong> ' + fmtText(result.feedback || result.hint || '') + '</div>';
         fb.innerHTML = msg;
         typeset(fb);
       }
@@ -391,7 +394,7 @@
     try {
       var hint = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id + '/hint', { method: 'POST' });
       if (fb) {
-        fb.innerHTML = '<div class="lms-card" style="background:#fef9c3;border-color:#fcd34d"><strong>Hint:</strong> ' + fmtText(hint.hint || hint.message || '') + '</div>';
+        fb.innerHTML = '<div class="lms-card lms-card-warn"><strong>Hint:</strong> ' + fmtText(hint.hint || hint.message || '') + '</div>';
         typeset(fb);
       }
     } catch (err) {

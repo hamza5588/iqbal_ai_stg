@@ -145,36 +145,101 @@
     return s;
   }
 
+  var _MATH_WORD_RE = /^(log|ln|sin|cos|tan|sec|csc|cot|lim|max|min|frac|sqrt|cdot|simplify|left|right|text|over|times)$/i;
+  var _FRAC_RE = /\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}/g;
+  var _ALG_ISLAND_RE = /(?:[A-Za-z]\^\{[^}]+\}|[A-Za-z]\^\d+|[A-Za-z]\d+)(?:\s*[+\-×÷=]\s*(?:[A-Za-z]\^\{[^}]+\}|[A-Za-z]\^\d+|[A-Za-z]\d+|[A-Za-z]|-?\d+))+/g;
+
+  function lmsNormalizeMixedPercents(s) {
+    s = String(s || '');
+    s = s.replace(/(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}\s*\\?%/g, '$1 $2/$3%');
+    s = s.replace(/(\d+)\s+(\d+)\s+(\d+)\s*%/g, '$1 $2/$3%');
+    return s;
+  }
+
+  function lmsIsMixedPercent(s) {
+    return /^\s*\d+\s+\d+\s*\/\s*\d+\s*%?\s*$/.test(s) || /^\s*\d+\s*\/\s*\d+\s*%?\s*$/.test(s);
+  }
+
+  function lmsLooksLikeProse(s) {
+    var words = String(s || '').match(/[A-Za-z]{4,}/g) || [];
+    var real = words.filter(function (w) { return !_MATH_WORD_RE.test(w); });
+    return real.length >= 3;
+  }
+
+  function lmsStripInnerMathDelims(s) {
+    // Do not use lmsMapOutsideMath here: nested \( \) inside \frac would be treated
+    // as top-level math and the fraction would never be rewritten.
+    return String(s || '').replace(/\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}/g, function (frac) {
+      return frac.replace(/\\[\(\[]\s*/g, '').replace(/\s*\\[\)\]]/g, '');
+    });
+  }
+
+  function lmsEscapePercentInMathBody(s) {
+    return String(s || '').replace(/\\%/g, '%').replace(/%/g, '\\%');
+  }
+
+  function lmsMapOutsideMath(s, fn) {
+    var re = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+\$/g;
+    var out = [];
+    var last = 0;
+    var m;
+    while ((m = re.exec(s))) {
+      if (m.index > last) out.push(fn(s.slice(last, m.index)));
+      out.push(m[0]);
+      last = m.index + m[0].length;
+    }
+    if (last < s.length) out.push(fn(s.slice(last)));
+    return out.join('');
+  }
+
+  function lmsWrapMathChunk(m, inline) {
+    if (/^\\[\(\[]/.test(m) || /^\$/.test(m) || lmsIsMixedPercent(m)) return m;
+    var inner = lmsEscapePercentInMathBody(m);
+    if (!inline && /\\frac/.test(inner)) return '\\[' + inner + '\\]';
+    return '\\(' + inner + '\\)';
+  }
+
+  function lmsWrapMathIslands(s, inline) {
+    return lmsMapOutsideMath(s, function (chunk) {
+      if (!chunk) return chunk;
+      chunk = chunk.replace(_FRAC_RE, function (m) { return lmsWrapMathChunk(m, inline); });
+      return lmsMapOutsideMath(chunk, function (c) {
+        return c.replace(_ALG_ISLAND_RE, function (m) { return lmsWrapMathChunk(m, true); });
+      });
+    });
+  }
+
   function lmsRecoverLatex(s) {
-    var     t = String(s || '').trim();
+    var t = String(s || '').trim();
     if (!t) return '';
     if (t.normalize) t = t.normalize('NFKC');
     t = t.replace(/−/g, '-');
     t = lmsUnicodeSupersToLatex(t);
     t = lmsImplicitExponents(t);
     t = lmsRecoverStackedFraction(t);
+    t = lmsNormalizeMixedPercents(t);
+    t = t.replace(/([0-9√π∞°}%])([A-Za-z]{3,})/g, '$1 $2');
+    t = t.replace(/(\})([A-Za-z]{3,})/g, '$1 $2');
     return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   function lmsLooksLikeMathExpression(str) {
     var s = String(str || '').trim();
     if (!s || s.length > 220) return false;
-    if (/\b(which|following|choose|statement|decimal|because|correct|except)\b/i.test(s)) {
-      return lmsLooksLikeRawLatex(s) || /\^\{/.test(s);
-    }
+    if (lmsLooksLikeProse(s)) return false;
     if (lmsLooksLikeRawLatex(s) || /\\(dots|ldots|cdots)\b/.test(s) || /\^\{/.test(s) || /\\frac/.test(s)) return true;
     var words = s.match(/[A-Za-z]{4,}/g) || [];
-    var mathWords = /^(log|ln|sin|cos|tan|sec|csc|cot|lim|max|min|frac|sqrt|cdot|simplify)$/i;
-    if (words.length && !words.every(function (w) { return mathWords.test(w); })) return false;
-    return /[a-zA-Z0-9]\^|\^{|[_^]|[=+\-*/]|\\[a-zA-Z]+|[A-Za-z]\d/.test(s) || /\blog\b|\bsin\b|\bcos\b/.test(s);
+    if (words.length && !words.every(function (w) { return _MATH_WORD_RE.test(w); })) return false;
+    return /[a-zA-Z0-9]\^|\^{|[_^]|[=+\-*]|\\[a-zA-Z]+|[A-Za-z]\d/.test(s) || /\blog\b|\bsin\b|\bcos\b/.test(s);
   }
 
   function lmsPickDisplayText(text, latex) {
     var t = lmsStripOptionLabelPrefix(text || '');
     var l = lmsStripOptionLabelPrefix(latex || '');
     if (lmsIsBrokenMathBlob(l)) l = '';
+    if (lmsLooksLikeProse(t)) return lmsRecoverLatex(t) || t;
     var recovered = lmsRecoverLatex(l || t);
-    if (recovered && (/\^\{/.test(recovered) || /\\frac/.test(recovered) || /\\times/.test(recovered))) {
+    if (recovered && (/\^\{/.test(recovered) || /\\frac/.test(recovered) || /\\times/.test(recovered)) && !lmsLooksLikeProse(recovered)) {
       return recovered;
     }
     if (lmsIsLabelOnly(t) && l && !lmsIsLabelOnly(l) && !lmsIsBrokenMathBlob(l)) return lmsRecoverLatex(l) || l;
@@ -187,17 +252,30 @@
     if (text == null) return '';
     var s = String(text).trim();
     if (!s) return '';
-    if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) return s;
-    var recovered = lmsRecoverLatex(s) || s;
+    s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
+    if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
+      if (lmsLooksLikeProse(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '))) {
+        return lmsWrapMathIslands(s, inline);
+      }
+      return lmsMapOutsideMath(s, function (c) { return c; }).replace(/\\\(([\s\S]*?)\\\)/g, function (m, inner) {
+        return '\\(' + lmsEscapePercentInMathBody(inner) + '\\)';
+      }).replace(/\\\[([\s\S]*?)\\\]/g, function (m, inner) {
+        return '\\[' + lmsEscapePercentInMathBody(inner) + '\\]';
+      });
+    }
+    var recovered = lmsStripInnerMathDelims(lmsRecoverLatex(s) || s);
     var colon = recovered.match(/^((?:Simplify|Find|Solve|Evaluate|Compute|Expand|Factor)\s*:)\s*(.+)$/i);
-    if (colon && (lmsLooksLikeMathExpression(colon[2]) || /\\frac|\^\{/.test(colon[2]))) {
+    if (colon && !lmsLooksLikeProse(colon[2]) && (lmsLooksLikeMathExpression(colon[2]) || /\\frac|\^\{/.test(colon[2]))) {
       var body = colon[2].trim();
       var wrap = (!inline && /\\frac/.test(body)) ? ['\\[', '\\]'] : ['\\(', '\\)'];
-      return colon[1] + ' ' + wrap[0] + body + wrap[1];
+      return colon[1] + ' ' + wrap[0] + lmsEscapePercentInMathBody(body) + wrap[1];
     }
+    if (lmsIsMixedPercent(recovered)) return recovered;
+    if (lmsLooksLikeProse(recovered)) return lmsWrapMathIslands(recovered, inline);
     if (lmsLooksLikeRawLatex(recovered) || lmsLooksLikeMathExpression(recovered) || /\\frac|\^\{/.test(recovered)) {
-      if (!inline && /\\frac/.test(recovered)) return '\\[' + recovered + '\\]';
-      return '\\(' + recovered + '\\)';
+      var math = lmsEscapePercentInMathBody(recovered);
+      if (!inline && /\\frac/.test(math)) return '\\[' + math + '\\]';
+      return '\\(' + math + '\\)';
     }
     return recovered;
   }
@@ -222,7 +300,8 @@
     opts = opts || {};
     var text = prepareMathText(raw, !!opts.inline);
     var html;
-    if (global.TeacherChatFormatter && typeof global.TeacherChatFormatter.formatChatResponse === 'function') {
+    var useFormatter = global.TeacherChatFormatter && typeof global.TeacherChatFormatter.formatChatResponse === 'function';
+    if (useFormatter && !opts.inline && !opts.quiz) {
       html = global.TeacherChatFormatter.formatChatResponse(text);
     } else {
       html = escapeHtml(text).replace(/\n/g, '<br>');

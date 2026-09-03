@@ -366,6 +366,7 @@ class AssessmentAttempt(Base):
     started_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     submitted_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)
+    timed_out = Column(Boolean, nullable=False, default=False, server_default="false")
 
     answers = relationship(
         "AttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"

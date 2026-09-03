@@ -1,8 +1,11 @@
 /** Deficiency learning chat — post-diagnostic weak-area practice (separate from main lesson chat). */
 (function () {
-  function fmtText(text, inline) {
+  function fmtText(text, inline, quiz) {
     if (typeof window.lmsFormatRichText === 'function') {
-      return window.lmsFormatRichText(text, inline ? { inline: true } : undefined);
+      var opts = {};
+      if (inline) opts.inline = true;
+      if (quiz) opts.quiz = true;
+      return window.lmsFormatRichText(text, opts);
     }
     return escapeHtml(text == null ? '' : String(text));
   }
@@ -10,13 +13,13 @@
     var raw = (typeof window.lmsOptionText === 'function')
       ? window.lmsOptionText(opt)
       : ((opt && (opt.text || opt.latex)) || '');
-    return fmtText(raw, true);
+    return fmtText(raw, true, true);
   }
   function fmtQuestion(q) {
     var raw = (typeof window.lmsQuestionText === 'function')
       ? window.lmsQuestionText(q)
       : ((q && (q.question_text || q.question_latex)) || '');
-    return fmtText(raw, false);
+    return fmtText(raw, false, true);
   }
   function typeset(el) {
     if (!el) return Promise.resolve();
@@ -60,7 +63,7 @@
       '<div class="lms-chat-avatar">AI</div>' +
       '<div class="lms-chat-bubble">' +
       '<div class="lms-chat-typing"><span></span><span></span><span></span></div>' +
-      '<span style="font-size:.75rem;color:#64748b;margin-left:8px;">Thinking...</span>' +
+      '<span class="lms-status" style="font-size:.75rem;margin:0 0 0 8px;">Thinking...</span>' +
       '</div></div>';
   }
 
@@ -68,7 +71,7 @@
     var html = defState.tutorHistory.map(function (m) {
       var role = m.role === 'user' ? 'user' : 'bot';
       var levelTag = m.levelLabel
-        ? '<div style="font-size:.7rem;color:#64748b;margin-bottom:4px;">' + escapeHtml(m.levelLabel) + '</div>'
+        ? '<div class="lms-status" style="font-size:.7rem;margin:0 0 4px;">' + escapeHtml(m.levelLabel) + '</div>'
         : '';
       return '<div class="lms-chat-msg ' + role + '">' +
         '<div class="lms-chat-avatar">' + (role === 'user' ? 'You' : 'AI') + '</div>' +

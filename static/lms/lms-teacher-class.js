@@ -21,7 +21,6 @@
     div.id = 'lmsTeacherGradeSetup';
     div.className = 'lms-card';
     div.style.marginBottom = '16px';
-    div.style.background = '#fff';
     var labels = (profile.teaching_grade_labels || []).join(', ') || 'Not set';
     div.innerHTML = '<h3 style="font-weight:700;margin:0 0 8px;color:var(--primary-color);">Your Teaching Grades</h3>' +
       '<p class="lms-status">Currently assigned: <strong>' + escapeHtml(labels) + '</strong></p>' +
@@ -209,7 +208,7 @@
             '<div class="lms-card-head">' +
             '<div><span class="lms-card-title">' + escapeHtml(c.name) + '</span> ' +
             (c.grade_level ? '<span class="lms-badge lms-badge-green">' + c.grade_level + 'th Grade</span>' : '') +
-            '<div class="lms-status" style="margin-top:6px;">Join code: <code style="background:#f0fdf4;padding:2px 8px;border-radius:4px;font-weight:700;color:var(--primary-color);">' + escapeHtml(c.join_code) + '</code></div></div>' +
+            '<div class="lms-status" style="margin-top:6px;">Join code: <code class="lms-code">' + escapeHtml(c.join_code) + '</code></div></div>' +
             '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsOpenClassDetail(' + c.id + ',\'' + escapeHtml(c.name).replace(/'/g, "\\'") + '\',\'' + escapeHtml(c.join_code) + '\',\'' + escapeHtml(c.grade_level || '') + '\')">Manage</button></div>' +
             '<div class="lms-status" style="margin-top:8px;">Students (' + roster.length + '):</div>' +
             rosterPreview + '</div>';

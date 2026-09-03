@@ -12203,7 +12203,7 @@ Align everything with the lesson objectives and do not invent missing informatio
         const body = await res.json();
         const classes = body.data || body || [];
         if (!classes.length) {
-          el.innerHTML = '<p style="color:#64748b;">No classes yet. Create one above.</p>';
+          el.innerHTML = '<p class="lms-status">No classes yet. Create one above.</p>';
           return;
         }
         el.innerHTML = await Promise.all(classes.map(async function (c) {
@@ -12218,15 +12218,15 @@ Align everything with the lesson objectives and do not invent missing informatio
               return '<li>' + escapeHtml(s.username || s.email || ('Student #' + s.student_id)) + '</li>';
             }).join('')
             : '<li>No students enrolled</li>';
-          return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:10px;">' +
+          return '<div class="lms-card">' +
             '<strong>' + escapeHtml(c.name) + '</strong>' +
-            (c.grade_level ? ' <span style="color:#64748b;font-size:.875rem;">(' + escapeHtml(c.grade_level) + ')</span>' : '') +
-            '<div style="margin:8px 0;font-size:.875rem;"><span style="color:#64748b;">Join code:</span> <code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-weight:700;">' + escapeHtml(c.join_code) + '</code></div>' +
-            '<div style="font-size:.875rem;color:#64748b;margin-bottom:4px;">Students (' + roster.length + '):</div>' +
-            '<ul style="margin:0;padding-left:18px;font-size:.875rem;">' + rosterHtml + '</ul></div>';
+            (c.grade_level ? ' <span class="lms-status" style="display:inline;margin:0;">(' + escapeHtml(c.grade_level) + ')</span>' : '') +
+            '<div class="lms-status">Join code: <code class="lms-code">' + escapeHtml(c.join_code) + '</code></div>' +
+            '<div class="lms-status">Students (' + roster.length + '):</div>' +
+            '<ul class="lms-class-roster-preview">' + rosterHtml + '</ul></div>';
         })).then(function (html) { return html.join(''); });
       } catch (err) {
-        el.innerHTML = '<p style="color:#dc2626;">Failed to load classes.</p>';
+        el.innerHTML = '<p class="lms-error">Failed to load classes.</p>';
       }
     }
     async function submitLmsCreateClass(e) {
@@ -12251,28 +12251,35 @@ Align everything with the lesson objectives and do not invent missing informatio
 
   <!-- LMS Assign Quiz (TE-613) -->
   <div id="lmsAssignModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsAssignModal()">
-    <div style="background:#fff;border-radius:12px;max-width:520px;width:100%;padding:24px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h2 style="font-size:1.25rem;font-weight:700;margin:0;">Create Assignment</h2>
-        <button type="button" onclick="closeLmsAssignModal()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+    <div class="lms-modal lms-modal-md" onclick="event.stopPropagation()">
+      <div class="lms-modal-header">
+        <h2>Create Assignment</h2>
+        <button type="button" class="lms-modal-close" onclick="closeLmsAssignModal()" aria-label="Close">&times;</button>
       </div>
+      <div class="lms-modal-body">
       <form id="lmsAssignForm" onsubmit="submitLmsAssignment(event)">
-        <label style="display:block;font-weight:600;margin-bottom:4px;">Assignment title</label>
-        <input id="lmsAssignTitle" type="text" required placeholder="Week 3 Quiz"
-          style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
-        <label style="display:block;font-weight:600;margin-bottom:4px;">Class</label>
-        <select id="lmsAssignClass" required style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;"></select>
-        <label style="display:block;font-weight:600;margin-bottom:4px;">Published quiz</label>
-        <select id="lmsAssignQuiz" required style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;"></select>
-        <label style="display:block;font-weight:600;margin-bottom:4px;">Due date (optional)</label>
-        <input id="lmsAssignDue" type="datetime-local"
-          style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
-        <button type="submit" id="lmsAssignSubmitBtn"
-          style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;width:100%;">
+        <div class="lms-field">
+          <label class="lms-label" for="lmsAssignTitle">Assignment title</label>
+          <input id="lmsAssignTitle" class="lms-input" type="text" required placeholder="Week 3 Quiz">
+        </div>
+        <div class="lms-field">
+          <label class="lms-label" for="lmsAssignClass">Class</label>
+          <select id="lmsAssignClass" class="lms-select" required></select>
+        </div>
+        <div class="lms-field">
+          <label class="lms-label" for="lmsAssignQuiz">Published quiz</label>
+          <select id="lmsAssignQuiz" class="lms-select" required></select>
+        </div>
+        <div class="lms-field">
+          <label class="lms-label" for="lmsAssignDue">Due date (optional)</label>
+          <input id="lmsAssignDue" class="lms-input" type="datetime-local">
+        </div>
+        <button type="submit" id="lmsAssignSubmitBtn" class="lms-btn lms-btn-primary" style="width:100%;">
           Create &amp; Publish
         </button>
       </form>
-      <div id="lmsAssignStatus" style="margin-top:12px;font-size:.875rem;color:#475569;"></div>
+      <div id="lmsAssignStatus" class="lms-status"></div>
+      </div>
     </div>
   </div>
   <script>
@@ -12400,28 +12407,30 @@ Align everything with the lesson objectives and do not invent missing informatio
     </div>
   </div>
   <div id="lmsQuizHubModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsQuizHub()">
-    <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;overflow:auto;padding:24px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h2 style="font-size:1.25rem;font-weight:700;margin:0;">PDF → MCQ Quiz Builder</h2>
-        <button type="button" onclick="closeLmsQuizHub()" style="border:none;background:transparent;font-size:1.5rem;cursor:pointer;">&times;</button>
+    <div class="lms-modal lms-modal-lg" onclick="event.stopPropagation()">
+      <div class="lms-modal-header">
+        <h2>PDF → MCQ Quiz Builder</h2>
+        <button type="button" class="lms-modal-close" onclick="closeLmsQuizHub()" aria-label="Close">&times;</button>
       </div>
+      <div class="lms-modal-body">
       <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)">
-        <label style="display:block;font-weight:600;margin-bottom:4px;">Quiz title</label>
-        <input id="lmsQuizTitle" type="text" required placeholder="Chapter 5 Post Test"
-          style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
-        <label style="display:block;font-weight:600;margin-bottom:4px;">Q&amp;A PDF</label>
-        <input id="lmsQuizPdfFile" type="file" accept=".pdf,application/pdf" required
-          style="width:100%;margin-bottom:12px;">
-        <button type="submit" id="lmsQuizSubmitBtn"
-          style="background:var(--primary-color);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;">
+        <div class="lms-field">
+          <label class="lms-label" for="lmsQuizTitle">Quiz title</label>
+          <input id="lmsQuizTitle" class="lms-input" type="text" required placeholder="Chapter 5 Post Test">
+        </div>
+        <div class="lms-field">
+          <label class="lms-label" for="lmsQuizPdfFile">Q&amp;A PDF</label>
+          <input id="lmsQuizPdfFile" class="lms-file-input" type="file" accept=".pdf,application/pdf" required>
+        </div>
+        <button type="submit" id="lmsQuizSubmitBtn" class="lms-btn lms-btn-primary">
           Upload &amp; Generate MCQs
         </button>
       </form>
-      <div id="lmsQuizStatus" style="margin-top:16px;font-size:.875rem;color:#475569;"></div>
-      <div id="lmsQuizPreview" style="margin-top:16px;"></div>
-      <div id="lmsQuizActions" style="margin-top:16px;display:none;gap:8px;">
-        <button type="button" onclick="publishLmsQuiz()"
-          style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;">
+      <div id="lmsQuizStatus" class="lms-status"></div>
+      <div id="lmsQuizPreview"></div>
+      </div>
+      <div id="lmsQuizActions" class="lms-modal-footer" style="display:none;">
+        <button type="button" class="lms-btn lms-btn-primary" onclick="publishLmsQuiz()">
           Publish Quiz
         </button>
       </div>
@@ -12432,7 +12441,7 @@ Align everything with the lesson objectives and do not invent missing informatio
   <script>
     function _lmsFmtText(text, inline) {
       if (typeof lmsFormatRichText === 'function') {
-        return lmsFormatRichText(text, inline ? { inline: true } : undefined);
+        return lmsFormatRichText(text, inline ? { inline: true, quiz: true } : { quiz: true });
       }
       return escapeHtml(text == null ? '' : String(text));
     }
@@ -12725,7 +12734,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           return '<li>' + o.label + '. ' + _lmsFmtOption(o) + mark + '</li>';
         }).join('');
         return '<div class="lms-diag-preview-card">' +
-          '<strong>Q' + (idx + 1) + '.</strong> ' + _lmsFmtQuestion(q) +
+          '<strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' + _lmsFmtQuestion(q) +
           '<ul>' + opts + '</ul></div>';
       }).join('');
       _lmsTypeset(previewEl);
@@ -12875,8 +12884,8 @@ Align everything with the lesson objectives and do not invent missing informatio
         if (!failMsg && d.warnings && d.warnings.length) {
           failMsg = d.warnings.join('; ');
         }
-        previewEl.innerHTML = '<p style="color:#b91c1c;font-weight:600;">No questions generated.</p>' +
-          (failMsg ? '<p style="font-size:.875rem;color:#64748b;margin-top:8px;">' + escapeHtml(failMsg) + '</p>' : '');
+        previewEl.innerHTML = '<p class="lms-error" style="font-weight:600;">No questions generated.</p>' +
+          (failMsg ? '<p class="lms-status">' + escapeHtml(failMsg) + '</p>' : '');
         return;
       }
       previewEl.innerHTML = d.questions.map(function (item, idx) {
@@ -12884,9 +12893,9 @@ Align everything with the lesson objectives and do not invent missing informatio
         const opts = (q.options || []).map(function (o) {
           return '<li>' + o.label + '. ' + _lmsFmtOption(o) + '</li>';
         }).join('');
-        return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;">' +
-          '<strong>Q' + (idx + 1) + '.</strong> ' + _lmsFmtQuestion(q) +
-          '<ul style="margin:8px 0 0 16px;">' + opts + '</ul></div>';
+        return '<div class="lms-diag-preview-card">' +
+          '<strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' + _lmsFmtQuestion(q) +
+          '<ul>' + opts + '</ul></div>';
       }).join('');
       _lmsTypeset(previewEl);
     }

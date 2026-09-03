@@ -2,7 +2,7 @@
 (function () {
   function fmtText(text, inline) {
     if (typeof window.lmsFormatRichText === 'function') {
-      return window.lmsFormatRichText(text, inline ? { inline: true } : undefined);
+        return window.lmsFormatRichText(text, inline ? { inline: true, quiz: true } : { quiz: true });
     }
     return escapeHtml(text == null ? '' : String(text));
   }
@@ -72,6 +72,31 @@
     return !!window._lmsNeedsDiagnostic;
   };
 
+  function unlockDiagnosticGate() {
+    window._lmsNeedsDiagnostic = false;
+    window._lmsDiagnosticAllowClose = true;
+    if (typeof setLmsDiagnosticGate === 'function') setLmsDiagnosticGate(false);
+    if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
+  }
+
+  function renderDiagnosticTimeOver(result) {
+    clearDiagTimer();
+    var body = document.getElementById('lmsDiagBody');
+    var timerEl = document.getElementById('lmsDiagTimer');
+    if (timerEl) timerEl.style.display = 'none';
+    var msg = (result && (result.message || result.diagnostic_timeout_message)) ||
+      'Time over. You have not submitted the diagnostic. You scored 0 marks.';
+    body.innerHTML =
+      '<div class="lms-card lms-diag-timeover">' +
+      '<p class="lms-diag-timeover-title">Time over</p>' +
+      '<p>' + escapeHtml(msg) + '</p>' +
+      '<p class="lms-status" style="margin-top:8px;">You cannot retake this assessment. Continue with your learning path or Learning Chat.</p>' +
+      '<div class="lms-modal-footer" style="border:none;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap;">' +
+      '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic()">Continue</button>' +
+      '</div></div>';
+    unlockDiagnosticGate();
+  }
+
   function clearDiagTimer() {
     if (diagState.timerInterval) {
       clearInterval(diagState.timerInterval);
@@ -122,15 +147,25 @@
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Loading diagnostic...</p>';
     try {
       var diag = await lmsApi('/api/lms/diagnostics/default');
+      if (diag.diagnostic_timed_out || diag.time_over) {
+        renderDiagnosticTimeOver(diag);
+        return;
+      }
       if (diag.diagnostic_completed || diag.any_diagnostic_completed) {
         body.innerHTML = '<div class="lms-card"><p>You have already completed the diagnostic assessment' +
           (diag.title ? ': <strong>' + escapeHtml(diag.title) + '</strong>' : '') +
           '.</p><p class="lms-status" style="margin-top:8px;">Retakes are not allowed. Continue with your learning path or Learning Chat.</p></div>';
+        unlockDiagnosticGate();
         return;
       }
       await startDiagnosticQuiz(diag.id, diag.title || 'Diagnostic Assessment', diag.question_count, 'Platform diagnostic', diag.time_limit_minutes);
     } catch (err) {
-      body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>' +
+      var loadMsg = err && err.message ? String(err.message) : '';
+      if (/time over/i.test(loadMsg)) {
+        renderDiagnosticTimeOver({ message: loadMsg });
+        return;
+      }
+      body.innerHTML = '<p class="lms-error">' + escapeHtml(loadMsg) + '</p>' +
         '<p class="lms-status">Contact your admin to upload the diagnostic assessment.</p>';
     }
   };
@@ -187,6 +222,10 @@
       (timeLimitMinutes ? '<p class="lms-status" style="margin-top:4px;">Time limit: ~' + timeLimitMinutes + ' minutes (AI-calculated per question)</p>' : '');
     try {
       var start = await lmsApi('/api/lms/quizzes/' + assessmentId + '/start', { method: 'POST' });
+      if (start.timed_out || start.time_over) {
+        renderDiagnosticTimeOver(start);
+        return;
+      }
       diagState.attemptId = start.attempt_id;
       diagState.expiresAt = start.expires_at || null;
       var rem = start.remaining_seconds;
@@ -205,6 +244,10 @@
       if (start.resumed) {
         lmsShowToast('Resuming where you left off', 'success');
       }
+      if (diagState.remainingSeconds != null && diagState.remainingSeconds <= 0) {
+        await submitLmsDiagnostic(true);
+        return;
+      }
       if (!diagState.questions.length) {
         body.innerHTML = '<p class="lms-error">No questions in this diagnostic.</p>';
         return;
@@ -212,7 +255,12 @@
       renderDiagnosticQuestion();
       startDiagTimer();
     } catch (err) {
-      body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
+      var startMsg = err && err.message ? String(err.message) : '';
+      if (/time over/i.test(startMsg)) {
+        renderDiagnosticTimeOver({ message: startMsg });
+        return;
+      }
+      body.innerHTML = '<p class="lms-error">' + escapeHtml(startMsg) + '</p>';
     }
   }
 
@@ -284,27 +332,39 @@
     clearDiagTimer();
     var body = document.getElementById('lmsDiagBody');
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">' +
-      (autoSubmit ? 'Time expired — submitting your answers...' : 'Scoring your diagnostic...') + '</p>';
+      (autoSubmit ? 'Time over — closing your diagnostic...' : 'Scoring your diagnostic...') + '</p>';
     try {
-      for (var i = 0; i < diagState.questions.length; i++) {
-        var item = diagState.questions[i];
-        var qid = item.question_id || (item.question && item.question.id);
-        if (diagState.answers[i] !== undefined && qid) {
-          await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
-          });
+      if (!autoSubmit) {
+        for (var i = 0; i < diagState.questions.length; i++) {
+          var item = diagState.questions[i];
+          var qid = item.question_id || (item.question && item.question.id);
+          if (diagState.answers[i] !== undefined && qid) {
+            await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
+            });
+          }
         }
       }
-      var result = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/submit', { method: 'POST' });
+      var result = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ time_expired: !!autoSubmit })
+      });
+      if (result.timed_out || result.time_over || autoSubmit) {
+        renderDiagnosticTimeOver(result);
+        return;
+      }
       renderDiagnosticResults(result);
-      window._lmsNeedsDiagnostic = false;
-      window._lmsDiagnosticAllowClose = true;
-      if (typeof setLmsDiagnosticGate === 'function') setLmsDiagnosticGate(false);
-      if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
+      unlockDiagnosticGate();
     } catch (err) {
-      body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
+      var msg = err && err.message ? String(err.message) : '';
+      if (autoSubmit || /time over/i.test(msg) || /expired/i.test(msg)) {
+        renderDiagnosticTimeOver({ message: msg || undefined });
+        return;
+      }
+      body.innerHTML = '<p class="lms-error">' + escapeHtml(msg) + '</p>';
     }
   };
 
@@ -408,9 +468,15 @@
         '<div class="lms-path-step-meta">' + escapeHtml(item.item_type) + '</div>' + action + '</div></li>';
     }).join('');
     var pct = path.total_count ? Math.round(100 * (path.completed_count || 0) / path.total_count) : 0;
-    return '<div class="lms-path-panel"><h3>My Learning Path <span style="font-weight:400;color:#64748b;font-size:.875rem;">(' + pct + '% done)</span></h3>' +
+    return '<div class="lms-path-panel"><h3>My Learning Path <span class="lms-path-pct" style="font-weight:400;font-size:.875rem;">(' + pct + '% done)</span></h3>' +
       '<ol class="lms-path-steps">' + steps + '</ol></div>';
   };
+
+  document.addEventListener('pagehide', function () {
+    if (diagState.attemptId && diagState.questions.length) {
+      persistDiagAnswers().catch(function () {});
+    }
+  });
 
   document.addEventListener('DOMContentLoaded', function () {
     if (typeof renderLmsLearningPath === 'function') {

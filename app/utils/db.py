@@ -405,6 +405,10 @@ def init_db(app):
                         logger.info("Adding expires_at to assessment_attempts...")
                         db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN expires_at TIMESTAMP"))
                         db.commit()
+                    if "timed_out" not in columns:
+                        logger.info("Adding timed_out to assessment_attempts...")
+                        db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN timed_out BOOLEAN NOT NULL DEFAULT FALSE"))
+                        db.commit()
             except Exception as e:
                 logger.warning("diagnostic timer migration warning: %s", e)
                 db.rollback()

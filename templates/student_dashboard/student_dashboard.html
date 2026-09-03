@@ -3159,34 +3159,34 @@
     /* LMS Overview (Phase 2) */
     .lms-overview { margin-bottom: 24px; }
     .lms-overview-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
-    .lms-overview-head h2 { font-size:1.25rem; font-weight:700; margin:0; color:#0f172a; }
+    .lms-overview-head h2 { font-size:1.25rem; font-weight:700; margin:0; color:var(--lms-text, #0f172a); }
     .lms-overview-actions { display:flex; gap:8px; flex-wrap:wrap; }
     .lms-btn { border:none; border-radius:8px; padding:8px 14px; font-weight:600; font-size:.875rem; cursor:pointer; }
     .lms-btn-primary { background:var(--primary-color); color:#fff; }
-    .lms-btn-secondary { background:#e2e8f0; color:#334155; }
+    .lms-btn-secondary { background:var(--lms-hover, #e2e8f0); color:var(--lms-text, #334155); }
     .lms-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
-    .lms-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; }
-    .lms-card-label { font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:#64748b; margin-bottom:4px; }
-    .lms-card-value { font-size:1.5rem; font-weight:700; color:#0f172a; }
-    .lms-card-list { margin:8px 0 0; padding:0; list-style:none; font-size:.875rem; color:#475569; }
-    .lms-card-list li { padding:4px 0; border-bottom:1px solid #f1f5f9; }
+    .lms-card { background:var(--lms-surface, #fff); border:1px solid var(--lms-border, #e2e8f0); border-radius:12px; padding:16px; }
+    .lms-card-label { font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--lms-muted, #64748b); margin-bottom:4px; }
+    .lms-card-value { font-size:1.5rem; font-weight:700; color:var(--lms-text, #0f172a); }
+    .lms-card-list { margin:8px 0 0; padding:0; list-style:none; font-size:.875rem; color:var(--lms-muted, #475569); }
+    .lms-card-list li { padding:4px 0; border-bottom:1px solid var(--lms-border, #f1f5f9); }
     .lms-onboarding-banner { background:#fef3c7; border:1px solid #fcd34d; border-radius:12px; padding:14px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
     /* Learning Path (Phase 4) */
-    .lms-path-panel { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-top:16px; }
-    .lms-path-panel h3 { font-size:1rem; font-weight:700; margin:0 0 12px; color:#0f172a; }
+    .lms-path-panel { background:var(--lms-surface, #fff); border:1px solid var(--lms-border, #e2e8f0); border-radius:12px; padding:16px; margin-top:16px; }
+    .lms-path-panel h3 { font-size:1rem; font-weight:700; margin:0 0 12px; color:var(--lms-text, #0f172a); }
     .lms-path-steps { list-style:none; margin:0; padding:0; }
-    .lms-path-step { display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid #f1f5f9; }
+    .lms-path-step { display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid var(--lms-border, #f1f5f9); }
     .lms-path-step:last-child { border-bottom:none; }
-    .lms-path-step.current { background:var(--green-muted); margin:0 -8px; padding:10px 8px; border-radius:8px; }
-    .lms-path-check { width:22px; height:22px; border-radius:50%; border:2px solid #cbd5e1; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:.75rem; color:#fff; }
+    .lms-path-step.current { background:var(--lms-green-muted, var(--green-muted)); margin:0 -8px; padding:10px 8px; border-radius:8px; }
+    .lms-path-check { width:22px; height:22px; border-radius:50%; border:2px solid var(--lms-input-border, #cbd5e1); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:.75rem; color:#fff; }
     .lms-path-step.completed .lms-path-check { background:var(--primary-600); border-color:var(--primary-600); }
     .lms-path-step.current .lms-path-check { border-color:#0284c7; background:#0284c7; }
     .lms-path-step-body { flex:1; min-width:0; }
-    .lms-path-step-title { font-weight:600; font-size:.875rem; color:#0f172a; }
-    .lms-path-step-meta { font-size:.75rem; color:#64748b; margin-top:2px; text-transform:capitalize; }
-    .lms-path-empty { color:#64748b; font-size:.875rem; }
+    .lms-path-step-title { font-weight:600; font-size:.875rem; color:var(--lms-text, #0f172a); }
+    .lms-path-step-meta { font-size:.75rem; color:var(--lms-muted, #64748b); margin-top:2px; text-transform:capitalize; }
+    .lms-path-empty { color:var(--lms-muted, #64748b); font-size:.875rem; }
     .lms-topic-filter { display:flex; align-items:center; gap:8px; margin-top:10px; }
-    .lms-topic-filter select { border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:.875rem; min-width:180px; }
+    .lms-topic-filter select { border:1px solid var(--lms-input-border, #cbd5e1); border-radius:8px; padding:8px 12px; font-size:.875rem; min-width:180px; background:var(--lms-input-bg, #fff); color:var(--lms-text, #0f172a); }
     .lms-topic-badge { display:inline-block; background:#e0f2fe; color:#0369a1; font-size:.75rem; padding:2px 8px; border-radius:9999px; margin-right:4px; }
     .mll-page-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; gap:16px; flex-wrap:wrap; }
     .mll-page-head h1{ font-size:24px; font-weight:800; margin-bottom:4px; }
@@ -4982,7 +4982,7 @@
 
         chatMessages.innerHTML = `
     <div class="mll-wrap">
-      <div id="lmsOverviewSection"><p style="color:#64748b;font-size:.875rem;">Loading LMS overview...</p></div>
+      <div id="lmsOverviewSection"><p class="lms-status">Loading LMS overview...</p></div>
       <div class="mll-page-head">
         <div>
           <h1>My Lessons</h1>
@@ -7840,7 +7840,7 @@
           action + '</div></li>';
       }).join('');
       const pct = path.total_count ? Math.round(100 * (path.completed_count || 0) / path.total_count) : 0;
-      return '<div class="lms-path-panel"><h3>My Learning Path <span style="font-weight:400;color:#64748b;font-size:.875rem;">(' + pct + '% done)</span></h3><ol class="lms-path-steps">' + steps + '</ol></div>';
+      return '<div class="lms-path-panel"><h3>My Learning Path <span class="lms-path-pct" style="font-weight:400;font-size:.875rem;">(' + pct + '% done)</span></h3><ol class="lms-path-steps">' + steps + '</ol></div>';
     }
     async function markLmsPathItemComplete(itemId) {
       try {
@@ -7887,7 +7887,7 @@
   <script>
     function _lmsFmtText(text, inline) {
       if (typeof lmsFormatRichText === 'function') {
-        return lmsFormatRichText(text, inline ? { inline: true } : undefined);
+        return lmsFormatRichText(text, inline ? { inline: true, quiz: true } : { quiz: true });
       }
       return escapeHtml(text == null ? '' : String(text));
     }

@@ -103,6 +103,26 @@
       || /[a-zA-Z0-9]\^-?\d/.test(inner);
   }
 
+  function _isInsideUnclosedFrac(before) {
+    var idx = before.lastIndexOf('\\frac');
+    if (idx < 0) return false;
+    var rest = before.slice(idx + 5);
+    var depth = 0;
+    var started = false;
+    for (var i = 0; i < rest.length; i++) {
+      var ch = rest.charAt(i);
+      if (ch === '{') { depth++; started = true; }
+      else if (ch === '}') depth--;
+    }
+    return started && depth > 0;
+  }
+
+  function _isInsideMathDelim(before) {
+    var opens = (before.match(/\\\(/g) || []).length + (before.match(/\\\[/g) || []).length;
+    var closes = (before.match(/\\\)/g) || []).length + (before.match(/\\\]/g) || []).length;
+    return opens > closes;
+  }
+
   function convertBareBracketMathToLatex(str) {
     if (!str || typeof str !== 'string') return str;
     // Square brackets: [\s\S] (not just non-newline) so multi-line display math like
@@ -126,8 +146,10 @@
     // Same fixed lookbehind as above - excludes '(' already part of a correct "\(" delimiter
     // AND '(' that's actually the argument to "\left(" / "\big(" / etc. (the exact live bug:
     // "\left(x + \frac{b}{2a}\right)" was getting mangled into "\left\(x + \frac{b}{2a}\right\)").
-    str = str.replace(/(?<!\\[a-zA-Z]*)\(([^()]{1,200})\)/g, function (match, inner) {
+    str = str.replace(/(?<!\\[a-zA-Z]*)\(([^()]{1,200})\)/g, function (match, inner, offset, full) {
       if (!_looksLikeMath(inner)) return match;
+      var before = full.slice(0, offset);
+      if (_isInsideUnclosedFrac(before) || _isInsideMathDelim(before)) return match;
       return '\\(' + inner.trim() + '\\)';
     });
     return str;
