@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 from app.models.lms_models import AssessmentAttempt, AttemptAnswer, Question, StudentProfile
 from app.services.lms.assessment_service import get_assessment
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
-from app.services.lms.mcq_utils import options_from_json
+from app.services.lms.mcq_utils import options_from_json, pick_display_fields
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -210,12 +210,16 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
         if not q:
             continue
         opts = options_from_json(q.options_json)
-        safe_opts = [{"label": o["label"], "text": o["text"], "latex": o.get("latex")} for o in opts]
+        q_text, q_latex = pick_display_fields(q.question_text, q.question_latex)
+        safe_opts = []
+        for o in opts:
+            text, latex = pick_display_fields(o.get("text"), o.get("latex"))
+            safe_opts.append({"label": o.get("label"), "text": text, "latex": latex})
         result.append(
             {
                 "question_id": q.id,
-                "question_text": q.question_text,
-                "question_latex": q.question_latex,
+                "question_text": q_text or q.question_text,
+                "question_latex": q_latex,
                 "options": safe_opts,
                 "sort_order": aq.sort_order,
                 "difficulty": q.difficulty,

@@ -337,7 +337,9 @@
 
 /* Quiz / diagnostic question UI */
 .lms-quiz-option {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
   text-align: left;
   border: 2px solid var(--lms-border);
@@ -346,21 +348,45 @@
   margin-bottom: 8px;
   background: #fff;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: inherit;
   transition: border-color 0.15s, background 0.15s;
+}
+.lms-quiz-option-label {
+  flex: 0 0 1.75rem;
+  font-weight: 700;
+  text-align: left;
+}
+.lms-quiz-option-body {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.lms-quiz-option-body .lms-math-content,
+.lms-quiz-option-body .lms-math-content p {
+  display: inline;
+  margin: 0;
+  font-weight: 400;
 }
 .lms-quiz-option:hover { border-color: #86efac; background: var(--lms-green-muted); }
 .lms-quiz-option.selected { border-color: var(--lms-green); background: var(--lms-green-muted); }
 .lms-quiz-progress { height: 6px; background: #e2e8f0; border-radius: 9999px; margin-bottom: 16px; overflow: hidden; }
 .lms-quiz-progress-bar { height: 100%; background: var(--lms-green); border-radius: 9999px; transition: width 0.3s; }
 .lms-quiz-stem {
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 12px 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 12px 0 16px;
   overflow-wrap: anywhere;
   word-break: break-word;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: auto;
+}
+.lms-quiz-stem .katex,
+.lms-quiz-stem .MathJax,
+.lms-quiz-option .katex,
+.lms-quiz-option .MathJax {
+  font-weight: 400;
 }
 
 /* Topic results */

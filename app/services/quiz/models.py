@@ -46,6 +46,11 @@ class PDFExtractionResult(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
+class LatexNormalizedBatch(BaseModel):
+    """AI reconstruction of exam math as LaTeX (does not invent questions)."""
+    questions: List[ExtractedQuestion] = Field(default_factory=list)
+
+
 class QuestionAnswerPair(BaseModel):
     question_number: Union[int, str]
     question_text: str
@@ -75,6 +80,10 @@ class MCQQuestion(BaseModel):
         description="Short student-friendly concept this question tests (3-8 words, not a document title)",
     )
     conversion_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+    preserve_option_order: bool = Field(
+        default=False,
+        description="Keep A–D in PDF paper order so the answer key still matches",
+    )
 
     @model_validator(mode="after")
     def validate_mcq_structure(self) -> "MCQQuestion":

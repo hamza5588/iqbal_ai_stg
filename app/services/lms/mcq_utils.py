@@ -7,6 +7,7 @@ import re
 from typing import Any, List, Optional, Tuple
 
 from app.services.lms.exceptions import LMSValidationError
+from app.services.quiz.math_text import recover_fields
 
 LABELS = ("A", "B", "C", "D")
 
@@ -54,16 +55,17 @@ def is_broken_math_blob(text: str) -> bool:
 
 
 def pick_display_fields(text: Optional[str], latex: Optional[str]) -> Tuple[str, Optional[str]]:
-    """Prefer spaced English text over smashed latex copies of the same sentence."""
+    """Prefer reconstructed math latex over flattened PDF text like '4x2' or 'a3b2'."""
     text_s = strip_option_label_prefix(text or "")
     latex_s = strip_option_label_prefix(latex or "") or None
     if latex_s and is_broken_math_blob(latex_s):
         latex_s = None
     if is_label_only(text_s) and latex_s and not is_label_only(latex_s) and not is_broken_math_blob(latex_s):
-        return latex_s, latex_s
+        text_s, latex_s = recover_fields(latex_s, latex_s)
+        return text_s, latex_s
     if latex_s and is_label_only(latex_s) and text_s and not is_label_only(text_s):
         latex_s = None
-    return text_s, latex_s
+    return recover_fields(text_s, latex_s)
 
 
 def parse_answer_label(text: str) -> Optional[str]:
@@ -154,9 +156,22 @@ def options_from_json(options_json: str) -> List[dict]:
 
 
 def shuffle_options(
-    options: List[dict], correct_option_index: int
+    options: List[dict],
+    correct_option_index: int,
+    *,
+    preserve_order: bool = False,
 ) -> Tuple[List[dict], int]:
-    """Shuffle options and return new correct index."""
+    """Shuffle options and return new correct index.
+
+    Native PDF MCQs keep A–D in paper order so the answer key still matches.
+    """
+    if preserve_order:
+        kept = []
+        for i, opt in enumerate(options):
+            item = dict(opt)
+            item["label"] = LABELS[i] if i < 4 else item.get("label") or "A"
+            kept.append(item)
+        return kept, correct_option_index
     indexed = list(enumerate(options))
     random.shuffle(indexed)
     shuffled = []
@@ -195,7 +210,8 @@ def split_stem_and_options(text: str) -> Tuple[str, List[dict]]:
                 continue
             if any(o["label"] == label for o in opts):
                 continue
-            opts.append({"label": label, "text": body, "latex": None})
+            recovered_text, recovered_latex = recover_fields(body, None)
+            opts.append({"label": label, "text": recovered_text, "latex": recovered_latex})
         elif opts:
             if stripped and not re.match(r"^(domain|unit|section|chapter)\b", stripped, re.I) and not re.search(r"answer key", stripped, re.I) and not _INLINE_ANSWER_RE.match(stripped):
                 opts[-1]["text"] = (opts[-1]["text"] + " " + stripped).strip()
@@ -298,10 +314,12 @@ def harvest_native_mcqs(pdf_text: str) -> List[dict]:
         stem, opts = split_stem_and_options(block)
         if len(opts) != 4:
             continue
+        stem_text, stem_latex = recover_fields(stem, None)
         results.append(
             {
                 "number": int(num) if num.isdigit() else num,
-                "text": stem,
+                "text": stem_text,
+                "latex": stem_latex,
                 "options": opts,
                 "answer": inline_answer,
             }

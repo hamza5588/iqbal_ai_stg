@@ -117,8 +117,8 @@
     var opts = (q.options || []).map(function (o, oi) {
       var sel = defState.selectedOption === oi ? ' selected' : '';
       return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDeficiencyOption(' + oi + ')">' +
-        '<strong>' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</strong> ' +
-        fmtOption(o) + '</button>';
+        '<span class="lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
+        '<span class="lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
 
     var tutorLevelHint = data.tutor_assist_label

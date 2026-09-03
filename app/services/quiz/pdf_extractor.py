@@ -16,10 +16,12 @@ from app.services.quiz.models import (
     ExtractedAnswer,
     ExtractedOption,
     ExtractedQuestion,
+    LatexNormalizedBatch,
     PDFExtractionResult,
     PairingResult,
     QuestionAnswerPair,
 )
+from app.services.quiz.math_text import recover_fields
 from app.services.quiz.retry_utils import invoke_structured
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,11 @@ _EXTRACTION_PROMPT = """You are extracting questions and answers from an educati
 Rules:
 - Extract ONLY content that appears in the document. Do NOT invent questions or answers.
 - Handle varied layouts: separate Questions/Answers sections, inline Q&A, numbered lists, native MCQs, etc.
-- Preserve math notation; put LaTeX ONLY in latex fields. Text fields must be readable (use "..." not "\\dots").
+- Preserve math notation; put LaTeX ONLY in latex fields. Text fields must be readable.
+- Flattened PDF exponents (x2, a3b2) MUST be stored as latex x^{2}, a^{3}b^{2}. Never keep "4x2" or "a4b3".
+- A stacked fraction (numerator line then denominator line) MUST become \\frac{num}{den}.
+  Example: Simplify / (a^3 b^2)(a^2 b^4) / ab^3 → latex \\frac{(a^{3}b^{2})(a^{2}b^{4})}{ab^{3}}.
+- Keep option order exactly as printed (A, B, C, D). Do not shuffle.
 - For each question and answer, capture the number/label as shown (int or str).
 - Extract EVERY numbered answer in the Answers / Answer Key / Answer Sheet section — do not stop early.
 - When the PDF already has multiple-choice options, extract each option's FULL text into question.options.
@@ -99,6 +105,16 @@ def _question_sort_key(pair: QuestionAnswerPair) -> tuple:
     return (1, 0, normalized)
 
 
+def _enrich_question_math(question: ExtractedQuestion) -> ExtractedQuestion:
+    question.text, question.latex = recover_fields(question.text, question.latex)
+    enriched: List[ExtractedOption] = []
+    for opt in question.options or []:
+        text, latex = recover_fields(opt.text, opt.latex)
+        enriched.append(ExtractedOption(label=opt.label, text=text, latex=latex))
+    question.options = enriched
+    return question
+
+
 def _options_from_extracted(question: ExtractedQuestion) -> List[ExtractedOption]:
     raw_opts = list(question.options or [])
     if len(raw_opts) == 4 and not any(is_label_only(o.text) for o in raw_opts):
@@ -144,6 +160,7 @@ def _postprocess_extraction(result: PDFExtractionResult, pdf_text: str) -> PDFEx
 
     for q in result.questions:
         q.options = _options_from_extracted(q)
+        _enrich_question_math(q)
 
     existing = {_normalize_number(a.number) for a in result.answers}
     harvested = harvest_answer_key(pdf_text)
@@ -199,8 +216,70 @@ def _merge_pair_results(primary: PairingResult, secondary: PairingResult) -> Pai
     return PairingResult(pairs=ordered, warnings=warnings)
 
 
+_LATEX_NORMALIZE_PROMPT = """You reconstruct exam mathematics as LaTeX. Do NOT invent questions, options, or answers.
+Do NOT shuffle options. Keep the same A/B/C/D order.
+
+Input JSON was copied from a PDF. Exponents are often flattened (x2 means x^2, a3b2 means a^{3}b^{2}).
+A fraction may appear as two lines under "Simplify:".
+
+Rules:
+- question.text = stem only (e.g. "Simplify:") — no A/B/C/D lines.
+- question.latex = the full math using \\frac and ^{{ }}.
+- Each option keeps its original label and meaning; fill option.latex with proper TeX.
+- Never store only the letter A/B/C/D as option text.
+- Example stem latex: \\frac{{(a^{{3}}b^{{2}})(a^{{2}}b^{{4}})}}{{ab^{{3}}}}
+- Example option latex: 4x^{{2}}-7x   or   a^{{4}}b^{{3}}
+
+Questions JSON:
+{questions}
+"""
+
+
+def _llm_normalize_math(questions: List[ExtractedQuestion]) -> List[ExtractedQuestion]:
+    """AI/Pydantic pass: reconstruct LaTeX while keeping harvest structure and option order."""
+    if not questions:
+        return questions
+    import json
+
+    from app.utils.llm_factory import get_chat_model
+
+    llm = get_chat_model(temperature=0.0, max_tokens=4096)
+    by_num = {_normalize_number(q.number): q for q in questions}
+    batch_size = 6
+    for i in range(0, len(questions), batch_size):
+        chunk = questions[i : i + batch_size]
+        payload = json.dumps([q.model_dump() for q in chunk], ensure_ascii=False)
+        try:
+            result: LatexNormalizedBatch = invoke_structured(
+                llm, LatexNormalizedBatch, _LATEX_NORMALIZE_PROMPT.format(questions=payload)
+            )
+        except Exception as exc:
+            logger.warning("LaTeX normalize batch failed: %s", exc)
+            continue
+        for neu in result.questions or []:
+            key = _normalize_number(neu.number)
+            orig = by_num.get(key)
+            if not orig:
+                continue
+            orig.text, orig.latex = recover_fields(neu.text or orig.text, neu.latex or orig.latex)
+            if not neu.options or len(neu.options) != 4:
+                continue
+            if any(is_label_only(o.text) for o in neu.options):
+                continue
+            label_map = {str(o.label or "").strip().upper()[:1]: o for o in neu.options}
+            merged: List[ExtractedOption] = []
+            for opt in orig.options:
+                lab = str(opt.label or "").strip().upper()[:1]
+                src = label_map.get(lab, opt)
+                text, latex = recover_fields(src.text, src.latex)
+                merged.append(ExtractedOption(label=lab, text=text, latex=latex))
+            if len(merged) == 4:
+                orig.options = merged
+    return [by_num[_normalize_number(q.number)] for q in questions]
+
+
 def _result_from_harvest(pdf_text: str) -> Optional[PDFExtractionResult]:
-    """If the PDF is already a numbered MCQ paper with an answer key, skip the LLM."""
+    """Numbered MCQ paper: harvest structure, then AI/Pydantic LaTeX reconstruction."""
     questions = harvest_native_mcqs(pdf_text)
     answers = harvest_answer_key(pdf_text)
     if len(questions) < 4:
@@ -213,21 +292,29 @@ def _result_from_harvest(pdf_text: str) -> Optional[PDFExtractionResult]:
             ExtractedOption(label=o["label"], text=o["text"], latex=o.get("latex"))
             for o in item["options"]
         ]
-        extracted_q.append(
-            ExtractedQuestion(number=item["number"], text=item["text"], options=opts)
+        q = ExtractedQuestion(
+            number=item["number"],
+            text=item["text"],
+            latex=item.get("latex"),
+            options=opts,
         )
+        extracted_q.append(_enrich_question_math(q))
         letter = ans_map.get(_normalize_number(item["number"]))
         raw = letter or (item.get("answer") or "").strip()
         if raw:
             extracted_a.append(ExtractedAnswer(number=item["number"], text=raw))
     if len(extracted_a) < max(4, int(0.8 * len(extracted_q))):
         return None
+    try:
+        extracted_q = _llm_normalize_math(extracted_q)
+    except Exception as exc:
+        logger.warning("LaTeX normalize skipped: %s", exc)
     fmt = "native_mcq_with_answer_key" if answers else "native_mcq_with_inline_answers"
     return PDFExtractionResult(
         questions=extracted_q,
         answers=extracted_a,
         format_detected=fmt,
-        confidence=0.92 if answers else 0.88,
+        confidence=0.94 if answers else 0.9,
         warnings=[],
     )
 
@@ -244,7 +331,7 @@ def extract_qa_from_text(pdf_text: str) -> PDFExtractionResult:
     harvested = _result_from_harvest(text)
     if harvested:
         logger.info(
-            "Native MCQ harvest: %s questions, %s answers",
+            "Native MCQ harvest + LaTeX normalize: %s questions, %s answers",
             len(harvested.questions),
             len(harvested.answers),
         )

@@ -228,8 +228,8 @@
     var opts = (q.options || []).map(function (o, oi) {
       var sel = diagState.answers[idx] === oi ? ' selected' : '';
       return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDiagOption(' + idx + ',' + oi + ')">' +
-        '<strong>' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</strong> ' +
-        fmtOption(o) + '</button>';
+        '<span class="lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
+        '<span class="lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
     var backBtn = idx > 0
       ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="prevDiagQuestion()">Back</button>'
@@ -254,7 +254,7 @@
     body.innerHTML =
       '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
       meta +
-      '<h3 class="lms-quiz-stem">' + fmtQuestion(q) + '</h3>' +
+      '<div class="lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
       opts +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' + nav + '</div>';
     typeset(body);

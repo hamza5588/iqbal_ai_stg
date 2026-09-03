@@ -5,17 +5,25 @@ from typing import Any, List, Optional
 
 from app.models.lms_models import Question
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
-from app.services.lms.mcq_utils import options_from_json, options_to_json, validate_mcq
+from app.services.lms.mcq_utils import pick_display_fields, options_from_json, options_to_json, validate_mcq
 from app.utils.db import get_db
 
 
 def _serialize_question(q: Question) -> dict:
+    q_text, q_latex = pick_display_fields(q.question_text, q.question_latex)
+    opts = []
+    for opt in options_from_json(q.options_json):
+        text, latex = pick_display_fields(opt.get("text"), opt.get("latex"))
+        item = dict(opt)
+        item["text"] = text
+        item["latex"] = latex
+        opts.append(item)
     return {
         "id": q.id,
         "topic_id": q.topic_id,
-        "question_text": q.question_text,
-        "question_latex": q.question_latex,
-        "options": options_from_json(q.options_json),
+        "question_text": q_text or q.question_text,
+        "question_latex": q_latex,
+        "options": opts,
         "correct_option_index": q.correct_option_index,
         "correct_answer_raw": q.correct_answer_raw,
         "explanation": q.explanation,
