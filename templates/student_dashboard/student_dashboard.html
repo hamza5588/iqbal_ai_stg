@@ -3344,6 +3344,7 @@
     };
   </script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <script>
     // Typeset only a newly-inserted element (returns a Promise)
@@ -7814,13 +7815,60 @@
               <div class="lms-card"><div class="lms-card-label">Weak Topics</div><div class="lms-card-value">${(d.weak_topics || []).length}</div><ul class="lms-card-list">${weak}</ul></div>
               <div class="lms-card"><div class="lms-card-label">My Classes</div><div class="lms-card-value">${(d.classes || []).length}</div><ul class="lms-card-list">${(d.classes || []).map(function(c){ return '<li>' + escapeHtml(c.name) + '</li>'; }).join('') || '<li>Not enrolled yet</li>'}</ul></div>
             </div>
+            <div class="lms-card" style="max-width:360px;margin:16px 0;">
+              <div class="lms-card-label">Topic Mastery Breakdown</div>
+              <canvas id="lmsMasteryPieChart" height="220"></canvas>
+              <p id="lmsMasteryPieEmpty" class="lms-path-empty hidden">No topics assessed yet.</p>
+            </div>
             ${pathHtml}
             <div class="lms-path-panel"><h3>Quiz History</h3><div id="lmsAttemptHistory"></div></div>
           </div>`;
         if (typeof loadLmsAttemptHistory === 'function') loadLmsAttemptHistory('lmsAttemptHistory');
+        renderLmsMasteryPieChart(d.mastery || []);
       } catch (err) {
         el.innerHTML = '';
       }
+    }
+
+    var _lmsMasteryChart = null;
+    function renderLmsMasteryPieChart(mastery) {
+      var canvas = document.getElementById('lmsMasteryPieChart');
+      var emptyMsg = document.getElementById('lmsMasteryPieEmpty');
+      if (!canvas || typeof Chart === 'undefined') return;
+      if (_lmsMasteryChart) { _lmsMasteryChart.destroy(); _lmsMasteryChart = null; }
+      if (!mastery.length) {
+        canvas.classList.add('hidden');
+        if (emptyMsg) emptyMsg.classList.remove('hidden');
+        return;
+      }
+      canvas.classList.remove('hidden');
+      if (emptyMsg) emptyMsg.classList.add('hidden');
+
+      var statusMeta = {
+        mastered: { label: 'Mastered', color: '#16a34a' },
+        improving: { label: 'Improving', color: '#0284c7' },
+        needs_practice: { label: 'Needs Practice', color: '#f59e0b' },
+        weak: { label: 'Weak', color: '#dc2626' },
+      };
+      var counts = { mastered: 0, improving: 0, needs_practice: 0, weak: 0 };
+      mastery.forEach(function (m) {
+        var key = counts.hasOwnProperty(m.mastery_status) ? m.mastery_status : 'needs_practice';
+        counts[key]++;
+      });
+      var labels = [], data = [], colors = [];
+      Object.keys(statusMeta).forEach(function (key) {
+        if (counts[key] > 0) {
+          labels.push(statusMeta[key].label + ' (' + counts[key] + ')');
+          data.push(counts[key]);
+          colors.push(statusMeta[key].color);
+        }
+      });
+
+      _lmsMasteryChart = new Chart(canvas, {
+        type: 'pie',
+        data: { labels: labels, datasets: [{ data: data, backgroundColor: colors }] },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+      });
     }
     function renderLmsLearningPath(path) {
       if (!path || !path.items || !path.items.length) {

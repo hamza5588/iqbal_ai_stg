@@ -111,6 +111,10 @@ def get_student_dashboard(student_id: int) -> dict:
         "onboarding": onboarding,
         "overall_progress": overall_progress,
         "weak_topics": weak_topics[:5],
+        # Full per-topic mastery breakdown (all statuses) - powers the
+        # mastery pie chart. weak_topics above stays a filtered/sorted
+        # top-5 for the existing list view.
+        "mastery": mastery,
         "pending_assignments": onboarding["pending_assignments"],
         "learning_path": learning_path,
         "current_learning_path_step": current_step,

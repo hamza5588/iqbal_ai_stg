@@ -300,7 +300,8 @@
       } else if (tab === 'roster') {
         var roster = await lmsApi('/api/lms/classes/' + classId + '/students');
         content.innerHTML = roster.length
-          ? '<table class="lms-table"><thead><tr><th>Student</th><th>Grade</th><th>Progress</th><th>Status</th></tr></thead><tbody>' +
+          ? '<div style="max-width:280px;margin:0 auto 16px;"><canvas id="lmsRosterPieChart" height="220"></canvas></div>' +
+            '<table class="lms-table"><thead><tr><th>Student</th><th>Grade</th><th>Progress</th><th>Status</th></tr></thead><tbody>' +
             roster.map(function (s) {
               return '<tr><td>' + escapeHtml(s.username || s.email || ('#' + s.student_id)) + '</td>' +
                 '<td>' + escapeHtml(s.grade_label || '—') + '</td>' +
@@ -308,11 +309,29 @@
                 '<td>' + (s.is_struggling ? '<span class="lms-badge lms-badge-red">Needs help</span>' : '<span class="lms-badge lms-badge-green">On track</span>') + '</td></tr>';
             }).join('') + '</tbody></table>'
           : '<p class="lms-status">No students enrolled.</p>';
+        if (roster.length) renderLmsRosterPieChart(roster);
       }
     } catch (err) {
       content.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }
   };
+
+  var _lmsRosterChart = null;
+  function renderLmsRosterPieChart(roster) {
+    var canvas = document.getElementById('lmsRosterPieChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (_lmsRosterChart) { _lmsRosterChart.destroy(); _lmsRosterChart = null; }
+    var onTrack = roster.filter(function (s) { return !s.is_struggling; }).length;
+    var needsHelp = roster.length - onTrack;
+    var labels = [], data = [], colors = [];
+    if (onTrack > 0) { labels.push('On track (' + onTrack + ')'); data.push(onTrack); colors.push('#16a34a'); }
+    if (needsHelp > 0) { labels.push('Needs help (' + needsHelp + ')'); data.push(needsHelp); colors.push('#dc2626'); }
+    _lmsRosterChart = new Chart(canvas, {
+      type: 'pie',
+      data: { labels: labels, datasets: [{ data: data, backgroundColor: colors }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+    });
+  }
 
   /* ── Guided practice ── */
   ensureModal('lmsPracticeModal', 'Guided Practice', 'lms-modal-md');
