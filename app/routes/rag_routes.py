@@ -2042,7 +2042,12 @@ def get_threads():
                     'filename': thread.filename,
                     'created_at': thread.created_at.isoformat() if thread.created_at else None,
                     'updated_at': thread.updated_at.isoformat() if thread.updated_at else None,
-                    'has_document': getattr(thread, 'has_document', False)
+                    'has_document': getattr(thread, 'has_document', False),
+                    # Persistent ingestion warning (e.g. chunk cap hit, or a
+                    # legacy thread flagged by identify_truncated_threads.py)
+                    # - stays attached to the thread, unlike the one-time
+                    # upload toast. See #19.
+                    'ingest_warning': getattr(thread, 'ingest_warning', None),
                 })
             
             return jsonify({

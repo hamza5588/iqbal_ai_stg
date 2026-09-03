@@ -232,6 +232,55 @@ def ensure_conversation_summaries_table(conn, inspector):
     )
 
 
+def ensure_rag_threads_ingest_warning_columns(conn, inspector):
+    """Add ingest_warning/ingest_warning_at columns to rag_threads if missing.
+
+    Persistent, user-facing ingestion warning (e.g. chunk-cap truncation
+    naming the last indexed page, or a retroactive "this document was
+    truncated by a past bug" flag) - separate from the one-time toast
+    surfaced from the Celery task result, which disappears once the upload
+    UI closes. See #19.
+    """
+    columns = {col["name"] for col in inspector.get_columns("rag_threads")}
+
+    if "ingest_warning" not in columns:
+        logger.info("Adding column rag_threads.ingest_warning ...")
+        conn.execute(text("ALTER TABLE rag_threads ADD COLUMN ingest_warning TEXT NULL"))
+
+    if "ingest_warning_at" not in columns:
+        logger.info("Adding column rag_threads.ingest_warning_at ...")
+        conn.execute(text("ALTER TABLE rag_threads ADD COLUMN ingest_warning_at TIMESTAMP NULL"))
+
+
+def ensure_rag_chunks_page_end_column(conn, inspector):
+    """Add page_end column to rag_chunks if it doesn't exist.
+
+    Inclusive end page (0-indexed, same convention as `page`) for chunks
+    produced by the concatenated-split ingestion path that span more than
+    one source page. Backfilled to equal `page` for every existing row, so
+    page-range queries can treat page_end as always populated. See #19.
+    """
+    if not inspector.has_table("rag_chunks"):
+        logger.info("Table rag_chunks does not exist, skipping page_end column.")
+        return
+    columns = {col["name"] for col in inspector.get_columns("rag_chunks")}
+    if "page_end" not in columns:
+        logger.info("Adding column rag_chunks.page_end ...")
+        conn.execute(
+            text("ALTER TABLE rag_chunks ADD COLUMN page_end INTEGER NOT NULL DEFAULT 0")
+        )
+        logger.info("Backfilling rag_chunks.page_end = page for existing rows ...")
+        conn.execute(text("UPDATE rag_chunks SET page_end = page"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_rag_chunk_page_range "
+                "ON rag_chunks (thread_id, user_id, page, page_end)"
+            )
+        )
+    else:
+        logger.info("Column rag_chunks.page_end already exists, skipping.")
+
+
 def main():
     logger.info("Connecting to database: %s", Config.SQLALCHEMY_DATABASE_URI)
     engine = create_engine(
@@ -250,6 +299,10 @@ def main():
         ensure_conversation_summaries_table(conn, inspector)
         inspector = inspect(engine)
         ensure_lessons_conversation_id_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_rag_threads_ingest_warning_columns(conn, inspector)
+        inspector = inspect(engine)
+        ensure_rag_chunks_page_end_column(conn, inspector)
 
     logger.info("Migration completed successfully.")
 

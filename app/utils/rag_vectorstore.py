@@ -73,7 +73,16 @@ def delete_by_thread(thread_id: str, user_id: int) -> None:
 
 
 def query_chunks_by_page(thread_id: str, user_id: int, page: int) -> List[Dict[str, Any]]:
-    """Query chunks from PostgreSQL (source of truth for text). Returns [{text, source, page, chunk_index}]."""
+    """
+    Query chunks from PostgreSQL (source of truth for text) that cover `page`.
+
+    Uses [page, page_end] overlap rather than exact equality: a chunk
+    produced by the concatenated-split path (large page-count documents) can
+    span multiple source pages, so "page == page" alone would miss it for
+    any page after its first. page_end always equals page for chunks that
+    don't span multiple pages, so this is equivalent to the old exact match
+    for every pre-existing chunk. Returns [{text, source, page, page_end, chunk_index}].
+    """
     from app.utils.db import get_db
     from app.models.database_models import RAGChunk
     try:
@@ -81,10 +90,11 @@ def query_chunks_by_page(thread_id: str, user_id: int, page: int) -> List[Dict[s
         rows = db.query(RAGChunk).filter(
             RAGChunk.thread_id == thread_id,
             RAGChunk.user_id == user_id,
-            RAGChunk.page == page,
+            RAGChunk.page <= page,
+            RAGChunk.page_end >= page,
         ).order_by(RAGChunk.chunk_index).all()
         return [
-            {"text": r.text, "source": r.source or "", "page": r.page, "chunk_index": r.chunk_index}
+            {"text": r.text, "source": r.source or "", "page": r.page, "page_end": r.page_end, "chunk_index": r.chunk_index}
             for r in rows
         ]
     except Exception as e:
@@ -94,9 +104,12 @@ def query_chunks_by_page(thread_id: str, user_id: int, page: int) -> List[Dict[s
 
 def query_chunks_by_page_range(thread_id: str, user_id: int, start_page: int, end_page: int) -> List[Dict[str, Any]]:
     """
-    Query every chunk from PostgreSQL whose page falls in [start_page, end_page] (inclusive).
+    Query every chunk from PostgreSQL whose [page, page_end] span overlaps
+    [start_page, end_page] (inclusive) - not just chunks whose single `page`
+    value falls in range, so a concatenated-split chunk covering e.g. pages
+    340-345 is still returned for a query range of (343, 344).
     No top-k cap: used for exhaustive section-based retrieval where truncation would drop content.
-    Returns [{text, source, page, chunk_index}] ordered by page, chunk_index.
+    Returns [{text, source, page, page_end, chunk_index}] ordered by page, chunk_index.
     """
     from app.utils.db import get_db
     from app.models.database_models import RAGChunk
@@ -105,11 +118,11 @@ def query_chunks_by_page_range(thread_id: str, user_id: int, start_page: int, en
         rows = db.query(RAGChunk).filter(
             RAGChunk.thread_id == thread_id,
             RAGChunk.user_id == user_id,
-            RAGChunk.page >= start_page,
             RAGChunk.page <= end_page,
+            RAGChunk.page_end >= start_page,
         ).order_by(RAGChunk.page, RAGChunk.chunk_index).all()
         return [
-            {"text": r.text, "source": r.source or "", "page": r.page, "chunk_index": r.chunk_index}
+            {"text": r.text, "source": r.source or "", "page": r.page, "page_end": r.page_end, "chunk_index": r.chunk_index}
             for r in rows
         ]
     except Exception as e:

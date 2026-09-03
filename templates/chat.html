@@ -6264,14 +6264,22 @@ async function initializeApp() {
             const escapedThreadId = thread.thread_id.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             const escapedThreadName = thread.name.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
+            // Persistent ingestion warning (chunk-cap truncation, or a legacy
+            // thread flagged for re-upload) - stays visible in the thread
+            // list itself instead of only a one-time upload toast. See #19.
+            const ingestWarning = thread.ingest_warning || '';
+            const escapedIngestWarning = escapeHtml(ingestWarning);
+
             threadDiv.innerHTML = `
                 <div class="flex items-center justify-between gap-2">
                     <div class="flex-1 min-w-0 cursor-pointer" onclick="switchToRAGThread('${escapedThreadId}')">
                         <div class="flex items-center gap-2">
                             <div class="text-sm font-medium text-gray-800 truncate ${isActive ? 'text-[#05B0FC] font-semibold' : ''}">${thread.name}</div>
                             ${isNewest && thread.has_document ? '<span class="px-1.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700 rounded">NEW</span>' : ''}
+                            ${ingestWarning ? `<i class="fas fa-triangle-exclamation text-amber-500 text-xs" title="${escapedIngestWarning}"></i>` : ''}
                         </div>
                         <div class="text-xs text-gray-500 truncate mt-0.5">${thread.filename || 'No file'}</div>
+                        ${ingestWarning ? `<div class="text-xs text-amber-600 mt-0.5" title="${escapedIngestWarning}">⚠ ${escapedIngestWarning}</div>` : ''}
                     </div>
                     <div class="flex items-center gap-1">
                         ${isActive ? '<i class="fas fa-check-circle text-[#05B0FC]"></i>' : ''}

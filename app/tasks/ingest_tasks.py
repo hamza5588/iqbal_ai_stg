@@ -174,6 +174,14 @@ def _save_thread_to_db(user_id: int, thread_id: str, filename: str, ingest_resul
             existing_thread.embedding_dim = ingest_result.get("embedding_dim")
             existing_thread.ingest_status = 'success'
             existing_thread.ingest_error = None
+            # Persist the ingestion warning to the thread (not just the
+            # one-time Celery task result) so it stays visible after the
+            # upload UI's toast disappears - see #19. A successful
+            # re-ingestion with no warning clears any stale one, including
+            # one set retroactively by identify_truncated_threads.py.
+            ingest_warning = ingest_result.get("warning")
+            existing_thread.ingest_warning = ingest_warning
+            existing_thread.ingest_warning_at = now if ingest_warning else None
             existing_thread.updated_at = now
             db.commit()
             logger.info("Updated thread %s with has_document=true", thread_id)

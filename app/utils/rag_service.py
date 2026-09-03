@@ -327,6 +327,125 @@ def _resolve_ingest_profile(file_size_mb: float) -> dict:
     }
 
 
+def _should_concat_split(num_pages: int) -> bool:
+    """
+    Gate for the concatenated-splitting path (see _split_docs_concatenated).
+
+    The default per-page splitting path treats each PDF page as its own
+    LangChain Document, so the splitter floors at >=1 chunk per page and
+    total chunk count tracks page count, not content volume. A long,
+    sparse document breaches RAG_LARGE_MAX_CHUNKS/RAG_STANDARD_MAX_CHUNKS on
+    page count alone (measured: a 3412-chunk document against a 2000 cap,
+    and a 4000-page file losing half its content). Only documents at or
+    above this page-count threshold take the alternative path; everything
+    below it keeps using the unchanged, unaffected per-page path.
+    """
+    threshold = int(os.getenv("RAG_CONCAT_SPLIT_PAGE_THRESHOLD", "300"))
+    return int(num_pages or 0) >= threshold
+
+
+def _split_docs_concatenated(docs: List[Document], ingest_profile: dict) -> List[Document]:
+    """
+    Gated alternative to `splitter.split_documents(docs)` for documents
+    whose page count alone risks breaching the chunk cap (see
+    _should_concat_split). Instead of splitting each page as an isolated
+    document (which floors chunk count at >=1 per page), this concatenates
+    all page text into one continuous stream and splits that, so chunk
+    count tracks actual content volume instead of page count.
+
+    Each resulting chunk carries 1-indexed, inclusive "page_start"/"page_end"
+    metadata, computed by mapping the chunk's character span in the combined
+    stream back onto per-page offsets, so page citations and page-range
+    queries keep working across a chunk that spans more than one page.
+    "page"/"page_number" are also set (0-indexed, matching the convention
+    PyPDFLoader uses for the unchanged per-page path) so the rest of the
+    ingestion pipeline's metadata handling needs no special-casing.
+    """
+    page_sep = "\n\n"
+    page_spans: List[Tuple[Optional[int], int, int]] = []  # (1-indexed page, start_char, end_char)
+    parts: List[str] = []
+    cursor = 0
+    for doc in docs:
+        raw_page = doc.metadata.get("page")
+        page_1indexed = int(raw_page) + 1 if isinstance(raw_page, (int, float)) else None
+        content = doc.page_content or ""
+        if parts:
+            cursor += len(page_sep)
+        start = cursor
+        parts.append(content)
+        cursor += len(content)
+        page_spans.append((page_1indexed, start, cursor))
+    combined_text = page_sep.join(parts)
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=ingest_profile["chunk_size"],
+        chunk_overlap=ingest_profile["chunk_overlap"],
+        separators=["\n\n", "\n", " ", ""],
+        add_start_index=True,
+    )
+    raw_chunks = splitter.create_documents([combined_text])
+
+    known_pages = [p for (p, _, _) in page_spans if p is not None]
+    fallback_page = known_pages[0] if known_pages else 1
+
+    for chunk in raw_chunks:
+        start = chunk.metadata.get("start_index")
+        if start is None:
+            start = max(combined_text.find(chunk.page_content), 0)
+        end = start + len(chunk.page_content)
+        covering = [
+            p for (p, s, e) in page_spans
+            if p is not None and e > start and s < end
+        ]
+        if not covering:
+            # Chunk landed entirely inside an inter-page separator (rare) -
+            # fall back to the nearest page by character position instead of
+            # leaving it unmapped.
+            nearest = sorted(
+                (p for p in page_spans if p[0] is not None),
+                key=lambda span: min(abs(span[1] - start), abs(span[2] - start)),
+            )
+            covering = [nearest[0][0]] if nearest else [fallback_page]
+        page_start, page_end = min(covering), max(covering)
+        chunk.metadata["page_start"] = page_start
+        chunk.metadata["page_end"] = page_end
+        chunk.metadata["page"] = page_start - 1
+        chunk.metadata["page_number"] = page_start - 1
+        chunk.metadata.pop("start_index", None)
+    return raw_chunks
+
+
+def _apply_chunk_cap(
+    chunks: List[Document], max_chunks: int
+) -> Tuple[List[Document], Optional[str]]:
+    """
+    Safety-net cap: keeps the first `max_chunks` chunks (in existing order)
+    and drops the rest, same as before. Since #19's concatenated-split path
+    brings the measured worst cases comfortably under the cap, this should
+    now trip only in genuine edge cases - but if it does, it must surface a
+    persistent, user-facing warning naming the last indexed page, not only a
+    log line. Returns (possibly-truncated chunks, warning message or None).
+    """
+    if max_chunks <= 0 or len(chunks) <= max_chunks:
+        return chunks, None
+
+    dropped = len(chunks) - max_chunks
+    last_kept = chunks[max_chunks - 1]
+    last_page = last_kept.metadata.get("page_end")
+    if last_page is None:
+        raw_page = last_kept.metadata.get("page")
+        last_page = int(raw_page) + 1 if isinstance(raw_page, (int, float)) else None
+
+    kept = chunks[:max_chunks]
+    page_note = f" (up to page {last_page})" if last_page is not None else ""
+    warning = (
+        f"This document was too large to index in full: only the first {max_chunks} of "
+        f"{max_chunks + dropped} chunks{page_note} were indexed. Content after that point "
+        "is not searchable. Consider splitting the document and uploading it in parts."
+    )
+    return kept, warning
+
+
 def _resolve_thread_retrieval_k(thread_id: str, user_id: int) -> int:
     """
     Resolve retrieval breadth (k) for a thread.
@@ -2244,22 +2363,32 @@ def ingest_pdf(
             40,
             f"Splitting document into chunks using {ingest_profile['name']} profile...",
         )
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=ingest_profile["chunk_size"],
-            chunk_overlap=ingest_profile["chunk_overlap"],
-            separators=["\n\n", "\n", " ", ""],
-        )
-        chunks = splitter.split_documents(docs)
-        max_chunks = int(ingest_profile.get("max_chunks", 0) or 0)
-        if max_chunks > 0 and len(chunks) > max_chunks:
-            logger.warning(
-                "Chunk cap applied for thread %s (%s MB): %s -> %s",
-                thread_id_str,
-                file_size_mb,
-                len(chunks),
-                max_chunks,
+        # Documents whose page count alone risks breaching the chunk cap take
+        # a gated alternative path that splits continuous text instead of
+        # per-page documents (see _should_concat_split / #19). Every other
+        # document keeps using the original per-page path, unchanged.
+        use_concat_split = _should_concat_split(num_pages)
+        if use_concat_split:
+            chunks = _split_docs_concatenated(docs, ingest_profile)
+            logger.info(
+                "Using concatenated-split path for thread %s: %s pages -> %s chunks",
+                thread_id_str, num_pages, len(chunks),
             )
-            chunks = chunks[:max_chunks]
+        else:
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=ingest_profile["chunk_size"],
+                chunk_overlap=ingest_profile["chunk_overlap"],
+                separators=["\n\n", "\n", " ", ""],
+            )
+            chunks = splitter.split_documents(docs)
+
+        max_chunks = int(ingest_profile.get("max_chunks", 0) or 0)
+        chunks, cap_warning = _apply_chunk_cap(chunks, max_chunks)
+        if cap_warning:
+            logger.warning(
+                "Chunk cap applied for thread %s (%s MB): capped at %s chunks - %s",
+                thread_id_str, file_size_mb, max_chunks, cap_warning,
+            )
         _send_progress("splitting", 50, f"Created {len(chunks)} text chunks from {num_pages} pages")
 
         _send_progress("chunk_metadata", 55, "Enriching chunk metadata...")
@@ -2304,6 +2433,15 @@ def ingest_pdf(
         vectors = [te[1] for te in text_embeddings]
         texts = [te[0] for te in text_embeddings]
 
+        # Known before any DB writes - reused for both the persisted,
+        # thread-attached warning and the return payload below, so a caller
+        # that never calls back into this module (e.g. the quiz PDF
+        # pipeline) still gets the warning attached to the thread, not only
+        # a one-time toast. See #19.
+        combined_warning = " ".join(
+            w for w in (partial_content_warning, mixed_content_warning, cap_warning) if w
+        ) or None
+
         _send_progress("postgres", 72, "Storing chunk text in PostgreSQL...")
         from datetime import datetime as dt
         db = get_db()
@@ -2321,16 +2459,29 @@ def ingest_pdf(
                 db.refresh(thread_row)
                 logger.info("Created RAGThread %s for ingestion", thread_id_str)
 
+            thread_row.ingest_warning = combined_warning
+            thread_row.ingest_warning_at = dt.utcnow() if combined_warning else None
+            db.commit()
+
             # Bulk insert chunk rows to reduce ORM overhead under concurrent ingestion.
             chunk_mappings = []
             for i, (text, meta) in enumerate(zip(texts, embed_metadatas)):
+                page_val = int(meta.get("page") or meta.get("page_number") or 0)
+                # "page_end" (1-indexed) is only set by the concatenated-split
+                # path for chunks that span more than one source page; convert
+                # to the same 0-indexed convention as "page" and default to it
+                # for single-page chunks so page-range queries never need a
+                # NULL/COALESCE special case.
+                raw_page_end = meta.get("page_end")
+                page_end_val = int(raw_page_end) - 1 if isinstance(raw_page_end, (int, float)) else page_val
                 chunk_mappings.append(
                     {
                         "thread_id": thread_id_str,
                         "user_id": user_id,
                         "document_id": None,
                         "chunk_index": i,
-                        "page": int(meta.get("page") or meta.get("page_number") or 0),
+                        "page": page_val,
+                        "page_end": page_end_val,
                         "text": text,
                         "source": meta.get("source_pdf") or safe_filename,
                     }
@@ -2387,8 +2538,6 @@ def ingest_pdf(
 
         _elapsed_seconds = round(time.time() - _start_time, 2)
         _send_progress("complete", 100, f"PDF processing complete! Processed {num_pages} pages in {_elapsed_seconds}s.")
-
-        combined_warning = " ".join(w for w in (partial_content_warning, mixed_content_warning) if w) or None
 
         return {
             "thread_id": thread_id_str,

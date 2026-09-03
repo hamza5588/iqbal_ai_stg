@@ -345,6 +345,13 @@ class RAGChunk(Base):
     document_id = Column(Integer, ForeignKey('user_documents.id', ondelete='SET NULL'), nullable=True)
     chunk_index = Column(Integer, nullable=False)
     page = Column(Integer, nullable=False)
+    # Inclusive end page (0-indexed, same convention as `page`) for chunks
+    # that span more than one source page - only the concatenated-split
+    # ingestion path (large page-count documents) produces chunks like this;
+    # every other chunk has page_end == page. See app/utils/rag_service.py
+    # _split_docs_concatenated. Always populated (never NULL) so page-range
+    # queries need no COALESCE special case.
+    page_end = Column(Integer, nullable=False, default=0, server_default='0')
     text = Column(Text, nullable=False)
     source = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
@@ -410,6 +417,14 @@ class RAGThread(Base):
     # instead of returning the same generic message for both.
     ingest_status = Column(String(20), nullable=True)
     ingest_error = Column(Text, nullable=True)
+    # Persistent, user-facing ingestion warning (e.g. "chunk cap was hit,
+    # content after page N is not searchable"). Unlike the one-time toast
+    # surfaced from the Celery task result, this stays attached to the
+    # thread so the warning doesn't disappear once the upload UI closes.
+    # Also (re)used to flag threads identified as truncated by a past bug,
+    # pending re-upload - see identify_truncated_threads.py.
+    ingest_warning = Column(Text, nullable=True)
+    ingest_warning_at = Column(DateTime, nullable=True)
     # Set to now()+time_limit when a Celery ingest task is queued. If a task is
     # hard-killed (SIGKILL on Celery's time_limit) it never reaches its own
     # except block, so this deadline is how we detect "abandoned" ingestion.
