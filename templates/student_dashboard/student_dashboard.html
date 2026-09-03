@@ -7863,6 +7863,19 @@
     }
   </script>
 
+  <!-- LMS Attempt Result Viewer (Quiz History click-through) -->
+  <div id="lmsAttemptResultModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsAttemptResult()">
+    <div class="lms-modal">
+      <div class="lms-modal-header">
+        <h2>Quiz Result</h2>
+        <button type="button" class="lms-modal-close" onclick="closeLmsAttemptResult()">&times;</button>
+      </div>
+      <div class="lms-modal-body">
+        <div id="lmsAttemptResultBody"><p class="lms-status">Loading...</p></div>
+      </div>
+    </div>
+  </div>
+
   <!-- LMS Student — green theme FAB bar -->
   <div class="lms-fab-bar">
     <button type="button" class="lms-fab" onclick="openLmsTutorPanel('student')">Ask Tutor</button>

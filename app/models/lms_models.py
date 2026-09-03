@@ -405,6 +405,16 @@ class StudentTopicScore(Base):
     student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     topic_id = Column(Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False)
     score_percent = Column(Float, nullable=False, default=0.0, server_default="0")
+    # How many questions the current score_percent was computed from - a
+    # diagnostic/quiz can resolve very unevenly many questions per topic
+    # (topic assignment is a text/PDF-label heuristic, not a fixed column -
+    # e.g. one real diagnostic resolved 25 questions into topics with as
+    # few as 1-2 each). Without this, get_overall_progress()'s per-topic
+    # average weighs a 1-question topic the same as a 10-question one,
+    # which can make "Overall Progress" diverge sharply (in either
+    # direction) from the student's actual raw score. See #: Overall
+    # Progress not matching real marks.
+    sample_size = Column(Integer, nullable=False, default=1, server_default="1")
     mastery_status = Column(String(32), nullable=False, default="needs_practice", server_default="needs_practice")
     last_assessed_at = Column(DateTime, nullable=True)
     updated_at = Column(

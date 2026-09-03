@@ -120,3 +120,44 @@ def test_missing_session_is_a_noop(db_session):
 
     performance_service.update_topic_scores_from_deficiency_session(9999)  # must not raise
     assert db_session.query(StudentTopicScore).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# get_overall_progress() must be weighted by sample_size, not a flat average
+# across topics - a diagnostic's topic assignment is a text/PDF-label
+# heuristic, so real question counts per topic are often wildly uneven.
+# Reproduced live: a diagnostic scored 64% raw came out as 95% unweighted.
+# ---------------------------------------------------------------------------
+
+def test_overall_progress_weighted_by_sample_size(db_session):
+    from app.services.lms import performance_service
+
+    # One topic resolved from just 1 question (100%, by chance), four
+    # topics resolved from many questions each, mostly wrong. An unweighted
+    # average would let the lone 1-question topic pull the score way up.
+    db_session.add_all([
+        StudentTopicScore(student_id=1, topic_id=1, score_percent=100.0, sample_size=1, mastery_status="mastered"),
+        StudentTopicScore(student_id=1, topic_id=2, score_percent=20.0, sample_size=10, mastery_status="weak"),
+        StudentTopicScore(student_id=1, topic_id=3, score_percent=20.0, sample_size=10, mastery_status="weak"),
+    ])
+    db_session.commit()
+
+    # Weighted: (100*1 + 20*10 + 20*10) / (1+10+10) = 500/21 ≈ 23.81
+    # Unweighted (the old, buggy behavior) would give (100+20+20)/3 = 46.67
+    progress = performance_service.get_overall_progress(1)
+    assert progress == round(500.0 / 21, 2)
+    assert progress < 25.0  # nowhere near the misleading unweighted 46.67
+
+
+def test_overall_progress_falls_back_to_unweighted_when_no_sample_size(db_session):
+    """Legacy rows backfilled to sample_size=1 (equal weight) must not error
+    or divide by zero - same as an unweighted average in that case."""
+    from app.services.lms import performance_service
+
+    db_session.add_all([
+        StudentTopicScore(student_id=2, topic_id=1, score_percent=100.0, sample_size=1, mastery_status="mastered"),
+        StudentTopicScore(student_id=2, topic_id=2, score_percent=0.0, sample_size=1, mastery_status="weak"),
+    ])
+    db_session.commit()
+
+    assert performance_service.get_overall_progress(2) == 50.0

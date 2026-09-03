@@ -410,9 +410,51 @@
       var items = await lmsApi('/api/lms/students/me/attempts');
       if (!items.length) { el.innerHTML = '<p class="lms-path-empty">No attempts yet.</p>'; return; }
       el.innerHTML = '<ul class="lms-card-list">' + items.map(function (a) {
-        return '<li class="lms-card" style="padding:10px;margin-bottom:6px;">Quiz #' + a.assessment_id +
+        // Only a submitted attempt has scored results to show - an
+        // in-progress/abandoned one has nothing to click through to yet.
+        var clickable = a.status === 'submitted';
+        var style = 'padding:10px;margin-bottom:6px;' + (clickable ? 'cursor:pointer;' : '');
+        var onclick = clickable ? ' onclick="viewLmsAttemptResult(' + a.attempt_id + ')"' : '';
+        return '<li class="lms-card" style="' + style + '"' + onclick + '>Quiz #' + a.assessment_id +
           ' — <strong>' + (a.score_percent != null ? a.score_percent + '%' : a.status) + '</strong></li>';
       }).join('') + '</ul>';
     } catch (e) { el.innerHTML = ''; }
+  };
+
+  /* Attempt result viewer (Quiz History click-through) */
+  window.viewLmsAttemptResult = async function (attemptId) {
+    var body = document.getElementById('lmsAttemptResultBody');
+    if (!body) return;
+    body.innerHTML = '<p class="lms-status">Loading...</p>';
+    if (typeof lmsOpenModal === 'function') lmsOpenModal('lmsAttemptResultModal');
+    try {
+      var r = await lmsApi('/api/lms/attempts/' + attemptId + '/results');
+      var html = '<h3 style="font-weight:700;margin:0 0 8px;">Score: ' + r.score + ' / ' + r.max_score +
+        ' (' + r.score_percent + '%)</h3>';
+      if (r.submitted_at) {
+        html += '<p class="lms-status" style="margin-bottom:12px;">Submitted ' + new Date(r.submitted_at).toLocaleString() + '</p>';
+      }
+      if (r.time_over) {
+        html += '<p class="lms-status">' + escapeHtml(r.message || 'Time expired before submission.') + '</p>';
+      }
+      if (r.weak_topics && r.weak_topics.length) {
+        html += '<h4 style="font-weight:600;margin:12px 0 6px;">Weak areas</h4><ul>' +
+          r.weak_topics.map(function (t) {
+            return '<li>' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + ' — ' + Math.round(t.score_percent) + '%</li>';
+          }).join('') + '</ul>';
+      }
+      if (r.strong_topics && r.strong_topics.length) {
+        html += '<h4 style="font-weight:600;margin:12px 0 6px;">Strong areas</h4><ul>' +
+          r.strong_topics.map(function (t) {
+            return '<li>' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + ' — ' + Math.round(t.score_percent) + '%</li>';
+          }).join('') + '</ul>';
+      }
+      body.innerHTML = html;
+    } catch (e) {
+      body.innerHTML = '<p class="lms-error">' + escapeHtml(e.message || 'Could not load result') + '</p>';
+    }
+  };
+  window.closeLmsAttemptResult = function () {
+    if (typeof lmsCloseModal === 'function') lmsCloseModal('lmsAttemptResultModal');
   };
 })();

@@ -228,6 +228,7 @@ def update_topic_scores_from_deficiency_session(session_id: int) -> None:
         status = compute_mastery_status(pct, prev)
         if row:
             row.score_percent = pct
+            row.sample_size = stats["total"]
             row.mastery_status = status
             row.last_assessed_at = now
         else:
@@ -236,6 +237,7 @@ def update_topic_scores_from_deficiency_session(session_id: int) -> None:
                     student_id=session.student_id,
                     topic_id=topic_id,
                     score_percent=pct,
+                    sample_size=stats["total"],
                     mastery_status=status,
                     last_assessed_at=now,
                 )
@@ -285,6 +287,7 @@ def update_topic_scores_from_attempt(attempt_id: int) -> None:
         status = compute_mastery_status(pct, prev)
         if row:
             row.score_percent = pct
+            row.sample_size = stats["total"]
             row.mastery_status = status
             row.last_assessed_at = now
         else:
@@ -293,6 +296,7 @@ def update_topic_scores_from_attempt(attempt_id: int) -> None:
                     student_id=attempt.student_id,
                     topic_id=topic_id,
                     score_percent=pct,
+                    sample_size=stats["total"],
                     mastery_status=status,
                     last_assessed_at=now,
                 )
@@ -313,6 +317,7 @@ def get_student_mastery(student_id: int) -> List[dict]:
             "topic_id": r.topic_id,
             "topic_name": _topic_display_name(r.topic_id),
             "score_percent": r.score_percent,
+            "sample_size": r.sample_size or 1,
             "mastery_status": r.mastery_status,
             "last_assessed_at": r.last_assessed_at.isoformat() if r.last_assessed_at else None,
         }
@@ -321,10 +326,26 @@ def get_student_mastery(student_id: int) -> List[dict]:
 
 
 def get_overall_progress(student_id: int) -> float:
+    """
+    Weighted average of per-topic mastery, weighted by how many questions
+    actually fed each topic's score (sample_size).
+
+    An unweighted average treats a topic resolved from just 1 question the
+    same as one resolved from 10 - since topic assignment on a
+    diagnostic/quiz is a text/PDF-label heuristic (not a fixed column), the
+    real question counts per topic are often wildly uneven, and an
+    unweighted average can diverge sharply (either direction) from the
+    student's actual raw score. Confirmed via reproduction: a diagnostic
+    scored 64% raw came out as 95% "Overall Progress" unweighted.
+    """
     rows = get_student_mastery(student_id)
     if not rows:
         return 0.0
-    return round(sum(r["score_percent"] for r in rows) / len(rows), 2)
+    total_weight = sum(r["sample_size"] for r in rows)
+    if not total_weight:
+        return round(sum(r["score_percent"] for r in rows) / len(rows), 2)
+    weighted = sum(r["score_percent"] * r["sample_size"] for r in rows)
+    return round(weighted / total_weight, 2)
 
 
 def analyze_attempt(attempt_id: int) -> dict:

@@ -81,13 +81,22 @@ def get_student_dashboard(student_id: int) -> dict:
 
     onboarding = get_onboarding_status(student_id)
     mastery = performance_service.get_student_mastery(student_id)
-    weak_topics = _diagnostic_weak_topics(student_id)
+    # Prefer live StudentTopicScore over the frozen diagnostic snapshot: a
+    # topic the student has since practiced (Learning Chat, quizzes) must
+    # drop off here once mastered, not stay stuck showing the diagnostic's
+    # original result forever. Falls back to the diagnostic-derived list
+    # only when there's no live mastery data at all (e.g. brand-new
+    # student). Live entries always carry a real mastery_status, so this
+    # also removes the "UNKNOWN" badge diagnostic-only entries showed
+    # (lmsMasteryBadge() falls back to 'unknown' when status is missing).
+    weak_topics = [
+        {**m, "topic_name": m.get("topic_name") or f"Topic #{m['topic_id']}"}
+        for m in mastery
+        if m.get("mastery_status") in ("weak", "needs_practice")
+    ]
+    weak_topics.sort(key=lambda m: m.get("score_percent") or 0)
     if not weak_topics:
-        weak_topics = [
-            {**m, "topic_name": m.get("topic_name") or f"Topic #{m['topic_id']}"}
-            for m in mastery
-            if m.get("mastery_status") == "weak"
-        ][:5]
+        weak_topics = _diagnostic_weak_topics(student_id)
     overall_progress = performance_service.get_overall_progress(student_id)
     learning_path = learning_path_service.ensure_learning_path(student_id)
 

@@ -281,6 +281,31 @@ def ensure_rag_chunks_page_end_column(conn, inspector):
         logger.info("Column rag_chunks.page_end already exists, skipping.")
 
 
+def ensure_student_topic_scores_sample_size_column(conn, inspector):
+    """Add sample_size column to student_topic_scores if it doesn't exist.
+
+    How many questions the current score_percent was computed from - topic
+    assignment on a diagnostic/quiz is a text/PDF-label heuristic (not a
+    fixed column), so question counts per topic can be wildly uneven.
+    Without this, get_overall_progress()'s per-topic average weighs a
+    1-question topic the same as a 10-question one, which can make
+    "Overall Progress" diverge sharply from the student's actual raw score.
+    Backfilled to 1 for existing rows (unweighted, same as before this fix -
+    they'll get a real sample_size the next time that topic is rescored).
+    """
+    if not inspector.has_table("student_topic_scores"):
+        logger.info("Table student_topic_scores does not exist, skipping sample_size column.")
+        return
+    columns = {col["name"] for col in inspector.get_columns("student_topic_scores")}
+    if "sample_size" not in columns:
+        logger.info("Adding column student_topic_scores.sample_size ...")
+        conn.execute(
+            text("ALTER TABLE student_topic_scores ADD COLUMN sample_size INTEGER NOT NULL DEFAULT 1")
+        )
+    else:
+        logger.info("Column student_topic_scores.sample_size already exists, skipping.")
+
+
 def main():
     logger.info("Connecting to database: %s", Config.SQLALCHEMY_DATABASE_URI)
     engine = create_engine(
@@ -303,6 +328,8 @@ def main():
         ensure_rag_threads_ingest_warning_columns(conn, inspector)
         inspector = inspect(engine)
         ensure_rag_chunks_page_end_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_student_topic_scores_sample_size_column(conn, inspector)
 
     logger.info("Migration completed successfully.")
 
