@@ -16,7 +16,8 @@ import logging
 import os
 import random
 import re
-from typing import Optional
+import time
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -252,3 +253,76 @@ def compute_retry_delay(
     exp = min(base_delay * (2 ** attempt), max_delay)
     jitter = random.uniform(0.0, exp)
     return jitter  # full-jitter: delay in [0, exp)
+
+
+# ---------------------------------------------------------------------------
+# Generic call wrapper (bounded concurrency + header-aware retry)
+# ---------------------------------------------------------------------------
+
+def invoke_with_groq_rate_limit(
+    fn: Callable[[], Any],
+    *,
+    description: str = "groq call",
+    max_retries: Optional[int] = None,
+) -> Any:
+    """
+    Run ``fn()`` (one Groq request) through the shared process-wide Groq
+    concurrency limiter with header-aware retry.
+
+    This is the provider-agnostic sibling of the ``_invoke_with_groq_rate_limit``
+    helpers in the lesson services — use it anywhere a raw ``structured.invoke`` /
+    ``llm.invoke`` would otherwise hit Groq with no back-pressure (LMS diagnostic
+    weakness analysis, Learning Chat MCQ generation, deficiency tutor).
+
+    Behaviour:
+    - Acquires a concurrency slot first (may raise ``GroqBusyError`` on timeout).
+    - Retries ``TPM_RATE_LIMITED`` / ``TRANSIENT_SERVER_ERROR`` up to
+      ``GROQ_MAX_RETRIES`` (default 3) using the provider's ``retry-after`` hint.
+    - Raises ``GroqRateLimitError`` once retries are exhausted for a rate-limit
+      condition, or immediately for a daily (RPD) cap.
+    - Re-raises any other exception unchanged.
+    """
+    # Lazy import: rag_service imports this module, so importing it at module
+    # load time would be circular.
+    from app.utils.rag_service import groq_rate_limiter
+
+    if max_retries is None:
+        max_retries = max(0, int(os.getenv("GROQ_MAX_RETRIES", "3")))
+
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        groq_rate_limiter.wait_if_needed()  # may raise GroqBusyError
+        try:
+            result = fn()
+            groq_rate_limiter.record_success()
+            return result
+        except (GroqRateLimitError, GroqBusyError):
+            groq_rate_limiter.release_slot()
+            raise
+        except Exception as exc:  # noqa: BLE001 — classified below
+            groq_rate_limiter.release_slot()
+            info = parse_groq_error(exc)
+            last_exc = exc
+
+            if info.kind in ("TPM_RATE_LIMITED", "TRANSIENT_SERVER_ERROR") and info.is_retryable:
+                groq_rate_limiter.record_429_error()
+                if attempt < max_retries:
+                    delay = compute_retry_delay(info, attempt)
+                    logger.warning(
+                        "invoke_with_groq_rate_limit: %s on '%s' (attempt %d/%d), retrying in %.1fs",
+                        info.kind, description, attempt + 1, max_retries, delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise GroqRateLimitError(info) from exc
+
+            if info.kind == "RPD_EXHAUSTED":
+                groq_rate_limiter.record_429_error()
+                raise GroqRateLimitError(info) from exc
+
+            # Non-retryable provider error — surface the original.
+            raise
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("invoke_with_groq_rate_limit: unexpected exit from retry loop")

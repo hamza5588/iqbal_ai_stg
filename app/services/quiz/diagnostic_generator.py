@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.services.quiz.models import MCQBatchResult, MCQQuestion
 from app.services.quiz.retry_utils import format_validation_errors, retry_on_validation_error
+from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
 from app.utils.llm_factory import get_chat_model
 from app.utils.rag_vectorstore import query_all_chunks
 
@@ -111,7 +112,10 @@ def generate_mcqs_from_content(
             content=content,
             retry_hint=retry_hint,
         )
-        batch: MCQBatchResult = structured.invoke(prompt)
+        batch: MCQBatchResult = invoke_with_groq_rate_limit(
+            lambda: structured.invoke(prompt),
+            description=f"diagnostic MCQ gen ({topic})",
+        )
         if not batch.questions:
             raise ValidationError.from_exception_data(
                 "MCQBatchResult",
