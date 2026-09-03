@@ -5,6 +5,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from app.services.lms.performance_service import get_student_mastery
+from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
 from app.utils.llm_factory import create_llm
 
 STUDENT_TUTOR_PROMPT = """You are IqbalAI — a friendly, general academic tutor for students (same spirit as the main IqbalAI chatbot).
@@ -161,7 +162,10 @@ def tutor_chat(
     messages.append({"role": "user", "content": message})
 
     try:
-        resp = llm.invoke(messages)
+        resp = invoke_with_groq_rate_limit(
+            lambda: llm.invoke(messages),
+            description=f"lms tutor chat ({mode})",
+        )
         content = getattr(resp, "content", str(resp))
         return content if isinstance(content, str) else str(content)
     except Exception as e:

@@ -345,6 +345,30 @@ def start_session(student_id: int, force_new: bool = False) -> dict:
     return _session_state(session)
 
 
+def prewarm_session(student_id: int) -> bool:
+    """
+    Best-effort: build the Learning Chat question queue right after the student
+    submits their diagnostic, so the later ``POST /deficiency/sessions`` call is a
+    cheap DB read instead of a burst of live Groq MCQ generation.
+
+    Spreading MCQ generation across the diagnostic-submit window (instead of
+    concentrating it when every student opens Learning Chat at once) is what keeps
+    Groq under its per-minute token cap at high concurrency. Any failure here is
+    swallowed — Learning Chat start will simply generate on demand as before.
+
+    Returns True when a session queue was warmed.
+    """
+    try:
+        state = start_session(student_id, force_new=False)
+        return bool(state.get("total_questions"))
+    except LMSValidationError as exc:
+        logger.info("Learning Chat prewarm skipped for student %s: %s", student_id, exc)
+        return False
+    except Exception as exc:  # noqa: BLE001 — prewarm must never break submit
+        logger.warning("Learning Chat prewarm failed for student %s: %s", student_id, exc)
+        return False
+
+
 def get_session(session_id: int, student_id: int) -> dict:
     db = get_db()
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()

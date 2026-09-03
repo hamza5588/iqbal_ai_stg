@@ -12,6 +12,7 @@ from app.models.lms_models import AssessmentAttempt, AttemptAnswer, Question
 from app.services.lms.assessment_service import get_assessment
 from app.services.lms.topic_resolver import get_or_create_topic_from_pdf_label
 from app.utils.db import get_db
+from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
 from app.utils.llm_factory import get_chat_model
 
 logger = logging.getLogger(__name__)
@@ -229,7 +230,10 @@ def _ai_analyze_weakness(
             title=assessment.title or "Diagnostic",
             questions_block=_build_questions_block(questions, ans_map),
         )
-        result: DiagnosticWeaknessResult = structured.invoke(prompt)
+        result: DiagnosticWeaknessResult = invoke_with_groq_rate_limit(
+            lambda: structured.invoke(prompt),
+            description="diagnostic weakness analysis",
+        )
     except Exception as exc:
         logger.warning("AI weakness analysis failed: %s", exc)
         return None

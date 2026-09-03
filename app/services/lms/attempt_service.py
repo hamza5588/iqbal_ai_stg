@@ -461,6 +461,14 @@ def submit_attempt(attempt_id: int, time_expired: bool = False) -> dict:
                 attempt.student_id, assessment_id=assessment.id
             )
         )
+        # Warm the Learning Chat question queue in the background (rate-limited
+        # Groq), so opening Learning Chat later is a DB read rather than a
+        # synchronised burst of MCQ generation across every student at once.
+        from app.tasks.lms_tasks import enqueue_deficiency_chat_prewarm
+
+        _post_submit_step(
+            lambda: enqueue_deficiency_chat_prewarm(attempt.student_id)
+        )
 
     if attempt.assignment_id:
         from app.services.lms import assignment_service
