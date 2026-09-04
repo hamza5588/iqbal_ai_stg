@@ -161,6 +161,12 @@ def extract_token_counts_from_chunk(chunk: BaseMessageChunk) -> tuple[Optional[i
 
 # Fallback $/1M when DB has no row (approximate; admin should set llm_model_pricing).
 _DEFAULT_MODEL_PRICING: dict[tuple[str, str], tuple[float, float]] = {
+    # Every LLM_PROVIDER=groq request currently runs on this model and it was
+    # missing from both this table and llm_model_pricing (DB) - every telemetry
+    # row was getting cost_usd=NULL and the admin LLM Telemetry dashboard showed
+    # $0 across the board. DB row (app/routes/admin_routes.py pricing endpoint)
+    # takes precedence over this fallback; keep this in sync as a safety net.
+    ("groq", "openai/gpt-oss-120b"): (0.15, 0.60),
     ("groq", "llama-3.3-70b-versatile"): (0.59, 0.79),
     ("groq", "llama-3.1-8b-instant"): (0.05, 0.08),
     ("groq", "qwen/qwen3.6-27b"): (0.60, 3.00),
