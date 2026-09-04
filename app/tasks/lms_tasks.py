@@ -36,9 +36,20 @@ def prewarm_deficiency_chat_task(self, student_id: int) -> dict:
     student opens Learning Chat at once.
     """
     from app.services.lms import deficiency_chat_service
+    from app.utils.llm_gateway import llm_workflow
 
     try:
-        warmed = deficiency_chat_service.prewarm_session(student_id)
+        # This runs on the Celery worker, off the request thread - the
+        # llm_workflow set in the /deficiency/sessions route (same MCQ
+        # generation, run inline instead) never reaches this process, so it
+        # was logging as workflow="unknown" without its own tag.
+        with llm_workflow(
+            "lms_deficiency_chat_mcq_generation",
+            user_id=student_id,
+            user_role="student",
+            traffic_source="production",
+        ):
+            warmed = deficiency_chat_service.prewarm_session(student_id)
         return {"student_id": student_id, "warmed": bool(warmed)}
     except Exception as exc:  # noqa: BLE001 — best-effort, never surface
         logger.warning("prewarm_deficiency_chat_task failed for student %s: %s", student_id, exc)

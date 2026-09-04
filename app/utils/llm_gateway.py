@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, fields
 from decimal import Decimal
@@ -56,6 +57,47 @@ def set_llm_telemetry_context(ctx: LlmTelemetryContext) -> Any:
 
 def reset_llm_telemetry_context(token: Any) -> None:
     _llm_telemetry_ctx.reset(token)
+
+
+@contextmanager
+def llm_workflow(
+    workflow: str,
+    *,
+    user_id: Optional[int] = None,
+    user_role: Optional[str] = None,
+    conversation_id: Optional[int] = None,
+    thread_id: Optional[str] = None,
+    traffic_source: Optional[str] = None,
+):
+    """Label every LLM call made inside this block with `workflow`, for
+    Admin -> LLM Telemetry's cost/requests-by-workflow breakdown (otherwise
+    it falls into "unknown", which is where ~95% of events were landing).
+
+    Purely additive: sets a ContextVar around the existing call, then
+    restores it - does not change what is called, which model, or any
+    prompt/business logic, so nothing downstream (LMS or otherwise)
+    behaves differently. Safe to wrap around existing code unchanged.
+    """
+    if traffic_source is None:
+        traffic_source = (
+            "load_test"
+            if os.getenv("LOAD_TEST_MODE", "false").lower() in ("true", "1", "yes")
+            else "production"
+        )
+    token = set_llm_telemetry_context(
+        LlmTelemetryContext(
+            user_id=user_id,
+            user_role=user_role,
+            workflow=workflow,
+            traffic_source=traffic_source,
+            conversation_id=conversation_id,
+            thread_id=thread_id,
+        )
+    )
+    try:
+        yield
+    finally:
+        reset_llm_telemetry_context(token)
 
 
 def update_llm_telemetry_context(**kwargs: Any) -> None:

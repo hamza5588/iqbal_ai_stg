@@ -649,7 +649,12 @@ def submit_attempt(attempt_id: int):
             return json_error("Forbidden", code="forbidden", status=403)
         body = request.get_json(silent=True) or {}
         time_expired = bool(body.get("time_expired") or body.get("timed_out"))
-        result = attempt_service.submit_attempt(attempt_id, time_expired=time_expired)
+        from app.utils.llm_gateway import llm_workflow
+
+        with llm_workflow(
+            "diagnostic_weakness_analysis", user_id=_current_user_id(), user_role=_current_role()
+        ):
+            result = attempt_service.submit_attempt(attempt_id, time_expired=time_expired)
         return json_success(result)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
@@ -662,7 +667,12 @@ def get_attempt_results(attempt_id: int):
         attempt = attempt_service.get_attempt(attempt_id)
         if attempt.student_id != _current_user_id() and _current_role() != "teacher":
             return json_error("Forbidden", code="forbidden", status=403)
-        return json_success(attempt_service.get_attempt_results(attempt_id))
+        from app.utils.llm_gateway import llm_workflow
+
+        with llm_workflow(
+            "diagnostic_weakness_analysis", user_id=_current_user_id(), user_role=_current_role()
+        ):
+            return json_success(attempt_service.get_attempt_results(attempt_id))
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 
@@ -1443,15 +1453,17 @@ def student_tutor_chat():
         attempt_count=int(body.get("attempt_count") or 0),
     )
     from app.services.lms import tutor_memory_service
+    from app.utils.llm_gateway import llm_workflow
 
-    result = tutor_memory_service.chat_with_memory(
-        _current_user_id(),
-        message,
-        mode="student",
-        api_key=session.get("groq_api_key", ""),
-        context=context,
-        tutor_chat_fn=tutor_service.tutor_chat,
-    )
+    with llm_workflow("lms_student_tutor_chat", user_id=_current_user_id(), user_role="student"):
+        result = tutor_memory_service.chat_with_memory(
+            _current_user_id(),
+            message,
+            mode="student",
+            api_key=session.get("groq_api_key", ""),
+            context=context,
+            tutor_chat_fn=tutor_service.tutor_chat,
+        )
     return json_success(result)
 
 
@@ -1466,15 +1478,17 @@ def teacher_tutor_chat():
     if not message:
         return json_error("message is required", code="validation_error")
     from app.services.lms import tutor_memory_service
+    from app.utils.llm_gateway import llm_workflow
 
-    result = tutor_memory_service.chat_with_memory(
-        _current_user_id(),
-        message,
-        mode="teacher",
-        api_key=session.get("groq_api_key", ""),
-        context=None,
-        tutor_chat_fn=tutor_service.tutor_chat,
-    )
+    with llm_workflow("lms_teacher_tutor_chat", user_id=_current_user_id(), user_role="teacher"):
+        result = tutor_memory_service.chat_with_memory(
+            _current_user_id(),
+            message,
+            mode="teacher",
+            api_key=session.get("groq_api_key", ""),
+            context=None,
+            tutor_chat_fn=tutor_service.tutor_chat,
+        )
     return json_success(result)
 
 
@@ -1559,10 +1573,13 @@ def start_deficiency_chat():
     try:
         body = request.get_json(silent=True) or {}
         force_new = bool(body.get("force_new"))
-        return json_success(
-            deficiency_chat_service.start_session(_current_user_id(), force_new=force_new),
-            status=201,
-        )
+        from app.utils.llm_gateway import llm_workflow
+
+        with llm_workflow(
+            "lms_deficiency_chat_mcq_generation", user_id=_current_user_id(), user_role="student"
+        ):
+            result = deficiency_chat_service.start_session(_current_user_id(), force_new=force_new)
+        return json_success(result, status=201)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
     except Exception as e:
@@ -1632,14 +1649,18 @@ def deficiency_chat_explain(session_id: int):
     if not message:
         return json_error("message is required", code="validation_error")
     try:
-        return json_success(
-            deficiency_chat_service.explain_with_tutor(
+        from app.utils.llm_gateway import llm_workflow
+
+        with llm_workflow(
+            "lms_deficiency_chat_tutor", user_id=_current_user_id(), user_role="student"
+        ):
+            result = deficiency_chat_service.explain_with_tutor(
                 session_id,
                 _current_user_id(),
                 message,
                 api_key=session.get("groq_api_key", ""),
             )
-        )
+        return json_success(result)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 
