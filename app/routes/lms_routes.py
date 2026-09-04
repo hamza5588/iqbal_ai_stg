@@ -1161,7 +1161,10 @@ def my_progress():
     uid = _current_user_id()
     mastery = performance_service.get_student_mastery(uid)
     overall = performance_service.get_overall_progress(uid)
-    path = learning_path_service.get_path_with_items(uid)
+    # ensure_learning_path (not get_path_with_items) so this matches the
+    # dashboard: after a Learning Chat session the finished practice path
+    # is shown as complete, not as a missing/zeroed path.
+    path = learning_path_service.ensure_learning_path(uid)
     return json_success({"overall_progress": overall, "topics": mastery, "learning_path": path})
 
 

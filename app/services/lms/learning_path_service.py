@@ -110,11 +110,7 @@ def _resolve_item_title(item_type: str, item_id: int) -> str:
     return f"{item_type} #{item_id}"
 
 
-def get_path_with_items(student_id: int) -> Optional[dict]:
-    path = get_active_path_for_student(student_id)
-    if not path:
-        return None
-
+def _path_to_dict(path: LearningPath) -> dict:
     items_out = []
     for i in sorted(path.items, key=lambda x: x.sort_order):
         items_out.append(
@@ -129,10 +125,8 @@ def get_path_with_items(student_id: int) -> Optional[dict]:
                 "completed_at": i.completed_at.isoformat() if i.completed_at else None,
             }
         )
-
     current_step = next((it for it in items_out if it["status"] != "completed"), None)
     completed_count = sum(1 for it in items_out if it["status"] == "completed")
-
     return {
         "id": path.id,
         "title": path.title,
@@ -142,6 +136,13 @@ def get_path_with_items(student_id: int) -> Optional[dict]:
         "completed_count": completed_count,
         "total_count": len(items_out),
     }
+
+
+def get_path_with_items(student_id: int) -> Optional[dict]:
+    path = get_active_path_for_student(student_id)
+    if not path:
+        return None
+    return _path_to_dict(path)
 
 
 def mark_item_complete(path_id: int, item_id: int, student_id: int) -> LearningPathItem:
@@ -212,8 +213,41 @@ def refresh_learning_path(student_id: int) -> Optional[LearningPath]:
     return active
 
 
+def _newest_submitted_attempt_at(student_id: int):
+    from app.models.lms_models import AssessmentAttempt
+
+    row = (
+        get_db()
+        .query(AssessmentAttempt.submitted_at)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.status == "submitted",
+        )
+        .order_by(AssessmentAttempt.submitted_at.desc())
+        .first()
+    )
+    return row[0] if row and row[0] else None
+
+
+def _is_untouched_single_practice(path: LearningPath) -> bool:
+    items = list(path.items)
+    return (
+        len(items) == 1
+        and items[0].item_type == "practice"
+        and items[0].status != "completed"
+    )
+
+
 def ensure_learning_path(student_id: int) -> Optional[dict]:
-    """Return the student's path, creating it when weak topics exist (e.g. after diagnostic)."""
+    """Return the student's current learning path (read-only from the dashboard).
+
+    The path is regenerated only when a new diagnostic/quiz is submitted
+    (attempt_service -> refresh_learning_path). This function must NOT spin
+    up a fresh "0% done" path just because the last one is finished and
+    weak topics still exist - after a Learning Chat session the student's
+    practice step IS done; further practice is driven by the live Weak
+    Topics tile, not by resetting the path to zero.
+    """
     from app.services.lms import assessment_service, performance_service
 
     profile = student_profile_service.get_or_create_profile(student_id)
@@ -228,18 +262,57 @@ def ensure_learning_path(student_id: int) -> Optional[dict]:
     if not path_generator.has_mastery_data(student_id) or repaired:
         performance_service.rebuild_student_mastery(student_id)
 
-    path = get_path_with_items(student_id)
-    path_stale = bool(
-        path
-        and path.get("items")
-        and (
-            len(path["items"]) > 1
-            or any(it.get("item_type") in ("quiz", "reassessment") for it in path["items"])
-        )
+    db = get_db()
+    all_paths = (
+        db.query(LearningPath)
+        .filter(LearningPath.student_id == student_id)
+        .order_by(LearningPath.id.desc())
+        .all()
     )
-    weak = path_generator.get_weak_topics(student_id)
-    should_have_path = bool(weak) or path_generator.has_mastery_data(student_id)
-    if should_have_path and (not path or not path.get("items") or path_stale):
-        refresh_learning_path(student_id)
-        path = get_path_with_items(student_id)
-    return path
+
+    if not all_paths:
+        weak = path_generator.get_weak_topics(student_id)
+        if weak or path_generator.has_mastery_data(student_id):
+            refresh_learning_path(student_id)
+        return get_path_with_items(student_id)
+
+    visible = [p for p in all_paths if p.status != "archived"]
+    latest = visible[0] if visible else all_paths[0]
+    completed_practice = next(
+        (p for p in all_paths if p.status == "completed" and any(i.item_type == "practice" for i in p.items)),
+        None,
+    )
+    newest_attempt = _newest_submitted_attempt_at(student_id)
+
+    # Heal accounts from before this fix: an untouched auto-regenerated
+    # practice path stacked on top of a completed one, with no new
+    # assessment since -> the completed path is the real state.
+    if (
+        latest.status == "active"
+        and completed_practice
+        and latest.id != completed_practice.id
+        and _is_untouched_single_practice(latest)
+        and (
+            newest_attempt is None
+            or (completed_practice.created_at and completed_practice.created_at >= newest_attempt)
+        )
+    ):
+        latest.status = "archived"
+        student_profile_service.set_current_learning_path(student_id, completed_practice.id)
+        db.commit()
+        latest = completed_practice
+
+    d = _path_to_dict(latest)
+
+    # Legacy multi-step / quiz-item path format -> regenerate once into the
+    # current single-practice-step format.
+    if d.get("items") and (
+        len(d["items"]) > 1
+        or any(it.get("item_type") in ("quiz", "reassessment") for it in d["items"])
+    ):
+        weak = path_generator.get_weak_topics(student_id)
+        if weak or path_generator.has_mastery_data(student_id):
+            refresh_learning_path(student_id)
+            return get_path_with_items(student_id) or d
+
+    return d
