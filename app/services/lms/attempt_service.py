@@ -533,6 +533,8 @@ def get_attempt_results(attempt_id: int) -> dict:
 
 
 def list_student_attempts(student_id: int, limit: int = 50) -> List[dict]:
+    from app.models.lms_models import Assessment
+
     db = get_db()
     rows = (
         db.query(AssessmentAttempt)
@@ -541,16 +543,36 @@ def list_student_attempts(student_id: int, limit: int = 50) -> List[dict]:
         .limit(limit)
         .all()
     )
+    assessment_ids = {a.assessment_id for a in rows}
+    assessments = (
+        {
+            s.id: s
+            for s in db.query(Assessment).filter(Assessment.id.in_(assessment_ids)).all()
+        }
+        if assessment_ids
+        else {}
+    )
+    type_label = {"diagnostic": "Diagnostic Assessment", "quiz": "Quiz"}
     result = []
     for a in rows:
         pct = None
         if a.status == "submitted" and a.max_score:
             pct = round(100.0 * (a.score or 0) / a.max_score, 1)
+        s = assessments.get(a.assessment_id)
+        a_type = s.assessment_type if s else "quiz"
+        if a_type == "diagnostic":
+            # Admins title diagnostics "unit22" / "8" / "10" - meaningless to a
+            # student; the type is the useful label.
+            title = "Diagnostic Assessment"
+        else:
+            title = (s.title if s and s.title else None) or type_label.get(a_type, "Assessment")
         result.append(
             {
                 "attempt_id": a.id,
                 "assessment_id": a.assessment_id,
                 "assignment_id": a.assignment_id,
+                "assessment_type": a_type,
+                "title": title,
                 "status": a.status,
                 "score_percent": pct,
                 "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,

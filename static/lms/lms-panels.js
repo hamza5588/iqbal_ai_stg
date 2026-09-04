@@ -434,7 +434,8 @@
         var clickable = a.status === 'submitted';
         var style = 'padding:10px;margin-bottom:6px;' + (clickable ? 'cursor:pointer;' : '');
         var onclick = clickable ? ' onclick="viewLmsAttemptResult(' + a.attempt_id + ')"' : '';
-        return '<li class="lms-card" style="' + style + '"' + onclick + '>Quiz #' + a.assessment_id +
+        var label = a.title || (a.assessment_type === 'diagnostic' ? 'Diagnostic Assessment' : 'Quiz #' + a.assessment_id);
+        return '<li class="lms-card" style="' + style + '"' + onclick + '>' + escapeHtml(label) +
           ' — <strong>' + (a.score_percent != null ? a.score_percent + '%' : a.status) + '</strong></li>';
       }).join('') + '</ul>';
     } catch (e) { el.innerHTML = ''; }

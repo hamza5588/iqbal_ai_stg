@@ -79,6 +79,11 @@ def _diagnostic_weak_topics(student_id: int) -> list:
 def get_student_dashboard(student_id: int) -> dict:
     from app.services.lms import learning_path_service, performance_service, path_generator
 
+    # One-time self-heal for accounts whose mastery predates the
+    # AI-grouping fix (their diagnostic and practice topic scores sit on
+    # mismatched topic_ids - weak topics never clear, progress inflates).
+    performance_service.maybe_rebuild_stale_mastery(student_id)
+
     onboarding = get_onboarding_status(student_id)
     mastery = performance_service.get_student_mastery(student_id)
     # Prefer live StudentTopicScore over the frozen diagnostic snapshot: a

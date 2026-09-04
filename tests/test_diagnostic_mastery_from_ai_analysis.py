@@ -16,6 +16,7 @@ from app.models.lms_models import (
     AssessmentAttempt,
     AttemptAnswer,
     Base,
+    DeficiencyChatSession,
     StudentTopicScore,
     Topic,
 )
@@ -29,6 +30,7 @@ def db_session(monkeypatch):
         tables=[
             AssessmentAttempt.__table__,
             AttemptAnswer.__table__,
+            DeficiencyChatSession.__table__,
             StudentTopicScore.__table__,
             Topic.__table__,
         ],
@@ -103,6 +105,29 @@ def test_upsert_topic_score_blend_math(db_session):
     row = db_session.query(StudentTopicScore).filter_by(student_id=1, topic_id=5).first()
     assert row.score_percent == 90.0  # replace, not blend
     assert row.sample_size == 4
+
+
+def test_rebuild_clears_stale_rows_before_recompute(db_session, monkeypatch):
+    """Pre-fix accounts have StudentTopicScore rows on topic_ids the new AI
+    grouping never touches (phantom weak topics that never clear). A rebuild
+    must drop them, not leave them alongside the fresh rows."""
+    from datetime import datetime
+    from app.services.lms import performance_service
+
+    # stale pre-fix rows on topics 1 & 17 - nothing will ever re-touch these
+    db_session.add_all([
+        StudentTopicScore(student_id=50, topic_id=1, score_percent=0.0, sample_size=1,
+                          mastery_status="weak", updated_at=datetime(2026, 9, 4, 3, 35)),
+        StudentTopicScore(student_id=50, topic_id=17, score_percent=0.0, sample_size=1,
+                          mastery_status="weak", updated_at=datetime(2026, 9, 4, 3, 35)),
+    ])
+    db_session.commit()
+
+    # no attempts / sessions for this student -> rebuild just clears
+    monkeypatch.setattr(performance_service, "update_topic_scores_from_attempt", lambda *_: None)
+    performance_service.rebuild_student_mastery(50)
+
+    assert db_session.query(StudentTopicScore).filter_by(student_id=50).count() == 0
 
 
 def test_find_similar_topic_reuses_synonym_variants():

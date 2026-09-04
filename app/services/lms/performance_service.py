@@ -499,9 +499,75 @@ def get_weak_topics_for_student(student_id: int) -> List[dict]:
     return get_diagnostic_weak_topics(student_id)
 
 
-def rebuild_student_mastery(student_id: int) -> None:
-    """Recompute topic scores from all submitted attempts (fixes missing topic_id on questions)."""
+# Accounts that took the diagnostic before the "unify on AI grouping" fix
+# (commit b58396f, deployed to staging 2026-09-04 ~04:22 UTC) have
+# StudentTopicScore rows from the old per-question fuzzy resolver on
+# topic_ids that don't line up with the ones Learning Chat practice writes
+# -> practice can never blend into or clear those weak topics, and each
+# practice session instead piles new "mastered" rows onto the weighted
+# average (Overall Progress inflates). rebuild_student_mastery() below
+# fully re-derives the profile; _needs_mastery_rebuild() detects the
+# stale state cheaply so get_student_dashboard() can self-heal an account
+# once on next load.
+from datetime import datetime as _dt
+
+MASTERY_FIX_DEPLOYED_AT = _dt(2026, 9, 4, 4, 22, 0)
+
+
+def _needs_mastery_rebuild(student_id: int) -> bool:
     db = get_db()
+    from app.models.lms_models import DeficiencyChatSession
+
+    oldest = (
+        db.query(StudentTopicScore.updated_at)
+        .filter(StudentTopicScore.student_id == student_id)
+        .order_by(StudentTopicScore.updated_at.asc())
+        .first()
+    )
+    if not oldest or not oldest[0] or oldest[0] >= MASTERY_FIX_DEPLOYED_AT:
+        return False
+    # Only bother if there's actually a diagnostic attempt to re-derive from.
+    has_diag = (
+        db.query(AssessmentAttempt.id)
+        .join(Assessment, Assessment.id == AssessmentAttempt.assessment_id)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.status == "submitted",
+            Assessment.assessment_type == "diagnostic",
+        )
+        .first()
+    )
+    return has_diag is not None
+
+
+def maybe_rebuild_stale_mastery(student_id: int) -> bool:
+    """Self-heal a pre-fix account once. Returns True if a rebuild ran."""
+    try:
+        if _needs_mastery_rebuild(student_id):
+            rebuild_student_mastery(student_id)
+            return True
+    except Exception as exc:  # noqa: BLE001 - never break the dashboard
+        logger.warning("maybe_rebuild_stale_mastery failed for %s: %s", student_id, exc)
+        get_db().rollback()
+    return False
+
+
+def rebuild_student_mastery(student_id: int) -> None:
+    """Fully re-derive StudentTopicScore for one student.
+
+    Clears existing rows, replays every submitted attempt oldest-first
+    (diagnostics now go through the AI grouping), then replays completed
+    Learning Chat sessions oldest-first as blends - so the final profile is
+    internally consistent regardless of what wrote the old rows.
+    """
+    from app.models.lms_models import DeficiencyChatSession
+
+    db = get_db()
+    db.query(StudentTopicScore).filter(
+        StudentTopicScore.student_id == student_id
+    ).delete(synchronize_session=False)
+    db.commit()
+
     attempts = (
         db.query(AssessmentAttempt)
         .filter(
@@ -521,6 +587,28 @@ def rebuild_student_mastery(student_id: int) -> None:
                 student_id,
                 exc,
             )
+            db.rollback()
+
+    sessions = (
+        db.query(DeficiencyChatSession)
+        .filter(
+            DeficiencyChatSession.student_id == student_id,
+            DeficiencyChatSession.status == "completed",
+        )
+        .order_by(DeficiencyChatSession.updated_at.asc())
+        .all()
+    )
+    for sess in sessions:
+        try:
+            update_topic_scores_from_deficiency_session(sess.id)
+        except Exception as exc:
+            logger.warning(
+                "rebuild_student_mastery: deficiency session %s failed for student %s: %s",
+                sess.id,
+                student_id,
+                exc,
+            )
+            db.rollback()
     db.commit()
 
 
