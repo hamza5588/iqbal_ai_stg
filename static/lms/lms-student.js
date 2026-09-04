@@ -377,25 +377,45 @@
     var body = document.getElementById('lmsDiagBody');
     var timerEl = document.getElementById('lmsDiagTimer');
     if (timerEl) timerEl.style.display = 'none';
-    var score = result.score_percent != null ? Math.round(result.score_percent) : '—';
+    var pct = result.score_percent != null ? Math.round(result.score_percent) : null;
+    var scoreLabel = pct != null ? pct + '%' : '—';
+    var hasCounts = result.score != null && result.max_score != null;
+    // Show the exact "N of M correct" the % is built from - this is the
+    // single biggest source of "why is my score X and not Y" confusion,
+    // because the topic tiles below are grouped scores, not a breakdown of
+    // the overall number.
+    var countLabel = hasCounts
+      ? Math.round(result.score) + ' of ' + Math.round(result.max_score) + ' questions correct'
+      : '';
     var weak = result.weak_topics || [];
     var strong = result.strong_topics || [];
+
+    function topicChip(t, cls) {
+      var p = Math.round(t.score_percent || 0);
+      var n = (t.question_ids && t.question_ids.length) || 0;
+      var frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+      return '<div class="lms-topic-chip ' + cls + '"><strong>' + p + '%</strong>' +
+        escapeHtml(t.topic_name || t.name || 'Topic') +
+        (frac ? '<span class="lms-topic-chip-frac">' + frac + '</span>' : '') + '</div>';
+    }
     var weakHtml = weak.length
-      ? weak.map(function (t) {
-          return '<div class="lms-topic-chip weak"><strong>' + Math.round(t.score_percent || 0) + '%</strong>' + escapeHtml(t.topic_name || t.name || 'Topic') + '</div>';
-        }).join('')
+      ? weak.map(function (t) { return topicChip(t, 'weak'); }).join('')
       : '<p class="lms-status">No weak topics detected yet.</p>';
     var strongHtml = strong.length
-      ? strong.map(function (t) {
-          return '<div class="lms-topic-chip strong"><strong>' + Math.round(t.score_percent || 0) + '%</strong>' + escapeHtml(t.topic_name || t.name || 'Topic') + '</div>';
-        }).join('')
+      ? strong.map(function (t) { return topicChip(t, 'strong'); }).join('')
       : '';
     body.innerHTML =
-      '<div style="text-align:center;margin-bottom:20px;">' +
-      '<div style="font-size:2.5rem;font-weight:800;color:var(--primary-color);">' + score + '%</div>' +
-      '<p class="lms-status">Overall diagnostic score</p></div>' +
+      '<div class="lms-diag-score">' +
+      '<div class="lms-diag-score-num">' + scoreLabel + '</div>' +
+      '<p class="lms-status">Overall diagnostic score' +
+      (countLabel ? ' &middot; <strong>' + countLabel + '</strong>' : '') + '</p>' +
+      (pct != null ? '<div class="lms-diag-score-bar"><div class="lms-diag-score-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></div></div>' : '') +
+      '</div>' +
+      ((weak.length || strong.length)
+        ? '<p class="lms-status lms-diag-explainer">Below, your questions are grouped by topic. Each tile is that topic\'s own score - the number above already adds up every question, strong topics included.</p>'
+        : '') +
       (weak.length ? '<h4 style="color:#991b1b;margin:0 0 8px;">Areas to improve</h4><div class="lms-topic-grid">' + weakHtml + '</div>' : '') +
-      (strong.length ? '<h4 style="color:var(--primary-color);margin:16px 0 8px;">Strong areas</h4><div class="lms-topic-grid">' + strongHtml + '</div>' : '') +
+      (strong.length ? '<h4 style="color:var(--lms-green);margin:16px 0 8px;">Strong areas</h4><div class="lms-topic-grid">' + strongHtml + '</div>' : '') +
       (weak.length ? '<p class="lms-status" style="margin-top:12px;">Practice weak areas in Learning Chat — one question at a time.</p>' : '') +
       '<div class="lms-modal-footer" style="border:none;padding-top:20px;display:flex;gap:8px;flex-wrap:wrap;">' +
       (weak.length ? '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>' : '') +

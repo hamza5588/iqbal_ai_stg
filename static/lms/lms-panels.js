@@ -449,25 +449,36 @@
     if (typeof lmsOpenModal === 'function') lmsOpenModal('lmsAttemptResultModal');
     try {
       var r = await lmsApi('/api/lms/attempts/' + attemptId + '/results');
-      var html = '<h3 style="font-weight:700;margin:0 0 8px;">Score: ' + r.score + ' / ' + r.max_score +
-        ' (' + r.score_percent + '%)</h3>';
-      if (r.submitted_at) {
-        html += '<p class="lms-status" style="margin-bottom:12px;">Submitted ' + new Date(r.submitted_at).toLocaleString() + '</p>';
-      }
+      var pct = r.score_percent != null ? Math.round(r.score_percent) : null;
+      var hasCounts = r.score != null && r.max_score != null;
+      var html = '<div class="lms-diag-score">' +
+        '<div class="lms-diag-score-num">' + (pct != null ? pct + '%' : '—') + '</div>' +
+        '<p class="lms-status">' +
+        (hasCounts ? '<strong>' + Math.round(r.score) + ' of ' + Math.round(r.max_score) + ' correct</strong>' : 'Score') +
+        (r.submitted_at ? ' &middot; ' + new Date(r.submitted_at).toLocaleString() : '') + '</p>' +
+        (pct != null ? '<div class="lms-diag-score-bar"><div class="lms-diag-score-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></div></div>' : '') +
+        '</div>';
       if (r.time_over) {
-        html += '<p class="lms-status">' + escapeHtml(r.message || 'Time expired before submission.') + '</p>';
+        html += '<p class="lms-status" style="text-align:center;">' + escapeHtml(r.message || 'Time expired before submission.') + '</p>';
+      }
+      function topicChip(t, cls) {
+        var p = Math.round(t.score_percent || 0);
+        var n = (t.question_ids && t.question_ids.length) || 0;
+        var frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+        return '<div class="lms-topic-chip ' + cls + '"><strong>' + p + '%</strong>' +
+          escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) +
+          (frac ? '<span class="lms-topic-chip-frac">' + frac + '</span>' : '') + '</div>';
+      }
+      if ((r.weak_topics && r.weak_topics.length) || (r.strong_topics && r.strong_topics.length)) {
+        html += '<p class="lms-status lms-diag-explainer">Grouped by topic below — each tile is that topic\'s own score, already included in the number above.</p>';
       }
       if (r.weak_topics && r.weak_topics.length) {
-        html += '<h4 style="font-weight:600;margin:12px 0 6px;">Weak areas</h4><ul>' +
-          r.weak_topics.map(function (t) {
-            return '<li>' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + ' — ' + Math.round(t.score_percent) + '%</li>';
-          }).join('') + '</ul>';
+        html += '<h4 style="color:#991b1b;margin:12px 0 8px;">Areas to improve</h4><div class="lms-topic-grid">' +
+          r.weak_topics.map(function (t) { return topicChip(t, 'weak'); }).join('') + '</div>';
       }
       if (r.strong_topics && r.strong_topics.length) {
-        html += '<h4 style="font-weight:600;margin:12px 0 6px;">Strong areas</h4><ul>' +
-          r.strong_topics.map(function (t) {
-            return '<li>' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + ' — ' + Math.round(t.score_percent) + '%</li>';
-          }).join('') + '</ul>';
+        html += '<h4 style="color:var(--lms-green);margin:16px 0 8px;">Strong areas</h4><div class="lms-topic-grid">' +
+          r.strong_topics.map(function (t) { return topicChip(t, 'strong'); }).join('') + '</div>';
       }
       body.innerHTML = html;
     } catch (e) {
