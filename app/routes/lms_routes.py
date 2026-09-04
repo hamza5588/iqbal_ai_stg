@@ -62,6 +62,43 @@ def _require_diagnostic_admin():
     return _require_permission(Permissions.CREATE_DIAGNOSTIC)
 
 
+def _require_assessment_owner(assessment_id: int):
+    """Same ownership rule publish_quiz already used: the assessment's
+    creator (or an admin) may edit it; the platform diagnostic requires
+    admin regardless of who created it. Returns (error_response_or_None,
+    assessment_or_None).
+
+    Without this, MANAGE_QUESTION_BANK / CREATE_QUIZ (granted to every
+    teacher) was the only gate on the quiz-questions and question-bank
+    write routes - any teacher could edit, reorder, or delete questions
+    on ANY other teacher's quiz, or on the platform diagnostic itself.
+    """
+    try:
+        assessment = assessment_service.get_assessment(assessment_id)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404), None
+    if assessment.assessment_type == "diagnostic":
+        denied = _require_diagnostic_admin()
+        if denied:
+            return denied, None
+    elif assessment.created_by != _current_user_id() and _current_role() != "admin":
+        return json_error("Forbidden", code="forbidden", status=403), None
+    return None, assessment
+
+
+def _require_question_owner(question_id: int):
+    """The question's creator (or an admin) may edit/delete it directly.
+    A question with no recorded creator (legacy data) is admin-only -
+    default-deny, not default-allow, for ownerless content."""
+    try:
+        q_row = question_bank_service.get_question(question_id)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404), None
+    if q_row.created_by != _current_user_id() and _current_role() != "admin":
+        return json_error("Forbidden", code="forbidden", status=403), None
+    return None, q_row
+
+
 @bp.route("/health", methods=["GET"])
 def health():
     return json_success({"status": "ok", "service": "lms"})
@@ -141,6 +178,9 @@ def question_detail(question_id: int):
             return json_error(str(e), code="not_found", status=404)
 
     denied = _require_permission(Permissions.MANAGE_QUESTION_BANK)
+    if denied:
+        return denied
+    denied, _owned = _require_question_owner(question_id)
     if denied:
         return denied
 
@@ -462,6 +502,9 @@ def finalize_pdf_quiz(source_id: int):
 def regenerate_quiz_question(quiz_id: int, question_id: int):
     """Regenerate distractors for a single PDF-sourced question."""
     denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    denied, _assessment = _require_assessment_owner(quiz_id)
     if denied:
         return denied
 
@@ -995,6 +1038,9 @@ def get_quiz(quiz_id: int):
 @login_required
 def update_quiz_questions(quiz_id: int):
     denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    denied, _assessment = _require_assessment_owner(quiz_id)
     if denied:
         return denied
     body = request.get_json(silent=True) or {}
