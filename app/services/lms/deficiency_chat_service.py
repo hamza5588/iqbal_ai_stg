@@ -309,8 +309,19 @@ def start_session(student_id: int, force_new: bool = False) -> dict:
         attempt = _latest_diagnostic_attempt(student_id, diag_id)
         if attempt:
             analysis = analyze_attempt(attempt.id)
-            if analysis.get("weak_topics"):
-                weak = analysis["weak_topics"]
+            ai_weak = analysis.get("weak_topics") or []
+            if ai_weak:
+                # Use the AI weak areas (they carry question_ids + names for PDF
+                # section matching) but keep only the ones that are STILL weak in
+                # live mastery — so a second Learning Chat session targets what
+                # the student has not practised yet, instead of re-serving the
+                # frozen diagnostic list every time.
+                live_weak_ids = {w.get("topic_id") for w in weak if w.get("topic_id")}
+                if live_weak_ids:
+                    still_weak = [w for w in ai_weak if w.get("topic_id") in live_weak_ids]
+                    weak = still_weak or ai_weak
+                else:
+                    weak = ai_weak
 
     queue = _build_question_queue(weak, target_thread_ids, rag_owner_id)
     if not queue:

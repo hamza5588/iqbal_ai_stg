@@ -175,6 +175,64 @@ def compute_mastery_status(score_percent: float, previous: Optional[float] = Non
     return "needs_practice"
 
 
+# Keep blended sample_size bounded so later evidence still moves the score.
+_MAX_BLEND_SAMPLE = 20
+
+
+def _upsert_topic_score(
+    db,
+    student_id: int,
+    topic_id: int,
+    pct: float,
+    sample_size: int,
+    now: datetime,
+    *,
+    blend: bool,
+) -> None:
+    """Write one StudentTopicScore.
+
+    blend=False  -> replace (a fresh diagnostic/quiz is the new source of truth)
+    blend=True   -> weighted-average into the existing score (Learning Chat
+                    practice must *nudge* mastery, not let 2 easy practice
+                    questions wipe out a 7-question diagnostic result).
+    """
+    if not topic_id or sample_size <= 0:
+        return
+    row = (
+        db.query(StudentTopicScore)
+        .filter(
+            StudentTopicScore.student_id == student_id,
+            StudentTopicScore.topic_id == topic_id,
+        )
+        .first()
+    )
+    prev = row.score_percent if row else None
+    if row and blend and prev is not None:
+        prev_ss = row.sample_size or 1
+        combined_ss = prev_ss + sample_size
+        pct = (prev * prev_ss + pct * sample_size) / combined_ss
+        new_ss = min(combined_ss, _MAX_BLEND_SAMPLE)
+    else:
+        new_ss = sample_size
+    status = compute_mastery_status(pct, prev)
+    if row:
+        row.score_percent = pct
+        row.sample_size = new_ss
+        row.mastery_status = status
+        row.last_assessed_at = now
+    else:
+        db.add(
+            StudentTopicScore(
+                student_id=student_id,
+                topic_id=topic_id,
+                score_percent=pct,
+                sample_size=new_ss,
+                mastery_status=status,
+                last_assessed_at=now,
+            )
+        )
+
+
 def update_topic_scores_from_deficiency_session(session_id: int) -> None:
     """
     Feed a completed Learning Chat (deficiency practice) session's results into
@@ -216,33 +274,72 @@ def update_topic_scores_from_deficiency_session(session_id: int) -> None:
     now = datetime.utcnow()
     for topic_id, stats in by_topic.items():
         pct = 100.0 * stats["correct"] / stats["total"] if stats["total"] else 0.0
-        row = (
-            db.query(StudentTopicScore)
-            .filter(
-                StudentTopicScore.student_id == session.student_id,
-                StudentTopicScore.topic_id == topic_id,
-            )
-            .first()
+        _upsert_topic_score(
+            db, session.student_id, topic_id, pct, stats["total"], now, blend=True
         )
-        prev = row.score_percent if row else None
-        status = compute_mastery_status(pct, prev)
-        if row:
-            row.score_percent = pct
-            row.sample_size = stats["total"]
-            row.mastery_status = status
-            row.last_assessed_at = now
-        else:
-            db.add(
-                StudentTopicScore(
-                    student_id=session.student_id,
-                    topic_id=topic_id,
-                    score_percent=pct,
-                    sample_size=stats["total"],
-                    mastery_status=status,
-                    last_assessed_at=now,
-                )
-            )
     db.commit()
+
+
+def _topic_buckets_from_diagnostic_analysis(attempt, assessment) -> Optional[dict[int, dict]]:
+    """Per-topic correct/total from the SAME AI grouping the student sees on the
+    results screen (weakness_analyzer). Returns None when no usable grouping
+    exists, so the caller can fall back to per-question resolution.
+
+    Fixes: a 40% diagnostic showing 0% "Overall Progress" because the old
+    per-question fuzzy text→topic match resolved only a handful of (all-wrong)
+    questions. The AI grouping already covers every question and matches the
+    displayed weak/strong areas.
+    """
+    from app.services.lms.weakness_analyzer import analyze_diagnostic_attempt
+
+    try:
+        analysis = analyze_diagnostic_attempt(attempt.id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("diagnostic analysis for topic scores failed (%s): %s", attempt.id, exc)
+        return None
+
+    areas = analysis.get("all_topics") or (
+        (analysis.get("weak_topics") or []) + (analysis.get("strong_topics") or [])
+    )
+    if not areas:
+        return None
+
+    db = get_db()
+    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
+    correct_by_q = {a.question_id: bool(a.is_correct) for a in answers}
+
+    buckets: dict[int, dict] = {}
+    for area in areas:
+        tid = area.get("topic_id")
+        if not tid:
+            continue
+        graded = [qid for qid in (area.get("question_ids") or []) if qid in correct_by_q]
+        if not graded:
+            continue
+        bucket = buckets.setdefault(tid, {"correct": 0, "total": 0})
+        bucket["total"] += len(graded)
+        bucket["correct"] += sum(1 for qid in graded if correct_by_q[qid])
+    return buckets or None
+
+
+def _topic_buckets_from_question_resolution(attempt, assessment) -> dict[int, dict]:
+    db = get_db()
+    q_ids = [aq.question_id for aq in assessment.questions]
+    questions = db.query(Question).filter(Question.id.in_(q_ids)).all()
+    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
+    ans_map = {a.question_id: a for a in answers}
+
+    buckets: dict[int, dict] = {}
+    for q in questions:
+        topic_id = _resolve_question_topic_id(q, assessment)
+        if not topic_id:
+            continue
+        bucket = buckets.setdefault(topic_id, {"correct": 0, "total": 0})
+        bucket["total"] += 1
+        ans = ans_map.get(q.id)
+        if ans and ans.is_correct:
+            bucket["correct"] += 1
+    return buckets
 
 
 def update_topic_scores_from_attempt(attempt_id: int) -> None:
@@ -252,55 +349,23 @@ def update_topic_scores_from_attempt(attempt_id: int) -> None:
         return
 
     assessment = get_assessment(attempt.assessment_id)
-    if assessment.assessment_type == "diagnostic":
+    is_diagnostic = assessment.assessment_type == "diagnostic"
+    if is_diagnostic:
         repair_diagnostic_topic_meta(assessment)
         assessment = get_assessment(attempt.assessment_id)
 
-    q_ids = [aq.question_id for aq in assessment.questions]
-    questions = db.query(Question).filter(Question.id.in_(q_ids)).all()
-    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
-    ans_map = {a.question_id: a for a in answers}
-
-    by_topic: dict[int, dict] = {}
-    for q in questions:
-        topic_id = _resolve_question_topic_id(q, assessment)
-        if not topic_id:
-            continue
-        bucket = by_topic.setdefault(topic_id, {"correct": 0, "total": 0})
-        bucket["total"] += 1
-        ans = ans_map.get(q.id)
-        if ans and ans.is_correct:
-            bucket["correct"] += 1
+    by_topic: Optional[dict[int, dict]] = None
+    if is_diagnostic and not getattr(attempt, "timed_out", False):
+        by_topic = _topic_buckets_from_diagnostic_analysis(attempt, assessment)
+    if by_topic is None:
+        by_topic = _topic_buckets_from_question_resolution(attempt, assessment)
 
     now = datetime.utcnow()
     for topic_id, stats in by_topic.items():
         pct = 100.0 * stats["correct"] / stats["total"] if stats["total"] else 0.0
-        row = (
-            db.query(StudentTopicScore)
-            .filter(
-                StudentTopicScore.student_id == attempt.student_id,
-                StudentTopicScore.topic_id == topic_id,
-            )
-            .first()
+        _upsert_topic_score(
+            db, attempt.student_id, topic_id, pct, stats["total"], now, blend=False
         )
-        prev = row.score_percent if row else None
-        status = compute_mastery_status(pct, prev)
-        if row:
-            row.score_percent = pct
-            row.sample_size = stats["total"]
-            row.mastery_status = status
-            row.last_assessed_at = now
-        else:
-            db.add(
-                StudentTopicScore(
-                    student_id=attempt.student_id,
-                    topic_id=topic_id,
-                    score_percent=pct,
-                    sample_size=stats["total"],
-                    mastery_status=status,
-                    last_assessed_at=now,
-                )
-            )
     db.commit()
 
 
@@ -413,15 +478,25 @@ def get_diagnostic_weak_topics(student_id: int, assessment_id: Optional[int] = N
 
 
 def get_weak_topics_for_student(student_id: int) -> List[dict]:
-    weak = get_diagnostic_weak_topics(student_id)
-    if weak:
-        return weak
+    """Weak topics that drive the learning path and the Learning Chat queue.
+
+    Prefer LIVE mastery (StudentTopicScore) over the frozen diagnostic AI
+    snapshot: once a student practises a topic in Learning Chat, that topic
+    must be able to drop off here — otherwise the learning path keeps
+    regenerating an identical "practice weak areas" step forever and Weak
+    Topics never clears. Falls back to the diagnostic snapshot only for a
+    brand-new student with no live mastery rows yet. (Mirrors the same
+    live-first rule already used by student_profile_service.get_student_dashboard.)
+    """
     rows = get_student_mastery(student_id)
-    return [
-        r
-        for r in rows
-        if r.get("mastery_status") == "weak" or r.get("score_percent", 100) < WEAK_THRESHOLD
-    ]
+    if rows:
+        return [
+            r
+            for r in rows
+            if r.get("mastery_status") == "weak"
+            or (r.get("score_percent") or 100) < WEAK_THRESHOLD
+        ]
+    return get_diagnostic_weak_topics(student_id)
 
 
 def rebuild_student_mastery(student_id: int) -> None:

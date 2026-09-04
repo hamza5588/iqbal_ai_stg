@@ -24,6 +24,48 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip().lower())
 
 
+_GENERIC_TOKENS = frozenset(
+    {"and", "or", "the", "of", "in", "with", "a", "an", "basic", "general",
+     "concepts", "concept", "operations", "operation", "problems", "problem",
+     "types", "type", "skills", "topics", "topic", "area", "areas", "practice",
+     "math", "mathematics", "fundamentals"}
+)
+
+
+def _content_tokens(name: str) -> set:
+    return {t for t in _normalize(name).split() if t and t not in _GENERIC_TOKENS}
+
+
+def _find_similar_topic(topics, clean: str):
+    """Reuse an existing near-duplicate topic instead of minting synonyms.
+
+    The AI weakness analyser names areas in free text, so the same concept
+    arrives as "Number Sense", "Number Sense Arithmetic", "Number Concepts", …
+    — each previously created a brand-new topic row, scattering one student's
+    mastery (and class analytics) across dozens of synonym topics.
+    """
+    normalized = _normalize(clean)
+    want = _content_tokens(clean)
+    if not want:
+        return None
+    best = None
+    best_score = 0.0
+    for topic in topics:
+        tn = _normalize(topic.name)
+        have = _content_tokens(topic.name)
+        if not have:
+            continue
+        if want == have or want <= have or have <= want:
+            return topic
+        if normalized and (normalized in tn or tn in normalized):
+            return topic
+        jaccard = len(want & have) / len(want | have)
+        if jaccard > best_score:
+            best_score = jaccard
+            best = topic
+    return best if best_score >= 0.6 else None
+
+
 def resolve_topic_id_from_label(label: str) -> Optional[int]:
     """Match a PDF heading or topic label to a curriculum topic."""
     if not label or not label.strip():
@@ -78,6 +120,10 @@ def get_or_create_topic_from_pdf_label(label: str, subject: str = PDF_TOPIC_SUBJ
     for topic in topics:
         if _normalize(topic.name) == normalized:
             return topic
+
+    similar = _find_similar_topic(topics, clean)
+    if similar is not None:
+        return similar
 
     slug_base = slugify_label(clean)
     slug = slug_base

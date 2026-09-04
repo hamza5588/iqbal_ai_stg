@@ -101,7 +101,11 @@ def test_updates_existing_score_not_just_creates_new(db_session):
     second, ignored row - StudentTopicScore is unique on (student_id, topic_id)."""
     from app.services.lms import performance_service
 
-    db_session.add(StudentTopicScore(student_id=7, topic_id=1, score_percent=0.0, mastery_status="weak"))
+    db_session.add(
+        StudentTopicScore(
+            student_id=7, topic_id=1, score_percent=0.0, sample_size=1, mastery_status="weak"
+        )
+    )
     db_session.commit()
 
     questions = [{"topic_id": 1, "answered": True, "correct": True} for _ in range(5)]
@@ -111,8 +115,70 @@ def test_updates_existing_score_not_just_creates_new(db_session):
 
     rows = db_session.query(StudentTopicScore).filter_by(student_id=7, topic_id=1).all()
     assert len(rows) == 1  # updated in place, not duplicated
-    assert rows[0].score_percent == 100.0
-    assert rows[0].mastery_status == "mastered"
+    # Blended, not overwritten: (0*1 + 100*5) / (1+5) = 83.33
+    assert rows[0].score_percent == pytest.approx(500.0 / 6, abs=0.01)
+    assert rows[0].sample_size == 6
+
+
+def test_practice_blends_into_diagnostic_result_not_overwrites(db_session):
+    """Finding #3: a topic scored 0/7 on the diagnostic must NOT jump to
+    'mastered 100%' because the student answered 2 easy generated practice
+    questions. Practice nudges the score, weighted by how much evidence
+    each side carries."""
+    from app.services.lms import performance_service
+
+    db_session.add(
+        StudentTopicScore(
+            student_id=8, topic_id=5, score_percent=0.0, sample_size=7, mastery_status="weak"
+        )
+    )
+    db_session.commit()
+
+    questions = [{"topic_id": 5, "answered": True, "correct": True} for _ in range(2)]
+    _make_session(db_session, questions, student_id=8, session_id=4)
+
+    performance_service.update_topic_scores_from_deficiency_session(4)
+
+    row = db_session.query(StudentTopicScore).filter_by(student_id=8, topic_id=5).first()
+    # (0*7 + 100*2) / 9 = 22.2 - still weak, not mastered
+    assert row.score_percent == pytest.approx(200.0 / 9, abs=0.01)
+    assert row.mastery_status == "weak"
+    assert row.sample_size == 9
+
+
+def test_get_weak_topics_for_student_prefers_live_mastery(db_session, monkeypatch):
+    """Findings #4/#5: once live mastery exists, the learning-path / Learning
+    Chat weak list must come from it - not the frozen diagnostic AI snapshot
+    (which never changes when the student practises)."""
+    from app.services.lms import performance_service
+
+    called = {"diag": False}
+
+    def _fake_diag(student_id, assessment_id=None):
+        called["diag"] = True
+        return [{"topic_id": 999, "topic_name": "Frozen Snapshot Topic", "score_percent": 0.0}]
+
+    monkeypatch.setattr(performance_service, "get_diagnostic_weak_topics", _fake_diag)
+    monkeypatch.setattr(
+        performance_service,
+        "_topic_display_name",
+        lambda tid, fallback="Topic": {5: "Geometry", 6: "Algebra"}.get(tid, fallback),
+    )
+
+    db_session.add_all([
+        StudentTopicScore(student_id=11, topic_id=5, score_percent=20.0, sample_size=6, mastery_status="weak"),
+        StudentTopicScore(student_id=11, topic_id=6, score_percent=90.0, sample_size=5, mastery_status="mastered"),
+    ])
+    db_session.commit()
+
+    weak = performance_service.get_weak_topics_for_student(11)
+    assert not called["diag"], "must not fall back to the frozen diagnostic snapshot"
+    assert [w["topic_id"] for w in weak] == [5]
+
+    # brand-new student with no live rows -> falls back to the diagnostic snapshot
+    weak_new = performance_service.get_weak_topics_for_student(12345)
+    assert called["diag"]
+    assert weak_new and weak_new[0]["topic_id"] == 999
 
 
 def test_missing_session_is_a_noop(db_session):

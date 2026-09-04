@@ -28,6 +28,10 @@ class WeakAreaItem(BaseModel):
 
 
 class DiagnosticWeaknessResult(BaseModel):
+    all_areas: List[WeakAreaItem] = Field(
+        default_factory=list,
+        description="EVERY learning area, each question_id in exactly one area (full coverage)",
+    )
     weak_areas: List[WeakAreaItem] = Field(default_factory=list)
     strong_areas: List[WeakAreaItem] = Field(default_factory=list)
 
@@ -41,9 +45,10 @@ Rules for area names:
 - NEVER use PDF headings, document titles, section headers, or technical report names.
 - NEVER use ALL CAPS titles or phrases like "IMPLEMENTATION REPORT", "FIXES MERGED", "PRS AWAITING".
 - score_percent = round(100 * correct / total) for questions in that area.
-- weak_areas: areas where score_percent < 60
-- strong_areas: areas where score_percent >= 80
-- Each question_id must appear in exactly one area.
+- all_areas: EVERY area you identify, each question_id in exactly one area, so all_areas together cover 100% of the questions.
+- weak_areas: the subset of all_areas where score_percent < 60
+- strong_areas: the subset of all_areas where score_percent >= 80
+- The same area object may appear in all_areas and (weak_areas or strong_areas).
 
 Diagnostic title: {title}
 
@@ -213,9 +218,22 @@ def _group_by_stored_concept(
         elif pct >= _STRONG_THRESHOLD:
             strong.append(entry)
 
+    all_topics = []
+    for name, stats in groups.items():
+        pct = round(100.0 * stats["correct"] / stats["total"], 2) if stats["total"] else 0.0
+        topic = get_or_create_topic_from_pdf_label(name)
+        all_topics.append(
+            {
+                "topic_id": topic.id if topic else 0,
+                "topic_name": name,
+                "score_percent": pct,
+                "question_ids": stats["question_ids"],
+            }
+        )
+
     weak.sort(key=lambda x: x["score_percent"])
     strong.sort(key=lambda x: x["score_percent"], reverse=True)
-    return {"weak_topics": weak, "strong_topics": strong}
+    return {"weak_topics": weak, "strong_topics": strong, "all_topics": all_topics}
 
 
 def _ai_analyze_weakness(
@@ -253,9 +271,19 @@ def _ai_analyze_weakness(
             )
         return entries
 
+    all_entries = _to_entries(result.all_areas)
+    weak_entries = _to_entries(result.weak_areas)
+    strong_entries = _to_entries(result.strong_areas)
+    if not all_entries:
+        # Older/looser model output: reconstruct full coverage from weak+strong.
+        seen: dict[str, dict] = {}
+        for e in weak_entries + strong_entries:
+            seen.setdefault(e["topic_name"], e)
+        all_entries = list(seen.values())
     return {
-        "weak_topics": _to_entries(result.weak_areas),
-        "strong_topics": _to_entries(result.strong_areas),
+        "weak_topics": weak_entries,
+        "strong_topics": strong_entries,
+        "all_topics": all_entries,
     }
 
 
@@ -272,13 +300,24 @@ def _cache_looks_invalid(cached: dict) -> bool:
     return bad >= max(2, len(all_entries) // 2)
 
 
+def _backfill_all_topics(cached: dict) -> dict:
+    """Give pre-existing caches an ``all_topics`` list without re-running the LLM."""
+    if cached.get("all_topics"):
+        return cached
+    seen: dict[str, dict] = {}
+    for e in (cached.get("weak_topics") or []) + (cached.get("strong_topics") or []):
+        seen.setdefault(e.get("topic_name") or "", e)
+    cached["all_topics"] = list(seen.values())
+    return cached
+
+
 def _get_cached(assessment, attempt_id: int) -> Optional[dict]:
     meta = _parse_assessment_meta(assessment)
     cached = (meta.get("weakness_cache") or {}).get(str(attempt_id))
     if cached and isinstance(cached, dict):
         if _cache_looks_invalid(cached):
             return None
-        return cached
+        return _backfill_all_topics(cached)
     return None
 
 
@@ -297,7 +336,7 @@ def analyze_diagnostic_attempt(attempt_id: int, use_cache: bool = True) -> dict:
     db = get_db()
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
-        return {"weak_topics": [], "strong_topics": []}
+        return {"weak_topics": [], "strong_topics": [], "all_topics": []}
 
     assessment = get_assessment(attempt.assessment_id)
     if use_cache:
@@ -323,6 +362,6 @@ def analyze_diagnostic_attempt(attempt_id: int, use_cache: bool = True) -> dict:
             _set_cache(assessment, attempt_id, ai_result)
             return ai_result
 
-    result = {"weak_topics": [], "strong_topics": []}
+    result = {"weak_topics": [], "strong_topics": [], "all_topics": []}
     _set_cache(assessment, attempt_id, result)
     return result
