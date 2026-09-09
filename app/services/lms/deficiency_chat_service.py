@@ -845,12 +845,19 @@ def explain_with_tutor(
     tutor_state = _load_tutor_state(session)
     assist_level = min(max(int(tutor_state.get("assist_level") or 1), 1), 5)
     history = tutor_state.get("messages") or []
+    prior_turns = sum(1 for m in history if m.get("role") == "assistant")
+
+    from app.services.lms import class_service
+
+    grade_level = class_service.get_student_grade(student_id)
 
     context = tutor_service.build_deficiency_context(
         weak_topics_json=session.weak_topics_json,
         current_question=current_q,
         pdf_excerpt=pdf_excerpt,
         assist_level=assist_level,
+        grade_level=grade_level,
+        prior_turns=prior_turns,
     )
     reply = tutor_service.tutor_chat(
         message,

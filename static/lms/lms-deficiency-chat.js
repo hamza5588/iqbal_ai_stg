@@ -67,22 +67,72 @@
       '</div></div>';
   }
 
+  var TUTOR_SUGGESTED_PROMPTS = [
+    'Explain this in simpler words',
+    'Break it into small steps',
+    'Give me a hint',
+    'Show me an example',
+    'I still don\'t understand'
+  ];
+
   function renderTutorMessages() {
-    var html = defState.tutorHistory.map(function (m) {
+    var html = defState.tutorHistory.map(function (m, i) {
       var role = m.role === 'user' ? 'user' : 'bot';
       var levelTag = m.levelLabel
         ? '<div class="lms-status" style="font-size:.7rem;margin:0 0 4px;">' + escapeHtml(m.levelLabel) + '</div>'
         : '';
+      var extra = '';
+      if (role === 'bot' && m.retry) {
+        extra = '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:8px;" onclick="retryDeficiencyTutorMessage()">Try again</button>';
+      } else if (role === 'bot') {
+        extra = '<button type="button" class="lms-copy-btn" title="Copy" onclick="lmsCopyTutorMessage(' + i + ',this)">Copy</button>';
+      }
       return '<div class="lms-chat-msg ' + role + '">' +
         '<div class="lms-chat-avatar">' + (role === 'user' ? 'You' : 'AI') + '</div>' +
         '<div class="lms-chat-bubble">' + levelTag +
-        (role === 'user' ? escapeHtml(m.text) : fmtText(m.text || '')) + '</div></div>';
+        (role === 'user' ? escapeHtml(m.text) : fmtText(m.text || '')) + extra + '</div></div>';
     }).join('');
     if (defState.tutorLoading) {
       html += renderTypingIndicator();
     }
     return html;
   }
+
+  function renderTutorSuggestedPrompts() {
+    if (defState.tutorLoading) return '';
+    return '<div class="lms-prompt-chips">' +
+      TUTOR_SUGGESTED_PROMPTS.map(function (p) {
+        return '<button type="button" class="lms-prompt-chip" onclick="sendDeficiencySuggestedPrompt(' +
+          JSON.stringify(p).replace(/"/g, '&quot;') + ')">' + escapeHtml(p) + '</button>';
+      }).join('') + '</div>';
+  }
+
+  window.lmsCopyTutorMessage = function (idx, btn) {
+    var m = defState.tutorHistory[idx];
+    if (!m) return;
+    var text = String(m.text || '');
+    var done = function () {
+      if (!btn) return;
+      var prev = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = prev; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { done(); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta); done();
+    }
+  };
+
+  window.sendDeficiencySuggestedPrompt = function (text) {
+    if (defState.tutorLoading) return;
+    var input = document.getElementById('lmsDeficiencyTutorInput');
+    if (input) input.value = text;
+    sendDeficiencyTutorMessage();
+  };
 
   function bindDeficiencyTutorInput() {
     var input = document.getElementById('lmsDeficiencyTutorInput');
@@ -145,13 +195,14 @@
         '<div id="lmsDeficiencyTutorMessages" class="lms-chat-messages">' +
         (renderTutorMessages() || '<p class="lms-status">Ask a question — the tutor guides you step by step using your teacher\'s PDF.</p>') +
         '</div>' +
+        renderTutorSuggestedPrompts() +
         '<div class="lms-chat-input-row">' +
         '<textarea id="lmsDeficiencyTutorInput" class="lms-textarea" rows="2" placeholder="I\'m stuck on this step... (Enter to send)"' +
         (defState.tutorLoading ? ' disabled' : '') + '></textarea>' +
         '<button type="button" id="lmsDeficiencyTutorSend" class="lms-btn lms-btn-secondary"' + sendDisabled +
         ' onclick="sendDeficiencyTutorMessage()">Send</button></div>' +
         '<p class="lms-status" style="font-size:.7rem;margin:6px 0 0;">Press Enter to send · Shift+Enter for new line</p>' +
-        '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:8px;" onclick="requestDeficiencyMoreHelp"' +
+        '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:8px;" onclick="requestDeficiencyMoreHelp()"' +
         (defState.tutorLoading ? ' disabled' : '') + '>Need more help</button>'
       : '';
 
@@ -327,6 +378,7 @@
     defState.tutorHistory.push({ role: 'user', text: msg });
     if (input) input.value = '';
     defState.tutorLoading = true;
+    defState._lastTutorMsg = msg;
     renderDeficiencyView(window._lmsDeficiencyLastState);
     scrollDeficiencyChatToBottom();
     try {
@@ -335,22 +387,50 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg })
       });
+      var reply = data.reply || 'No response';
+      // The server never throws for an LLM hiccup - it returns the text
+      // "Tutor error: ..." / "Tutor unavailable: ...". Treat that as a
+      // retryable failure, not a normal tutor turn.
+      if (/^Tutor (error|unavailable)[:\s]/i.test(reply)) {
+        throw new Error(reply);
+      }
       defState.tutorHistory.push({
         role: 'bot',
-        text: data.reply || 'No response',
+        text: reply,
         levelLabel: data.assist_level_label || ''
       });
+      defState._lastTutorMsg = null;
       if (window._lmsDeficiencyLastState) {
         window._lmsDeficiencyLastState.tutor_assist_level = data.next_assist_level;
         window._lmsDeficiencyLastState.tutor_assist_label = data.next_assist_level_label;
       }
     } catch (err) {
-      defState.tutorHistory.push({ role: 'bot', text: 'Error: ' + err.message });
+      // Drop the unanswered question from history and let them retry with
+      // one tap - don't leave a dead "Error:" bubble that never recovers.
+      if (defState.tutorHistory.length && defState.tutorHistory[defState.tutorHistory.length - 1].role === 'user') {
+        defState.tutorHistory.pop();
+      }
+      defState.tutorHistory.push({
+        role: 'bot',
+        text: 'The tutor didn\'t answer that time. Tap **Try again** below.',
+        retry: true
+      });
     } finally {
       defState.tutorLoading = false;
       renderDeficiencyView(window._lmsDeficiencyLastState);
       scrollDeficiencyChatToBottom();
     }
+  };
+
+  window.retryDeficiencyTutorMessage = function () {
+    if (defState.tutorLoading || !defState._lastTutorMsg) return;
+    // remove the retry notice
+    if (defState.tutorHistory.length && defState.tutorHistory[defState.tutorHistory.length - 1].retry) {
+      defState.tutorHistory.pop();
+    }
+    var input = document.getElementById('lmsDeficiencyTutorInput');
+    if (input) input.value = defState._lastTutorMsg;
+    sendDeficiencyTutorMessage();
   };
 
   window.pauseDeficiencyChat = async function () {

@@ -27,7 +27,25 @@ DEFICIENCY_TUTOR_PROMPT = """You are a supportive tutor helping a student practi
 - Use the teacher's target PDF content when explaining.
 - Be encouraging, clear, and concise — same friendly tone as the main IqbalAI tutor.
 - NEVER give the final MCQ letter answer or full solution on early assistance levels.
-- Follow the ASSISTANCE LEVEL instruction exactly for this turn."""
+- Follow the ASSISTANCE LEVEL instruction exactly for this turn.
+- Follow the READING LEVEL rules below in every reply."""
+
+# Keep tutor replies readable for a struggling student at their grade.
+_READING_LEVEL_RULES = (
+    "READING LEVEL RULES:\n"
+    "- Write for a student in {grade} who is finding this hard.\n"
+    "- Use simple, everyday words. If a hard word is unavoidable, say what it means.\n"
+    "- Short sentences — about 12 words or fewer. One idea per sentence.\n"
+    "- Explain step by step. Put each step on its own line, numbered 1., 2., 3.\n"
+    "- Give one small concrete example the student can picture.\n"
+    "- Keep the whole reply short: 4–8 short lines."
+)
+
+_NO_REPEAT_RULE = (
+    "The student has already seen your earlier explanation and still does not "
+    "get it. Do NOT repeat your previous wording. Explain it a DIFFERENT way: "
+    "simpler words, smaller steps, a fresh example or analogy."
+)
 
 DEFICIENCY_ASSISTANCE_LEVELS = {
     1: {
@@ -87,6 +105,13 @@ def build_student_context(
     mastery = get_student_mastery(student_id)
     weak = [m for m in mastery if m.get("mastery_status") == "weak"]
     parts = [f"Weak topics: {len(weak)}", f"Prior attempts on this item: {attempt_count}"]
+    try:
+        from app.services.lms import class_service
+
+        grade = class_service.get_student_grade(student_id)
+    except Exception:
+        grade = None
+    parts.append(_READING_LEVEL_RULES.format(grade=f"grade {grade}" if grade else "this student's grade"))
     if topic_id:
         parts.append(f"Current topic_id: {topic_id}")
     if question_text:
@@ -109,9 +134,15 @@ def build_deficiency_context(
     current_question: Optional[dict] = None,
     pdf_excerpt: Optional[str] = None,
     assist_level: int = 1,
+    grade_level: Optional[str] = None,
+    prior_turns: int = 0,
 ) -> str:
     parts = []
+    grade_label = f"grade {grade_level}" if grade_level else "this student's grade"
+    parts.append(_READING_LEVEL_RULES.format(grade=grade_label))
     parts.append(get_deficiency_assist_instruction(assist_level))
+    if prior_turns > 0:
+        parts.append(_NO_REPEAT_RULE)
     if weak_topics_json:
         parts.append(f"Weak areas (from diagnostic): {weak_topics_json[:800]}")
     if current_question:
@@ -151,25 +182,40 @@ def tutor_chat(
     if context:
         system += f"\n\nContext:\n{context}"
 
-    if api_key == "__admin__":
-        from app.utils.llm_factory import get_chat_model
-        llm = get_chat_model(temperature=0.4, max_tokens=1024)
-    else:
-        llm = create_llm(api_key=api_key)
     messages: List[Any] = [{"role": "system", "content": system}]
     for h in history or []:
         messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
     messages.append({"role": "user", "content": message})
 
-    try:
+    def _platform_llm():
+        from app.utils.llm_factory import get_chat_model
+
+        return get_chat_model(temperature=0.4, max_tokens=1024)
+
+    def _run(llm) -> str:
         resp = invoke_with_groq_rate_limit(
             lambda: llm.invoke(messages),
             description=f"lms tutor chat ({mode})",
         )
         content = getattr(resp, "content", str(resp))
         return content if isinstance(content, str) else str(content)
-    except Exception as e:
-        return f"Tutor error: {e}"
+
+    # A student's saved Groq key can be stale or invalid mid-session (the
+    # "Ask a Tutor stopped working until I logged out and back in" report).
+    # Always fall back to the platform model instead of surfacing an error.
+    if api_key == "__admin__":
+        try:
+            return _run(_platform_llm())
+        except Exception as e:  # noqa: BLE001
+            return f"Tutor error: {e}"
+
+    try:
+        return _run(create_llm(api_key=api_key))
+    except Exception:
+        try:
+            return _run(_platform_llm())
+        except Exception as e:  # noqa: BLE001
+            return f"Tutor error: {e}"
 
 
 def get_hint(level: int = 0, question_text: Optional[str] = None) -> str:

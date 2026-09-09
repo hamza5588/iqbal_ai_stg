@@ -314,6 +314,42 @@
   display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;
 }
 .lms-chat-msg.user .lms-chat-avatar { background: var(--lms-green); color: #fff; }
+
+/* Copy button on tutor replies */
+.lms-copy-btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--lms-border);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--lms-green);
+  cursor: pointer;
+}
+.lms-copy-btn:hover { background: var(--lms-green-muted); border-color: var(--lms-green); }
+
+/* Suggested prompt chips */
+.lms-prompt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.lms-prompt-chip {
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  border: 1px solid var(--lms-green);
+  border-radius: 9999px;
+  background: var(--lms-green-muted);
+  color: var(--lms-green);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.lms-prompt-chip:hover { background: var(--lms-green-light); }
 .lms-math-content {
   overflow-wrap: break-word;
   word-break: normal;
