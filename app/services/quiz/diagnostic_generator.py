@@ -19,12 +19,14 @@ _MAX_CONTEXT_CHARS = 6000
 _CONTENT_MCQ_PROMPT = """Generate {count} multiple-choice diagnostic question(s) based ONLY on the educational content below.
 
 Topic / section: {topic}
-
+{level_line}
 Content:
 {content}
 
 Rules:
 - Each question must have exactly 4 unique options labeled A, B, C, D.
+- Pitch every question at the target difficulty and grade level above. Do NOT
+  drift easier or harder, and do NOT use skills from a higher grade.
 - One clearly correct answer per question grounded in the content.
 - Distractors should reflect common student mistakes.
 - Option text must be the FULL choice, never only "A"/"B"/"C"/"D".
@@ -88,10 +90,21 @@ def get_section_text(
     return combined
 
 
+def _level_line(difficulty: Optional[str], grade_level: Optional[str]) -> str:
+    parts = []
+    if grade_level:
+        parts.append(f"Grade level: {grade_level}")
+    if difficulty:
+        parts.append(f"Target difficulty: {difficulty}")
+    return ("\n".join(parts) + "\n") if parts else ""
+
+
 def generate_mcqs_from_content(
     content: str,
     topic: str,
     count: int,
+    difficulty: Optional[str] = None,
+    grade_level: Optional[str] = None,
 ) -> List[MCQQuestion]:
     """Generate validated MCQs from PDF section text using structured LLM output."""
     if not content.strip():
@@ -104,12 +117,14 @@ def generate_mcqs_from_content(
     llm = get_chat_model(temperature=0.4, max_tokens=4096)
     structured = llm.with_structured_output(MCQBatchResult)
     retry_hint = ""
+    level_line = _level_line(difficulty, grade_level)
 
     def _invoke() -> MCQBatchResult:
         prompt = _CONTENT_MCQ_PROMPT.format(
             count=count,
             topic=topic,
             content=content,
+            level_line=level_line,
             retry_hint=retry_hint,
         )
         batch: MCQBatchResult = invoke_with_groq_rate_limit(

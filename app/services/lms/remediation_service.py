@@ -106,6 +106,10 @@ def get_or_create_remediation_quiz(
     diff = difficulty or suggest_difficulty(score_percent)
     exclude = _exclude_texts_for_student(student_id, topic_id)
 
+    from app.services.lms import class_service
+
+    grade_level = class_service.get_student_grade(student_id) or topic.grade_level
+
     try:
         mcqs = generate_remediation_mcqs(
             topic_name=topic.name,
@@ -115,6 +119,7 @@ def get_or_create_remediation_quiz(
             difficulty=diff,
             purpose=purpose,
             exclude_question_texts=exclude,
+            grade_level=grade_level,
         )
     except Exception as exc:
         logger.warning("remediation MCQ generation failed for topic %s: %s", topic_id, exc)

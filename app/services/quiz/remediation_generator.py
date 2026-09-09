@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.services.quiz.models import MCQBatchResult, MCQQuestion
 from app.services.quiz.retry_utils import format_validation_errors, retry_on_validation_error
+from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
 from app.utils.llm_factory import get_chat_model
 
 logger = logging.getLogger(__name__)
@@ -16,12 +17,15 @@ _REMEDIATION_PROMPT = """Generate {count} NEW practice multiple-choice question(
 
 Curriculum topic: {topic_name}
 Topic description: {topic_description}
+Grade level: {grade_level}
 Student recent score on this topic: {score_percent}%
 Target difficulty: {difficulty}
 Practice focus: {purpose_label}
 
 Rules:
 - These are PRACTICE questions — NOT the same style as a broad diagnostic screener.
+- Stay on the grade level above: use only skills a student at that grade is
+  taught. Never pull in a concept from a higher grade.
 - Focus on the specific skills and common mistakes for this topic at the given difficulty.
 - Do NOT copy or lightly rephrase any question listed under "Already used (avoid repeating)".
 - Each question must have exactly 4 unique options (A, B, C, D) and one clearly correct answer.
@@ -42,6 +46,7 @@ def generate_remediation_mcqs(
     difficulty: str = "medium",
     purpose: str = "practice",
     exclude_question_texts: Optional[List[str]] = None,
+    grade_level: Optional[str] = None,
 ) -> List[MCQQuestion]:
     """Generate topic-targeted practice MCQs distinct from diagnostic items."""
     if count < 1:
@@ -54,11 +59,10 @@ def generate_remediation_mcqs(
         if exclude
         else "(none — still create original practice questions)"
     )
-    purpose_label = (
-        "Quick reassessment after practice"
-        if purpose == "reassessment"
-        else "Guided practice on weak areas"
-    )
+    purpose_label = {
+        "reassessment": "Quick reassessment after practice",
+        "enrichment": "Enrichment / challenge for a student with no weak areas",
+    }.get(purpose, "Guided practice on weak areas")
 
     llm = get_chat_model(temperature=0.55, max_tokens=4096)
     structured = llm.with_structured_output(MCQBatchResult)
@@ -69,13 +73,17 @@ def generate_remediation_mcqs(
             count=count,
             topic_name=topic_name,
             topic_description=topic_description or topic_name,
+            grade_level=grade_level or "not specified",
             score_percent=round(score_percent, 1),
             difficulty=difficulty,
             purpose_label=purpose_label,
             exclude_block=exclude_block,
             retry_hint=retry_hint,
         )
-        batch: MCQBatchResult = structured.invoke(prompt)
+        batch: MCQBatchResult = invoke_with_groq_rate_limit(
+            lambda: structured.invoke(prompt),
+            description=f"remediation MCQ gen ({topic_name})",
+        )
         if not batch.questions:
             raise ValidationError.from_exception_data(
                 "MCQBatchResult",
