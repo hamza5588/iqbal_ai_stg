@@ -1009,6 +1009,41 @@ def publish_diagnostic(assessment_id: int):
         return json_error(str(e), code="not_found", status=404)
 
 
+@bp.route("/diagnostics/<int:assessment_id>/variants", methods=["GET", "POST"])
+@login_required
+def diagnostic_variants(assessment_id: int):
+    """Admin: view or top up the equivalent-variant pool used for retakes."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import diagnostic_variant_service
+
+    try:
+        if request.method == "GET":
+            pool = diagnostic_variant_service.get_variant_pool(assessment_id)
+            return json_success(
+                {
+                    "assessment_id": assessment_id,
+                    "per_question": {k: len(v) for k, v in pool.items()},
+                    "total_variants": sum(len(v) for v in pool.values()),
+                }
+            )
+        body = request.get_json(silent=True) or {}
+        from app.utils.llm_gateway import llm_workflow
+
+        with llm_workflow("diagnostic_variant_generation", user_id=_current_user_id(), user_role="admin"):
+            result = diagnostic_variant_service.ensure_variant_pool(
+                assessment_id,
+                target_per_question=int(body.get("target_per_question", 2)),
+                max_generate=int(body.get("max_generate", 6)),
+            )
+        return json_success(result)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
 @bp.route("/quizzes", methods=["GET", "POST"])
 @login_required
 def quizzes():

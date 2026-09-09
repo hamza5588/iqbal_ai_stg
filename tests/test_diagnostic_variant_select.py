@@ -12,10 +12,14 @@ def _load():
     # Stub the three app modules diagnostic_variant_service imports so it can
     # load without sqlalchemy / a DB. Only select_and_shuffle is exercised.
     for name in ("app", "app.models", "app.models.lms_models", "app.services",
-                 "app.services.lms", "app.services.lms.assessment_service", "app.utils", "app.utils.db"):
+                 "app.services.lms", "app.services.lms.assessment_service",
+                 "app.services.lms.mcq_utils", "app.utils", "app.utils.db"):
         sys.modules.setdefault(name, types.ModuleType(name))
     sys.modules["app.models.lms_models"].Assessment = object
+    sys.modules["app.models.lms_models"].Question = object
     sys.modules["app.services.lms.assessment_service"].get_assessment = lambda *_a, **_k: None
+    sys.modules["app.services.lms.mcq_utils"].options_from_json = lambda *_a, **_k: []
+    sys.modules["app.services.lms.mcq_utils"].pick_display_fields = lambda *a, **_k: (a[0] if a else "", None)
     sys.modules["app.utils.db"].get_db = lambda: None
     spec = importlib.util.spec_from_file_location("_dvs_under_test", _p)
     mod = importlib.util.module_from_spec(spec)

@@ -79,3 +79,37 @@ def enqueue_deficiency_chat_prewarm(student_id: int) -> None:
         deficiency_chat_service.prewarm_session(student_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Inline Learning Chat prewarm failed for student %s: %s", student_id, exc)
+
+
+@celery.task(
+    bind=True,
+    name="app.tasks.lms_tasks.variant_pool_prewarm_task",
+    queue="default",
+    max_retries=0,
+)
+def variant_pool_prewarm_task(self, assessment_id: int) -> dict:
+    """Top up the diagnostic's equivalent-variant pool a few at a time,
+    off the request thread and under the Groq rate limiter."""
+    from app.services.lms import diagnostic_variant_service
+    from app.utils.llm_gateway import llm_workflow
+
+    try:
+        with llm_workflow("diagnostic_variant_generation", traffic_source="production"):
+            result = diagnostic_variant_service.ensure_variant_pool(assessment_id)
+        return result
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("variant_pool_prewarm_task failed for assessment %s: %s", assessment_id, exc)
+        return {"assessment_id": assessment_id, "generated": 0, "error": str(exc)}
+
+
+def enqueue_variant_pool_prewarm(assessment_id: int) -> None:
+    """Fire-and-forget top-up of the diagnostic variant pool. Never runs
+    inline on a request thread - variant generation is slow and a retake
+    falls back to the original question for any slot without a variant."""
+    if not _celery_async_enabled():
+        logger.debug("Celery async off - skipping variant pool prewarm for %s", assessment_id)
+        return
+    try:
+        variant_pool_prewarm_task.delay(assessment_id=assessment_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not enqueue variant pool prewarm for %s: %s", assessment_id, exc)

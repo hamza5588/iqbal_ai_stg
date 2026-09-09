@@ -323,8 +323,10 @@ def _topic_buckets_from_diagnostic_analysis(attempt, assessment) -> Optional[dic
 
 
 def _topic_buckets_from_question_resolution(attempt, assessment) -> dict[int, dict]:
+    from app.services.lms.attempt_service import attempt_question_ids
+
     db = get_db()
-    q_ids = [aq.question_id for aq in assessment.questions]
+    q_ids = attempt_question_ids(attempt)
     questions = db.query(Question).filter(Question.id.in_(q_ids)).all()
     answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
     ans_map = {a.question_id: a for a in answers}
@@ -425,7 +427,9 @@ def analyze_attempt(attempt_id: int) -> dict:
 
         return analyze_diagnostic_attempt(attempt_id)
 
-    q_ids = [aq.question_id for aq in assessment.questions]
+    from app.services.lms.attempt_service import attempt_question_ids
+
+    q_ids = attempt_question_ids(attempt)
     questions = db.query(Question).filter(Question.id.in_(q_ids)).all()
     answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
     ans_map = {a.question_id: a for a in answers}

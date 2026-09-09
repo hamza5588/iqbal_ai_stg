@@ -18,13 +18,17 @@ from __future__ import annotations
 import json
 import logging
 import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-from app.models.lms_models import Assessment
+from app.models.lms_models import Assessment, Question
 from app.services.lms.assessment_service import get_assessment
+from app.services.lms.mcq_utils import options_from_json, pick_display_fields
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
+
+VARIANT_SOURCE_TYPE = "ai_variant"
+TARGET_VARIANTS_PER_QUESTION = 2
 
 
 def _parse_meta(assessment: Assessment) -> dict:
@@ -89,15 +93,167 @@ def question_set_for_attempt(assessment_id: int, attempt_number: int) -> List[in
 # --- pool building (7b wires the LLM into _generate_variants) --------------
 
 def enqueue_pool_prewarm(assessment_id: int) -> None:
-    """Best-effort background build of the variant pool. 7a: no-op
-    placeholder; 7b enqueues a Celery task that calls ensure_variant_pool."""
-    logger.debug("variant pool prewarm requested for assessment %s", assessment_id)
+    """Best-effort background build of the variant pool - a retake never
+    waits on it (it just falls back to the original for unfilled slots)."""
+    try:
+        from app.tasks.lms_tasks import enqueue_variant_pool_prewarm
+
+        enqueue_variant_pool_prewarm(assessment_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("variant pool prewarm unavailable: %s", exc)
 
 
-def ensure_variant_pool(assessment_id: int, target_per_question: int = 2) -> dict:
-    """Fill the variant pool up to ``target_per_question`` per original.
-    7b implements _generate_variants; until then this is a safe no-op that
-    reports the current pool size."""
-    pool = get_variant_pool(assessment_id)
-    have = sum(len(v) for v in pool.values())
-    return {"assessment_id": assessment_id, "variants": have, "generated": 0}
+# --- LLM generation + self-check -----------------------------------------
+
+_GEN_PROMPT = """Rewrite this multiple-choice maths question as an EQUIVALENT new question.
+
+Rules:
+- Same concept, same method, same difficulty, same structure/format.
+- Change the numbers, names, or context so it is clearly a different question.
+- Exactly 4 options. Exactly one correct. Make the 3 wrong options plausible
+  (common mistakes), not obviously silly.
+- Keep option style consistent (all numbers, or all expressions, etc.).
+- Return plain text (you may use ^ for powers and / for fractions).
+
+ORIGINAL QUESTION:
+{stem}
+
+ORIGINAL OPTIONS:
+{options}
+(correct: {correct_letter})
+"""
+
+_SOLVE_PROMPT = """Solve this multiple-choice question. Think step by step, then give
+the 0-based index of the correct option and your confidence 0-1.
+
+{stem}
+
+Options:
+{options}
+"""
+
+
+def _generate_one_variant(orig: Question) -> Optional[dict]:
+    """Return {question_text, options[4], correct_index} for a validated
+    equivalent variant, or None if generation/validation failed."""
+    try:
+        from pydantic import BaseModel, Field, conlist
+
+        from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
+        from app.utils.llm_factory import get_chat_model
+
+        class VariantMCQ(BaseModel):
+            question_text: str = Field(..., min_length=3)
+            options: conlist(str, min_length=4, max_length=4)  # type: ignore
+            correct_index: int = Field(..., ge=0, le=3)
+
+        class SolvedMCQ(BaseModel):
+            chosen_index: int = Field(..., ge=0, le=3)
+            confidence: float = Field(..., ge=0.0, le=1.0)
+
+        stem, _ = pick_display_fields(orig.question_text, orig.question_latex)
+        opts = options_from_json(orig.options_json)
+        opt_texts = []
+        for o in opts:
+            t, _l = pick_display_fields(o.get("text"), o.get("latex"))
+            opt_texts.append(t or o.get("text") or "")
+        correct_letter = "ABCD"[orig.correct_option_index] if orig.correct_option_index is not None else "?"
+
+        gen_llm = get_chat_model(temperature=0.7, max_tokens=500).with_structured_output(VariantMCQ)
+        variant: VariantMCQ = invoke_with_groq_rate_limit(
+            lambda: gen_llm.invoke(
+                _GEN_PROMPT.format(
+                    stem=(stem or "").strip()[:800],
+                    options="\n".join(f"{l}. {t[:120]}" for l, t in zip("ABCD", opt_texts)),
+                    correct_letter=correct_letter,
+                )
+            ),
+            description="diagnostic variant generation",
+        )
+        v_opts = [str(x).strip() for x in variant.options]
+        if len(set(o.lower() for o in v_opts)) < 4 or any(not o for o in v_opts):
+            return None
+
+        solve_llm = get_chat_model(temperature=0.0, max_tokens=400).with_structured_output(SolvedMCQ)
+        solved: SolvedMCQ = invoke_with_groq_rate_limit(
+            lambda: solve_llm.invoke(
+                _SOLVE_PROMPT.format(
+                    stem=variant.question_text.strip()[:800],
+                    options="\n".join(f"{i}. {o[:120]}" for i, o in enumerate(v_opts)),
+                )
+            ),
+            description="diagnostic variant self-check",
+        )
+        if solved.chosen_index != variant.correct_index or solved.confidence < 0.6:
+            logger.info(
+                "Variant of q%s rejected (gen says %s, solver says %s @%.2f)",
+                orig.id, variant.correct_index, solved.chosen_index, solved.confidence,
+            )
+            return None
+
+        return {
+            "question_text": variant.question_text.strip(),
+            "options": v_opts,
+            "correct_index": variant.correct_index,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Variant generation for q%s failed: %s", orig.id, exc)
+        return None
+
+
+def ensure_variant_pool(
+    assessment_id: int,
+    target_per_question: int = TARGET_VARIANTS_PER_QUESTION,
+    max_generate: int = 6,
+) -> dict:
+    """Top the variant pool up towards ``target_per_question`` per original,
+    generating at most ``max_generate`` this call (so a worker run is
+    bounded and resumable). Slots with the fewest variants go first."""
+    from app.services.lms import question_bank_service
+
+    db = get_db()
+    assessment = get_assessment(assessment_id)
+    if assessment.assessment_type != "diagnostic":
+        return {"assessment_id": assessment_id, "generated": 0, "reason": "not_diagnostic"}
+
+    meta = _parse_meta(assessment)
+    pool: Dict[str, List[int]] = meta.setdefault("variant_pool", {})
+    originals = {aq.question_id: aq for aq in assessment.questions}
+    orig_rows = {r.id: r for r in db.query(Question).filter(Question.id.in_(list(originals))).all()}
+
+    need = sorted(
+        (oid for oid in originals if len(pool.get(str(oid), [])) < target_per_question),
+        key=lambda oid: len(pool.get(str(oid), [])),
+    )
+    generated = 0
+    for oid in need:
+        if generated >= max_generate:
+            break
+        orig = orig_rows.get(oid)
+        if not orig:
+            continue
+        v = _generate_one_variant(orig)
+        if not v:
+            continue
+        try:
+            q = question_bank_service.create_question(
+                created_by=assessment.created_by or (orig.created_by or 1),
+                question_text=v["question_text"],
+                options=v["options"],
+                correct_option_index=v["correct_index"],
+                topic_id=orig.topic_id,
+                difficulty=orig.difficulty or "medium",
+                source_type=VARIANT_SOURCE_TYPE,
+            )
+            if orig.time_limit_seconds:
+                q.time_limit_seconds = orig.time_limit_seconds
+            pool.setdefault(str(oid), []).append(q.id)
+            generated += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Storing variant of q%s failed: %s", oid, exc)
+            db.rollback()
+
+    if generated:
+        _save_meta(assessment, meta)
+    total = sum(len(v) for v in pool.values())
+    return {"assessment_id": assessment_id, "generated": generated, "pool_total": total}
