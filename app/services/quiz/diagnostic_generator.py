@@ -90,11 +90,21 @@ def get_section_text(
     return combined
 
 
-def _level_line(difficulty: Optional[str], grade_level: Optional[str]) -> str:
+def _level_line(
+    difficulty: Optional[str],
+    grade_level: Optional[str],
+    difficulty_ladder: Optional[List[str]] = None,
+) -> str:
     parts = []
     if grade_level:
         parts.append(f"Grade level: {grade_level}")
-    if difficulty:
+    if difficulty_ladder:
+        rungs = ", ".join(f"#{i + 1} {d}" for i, d in enumerate(difficulty_ladder))
+        parts.append(
+            "Return the questions ordered from easiest to hardest by this "
+            f"exact ladder: {rungs}. Do not deviate from this order or these levels."
+        )
+    elif difficulty:
         parts.append(f"Target difficulty: {difficulty}")
     return ("\n".join(parts) + "\n") if parts else ""
 
@@ -105,10 +115,17 @@ def generate_mcqs_from_content(
     count: int,
     difficulty: Optional[str] = None,
     grade_level: Optional[str] = None,
+    difficulty_ladder: Optional[List[str]] = None,
 ) -> List[MCQQuestion]:
-    """Generate validated MCQs from PDF section text using structured LLM output."""
+    """Generate validated MCQs from PDF section text using structured LLM output.
+
+    ``difficulty_ladder`` (e.g. ``["easy", "medium", "hard"]``) asks for one
+    question per rung in that order; it overrides ``count``.
+    """
     if not content.strip():
         raise ValueError(f"No content available for topic: {topic}")
+    if difficulty_ladder:
+        count = len(difficulty_ladder)
     if count < 1:
         return []
     if count > 10:
@@ -117,7 +134,7 @@ def generate_mcqs_from_content(
     llm = get_chat_model(temperature=0.4, max_tokens=4096)
     structured = llm.with_structured_output(MCQBatchResult)
     retry_hint = ""
-    level_line = _level_line(difficulty, grade_level)
+    level_line = _level_line(difficulty, grade_level, difficulty_ladder)
 
     def _invoke() -> MCQBatchResult:
         prompt = _CONTENT_MCQ_PROMPT.format(

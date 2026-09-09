@@ -26,6 +26,26 @@ logger = logging.getLogger(__name__)
 
 PRACTICE_QUESTIONS_PER_WEAK_AREA = 2
 
+# Adaptive difficulty: practice ramps up on correct answers and eases back on
+# wrong ones, starting from a rung set by the student's diagnostic score.
+_DIFF_LADDER = ["easy", "medium", "hard"]
+_DIFF_RANK = {"easy": 0, "medium": 1, "hard": 2}
+
+
+def _start_rank_for_score(score_percent: float) -> int:
+    """Diagnostic score on a weak topic -> starting difficulty rung."""
+    if score_percent < 55:
+        return 0  # still weak -> begin easy
+    return 1
+
+
+def _ladder_from(start_rank: int) -> List[str]:
+    """Difficulty rungs from ``start_rank`` up to hard (>=2 questions)."""
+    rungs = _DIFF_LADDER[start_rank:]
+    if len(rungs) < 2:
+        rungs = _DIFF_LADDER[max(0, start_rank - 1):]
+    return rungs
+
 
 def _get_target_threads(assessment_id: int) -> List[dict]:
     """Return all target PDF threads for a diagnostic."""
@@ -110,7 +130,10 @@ def _match_target_section(weak_area_name: str, target_thread_ids: List[str]) -> 
     return (best or name), best_thread
 
 
-def _mcq_to_queue_item(mcq, topic_id: int, topic_name: str, pdf_section: str, rag_thread_id: str) -> Optional[dict]:
+def _mcq_to_queue_item(
+    mcq, topic_id: int, topic_name: str, pdf_section: str, rag_thread_id: str,
+    difficulty: str = "medium",
+) -> Optional[dict]:
     options = normalize_options(
         [{"label": o.label, "text": o.text, "latex": getattr(o, "latex", None)} for o in mcq.options]
     )
@@ -130,24 +153,63 @@ def _mcq_to_queue_item(mcq, topic_id: int, topic_name: str, pdf_section: str, ra
         "question_latex": q_latex,
         "options": options,
         "correct_option_index": correct_idx,
+        "difficulty": difficulty if difficulty in _DIFF_RANK else "medium",
         "source": "target_pdf",
         "answered": False,
         "correct": None,
     }
 
 
+def _grade_appropriate_fallback(
+    topic_id: int, topic_name: str, score_percent: float, ladder: List[str],
+    grade_level: Optional[str],
+) -> List[dict]:
+    """When the target PDF has no usable section for a weak area, generate
+    grade-appropriate practice questions for the skill instead (DIL: practice
+    must still match the student's grade and the actual skill)."""
+    try:
+        from app.services.quiz.remediation_generator import generate_remediation_mcqs
+
+        mcqs = generate_remediation_mcqs(
+            topic_name=topic_name,
+            topic_description=topic_name,
+            count=len(ladder),
+            score_percent=score_percent,
+            difficulty=ladder[len(ladder) // 2],
+            purpose="practice",
+            grade_level=grade_level,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Grade-fit fallback gen failed for %s: %s", topic_name, exc)
+        return []
+
+    items: List[dict] = []
+    for i, mcq in enumerate(mcqs):
+        diff = ladder[i] if i < len(ladder) else ladder[-1]
+        item = _mcq_to_queue_item(mcq, topic_id, topic_name, topic_name, "", diff)
+        if item:
+            item["source"] = "grade_fit_ai"
+            items.append(item)
+    return items
+
+
 def _build_question_queue(
     weak_topics: List[dict],
     target_thread_ids: List[str],
     rag_owner_id: int,
+    grade_level: Optional[str] = None,
 ) -> List[dict]:
-    """Generate Learning Chat MCQs from target content PDF(s)."""
+    """Generate Learning Chat MCQs, difficulty-laddered per weak area and
+    pitched to the student's grade. Prefers the teacher target PDF; falls
+    back to AI generation for the skill when the PDF has no usable section."""
     queue: List[dict] = []
     seen_texts: set[str] = set()
 
     for entry in weak_topics:
         topic_id = entry.get("topic_id") or 0
         topic_name = (entry.get("topic_name") or "Practice area").strip()
+        score = float(entry.get("score_percent") or 0)
+        ladder = _ladder_from(_start_rank_for_score(score))
         pdf_section, thread_id = _match_target_section(topic_name, target_thread_ids)
 
         section_text = get_section_text(thread_id, rag_owner_id, pdf_section)
@@ -159,24 +221,35 @@ def _build_question_queue(
                 if section_text.strip():
                     thread_id = alt_thread
                     break
-        if not section_text.strip():
-            logger.warning("No target PDF text for weak area %s (section %s)", topic_name, pdf_section)
-            continue
 
-        try:
-            mcqs = generate_mcqs_from_content(
-                section_text, pdf_section, PRACTICE_QUESTIONS_PER_WEAK_AREA
+        topic_items: List[dict] = []
+        if section_text.strip():
+            try:
+                mcqs = generate_mcqs_from_content(
+                    section_text, pdf_section, len(ladder),
+                    grade_level=grade_level, difficulty_ladder=ladder,
+                )
+                for i, mcq in enumerate(mcqs):
+                    diff = ladder[i] if i < len(ladder) else ladder[-1]
+                    item = _mcq_to_queue_item(
+                        mcq, topic_id, topic_name, pdf_section, thread_id, diff
+                    )
+                    if item:
+                        topic_items.append(item)
+            except Exception as exc:
+                logger.warning("Target PDF MCQ gen failed for %s: %s", pdf_section, exc)
+
+        if not topic_items:
+            logger.info("No target PDF questions for %s - using grade-fit AI", topic_name)
+            topic_items = _grade_appropriate_fallback(
+                topic_id, topic_name, score, ladder, grade_level
             )
-            for mcq in mcqs:
-                item = _mcq_to_queue_item(mcq, topic_id, topic_name, pdf_section, thread_id)
-                if not item:
-                    continue
-                key = (item.get("question_text") or "")[:120].lower()
-                if key and key not in seen_texts:
-                    seen_texts.add(key)
-                    queue.append(item)
-        except Exception as exc:
-            logger.warning("Target PDF MCQ gen failed for %s: %s", pdf_section, exc)
+
+        for item in topic_items:
+            key = (item.get("question_text") or "")[:120].lower()
+            if key and key not in seen_texts:
+                seen_texts.add(key)
+                queue.append(item)
 
     return queue
 
@@ -192,6 +265,44 @@ def _save_questions(session: DeficiencyChatSession, questions: List[dict]) -> No
     session.questions_json = json.dumps(questions, ensure_ascii=False)
 
 
+def _base_rank(session: DeficiencyChatSession) -> int:
+    try:
+        weak = json.loads(session.weak_topics_json or "[]")
+    except json.JSONDecodeError:
+        weak = []
+    scores = [float(w.get("score_percent") or 0) for w in weak if w.get("score_percent") is not None]
+    if not scores:
+        return 0
+    return _start_rank_for_score(sum(scores) / len(scores))
+
+
+def _current_target_rank(session: DeficiencyChatSession, questions: List[dict]) -> int:
+    """Adaptive difficulty: base rung + 1 per past correct, - 1 per past wrong."""
+    rank = _base_rank(session)
+    for q in questions[: session.current_index]:
+        if not q.get("answered"):
+            continue
+        rank += 1 if q.get("correct") else -1
+    return max(0, min(2, rank))
+
+
+def _reorder_pending(session: DeficiencyChatSession, questions: List[dict]) -> None:
+    """Sort the not-yet-served questions so the next one sits at the student's
+    current adaptive difficulty (up on correct, down on wrong)."""
+    idx = session.current_index
+    tail = questions[idx:]
+    if len(tail) <= 1:
+        return
+    target = _current_target_rank(session, questions)
+    tail.sort(
+        key=lambda q: (
+            abs(_DIFF_RANK.get(q.get("difficulty", "medium"), 1) - target),
+            _DIFF_RANK.get(q.get("difficulty", "medium"), 1),
+        )
+    )
+    questions[idx:] = tail
+
+
 def _session_state(session: DeficiencyChatSession) -> dict:
     questions = _load_questions(session)
     total = len(questions)
@@ -199,6 +310,7 @@ def _session_state(session: DeficiencyChatSession) -> dict:
     if session.current_index < total:
         q = dict(questions[session.current_index])
         q.pop("correct_option_index", None)
+        q["difficulty"] = q.get("difficulty") or "medium"
         current = q
     weak = []
     try:
@@ -323,7 +435,10 @@ def start_session(student_id: int, force_new: bool = False) -> dict:
                 else:
                     weak = ai_weak
 
-    queue = _build_question_queue(weak, target_thread_ids, rag_owner_id)
+    from app.services.lms import class_service
+
+    grade_level = class_service.get_student_grade(student_id)
+    queue = _build_question_queue(weak, target_thread_ids, rag_owner_id, grade_level)
     if not queue:
         raise LMSValidationError(
             "Could not generate questions from the target PDF(s) for your weak areas. "
@@ -429,6 +544,9 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         if session.current_index >= len(questions):
             session.status = "completed"
             just_completed = True
+        else:
+            # Adaptive: pick the next question at the new (higher) difficulty.
+            _reorder_pending(session, questions)
     else:
         q["answered"] = True
         q["correct"] = False
@@ -483,6 +601,9 @@ def advance_session(session_id: int, student_id: int) -> dict:
     just_completed = session.current_index >= len(questions)
     if just_completed:
         session.status = "completed"
+    else:
+        _reorder_pending(session, questions)
+        _save_questions(session, questions)
     db.commit()
 
     if just_completed:
