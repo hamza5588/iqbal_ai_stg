@@ -402,6 +402,14 @@
       diagQuestionMapHtml() +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' + nav + '</div>';
     typeset(body);
+    // Re-show a clarification the student already asked for on this question.
+    if (qid && window._lmsDiagExplainCache && window._lmsDiagExplainCache[qid]) {
+      var ep = document.getElementById('lmsDiagExplain');
+      if (ep) {
+        ep.hidden = false;
+        ep.innerHTML = '<strong>In simpler words:</strong> ' + escapeHtml(window._lmsDiagExplainCache[qid]);
+      }
+    }
     if (window._lmsDiagWorkspaceOpen && typeof window.mountDiagWorkspace === 'function') window.mountDiagWorkspace();
   }
 
@@ -443,6 +451,30 @@
       renderDiagnosticQuestion();
     }
   };
+  window._lmsDiagExplainCache = {};
+  window.lmsExplainDiagQuestion = async function (qIdx) {
+    var panel = document.getElementById('lmsDiagExplain');
+    if (!panel) return;
+    var item = diagState.questions[qIdx];
+    var q = item.question || item;
+    var qid = item.question_id || (q && q.id);
+    if (!qid || !diagState.attemptId) return;
+    panel.hidden = false;
+    if (window._lmsDiagExplainCache[qid]) {
+      panel.innerHTML = '<strong>In simpler words:</strong> ' + escapeHtml(window._lmsDiagExplainCache[qid]);
+      return;
+    }
+    panel.innerHTML = '<span class="lms-status">Rephrasing this question…</span>';
+    try {
+      var res = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/questions/' + qid + '/clarify', { method: 'POST' });
+      var text = (res && res.clarification) || 'Read the question one part at a time and work out your own answer before choosing.';
+      window._lmsDiagExplainCache[qid] = text;
+      panel.innerHTML = '<strong>In simpler words:</strong> ' + escapeHtml(text);
+    } catch (e) {
+      panel.innerHTML = '<span class="lms-status">Could not rephrase right now. Read the question one part at a time and work out your own answer before choosing.</span>';
+    }
+  };
+
   window.confirmSubmitDiagnostic = function () {
     var total = diagState.questions.length;
     var answered = diagAnsweredCount();

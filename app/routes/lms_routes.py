@@ -637,6 +637,30 @@ def save_attempt_answer(attempt_id: int):
         return json_error(str(e), code="validation_error")
 
 
+@bp.route("/attempts/<int:attempt_id>/questions/<int:question_id>/clarify", methods=["POST"])
+@login_required
+def clarify_attempt_question(attempt_id: int, question_id: int):
+    """Rephrase one question for a stuck student - never reveals the answer."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    from app.services.lms import question_clarify_service
+    from app.utils.llm_gateway import llm_workflow
+
+    try:
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        with llm_workflow(
+            "diagnostic_question_clarify", user_id=_current_user_id(), user_role="student"
+        ):
+            result = question_clarify_service.clarify_question(attempt.assessment_id, question_id)
+        return json_success(result)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
 @bp.route("/attempts/<int:attempt_id>/submit", methods=["POST"])
 @login_required
 def submit_attempt(attempt_id: int):
