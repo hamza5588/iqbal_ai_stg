@@ -107,6 +107,8 @@ def _resolve_item_title(item_type: str, item_id: int) -> str:
             return f"Reassessment: {topic.name}"
         except LMSNotFoundError:
             return f"Reassessment (topic #{item_id})"
+    if item_type == "enrichment":
+        return "Challenge activity — stretch questions"
     return f"{item_type} #{item_id}"
 
 
@@ -197,6 +199,26 @@ def generate_learning_path(student_id: int, force: bool = False) -> Optional[Lea
     return path
 
 
+def _has_enrichment_path_since_last_attempt(student_id: int) -> bool:
+    """True if an enrichment/challenge path already exists for this student
+    since their most recent submitted assessment - so we don't mint a fresh
+    one on every refresh."""
+    db = get_db()
+    newest = _newest_submitted_attempt_at(student_id)
+    paths = (
+        db.query(LearningPath)
+        .filter(LearningPath.student_id == student_id)
+        .order_by(LearningPath.id.desc())
+        .all()
+    )
+    for path in paths:
+        if not any(i.item_type == "enrichment" for i in path.items):
+            continue
+        if newest is None or (path.created_at and path.created_at >= newest):
+            return True
+    return False
+
+
 def refresh_learning_path(student_id: int) -> Optional[LearningPath]:
     """Regenerate path after reassessment / quiz / diagnostic submit (P-405)."""
     weak = path_generator.get_weak_topics(student_id)
@@ -206,8 +228,14 @@ def refresh_learning_path(student_id: int) -> Optional[LearningPath]:
     if not path_generator.has_mastery_data(student_id):
         return get_active_path_for_student(student_id)
 
+    # No weak areas: give the student an enrichment / challenge activity
+    # instead of an empty practice section (DIL feedback #4). Only once per
+    # diagnostic - don't regenerate it every refresh.
+    if not _has_enrichment_path_since_last_attempt(student_id):
+        return generate_learning_path(student_id, force=True)
+
     active = get_active_path_for_student(student_id)
-    if active:
+    if active and not list(active.items):
         active.status = "completed"
         get_db().commit()
     return active

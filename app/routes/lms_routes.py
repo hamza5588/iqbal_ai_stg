@@ -1636,12 +1636,15 @@ def start_deficiency_chat():
     try:
         body = request.get_json(silent=True) or {}
         force_new = bool(body.get("force_new"))
+        mode = "enrichment" if body.get("mode") == "enrichment" else "practice"
         from app.utils.llm_gateway import llm_workflow
 
         with llm_workflow(
             "lms_deficiency_chat_mcq_generation", user_id=_current_user_id(), user_role="student"
         ):
-            result = deficiency_chat_service.start_session(_current_user_id(), force_new=force_new)
+            result = deficiency_chat_service.start_session(
+                _current_user_id(), force_new=force_new, mode=mode
+            )
         return json_success(result, status=201)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")

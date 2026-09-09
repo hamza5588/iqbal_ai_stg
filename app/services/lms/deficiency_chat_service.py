@@ -365,6 +365,11 @@ def _session_state(session: DeficiencyChatSession) -> dict:
             tutor_messages.append({"role": "bot", "text": text, "levelLabel": ""})
         elif role == "user":
             tutor_messages.append({"role": "user", "text": text})
+    session_mode = (
+        "enrichment"
+        if questions and questions[0].get("source") == "enrichment_ai"
+        else "practice"
+    )
     return {
         "session_id": session.id,
         "status": session.status,
@@ -373,6 +378,7 @@ def _session_state(session: DeficiencyChatSession) -> dict:
         "correct_count": session.correct_count,
         "weak_topics": weak,
         "current_question": current,
+        "mode": session_mode,
         "has_pdf": bool(session.rag_thread_id),
         "pdf_label": "Teacher target content PDF",
         "tutor_assist_level": assist_level,
@@ -428,12 +434,88 @@ def _latest_diagnostic_attempt(student_id: int, assessment_id: int) -> Optional[
     )
 
 
-def start_session(student_id: int, force_new: bool = False) -> dict:
-    """Start Learning Chat — questions generated from target PDF(s)."""
+def _enrichment_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
+    """Topics to stretch a student who has no weak areas: their strongest
+    diagnostic topics, so the challenge builds on what they already know."""
+    from app.services.lms import performance_service
+
+    rows = performance_service.get_student_mastery(student_id) or []
+    strong = sorted(
+        (r for r in rows if (r.get("score_percent") or 0) >= 60 and r.get("topic_id")),
+        key=lambda r: -(r.get("score_percent") or 0),
+    )[:3]
+    if strong:
+        return [
+            {
+                "topic_id": r["topic_id"],
+                "topic_name": r.get("topic_name") or f"Topic #{r['topic_id']}",
+                "score_percent": r.get("score_percent") or 0,
+            }
+            for r in strong
+        ]
+    if diag_id:
+        attempt = _latest_diagnostic_attempt(student_id, diag_id)
+        if attempt:
+            try:
+                analysis = analyze_attempt(attempt.id)
+            except Exception:  # noqa: BLE001
+                analysis = {}
+            areas = (analysis.get("strong_topics") or []) or (analysis.get("all_topics") or [])
+            return list(areas)[:3]
+    return []
+
+
+def _build_enrichment_queue(areas: List[dict], grade_level: Optional[str]) -> List[dict]:
+    """Above-level challenge questions for a student with no weak areas."""
+    from app.services.quiz.remediation_generator import generate_remediation_mcqs
+
+    ladder = ["medium", "hard"]
+    queue: List[dict] = []
+    seen: set[str] = set()
+    for area in areas:
+        name = (area.get("topic_name") or "Challenge area").strip()
+        tid = _resolve_weak_topic_id(area.get("topic_id") or 0, name)
+        try:
+            mcqs = generate_remediation_mcqs(
+                topic_name=name,
+                topic_description=name,
+                count=len(ladder),
+                score_percent=float(area.get("score_percent") or 0),
+                difficulty="hard",
+                purpose="enrichment",
+                grade_level=grade_level,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Enrichment question gen failed for %s: %s", name, exc)
+            continue
+        for i, mcq in enumerate(mcqs):
+            diff = ladder[i] if i < len(ladder) else "hard"
+            item = _mcq_to_queue_item(mcq, tid, name, name, "", diff)
+            if not item:
+                continue
+            item["source"] = "enrichment_ai"
+            key = (item.get("question_text") or "")[:120].lower()
+            if key and key not in seen:
+                seen.add(key)
+                queue.append(item)
+    return queue
+
+
+def start_session(
+    student_id: int, force_new: bool = False, mode: str = "practice"
+) -> dict:
+    """Start Learning Chat.
+
+    mode="practice"   -> difficulty-laddered questions on weak areas
+    mode="enrichment" -> above-level challenge questions when there are no
+                         weak areas (DIL: the practice section must never be
+                         empty after a clean diagnostic).
+    """
+    enrichment = mode == "enrichment"
     target_thread_ids, rag_owner_id, diag_id = _resolve_all_target_threads(student_id)
     target_thread_id = target_thread_ids[0] if target_thread_ids else None
 
-    if not target_thread_id or not rag_owner_id:
+    if not enrichment and (not target_thread_id or not rag_owner_id):
         raise LMSValidationError(
             "No target content PDF has been uploaded yet. "
             "Learning Chat uses study material PDFs for weak areas — ask your admin."
@@ -443,11 +525,50 @@ def start_session(student_id: int, force_new: bool = False) -> dict:
         _close_old_sessions(student_id)
 
     existing = None if force_new else get_active_session(student_id, diag_id)
-    if existing and existing.rag_thread_id == target_thread_id:
+    if existing and (enrichment or existing.rag_thread_id == target_thread_id):
         if existing.status == "paused":
             existing.status = "active"
             get_db().commit()
         return _session_state(existing)
+
+    from app.services.lms import class_service
+
+    grade_level = class_service.get_student_grade(student_id)
+
+    if enrichment:
+        areas = _enrichment_areas(student_id, diag_id)
+        if not areas:
+            raise LMSValidationError(
+                "Finish your diagnostic assessment first to unlock challenge questions."
+            )
+        queue = _build_enrichment_queue(areas, grade_level)
+        if not queue:
+            raise LMSValidationError(
+                "Could not generate challenge questions right now — please try again shortly."
+            )
+        payload = [
+            {
+                "topic_id": a.get("topic_id", 0),
+                "topic_name": a.get("topic_name") or "Challenge area",
+                "score_percent": a.get("score_percent", 0),
+                "question_ids": [],
+            }
+            for a in areas
+        ]
+        db = get_db()
+        session = DeficiencyChatSession(
+            student_id=student_id,
+            diagnostic_assessment_id=diag_id,
+            rag_thread_id=None,
+            rag_owner_id=rag_owner_id,
+            weak_topics_json=json.dumps(payload, ensure_ascii=False),
+            questions_json=json.dumps(queue, ensure_ascii=False),
+            status="active",
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        return _session_state(session)
 
     weak = get_weak_topics(student_id)
     if not weak:
@@ -473,9 +594,6 @@ def start_session(student_id: int, force_new: bool = False) -> dict:
                 else:
                     weak = ai_weak
 
-    from app.services.lms import class_service
-
-    grade_level = class_service.get_student_grade(student_id)
     queue = _build_question_queue(weak, target_thread_ids, rag_owner_id, grade_level)
     if not queue:
         raise LMSValidationError(
@@ -771,7 +889,7 @@ def _mark_learning_path_chat_complete(student_id: int) -> None:
         return
     db = get_db()
     for item in path.items:
-        if item.item_type == "practice" and item.item_id == 0:
+        if item.item_type in ("practice", "enrichment") and item.item_id == 0:
             item.status = "completed"
             item.completed_at = datetime.utcnow()
     path.status = "completed"

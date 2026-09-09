@@ -169,17 +169,19 @@
     typeset(body);
   }
 
-  window.openDeficiencyChat = async function (forceNew) {
+  window.openDeficiencyChat = async function (forceNew, mode) {
     ensureDeficiencyModal();
     lmsOpenModal('lmsDeficiencyModal');
     defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
     var body = document.getElementById('lmsDeficiencyBody');
-    body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Preparing your personalized questions...</p>';
+    var isChallenge = mode === 'enrichment';
+    body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">' +
+      (isChallenge ? 'Preparing your challenge questions...' : 'Preparing your personalized questions...') + '</p>';
     try {
       var data = await lmsApi('/api/lms/deficiency/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_new: forceNew === true })
+        body: JSON.stringify({ force_new: forceNew === true, mode: isChallenge ? 'enrichment' : 'practice' })
       });
       defState.sessionId = data.session_id;
       if (data.tutor_messages && data.tutor_messages.length) {

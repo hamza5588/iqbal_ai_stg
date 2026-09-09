@@ -435,6 +435,29 @@ html.dark .lms-diag-timeout-note,
     color: #fde68a;
   }
 }
+.lms-diag-clear-note {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-top: 12px;
+}
+html.dark .lms-diag-clear-note,
+.dark .lms-diag-clear-note {
+  background: #022c22;
+  border-color: #065f46;
+  color: #6ee7b7;
+}
+@media (prefers-color-scheme: dark) {
+  .lms-diag-clear-note {
+    background: #022c22;
+    border-color: #065f46;
+    color: #6ee7b7;
+  }
+}
 .lms-quiz-progress { height: 6px; background: var(--lms-border); border-radius: 9999px; margin-bottom: 16px; overflow: hidden; }
 .lms-quiz-progress-bar { height: 100%; background: var(--lms-green); border-radius: 9999px; transition: width 0.3s; }
 .lms-quiz-stem {

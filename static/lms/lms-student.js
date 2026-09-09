@@ -721,9 +721,15 @@
         : '') +
       (weak.length ? '<h4 style="color:#991b1b;margin:0 0 8px;">Areas to improve</h4><div class="lms-topic-grid">' + weakHtml + '</div>' : '') +
       (strong.length ? '<h4 style="color:var(--lms-green);margin:16px 0 8px;">Strong areas</h4><div class="lms-topic-grid">' + strongHtml + '</div>' : '') +
-      (weak.length ? '<p class="lms-status" style="margin-top:12px;">Practice weak areas in Learning Chat — one question at a time.</p>' : '') +
+      (weak.length
+        ? '<p class="lms-status" style="margin-top:12px;">Practice weak areas in Learning Chat — one question at a time.</p>'
+        : '<div class="lms-diag-clear-note"><strong>&#127881; No areas of improvement.</strong> ' +
+          'You met the mark on every topic in this diagnostic. Keep it sharp with a short set of ' +
+          'above-level challenge questions built from your strongest topics.</div>') +
       '<div class="lms-modal-footer" style="border:none;padding-top:20px;display:flex;gap:8px;flex-wrap:wrap;">' +
-      (weak.length ? '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>' : '') +
+      (weak.length
+        ? '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>'
+        : '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat(false, \'enrichment\')">Start challenge</button>') +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="lmsRetakeDiagnostic()">Retake with new questions</button>' +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button></div>';
   }
@@ -757,6 +763,12 @@
       }
       return;
     }
+    if (itemType === 'enrichment') {
+      if (typeof openDeficiencyChat === 'function') {
+        openDeficiencyChat(false, 'enrichment');
+      }
+      return;
+    }
     if (itemType === 'reassessment') {
       if (typeof startLmsQuiz === 'function' && itemId && itemId > 5) {
         startLmsQuiz(itemId, null);
@@ -786,6 +798,9 @@
         if (item.item_type === 'practice' && item.item_id === 0) {
           action = '<div class="lms-path-action">' +
             '<button type="button" class="lms-btn lms-btn-primary" onclick="openDeficiencyChat()">Open Learning Chat</button></div>';
+        } else if (item.item_type === 'enrichment') {
+          action = '<div class="lms-path-action">' +
+            '<button type="button" class="lms-btn lms-btn-primary" onclick="openDeficiencyChat(false, \'enrichment\')">Start challenge</button></div>';
         } else {
           action = '<div class="lms-path-action">' +
             '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsLaunchPathStep(\'' + escapeHtml(item.item_type) + '\',' + (item.item_id || 'null') + ',' + item.id + ')">Start</button> ' +

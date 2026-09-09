@@ -191,27 +191,47 @@ def build_path_items(student_id: int) -> List[dict]:
 
     weak = get_weak_topics(student_id)
 
-    if not weak:
+    if weak:
 
-        return []
+        return [
 
+            {
 
+                "item_type": "practice",
 
-    return [
+                "item_id": 0,
 
-        {
+                "sort_order": 0,
 
-            "item_type": "practice",
+                "label": "Learning Chat — practice weak areas",
 
-            "item_id": 0,
+            }
 
-            "sort_order": 0,
+        ]
 
-            "label": "Learning Chat — practice weak areas",
+    # No weak areas but the student has finished a diagnostic: offer an
+    # enrichment / challenge activity so the practice section is never empty
+    # (DIL feedback #4).
 
-        }
+    if has_mastery_data(student_id):
 
-    ]
+        return [
+
+            {
+
+                "item_type": "enrichment",
+
+                "item_id": 0,
+
+                "sort_order": 0,
+
+                "label": "Challenge activity — stretch questions",
+
+            }
+
+        ]
+
+    return []
 
 
 
