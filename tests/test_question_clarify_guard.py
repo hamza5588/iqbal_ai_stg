@@ -60,3 +60,29 @@ def test_sharing_a_common_term_is_allowed():
 def test_echoing_a_full_option_statement_is_blocked():
     leak = "In other words: is the sum of a rational number and an irrational number is always irrational?"
     assert _looks_leaky(leak, OPTIONS)
+
+
+# --- method / formula disclosure (DIL feedback: rephrase leaked the method) ---
+
+RECT_OPTIONS = [
+    {"text": "55 cm^2"}, {"text": "60 cm^2"}, {"text": "50 cm^2"}, {"text": "65 cm^2"},
+]
+
+
+def test_stating_the_method_is_blocked():
+    leak = ("What is the area of a rectangle that is 12 cm long and 5 cm wide? "
+            "The area is found by multiplying the length by the width.")
+    assert _looks_leaky(leak, RECT_OPTIONS)
+
+
+def test_naming_the_operation_is_blocked():
+    assert _looks_leaky("To find the area, multiply 12 by 5.", RECT_OPTIONS)
+    assert _looks_leaky("You just multiply the two side lengths together.", RECT_OPTIONS)
+    assert _looks_leaky("The area is length times the width.", RECT_OPTIONS)
+
+
+def test_pure_reword_of_the_rectangle_question_passes():
+    good = ("This asks for the area of a rectangle. Area means the amount of "
+            "flat space inside the shape. The rectangle is 12 cm on the long "
+            "side and 5 cm on the short side. Give the area in square centimetres.")
+    assert _looks_leaky(good, RECT_OPTIONS) is False

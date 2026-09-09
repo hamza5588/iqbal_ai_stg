@@ -26,31 +26,51 @@ logger = logging.getLogger(__name__)
 
 _MAX_CHARS = 600
 
-_CLARIFY_PROMPT = """A student on a diagnostic test does not understand how this multiple-choice
-question is worded. Rewrite the QUESTION so it is easier to understand.
+# Bump when the prompt or the leak guard changes so old cached
+# clarifications (e.g. ones that leaked the method) are regenerated.
+_CLARIFY_VERSION = 2
+
+_CLARIFY_PROMPT = """A student on a diagnostic test cannot follow the WORDING of this
+multiple-choice question. Say the SAME question again in the simplest
+possible words. You are only re-wording it - not teaching it.
 
 STRICT RULES - breaking any of these makes the test invalid:
-- Do NOT give the answer, and do NOT say or hint which option is right or wrong.
-- Do NOT rank, compare, eliminate, or point to any option.
-- Do NOT solve the problem or show any step of the working.
-- Only: restate what is being asked in plain words, explain any hard term, and
-  spell out any notation (e.g. what "P(B)" or "x^2" means).
-- Keep the same difficulty. 2-3 short sentences. No option letters (A/B/C/D).
+- Do NOT answer it, and do NOT say or hint which option is right or wrong.
+- Do NOT mention, compare, rank, or rule out any option.
+- Do NOT say HOW to solve it. No method, no formula, no steps, no
+  operation. Never say to multiply / divide / add / subtract anything.
+  Never write things like "X is found by ...", "the area is length times
+  width", "you calculate it by ...". Say only WHAT is being asked.
+- You MAY swap hard words for easy ones and give a plain-language meaning
+  of a term (e.g. "area" = the space inside a shape, "median" = the
+  middle value) - but never turn that into a way to work out the answer.
+- Very simple English, like for a younger student. 1 to 3 short sentences.
+  No option letters (A/B/C/D).
 
 QUESTION:
 {stem}
 
-(The options are given only so you know the context - never refer to them.)
+(The options are shown for context only - never refer to them.)
 OPTIONS:
 {options}
 
-Rewrite of the question:"""
+The same question in very simple words:"""
 
-# Phrases that mean the model leaked guidance about the answer.
+# Phrases that mean the model leaked the answer or the solving method.
 _LEAK_RE = re.compile(
     r"\b(the answer is|correct (option|answer|choice)|right (option|answer|choice)"
     r"|option [a-d]\b|choice [a-d]\b|is correct|is incorrect|eliminate|rule out"
-    r"|the solution is|equals?\s|therefore|so the value)\b",
+    r"|the solution is|equals?\s|therefore|so the value"
+    # --- method / formula disclosure ---
+    r"|multiply|multiplying|multiplied by|multiplication|divide|dividing|divided by"
+    r"|subtract|subtracting|adding|add up|add together|times the"
+    r"|by the width|by the length|by the height|by the base"
+    r"|is found by|is calculated|is computed|is obtained by|is worked out"
+    r"|is given by|is the product of|is the sum of|is the difference of"
+    r"|is the quotient of|formula"
+    r"|to (find|get|calculate|work out|figure out) (the|its|your)"
+    r"|you (can |should |just |then |need to |simply )?(multiply|divide|add|subtract|calculate|compute)"
+    r")\b",
     re.I,
 )
 
@@ -71,12 +91,21 @@ def _save_meta(assessment: Assessment, meta: dict) -> None:
 
 
 def _cached(assessment: Assessment, question_id: int) -> Optional[str]:
-    return (_parse_meta(assessment).get("clarify_cache") or {}).get(str(question_id))
+    entry = (_parse_meta(assessment).get("clarify_cache") or {}).get(str(question_id))
+    if isinstance(entry, dict):
+        if entry.get("v") == _CLARIFY_VERSION:
+            return entry.get("text")
+        return None
+    # legacy plain-string entry from an older guard version - ignore it
+    return None
 
 
 def _store(assessment: Assessment, question_id: int, text: str) -> None:
     meta = _parse_meta(assessment)
-    meta.setdefault("clarify_cache", {})[str(question_id)] = text
+    meta.setdefault("clarify_cache", {})[str(question_id)] = {
+        "v": _CLARIFY_VERSION,
+        "text": text,
+    }
     _save_meta(assessment, meta)
 
 
@@ -96,9 +125,10 @@ def _looks_leaky(text: str, options: list) -> bool:
 def _fallback(stem: str) -> str:
     stem = re.sub(r"\s+", " ", (stem or "").strip())
     return (
-        "Read the question one part at a time. It is asking: "
+        "Read it slowly, one part at a time. The question is asking: "
         + (stem[:280] + ("…" if len(stem) > 280 else ""))
-        + " Work out your own answer first, then pick the option that matches it."
+        + " It does not want you to do anything except answer that. "
+        "Work out your own answer first, then choose the option that matches it."
     )
 
 
