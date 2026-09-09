@@ -81,16 +81,23 @@
 
   function renderDiagnosticTimeOver(result) {
     clearDiagTimer();
+    // A timed-out attempt now keeps the score for every answered question -
+    // if we have a real result, show the normal results screen with a
+    // "time ran out" note instead of a dead-end "you scored 0" card.
+    if (result && result.max_score != null && result.score != null) {
+      renderDiagnosticResults(result, { timedOut: true });
+      unlockDiagnosticGate();
+      return;
+    }
     var body = document.getElementById('lmsDiagBody');
     var timerEl = document.getElementById('lmsDiagTimer');
     if (timerEl) timerEl.style.display = 'none';
     var msg = (result && (result.message || result.diagnostic_timeout_message)) ||
-      'Time over. You have not submitted the diagnostic. You scored 0 marks.';
+      'Time is up. Your diagnostic was submitted automatically.';
     body.innerHTML =
       '<div class="lms-card lms-diag-timeover">' +
-      '<p class="lms-diag-timeover-title">Time over</p>' +
+      '<p class="lms-diag-timeover-title">Time is up</p>' +
       '<p>' + escapeHtml(msg) + '</p>' +
-      '<p class="lms-status" style="margin-top:8px;">You cannot retake this assessment. Continue with your learning path or Learning Chat.</p>' +
       '<div class="lms-modal-footer" style="border:none;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap;">' +
       '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic()">Continue</button>' +
       '</div></div>';
@@ -147,6 +154,14 @@
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Loading diagnostic...</p>';
     try {
       var diag = await lmsApi('/api/lms/diagnostics/default');
+      if ((diag.diagnostic_completed || diag.any_diagnostic_completed || diag.diagnostic_timed_out) && diag.latest_attempt_id) {
+        try {
+          var prevResult = await lmsApi('/api/lms/attempts/' + diag.latest_attempt_id + '/results');
+          renderDiagnosticResults(prevResult, { timedOut: !!prevResult.timed_out, alreadyDone: true });
+          unlockDiagnosticGate();
+          return;
+        } catch (e) { /* fall through to the generic message */ }
+      }
       if (diag.diagnostic_timed_out || diag.time_over) {
         renderDiagnosticTimeOver(diag);
         return;
@@ -154,7 +169,7 @@
       if (diag.diagnostic_completed || diag.any_diagnostic_completed) {
         body.innerHTML = '<div class="lms-card"><p>You have already completed the diagnostic assessment' +
           (diag.title ? ': <strong>' + escapeHtml(diag.title) + '</strong>' : '') +
-          '.</p><p class="lms-status" style="margin-top:8px;">Retakes are not allowed. Continue with your learning path or Learning Chat.</p></div>';
+          '.</p><p class="lms-status" style="margin-top:8px;">Continue with your learning path or Learning Chat.</p></div>';
         unlockDiagnosticGate();
         return;
       }
@@ -355,11 +370,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ time_expired: !!autoSubmit })
       });
-      if (result.timed_out || result.time_over || autoSubmit) {
+      if ((result.timed_out || result.time_over) && !(result.max_score != null && result.score != null)) {
         renderDiagnosticTimeOver(result);
         return;
       }
-      renderDiagnosticResults(result);
+      renderDiagnosticResults(result, { timedOut: !!(result.timed_out || result.time_over || autoSubmit) });
       unlockDiagnosticGate();
     } catch (err) {
       var msg = err && err.message ? String(err.message) : '';
@@ -373,7 +388,9 @@
     }
   };
 
-  function renderDiagnosticResults(result) {
+  function renderDiagnosticResults(result, opts) {
+    opts = opts || {};
+    clearDiagTimer();
     var body = document.getElementById('lmsDiagBody');
     var timerEl = document.getElementById('lmsDiagTimer');
     if (timerEl) timerEl.style.display = 'none';
@@ -404,7 +421,15 @@
     var strongHtml = strong.length
       ? strong.map(function (t) { return topicChip(t, 'strong'); }).join('')
       : '';
+    var timedOutBanner = opts.timedOut
+      ? '<div class="lms-diag-timeout-note">&#9203; ' +
+        escapeHtml(result.message || 'Time ran out — the questions you answered were scored.') +
+        '</div>'
+      : (opts.alreadyDone
+        ? '<div class="lms-diag-timeout-note">You have already completed the diagnostic. Here is how you did.</div>'
+        : '');
     body.innerHTML =
+      timedOutBanner +
       '<div class="lms-diag-score">' +
       '<div class="lms-diag-score-num">' + scoreLabel + '</div>' +
       '<p class="lms-status">Overall diagnostic score' +

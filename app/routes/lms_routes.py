@@ -709,9 +709,12 @@ def default_diagnostic():
     diag["diagnostic_timeout_message"] = (
         attempt_service.TIME_OVER_MESSAGE if timed_out else None
     )
+    if latest and latest.max_score:
+        # A timed-out attempt now keeps the score for the answered questions.
+        diag["latest_attempt_id"] = latest.id
+        diag["score"] = latest.score or 0
+        diag["score_percent"] = round(100.0 * (latest.score or 0) / latest.max_score, 1)
     if timed_out:
-        diag["score"] = 0
-        diag["score_percent"] = 0
         diag["message"] = attempt_service.TIME_OVER_MESSAGE
     if diag["diagnostic_completed"] and completed_id:
         diag["completed_assessment_id"] = completed_id

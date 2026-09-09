@@ -14,7 +14,8 @@ from app.utils.db import get_db
 logger = logging.getLogger(__name__)
 
 TIME_OVER_MESSAGE = (
-    "Time over. You have not submitted the diagnostic. You scored 0 marks."
+    "Time is up. Your diagnostic was submitted automatically — "
+    "every question you answered has been scored."
 )
 
 
@@ -115,25 +116,14 @@ def get_latest_submitted_attempt(
     )
 
 
-def time_over_payload(attempt: AssessmentAttempt) -> dict:
-    max_score = float(attempt.max_score or 0) or 1.0
-    return {
-        "attempt_id": attempt.id,
-        "score": 0.0,
-        "max_score": max_score,
-        "score_percent": 0.0,
-        "timed_out": True,
-        "time_over": True,
-        "diagnostic_completed": True,
-        "message": TIME_OVER_MESSAGE,
-        "assessment_type": "diagnostic",
-        "weak_topics": [],
-        "strong_topics": [],
-    }
-
-
 def finalize_expired_attempt(attempt_id: int) -> dict:
-    """Close an expired diagnostic without a student submit: 0 marks."""
+    """Close an attempt whose timer ran out.
+
+    The questions the student already answered are scored normally - only
+    the ones they never got to are missing (and simply aren't correct).
+    Losing a student's completed work on a timeout was the #1 complaint
+    from the DIL rollout.
+    """
     attempt = get_attempt(attempt_id)
     if attempt.status == "submitted":
         return get_attempt_results(attempt_id)
@@ -141,45 +131,8 @@ def finalize_expired_attempt(attempt_id: int) -> dict:
         raise LMSValidationError("Attempt is not in progress")
 
     assessment = get_assessment(attempt.assessment_id)
-    db = get_db()
-    question_ids = [aq.question_id for aq in assessment.questions]
-    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
-    for ans in answers:
-        ans.is_correct = False
-
-    max_score = float(len(question_ids)) or 1.0
-    attempt.score = 0.0
-    attempt.max_score = max_score
-    attempt.status = "submitted"
-    attempt.submitted_at = datetime.utcnow()
-    attempt.timed_out = True
-    db.commit()
-    logger.info("Finalized expired diagnostic attempt %s with 0 marks", attempt_id)
-
-    from app.services.lms import learning_path_service, performance_service
-
-    def _post_submit_step(fn):
-        try:
-            fn()
-        except Exception as exc:
-            logger.warning("Post-timeout step failed for attempt %s: %s", attempt_id, exc)
-            db.rollback()
-
-    _post_submit_step(lambda: performance_service.update_topic_scores_from_attempt(attempt_id))
-    _post_submit_step(lambda: learning_path_service.refresh_learning_path(attempt.student_id))
-    _post_submit_step(lambda: performance_service.create_snapshot(attempt.student_id))
-
-    if assessment.assessment_type == "diagnostic":
-        from app.services.lms import deficiency_chat_service, student_profile_service
-
-        _post_submit_step(lambda: deficiency_chat_service._close_old_sessions(attempt.student_id))
-        _post_submit_step(
-            lambda: student_profile_service.mark_diagnostic_complete(
-                attempt.student_id, assessment_id=assessment.id
-            )
-        )
-
-    return time_over_payload(attempt)
+    logger.info("Finalizing expired diagnostic attempt %s (scoring answered questions)", attempt_id)
+    return _score_and_finalize(attempt, assessment, timed_out=True)
 
 
 def finalize_expired_diagnostic_if_needed(
@@ -393,33 +346,64 @@ def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -
     return answer
 
 
-def submit_attempt(attempt_id: int, time_expired: bool = False) -> dict:
-    attempt = get_attempt(attempt_id)
-    if attempt.status == "submitted":
-        return get_attempt_results(attempt_id)
-    if attempt.status != "in_progress":
-        raise LMSValidationError("Attempt is not in progress")
+def _run_post_submit_steps(attempt: AssessmentAttempt, assessment) -> None:
+    """Mastery refresh, learning-path regen, snapshot, prewarm, assignment
+    completion. Every step is best-effort - a failure in one must not lose
+    the score that is already committed."""
+    db = get_db()
+    from app.services.lms import learning_path_service, performance_service
 
-    assessment = get_assessment(attempt.assessment_id)
-    expired = bool(
-        assessment.assessment_type == "diagnostic"
-        and (time_expired or _attempt_is_expired(attempt))
-    )
-    if expired:
-        logger.info("Diagnostic attempt %s ended without submit (time over)", attempt_id)
-        return finalize_expired_attempt(attempt_id)
+    def step(fn):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Post-submit step failed for attempt %s: %s", attempt.id, exc)
+            db.rollback()
 
+    step(lambda: performance_service.update_topic_scores_from_attempt(attempt.id))
+    step(lambda: learning_path_service.refresh_learning_path(attempt.student_id))
+    step(lambda: performance_service.create_snapshot(attempt.student_id))
+
+    if assessment.assessment_type == "diagnostic":
+        from app.services.lms import deficiency_chat_service, student_profile_service
+        from app.tasks.lms_tasks import enqueue_deficiency_chat_prewarm
+
+        step(lambda: deficiency_chat_service._close_old_sessions(attempt.student_id))
+        step(
+            lambda: student_profile_service.mark_diagnostic_complete(
+                attempt.student_id, assessment_id=assessment.id
+            )
+        )
+        step(lambda: enqueue_deficiency_chat_prewarm(attempt.student_id))
+
+    if attempt.assignment_id:
+        from app.services.lms import assignment_service
+
+        step(
+            lambda: assignment_service.mark_submission_complete(
+                attempt.assignment_id, attempt.student_id, attempt.id
+            )
+        )
+
+
+def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bool) -> dict:
+    """Score whatever the student answered, mark the attempt submitted, run
+    post-submit steps, and return the result payload. Shared by
+    submit_attempt (normal + client-signalled timeout) and
+    finalize_expired_attempt (server-detected timeout).
+
+    Unanswered questions are simply not correct - they never force the
+    answered ones to zero.
+    """
     db = get_db()
     question_ids = [aq.question_id for aq in assessment.questions]
     questions = db.query(Question).filter(Question.id.in_(question_ids)).all()
     q_by_id = {q.id: q for q in questions}
-
-    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
+    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
     answer_by_q = {a.question_id: a for a in answers}
 
     correct = 0
     topic_breakdown: Dict[int, dict] = {}
-
     for qid in question_ids:
         q = q_by_id.get(qid)
         if not q:
@@ -447,49 +431,12 @@ def submit_attempt(attempt_id: int, time_expired: bool = False) -> dict:
     attempt.max_score = max_score
     attempt.status = "submitted"
     attempt.submitted_at = datetime.utcnow()
+    if timed_out:
+        attempt.timed_out = True
     db.commit()
 
-    from app.services.lms import performance_service, learning_path_service
+    _run_post_submit_steps(attempt, assessment)
 
-    def _post_submit_step(fn):
-        try:
-            fn()
-        except Exception as exc:
-            logger.warning("Post-submit step failed for attempt %s: %s", attempt_id, exc)
-            db.rollback()
-
-    _post_submit_step(lambda: performance_service.update_topic_scores_from_attempt(attempt_id))
-    _post_submit_step(lambda: learning_path_service.refresh_learning_path(attempt.student_id))
-    _post_submit_step(lambda: performance_service.create_snapshot(attempt.student_id))
-
-    if assessment.assessment_type == "diagnostic":
-        from app.services.lms import deficiency_chat_service, student_profile_service
-
-        _post_submit_step(
-            lambda: deficiency_chat_service._close_old_sessions(attempt.student_id)
-        )
-        _post_submit_step(
-            lambda: student_profile_service.mark_diagnostic_complete(
-                attempt.student_id, assessment_id=assessment.id
-            )
-        )
-        # Warm the Learning Chat question queue in the background (rate-limited
-        # Groq), so opening Learning Chat later is a DB read rather than a
-        # synchronised burst of MCQ generation across every student at once.
-        from app.tasks.lms_tasks import enqueue_deficiency_chat_prewarm
-
-        _post_submit_step(
-            lambda: enqueue_deficiency_chat_prewarm(attempt.student_id)
-        )
-
-    if attempt.assignment_id:
-        from app.services.lms import assignment_service
-
-        _post_submit_step(
-            lambda: assignment_service.mark_submission_complete(
-                attempt.assignment_id, attempt.student_id, attempt_id
-            )
-        )
     result = {
         "attempt_id": attempt.id,
         "score": correct,
@@ -498,14 +445,35 @@ def submit_attempt(attempt_id: int, time_expired: bool = False) -> dict:
         "topic_breakdown": list(topic_breakdown.values()),
         "assessment_type": assessment.assessment_type,
     }
-
     if assessment.assessment_type == "diagnostic":
-        analysis = performance_service.analyze_attempt(attempt_id)
+        from app.services.lms import performance_service
+
+        analysis = performance_service.analyze_attempt(attempt.id)
         result["weak_topics"] = analysis.get("weak_topics", [])
         result["strong_topics"] = analysis.get("strong_topics", [])
         result["diagnostic_completed"] = True
-
+    if timed_out:
+        result["timed_out"] = True
+        result["time_over"] = True
+        result["message"] = TIME_OVER_MESSAGE
     return result
+
+
+def submit_attempt(attempt_id: int, time_expired: bool = False) -> dict:
+    attempt = get_attempt(attempt_id)
+    if attempt.status == "submitted":
+        return get_attempt_results(attempt_id)
+    if attempt.status != "in_progress":
+        raise LMSValidationError("Attempt is not in progress")
+
+    assessment = get_assessment(attempt.assessment_id)
+    timed_out = bool(
+        assessment.assessment_type == "diagnostic"
+        and (time_expired or _attempt_is_expired(attempt))
+    )
+    if timed_out:
+        logger.info("Diagnostic attempt %s auto-submitted (time over)", attempt_id)
+    return _score_and_finalize(attempt, assessment, timed_out=timed_out)
 
 
 def get_attempt_results(attempt_id: int) -> dict:
@@ -516,6 +484,7 @@ def get_attempt_results(attempt_id: int) -> dict:
     max_score = attempt.max_score or 1.0
     score = attempt.score or 0.0
     assessment = get_assessment(attempt.assessment_id)
+    timed_out = bool(getattr(attempt, "timed_out", False))
     result = {
         "attempt_id": attempt.id,
         "score": score,
@@ -523,24 +492,20 @@ def get_attempt_results(attempt_id: int) -> dict:
         "score_percent": round(100.0 * score / max_score, 2) if max_score else 0.0,
         "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
         "assessment_type": assessment.assessment_type,
-        "timed_out": bool(getattr(attempt, "timed_out", False)),
+        "timed_out": timed_out,
     }
-    if getattr(attempt, "timed_out", False):
+    if timed_out:
+        # The timer ran out, but the answered questions still count - keep
+        # the real score, just note that it was auto-submitted.
         result["time_over"] = True
-        result["score"] = 0.0
-        result["score_percent"] = 0.0
         result["message"] = TIME_OVER_MESSAGE
     if assessment.assessment_type == "diagnostic":
         result["diagnostic_completed"] = True
-        if getattr(attempt, "timed_out", False):
-            result["weak_topics"] = []
-            result["strong_topics"] = []
-        else:
-            from app.services.lms import performance_service
+        from app.services.lms import performance_service
 
-            analysis = performance_service.analyze_attempt(attempt_id)
-            result["weak_topics"] = analysis.get("weak_topics", [])
-            result["strong_topics"] = analysis.get("strong_topics", [])
+        analysis = performance_service.analyze_attempt(attempt_id)
+        result["weak_topics"] = analysis.get("weak_topics", [])
+        result["strong_topics"] = analysis.get("strong_topics", [])
     return result
 
 
