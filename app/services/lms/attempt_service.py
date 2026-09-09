@@ -268,6 +268,8 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
     """Return questions without correct answers for student delivery."""
     attempt = get_attempt(attempt_id)
     _check_attempt_expired(attempt)
+    from app.services.quiz.math_text import wrap_for_mathjax
+
     assessment = get_assessment(attempt.assessment_id)
     db = get_db()
     result = []
@@ -280,12 +282,22 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
         safe_opts = []
         for o in opts:
             text, latex = pick_display_fields(o.get("text"), o.get("latex"))
-            safe_opts.append({"label": o.get("label"), "text": text, "latex": latex})
+            safe_opts.append(
+                {
+                    "label": o.get("label"),
+                    "text": text,
+                    "latex": latex,
+                    # Delimiter-wrapped so MathJax always typesets it -
+                    # the client renders this verbatim.
+                    "render": wrap_for_mathjax(latex or text, inline=True),
+                }
+            )
         result.append(
             {
                 "question_id": q.id,
                 "question_text": q_text or q.question_text,
                 "question_latex": q_latex,
+                "question_render": wrap_for_mathjax(q_latex or q_text or q.question_text, inline=False),
                 "options": safe_opts,
                 "sort_order": aq.sort_order,
                 "difficulty": q.difficulty,

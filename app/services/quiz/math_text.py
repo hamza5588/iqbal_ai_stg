@@ -81,17 +81,20 @@ def _is_function_name(text: str, letter_index: int) -> bool:
 
 
 def implicit_exponents_to_latex(text: str) -> str:
-    """Turn flattened PDF exponents (x2, a3b2) into TeX (x^{2}, a^{3}b^{2})."""
+    """Turn flattened PDF exponents (x2, a3b2, (x-1)2) into TeX
+    (x^{2}, a^{3}b^{2}, (x-1)^{2})."""
     if not text:
         return text
 
     def repl(match: re.Match[str]) -> str:
-        letter, digits = match.group(1), match.group(2)
-        if _is_function_name(match.string, match.start(1)):
+        base, digits = match.group(1), match.group(2)
+        if base.isalpha() and _is_function_name(match.string, match.start(1)):
             return match.group(0)
-        return f"{letter}^{{{digits}}}"
+        return f"{base}^{{{digits}}}"
 
-    return re.sub(r"([A-Za-z])(?!\^)(\d+)", repl, text)
+    # letter/paren/brace/bracket followed directly by digits and NOT already
+    # an exponent - e.g. "x2", "(3x-2)2", "}2"
+    return re.sub(r"([A-Za-z\)\]\}])(?!\^)(\d+)", repl, text)
 
 
 def unsquash_english(text: str) -> str:
@@ -323,3 +326,86 @@ def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[st
 def option_needs_math(text: str) -> bool:
     recovered = recover_latex(text)
     return bool(recovered) and ("^{" in recovered or "\\frac" in recovered or looks_like_math_line(recovered))
+
+
+# --- Delimiter wrapping so MathJax actually typesets the recovered math ---
+
+_HAS_DELIM_RE = re.compile(r"\\\(|\\\)|\\\[|\\\]|\$")
+_BARE_MATH_RE = re.compile(
+    r"\\(?:frac|sqrt|times|div|cdot|pm|mp|leq|geq|neq|le|ge|ne|sum|int|"
+    r"alpha|beta|gamma|theta|pi|infty|circ|approx|left|right|overline|vec)\b"
+    r"|\^\{|_\{|[A-Za-z]\^\d|[A-Za-z]\^\{"
+)
+_BRACE_1 = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
+# A single math token: number, one variable letter (not part of a word),
+# an operator, a \command, an exponent, a subscript, or a brace group.
+_MATH_TOKEN = (
+    r"(?:\d+(?:\.\d+)?"
+    r"|[A-Za-z](?![A-Za-z])"
+    r"|[()\[\]+\-=*/·×÷]"
+    r"|\\[A-Za-z]+"
+    r"|\^\{[^{}]+\}|\^-?\d+|\^[A-Za-z]"
+    r"|_\{[^{}]+\}|_\d+"
+    r"|" + _BRACE_1 + r")"
+)
+_MATH_RUN_RE = re.compile(
+    "(?:"
+    r"\\frac\s*" + _BRACE_1 + r"\s*" + _BRACE_1
+    + r"|\\sqrt\s*" + _BRACE_1
+    + r"|(?:\([^()]{0,40}\)|[A-Za-z0-9\]]{1,20})\s*\^\s*(?:\{[^{}]+\}|-?\d+|[A-Za-z])"
+    + ")"
+    + r"(?:\s*" + _MATH_TOKEN + r")*"
+)
+
+
+def _wrap_math_islands(text: str, inline: bool) -> str:
+    """Wrap \\frac{..}{..}, \\sqrt{..} and exponent runs in \\( \\), leaving
+    the surrounding English words untouched."""
+    def repl(m: re.Match[str]) -> str:
+        body = m.group(0).strip()
+        block = (not inline) and "\\frac" in body
+        return (f" \\[{body}\\] " if block else f" \\({body}\\) ")
+
+    wrapped = _MATH_RUN_RE.sub(repl, text or "")
+    # merge islands separated only by whitespace: \(a\) \(b\) -> \(a b\)
+    wrapped = re.sub(r"\\\)\s+\\\(", " ", wrapped)
+    wrapped = re.sub(r"\\\]\s+\\\[", " ", wrapped)
+    return re.sub(r"[ \t]{2,}", " ", wrapped).strip()
+
+
+def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
+    """Return a string MathJax/KaTeX will typeset.
+
+    Prose stays prose; a bare LaTeX body (``\\frac{a}{b}``, ``x^{2}+1``) or
+    an ``Instruction: <math>`` line gets wrapped in ``\\( \\)`` (or ``\\[ \\]``
+    for a display fraction). No-ops when the text already carries
+    delimiters or has no math at all - so it is safe to run on every
+    delivered question and option.
+    """
+    s = (text or "").strip()
+    if not s:
+        return text or ""
+    if _HAS_DELIM_RE.search(s):
+        return s
+    prefixed = _INSTRUCTION_PREFIX_RE.match(s)
+    if prefixed and (prefixed.group(2) or "").strip():
+        body = prefixed.group(2).strip()
+        if looks_like_prose(body) and not re.search(r"\\frac|\^\{", body):
+            return s
+        block = (not inline) and "\\frac" in body
+        prefix = prefixed.group(1).rstrip()
+        return f"{prefix} " + (f"\\[{body}\\]" if block else f"\\({body}\\)")
+    if not _BARE_MATH_RE.search(s):
+        return s
+    if looks_like_prose(s):
+        return _wrap_math_islands(s, inline)
+    block = (not inline) and "\\frac" in s
+    return f"\\[{s}\\]" if block else f"\\({s}\\)"
+
+
+def to_render_string(text: Optional[str], latex: Optional[str] = None, *, inline: bool = True) -> str:
+    """Full pipeline for a diagnostic stem/option: recover the math, then
+    guarantee it is delimited for MathJax. This is what delivery sends as
+    the ``render`` field so the client does not have to re-guess."""
+    display, recovered_latex = recover_fields(text, latex)
+    return wrap_for_mathjax(recovered_latex or display, inline=inline)
