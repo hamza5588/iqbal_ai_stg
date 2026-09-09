@@ -204,8 +204,12 @@
       try { await persistDiagAnswers(); } catch (e) { /* ignore */ }
     }
     clearDiagTimer();
+    try { localStorage.removeItem('lmsDiagWs:' + (diagState.attemptId || 'x')); } catch (e) { /* ignore */ }
     lmsCloseModal('lmsDiagnosticModal');
     diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {}, expiresAt: null, remainingSeconds: null, timerInterval: null };
+    window._lmsDiagWorkspaceOpen = false;
+    window._lmsDiagExplainCache = {};
+    wsState = { tab: 'notes', notes: '', canvas: null, drawing: false, color: '#111827', erasing: false, last: null };
   };
 
   async function persistDiagAnswers() {
@@ -451,6 +455,110 @@
       renderDiagnosticQuestion();
     }
   };
+  /* ---- Math workspace: scratch notes + freehand canvas ---- */
+  var wsState = { tab: 'notes', notes: '', canvas: null, drawing: false, color: '#111827', erasing: false, last: null };
+
+  function wsNotesKey() { return 'lmsDiagWs:' + (diagState.attemptId || 'x'); }
+
+  window.toggleDiagWorkspace = function () {
+    window._lmsDiagWorkspaceOpen = !window._lmsDiagWorkspaceOpen;
+    var host = document.getElementById('lmsDiagWorkspaceHost');
+    if (!host) return;
+    if (window._lmsDiagWorkspaceOpen) window.mountDiagWorkspace();
+    else host.innerHTML = '';
+  };
+
+  window.mountDiagWorkspace = function () {
+    var host = document.getElementById('lmsDiagWorkspaceHost');
+    if (!host) return;
+    if (!wsState.notes) {
+      try { wsState.notes = localStorage.getItem(wsNotesKey()) || ''; } catch (e) { /* ignore */ }
+    }
+    var colors = ['#111827', '#dc2626', '#2563eb', '#16a34a'];
+    var swatches = colors.map(function (c) {
+      return '<button type="button" class="lms-diag-workspace-swatch' + (wsState.color === c && !wsState.erasing ? ' active' : '') +
+        '" style="background:' + c + '" onclick="lmsWsSetColor(\'' + c + '\')" aria-label="pen colour"></button>';
+    }).join('');
+    host.innerHTML =
+      '<div class="lms-diag-workspace">' +
+      '<div class="lms-diag-workspace-tabs">' +
+      '<button type="button" class="lms-diag-workspace-tab' + (wsState.tab === 'notes' ? ' active' : '') + '" onclick="lmsWsTab(\'notes\')">Notes</button>' +
+      '<button type="button" class="lms-diag-workspace-tab' + (wsState.tab === 'draw' ? ' active' : '') + '" onclick="lmsWsTab(\'draw\')">Rough sheet</button>' +
+      '</div>' +
+      '<div class="lms-diag-workspace-body">' +
+      (wsState.tab === 'notes'
+        ? '<textarea class="lms-diag-workspace-notes" id="lmsWsNotes" placeholder="Working / rough notes (only you see this)">' + escapeHtml(wsState.notes) + '</textarea>'
+        : '<div class="lms-diag-workspace-toolbar">' + swatches +
+          '<button type="button" class="lms-quiz-tool' + (wsState.erasing ? ' active' : '') + '" onclick="lmsWsErase()">Eraser</button>' +
+          '<button type="button" class="lms-quiz-tool" onclick="lmsWsClear()">Clear</button></div>' +
+          '<div class="lms-diag-workspace-canvas-wrap"><canvas class="lms-diag-workspace-canvas" id="lmsWsCanvas"></canvas></div>') +
+      '</div></div>';
+    if (wsState.tab === 'notes') {
+      var ta = document.getElementById('lmsWsNotes');
+      ta.addEventListener('input', function () {
+        wsState.notes = ta.value;
+        try { localStorage.setItem(wsNotesKey(), ta.value); } catch (e) { /* ignore */ }
+      });
+    } else {
+      lmsWsInitCanvas();
+    }
+  };
+
+  window.lmsWsTab = function (t) { wsState.tab = t; window.mountDiagWorkspace(); };
+  window.lmsWsSetColor = function (c) { wsState.color = c; wsState.erasing = false; window.mountDiagWorkspace(); };
+  window.lmsWsErase = function () { wsState.erasing = !wsState.erasing; window.mountDiagWorkspace(); };
+  window.lmsWsClear = function () {
+    wsState.canvasData = null;
+    var c = document.getElementById('lmsWsCanvas');
+    if (c) { var x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height); }
+  };
+
+  function lmsWsInitCanvas() {
+    var canvas = document.getElementById('lmsWsCanvas');
+    if (!canvas) return;
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.lineJoin = ctx.lineCap = 'round';
+    if (wsState.canvasData) {
+      var img = new Image();
+      img.onload = function () { ctx.drawImage(img, 0, 0, rect.width, rect.height); };
+      img.src = wsState.canvasData;
+    }
+    function pos(e) {
+      var r = canvas.getBoundingClientRect();
+      var p = (e.touches && e.touches[0]) || e;
+      return { x: p.clientX - r.left, y: p.clientY - r.top };
+    }
+    function start(e) { wsState.drawing = true; wsState.last = pos(e); e.preventDefault(); }
+    function move(e) {
+      if (!wsState.drawing) return;
+      var p = pos(e);
+      ctx.strokeStyle = wsState.erasing ? '#ffffff' : wsState.color;
+      ctx.lineWidth = wsState.erasing ? 16 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(wsState.last.x, wsState.last.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      wsState.last = p;
+      e.preventDefault();
+    }
+    function end() {
+      if (!wsState.drawing) return;
+      wsState.drawing = false;
+      try { wsState.canvasData = canvas.toDataURL('image/png'); } catch (e) { /* ignore */ }
+    }
+    canvas.addEventListener('pointerdown', start);
+    canvas.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+  }
+
   window._lmsDiagExplainCache = {};
   window.lmsExplainDiagQuestion = async function (qIdx) {
     var panel = document.getElementById('lmsDiagExplain');
