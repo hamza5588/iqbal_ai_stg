@@ -100,13 +100,28 @@ def _resolve_all_target_threads(student_id: int) -> Tuple[List[str], Optional[in
     return [], None, None
 
 
-def _match_target_section(weak_area_name: str, target_thread_ids: List[str]) -> Tuple[str, str]:
-    """Pick the best target PDF heading across all target PDFs. Returns (section, thread_id)."""
+_SECTION_STOPWORDS = frozenset(
+    {"and", "or", "the", "of", "in", "with", "a", "an", "to", "for", "on",
+     "basic", "general", "concepts", "concept", "problems", "problem",
+     "skills", "skill", "topics", "topic", "practice", "math", "mathematics"}
+)
+
+
+def _match_target_section(
+    weak_area_name: str, target_thread_ids: List[str]
+) -> Tuple[str, str, int]:
+    """Best target-PDF heading for a weak area, across all target PDFs.
+
+    Returns (section, thread_id, relevance) where relevance is the count of
+    shared meaningful words (a substring hit counts as 2). relevance == 0
+    means no real match - the caller should not trust this section for the
+    skill and should generate grade-appropriate questions instead."""
     name = (weak_area_name or "").strip()
     if not name:
-        return name, target_thread_ids[0] if target_thread_ids else ""
+        return name, (target_thread_ids[0] if target_thread_ids else ""), 0
 
     name_lower = name.lower()
+    name_tokens = {t for t in name_lower.split() if t not in _SECTION_STOPWORDS}
     best = None
     best_score = 0
     best_thread = target_thread_ids[0] if target_thread_ids else ""
@@ -118,16 +133,16 @@ def _match_target_section(weak_area_name: str, target_thread_ids: List[str]) -> 
             if not heading:
                 continue
             h_lower = heading.lower()
-            score = 0
+            h_tokens = {t for t in h_lower.split() if t not in _SECTION_STOPWORDS}
             if name_lower in h_lower or h_lower in name_lower:
-                score = min(len(name_lower), len(h_lower))
+                score = 2 + len(name_tokens & h_tokens)
             else:
-                score = len(set(name_lower.split()) & set(h_lower.split()))
+                score = len(name_tokens & h_tokens)
             if score > best_score:
                 best_score = score
                 best = heading
                 best_thread = thread_id
-    return (best or name), best_thread
+    return (best or name), best_thread, best_score
 
 
 def _mcq_to_queue_item(
@@ -158,6 +173,22 @@ def _mcq_to_queue_item(
         "answered": False,
         "correct": None,
     }
+
+
+def _resolve_weak_topic_id(topic_id: int, topic_name: str) -> int:
+    """A weak area must map to a real curriculum topic, otherwise its mastery
+    can't be tracked and it never clears from Weak Topics. Backfill a missing
+    id from the skill name."""
+    if topic_id:
+        return topic_id
+    try:
+        from app.services.lms.topic_resolver import get_or_create_topic_from_pdf_label
+
+        topic = get_or_create_topic_from_pdf_label(topic_name)
+        return topic.id if topic else 0
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not resolve topic id for weak area %s: %s", topic_name, exc)
+        return 0
 
 
 def _grade_appropriate_fallback(
@@ -206,21 +237,28 @@ def _build_question_queue(
     seen_texts: set[str] = set()
 
     for entry in weak_topics:
-        topic_id = entry.get("topic_id") or 0
         topic_name = (entry.get("topic_name") or "Practice area").strip()
+        topic_id = _resolve_weak_topic_id(entry.get("topic_id") or 0, topic_name)
         score = float(entry.get("score_percent") or 0)
         ladder = _ladder_from(_start_rank_for_score(score))
-        pdf_section, thread_id = _match_target_section(topic_name, target_thread_ids)
+        pdf_section, thread_id, relevance = _match_target_section(topic_name, target_thread_ids)
 
-        section_text = get_section_text(thread_id, rag_owner_id, pdf_section)
-        if not section_text.strip():
-            for alt_thread in target_thread_ids:
-                if alt_thread == thread_id:
-                    continue
-                section_text = get_section_text(alt_thread, rag_owner_id, pdf_section)
-                if section_text.strip():
-                    thread_id = alt_thread
-                    break
+        section_text = ""
+        if relevance > 0:
+            section_text = get_section_text(thread_id, rag_owner_id, pdf_section)
+            if not section_text.strip():
+                for alt_thread in target_thread_ids:
+                    if alt_thread == thread_id:
+                        continue
+                    section_text = get_section_text(alt_thread, rag_owner_id, pdf_section)
+                    if section_text.strip():
+                        thread_id = alt_thread
+                        break
+        else:
+            logger.info(
+                "Weak area %s has no relevant target-PDF section - generating "
+                "grade-appropriate questions for the skill", topic_name,
+            )
 
         topic_items: List[dict] = []
         if section_text.strip():

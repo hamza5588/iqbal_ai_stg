@@ -10,20 +10,29 @@ import types
 _p = pathlib.Path(__file__).resolve().parents[1] / "app" / "services" / "lms" / "deficiency_chat_service.py"
 
 
+_FAKE_HEADINGS = {"t1": {"topics": [
+    {"topic": "Area and Perimeter of Rectangles"},
+    {"topic": "Rational and Irrational Numbers"},
+    {"topic": "Solving Linear Equations"},
+]}}
+
+
 def _load():
     src = _p.read_text(encoding="utf-8")
     ns: dict = {
-        "json": json, "List": list, "Optional": object,
+        "json": json, "List": list, "Optional": object, "Tuple": tuple,
         "DeficiencyChatSession": object,
+        "_get_thread_topics": lambda tid: _FAKE_HEADINGS.get(tid, {"topics": []}),
     }
-    # module-level constants
-    for name in ("_DIFF_LADDER", "_DIFF_RANK"):
-        m = re.search(rf"^{name} = .+$", src, re.M)
+    # grab each top-level block from its header to the next top-level
+    # header (def / NAME = / @decorator) or EOF
+    _stop = r"(?=\ndef |\n[A-Za-z_]+ = |\n@|\Z)"
+    for name in ("_DIFF_LADDER", "_DIFF_RANK", "_SECTION_STOPWORDS"):
+        m = re.search(rf"\n{name} = .*?{_stop}", src, re.S)
         exec(m.group(0), ns)
-    # pure functions (def ... up to the next top-level def/blank-blank)
     for fn in ("_start_rank_for_score", "_ladder_from", "_base_rank",
-               "_current_target_rank", "_reorder_pending"):
-        m = re.search(rf"\ndef {fn}\(.*?\n(?:(?:[ \t].*)?\n)*", src)
+               "_current_target_rank", "_reorder_pending", "_match_target_section"):
+        m = re.search(rf"\ndef {fn}\(.*?{_stop}", src, re.S)
         exec(m.group(0), ns)
     return ns
 
@@ -81,3 +90,23 @@ def test_reorder_pending_is_noop_on_last_question():
     questions = [_q("easy", True, True), _q("medium", True, False), _q("hard")]
     NS["_reorder_pending"](session, questions)
     assert questions[2]["difficulty"] == "hard"
+
+
+# --- skill / section relevance (DIL #1, #3) ---
+
+def test_matching_skill_finds_its_section():
+    section, thread, relevance = NS["_match_target_section"]("Area of a rectangle", ["t1"])
+    assert section == "Area and Perimeter of Rectangles"
+    assert relevance > 0
+
+
+def test_unrelated_skill_scores_zero_relevance():
+    # nothing in the PDF is about probability -> caller must generate instead
+    section, thread, relevance = NS["_match_target_section"]("Probability of an event", ["t1"])
+    assert relevance == 0
+
+
+def test_generic_words_alone_do_not_count_as_a_match():
+    # "problems" / "math" are stopwords - no real overlap with any heading
+    _s, _t, relevance = NS["_match_target_section"]("Word problems in math", ["t1"])
+    assert relevance == 0
