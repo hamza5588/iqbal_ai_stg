@@ -27,7 +27,11 @@ from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
 
-VARIANT_SOURCE_TYPE = "ai_variant"
+# questions.source_type has a CHECK constraint
+# (manual, pdf_qa_converted, pdf_ai, mixed) - variants are AI-built from an
+# existing item, so they store as "mixed". They are identified as variants
+# only through the assessment's variant_pool meta, never by source_type.
+VARIANT_SOURCE_TYPE = "mixed"
 TARGET_VARIANTS_PER_QUESTION = 2
 
 
