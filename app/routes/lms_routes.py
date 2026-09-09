@@ -551,6 +551,7 @@ def start_quiz_attempt(quiz_id: int):
             student_id=_current_user_id(),
             assessment_id=quiz_id,
             assignment_id=assignment_id,
+            retake=bool(body.get("retake")),
         )
         if assignment_id:
             assignment_service.link_attempt_to_submission(

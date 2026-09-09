@@ -367,6 +367,10 @@ class AssessmentAttempt(Base):
     submitted_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)
     timed_out = Column(Boolean, nullable=False, default=False, server_default="false")
+    # JSON list of question ids for THIS attempt. NULL = use the assessment's
+    # own question list (every attempt before diagnostic retakes existed).
+    # A retake stores a fresh, order-shuffled / AI-variant set here.
+    question_ids_json = Column(Text, nullable=True)
 
     answers = relationship(
         "AttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"

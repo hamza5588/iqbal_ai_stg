@@ -251,10 +251,15 @@
     if (timerEl) timerEl.style.display = 'none';
     var mins = diag.time_limit_minutes ? Math.round(diag.time_limit_minutes) : 30;
     var qn = diag.question_count || '';
+    var isRetake = !!diag._retake;
     body.innerHTML =
       '<div class="lms-diag-orient">' +
-      '<h3 class="lms-diag-orient-title">Before you begin</h3>' +
-      '<p class="lms-diag-orient-lead">This is a one-time diagnostic. It is not graded like a test — it just helps us find what you already know and where you need practice, so your Learning Path is built for you.</p>' +
+      '<h3 class="lms-diag-orient-title">' + (isRetake ? 'Retaking the diagnostic' : 'Before you begin') + '</h3>' +
+      '<p class="lms-diag-orient-lead">' +
+      (isRetake
+        ? 'These are fresh questions on the same topics as before. Your Learning Path will update from this attempt.'
+        : 'This is a diagnostic. It is not graded like a test — it just helps us find what you already know and where you need practice, so your Learning Path is built for you.') +
+      '</p>' +
       '<ul class="lms-diag-orient-list">' +
       (qn ? '<li><strong>' + escapeHtml(String(qn)) + ' questions</strong>, multiple choice.</li>' : '') +
       '<li><strong>About ' + mins + ' minutes.</strong> The timer starts when you press Start and is shown at the top.</li>' +
@@ -272,16 +277,32 @@
   window.lmsBeginDiagnostic = function () {
     var diag = window._lmsDiagOrientation;
     if (!diag) return;
-    startDiagnosticQuiz(diag.id, diag.title || 'Diagnostic Assessment', diag.question_count, 'Platform diagnostic', diag.time_limit_minutes);
+    startDiagnosticQuiz(diag.id, diag.title || 'Diagnostic Assessment', diag.question_count, 'Platform diagnostic', diag.time_limit_minutes, !!diag._retake);
   };
 
-  async function startDiagnosticQuiz(assessmentId, title, qCount, subtitle, timeLimitMinutes) {
+  window.lmsRetakeDiagnostic = async function () {
+    var body = document.getElementById('lmsDiagBody');
+    if (body) body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center;">Loading a fresh set of questions…</p>';
+    try {
+      var diag = await lmsApi('/api/lms/diagnostics/default');
+      diag._retake = true;
+      showDiagnosticOrientation(diag);
+    } catch (e) {
+      if (body) body.innerHTML = '<p class="lms-error">Could not start a retake right now.</p>';
+    }
+  };
+
+  async function startDiagnosticQuiz(assessmentId, title, qCount, subtitle, timeLimitMinutes, retake) {
     diagState.assessmentId = assessmentId;
     var body = document.getElementById('lmsDiagBody');
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center;">Starting ' + escapeHtml(title) + '...</p>';
     try {
-      var start = await lmsApi('/api/lms/quizzes/' + assessmentId + '/start', { method: 'POST' });
-      if (start.timed_out || start.time_over) {
+      var start = await lmsApi('/api/lms/quizzes/' + assessmentId + '/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retake: !!retake })
+      });
+      if (!retake && (start.timed_out || start.time_over)) {
         renderDiagnosticTimeOver(start);
         return;
       }
@@ -703,6 +724,7 @@
       (weak.length ? '<p class="lms-status" style="margin-top:12px;">Practice weak areas in Learning Chat — one question at a time.</p>' : '') +
       '<div class="lms-modal-footer" style="border:none;padding-top:20px;display:flex;gap:8px;flex-wrap:wrap;">' +
       (weak.length ? '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>' : '') +
+      '<button type="button" class="lms-btn lms-btn-secondary" onclick="lmsRetakeDiagnostic()">Retake with new questions</button>' +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button></div>';
   }
 

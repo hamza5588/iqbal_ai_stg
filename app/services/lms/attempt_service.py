@@ -1,6 +1,7 @@
 """Assessment attempt and scoring service."""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -12,6 +13,22 @@ from app.services.lms.mcq_utils import options_from_json, pick_display_fields
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
+
+
+def attempt_question_ids(attempt: AssessmentAttempt) -> List[int]:
+    """Ordered question ids for this attempt: its own list when set (a
+    diagnostic retake carries a shuffled / AI-variant set), otherwise the
+    assessment's own questions."""
+    raw = getattr(attempt, "question_ids_json", None)
+    if raw:
+        try:
+            ids = json.loads(raw)
+            if isinstance(ids, list) and ids:
+                return [int(x) for x in ids]
+        except (ValueError, TypeError):
+            logger.warning("Bad question_ids_json on attempt %s", attempt.id)
+    assessment = get_assessment(attempt.assessment_id)
+    return [aq.question_id for aq in sorted(assessment.questions, key=lambda x: x.sort_order)]
 
 TIME_OVER_MESSAGE = (
     "Time is up. Your diagnostic was submitted automatically — "
@@ -144,16 +161,31 @@ def finalize_expired_diagnostic_if_needed(
     return None
 
 
+def _submitted_diagnostic_count(student_id: int, assessment_id: int) -> int:
+    db = get_db()
+    return (
+        db.query(AssessmentAttempt)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.assessment_id == assessment_id,
+            AssessmentAttempt.status == "submitted",
+        )
+        .count()
+    )
+
+
 def start_attempt(
     student_id: int,
     assessment_id: int,
     assignment_id: Optional[int] = None,
+    retake: bool = False,
 ) -> tuple[AssessmentAttempt, bool]:
     """Start or resume an attempt. Returns (attempt, resumed)."""
     assessment = get_assessment(assessment_id)
     if assessment.status != "published":
         raise LMSValidationError("Assessment is not published")
 
+    is_diagnostic_retake = False
     if assessment.assessment_type == "diagnostic":
         from app.services.lms.assessment_service import get_active_platform_diagnostic
 
@@ -162,15 +194,17 @@ def start_attempt(
             raise LMSValidationError("This diagnostic is not available")
         assignment_id = None
         timeout = finalize_expired_diagnostic_if_needed(student_id, assessment_id)
-        if timeout:
+        if timeout and not retake:
             return get_attempt(timeout["attempt_id"]), False
         if _student_completed_diagnostic(student_id, assessment_id):
-            latest = get_latest_submitted_attempt(student_id, assessment_id)
-            if latest and getattr(latest, "timed_out", False):
-                return latest, False
-            raise LMSValidationError(
-                "You have already completed the diagnostic assessment. Retakes are not allowed."
-            )
+            if not retake:
+                latest = get_latest_submitted_attempt(student_id, assessment_id)
+                if latest:
+                    return latest, False
+                raise LMSValidationError(
+                    "You have already completed the diagnostic assessment."
+                )
+            is_diagnostic_retake = True
     elif assessment.assessment_type == "quiz":
         from app.services.lms.assignment_service import resolve_student_quiz_assignment
 
@@ -201,6 +235,22 @@ def start_attempt(
         max_score=float(len(assessment.questions)),
     )
 
+    if is_diagnostic_retake:
+        from app.services.lms import diagnostic_variant_service
+
+        attempt_number = _submitted_diagnostic_count(student_id, assessment_id) + 1
+        try:
+            q_ids = diagnostic_variant_service.question_set_for_attempt(
+                assessment_id, attempt_number
+            )
+            if q_ids:
+                import json as _json
+
+                attempt.question_ids_json = _json.dumps(q_ids)
+                attempt.max_score = float(len(q_ids))
+        except Exception as exc:  # noqa: BLE001 - never block a retake
+            logger.warning("Retake question-set build failed for student %s: %s", student_id, exc)
+
     if assessment.assessment_type == "diagnostic":
         from app.services.lms.diagnostic_timer_service import compute_attempt_deadline
 
@@ -210,6 +260,15 @@ def start_attempt(
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
+
+    if is_diagnostic_retake:
+        try:
+            from app.services.lms import diagnostic_variant_service
+
+            diagnostic_variant_service.enqueue_pool_prewarm(assessment_id)
+        except Exception:  # noqa: BLE001
+            pass
+
     return attempt, False
 
 
@@ -270,11 +329,12 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
     _check_attempt_expired(attempt)
     from app.services.quiz.math_text import wrap_for_mathjax
 
-    assessment = get_assessment(attempt.assessment_id)
     db = get_db()
+    q_ids = attempt_question_ids(attempt)
+    q_rows = {r.id: r for r in db.query(Question).filter(Question.id.in_(q_ids)).all()}
     result = []
-    for aq in sorted(assessment.questions, key=lambda x: x.sort_order):
-        q = db.query(Question).filter(Question.id == aq.question_id).first()
+    for sort_order, qid in enumerate(q_ids):
+        q = q_rows.get(qid)
         if not q:
             continue
         opts = options_from_json(q.options_json)
@@ -299,7 +359,7 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
                 "question_latex": q_latex,
                 "question_render": wrap_for_mathjax(q_latex or q_text or q.question_text, inline=False),
                 "options": safe_opts,
-                "sort_order": aq.sort_order,
+                "sort_order": sort_order,
                 "difficulty": q.difficulty,
                 "time_limit_seconds": q.time_limit_seconds,
             }
@@ -457,7 +517,7 @@ def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bo
     answered ones to zero.
     """
     db = get_db()
-    question_ids = [aq.question_id for aq in assessment.questions]
+    question_ids = attempt_question_ids(attempt)
     questions = db.query(Question).filter(Question.id.in_(question_ids)).all()
     q_by_id = {q.id: q for q in questions}
     answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()

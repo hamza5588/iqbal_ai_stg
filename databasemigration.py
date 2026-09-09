@@ -306,6 +306,24 @@ def ensure_student_topic_scores_sample_size_column(conn, inspector):
         logger.info("Column student_topic_scores.sample_size already exists, skipping.")
 
 
+def ensure_assessment_attempts_question_ids_column(conn, inspector):
+    """Add question_ids_json to assessment_attempts.
+
+    Lets a single attempt carry its own question list (diagnostic retakes
+    get a shuffled / AI-variant set). NULL means "use the assessment's own
+    questions", which is every attempt taken before retakes existed.
+    """
+    if not inspector.has_table("assessment_attempts"):
+        logger.info("Table assessment_attempts does not exist, skipping question_ids_json column.")
+        return
+    columns = {col["name"] for col in inspector.get_columns("assessment_attempts")}
+    if "question_ids_json" not in columns:
+        logger.info("Adding column assessment_attempts.question_ids_json ...")
+        conn.execute(text("ALTER TABLE assessment_attempts ADD COLUMN question_ids_json TEXT NULL"))
+    else:
+        logger.info("Column assessment_attempts.question_ids_json already exists, skipping.")
+
+
 def main():
     logger.info("Connecting to database: %s", Config.SQLALCHEMY_DATABASE_URI)
     engine = create_engine(
@@ -330,6 +348,8 @@ def main():
         ensure_rag_chunks_page_end_column(conn, inspector)
         inspector = inspect(engine)
         ensure_student_topic_scores_sample_size_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_assessment_attempts_question_ids_column(conn, inspector)
 
     logger.info("Migration completed successfully.")
 
