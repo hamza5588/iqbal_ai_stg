@@ -353,15 +353,20 @@
     }
     try {
       if (!autoSubmit) {
+        // Best-effort flush of every selected answer. Answers are already
+        // saved on selection; this is a safety net, so one failed save
+        // must not block the submit itself.
         for (var i = 0; i < diagState.questions.length; i++) {
           var item = diagState.questions[i];
           var qid = item.question_id || (item.question && item.question.id);
           if (diagState.answers[i] !== undefined && qid) {
-            await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
-            });
+            try {
+              await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
+              });
+            } catch (flushErr) { /* keep going - submit will score what's saved */ }
           }
         }
       }

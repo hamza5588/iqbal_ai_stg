@@ -325,23 +325,63 @@ def get_attempt_timer_info(attempt_id: int) -> dict:
     }
 
 
-def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -> AttemptAnswer:
+def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -> dict:
+    """Save (or overwrite) one answer. Returns a small status dict.
+
+    - Tolerant of a late save after the attempt is already submitted /
+      timed out (returns saved=False instead of raising) so a client that
+      is mid-flush when the server auto-submits doesn't blow up.
+    - Race-safe: two concurrent saves for the same (attempt, question) no
+      longer 500 on the uq_attempt_question unique constraint.
+    """
     attempt = get_attempt(attempt_id)
     if attempt.status != "in_progress":
-        raise LMSValidationError("Attempt is not in progress")
-    _check_attempt_expired(attempt)
+        return {"saved": False, "reason": "attempt_not_in_progress", "question_id": question_id}
+    if _attempt_is_expired(attempt):
+        finalize_expired_attempt(attempt.id)
+        return {"saved": False, "reason": "time_over", "question_id": question_id}
 
     db = get_db()
-    answer = (
-        db.query(AttemptAnswer)
-        .filter(AttemptAnswer.attempt_id == attempt_id, AttemptAnswer.question_id == question_id)
-        .first()
+    _upsert_answer(db, attempt_id, question_id, selected_option_index)
+    return {"saved": True, "question_id": question_id}
+
+
+def _upsert_answer(db, attempt_id: int, question_id: int, selected_option_index: int) -> AttemptAnswer:
+    from sqlalchemy.exc import IntegrityError
+
+    def _find():
+        return (
+            db.query(AttemptAnswer)
+            .filter(
+                AttemptAnswer.attempt_id == attempt_id,
+                AttemptAnswer.question_id == question_id,
+            )
+            .first()
+        )
+
+    answer = _find()
+    if answer is not None:
+        answer.selected_option_index = selected_option_index
+        db.commit()
+        db.refresh(answer)
+        return answer
+
+    answer = AttemptAnswer(
+        attempt_id=attempt_id,
+        question_id=question_id,
+        selected_option_index=selected_option_index,
     )
-    if not answer:
-        answer = AttemptAnswer(attempt_id=attempt_id, question_id=question_id)
-        db.add(answer)
-    answer.selected_option_index = selected_option_index
-    db.commit()
+    db.add(answer)
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent request inserted the row first - update it instead.
+        db.rollback()
+        answer = _find()
+        if answer is None:
+            raise
+        answer.selected_option_index = selected_option_index
+        db.commit()
     db.refresh(answer)
     return answer
 

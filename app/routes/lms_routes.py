@@ -625,12 +625,12 @@ def save_attempt_answer(attempt_id: int):
         attempt = attempt_service.get_attempt(attempt_id)
         if attempt.student_id != _current_user_id():
             return json_error("Forbidden", code="forbidden", status=403)
-        answer = attempt_service.save_answer(
+        status = attempt_service.save_answer(
             attempt_id,
             int(body["question_id"]),
             int(body["selected_option_index"]),
         )
-        return json_success({"saved": True, "question_id": answer.question_id})
+        return json_success(status)
     except (KeyError, TypeError, ValueError) as e:
         return json_error(str(e), code="validation_error")
     except LMSValidationError as e:
