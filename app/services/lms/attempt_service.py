@@ -350,12 +350,24 @@ def get_attempt_timer_info(attempt_id: int) -> dict:
     if attempt.expires_at:
         delta = (attempt.expires_at - datetime.utcnow()).total_seconds()
         remaining = max(0, int(delta))
+
+    time_limit_minutes = assessment.time_limit_minutes
+    if assessment.assessment_type == "diagnostic":
+        # Keep the displayed limit consistent with the real deadline
+        # (which now has a 30-minute floor - see diagnostic_timer_service).
+        from app.services.lms.diagnostic_timer_service import compute_attempt_deadline
+
+        try:
+            time_limit_minutes = max(1, round(compute_attempt_deadline(assessment.id) / 60))
+        except Exception:  # noqa: BLE001 - fall back to the stored value
+            pass
+
     return {
         "attempt_id": attempt.id,
         "assessment_type": assessment.assessment_type,
         "expires_at": attempt.expires_at.isoformat() + "Z" if attempt.expires_at else None,
         "remaining_seconds": remaining,
-        "time_limit_minutes": assessment.time_limit_minutes,
+        "time_limit_minutes": time_limit_minutes,
         "is_expired": remaining == 0 if remaining is not None else False,
     }
 

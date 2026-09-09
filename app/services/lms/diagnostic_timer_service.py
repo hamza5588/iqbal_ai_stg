@@ -22,6 +22,11 @@ _MAX_SECONDS = 300
 _BUFFER_RATIO = 0.10
 _MAX_TOTAL_SECONDS = 3 * 60 * 60  # 3 hour safety cap for a diagnostic attempt
 
+# DIL rollout feedback: the per-question time sum came out at ~17 min, which
+# left students rushing. A diagnostic attempt now always gets at least this
+# long; the per-question sum can still push the total higher for a longer test.
+DIAGNOSTIC_MIN_TOTAL_SECONDS = 30 * 60
+
 
 def _clamp_seconds(value: int) -> int:
     return max(_MIN_SECONDS, min(_MAX_SECONDS, int(value)))
@@ -95,7 +100,10 @@ def _apply_estimates(assessment_id: int, estimates: List[QuestionTimeEstimate]) 
         q.difficulty = est.difficulty
         q.time_limit_seconds = _clamp_seconds(est.time_limit_seconds)
         total += q.time_limit_seconds
-    assessment.time_limit_minutes = max(1, int((total * (1 + _BUFFER_RATIO) + 59) // 60))
+    buffered = total * (1 + _BUFFER_RATIO)
+    if assessment.assessment_type == "diagnostic":
+        buffered = max(buffered, DIAGNOSTIC_MIN_TOTAL_SECONDS)
+    assessment.time_limit_minutes = max(1, int((buffered + 59) // 60))
     db.commit()
     return total
 
@@ -175,6 +183,8 @@ def compute_attempt_deadline(assessment_id: int) -> int:
         else:
             total = mins * 60
     deadline = int(total * (1 + _BUFFER_RATIO))
+    if assessment.assessment_type == "diagnostic":
+        deadline = max(deadline, DIAGNOSTIC_MIN_TOTAL_SECONDS)
     return min(max(deadline, _MIN_SECONDS), _MAX_TOTAL_SECONDS)
 
 

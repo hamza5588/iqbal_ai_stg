@@ -64,6 +64,14 @@ def list_admin_diagnostics() -> List[dict]:
 
 
 def _assessment_to_diagnostic_dict(assessment: Assessment, source: str) -> dict:
+    time_limit_minutes = assessment.time_limit_minutes
+    if assessment.assessment_type == "diagnostic":
+        from app.services.lms.diagnostic_timer_service import compute_attempt_deadline
+
+        try:
+            time_limit_minutes = max(1, round(compute_attempt_deadline(assessment.id) / 60))
+        except Exception:  # noqa: BLE001
+            pass
     return {
         "id": assessment.id,
         "title": assessment.title,
@@ -72,5 +80,5 @@ def _assessment_to_diagnostic_dict(assessment: Assessment, source: str) -> dict:
         "status": assessment.status,
         "source": source,
         "creation_mode": assessment.creation_mode,
-        "time_limit_minutes": assessment.time_limit_minutes,
+        "time_limit_minutes": time_limit_minutes,
     }
