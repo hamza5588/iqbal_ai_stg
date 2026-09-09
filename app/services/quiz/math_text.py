@@ -331,6 +331,12 @@ def option_needs_math(text: str) -> bool:
 # --- Delimiter wrapping so MathJax actually typesets the recovered math ---
 
 _HAS_DELIM_RE = re.compile(r"\\\(|\\\)|\\\[|\\\]|\$")
+# A plain English connective ("or", "and", ...) between two math bits, e.g.
+# "x = 3 or x = -3". The whole line must not be one math span - math mode
+# eats the spaces and renders the word as italic letters ("3orx").
+_MATH_CONNECTIVE_RE = re.compile(
+    r"[0-9A-Za-z)}\]]\s+(?:or|and|nor|where|when|then)\s+[-(\\0-9A-Za-z]", re.I
+)
 _BARE_MATH_RE = re.compile(
     r"\\(?:frac|sqrt|times|div|cdot|pm|mp|leq|geq|neq|le|ge|ne|sum|int|"
     r"alpha|beta|gamma|theta|pi|infty|circ|approx|left|right|overline|vec)\b"
@@ -397,7 +403,7 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
         return f"{prefix} " + (f"\\[{body}\\]" if block else f"\\({body}\\)")
     if not _BARE_MATH_RE.search(s):
         return s
-    if looks_like_prose(s):
+    if looks_like_prose(s) or _MATH_CONNECTIVE_RE.search(s):
         return _wrap_math_islands(s, inline)
     block = (not inline) and "\\frac" in s
     return f"\\[{s}\\]" if block else f"\\({s}\\)"

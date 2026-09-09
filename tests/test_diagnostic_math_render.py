@@ -87,3 +87,16 @@ def test_adjacent_islands_merge():
 def test_prose_with_no_math_never_wraps():
     raw = "the answer is a repeating decimal"
     assert wrap_for_mathjax(raw, inline=True) == raw
+
+
+def test_connective_between_math_bits_is_not_one_span():
+    # "x = 3 or x = -3" wrapped whole -> MathJax eats the spaces -> "3orx".
+    # The word "or" must stay outside any \( \).
+    out = to_render_string("x2 = 9 or x = -3", None, inline=True)
+    # "or" sits outside the math span, spaces intact
+    assert out == r"\(x^{2} = 9\) or x = -3"
+
+
+def test_fraction_options_joined_by_or_wrap_separately():
+    out = to_render_string(r"\frac{1}{2} or \frac{1}{3}", None, inline=True)
+    assert out == r"\(\frac{1}{2}\) or \(\frac{1}{3}\)"

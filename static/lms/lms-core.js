@@ -242,6 +242,9 @@
   var _FRAC_RE = /\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}/g;
   var _ALG_TERM = '(?:-?\\d*(?:[A-Za-z](?:\\^\\{[^}]+\\}|\\^\\d+|\\d+)*)+|-?\\d+)';
   var _ALG_ISLAND_RE = new RegExp(_ALG_TERM + '(?:\\s*[+\\-×÷=]\\s*' + _ALG_TERM + ')+', 'g');
+  // A plain English connective ("or", "and", ...) sitting between two math
+  // bits - e.g. "x = 3 or x = -3". Must not be wrapped as one math span.
+  var _MATH_CONNECTIVE_RE = /[0-9A-Za-z)}\]]\s+(?:or|and|nor|where|when|then)\s+[-(\\0-9A-Za-z]/i;
   var _EXAM_WORDS = [
     'factorization', 'factorisation', 'polynomials', 'polynomial',
     'expressions', 'expression', 'statements', 'statement',
@@ -471,6 +474,12 @@
     }
     if (lmsIsMixedPercent(recovered)) return recovered;
     if (lmsLooksLikeProse(recovered)) return lmsWrapMathIslands(recovered, inline);
+    // "x = 3 or x = -3", "a < b and b < c": a plain English connective joins
+    // two math bits. Wrapping the whole string makes MathJax eat the spaces
+    // and render the word as italic letters ("3orx"). Wrap each bit instead.
+    if (_MATH_CONNECTIVE_RE.test(recovered)) {
+      return lmsWrapMathIslands(recovered, inline);
+    }
     if (lmsLooksLikeRawLatex(recovered) || lmsLooksLikeMathExpression(recovered) || /\\frac|\^\{/.test(recovered)) {
       var math = lmsEscapePercentInMathBody(recovered);
       if (!inline && /\\frac/.test(math)) return '\\[' + math + '\\]';
