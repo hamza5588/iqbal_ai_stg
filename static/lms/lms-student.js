@@ -173,7 +173,7 @@
         unlockDiagnosticGate();
         return;
       }
-      await startDiagnosticQuiz(diag.id, diag.title || 'Diagnostic Assessment', diag.question_count, 'Platform diagnostic', diag.time_limit_minutes);
+      showDiagnosticOrientation(diag);
     } catch (err) {
       var loadMsg = err && err.message ? String(err.message) : '';
       if (/time over/i.test(loadMsg)) {
@@ -229,12 +229,44 @@
     } catch (e) { /* ignore */ }
   }
 
+  window._lmsDiagOrientation = null;
+
+  function showDiagnosticOrientation(diag) {
+    clearDiagTimer();
+    window._lmsDiagOrientation = diag;
+    var body = document.getElementById('lmsDiagBody');
+    var timerEl = document.getElementById('lmsDiagTimer');
+    if (timerEl) timerEl.style.display = 'none';
+    var mins = diag.time_limit_minutes ? Math.round(diag.time_limit_minutes) : 30;
+    var qn = diag.question_count || '';
+    body.innerHTML =
+      '<div class="lms-diag-orient">' +
+      '<h3 class="lms-diag-orient-title">Before you begin</h3>' +
+      '<p class="lms-diag-orient-lead">This is a one-time diagnostic. It is not graded like a test — it just helps us find what you already know and where you need practice, so your Learning Path is built for you.</p>' +
+      '<ul class="lms-diag-orient-list">' +
+      (qn ? '<li><strong>' + escapeHtml(String(qn)) + ' questions</strong>, multiple choice.</li>' : '') +
+      '<li><strong>About ' + mins + ' minutes.</strong> The timer starts when you press Start and is shown at the top.</li>' +
+      '<li>You can <strong>move between questions freely</strong>, skip any question, and change your answers until you submit.</li>' +
+      '<li>Use <strong>&ldquo;Explain this question&rdquo;</strong> if the wording is unclear — it rephrases the question without giving the answer.</li>' +
+      '<li>Use the <strong>Workspace</strong> (rough sheet / notes) for any working out.</li>' +
+      '<li>If time runs out it submits automatically, and <strong>every question you answered is still scored</strong>.</li>' +
+      '</ul>' +
+      '<div class="lms-modal-footer" style="border:none;padding-top:8px;display:flex;gap:8px;flex-wrap:wrap;">' +
+      '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsBeginDiagnostic()">Start Diagnostic</button>' +
+      (window._lmsDiagnosticMandatory ? '' : '<button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnostic()">Not now</button>') +
+      '</div></div>';
+  }
+
+  window.lmsBeginDiagnostic = function () {
+    var diag = window._lmsDiagOrientation;
+    if (!diag) return;
+    startDiagnosticQuiz(diag.id, diag.title || 'Diagnostic Assessment', diag.question_count, 'Platform diagnostic', diag.time_limit_minutes);
+  };
+
   async function startDiagnosticQuiz(assessmentId, title, qCount, subtitle, timeLimitMinutes) {
     diagState.assessmentId = assessmentId;
     var body = document.getElementById('lmsDiagBody');
-    body.innerHTML = '<p class="lms-status">Starting ' + escapeHtml(title) + '...</p>' +
-      (subtitle ? '<p class="lms-status" style="margin-top:4px;">' + escapeHtml(subtitle) + '</p>' : '') +
-      (timeLimitMinutes ? '<p class="lms-status" style="margin-top:4px;">Time limit: ~' + timeLimitMinutes + ' minutes (AI-calculated per question)</p>' : '');
+    body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center;">Starting ' + escapeHtml(title) + '...</p>';
     try {
       var start = await lmsApi('/api/lms/quizzes/' + assessmentId + '/start', { method: 'POST' });
       if (start.timed_out || start.time_over) {
@@ -279,6 +311,30 @@
     }
   }
 
+  function diagAnsweredCount() {
+    var n = 0;
+    for (var k = 0; k < diagState.questions.length; k++) {
+      if (diagState.answers[k] !== undefined) n++;
+    }
+    return n;
+  }
+
+  function diagQuestionMapHtml() {
+    var total = diagState.questions.length;
+    var cells = '';
+    for (var i = 0; i < total; i++) {
+      var state = (i === diagState.current)
+        ? 'current'
+        : (diagState.answers[i] !== undefined ? 'answered' : 'unanswered');
+      cells += '<button type="button" class="lms-qmap-cell ' + state + '" ' +
+        'onclick="jumpToDiagQuestion(' + i + ')" aria-label="Question ' + (i + 1) + '">' + (i + 1) + '</button>';
+    }
+    var answered = diagAnsweredCount();
+    return '<div class="lms-qmap">' +
+      '<div class="lms-qmap-head"><span>' + answered + ' of ' + total + ' answered</span></div>' +
+      '<div class="lms-qmap-grid">' + cells + '</div></div>';
+  }
+
   function renderDiagnosticQuestion() {
     var body = document.getElementById('lmsDiagBody');
     var idx = diagState.current;
@@ -288,44 +344,81 @@
     var pct = Math.round(100 * (idx + 1) / total);
     var qSecs = item.time_limit_seconds || q.time_limit_seconds;
     var diff = item.difficulty || q.difficulty || '';
+    var qid = item.question_id || (q && q.id);
     var opts = (q.options || []).map(function (o, oi) {
       var sel = diagState.answers[idx] === oi ? ' selected' : '';
       return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDiagOption(' + idx + ',' + oi + ')">' +
         '<span class="lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
         '<span class="lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
+
     var backBtn = idx > 0
       ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="prevDiagQuestion()">Back</button>'
       : '';
-    var forwardBtn = '';
-    if (idx < total - 1) {
-      forwardBtn = '<button type="button" class="lms-btn lms-btn-primary" onclick="nextDiagQuestion()"' +
-        (diagState.answers[idx] === undefined ? ' disabled' : '') + '>Next</button>';
-    } else {
-      forwardBtn = '<button type="button" class="lms-btn lms-btn-primary" onclick="submitLmsDiagnostic()"' +
-        (diagState.answers[idx] === undefined ? ' disabled' : '') + '>Submit Diagnostic</button>';
-    }
+    var nextBtn = idx < total - 1
+      ? '<button type="button" class="lms-btn lms-btn-primary" onclick="nextDiagQuestion()">' +
+        (diagState.answers[idx] === undefined ? 'Skip &rarr;' : 'Next') + '</button>'
+      : '';
+    var submitBtn = '<button type="button" class="lms-btn ' + (idx === total - 1 ? 'lms-btn-primary' : 'lms-btn-secondary') +
+      '" onclick="confirmSubmitDiagnostic()">Submit Diagnostic</button>';
     var nav =
       '<div class="lms-quiz-nav">' +
       '<div class="lms-quiz-nav-start">' + backBtn + '</div>' +
-      '<div class="lms-quiz-nav-end">' + forwardBtn + '</div>' +
+      '<div class="lms-quiz-nav-end">' + nextBtn + ' ' + submitBtn + '</div>' +
       '</div>';
+
+    var tools =
+      '<div class="lms-quiz-tools">' +
+      (qid && typeof window.lmsExplainDiagQuestion === 'function'
+        ? '<button type="button" class="lms-quiz-tool" onclick="lmsExplainDiagQuestion(' + idx + ')">&#128172; Explain this question</button>' : '') +
+      (typeof window.toggleDiagWorkspace === 'function'
+        ? '<button type="button" class="lms-quiz-tool" onclick="toggleDiagWorkspace()">&#9998; Workspace</button>' : '') +
+      (diagState.answers[idx] !== undefined
+        ? '<button type="button" class="lms-quiz-tool" onclick="clearDiagAnswer(' + idx + ')">Clear answer</button>'
+        : '') +
+      '</div>';
+
     var meta = '<p class="lms-status">Question ' + (idx + 1) + ' of ' + total;
     if (diff) meta += ' &middot; ' + escapeHtml(diff);
     if (qSecs) meta += ' &middot; ~' + qSecs + 's suggested';
     meta += '</p>';
+
     body.innerHTML =
       '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
       meta +
       '<div class="lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
+      '<div id="lmsDiagExplain" class="lms-diag-explain" hidden></div>' +
       opts +
+      tools +
+      '<div id="lmsDiagWorkspaceHost"></div>' +
+      diagQuestionMapHtml() +
       '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' + nav + '</div>';
     typeset(body);
+    if (window._lmsDiagWorkspaceOpen && typeof window.mountDiagWorkspace === 'function') window.mountDiagWorkspace();
   }
 
   window.selectDiagOption = function (qIdx, optIdx) {
     diagState.answers[qIdx] = optIdx;
     saveDiagAnswerAtIndex(qIdx);
+    renderDiagnosticQuestion();
+  };
+  window.clearDiagAnswer = function (qIdx) {
+    delete diagState.answers[qIdx];
+    // Persist the clear as -1 so the server-side answer is neutralised.
+    var item = diagState.questions[qIdx];
+    var qid = item && (item.question_id || (item.question && item.question.id));
+    if (diagState.attemptId && qid) {
+      lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: qid, selected_option_index: -1 })
+      }).catch(function () {});
+    }
+    renderDiagnosticQuestion();
+  };
+  window.jumpToDiagQuestion = function (i) {
+    if (i < 0 || i >= diagState.questions.length) return;
+    saveDiagAnswerAtIndex(diagState.current);
+    diagState.current = i;
     renderDiagnosticQuestion();
   };
   window.nextDiagQuestion = function () {
@@ -341,6 +434,19 @@
       diagState.current--;
       renderDiagnosticQuestion();
     }
+  };
+  window.confirmSubmitDiagnostic = function () {
+    var total = diagState.questions.length;
+    var answered = diagAnsweredCount();
+    var missing = total - answered;
+    if (missing > 0) {
+      var ok = window.confirm(
+        'You have ' + missing + ' unanswered question' + (missing === 1 ? '' : 's') +
+        '. Unanswered questions score 0. Submit anyway?'
+      );
+      if (!ok) return;
+    }
+    submitLmsDiagnostic();
   };
 
   window.submitLmsDiagnostic = async function (autoSubmit) {

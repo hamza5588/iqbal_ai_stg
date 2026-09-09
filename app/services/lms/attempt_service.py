@@ -240,7 +240,7 @@ def get_attempt_delivery_state(attempt_id: int) -> dict:
     saved_by_qid = {
         a.question_id: a.selected_option_index
         for a in rows
-        if a.selected_option_index is not None
+        if a.selected_option_index is not None and a.selected_option_index >= 0
     }
 
     saved_answers: dict[int, int] = {}
@@ -342,6 +342,15 @@ def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -
         return {"saved": False, "reason": "time_over", "question_id": question_id}
 
     db = get_db()
+    if selected_option_index is None or selected_option_index < 0:
+        # A cleared answer - remove the row so it reads as unanswered.
+        db.query(AttemptAnswer).filter(
+            AttemptAnswer.attempt_id == attempt_id,
+            AttemptAnswer.question_id == question_id,
+        ).delete(synchronize_session=False)
+        db.commit()
+        return {"saved": True, "cleared": True, "question_id": question_id}
+
     _upsert_answer(db, attempt_id, question_id, selected_option_index)
     return {"saved": True, "question_id": question_id}
 
