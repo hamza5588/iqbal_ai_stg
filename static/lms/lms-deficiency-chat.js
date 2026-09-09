@@ -104,11 +104,20 @@
     if (!body) return;
 
     if (data.completed || !data.current_question) {
+      var got = data.correct_count || 0;
+      var tot = data.total_questions || 0;
+      var aced = tot > 0 && got === tot;
       body.innerHTML =
         '<div style="text-align:center;padding:24px;">' +
-        '<div style="font-size:2rem;font-weight:800;color:var(--primary-color);">Done!</div>' +
-        '<p class="lms-status">You completed ' + (data.correct_count || 0) + ' / ' + (data.total_questions || 0) + ' correctly.</p>' +
+        '<div style="font-size:2.4rem;">' + (aced ? '🏆' : '🎉') + '</div>' +
+        '<div style="font-size:1.6rem;font-weight:800;color:var(--primary-color);">' +
+        (aced ? 'Perfect run!' : 'Great effort!') + '</div>' +
+        '<p class="lms-status">You got ' + got + ' / ' + tot + ' right.</p>' +
         '<button type="button" class="lms-btn lms-btn-primary" onclick="closeDeficiencyChat()">Close</button></div>';
+      if (!defState._celebratedDone) {
+        defState._celebratedDone = true;
+        try { lmsFeedback.celebrate(aced ? 'Perfect run!' : 'Nice work!'); } catch (e) { /* ignore */ }
+      }
       if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
       return;
     }
@@ -118,8 +127,10 @@
       ? Math.round(100 * (data.current_index + 1) / data.total_questions)
       : 0;
     var opts = (q.options || []).map(function (o, oi) {
-      var sel = defState.selectedOption === oi ? ' selected' : '';
-      return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDeficiencyOption(' + oi + ')">' +
+      var cls = 'lms-quiz-option';
+      if (defState.selectedOption === oi) cls += ' selected';
+      if (defState.lastWrongIndex === oi) cls += ' lms-opt-wrong';
+      return '<button type="button" class="' + cls + '" onclick="selectDeficiencyOption(' + oi + ')">' +
         '<span class="lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
         '<span class="lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
@@ -158,7 +169,9 @@
         ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="advanceDeficiencyQuestion()">Next question</button>'
         : '') +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="toggleDeficiencyTutor()">Ask Tutor</button>' +
-      '<button type="button" class="lms-btn lms-btn-secondary" onclick="pauseDeficiencyChat()">Pause &amp; Exit</button></div>' +
+      '<button type="button" class="lms-btn lms-btn-secondary" onclick="pauseDeficiencyChat()">Pause &amp; Exit</button>' +
+      '<button type="button" class="lms-btn lms-btn-ghost lms-sound-toggle" title="Sound cues" onclick="lmsToggleDeficiencySound(this)">' +
+      (lmsFeedback.soundEnabled() ? '🔊' : '🔇') + '</button></div>' +
       tutorSection;
 
     if (defState.tutorOpen) {
@@ -210,7 +223,14 @@
 
   window.selectDeficiencyOption = function (idx) {
     defState.selectedOption = idx;
+    defState.lastWrongIndex = null;
     renderDeficiencyView(window._lmsDeficiencyLastState);
+  };
+
+  window.lmsToggleDeficiencySound = function (btn) {
+    var on = lmsFeedback.toggleSound();
+    if (btn) btn.textContent = on ? '🔊' : '🔇';
+    if (on) lmsFeedback.cue('success');
   };
 
   window.submitDeficiencyAnswer = async function () {
@@ -223,6 +243,7 @@
         body: JSON.stringify({ selected_option_index: defState.selectedOption })
       });
       window._lmsDeficiencyLastState = data;
+      var chosen = defState.selectedOption;
       defState.selectedOption = null;
       if (!data.tutor_messages || !data.tutor_messages.length) {
         defState.tutorHistory = [];
@@ -231,16 +252,28 @@
       }
       defState.tutorLoading = false;
       if (data.last_answer && !data.last_answer.correct) {
+        defState.streak = 0;
+        defState.lastWrongIndex = chosen;
         defState.tutorOpen = true;
-        lmsShowToast('Incorrect — ask the tutor for help, then tap Next question when you are ready.', 'error');
+        lmsFeedback.cue('error');
+        lmsShowToast('Not quite — take another look, or ask the tutor for a hint.', 'error');
       } else {
+        defState.lastWrongIndex = null;
         defState.tutorOpen = false;
         defState.tutorHistory = [];
         if (data.last_answer && data.last_answer.correct) {
-          lmsShowToast('Correct!', 'success');
+          defState.streak = (defState.streak || 0) + 1;
+          lmsFeedback.celebrate(lmsFeedback.praise(defState.streak));
         }
       }
       renderDeficiencyView(data);
+      if (data.last_answer && !data.last_answer.correct && chosen != null) {
+        var wrongBtn = document.querySelectorAll('#lmsDeficiencyBody .lms-quiz-option')[chosen];
+        if (wrongBtn) {
+          wrongBtn.classList.add('lms-shake');
+          setTimeout(function () { wrongBtn.classList.remove('lms-shake'); }, 500);
+        }
+      }
     } catch (err) {
       if (body) body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }
@@ -254,6 +287,7 @@
         method: 'POST'
       });
       defState.selectedOption = null;
+      defState.lastWrongIndex = null;
       defState.tutorOpen = false;
       defState.tutorHistory = [];
       defState.tutorLoading = false;

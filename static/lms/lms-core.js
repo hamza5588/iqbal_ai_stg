@@ -25,6 +25,98 @@
     }
   };
 
+  /* ---- Answer feedback & motivation (shared by Learning Chat + practice) ---- */
+  global.lmsFeedback = (function () {
+    var PRAISE = [
+      'Good job!', 'Well done!', 'You got it!', 'Nice work!', 'Excellent!',
+      'Spot on!', 'Great thinking!', 'That\'s right!', 'Brilliant!', 'Perfect!'
+    ];
+    var STREAK = [
+      '', '', '2 in a row!', '3 in a row — on fire!', '4 straight!',
+      '5 in a row — unstoppable!'
+    ];
+
+    function reduceMotion() {
+      try {
+        return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      } catch (e) { return false; }
+    }
+    function soundEnabled() {
+      try { return localStorage.getItem('lms_sound') !== 'off'; } catch (e) { return true; }
+    }
+    function toggleSound() {
+      var on = !soundEnabled();
+      try { localStorage.setItem('lms_sound', on ? 'on' : 'off'); } catch (e) { /* ignore */ }
+      return on;
+    }
+
+    function praise(streak) {
+      var base = PRAISE[Math.floor(Math.random() * PRAISE.length)];
+      var s = streak && STREAK[Math.min(streak, STREAK.length - 1)];
+      return s ? (base + ' ' + s) : base;
+    }
+
+    var _actx = null;
+    function cue(kind) {
+      if (!soundEnabled()) return;
+      try {
+        var Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        _actx = _actx || new Ctx();
+        var now = _actx.currentTime;
+        var notes = kind === 'error' ? [311.1, 246.9] : [587.3, 784.0];
+        notes.forEach(function (f, i) {
+          var osc = _actx.createOscillator();
+          var g = _actx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = f;
+          var t = now + i * 0.09;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+          osc.connect(g); g.connect(_actx.destination);
+          osc.start(t); osc.stop(t + 0.18);
+        });
+      } catch (e) { /* audio is best-effort */ }
+    }
+
+    function celebrate(message) {
+      cue('success');
+      if (reduceMotion()) { if (message) global.lmsShowToast(message, 'success'); return; }
+      var host = document.createElement('div');
+      host.className = 'lms-celebrate';
+      host.innerHTML =
+        '<div class="lms-celebrate-badge">' +
+        '<span class="lms-celebrate-icon">👍</span>' +
+        (message ? '<span class="lms-celebrate-msg">' + global.escapeHtml(message) + '</span>' : '') +
+        '</div>';
+      document.body.appendChild(host);
+      setTimeout(function () { host.classList.add('out'); }, 1100);
+      setTimeout(function () { if (host.parentNode) host.parentNode.removeChild(host); }, 1600);
+    }
+
+    function markOption(el, kind) {
+      if (!el) return;
+      el.classList.add(kind === 'wrong' ? 'lms-opt-wrong' : 'lms-opt-correct');
+      if (kind === 'wrong' && !reduceMotion()) {
+        el.classList.add('lms-shake');
+        setTimeout(function () { el.classList.remove('lms-shake'); }, 500);
+      }
+    }
+    function clearOptionMarks(container) {
+      var root = container || document;
+      root.querySelectorAll('.lms-opt-wrong, .lms-opt-correct').forEach(function (n) {
+        n.classList.remove('lms-opt-wrong', 'lms-opt-correct', 'lms-shake');
+      });
+    }
+
+    return {
+      praise: praise, cue: cue, celebrate: celebrate,
+      markOption: markOption, clearOptionMarks: clearOptionMarks,
+      soundEnabled: soundEnabled, toggleSound: toggleSound
+    };
+  })();
+
   global.lmsOpenModal = function (id) {
     var el = document.getElementById(id);
     if (!el) return;

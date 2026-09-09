@@ -391,12 +391,24 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selected_option_index: optIdx })
       });
-      if (fb) {
-        var msg = result.correct
-          ? '<div class="lms-card lms-card-ok"><strong>Correct!</strong> ' + fmtText(result.feedback || '') + '</div>'
-          : '<div class="lms-card lms-card-bad"><strong>Try again.</strong> ' + fmtText(result.feedback || result.hint || '') + '</div>';
-        fb.innerHTML = msg;
-        typeset(fb);
+      var optBtn = document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option')[optIdx];
+      if (result.correct) {
+        if (optBtn && typeof lmsFeedback !== 'undefined') lmsFeedback.markOption(optBtn, 'correct');
+        var cheer = typeof lmsFeedback !== 'undefined' ? lmsFeedback.praise() : 'Correct!';
+        if (typeof lmsFeedback !== 'undefined') lmsFeedback.celebrate(cheer);
+        if (fb) {
+          fb.innerHTML = '<div class="lms-card lms-card-ok"><strong>' + escapeHtml(cheer) + '</strong> ' + fmtText(result.feedback || '') + '</div>';
+          typeset(fb);
+        }
+      } else {
+        if (typeof lmsFeedback !== 'undefined') {
+          lmsFeedback.cue('error');
+          if (optBtn) lmsFeedback.markOption(optBtn, 'wrong');
+        }
+        if (fb) {
+          fb.innerHTML = '<div class="lms-card lms-card-bad"><strong>Not quite — take another look.</strong> ' + fmtText(result.feedback || result.hint || '') + '</div>';
+          typeset(fb);
+        }
       }
       if (result.correct && result.next_question) {
         setTimeout(renderPracticeQuestion, 1200);

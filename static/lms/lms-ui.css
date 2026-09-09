@@ -402,6 +402,83 @@
 }
 .lms-quiz-option:hover { border-color: #86efac; background: var(--lms-green-muted); }
 .lms-quiz-option.selected { border-color: var(--lms-green); background: var(--lms-green-muted); }
+
+/* Answer feedback: highlight a wrong pick clearly, confirm a right one */
+.lms-quiz-option.lms-opt-wrong {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.lms-quiz-option.lms-opt-wrong .lms-quiz-option-label { color: #dc2626; }
+.lms-quiz-option.lms-opt-correct {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #166534;
+}
+html.dark .lms-quiz-option.lms-opt-wrong,
+.dark .lms-quiz-option.lms-opt-wrong {
+  background: #450a0a; color: #fca5a5; border-color: #dc2626;
+}
+html.dark .lms-quiz-option.lms-opt-correct,
+.dark .lms-quiz-option.lms-opt-correct {
+  background: #052e16; color: #86efac; border-color: #16a34a;
+}
+@media (prefers-color-scheme: dark) {
+  .lms-quiz-option.lms-opt-wrong { background: #450a0a; color: #fca5a5; border-color: #dc2626; }
+  .lms-quiz-option.lms-opt-correct { background: #052e16; color: #86efac; border-color: #16a34a; }
+}
+
+@keyframes lmsShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+.lms-shake { animation: lmsShake 0.45s cubic-bezier(.36,.07,.19,.97) both; }
+
+/* Success celebration burst */
+.lms-celebrate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10060;
+}
+.lms-celebrate-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 26px;
+  background: var(--lms-surface, #fff);
+  border: 2px solid #16a34a;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(22, 163, 74, 0.28);
+  animation: lmsPopIn 0.32s cubic-bezier(.17,.89,.32,1.28) both;
+}
+.lms-celebrate.out .lms-celebrate-badge { animation: lmsPopOut 0.4s ease forwards; }
+.lms-celebrate-icon { font-size: 2.4rem; line-height: 1; animation: lmsCheerBounce 0.6s ease 0.1s; }
+.lms-celebrate-msg { font-weight: 800; font-size: 1.05rem; color: #16a34a; }
+html.dark .lms-celebrate-badge, .dark .lms-celebrate-badge { background: #0b1220; }
+@media (prefers-color-scheme: dark) {
+  .lms-celebrate-badge { background: #0b1220; }
+}
+@keyframes lmsPopIn { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes lmsPopOut { to { opacity: 0; transform: scale(0.9) translateY(-10px); } }
+@keyframes lmsCheerBounce {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  30% { transform: translateY(-10px) rotate(-12deg); }
+  60% { transform: translateY(-4px) rotate(8deg); }
+}
+.lms-sound-toggle { padding: 6px 10px; font-size: 1rem; line-height: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lms-shake,
+  .lms-celebrate-badge,
+  .lms-celebrate-icon { animation: none !important; }
+}
 .lms-diag-timeover {
   text-align: center;
   padding: 28px 20px;
