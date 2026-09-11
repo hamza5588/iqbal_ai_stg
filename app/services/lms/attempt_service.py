@@ -474,35 +474,52 @@ def _run_post_submit_steps(attempt: AssessmentAttempt, assessment) -> None:
     db = get_db()
     from app.services.lms import learning_path_service, performance_service
 
+    # Capture every field a step (or its failure-logging) needs into plain
+    # values BEFORE any step runs. Found via E2E test: a step that fails a
+    # flush (e.g. the enrichment-item CHECK-constraint bug) leaves the
+    # session's pending transaction rolled back; touching attempt.<attr>
+    # afterwards - even just to log which attempt failed - forces SQLAlchemy
+    # to reload it from that same broken session, which raises
+    # PendingRollbackError *inside* the except block and escapes step(),
+    # turning one best-effort step's failure into a 500 on the whole submit.
+    attempt_id = attempt.id
+    student_id = attempt.student_id
+    assignment_id = attempt.assignment_id
+    assessment_id = assessment.id
+    assessment_type = assessment.assessment_type
+
     def step(fn):
         try:
             fn()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Post-submit step failed for attempt %s: %s", attempt.id, exc)
-            db.rollback()
+            logger.warning("Post-submit step failed for attempt %s: %s", attempt_id, exc)
+            try:
+                db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
 
-    step(lambda: performance_service.update_topic_scores_from_attempt(attempt.id))
-    step(lambda: learning_path_service.refresh_learning_path(attempt.student_id))
-    step(lambda: performance_service.create_snapshot(attempt.student_id))
+    step(lambda: performance_service.update_topic_scores_from_attempt(attempt_id))
+    step(lambda: learning_path_service.refresh_learning_path(student_id))
+    step(lambda: performance_service.create_snapshot(student_id))
 
-    if assessment.assessment_type == "diagnostic":
+    if assessment_type == "diagnostic":
         from app.services.lms import deficiency_chat_service, student_profile_service
         from app.tasks.lms_tasks import enqueue_deficiency_chat_prewarm
 
-        step(lambda: deficiency_chat_service._close_old_sessions(attempt.student_id))
+        step(lambda: deficiency_chat_service._close_old_sessions(student_id))
         step(
             lambda: student_profile_service.mark_diagnostic_complete(
-                attempt.student_id, assessment_id=assessment.id
+                student_id, assessment_id=assessment_id
             )
         )
-        step(lambda: enqueue_deficiency_chat_prewarm(attempt.student_id))
+        step(lambda: enqueue_deficiency_chat_prewarm(student_id))
 
-    if attempt.assignment_id:
+    if assignment_id:
         from app.services.lms import assignment_service
 
         step(
             lambda: assignment_service.mark_submission_complete(
-                attempt.assignment_id, attempt.student_id, attempt.id
+                assignment_id, student_id, attempt_id
             )
         )
 

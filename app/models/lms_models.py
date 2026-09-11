@@ -498,7 +498,7 @@ class LearningPathItem(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "item_type IN ('lesson','quiz','practice','reassessment')",
+            "item_type IN ('lesson','quiz','practice','reassessment','enrichment')",
             name="check_path_item_type",
         ),
         CheckConstraint(

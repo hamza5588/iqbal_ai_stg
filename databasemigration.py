@@ -324,6 +324,32 @@ def ensure_assessment_attempts_question_ids_column(conn, inspector):
         logger.info("Column assessment_attempts.question_ids_json already exists, skipping.")
 
 
+def ensure_learning_path_item_type_enrichment(conn, inspector):
+    """Widen learning_path_items.item_type's CHECK constraint to allow
+    'enrichment' (the no-weak-areas challenge-activity item, DIL feedback:
+    "no areas of improvement -> challenge activity, not an empty section").
+    Found via E2E test: every diagnostic submit for a student with no weak
+    areas raised IntegrityError building the enrichment learning-path step,
+    which then 500'd the submit response (the score itself was already
+    committed - see attempt_service._run_post_submit_steps for the other
+    half of that fix). Postgres only; drop+re-add is idempotent.
+    """
+    if not inspector.has_table("learning_path_items"):
+        logger.info("Table learning_path_items does not exist, skipping item_type constraint widen.")
+        return
+    if conn.engine.dialect.name != "postgresql":
+        logger.info("Skipping check_path_item_type widen on non-Postgres dialect.")
+        return
+    conn.execute(text("ALTER TABLE learning_path_items DROP CONSTRAINT IF EXISTS check_path_item_type"))
+    conn.execute(
+        text(
+            "ALTER TABLE learning_path_items ADD CONSTRAINT check_path_item_type "
+            "CHECK (item_type IN ('lesson','quiz','practice','reassessment','enrichment'))"
+        )
+    )
+    logger.info("Widened check_path_item_type to include 'enrichment'.")
+
+
 def main():
     logger.info("Connecting to database: %s", Config.SQLALCHEMY_DATABASE_URI)
     engine = create_engine(
@@ -350,6 +376,8 @@ def main():
         ensure_student_topic_scores_sample_size_column(conn, inspector)
         inspector = inspect(engine)
         ensure_assessment_attempts_question_ids_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_learning_path_item_type_enrichment(conn, inspector)
 
     logger.info("Migration completed successfully.")
 
