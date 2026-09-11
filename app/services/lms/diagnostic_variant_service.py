@@ -174,6 +174,17 @@ def _generate_one_variant(orig: Question) -> Optional[dict]:
             ),
             description="diagnostic variant generation",
         )
+        # The structured-output JSON round trip can mis-escape a literal
+        # backslash before a LaTeX command as a control character (\frac ->
+        # a real form-feed + "rac" - see math_text.py). Repair BEFORE the
+        # .strip() calls below, which would otherwise treat that leading
+        # control character as whitespace and destroy the only evidence of
+        # where it belonged (found live via E2E testing: a stored variant
+        # option read "rac{3}{8}" with the backslash-f gone for good).
+        from app.services.quiz.math_text import recover_eaten_backslash_commands
+
+        variant.question_text = recover_eaten_backslash_commands(variant.question_text)
+        variant.options = [recover_eaten_backslash_commands(o) for o in variant.options]
         v_opts = [str(x).strip() for x in variant.options]
         if len(set(o.lower() for o in v_opts)) < 4 or any(not o for o in v_opts):
             return None

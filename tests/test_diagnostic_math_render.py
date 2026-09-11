@@ -18,6 +18,8 @@ _mt = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mt)
 to_render_string = _mt.to_render_string
 wrap_for_mathjax = _mt.wrap_for_mathjax
+recover_latex = _mt.recover_latex
+recover_fields = _mt.recover_fields
 
 
 def _has_balanced_delims(s: str) -> bool:
@@ -100,3 +102,35 @@ def test_connective_between_math_bits_is_not_one_span():
 def test_fraction_options_joined_by_or_wrap_separately():
     out = to_render_string(r"\frac{1}{2} or \frac{1}{3}", None, inline=True)
     assert out == r"\(\frac{1}{2}\) or \(\frac{1}{3}\)"
+
+
+# --- LLM structured-output JSON escaping eats "\f"/"\t" before a LaTeX
+# command (\frac -> a real form-feed + "rac"). Found live via E2E testing
+# an AI-generated diagnostic retake variant: an option rendered as
+# "rac{3}{7} imes rac{2}{5}" on screen instead of a fraction times a
+# fraction. ---
+
+def test_eaten_backslash_frac_is_restored():
+    corrupted = "\x0crac{3}{7} \x09imes \x0crac{2}{5}"
+    assert recover_latex(corrupted) == r"\frac{3}{7} \times \frac{2}{5}"
+
+
+def test_eaten_backslash_at_the_very_start_of_the_string_is_still_restored():
+    # A control-char artifact at position 0 is also what str.strip() would
+    # treat as whitespace and delete first if repair ran after strip().
+    corrupted = "\x0crac{5}{6} \x09imes \x0crac{3}{4}"
+    out = to_render_string(corrupted, None, inline=True)
+    assert out == r"\(\frac{5}{6} \times \frac{3}{4}\)"
+
+
+def test_eaten_backslash_repair_is_a_noop_on_clean_text():
+    clean = r"\frac{1}{2} + \times 3"
+    assert recover_latex(clean) == clean
+
+
+def test_eaten_backslash_repair_via_recover_fields_option_path():
+    # mcq_utils.pick_display_fields calls recover_fields directly - this is
+    # the Learning Chat / practice option path, not just the diagnostic one.
+    text, latex = recover_fields("\x0crac{2}{5} \x09imes \x0crac{3}{4}", None)
+    assert "\\frac{2}{5}" in text
+    assert "\\times" in text

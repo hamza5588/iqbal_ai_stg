@@ -457,8 +457,35 @@
     });
   }
 
+  // Some LLM structured-output round trips mis-escape a literal backslash
+  // before a LaTeX command as a JSON control-character escape - e.g. the
+  // model writes \frac{1}{2} inside a JSON string field, but a spec-
+  // compliant JSON parser reads "\f" as U+000C (form feed), eating the
+  // backslash and the f: \frac -> "\x0Crac". Mirrors math_text.py's
+  // _recover_eaten_backslash_commands (found live via E2E testing an
+  // AI-generated diagnostic variant question).
+  var _EATEN_BACKSLASH_COMMANDS = {
+    '\x0Crac': '\\frac',
+    '\x09imes': '\\times',
+    '\x09heta': '\\theta',
+    '\x09ext': '\\text',
+    '\x08eta': '\\beta',
+    '\x0Bec': '\\vec'
+  };
+  function lmsRecoverEatenBackslashCommands(s) {
+    if (!s || !/[\x08\x09\x0B\x0C]/.test(s)) return s;
+    var out = s;
+    Object.keys(_EATEN_BACKSLASH_COMMANDS).forEach(function (bad) {
+      out = out.split(bad).join(_EATEN_BACKSLASH_COMMANDS[bad]);
+    });
+    return out;
+  }
+
   function lmsRecoverLatex(s) {
-    var t = String(s || '').trim();
+    // Repair BEFORE trim(): String.trim() treats a form-feed/tab artifact
+    // at the very start/end as whitespace and would delete the very
+    // character the repair needs to see.
+    var t = lmsRecoverEatenBackslashCommands(String(s || '')).trim();
     if (!t) return '';
     if (t.normalize) t = t.normalize('NFKC');
     t = lmsUnwrapOuterMathIfProse(t);
@@ -485,8 +512,8 @@
   }
 
   function lmsPickDisplayText(text, latex) {
-    var t = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(text || '')));
-    var l = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(latex || '')));
+    var t = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(lmsRecoverEatenBackslashCommands(text || ''))));
+    var l = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(lmsRecoverEatenBackslashCommands(latex || ''))));
     if (lmsIsBrokenMathBlob(l)) l = '';
     if (lmsLooksLikeProse(t)) return lmsRecoverLatex(t) || t;
     var recovered = lmsRecoverLatex(l || t);
@@ -501,7 +528,8 @@
   /** Wrap recovered LaTeX so MathJax/KaTeX render exponents and fractions. */
   function prepareMathText(text, inline) {
     if (text == null) return '';
-    var s = String(text).trim();
+    // Repair BEFORE trim(): see lmsRecoverLatex for why the order matters.
+    var s = lmsRecoverEatenBackslashCommands(String(text)).trim();
     if (!s) return '';
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));

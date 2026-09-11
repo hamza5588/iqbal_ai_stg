@@ -5,6 +5,34 @@ import re
 import unicodedata
 from typing import Optional, Tuple
 
+# Some LLM structured-output round trips mis-escape a literal backslash
+# before a LaTeX command as a JSON control-character escape - e.g. the model
+# writes `\frac{1}{2}` inside a JSON string field, but a spec-compliant JSON
+# parser reads "\f" as U+000C (form feed) per the JSON escape table, eating
+# the backslash and the f: `\frac` -> "\x0crac". Found live via E2E testing
+# an AI-generated diagnostic variant question ("\frac{3}{7} \times \frac{2}
+# {5}" arrived as "\x0crac{3}{7} \x09imes \x0crac{2}{5}"). Restore the
+# handful of common math commands this happens to; every other control
+# character is left alone since it's far more likely a real backslash never
+# belonged there.
+_EATEN_BACKSLASH_COMMANDS = {
+    "\x0crac": "\\frac",       # \f + rac  <- \frac
+    "\x09imes": "\\times",     # \t + imes <- \times
+    "\x09heta": "\\theta",     # \t + heta <- \theta
+    "\x09ext": "\\text",       # \t + ext  <- \text
+    "\x08eta": "\\beta",       # \b + eta  <- \beta
+    "\x0bec": "\\vec",         # \v + ec   <- \vec
+}
+
+
+def recover_eaten_backslash_commands(text: str) -> str:
+    if not text or not any(c in text for c in "\x08\x09\x0b\x0c"):
+        return text
+    for bad, good in _EATEN_BACKSLASH_COMMANDS.items():
+        text = text.replace(bad, good)
+    return text
+
+
 _UNICODE_SUPER = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾", "0123456789+-()")
 _SUPER_CHARS = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾"
 _FUNC_NAMES = (
@@ -200,7 +228,10 @@ def recover_stacked_fraction(text: str) -> str:
 
 def recover_latex(text: Optional[str]) -> str:
     """Best-effort LaTeX body (no delimiters) from flattened PDF / stored MCQ text."""
-    s = (text or "").strip()
+    # Repair BEFORE strip(): a form-feed/tab/etc. artifact at the very start
+    # or end of the string is whitespace as far as str.strip() is concerned,
+    # so stripping first would delete the very character the repair needs.
+    s = recover_eaten_backslash_commands(text or "").strip()
     if not s:
         return ""
     s = unicodedata.normalize("NFKC", s)
@@ -300,9 +331,11 @@ def looks_like_prose(text: str) -> bool:
 
 def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[str, Optional[str]]:
     """Return (display_text, latex) with reconstructed math for diagnostic MCQs."""
-    text_s = unsquash_english(unicodedata.normalize("NFKC", (text or "").strip()))
+    # Repair BEFORE strip() - see recover_latex() for why the order matters.
+    text_s = recover_eaten_backslash_commands(text or "").strip()
+    text_s = unsquash_english(unicodedata.normalize("NFKC", text_s))
     text_s = unwrap_outer_math_if_prose(text_s)
-    latex_s = (latex or "").strip() or None
+    latex_s = recover_eaten_backslash_commands(latex or "").strip() or None
     if latex_s:
         latex_s = unwrap_outer_math_if_prose(unsquash_english(unicodedata.normalize("NFKC", latex_s)))
     if looks_like_prose(text_s):
