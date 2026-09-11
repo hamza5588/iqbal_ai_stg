@@ -858,6 +858,7 @@ def explain_with_tutor(
         assist_level=assist_level,
         grade_level=grade_level,
         prior_turns=prior_turns,
+        message=message,
     )
     reply = tutor_service.tutor_chat(
         message,

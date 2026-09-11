@@ -1514,6 +1514,7 @@ def student_tutor_chat():
         topic_id=body.get("topic_id"),
         question_text=body.get("question_text"),
         attempt_count=int(body.get("attempt_count") or 0),
+        message=message,
     )
     from app.services.lms import tutor_memory_service
     from app.utils.llm_gateway import llm_workflow
