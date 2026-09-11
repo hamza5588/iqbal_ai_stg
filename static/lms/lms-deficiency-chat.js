@@ -59,11 +59,12 @@
   }
 
   function renderTypingIndicator() {
+    var label = defState._tutorReconnecting ? 'Connection dropped - reconnecting...' : 'Thinking...';
     return '<div class="lms-chat-msg bot" id="lmsDeficiencyTyping">' +
       '<div class="lms-chat-avatar">AI</div>' +
       '<div class="lms-chat-bubble">' +
       '<div class="lms-chat-typing"><span></span><span></span><span></span></div>' +
-      '<span class="lms-status" style="font-size:.75rem;margin:0 0 0 8px;">Thinking...</span>' +
+      '<span class="lms-status" style="font-size:.75rem;margin:0 0 0 8px;">' + escapeHtml(label) + '</span>' +
       '</div></div>';
   }
 
@@ -370,6 +371,27 @@
     }
   };
 
+  var TUTOR_AUTO_RETRIES = 2;
+  var TUTOR_RETRY_DELAY_MS = 1500;
+
+  function _sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+  async function _requestTutorReply(msg) {
+    var data = await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    var reply = data.reply || 'No response';
+    // The server never throws for an LLM hiccup - it returns the text
+    // "Tutor error: ..." / "Tutor unavailable: ...". Treat that as a
+    // retryable failure, not a normal tutor turn.
+    if (/^Tutor (error|unavailable)[:\s]/i.test(reply)) {
+      throw new Error(reply);
+    }
+    return data;
+  }
+
   window.sendDeficiencyTutorMessage = async function () {
     if (defState.tutorLoading) return;
     var input = document.getElementById('lmsDeficiencyTutorInput');
@@ -379,24 +401,32 @@
     if (input) input.value = '';
     defState.tutorLoading = true;
     defState._lastTutorMsg = msg;
+    defState._tutorReconnecting = false;
     renderDeficiencyView(window._lmsDeficiencyLastState);
     scrollDeficiencyChatToBottom();
-    try {
-      var data = await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg })
-      });
-      var reply = data.reply || 'No response';
-      // The server never throws for an LLM hiccup - it returns the text
-      // "Tutor error: ..." / "Tutor unavailable: ...". Treat that as a
-      // retryable failure, not a normal tutor turn.
-      if (/^Tutor (error|unavailable)[:\s]/i.test(reply)) {
-        throw new Error(reply);
+
+    // The connection can drop mid-chat (DIL feedback: "tutor should
+    // reconnect in the background"). Retry a couple of times, quietly,
+    // before asking the student to tap anything.
+    var data = null;
+    for (var attempt = 0; attempt <= TUTOR_AUTO_RETRIES; attempt++) {
+      try {
+        data = await _requestTutorReply(msg);
+        break;
+      } catch (err) {
+        if (attempt < TUTOR_AUTO_RETRIES) {
+          defState._tutorReconnecting = true;
+          renderDeficiencyView(window._lmsDeficiencyLastState);
+          await _sleep(TUTOR_RETRY_DELAY_MS * (attempt + 1));
+        }
       }
+    }
+    defState._tutorReconnecting = false;
+
+    if (data) {
       defState.tutorHistory.push({
         role: 'bot',
-        text: reply,
+        text: data.reply || 'No response',
         levelLabel: data.assist_level_label || ''
       });
       defState._lastTutorMsg = null;
@@ -404,23 +434,34 @@
         window._lmsDeficiencyLastState.tutor_assist_level = data.next_assist_level;
         window._lmsDeficiencyLastState.tutor_assist_label = data.next_assist_level_label;
       }
-    } catch (err) {
+    } else {
       // Drop the unanswered question from history and let them retry with
       // one tap - don't leave a dead "Error:" bubble that never recovers.
+      // A reconnect ("online" event) also auto-resends this automatically.
       if (defState.tutorHistory.length && defState.tutorHistory[defState.tutorHistory.length - 1].role === 'user') {
         defState.tutorHistory.pop();
       }
       defState.tutorHistory.push({
         role: 'bot',
-        text: 'The tutor didn\'t answer that time. Tap **Try again** below.',
+        text: 'The tutor lost connection. It will keep trying to reconnect, or tap **Try again**.',
         retry: true
       });
-    } finally {
-      defState.tutorLoading = false;
-      renderDeficiencyView(window._lmsDeficiencyLastState);
-      scrollDeficiencyChatToBottom();
     }
+    defState.tutorLoading = false;
+    renderDeficiencyView(window._lmsDeficiencyLastState);
+    scrollDeficiencyChatToBottom();
   };
+
+  // Background reconnect: as soon as the browser reports the connection is
+  // back, auto-resend a tutor message that was left queued after a failure
+  // - the student should not have to notice or tap anything.
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('online', function () {
+      if (!defState.tutorLoading && defState._lastTutorMsg && defState.sessionId) {
+        retryDeficiencyTutorMessage();
+      }
+    });
+  }
 
   window.retryDeficiencyTutorMessage = function () {
     if (defState.tutorLoading || !defState._lastTutorMsg) return;

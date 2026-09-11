@@ -47,6 +47,78 @@
     timerInterval: null
   };
 
+  /* ---- Local answer backup (DIL feedback: don't lose answers when the
+     connection drops). Every pick is written to localStorage synchronously,
+     BEFORE the network call - so it survives a lost connection, a reload,
+     or the tab being closed, even if the server call never lands. A queue
+     of not-yet-synced answers is retried on reconnect, periodically while
+     the diagnostic is open, and right before submit. ---- */
+  function diagLsKey(attemptId) { return 'lmsDiagPending:' + attemptId; }
+
+  function loadDiagLocal(attemptId) {
+    try {
+      var raw = localStorage.getItem(diagLsKey(attemptId));
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+
+  function saveDiagLocal(attemptId, data) {
+    try { localStorage.setItem(diagLsKey(attemptId), JSON.stringify(data)); } catch (e) { /* storage full/blocked - best effort only */ }
+  }
+
+  function persistAnswerLocally(attemptId, qid, idx) {
+    if (!attemptId || qid == null) return;
+    var data = loadDiagLocal(attemptId);
+    data[qid] = { idx: idx, synced: false, ts: Date.now() };
+    saveDiagLocal(attemptId, data);
+  }
+
+  function markDiagAnswerSynced(attemptId, qid) {
+    if (!attemptId || qid == null) return;
+    var data = loadDiagLocal(attemptId);
+    if (data[qid]) {
+      data[qid].synced = true;
+      saveDiagLocal(attemptId, data);
+    }
+  }
+
+  function clearDiagLocal(attemptId) {
+    if (!attemptId) return;
+    try { localStorage.removeItem(diagLsKey(attemptId)); } catch (e) { /* ignore */ }
+  }
+
+  var _diagFlushInFlight = false;
+  async function flushDiagPendingAnswers() {
+    var attemptId = diagState.attemptId;
+    if (!attemptId || _diagFlushInFlight) return;
+    var data = loadDiagLocal(attemptId);
+    var pendingQids = Object.keys(data).filter(function (qid) { return data[qid] && !data[qid].synced; });
+    if (!pendingQids.length) return;
+    _diagFlushInFlight = true;
+    try {
+      for (var i = 0; i < pendingQids.length; i++) {
+        var qid = pendingQids[i];
+        try {
+          await lmsApi('/api/lms/attempts/' + attemptId + '/answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question_id: parseInt(qid, 10), selected_option_index: data[qid].idx })
+          });
+          markDiagAnswerSynced(attemptId, qid);
+        } catch (e) { /* still offline / server hiccup - stays queued, try again next time */ }
+      }
+    } finally {
+      _diagFlushInFlight = false;
+    }
+  }
+  // Reconnect trigger: as soon as the browser reports the connection back,
+  // push anything that piled up locally while it was down.
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('online', function () {
+      if (diagState.attemptId) flushDiagPendingAnswers();
+    });
+  }
+
   function ensureDiagnosticModal() {
     if (document.getElementById('lmsDiagnosticModal')) return;
     var html = '<div id="lmsDiagnosticModal" class="lms-modal-backdrop">' +
@@ -142,11 +214,17 @@
     clearDiagTimer();
     if (diagState.remainingSeconds == null) return;
     updateTimerDisplay();
+    var _diagTick = 0;
     diagState.timerInterval = setInterval(function () {
       if (diagState.remainingSeconds != null && diagState.remainingSeconds > 0) {
         diagState.remainingSeconds = Math.max(0, diagState.remainingSeconds - 1);
       }
       updateTimerDisplay();
+      // Retry any answer still stuck in the local queue every ~15s, not
+      // just on the browser's "online" event (some networks flap without
+      // firing it reliably).
+      _diagTick++;
+      if (_diagTick % 15 === 0) flushDiagPendingAnswers();
       if (diagState.remainingSeconds <= 0) {
         clearDiagTimer();
         submitLmsDiagnostic(true);
@@ -202,6 +280,12 @@
     }
     if (diagState.attemptId && diagState.questions.length) {
       try { await persistDiagAnswers(); } catch (e) { /* ignore */ }
+      // Only drop the local backup once every answer actually made it to
+      // the server - if some are still stuck (offline), keep them queued
+      // so the next open / reconnect / periodic retry can finish the job.
+      var stillPending = loadDiagLocal(diagState.attemptId);
+      var allSynced = Object.keys(stillPending).every(function (qid) { return stillPending[qid].synced; });
+      if (allSynced) clearDiagLocal(diagState.attemptId);
     }
     clearDiagTimer();
     try { localStorage.removeItem('lmsDiagWs:' + (diagState.attemptId || 'x')); } catch (e) { /* ignore */ }
@@ -219,11 +303,16 @@
       var item = diagState.questions[i];
       var qid = item.question_id || (item.question && item.question.id);
       if (!qid) continue;
-      await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
-      });
+      var idx = diagState.answers[i];
+      persistAnswerLocally(diagState.attemptId, qid, idx);
+      try {
+        await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question_id: qid, selected_option_index: idx })
+        });
+        markDiagAnswerSynced(diagState.attemptId, qid);
+      } catch (e) { /* offline / server hiccup - one answer failing must not stop the rest, and stays queued locally */ }
     }
   }
 
@@ -232,13 +321,19 @@
     var item = diagState.questions[qIdx];
     var qid = item.question_id || (item.question && item.question.id);
     if (!qid) return;
+    var idx = diagState.answers[qIdx];
+    // Save locally FIRST, synchronously - this is what makes the answer
+    // survive a dropped connection, a reload, or the tab closing, even if
+    // the network call below never lands.
+    persistAnswerLocally(diagState.attemptId, qid, idx);
     try {
       await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[qIdx] })
+        body: JSON.stringify({ question_id: qid, selected_option_index: idx })
       });
-    } catch (e) { /* ignore */ }
+      markDiagAnswerSynced(diagState.attemptId, qid);
+    } catch (e) { /* offline / server hiccup - stays queued in localStorage, retried automatically */ }
   }
 
   window._lmsDiagOrientation = null;
@@ -320,6 +415,17 @@
       Object.keys(saved).forEach(function (k) {
         diagState.answers[parseInt(k, 10)] = saved[k];
       });
+      // Recover any answer that only ever reached this browser (picked
+      // while offline, or a reload/tab-close before the server call
+      // landed) - it must not silently disappear on resume.
+      var localPending = loadDiagLocal(diagState.attemptId);
+      diagState.questions.forEach(function (item, idx) {
+        var qid = item.question_id || (item.question && item.question.id);
+        if (qid != null && diagState.answers[idx] === undefined && localPending[qid] && localPending[qid].idx != null) {
+          diagState.answers[idx] = localPending[qid].idx;
+        }
+      });
+      flushDiagPendingAnswers();
       diagState.current = qData.current_question_index != null ? qData.current_question_index : 0;
       if (start.resumed) {
         lmsShowToast('Resuming where you left off', 'success');
@@ -635,21 +741,29 @@
           var item = diagState.questions[i];
           var qid = item.question_id || (item.question && item.question.id);
           if (diagState.answers[i] !== undefined && qid) {
+            persistAnswerLocally(diagState.attemptId, qid, diagState.answers[i]);
             try {
               await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
               });
-            } catch (flushErr) { /* keep going - submit will score what's saved */ }
+              markDiagAnswerSynced(diagState.attemptId, qid);
+            } catch (flushErr) { /* keep going - submit will score what's saved, and this stays queued for a retry */ }
           }
         }
+      } else {
+        // Timed out: still try to flush whatever is queued locally one
+        // last time before submit scores the attempt server-side.
+        await flushDiagPendingAnswers();
       }
       var result = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ time_expired: !!autoSubmit })
       });
+      // Attempt is finalized server-side now - the local backup has done its job.
+      clearDiagLocal(diagState.attemptId);
       if ((result.timed_out || result.time_over) && !(result.max_score != null && result.score != null)) {
         renderDiagnosticTimeOver(result);
         return;
