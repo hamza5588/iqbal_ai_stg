@@ -117,6 +117,57 @@
     };
   })();
 
+  /* ---- Reusable copy-to-clipboard (question text, tutor replies, ...) ---- */
+  global.lmsCopyToClipboard = function (text, btn, doneLabel) {
+    text = String(text == null ? '' : text);
+    var done = function () {
+      if (!btn) return;
+      var prev = btn.textContent;
+      btn.textContent = doneLabel || 'Copied';
+      setTimeout(function () { btn.textContent = prev; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { done(); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      done();
+    }
+  };
+
+  /* ---- Adjustable text size for question/answer/tutor content (DIL
+     feedback: readability). Persisted per browser, applied via a CSS
+     custom property so every LMS surface (--lms-font-scale) picks it up
+     without re-rendering. ---- */
+  var _FONT_STEP_MIN = -2, _FONT_STEP_MAX = 3;
+  function _fontStep() {
+    try {
+      var v = parseInt(localStorage.getItem('lms_font_step') || '0', 10);
+      return isNaN(v) ? 0 : Math.max(_FONT_STEP_MIN, Math.min(_FONT_STEP_MAX, v));
+    } catch (e) { return 0; }
+  }
+  function _applyFontScale() {
+    var scale = (1 + _fontStep() * 0.1).toFixed(2);
+    try { document.documentElement.style.setProperty('--lms-font-scale', scale); } catch (e) { /* ignore */ }
+  }
+  global.lmsStepFont = function (delta) {
+    var step = Math.max(_FONT_STEP_MIN, Math.min(_FONT_STEP_MAX, _fontStep() + delta));
+    try { localStorage.setItem('lms_font_step', String(step)); } catch (e) { /* ignore */ }
+    _applyFontScale();
+    return step;
+  };
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _applyFontScale);
+    } else {
+      _applyFontScale();
+    }
+  }
+
   global.lmsOpenModal = function (id) {
     var el = document.getElementById(id);
     if (!el) return;

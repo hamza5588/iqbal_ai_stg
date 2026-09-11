@@ -515,6 +515,11 @@
       (diagState.answers[idx] !== undefined
         ? '<button type="button" class="lms-quiz-tool" onclick="clearDiagAnswer(' + idx + ')">Clear answer</button>'
         : '') +
+      '<button type="button" class="lms-quiz-tool" title="Copy question text" onclick="lmsCopyDiagQuestion(this)">&#128203; Copy</button>' +
+      // --lms-font-scale is a live CSS custom property - text resizes
+      // immediately, no re-render needed.
+      '<button type="button" class="lms-font-btn" title="Smaller text" onclick="lmsStepFont(-1)">A-</button>' +
+      '<button type="button" class="lms-font-btn" title="Larger text" onclick="lmsStepFont(1)">A+</button>' +
       '</div>';
 
     var meta = '<p class="lms-status">Question ' + (idx + 1) + ' of ' + total;
@@ -543,6 +548,21 @@
     }
     if (window._lmsDiagWorkspaceOpen && typeof window.mountDiagWorkspace === 'function') window.mountDiagWorkspace();
   }
+
+  window.lmsCopyDiagQuestion = function (btn) {
+    var item = diagState.questions[diagState.current];
+    if (!item) return;
+    var q = item.question || item;
+    var lines = [(typeof window.lmsQuestionText === 'function' ? window.lmsQuestionText(q) : (q.question_text || '')).trim()];
+    (q.options || []).forEach(function (o, oi) {
+      var label = o.label || String.fromCharCode(65 + oi);
+      var text = (typeof window.lmsOptionText === 'function' ? window.lmsOptionText(o) : (o.text || o.latex || ''));
+      lines.push(label + '. ' + String(text).trim());
+    });
+    if (typeof window.lmsCopyToClipboard === 'function') {
+      window.lmsCopyToClipboard(lines.join('\n'), btn);
+    }
+  };
 
   window.selectDiagOption = function (qIdx, optIdx) {
     diagState.answers[qIdx] = optIdx;

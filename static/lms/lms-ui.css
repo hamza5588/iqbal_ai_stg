@@ -17,6 +17,9 @@
   --lms-green-dark: var(--primary-600, #14532d);
   --lms-green-light: var(--primary-100, #dcfce7);
   --lms-green-muted: var(--primary-50, #f0fdf4);
+  /* Student-adjustable text size for question/answer/tutor content, set by
+     lmsStepFont() in lms-core.js and persisted per browser. */
+  --lms-font-scale: 1;
 }
 
 /* Floating action buttons */
@@ -303,7 +306,7 @@
   max-width: 85%;
   padding: 10px 14px;
   border-radius: 12px;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--lms-font-scale, 1));
   line-height: 1.5;
 }
 .lms-chat-msg.bot .lms-chat-bubble { background: var(--lms-surface); border: 1px solid var(--lms-border); color: var(--lms-text); }
@@ -414,7 +417,7 @@
   margin-bottom: 8px;
   background: var(--lms-surface);
   cursor: pointer;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--lms-font-scale, 1));
   font-family: inherit;
   color: var(--lms-text);
   transition: border-color 0.15s, background 0.15s;
@@ -574,7 +577,7 @@ html.dark .lms-diag-clear-note,
 .lms-quiz-progress { height: 6px; background: var(--lms-border); border-radius: 9999px; margin-bottom: 16px; overflow: hidden; }
 .lms-quiz-progress-bar { height: 100%; background: var(--lms-green); border-radius: 9999px; transition: width 0.3s; }
 .lms-quiz-stem {
-  font-size: 1.05rem;
+  font-size: calc(1.05rem * var(--lms-font-scale, 1));
   font-weight: 600;
   margin: 12px 0 16px;
   overflow-wrap: break-word;
@@ -611,6 +614,22 @@ html.dark .lms-diag-clear-note,
   cursor: pointer;
 }
 .lms-quiz-tool:hover { background: var(--lms-hover); border-color: var(--lms-green); }
+
+/* Font-size step buttons (A- / A+) - match .lms-quiz-tool, fixed width so
+   they don't jiggle the row as the label font-weight varies. */
+.lms-font-btn {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  min-width: 34px;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid var(--lms-border);
+  background: var(--lms-surface);
+  color: var(--lms-text);
+  cursor: pointer;
+}
+.lms-font-btn:hover { background: var(--lms-hover); border-color: var(--lms-green); }
 
 /* Diagnostic "explain this question" panel */
 .lms-diag-explain {

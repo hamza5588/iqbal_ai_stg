@@ -111,20 +111,23 @@
   window.lmsCopyTutorMessage = function (idx, btn) {
     var m = defState.tutorHistory[idx];
     if (!m) return;
-    var text = String(m.text || '');
-    var done = function () {
-      if (!btn) return;
-      var prev = btn.textContent;
-      btn.textContent = 'Copied';
-      setTimeout(function () { btn.textContent = prev; }, 1500);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done).catch(function () { done(); });
-    } else {
-      var ta = document.createElement('textarea');
-      ta.value = text; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
-      document.body.removeChild(ta); done();
+    if (typeof window.lmsCopyToClipboard === 'function') {
+      window.lmsCopyToClipboard(m.text || '', btn);
+    }
+  };
+
+  window.lmsCopyDeficiencyQuestion = function (btn) {
+    var data = window._lmsDeficiencyLastState;
+    var q = data && data.current_question;
+    if (!q) return;
+    var lines = [(typeof window.lmsQuestionText === 'function' ? window.lmsQuestionText(q) : (q.question_text || '')).trim()];
+    (q.options || []).forEach(function (o, oi) {
+      var label = o.label || String.fromCharCode(65 + oi);
+      var text = (typeof window.lmsOptionText === 'function' ? window.lmsOptionText(o) : (o.text || o.latex || ''));
+      lines.push(label + '. ' + String(text).trim());
+    });
+    if (typeof window.lmsCopyToClipboard === 'function') {
+      window.lmsCopyToClipboard(lines.join('\n'), btn);
     }
   };
 
@@ -222,6 +225,11 @@
         : '') +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="toggleDeficiencyTutor()">Ask Tutor</button>' +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="pauseDeficiencyChat()">Pause &amp; Exit</button>' +
+      '<button type="button" class="lms-btn lms-btn-ghost" title="Copy question text" onclick="lmsCopyDeficiencyQuestion(this)">&#128203; Copy</button>' +
+      // --lms-font-scale is a live CSS custom property - text resizes
+      // immediately, no re-render needed.
+      '<button type="button" class="lms-btn lms-btn-ghost lms-font-btn" title="Smaller text" onclick="lmsStepFont(-1)">A-</button>' +
+      '<button type="button" class="lms-btn lms-btn-ghost lms-font-btn" title="Larger text" onclick="lmsStepFont(1)">A+</button>' +
       '<button type="button" class="lms-btn lms-btn-ghost lms-sound-toggle" title="Sound cues" onclick="lmsToggleDeficiencySound(this)">' +
       (lmsFeedback.soundEnabled() ? '🔊' : '🔇') + '</button></div>' +
       tutorSection;
