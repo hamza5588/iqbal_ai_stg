@@ -617,4 +617,32 @@
   /* Bridge legacy _showLmsModal */
   global._showLmsModal = global.lmsOpenModal;
   global._hideLmsModal = global.lmsCloseModal;
+
+  /* LMS action bar (teacher dashboard) — collapse/expand toggle, persisted per browser */
+  global.toggleLmsActionBar = function () {
+    var bar = document.getElementById('lmsActionBar');
+    var btn = document.getElementById('lmsActionBarToggle');
+    if (!bar || !btn) return;
+    var collapsed = bar.classList.toggle('collapsed');
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    var label = collapsed ? 'Show class actions' : 'Hide class actions';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    try { localStorage.setItem('lmsActionBarCollapsed', collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var bar = document.getElementById('lmsActionBar');
+    if (!bar) return;
+    var collapsed = false;
+    try { collapsed = localStorage.getItem('lmsActionBarCollapsed') === '1'; } catch (e) { /* ignore */ }
+    if (!collapsed) return;
+    bar.classList.add('collapsed');
+    var btn = document.getElementById('lmsActionBarToggle');
+    if (btn) {
+      btn.setAttribute('aria-expanded', 'false');
+      btn.title = 'Show class actions';
+      btn.setAttribute('aria-label', 'Show class actions');
+    }
+  });
 })(window);

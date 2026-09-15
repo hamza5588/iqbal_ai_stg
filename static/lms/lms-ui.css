@@ -17,6 +17,15 @@
   --lms-green-dark: var(--primary-600, #14532d);
   --lms-green-light: var(--primary-100, #dcfce7);
   --lms-green-muted: var(--primary-50, #f0fdf4);
+  /* Text/icon/border colour for green content on top of a surface (e.g. outline
+     buttons). Equal to --lms-green in light mode; redefined for dark mode below
+     because --lms-green itself is never redefined there and drops under 3:1
+     contrast when used as text on the dark --lms-surface. */
+  --lms-green-text: var(--lms-green);
+  /* Shared keyboard-focus ring color. Existing focus rings (e.g. .lms-input:focus)
+     hardcode rgba(22,101,52,.15) per component; this token keeps new components
+     in sync with one decision and gives them a dark-mode value. */
+  --lms-focus-ring: rgba(22, 101, 52, 0.35);
   /* Student-adjustable text size for question/answer/tutor content, set by
      lmsStepFont() in lms-core.js and persisted per browser. */
   --lms-font-scale: 1;
@@ -55,6 +64,129 @@
 }
 .lms-fab-secondary { background: var(--lms-surface); color: var(--lms-green); border: 2px solid var(--lms-green); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
 .lms-fab-secondary:hover { background: var(--lms-green-muted); }
+
+/* LMS action bar — teacher dashboard only. In-page toolbar docked under the
+   black nav, replacing the fixed bottom-right .lms-fab-bar for this screen.
+   student_dashboard.html keeps using .lms-fab-bar/.lms-fab above, unchanged. */
+.lms-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 20px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--lms-border);
+  border-radius: 14px;
+  background: var(--lms-surface);
+}
+.lms-action-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lms-action-bar-inner::-webkit-scrollbar { display: none; }
+.lms-action-bar.collapsed .lms-action-bar-inner { display: none; }
+
+.lms-action-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.lms-action-group-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--lms-muted);
+  padding: 0 2px;
+  white-space: nowrap;
+}
+.lms-action-divider { width: 1px; height: 22px; background: var(--lms-border); flex-shrink: 0; }
+
+.lms-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--lms-text);
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.lms-action-icon { width: 15px; height: 15px; flex-shrink: 0; }
+
+.lms-action-btn-solid { background: var(--lms-green); color: #fff; }
+.lms-action-btn-solid:hover { background: var(--lms-green-dark); }
+
+.lms-action-btn-outline { background: transparent; color: var(--lms-green-text); border-color: var(--lms-green-text); }
+.lms-action-btn-outline:hover { background: var(--lms-green-muted); }
+
+.lms-action-btn-icon { padding: 7px; }
+.lms-action-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--lms-focus-ring); }
+
+/* Tooltip for icon-only buttons: fires on hover AND keyboard focus */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+  background: var(--lms-text);
+  color: var(--lms-surface);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 20;
+}
+[data-tooltip]:hover::after, [data-tooltip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.lms-action-bar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--lms-muted);
+  border-radius: 8px;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+.lms-action-bar-toggle:hover { background: var(--lms-hover); color: var(--lms-text); }
+.lms-action-bar-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--lms-focus-ring); }
+.lms-action-bar-toggle svg { width: 14px; height: 14px; transition: transform 0.15s ease; }
+.lms-action-bar.collapsed .lms-action-bar-toggle svg { transform: rotate(-90deg); }
+.lms-action-bar-toggle-label { display: none; font-size: 0.8125rem; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .lms-action-group-label { display: none; }
+  .lms-action-bar { margin: 12px 12px 0; }
+}
+
+@media (max-width: 480px) {
+  .lms-action-bar { flex-direction: column; align-items: stretch; padding: 4px; }
+  .lms-action-bar-toggle { justify-content: space-between; padding: 10px 12px; order: -1; }
+  .lms-action-bar-toggle-label { display: inline; }
+  .lms-action-bar-inner { flex-direction: column; align-items: stretch; overflow-x: visible; padding: 4px 4px 6px; }
+  .lms-action-bar.collapsed .lms-action-bar-inner { display: none; }
+  .lms-action-group { flex-direction: column; align-items: stretch; }
+  .lms-action-group-label { display: block; padding: 6px 8px 2px; }
+  .lms-action-btn { width: 100%; padding: 10px 12px; }
+  .lms-action-divider { width: auto; height: 1px; margin: 4px 0; }
+  .lms-action-btn-icon .lms-action-text { display: inline; }
+  .lms-action-btn-icon { width: 100%; justify-content: flex-start; }
+  [data-tooltip]::after { display: none; }
+}
 
 .lms-diag-timer {
   font-size: 1.125rem;
@@ -932,6 +1064,8 @@ html.dark,
   --lms-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   --lms-green-light: #14532d;
   --lms-green-muted: #052e16;
+  --lms-green-text: #4ade80;
+  --lms-focus-ring: rgba(74, 222, 128, 0.45);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -947,6 +1081,8 @@ html.dark,
     --lms-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
     --lms-green-light: #14532d;
     --lms-green-muted: #052e16;
+    --lms-green-text: #4ade80;
+    --lms-focus-ring: rgba(74, 222, 128, 0.45);
   }
 }
 

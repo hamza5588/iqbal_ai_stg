@@ -3682,6 +3682,78 @@
       </div>
     </div>
 
+    <!-- LMS Action Bar — in-page, docked under the black toolbar nav above. Replaces
+         the old fixed bottom-right .lms-fab-bar for the teacher dashboard only; lives
+         in the same non-scrolling flex column as the header/toolbar, so it can never
+         overlap #floatingActionBtn/#floatingMenu (fixed, mobile-only, bottom-right). -->
+    <div class="lms-action-bar" id="lmsActionBar">
+      <div class="lms-action-bar-inner" id="lmsActionBarInner">
+
+        <div class="lms-action-group">
+          <span class="lms-action-group-label">Classes</span>
+          <button type="button" class="lms-action-btn lms-action-btn-solid"
+                  onclick="openLmsClassHub()" aria-label="Add or manage your classes">
+            <svg class="lms-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M3 6.5 10 3l7 3.5-7 3.5-7-3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M5.5 8.7V13c0 1 2 2.3 4.5 2.3s4.5-1.3 4.5-2.3V8.7" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span class="lms-action-text">Manage Classes</span>
+          </button>
+        </div>
+
+        <div class="lms-action-divider" aria-hidden="true"></div>
+
+        <div class="lms-action-group">
+          <span class="lms-action-group-label">Content</span>
+          <button type="button" class="lms-action-btn lms-action-btn-solid"
+                  onclick="openLmsQuizHub()" aria-label="Create a new quiz">
+            <svg class="lms-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <span class="lms-action-text">Create Quiz</span>
+          </button>
+          <button type="button" class="lms-action-btn lms-action-btn-solid"
+                  onclick="openLmsAssignModal()" aria-label="Assign a quiz to a class">
+            <svg class="lms-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M4 10.5 8 14.5 16 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="lms-action-text">Assign Quiz</span>
+          </button>
+        </div>
+
+        <div class="lms-action-divider" aria-hidden="true"></div>
+
+        <div class="lms-action-group">
+          <span class="lms-action-group-label">Insights / Help</span>
+          <button type="button" class="lms-action-btn lms-action-btn-solid lms-action-btn-icon"
+                  onclick="openLmsTeacherAnalytics()" aria-label="Analytics" data-tooltip="Analytics">
+            <svg class="lms-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M4 16V9M10 16V4M16 16v-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <span class="lms-action-text">Analytics</span>
+          </button>
+          <button type="button" class="lms-action-btn lms-action-btn-solid lms-action-btn-icon"
+                  onclick="openLmsTutorPanel('teacher')" aria-label="AI Tutor" data-tooltip="AI Tutor">
+            <svg class="lms-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <rect x="4" y="6" width="12" height="9" rx="2.5" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M10 6V3.5M7.5 10.2v.1M12.5 10.2v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <span class="lms-action-text">AI Tutor</span>
+          </button>
+        </div>
+
+      </div>
+
+      <button type="button" class="lms-action-bar-toggle" id="lmsActionBarToggle"
+              aria-expanded="true" aria-controls="lmsActionBarInner"
+              onclick="toggleLmsActionBar()" title="Hide class actions" aria-label="Hide class actions">
+        <span class="lms-action-bar-toggle-label">Class Actions</span>
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- Main content: min-h-0 so flex child can shrink and chat area scrolls; input stays at bottom -->
     <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
 
@@ -12145,16 +12217,6 @@ Align everything with the lesson objectives and do not invent missing informatio
   </div>
 
   <!-- LMS Classes Hub (Phase 2) -->
-  <div class="lms-fab-bar">
-    <!-- lms-fab-bar is column-reverse, so DOM order here is the reverse of the
-         visual top-to-bottom order: Add/Manage Classes, Create Quiz, Assign
-         Quiz, Analytics, AI Tutor. -->
-    <button type="button" class="lms-fab" onclick="openLmsTutorPanel('teacher')">AI Tutor</button>
-    <button type="button" class="lms-fab" onclick="openLmsTeacherAnalytics()">Analytics</button>
-    <button type="button" class="lms-fab lms-fab-secondary" onclick="openLmsAssignModal()">Assign Quiz</button>
-    <button type="button" class="lms-fab" onclick="openLmsQuizHub()">Create Quiz</button>
-    <button type="button" class="lms-fab" onclick="openLmsClassHub()">Add/Manage Classes</button>
-  </div>
   <div id="lmsClassHubModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsClassHub()">
     <div class="lms-modal lms-modal-lg">
       <div class="lms-modal-header">
