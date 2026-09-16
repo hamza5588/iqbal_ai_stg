@@ -163,9 +163,12 @@
 
 # app/__init__.py
 from flask import Flask, request, redirect
-from flask_cors import CORS  
+from flask_cors import CORS
 from datetime import timedelta
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # Disable tqdm threading and tokenizer parallelism to prevent "cannot start new thread" errors
 # This must be set BEFORE any imports that use these libraries
@@ -241,6 +244,42 @@ def create_app():
     
     # Register database cleanup function
     app.teardown_appcontext(close_db)
+
+    # ------------------------------------------------------------------
+    # Generic DB-session recovery on uncaught exceptions
+    # ------------------------------------------------------------------
+    # Without this, a mid-request DB error (e.g. a bad query) can leave the
+    # per-request/thread-local SQLAlchemy session in a failed transaction
+    # state (psycopg2.errors.InFailedSqlTransaction). Any subsequent query
+    # on that same session -- whether later in the same request or in the
+    # next request handled by the same worker thread (scoped_session is
+    # thread-local) -- then fails too, even though it is otherwise
+    # unrelated. close_db() already rolls back on commit failure at
+    # teardown, but that does not help an exception that propagates before
+    # reaching teardown, nor does it catch the case where application code
+    # itself already swallowed a DB error without rolling back. Rolling
+    # back here, for any uncaught exception, guarantees the session is
+    # never left aborted for the next query to inherit.
+    @app.errorhandler(Exception)
+    def _rollback_db_on_uncaught_exception(e):
+        from werkzeug.exceptions import HTTPException
+
+        if isinstance(e, HTTPException):
+            # Normal aborts (404, 403, etc.) aren't DB errors; let Flask's
+            # default handling deal with them unchanged.
+            raise e
+
+        try:
+            from flask import g
+            db = g.get('db', None)
+            if db is not None:
+                db.rollback()
+        except Exception:
+            logger.error("Failed to roll back DB session after uncaught exception", exc_info=True)
+
+        # Preserve existing behavior (debug traceback / generic 500) by
+        # re-raising after the rollback side effect.
+        raise e
     
     # Initialize database and (optionally) heavy startup components.
     # For local verification scripts we can skip expensive startup work.
