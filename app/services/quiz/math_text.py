@@ -218,6 +218,16 @@ def recover_stacked_fraction(text: str) -> str:
 
     if len(math_lines) == 2 and looks_like_math_line(math_lines[0]) and looks_like_math_line(math_lines[1]):
         num, den = math_lines[0], math_lines[1]
+        # A "denominator" of a bare 1 is a strong signal this isn't really a
+        # stacked fraction at all (nobody typesets "expression / 1" as a
+        # fraction) - more likely a radical/vinculum artifact (e.g. a sqrt's
+        # bar or an unrelated stray "1" glyph) from PDF text extraction
+        # getting misread as a fraction denominator. Found live: a
+        # distance-formula sqrt((4-1)^2+(6-2)^2) coming out as a bare
+        # "\frac{(4-1)^2+(6-2)^2}{1}". Leave such lines unmerged rather than
+        # guess what the real numerator/denominator relationship should be.
+        if den.strip() == "1" or num.strip() == "1":
+            return text
         if "\\frac" not in num and "\\frac" not in den:
             frac = f"\\frac{{{num}}}{{{den}}}"
             if prefix_parts:
