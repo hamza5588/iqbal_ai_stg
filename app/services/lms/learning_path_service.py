@@ -320,6 +320,7 @@ def ensure_learning_path(student_id: int) -> Optional[dict]:
         and completed_practice
         and latest.id != completed_practice.id
         and _is_untouched_single_practice(latest)
+        and not path_generator.get_weak_topics(student_id)
         and (
             newest_attempt is None
             or (completed_practice.created_at and completed_practice.created_at >= newest_attempt)
@@ -331,6 +332,19 @@ def ensure_learning_path(student_id: int) -> Optional[dict]:
         latest = completed_practice
 
     d = _path_to_dict(latest)
+
+    # A finished Learning Chat step should stay finished only when the student
+    # has reached the practice target. If topic mastery is still below 100%,
+    # create the next practice round so the dashboard does not strand the
+    # student at e.g. 87%.
+    if latest.status == "completed" and any(
+        it.get("item_type") in ("practice", "enrichment") for it in d.get("items", [])
+    ):
+        weak = path_generator.get_weak_topics(student_id)
+        if weak:
+            refreshed = refresh_learning_path(student_id)
+            if refreshed and refreshed.id != latest.id:
+                return get_path_with_items(student_id) or d
 
     # Legacy multi-step / quiz-item path format -> regenerate once into the
     # current single-practice-step format.

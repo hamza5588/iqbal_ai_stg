@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 MASTERED_THRESHOLD = 85.0
 WEAK_THRESHOLD = 60.0
+PRACTICE_TARGET_THRESHOLD = 99.5
 
 
 def _parse_assessment_meta(assessment) -> dict:
@@ -515,8 +516,7 @@ def get_weak_topics_for_student(student_id: int) -> List[dict]:
         return [
             r
             for r in rows
-            if r.get("mastery_status") == "weak"
-            or (r.get("score_percent") or 100) < WEAK_THRESHOLD
+            if (r.get("score_percent") or 100) < PRACTICE_TARGET_THRESHOLD
         ]
     return get_diagnostic_weak_topics(student_id)
 

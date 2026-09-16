@@ -36,7 +36,11 @@ Rules:
 - Set conversion_confidence between 0 and 1 for each question.
 - Set learning_concept to a short student-friendly skill name (3-8 words) for what the question tests — not the PDF heading or document title.
 - Do not invent facts not supported by the content.
+- Do NOT copy or lightly rephrase any question listed under "Already used (avoid repeating)".
 {retry_hint}
+
+Already used (avoid repeating):
+{exclude_block}
 """
 
 
@@ -116,6 +120,7 @@ def generate_mcqs_from_content(
     difficulty: Optional[str] = None,
     grade_level: Optional[str] = None,
     difficulty_ladder: Optional[List[str]] = None,
+    exclude_question_texts: Optional[List[str]] = None,
 ) -> List[MCQQuestion]:
     """Generate validated MCQs from PDF section text using structured LLM output.
 
@@ -135,6 +140,12 @@ def generate_mcqs_from_content(
     structured = llm.with_structured_output(MCQBatchResult)
     retry_hint = ""
     level_line = _level_line(difficulty, grade_level, difficulty_ladder)
+    exclude = exclude_question_texts or []
+    exclude_block = (
+        "\n".join(f"- {t[:200]}" for t in exclude[:20])
+        if exclude
+        else "(none)"
+    )
 
     def _invoke() -> MCQBatchResult:
         prompt = _CONTENT_MCQ_PROMPT.format(
@@ -143,6 +154,7 @@ def generate_mcqs_from_content(
             content=content,
             level_line=level_line,
             retry_hint=retry_hint,
+            exclude_block=exclude_block,
         )
         batch: MCQBatchResult = invoke_with_groq_rate_limit(
             lambda: structured.invoke(prompt),

@@ -97,7 +97,7 @@ def get_student_dashboard(student_id: int) -> dict:
     weak_topics = [
         {**m, "topic_name": m.get("topic_name") or f"Topic #{m['topic_id']}"}
         for m in mastery
-        if m.get("mastery_status") in ("weak", "needs_practice")
+        if (m.get("score_percent") or 100) < performance_service.PRACTICE_TARGET_THRESHOLD
     ]
     weak_topics.sort(key=lambda m: m.get("score_percent") or 0)
     if not weak_topics:

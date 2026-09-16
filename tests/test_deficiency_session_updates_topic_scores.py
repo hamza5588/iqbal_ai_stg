@@ -168,12 +168,13 @@ def test_get_weak_topics_for_student_prefers_live_mastery(db_session, monkeypatc
     db_session.add_all([
         StudentTopicScore(student_id=11, topic_id=5, score_percent=20.0, sample_size=6, mastery_status="weak"),
         StudentTopicScore(student_id=11, topic_id=6, score_percent=90.0, sample_size=5, mastery_status="mastered"),
+        StudentTopicScore(student_id=11, topic_id=7, score_percent=100.0, sample_size=5, mastery_status="mastered"),
     ])
     db_session.commit()
 
     weak = performance_service.get_weak_topics_for_student(11)
     assert not called["diag"], "must not fall back to the frozen diagnostic snapshot"
-    assert [w["topic_id"] for w in weak] == [5]
+    assert [w["topic_id"] for w in weak] == [5, 6]
 
     # brand-new student with no live rows -> falls back to the diagnostic snapshot
     weak_new = performance_service.get_weak_topics_for_student(12345)
@@ -186,6 +187,67 @@ def test_missing_session_is_a_noop(db_session):
 
     performance_service.update_topic_scores_from_deficiency_session(9999)  # must not raise
     assert db_session.query(StudentTopicScore).count() == 0
+
+
+def test_learning_chat_queue_avoids_prior_question_texts(monkeypatch):
+    from app.services.lms import deficiency_chat_service as dcs
+    from app.services.quiz.models import MCQOption, MCQQuestion
+
+    def mcq(text):
+        return MCQQuestion(
+            question_text=text,
+            options=[
+                MCQOption(label="A", text="one"),
+                MCQOption(label="B", text="two"),
+                MCQOption(label="C", text="three"),
+                MCQOption(label="D", text="four"),
+            ],
+            correct_option_label="A",
+        )
+
+    monkeypatch.setattr(dcs, "_match_target_section", lambda name, threads: ("Algebra", "t1", 1))
+    monkeypatch.setattr(dcs, "get_section_text", lambda *args, **kwargs: "x + 1 = 2")
+    monkeypatch.setattr(
+        dcs,
+        "generate_mcqs_from_content",
+        lambda *args, **kwargs: [mcq("Already used?"), mcq("Fresh PDF question")],
+    )
+    monkeypatch.setattr(
+        dcs,
+        "_grade_appropriate_fallback",
+        lambda *args, **kwargs: [{
+            "topic_id": 5,
+            "topic_name": "Algebra",
+            "pdf_section": "Algebra",
+            "rag_thread_id": "",
+            "question_text": "Fresh fallback question",
+            "question_latex": None,
+            "options": [
+                {"label": "A", "text": "one"},
+                {"label": "B", "text": "two"},
+                {"label": "C", "text": "three"},
+                {"label": "D", "text": "four"},
+            ],
+            "correct_option_index": 0,
+            "difficulty": "medium",
+            "source": "grade_fit_ai",
+            "answered": False,
+            "correct": None,
+        }],
+    )
+
+    queue = dcs._build_question_queue(
+        [{"topic_id": 5, "topic_name": "Algebra", "score_percent": 87}],
+        ["t1"],
+        1,
+        "8th",
+        used_question_texts_by_topic={5: ["Already used?"]},
+    )
+
+    assert [q["question_text"] for q in queue] == [
+        "Fresh PDF question",
+        "Fresh fallback question",
+    ]
 
 
 # ---------------------------------------------------------------------------

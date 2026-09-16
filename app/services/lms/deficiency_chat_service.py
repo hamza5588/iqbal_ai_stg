@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from app.models.lms_models import AssessmentAttempt, DeficiencyChatSession, StudentProfile
 from app.services.lms import assessment_service, tutor_service
@@ -191,9 +192,45 @@ def _resolve_weak_topic_id(topic_id: int, topic_name: str) -> int:
         return 0
 
 
+def _question_key(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip().lower())[:180]
+
+
+def _prior_question_texts_by_topic(student_id: int) -> Dict[int, List[str]]:
+    """Previously served Learning Chat questions, grouped by topic.
+
+    This keeps repeat sessions useful: the same weak/needs-practice topic can
+    be practiced again, but the student should see fresh stems.
+    """
+    db = get_db()
+    rows = (
+        db.query(DeficiencyChatSession.questions_json)
+        .filter(DeficiencyChatSession.student_id == student_id)
+        .order_by(DeficiencyChatSession.updated_at.desc())
+        .limit(25)
+        .all()
+    )
+    by_topic: Dict[int, List[str]] = {}
+    seen: set[str] = set()
+    for (raw_questions,) in rows:
+        try:
+            questions = json.loads(raw_questions or "[]")
+        except json.JSONDecodeError:
+            continue
+        for q in questions:
+            topic_id = q.get("topic_id") or 0
+            text = (q.get("question_text") or q.get("question_latex") or "").strip()
+            key = f"{topic_id}:{_question_key(text)}"
+            if not topic_id or not text or key in seen:
+                continue
+            seen.add(key)
+            by_topic.setdefault(topic_id, []).append(text)
+    return by_topic
+
+
 def _grade_appropriate_fallback(
     topic_id: int, topic_name: str, score_percent: float, ladder: List[str],
-    grade_level: Optional[str],
+    grade_level: Optional[str], exclude_question_texts: Optional[List[str]] = None,
 ) -> List[dict]:
     """When the target PDF has no usable section for a weak area, generate
     grade-appropriate practice questions for the skill instead (DIL: practice
@@ -209,6 +246,7 @@ def _grade_appropriate_fallback(
             difficulty=ladder[len(ladder) // 2],
             purpose="practice",
             grade_level=grade_level,
+            exclude_question_texts=exclude_question_texts or [],
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Grade-fit fallback gen failed for %s: %s", topic_name, exc)
@@ -229,11 +267,13 @@ def _build_question_queue(
     target_thread_ids: List[str],
     rag_owner_id: int,
     grade_level: Optional[str] = None,
+    used_question_texts_by_topic: Optional[Dict[int, List[str]]] = None,
 ) -> List[dict]:
     """Generate Learning Chat MCQs, difficulty-laddered per weak area and
     pitched to the student's grade. Prefers the teacher target PDF; falls
     back to AI generation for the skill when the PDF has no usable section."""
     queue: List[dict] = []
+    used_question_texts_by_topic = used_question_texts_by_topic or {}
     seen_texts: set[str] = set()
 
     for entry in weak_topics:
@@ -241,6 +281,8 @@ def _build_question_queue(
         topic_id = _resolve_weak_topic_id(entry.get("topic_id") or 0, topic_name)
         score = float(entry.get("score_percent") or 0)
         ladder = _ladder_from(_start_rank_for_score(score))
+        exclude_texts = used_question_texts_by_topic.get(topic_id, [])
+        exclude_keys = {_question_key(t) for t in exclude_texts if t}
         pdf_section, thread_id, relevance = _match_target_section(topic_name, target_thread_ids)
 
         section_text = ""
@@ -266,26 +308,34 @@ def _build_question_queue(
                 mcqs = generate_mcqs_from_content(
                     section_text, pdf_section, len(ladder),
                     grade_level=grade_level, difficulty_ladder=ladder,
+                    exclude_question_texts=exclude_texts,
                 )
                 for i, mcq in enumerate(mcqs):
                     diff = ladder[i] if i < len(ladder) else ladder[-1]
                     item = _mcq_to_queue_item(
                         mcq, topic_id, topic_name, pdf_section, thread_id, diff
                     )
-                    if item:
+                    key = _question_key((item or {}).get("question_text") or "")
+                    if item and key and key not in exclude_keys:
                         topic_items.append(item)
             except Exception as exc:
                 logger.warning("Target PDF MCQ gen failed for %s: %s", pdf_section, exc)
 
-        if not topic_items:
+        if len(topic_items) < len(ladder):
             logger.info("No target PDF questions for %s - using grade-fit AI", topic_name)
-            topic_items = _grade_appropriate_fallback(
-                topic_id, topic_name, score, ladder, grade_level
+            fallback_ladder = ladder[len(topic_items):] or ladder
+            topic_items = topic_items + _grade_appropriate_fallback(
+                topic_id,
+                topic_name,
+                score,
+                fallback_ladder,
+                grade_level,
+                exclude_texts + [q.get("question_text") or "" for q in topic_items],
             )
 
         for item in topic_items:
-            key = (item.get("question_text") or "")[:120].lower()
-            if key and key not in seen_texts:
+            key = _question_key(item.get("question_text") or "")
+            if key and key not in exclude_keys and key not in seen_texts:
                 seen_texts.add(key)
                 queue.append(item)
 
@@ -594,7 +644,14 @@ def start_session(
                 else:
                     weak = ai_weak
 
-    queue = _build_question_queue(weak, target_thread_ids, rag_owner_id, grade_level)
+    prior_questions = _prior_question_texts_by_topic(student_id)
+    queue = _build_question_queue(
+        weak,
+        target_thread_ids,
+        rag_owner_id,
+        grade_level,
+        used_question_texts_by_topic=prior_questions,
+    )
     if not queue:
         raise LMSValidationError(
             "Could not generate questions from the target PDF(s) for your weak areas. "
