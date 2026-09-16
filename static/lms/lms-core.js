@@ -374,6 +374,15 @@
     return real.length >= 3;
   }
 
+  function lmsLooksLikeMixedTextAndMath(s) {
+    s = lmsUnsquashEnglish(String(s || '').trim());
+    if (!s) return false;
+    var words = s.match(/[A-Za-z]{4,}/g) || [];
+    var real = words.filter(function (w) { return !_MATH_WORD_RE.test(w); });
+    if (!real.length) return false;
+    return /[A-Za-z]\s*\^\{?|[A-Za-z]\d|\\(frac|sqrt|pm|times|cdot)\b|[=+\-]\s*-?\d|\d\s*[=+\-]/.test(s);
+  }
+
   function lmsStripMathDelims(s) {
     return String(s || '').replace(/\\\(|\\\)|\\\[|\\\]/g, '');
   }
@@ -517,7 +526,7 @@
     if (lmsIsBrokenMathBlob(l)) l = '';
     if (lmsLooksLikeProse(t)) return lmsRecoverLatex(t) || t;
     var recovered = lmsRecoverLatex(l || t);
-    if (recovered && (/\^\{/.test(recovered) || /\\frac/.test(recovered) || /\\times/.test(recovered)) && !lmsLooksLikeProse(recovered)) {
+    if (recovered && (/\^\{/.test(recovered) || /\\frac/.test(recovered) || /\\times/.test(recovered)) && !lmsLooksLikeProse(recovered) && !lmsLooksLikeMixedTextAndMath(recovered)) {
       return recovered;
     }
     if (lmsIsLabelOnly(t) && l && !lmsIsLabelOnly(l) && !lmsIsBrokenMathBlob(l)) return lmsRecoverLatex(l) || l;
@@ -552,6 +561,7 @@
       return colon[1] + ' ' + wrap[0] + lmsEscapePercentInMathBody(body) + wrap[1];
     }
     if (lmsIsMixedPercent(recovered)) return recovered;
+    if (lmsLooksLikeMixedTextAndMath(recovered)) return lmsWrapMathIslands(recovered, inline);
     if (lmsLooksLikeProse(recovered)) return lmsWrapMathIslands(recovered, inline);
     // "x = 3 or x = -3", "a < b and b < c": a plain English connective joins
     // two math bits. Wrapping the whole string makes MathJax eat the spaces
