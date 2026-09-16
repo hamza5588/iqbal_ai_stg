@@ -1,6 +1,7 @@
 """Assessment and quiz service."""
 from __future__ import annotations
 
+import json
 import logging
 from typing import List, Optional
 
@@ -277,6 +278,31 @@ def publish_assessment(assessment_id: int) -> Assessment:
             estimate_question_times(assessment_id)
         except Exception as exc:
             logger.warning("Timer estimation on publish failed: %s", exc)
+            # Don't just log-and-continue silently: the student-facing
+            # deadline (compute_attempt_deadline()) is computed
+            # independently and can end up disagreeing with the
+            # admin-set/previous time_limit_minutes with no visible
+            # indication anywhere. Persist a warning in the assessment
+            # meta (same JSON-in-description convention used elsewhere for
+            # diagnostics, e.g. weakness_cache) so publish/detail responses
+            # can surface it to the admin.
+            try:
+                meta = {}
+                if assessment.description:
+                    try:
+                        parsed = json.loads(assessment.description)
+                        if isinstance(parsed, dict):
+                            meta = parsed
+                    except (json.JSONDecodeError, TypeError):
+                        meta = {}
+                meta["timer_estimation_warning"] = (
+                    f"Automatic per-question time estimation failed ({exc}); "
+                    f"the configured time_limit_minutes may not match what "
+                    f"students actually get during the attempt."
+                )
+                assessment.description = json.dumps(meta, ensure_ascii=False)
+            except Exception:
+                logger.warning("Could not persist timer estimation warning", exc_info=True)
         # Archive other published diagnostics (only one active platform diagnostic)
         others = (
             db.query(Assessment)

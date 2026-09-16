@@ -547,7 +547,7 @@ def start_quiz_attempt(quiz_id: int):
     body = request.get_json(silent=True) or {}
     assignment_id = body.get("assignment_id")
     try:
-        attempt, resumed = attempt_service.start_attempt(
+        attempt, resumed, already_completed = attempt_service.start_attempt(
             student_id=_current_user_id(),
             assessment_id=quiz_id,
             assignment_id=assignment_id,
@@ -563,7 +563,15 @@ def start_quiz_attempt(quiz_id: int):
             "status": attempt.status,
             "max_score": attempt.max_score,
             "resumed": resumed,
+            "already_completed": already_completed,
         }
+        if already_completed:
+            # Diagnostic retakes aren't allowed, but unlike the quiz path
+            # (which raises an explicit LMSValidationError below), this
+            # returns 200 with the existing completed attempt -- make that
+            # explicit instead of leaving client code to guess from
+            # response shape alone.
+            payload["message"] = "You have already completed this diagnostic."
         assessment = assessment_service.get_assessment(quiz_id)
         if assessment.assessment_type == "diagnostic":
             if getattr(attempt, "timed_out", False):
@@ -997,11 +1005,20 @@ def publish_diagnostic(assessment_id: int):
         if assessment.assessment_type != "diagnostic":
             return json_error("Not a diagnostic assessment", code="validation_error", status=400)
         a = assessment_service.publish_assessment(assessment_id)
+        warnings = []
+        try:
+            import json as _json
+            meta = _json.loads(a.description) if a.description else {}
+            if isinstance(meta, dict) and meta.get("timer_estimation_warning"):
+                warnings.append(meta["timer_estimation_warning"])
+        except (ValueError, TypeError):
+            pass
         return json_success({
             "id": a.id,
             "status": a.status,
             "title": a.title,
             "time_limit_minutes": a.time_limit_minutes,
+            "warnings": warnings,
         })
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
