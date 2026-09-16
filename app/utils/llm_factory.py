@@ -109,7 +109,7 @@ def get_chat_model(user_id: Optional[int] = None, **kwargs):
             )
         
         logger.info(f"Retrieved {active_provider} API key (length: {len(api_key) if api_key else 0})")
-        
+
         # Determine model to use
         model_to_use = None
         
@@ -193,7 +193,8 @@ def get_chat_model(user_id: Optional[int] = None, **kwargs):
         )
         
     except Exception as e:
-        logger.error(f"Error in get_chat_model: {str(e)}", exc_info=True)
+        original_provider = locals().get('active_provider')
+        logger.error(f"Error in get_chat_model (original provider={original_provider}): {str(e)}", exc_info=True)
         # Try to preserve provider from kwargs or get from settings
         fallback_provider = kwargs.get('provider')
         if not fallback_provider:
@@ -207,12 +208,40 @@ def get_chat_model(user_id: Optional[int] = None, **kwargs):
                 else:
                     setting = db.query(SystemSettings).filter(SystemSettings.key == 'llm_provider').first()
                     fallback_provider = setting.value.lower() if setting else Config.LLM_PROVIDER.lower()
-            except:
+            except Exception:
                 fallback_provider = Config.LLM_PROVIDER.lower()
-        
-        # Fallback to original create_llm behavior but preserve provider
+
+        # Resolve a usable API key for the fallback provider (env var or
+        # stored SystemSettings) instead of dropping straight into
+        # create_llm(provider=fallback_provider) with no api_key at all --
+        # that silently produced a confusing "OPENAI API key is not
+        # configured" error even when e.g. Groq was the real,
+        # actually-configured provider working everywhere else.
+        fallback_api_key = kwargs.get('api_key')
+        if not fallback_api_key:
+            if fallback_provider == 'openai':
+                fallback_api_key = os.getenv('OPENAI_API_KEY') or _resolve_stored_api_key('openai')
+            elif fallback_provider == 'groq':
+                fallback_api_key = os.getenv('GROQ_API_KEY') or _resolve_stored_api_key('groq')
+
         logger.warning(f"Falling back to create_llm with provider={fallback_provider}")
-        return create_llm(provider=fallback_provider, **kwargs)
+        try:
+            return create_llm(
+                provider=fallback_provider,
+                api_key=fallback_api_key,
+                **{k: v for k, v in kwargs.items() if k not in ('provider', 'api_key')},
+            )
+        except Exception as fallback_exc:
+            # Don't let the fallback attempt's own failure loop back through
+            # this same except clause (that loop is what turned "the
+            # originally-attempted provider had a transient DB/decrypt
+            # error" into a hardcoded, misleading "OPENAI API key is not
+            # configured" message). Surface a clear error naming the
+            # originally attempted provider instead.
+            raise ValueError(
+                f"Failed to initialize LLM for provider '{original_provider or fallback_provider}': {str(e)}. "
+                f"Fallback to provider '{fallback_provider}' also failed: {str(fallback_exc)}"
+            ) from fallback_exc
 
 
 def create_llm(
