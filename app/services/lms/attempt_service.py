@@ -179,8 +179,17 @@ def start_attempt(
     assessment_id: int,
     assignment_id: Optional[int] = None,
     retake: bool = False,
-) -> tuple[AssessmentAttempt, bool]:
-    """Start or resume an attempt. Returns (attempt, resumed)."""
+) -> tuple[AssessmentAttempt, bool, bool]:
+    """Start or resume an attempt. Returns (attempt, resumed, already_completed).
+
+    ``already_completed`` is True when this call did not start/resume a live
+    attempt but instead handed back a previously-finished one because
+    retakes aren't allowed (diagnostic: ever; quiz: raises instead, see
+    below) -- so callers can be explicit about it instead of having to
+    guess from response shape alone (quiz raises LMSValidationError with a
+    clear message on retake; diagnostic returns 200 with the existing
+    attempt, so it needs its own explicit flag).
+    """
     assessment = get_assessment(assessment_id)
     if assessment.status != "published":
         raise LMSValidationError("Assessment is not published")
@@ -195,12 +204,12 @@ def start_attempt(
         assignment_id = None
         timeout = finalize_expired_diagnostic_if_needed(student_id, assessment_id)
         if timeout and not retake:
-            return get_attempt(timeout["attempt_id"]), False
+            return get_attempt(timeout["attempt_id"]), False, True
         if _student_completed_diagnostic(student_id, assessment_id):
             if not retake:
                 latest = get_latest_submitted_attempt(student_id, assessment_id)
                 if latest:
-                    return latest, False
+                    return latest, False, True
                 raise LMSValidationError(
                     "You have already completed the diagnostic assessment."
                 )
@@ -220,7 +229,7 @@ def start_attempt(
         _abandon_stale_in_progress_attempts(
             student_id, assessment_id, existing.id, assignment_id
         )
-        return existing, True
+        return existing, True, False
 
     if assessment.assessment_type == "quiz" and _student_completed_quiz(student_id, assessment_id):
         raise LMSValidationError(
@@ -269,7 +278,7 @@ def start_attempt(
         except Exception:  # noqa: BLE001
             pass
 
-    return attempt, False
+    return attempt, False, False
 
 
 def _check_attempt_expired(attempt: AssessmentAttempt) -> None:
