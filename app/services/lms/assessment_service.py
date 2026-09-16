@@ -20,6 +20,7 @@ def create_assessment(
     description: Optional[str] = None,
     creation_mode: str = "manual",
     time_limit_minutes: Optional[int] = None,
+    grade_level: Optional[str] = None,
 ) -> Assessment:
     if assessment_type not in ("diagnostic", "quiz"):
         raise LMSValidationError("assessment_type must be diagnostic or quiz")
@@ -30,6 +31,7 @@ def create_assessment(
         assessment_type=assessment_type,
         creation_mode=creation_mode,
         created_by=created_by,
+        grade_level=(grade_level or "").strip() or None,
         status="draft",
         time_limit_minutes=time_limit_minutes,
     )
@@ -37,6 +39,27 @@ def create_assessment(
     db.commit()
     db.refresh(assessment)
     return assessment
+
+
+def normalize_grade_level(grade_level: Optional[str]) -> str:
+    return (grade_level or "").strip()
+
+
+def get_active_diagnostic_for_grade(grade_level: Optional[str]) -> Optional[Assessment]:
+    grade = normalize_grade_level(grade_level)
+    if not grade:
+        return None
+    db = get_db()
+    return (
+        db.query(Assessment)
+        .filter(
+            Assessment.assessment_type == "diagnostic",
+            Assessment.grade_level == grade,
+            Assessment.status != "archived",
+        )
+        .order_by(Assessment.updated_at.desc(), Assessment.id.desc())
+        .first()
+    )
 
 
 def get_assessment(assessment_id: int) -> Assessment:
@@ -303,12 +326,14 @@ def publish_assessment(assessment_id: int) -> Assessment:
                 assessment.description = json.dumps(meta, ensure_ascii=False)
             except Exception:
                 logger.warning("Could not persist timer estimation warning", exc_info=True)
-        # Archive other published diagnostics (only one active platform diagnostic)
+        # Archive other published diagnostics for the same grade. Diagnostics are
+        # first-time managed per grade, so Grade 9 and Grade 10 can coexist.
         others = (
             db.query(Assessment)
             .filter(
                 Assessment.assessment_type == "diagnostic",
                 Assessment.status == "published",
+                Assessment.grade_level == assessment.grade_level,
                 Assessment.id != assessment_id,
             )
             .all()
@@ -334,15 +359,18 @@ def archive_diagnostic(assessment_id: int) -> Assessment:
     return assessment
 
 
-def get_active_platform_diagnostic() -> Optional[Assessment]:
-    """Return the single published platform diagnostic."""
+def get_active_platform_diagnostic(grade_level: Optional[str] = None) -> Optional[Assessment]:
+    """Return the published platform diagnostic, scoped by grade when provided."""
     db = get_db()
-    return (
-        db.query(Assessment)
-        .filter(
+    q = db.query(Assessment).filter(
             Assessment.assessment_type == "diagnostic",
             Assessment.status == "published",
         )
+    grade = normalize_grade_level(grade_level)
+    if grade:
+        q = q.filter(Assessment.grade_level == grade)
+    return (
+        q
         .order_by(Assessment.updated_at.desc(), Assessment.id.desc())
         .first()
     )
@@ -393,6 +421,7 @@ def get_assessment_with_questions(assessment_id: int, include_answers: bool = Fa
         "assessment_type": assessment.assessment_type,
         "creation_mode": assessment.creation_mode,
         "status": assessment.status,
+        "grade_level": assessment.grade_level,
         "time_limit_minutes": assessment.time_limit_minutes,
         "overall_confidence": assessment.overall_confidence,
         "requires_review": assessment.requires_review,

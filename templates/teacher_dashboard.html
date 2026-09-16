@@ -5491,6 +5491,29 @@
                         <p>Provide a clear context to help IQBAL AI create more accurate and effective lessons.</p>
                       </div>
 
+                      <div class="pu1-field">
+                          <div class="pu1-field-label">
+                            <span class="pu1-field-icon"><i class="fas fa-sliders-h"></i></span>
+                            <span>Lesson Output</span>
+                          </div>
+                          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label class="flex items-start gap-3 border border-emerald-200 rounded-lg p-3 cursor-pointer bg-white">
+                              <input type="radio" name="lessonOutputMode" value="generate" class="mt-1" checked>
+                              <span>
+                                <span class="block font-semibold text-gray-800">Generate from PDF</span>
+                                <span class="block text-xs text-gray-500">Use chat to create an AI lesson from the uploaded PDF.</span>
+                              </span>
+                            </label>
+                            <label class="flex items-start gap-3 border border-emerald-200 rounded-lg p-3 cursor-pointer bg-white">
+                              <input type="radio" name="lessonOutputMode" value="as_is" class="mt-1">
+                              <span>
+                                <span class="block font-semibold text-gray-800">Use PDF as lesson</span>
+                                <span class="block text-xs text-gray-500">Show the uploaded document text directly as the lesson.</span>
+                              </span>
+                            </label>
+                          </div>
+                      </div>
+
                       <!-- Action Buttons -->
                       <button id="nextStepButton" onclick="processCreateLessonStep1()" class="pu1-submit-btn">
                           <i class="fas fa-arrow-up"></i>
@@ -5683,6 +5706,7 @@
         const lessonContextInput = document.getElementById('lessonContext');
         const lessonSubjectInput = document.getElementById('lessonSubject');
         const lessonGradeInput = document.getElementById('lessonGrade');
+        const lessonModeInput = document.querySelector('input[name="lessonOutputMode"]:checked');
         const fileInput = document.getElementById('pdfFileInput');
 
         console.log('Form elements:', {
@@ -5705,6 +5729,7 @@
         const lessonContext = lessonContextInput ? lessonContextInput.value.trim() : '';
         const lessonSubject = lessonSubjectInput ? lessonSubjectInput.value : 'General';
         const lessonGrade = lessonGradeInput ? lessonGradeInput.value : 'General';
+        const lessonMode = lessonModeInput ? lessonModeInput.value : 'generate';
 
         // Validation
         if (!lessonTitle) {
@@ -5762,11 +5787,11 @@
         console.log('All validations passed, proceeding to step 2');
 
         // Auto-progress to Step 2: Processing
-        showCreateLessonStep2(file, lessonTitle, lessonContext, lessonSubject, lessonGrade);
+        showCreateLessonStep2(file, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode);
       }
 
       // Step 2 with responsive design
-      function showCreateLessonStep2(file, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
+      function showCreateLessonStep2(file, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode) {
         const modalContent = document.getElementById('createLessonModalContent');
         if (!modalContent) return;
 
@@ -5893,9 +5918,9 @@
       `;
 
         window._createLessonFile = file;
-        window._createLessonMeta = { lessonTitle, lessonContext, lessonSubject, lessonGrade, conversationId: null, threadId: null };
+        window._createLessonMeta = { lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode, conversationId: null, threadId: null };
         setTimeout(() => {
-          processCreateLessonStep2(file.name, file.size, lessonTitle, lessonContext, lessonSubject, lessonGrade);
+          processCreateLessonStep2(file.name, file.size, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode);
         }, 500);
       }
 
@@ -5973,7 +5998,7 @@
       }
 
       // Step 2 processing - API: POST /api/rag/ingest (RAG document ingest for chat), NOT create_lesson
-      async function processCreateLessonStep2(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
+      async function processCreateLessonStep2(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode) {
         const modal = document.getElementById('createLessonModal');
         if (!modal) return;
         const progressBar = modal.querySelector('#progressBar');
@@ -6110,7 +6135,7 @@
               window._createLessonMeta.numPages = data.num_pages || data.pages || data.documents || null;
             }
             // Auto-redirect into chat after successful processing (no manual Continue click).
-            finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade);
+            finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode);
           } else {
             // Best-effort cleanup for cancelled thread so it cannot be used accidentally.
             if (window._ingestCancelRequested && pendingThreadId) {
@@ -6404,7 +6429,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       // Finalization function - NO AUTO-SAVE
-      function finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade) {
+      async function finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode) {
         closeCreateLessonModal();
 
         const numPages = (window._createLessonMeta && window._createLessonMeta.numPages != null)
@@ -6435,6 +6460,39 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         // Save to localStorage so it persists across tab switches
         savePDFDataToStorage();
 
+        var metaThreadId = (window._createLessonMeta && window._createLessonMeta.threadId) || window.currentRAGThreadId || null;
+        var metaConvId = (window._createLessonMeta && window._createLessonMeta.conversationId) || null;
+
+        if (lessonMode === 'as_is') {
+          try {
+            const res = await fetch('/api/lessons/create_from_uploaded_document', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: lessonTitle,
+                summary: lessonContext || ('Uploaded PDF lesson: ' + lessonTitle),
+                focus_area: lessonSubject,
+                grade_level: lessonGrade,
+                filename: fileName,
+                rag_thread_id: metaThreadId,
+                conversation_id: metaConvId
+              })
+            });
+            const body = await res.json().catch(function () { return {}; });
+            if (!res.ok || !body.success) {
+              throw new Error((body && body.error) || 'Could not save uploaded document as lesson');
+            }
+            showToast('PDF saved directly as a lesson.', 'success', 4000);
+            await showMyLessonsPage();
+            return;
+          } catch (err) {
+            console.error('Direct PDF lesson save failed', err);
+            showToast(err.message || 'Could not save uploaded document as lesson.', 'error', 5000);
+            return;
+          }
+        }
+
         showToast(`✅ PDF "${lessonTitle}" uploaded successfully!`, 'success', 4000);
 
         // Enable chat tab and switch to the NEW backend conversation (do not start a client-side chat)
@@ -6442,7 +6500,6 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         showChatTab();
 
         // Prefer the conversation/thread created for THIS upload, fall back to global if needed
-        var metaConvId = (window._createLessonMeta && window._createLessonMeta.conversationId) || null;
         var newConvId = metaConvId != null ? metaConvId : window.currentRAGConversationId;
         var successHtml = buildPDFUploadSuccessMessage({
           fileName: fileName,
@@ -12435,6 +12492,17 @@ Align everything with the lesson objectives and do not invent missing informatio
               <input id="lmsDiagTitle" class="lms-input" type="text" required placeholder="e.g. Grade 8 — Unit 1 Diagnostic">
             </div>
             <div class="lms-field">
+              <label class="lms-label" for="lmsDiagGrade">Grade</label>
+              <select id="lmsDiagGrade" class="lms-input" required>
+                <option value="">Select grade</option>
+                <option value="6">6th Grade</option>
+                <option value="7">7th Grade</option>
+                <option value="8">8th Grade</option>
+                <option value="9">9th Grade</option>
+                <option value="10">10th Grade</option>
+              </select>
+            </div>
+            <div class="lms-field">
               <label class="lms-label" for="lmsDiagPdfFile">Diagnostic Q&amp;A PDF</label>
               <p class="lms-help-text">Questions + answer key only — builds the student diagnostic test.</p>
               <input id="lmsDiagPdfFile" class="lms-file-input" type="file" accept=".pdf,application/pdf" required>
@@ -12639,8 +12707,14 @@ Align everything with the lesson objectives and do not invent missing informatio
     function submitLmsDiagnosticPdf(e) {
       e.preventDefault();
       const title = document.getElementById('lmsDiagTitle').value.trim();
+      const grade = document.getElementById('lmsDiagGrade').value;
       const file = document.getElementById('lmsDiagPdfFile').files[0];
       const targetFile = document.getElementById('lmsDiagTargetPdfFile').files[0];
+      if (!grade) {
+        alert('Select a grade for this diagnostic.');
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
       if (!file || !targetFile) {
         alert('Both Diagnostic Q&A PDF and Target content PDF are required.');
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
@@ -12655,6 +12729,7 @@ Align everything with the lesson objectives and do not invent missing informatio
       _setLmsDiagProgress(5, 'Preparing upload...');
       const fd = new FormData();
       fd.append('title', title);
+      fd.append('grade_level', grade);
       fd.append('diagnostic_file', file);
       fd.append('target_file', targetFile);
       const xhr = new XMLHttpRequest();

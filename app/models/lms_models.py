@@ -185,6 +185,7 @@ class Assessment(Base):
     assessment_type = Column(String(32), nullable=False)  # diagnostic | quiz
     creation_mode = Column(String(32), nullable=False, default="manual", server_default="manual")
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    grade_level = Column(String(100), nullable=True, index=True)
     status = Column(String(32), nullable=False, default="draft", server_default="draft")
     time_limit_minutes = Column(Integer, nullable=True)
     overall_confidence = Column(Float, nullable=True)

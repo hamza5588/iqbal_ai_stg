@@ -1,6 +1,12 @@
 from flask import Blueprint, request, jsonify, session, send_file, after_this_request, render_template, current_app
 from app.models.models import UserModel, LessonModel
-from app.models.database_models import Lesson as DBLesson, LessonFAQ as DBLessonFAQ, LessonChatHistory as DBLessonChatHistory
+from app.models.database_models import (
+    Lesson as DBLesson,
+    LessonFAQ as DBLessonFAQ,
+    LessonChatHistory as DBLessonChatHistory,
+    RAGChunk,
+    RAGThread,
+)
 from app.services.lesson_service import LessonService
 from app.services.lesson.lesson_qa_graph import invoke_lesson_qa
 from app.utils.decorators import login_required, teacher_required, student_required
@@ -591,6 +597,98 @@ def create_lesson_simple():
     except Exception as e:
         logger.error(f"Error creating lesson: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to create lesson: {str(e)}'}), 500
+
+
+@bp.route('/create_from_uploaded_document', methods=['POST'])
+@login_required
+def create_lesson_from_uploaded_document():
+    """Save an uploaded PDF as the lesson content without AI generation."""
+    try:
+        data = request.get_json() or {}
+        title = (data.get('title') or '').strip()
+        focus_area = (data.get('focus_area') or data.get('subject') or 'General').strip() or 'General'
+        grade_level = (data.get('grade_level') or data.get('grade') or 'General').strip() or 'General'
+        summary = (data.get('summary') or data.get('additional_notes') or '').strip()
+        rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip()
+        filename = (data.get('filename') or data.get('file_name') or '').strip() or None
+        raw_conv_id = data.get('conversation_id')
+        lesson_conversation_id = None
+        if raw_conv_id is not None:
+            try:
+                lesson_conversation_id = int(raw_conv_id)
+            except (TypeError, ValueError):
+                lesson_conversation_id = None
+
+        if not title:
+            return jsonify({'error': 'Title is required'}), 400
+        if not rag_thread_id:
+            return jsonify({'error': 'Uploaded document thread_id is required'}), 400
+        if LessonModel.check_title_exists(session['user_id'], title):
+            return jsonify({'error': 'This lesson title is already used. Please choose a different title.'}), 400
+
+        db = get_db()
+        thread = (
+            db.query(RAGThread)
+            .filter(RAGThread.thread_id == rag_thread_id, RAGThread.user_id == session['user_id'])
+            .first()
+        )
+        if not thread:
+            return jsonify({'error': 'Uploaded document not found or access denied'}), 404
+        if thread.ingest_status and thread.ingest_status not in ('success',):
+            return jsonify({'error': 'Uploaded document is not ready yet'}), 400
+
+        chunks = (
+            db.query(RAGChunk)
+            .filter(RAGChunk.thread_id == rag_thread_id, RAGChunk.user_id == session['user_id'])
+            .order_by(RAGChunk.page.asc(), RAGChunk.chunk_index.asc(), RAGChunk.id.asc())
+            .all()
+        )
+        seen = set()
+        parts = []
+        for chunk in chunks:
+            text = (chunk.text or '').strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            page_label = (chunk.page or 0) + 1
+            parts.append(f"## Page {page_label}\n\n{text}")
+
+        if not parts:
+            return jsonify({'error': 'No readable text was found in the uploaded document'}), 400
+
+        source_name = filename or thread.filename or 'uploaded document'
+        content = (
+            f"# {title}\n\n"
+            f"Source document: {source_name}\n\n"
+            + "\n\n".join(parts)
+        )
+        lesson_id = LessonModel.create_lesson(
+            teacher_id=session['user_id'],
+            title=title,
+            summary=summary or f"Uploaded document lesson for {grade_level}",
+            learning_objectives='',
+            content=content,
+            grade_level=grade_level,
+            focus_area=focus_area,
+            file_name=source_name,
+            is_public=True,
+            status='finalized',
+            rag_thread_id=rag_thread_id,
+            conversation_id=lesson_conversation_id,
+        )
+        if not lesson_id:
+            return jsonify({'error': 'Failed to save lesson to database'}), 500
+
+        lesson = LessonModel.get_lesson_by_id(lesson_id)
+        return jsonify({
+            'success': True,
+            'lesson': lesson,
+            'id': lesson_id,
+            'message': 'Uploaded document saved as lesson successfully',
+        }), 201
+    except Exception as e:
+        logger.error(f"Error creating lesson from uploaded document: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Failed to create lesson from uploaded document: {str(e)}'}), 500
 
 @bp.route('/ask_question_general', methods=['POST'])
 @login_required

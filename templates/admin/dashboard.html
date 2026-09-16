@@ -426,11 +426,11 @@
             <!-- Diagnostic Assessment Section (Admin only) -->
             <div id="diagnostic-section" class="section hidden">
                 <h2 class="text-3xl font-bold text-gray-800 mb-2">Diagnostic Assessment</h2>
-                <p class="text-gray-600 mb-6">Upload the platform diagnostic once. Students can take it only one time.
+                <p class="text-gray-600 mb-6">Upload one platform diagnostic per grade. Students take the diagnostic for their own grade only once.
                     AI calculates the timer based on each question's difficulty.</p>
 
                 <div id="adminDiagActiveNote" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-amber-800" style="display:none;">
-                    A diagnostic is currently active. You can add more target content PDFs below. Remove the diagnostic to upload a new Q&amp;A test.
+                    One or more diagnostics are active. You can still upload another grade; remove a grade's diagnostic before replacing that same grade.
                 </div>
 
                 <div id="adminDiagList" class="mb-6"></div>
@@ -461,6 +461,18 @@
                             <input id="adminDiagTitle" type="text" required
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2"
                                 placeholder="e.g. Grade 8 Math Diagnostic">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1" for="adminDiagGrade">Grade</label>
+                            <select id="adminDiagGrade" required
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                <option value="">Select grade</option>
+                                <option value="6">6th Grade</option>
+                                <option value="7">7th Grade</option>
+                                <option value="8">8th Grade</option>
+                                <option value="9">9th Grade</option>
+                                <option value="10">10th Grade</option>
+                            </select>
                         </div>
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1" for="adminDiagQaFile">Diagnostic Q&amp;A PDF</label>

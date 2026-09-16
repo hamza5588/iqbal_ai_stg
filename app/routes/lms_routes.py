@@ -786,12 +786,20 @@ def create_diagnostic_from_pdf():
         return denied
 
     title = request.form.get("title") or "Diagnostic Assessment"
+    grade_level = (
+        request.form.get("grade_level")
+        or request.form.get("gradeLevel")
+        or request.form.get("grade")
+        or ""
+    ).strip()
     diagnostic_file = request.files.get("diagnostic_file") or request.files.get("file")
     target_files = request.files.getlist("target_files") or request.files.getlist("target_files[]") or request.files.getlist("target_file")
     target_file = request.files.get("target_file")
 
     if not diagnostic_file:
         return json_error("Diagnostic Q&A PDF is required", code="validation_error")
+    if not grade_level:
+        return json_error("Grade level is required", code="validation_error")
 
     try:
         extra_targets = []
@@ -817,6 +825,7 @@ def create_diagnostic_from_pdf():
         result = upload_diagnostic_bundle(
             teacher_id=_current_user_id(),
             title=title.strip(),
+            grade_level=grade_level,
             diagnostic_file_bytes=diagnostic_file.read(),
             diagnostic_filename=diagnostic_file.filename or "diagnostic.pdf",
             target_file_bytes=first["bytes"],

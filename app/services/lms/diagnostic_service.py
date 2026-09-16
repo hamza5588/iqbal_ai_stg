@@ -6,13 +6,14 @@ from typing import List, Optional
 from app.models.lms_models import Assessment
 from app.services.lms import assessment_service
 from app.utils.db import get_db
+from app.services.lms import class_service
 
 DEFAULT_DIAGNOSTIC_TITLE = "Platform Math Diagnostic"
 
 
-def get_default_diagnostic() -> Optional[Assessment]:
+def get_default_diagnostic(grade_level: Optional[str] = None) -> Optional[Assessment]:
     """Return the published platform diagnostic."""
-    return assessment_service.get_active_platform_diagnostic()
+    return assessment_service.get_active_platform_diagnostic(grade_level=grade_level)
 
 
 def get_teacher_diagnostic_for_student(student_id: int) -> Optional[Assessment]:
@@ -21,8 +22,8 @@ def get_teacher_diagnostic_for_student(student_id: int) -> Optional[Assessment]:
 
 
 def get_student_diagnostic(student_id: int) -> Optional[Assessment]:
-    """Diagnostic shown to a student: the single platform diagnostic."""
-    return get_default_diagnostic()
+    """Diagnostic shown to a student: the published diagnostic for their grade."""
+    return get_default_diagnostic(class_service.get_student_grade(student_id))
 
 
 def get_default_diagnostic_dict() -> Optional[dict]:
@@ -33,7 +34,10 @@ def get_default_diagnostic_dict() -> Optional[dict]:
 
 
 def get_student_diagnostic_dict(student_id: int) -> Optional[dict]:
-    return get_default_diagnostic_dict()
+    diag = get_student_diagnostic(student_id)
+    if not diag:
+        return None
+    return _assessment_to_diagnostic_dict(diag, source="platform")
 
 
 def list_admin_diagnostics() -> List[dict]:
@@ -53,6 +57,7 @@ def list_admin_diagnostics() -> List[dict]:
                 "id": a.id,
                 "title": a.title,
                 "status": a.status,
+                "grade_level": a.grade_level,
                 "question_count": len(a.questions),
                 "time_limit_minutes": a.time_limit_minutes,
                 "target_pdf_count": len(target_pdfs),
@@ -78,6 +83,7 @@ def _assessment_to_diagnostic_dict(assessment: Assessment, source: str) -> dict:
         "description": assessment.description,
         "question_count": len(assessment.questions),
         "status": assessment.status,
+        "grade_level": assessment.grade_level,
         "source": source,
         "creation_mode": assessment.creation_mode,
         "time_limit_minutes": time_limit_minutes,

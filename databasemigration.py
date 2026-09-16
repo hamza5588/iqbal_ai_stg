@@ -188,26 +188,51 @@ def ensure_conversation_summaries_table(conn, inspector):
         )
     )
     # Replace legacy uniqueness strategy with lesson-scoped uniqueness + generic dedupe.
-    conn.execute(text("ALTER TABLE conversation_summaries DROP CONSTRAINT IF EXISTS uq_conversation_summary_last_message"))
+    if conn.engine.dialect.name == "postgresql":
+        conn.execute(text("ALTER TABLE conversation_summaries DROP CONSTRAINT IF EXISTS uq_conversation_summary_last_message"))
     conn.execute(text("DROP INDEX IF EXISTS uq_conversation_summary_last_message"))
 
     # Keep only the newest row per (conversation_id, lesson_id) before adding unique index.
-    conn.execute(
-        text(
-            """
-            DELETE FROM conversation_summaries older
-            USING conversation_summaries newer
-            WHERE older.lesson_id IS NOT NULL
-              AND newer.lesson_id IS NOT NULL
-              AND older.conversation_id = newer.conversation_id
-              AND older.lesson_id = newer.lesson_id
-              AND (
-                older.generated_at < newer.generated_at
-                OR (older.generated_at = newer.generated_at AND older.id < newer.id)
-              )
-            """
+    if conn.engine.dialect.name == "postgresql":
+        conn.execute(
+            text(
+                """
+                DELETE FROM conversation_summaries older
+                USING conversation_summaries newer
+                WHERE older.lesson_id IS NOT NULL
+                  AND newer.lesson_id IS NOT NULL
+                  AND older.conversation_id = newer.conversation_id
+                  AND older.lesson_id = newer.lesson_id
+                  AND (
+                    older.generated_at < newer.generated_at
+                    OR (older.generated_at = newer.generated_at AND older.id < newer.id)
+                  )
+                """
+            )
         )
-    )
+    else:
+        conn.execute(
+            text(
+                """
+                DELETE FROM conversation_summaries
+                WHERE lesson_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM conversation_summaries newer
+                    WHERE newer.lesson_id IS NOT NULL
+                      AND newer.conversation_id = conversation_summaries.conversation_id
+                      AND newer.lesson_id = conversation_summaries.lesson_id
+                      AND (
+                        conversation_summaries.generated_at < newer.generated_at
+                        OR (
+                          conversation_summaries.generated_at = newer.generated_at
+                          AND conversation_summaries.id < newer.id
+                        )
+                      )
+                  )
+                """
+            )
+        )
 
     # One summary row per lesson scope.
     conn.execute(
@@ -324,6 +349,25 @@ def ensure_assessment_attempts_question_ids_column(conn, inspector):
         logger.info("Column assessment_attempts.question_ids_json already exists, skipping.")
 
 
+def ensure_assessments_grade_level_column(conn, inspector):
+    """Add grade_level to assessments for grade-scoped diagnostics."""
+    if not inspector.has_table("assessments"):
+        logger.info("Table assessments does not exist, skipping grade_level column.")
+        return
+    columns = {col["name"] for col in inspector.get_columns("assessments")}
+    if "grade_level" not in columns:
+        logger.info("Adding column assessments.grade_level ...")
+        conn.execute(text("ALTER TABLE assessments ADD COLUMN grade_level VARCHAR(100) NULL"))
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_assessments_grade_level "
+                "ON assessments (grade_level)"
+            )
+        )
+    else:
+        logger.info("Column assessments.grade_level already exists, skipping.")
+
+
 def ensure_learning_path_item_type_enrichment(conn, inspector):
     """Widen learning_path_items.item_type's CHECK constraint to allow
     'enrichment' (the no-weak-areas challenge-activity item, DIL feedback:
@@ -376,6 +420,8 @@ def main():
         ensure_student_topic_scores_sample_size_column(conn, inspector)
         inspector = inspect(engine)
         ensure_assessment_attempts_question_ids_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_assessments_grade_level_column(conn, inspector)
         inspector = inspect(engine)
         ensure_learning_path_item_type_enrichment(conn, inspector)
 

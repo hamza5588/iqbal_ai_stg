@@ -340,13 +340,15 @@
 
             '<p class="text-sm ' + statusCls + '">' + esc(d.status) + ' &middot; ' +
 
+            (d.grade_level ? ('Grade ' + esc(d.grade_level) + ' &middot; ') : '') +
+
             (d.question_count || 0) + ' questions' +
 
             (d.time_limit_minutes ? ' &middot; ~' + d.time_limit_minutes + ' min timer' : '') + '</p>' +
 
             targetBlock + '</div>' +
 
-            (d.status === 'published' ?
+            (d.status !== 'archived' ?
 
               '<button type="button" onclick="adminRemoveDiagnostic(' + d.id + ')" class="text-red-600 hover:underline text-sm whitespace-nowrap">Remove diagnostic</button>' : '') +
 
@@ -372,7 +374,7 @@
 
         state.assessmentId = active.id;
 
-        if (uploadSection) uploadSection.style.display = 'none';
+        if (uploadSection) uploadSection.style.display = 'block';
 
         if (activeNote) activeNote.style.display = 'block';
 
@@ -533,6 +535,7 @@
     e.preventDefault();
 
     var title = document.getElementById('adminDiagTitle').value.trim();
+    var grade = document.getElementById('adminDiagGrade').value;
 
     var diagFile = document.getElementById('adminDiagQaFile').files[0];
 
@@ -546,6 +549,11 @@
 
     if (!diagFile) {
       alert('Diagnostic Q&A PDF is required.');
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      return;
+    }
+    if (!grade) {
+      alert('Select a grade for this diagnostic.');
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       return;
     }
@@ -570,6 +578,7 @@
     var fd = new FormData();
 
     fd.append('title', title);
+    fd.append('grade_level', grade);
 
     fd.append('diagnostic_file', diagFile);
 
@@ -708,5 +717,3 @@
   };
 
 })();
-
-

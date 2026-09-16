@@ -189,6 +189,7 @@ def upload_diagnostic_bundle(
     teacher_id: int,
 
     title: str,
+    grade_level: str,
 
     diagnostic_file_bytes: bytes,
 
@@ -214,6 +215,16 @@ def upload_diagnostic_bundle(
 
         raise LMSValidationError("Diagnostic Q&A PDF is empty")
 
+    grade = assessment_service.normalize_grade_level(grade_level)
+    if not grade:
+        raise LMSValidationError("Grade level is required for diagnostic upload")
+    existing = assessment_service.get_active_diagnostic_for_grade(grade)
+    if existing:
+        raise LMSValidationError(
+            f"A diagnostic assessment already exists for grade {grade}. "
+            "Remove/archive it before uploading another diagnostic for this grade."
+        )
+
     targets: List[Dict[str, Any]] = list(target_files or [])
     if not targets:
         if not target_file_bytes:
@@ -233,6 +244,8 @@ def upload_diagnostic_bundle(
         assessment_type="diagnostic",
 
         creation_mode="pdf_qa_auto",
+
+        grade_level=grade,
 
     )
 
@@ -340,6 +353,8 @@ def upload_diagnostic_bundle(
 
         "title": assessment.title,
 
+        "grade_level": assessment.grade_level,
+
         "status": assessment.status,
 
         "question_count": pipeline_result.get("question_count"),
@@ -359,6 +374,7 @@ def upload_diagnostic_pdf(
     teacher_id: int,
 
     title: str,
+    grade_level: str,
 
     file_bytes: bytes,
 
@@ -371,6 +387,16 @@ def upload_diagnostic_pdf(
     if not file_bytes:
 
         raise LMSValidationError("PDF file is empty")
+
+    grade = assessment_service.normalize_grade_level(grade_level)
+    if not grade:
+        raise LMSValidationError("Grade level is required for diagnostic upload")
+    existing = assessment_service.get_active_diagnostic_for_grade(grade)
+    if existing:
+        raise LMSValidationError(
+            f"A diagnostic assessment already exists for grade {grade}. "
+            "Remove/archive it before uploading another diagnostic for this grade."
+        )
 
 
 
@@ -385,6 +411,8 @@ def upload_diagnostic_pdf(
         assessment_type="diagnostic",
 
         creation_mode="pdf_ai",
+
+        grade_level=grade,
 
     )
 
@@ -449,6 +477,8 @@ def upload_diagnostic_pdf(
         "thread_id": thread_id,
 
         "title": assessment.title,
+
+        "grade_level": assessment.grade_level,
 
         "status": assessment.status,
 
