@@ -322,7 +322,20 @@ def _topic_buckets_from_diagnostic_analysis(attempt, assessment) -> Optional[dic
     return buckets or None
 
 
-def _topic_buckets_from_question_resolution(attempt, assessment) -> dict[int, dict]:
+def _topic_buckets_from_question_resolution(
+    attempt, assessment, *, exclude_unanswered: bool = False
+) -> dict[int, dict]:
+    """Per-topic correct/total from questions.topic_id resolution.
+
+    ``exclude_unanswered``: when True (timed-out/auto-submitted attempts),
+    a question with no answer at all is treated as "never reached" rather
+    than "reached and got 0 right" -- it's dropped from the bucket instead
+    of being counted as a wrong answer. Without this, topics the student
+    never even saw before time ran out get a StudentTopicScore row with
+    score_percent=0, indistinguishable from a topic they were shown and
+    genuinely missed. A topic where the student answered at least one
+    question still scores normally from just the answered ones.
+    """
     from app.services.lms.attempt_service import attempt_question_ids
 
     db = get_db()
@@ -333,12 +346,14 @@ def _topic_buckets_from_question_resolution(attempt, assessment) -> dict[int, di
 
     buckets: dict[int, dict] = {}
     for q in questions:
+        ans = ans_map.get(q.id)
+        if exclude_unanswered and ans is None:
+            continue
         topic_id = _resolve_question_topic_id(q, assessment)
         if not topic_id:
             continue
         bucket = buckets.setdefault(topic_id, {"correct": 0, "total": 0})
         bucket["total"] += 1
-        ans = ans_map.get(q.id)
         if ans and ans.is_correct:
             bucket["correct"] += 1
     return buckets
@@ -356,11 +371,14 @@ def update_topic_scores_from_attempt(attempt_id: int) -> None:
         repair_diagnostic_topic_meta(assessment)
         assessment = get_assessment(attempt.assessment_id)
 
+    timed_out = bool(getattr(attempt, "timed_out", False))
     by_topic: Optional[dict[int, dict]] = None
-    if is_diagnostic and not getattr(attempt, "timed_out", False):
+    if is_diagnostic and not timed_out:
         by_topic = _topic_buckets_from_diagnostic_analysis(attempt, assessment)
     if by_topic is None:
-        by_topic = _topic_buckets_from_question_resolution(attempt, assessment)
+        by_topic = _topic_buckets_from_question_resolution(
+            attempt, assessment, exclude_unanswered=timed_out
+        )
 
     now = datetime.utcnow()
     for topic_id, stats in by_topic.items():
