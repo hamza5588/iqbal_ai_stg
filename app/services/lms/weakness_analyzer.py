@@ -364,6 +364,68 @@ def analyze_diagnostic_attempt(attempt_id: int, use_cache: bool = True) -> dict:
             _set_cache(assessment, attempt_id, ai_result)
             return ai_result
 
+    # Concept metadata (question_concepts/question_pdf_topics) was empty or
+    # missing, and AI grouping didn't produce anything usable either. Rather
+    # than surface an empty weak/strong screen (which then disagrees with
+    # the dashboard's questions.topic_id/student_topic_scores-based view a
+    # moment later), fall back to the same topic_id-based grouping the
+    # non-diagnostic (quiz) branch of performance_service.analyze_attempt
+    # already uses, so the immediate results screen matches the dashboard.
+    topic_result = _group_by_question_topic_id(questions, ans_map, assessment)
+    if topic_result and (topic_result.get("weak_topics") or topic_result.get("strong_topics")):
+        _set_cache(assessment, attempt_id, topic_result)
+        return topic_result
+
     result = {"weak_topics": [], "strong_topics": [], "all_topics": []}
     _set_cache(assessment, attempt_id, result)
     return result
+
+
+def _group_by_question_topic_id(
+    questions: List[Question],
+    ans_map: dict,
+    assessment,
+) -> Optional[dict]:
+    """Fallback grouping by questions.topic_id, mirroring the quiz branch of
+    performance_service.analyze_attempt (same resolver + same thresholds),
+    for use when diagnostic concept metadata is absent/empty."""
+    from app.services.lms.performance_service import (
+        _resolve_question_topic_id,
+        _topic_display_name,
+    )
+
+    by_topic: dict[int, dict] = {}
+    for q in questions:
+        topic_id = _resolve_question_topic_id(q, assessment)
+        if not topic_id:
+            continue
+        bucket = by_topic.setdefault(
+            topic_id, {"topic_id": topic_id, "correct": 0, "total": 0, "question_ids": []}
+        )
+        bucket["total"] += 1
+        bucket["question_ids"].append(q.id)
+        ans = ans_map.get(q.id)
+        if ans and ans.is_correct:
+            bucket["correct"] += 1
+
+    if not by_topic:
+        return None
+
+    weak, strong, all_topics = [], [], []
+    for tid, stats in by_topic.items():
+        pct = round(100.0 * stats["correct"] / stats["total"], 2) if stats["total"] else 0.0
+        entry = {
+            "topic_id": tid,
+            "topic_name": _topic_display_name(tid),
+            "score_percent": pct,
+            "question_ids": stats["question_ids"],
+        }
+        all_topics.append(entry)
+        if pct < WEAK_THRESHOLD:
+            weak.append(entry)
+        elif pct >= _STRONG_THRESHOLD:
+            strong.append(entry)
+
+    weak.sort(key=lambda x: x["score_percent"])
+    strong.sort(key=lambda x: x["score_percent"], reverse=True)
+    return {"weak_topics": weak, "strong_topics": strong, "all_topics": all_topics}
