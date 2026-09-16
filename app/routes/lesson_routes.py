@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import re
+from html import escape
 from urllib.parse import urlparse
 from app.utils.lesson_similarity import is_likely_same_lesson
 
@@ -37,6 +38,165 @@ _lesson_qa_user_rate = {}
 _lesson_qa_rate_lock = threading.Lock()
 _lesson_qa_redis_client = None
 _lesson_qa_redis_lock = threading.Lock()
+
+
+_DIRECT_LESSON_HEADING_WORDS = {
+    "objective",
+    "objectives",
+    "resources",
+    "video",
+    "review",
+    "activity",
+    "assessment",
+    "homework",
+    "lesson summary",
+    "teacher reflection",
+    "think - pair - share",
+    "think-pair-share",
+}
+
+
+def _clean_uploaded_doc_line(line: str) -> str:
+    line = re.sub(r"\s+", " ", str(line or "").strip())
+    line = line.replace("\u2013", "-").replace("\u2014", "-")
+    line = line.replace("\u2022", "-").replace("\u2212", "-")
+    return line
+
+
+def _merge_uploaded_doc_lines(texts) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for text in texts:
+        for raw_line in str(text or "").splitlines():
+            line = _clean_uploaded_doc_line(raw_line)
+            if not line:
+                continue
+            key = re.sub(r"\W+", "", line.lower())
+            if not key or key in seen:
+                continue
+            # RAG chunks overlap. If the exact line was already included as a
+            # nearby substring, skip it instead of repeating page content.
+            recent = " ".join(lines[-18:]).lower()
+            if len(line) > 24 and line.lower() in recent:
+                continue
+            seen.add(key)
+            lines.append(line)
+    return lines
+
+
+def _looks_like_uploaded_doc_heading(line: str) -> bool:
+    clean = line.strip().strip(":")
+    lower = clean.lower()
+    if lower in _DIRECT_LESSON_HEADING_WORDS:
+        return True
+    if re.match(r"^(activity|review|video|homework|assessment)\b.*\(\s*\d+", lower):
+        return True
+    if (
+        line.rstrip().endswith(":")
+        and len(clean.split()) <= 8
+        and not re.match(r"^(by the end|students|teacher|answer)\b", lower)
+    ):
+        return True
+    if len(clean) <= 80 and not clean.endswith((".", "?", "!")):
+        words = clean.split()
+        if not (1 <= len(words) <= 10):
+            return False
+        if re.match(r"^(answer|teacher can add|solve|consider|by the end|students|there is|this means)\b", lower):
+            return False
+        return clean.istitle() or bool(re.match(r"^[A-Z]-\d{1,2}-[A-Z]-\d{1,2}\b", clean))
+    return False
+
+
+def _markdownize_uploaded_doc_page(page_num: int, lines: list[str]) -> str:
+    out = [f'<section class="uploaded-doc-page" data-page="{page_num}">', f"<h2>Page {page_num}</h2>"]
+    in_list = False
+
+    def close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    for idx, line in enumerate(lines):
+        lower = line.lower()
+        if line.startswith(("- ", "* ")) or re.match(r"^[*-]\s*", line):
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            item = re.sub(r"^[*-]\s*", "", line).strip()
+            out.append(f"<li>{escape(item)}</li>")
+        elif lower.startswith("answer:"):
+            close_list()
+            out.append(f"<p><strong>Answer:</strong> {escape(line.split(':', 1)[1].strip())}</p>")
+        elif lower.startswith("teacher can add:"):
+            close_list()
+            out.append(f"<p><strong>Teacher can add:</strong> {escape(line.split(':', 1)[1].strip())}</p>")
+        elif _looks_like_uploaded_doc_heading(line):
+            close_list()
+            level = "###" if idx <= 2 else "####"
+            tag = "h3" if level == "###" else "h4"
+            out.append(f"<{tag}>{escape(line.strip(':'))}</{tag}>")
+        else:
+            close_list()
+            out.append(f"<p>{escape(line)}</p>")
+    close_list()
+    out.append("</section>")
+    return "\n".join(out)
+
+
+def _format_uploaded_document_pages(title: str, source_name: str, page_texts: dict[int, list[str]]) -> str:
+    parts = [f"# {title}", "", f"**Source document:** {source_name}", ""]
+    for page_num in sorted(page_texts):
+        lines = _merge_uploaded_doc_lines(page_texts[page_num])
+        if lines:
+            parts.append(_markdownize_uploaded_doc_page(page_num, lines))
+            parts.append("")
+    return "\n".join(parts).strip()
+
+
+def _format_uploaded_document_content(content: str, fallback_title: str = "Lesson") -> str:
+    """Repair older direct-upload lessons that were saved as overlapping chunks."""
+    raw = str(content or "")
+    if "Source document:" not in raw or "Page " not in raw:
+        return raw
+
+    title = fallback_title
+    source = "uploaded document"
+    page_texts: dict[int, list[str]] = {}
+    current_page = None
+    current_lines: list[str] = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# ") and title == fallback_title:
+            title = stripped[2:].strip() or title
+            continue
+        if stripped.lower().startswith("source document:"):
+            source = stripped.split(":", 1)[1].strip() or source
+            continue
+        m = re.match(r"^#{0,3}\s*Page\s+(\d+)\s*$", stripped, re.I)
+        if m:
+            if current_page is not None:
+                page_texts.setdefault(current_page, []).append("\n".join(current_lines))
+            current_page = int(m.group(1))
+            current_lines = []
+            continue
+        if current_page is not None:
+            current_lines.append(line)
+    if current_page is not None:
+        page_texts.setdefault(current_page, []).append("\n".join(current_lines))
+    if not page_texts:
+        return raw
+    return _format_uploaded_document_pages(title, source, page_texts)
+
+
+def _apply_uploaded_document_formatting(lesson: dict | None) -> dict | None:
+    if not isinstance(lesson, dict):
+        return lesson
+    content = lesson.get("content")
+    if isinstance(content, str):
+        lesson = dict(lesson)
+        lesson["content"] = _format_uploaded_document_content(content, lesson.get("title") or "Lesson")
+    return lesson
 
 
 def _normalize_faq_question_text(question: str) -> str:
@@ -643,25 +803,19 @@ def create_lesson_from_uploaded_document():
             .order_by(RAGChunk.page.asc(), RAGChunk.chunk_index.asc(), RAGChunk.id.asc())
             .all()
         )
-        seen = set()
-        parts = []
+        page_texts = {}
         for chunk in chunks:
             text = (chunk.text or '').strip()
-            if not text or text in seen:
+            if not text:
                 continue
-            seen.add(text)
             page_label = (chunk.page or 0) + 1
-            parts.append(f"## Page {page_label}\n\n{text}")
+            page_texts.setdefault(page_label, []).append(text)
 
-        if not parts:
+        if not page_texts:
             return jsonify({'error': 'No readable text was found in the uploaded document'}), 400
 
         source_name = filename or thread.filename or 'uploaded document'
-        content = (
-            f"# {title}\n\n"
-            f"Source document: {source_name}\n\n"
-            + "\n\n".join(parts)
-        )
+        content = _format_uploaded_document_pages(title, source_name, page_texts)
         lesson_id = LessonModel.create_lesson(
             teacher_id=session['user_id'],
             title=title,
@@ -882,6 +1036,7 @@ def get_lesson(lesson_id):
         else:
             logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
             return jsonify({'error': 'Access denied'}), 403
+        lesson = _apply_uploaded_document_formatting(lesson)
         
         return jsonify({
             'success': True,
@@ -923,6 +1078,8 @@ def view_lesson(lesson_id):
         # is returned (its own row) with no history.
         root_lesson_id = lesson.get('parent_lesson_id') or lesson_id
         versions = LessonModel.get_lesson_versions(root_lesson_id)
+        lesson = _apply_uploaded_document_formatting(lesson)
+        versions = [_apply_uploaded_document_formatting(v) for v in (versions or [])]
 
         return jsonify({
             'success': True,
