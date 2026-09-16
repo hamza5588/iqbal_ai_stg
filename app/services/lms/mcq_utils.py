@@ -31,6 +31,16 @@ _ANSWER_KEY_NUM_RE = re.compile(r"^([0-9]{1,3})$")
 _INLINE_ANSWER_RE = re.compile(
     r"(?im)^\s*(?:the\s+)?(?:correct\s+)?(?:answer|ans|sol(?:ution)?)(?=\s|[:.\-]|$)\s*(?:is\s*)?[:.\-]?\s*(.+?)\s*$"
 )
+# PDF page-break/divider artifacts inserted between pages during text
+# extraction, e.g. "============================================================".
+# These sit on their own line at a page boundary and, without this check,
+# get appended as a continuation line onto whichever option (usually D)
+# happens to be last when the page ends.
+_PAGE_SEPARATOR_RE = re.compile(r"^[=\-_*~]{4,}(?:\s+[=\-_*~]{4,})*$")
+
+
+def is_page_separator_line(text: str) -> bool:
+    return bool(_PAGE_SEPARATOR_RE.match((text or "").strip()))
 
 
 def is_label_only(text: str) -> bool:
@@ -195,6 +205,8 @@ def split_stem_and_options(text: str) -> Tuple[str, List[dict]]:
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("--") and " of " in stripped:
+            continue
+        if is_page_separator_line(stripped):
             continue
         if _INLINE_ANSWER_RE.match(stripped):
             continue
