@@ -1888,7 +1888,8 @@
     #viewLessonModal .svc-body.source-pdf-mode{ padding:0; background:#eef2f7; }
     #viewLessonModal .source-pdf-viewer{
       display:flex; flex-direction:column; align-items:center; gap:18px;
-      min-height:420px; padding:16px; overflow-x:auto; background:#eef2f7;
+      width:100%; max-width:none; min-height:420px; padding:16px;
+      overflow-x:auto; background:#eef2f7; box-sizing:border-box;
     }
     #viewLessonModal .source-pdf-toolbar{
       align-self:stretch; display:flex; align-items:center; justify-content:space-between;
@@ -1896,7 +1897,7 @@
     }
     #viewLessonModal .source-pdf-toolbar a{ color:#166534; text-decoration:underline; }
     #viewLessonModal .source-pdf-page{
-      position:relative; flex:0 0 auto; max-width:100%; background:#fff;
+      position:relative; flex:0 0 auto; background:#fff;
       box-shadow:0 16px 36px -26px rgba(15,23,42,.75);
     }
     #viewLessonModal .source-pdf-page canvas{ display:block; max-width:100%; height:auto; }
@@ -5357,9 +5358,11 @@
           if (contentEl) {
             if (lesson.source_pdf_url) {
               contentEl.classList.add('source-pdf-mode');
+              contentEl.classList.remove('prose', 'prose-sm', 'md:prose-base', 'markdown-content', 'lesson-content-formatted');
               renderStudentLessonPdf(contentEl, lesson.source_pdf_url);
             } else {
               contentEl.classList.remove('source-pdf-mode');
+              contentEl.classList.add('prose', 'prose-sm', 'md:prose-base', 'max-w-none', 'markdown-content', 'lesson-content-formatted');
               const rawContent = (lesson.content || lesson.body || '').trim();
               contentEl.innerHTML = formatLessonContentForView(rawContent);
               contentEl.classList.add('markdown-content');
@@ -5399,7 +5402,10 @@
             pdf.numPages + ' page' + (pdf.numPages === 1 ? '' : 's') + '</span>' +
             '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">Open PDF</a></div>';
 
-          const availableWidth = Math.max(280, Math.min(container.clientWidth || 900, 980) - 32);
+          await new Promise(function (resolve) { requestAnimationFrame(resolve); });
+          const measuredWidth = container.getBoundingClientRect().width || container.parentElement?.getBoundingClientRect().width || 900;
+          const availableWidth = Math.max(280, Math.min(measuredWidth - 32, 1180));
+          const outputScale = Math.min(window.devicePixelRatio || 1, 2);
           for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
             if (container._pdfRenderGeneration !== generation) return;
             const page = await pdf.getPage(pageNumber);
@@ -5412,8 +5418,8 @@
             pageWrap.style.height = viewport.height + 'px';
 
             const canvas = document.createElement('canvas');
-            canvas.width = Math.floor(viewport.width);
-            canvas.height = Math.floor(viewport.height);
+            canvas.width = Math.floor(viewport.width * outputScale);
+            canvas.height = Math.floor(viewport.height * outputScale);
             canvas.style.width = viewport.width + 'px';
             canvas.style.height = viewport.height + 'px';
             pageWrap.appendChild(canvas);
@@ -5422,7 +5428,12 @@
             linkLayer.className = 'source-pdf-link-layer';
             pageWrap.appendChild(linkLayer);
             viewer.appendChild(pageWrap);
-            await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+            const renderContext = {
+              canvasContext: canvas.getContext('2d'),
+              viewport: viewport,
+              transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0]
+            };
+            await page.render(renderContext).promise;
 
             const annotations = await page.getAnnotations({ intent: 'display' });
             annotations.forEach(function (annotation) {
