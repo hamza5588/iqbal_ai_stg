@@ -1282,7 +1282,14 @@ def lesson_topics(lesson_id: int):
     uid = _current_user_id()
     role = _current_role()
     if lesson.get("teacher_id") != uid and role != "admin":
-        if role != "student" or not lesson.get("is_public"):
+        from app.services.lms.class_service import student_can_access_teacher_grade
+        if (
+            role != "student"
+            or not lesson.get("is_public")
+            or not student_can_access_teacher_grade(
+                uid, lesson.get("teacher_id"), lesson.get("grade_level")
+            )
+        ):
             return json_error("Forbidden", code="forbidden", status=403)
 
     if request.method == "GET":

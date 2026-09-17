@@ -506,6 +506,7 @@ class LessonModel:
         per_page: int = 10,
         search_term: str = None,
         topic_id: int = None,
+        teacher_grade_links: List[tuple[int, str]] = None,
     ) -> Dict[str, Any]:
         """Get latest public lessons with DB-level pagination (one row per logical lesson)."""
         try:
@@ -522,6 +523,38 @@ class LessonModel:
                 DBLesson.is_public.is_(True),
                 DBLesson.has_child_version.is_(False),
             )
+
+            if teacher_grade_links is not None:
+                access_filters = []
+                for teacher_id, grade in teacher_grade_links:
+                    grade_text = str(grade).strip()
+                    suffix = "th"
+                    if grade_text == "1":
+                        suffix = "st"
+                    elif grade_text == "2":
+                        suffix = "nd"
+                    elif grade_text == "3":
+                        suffix = "rd"
+                    grade_values = {
+                        grade_text,
+                        f"grade {grade_text}",
+                        f"grade {grade_text}{suffix}",
+                        f"class {grade_text}",
+                        f"class {grade_text}{suffix}",
+                        f"{grade_text}{suffix}",
+                        f"{grade_text}{suffix} grade",
+                        f"{grade_text}{suffix} class",
+                        f"standard {grade_text}",
+                        f"{grade_text}{suffix} standard",
+                    }
+                    access_filters.append(and_(
+                        DBLesson.teacher_id == teacher_id,
+                        func.lower(func.trim(DBLesson.grade_level)).in_(grade_values),
+                    ))
+                if not access_filters:
+                    filtered = filtered.filter(False)
+                else:
+                    filtered = filtered.filter(or_(*access_filters))
 
             if grade_level:
                 filtered = filtered.filter(DBLesson.grade_level == grade_level)

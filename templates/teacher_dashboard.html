@@ -5595,11 +5595,19 @@
                                 <span>Grade Level</span>
                               </div>
                               <select id="lessonGrade" class="pu1-input border-2 border-emerald-600 focus:border-emerald-700">
-                                  <option value="General">General</option>
-                                  <option value="Elementary">Elementary</option>
-                                  <option value="Middle School">Middle School</option>
-                                  <option value="High School">High School</option>
-                                  <option value="College">College</option>
+                                  <option value="">Select grade</option>
+                                  <option value="1">1st Grade</option>
+                                  <option value="2">2nd Grade</option>
+                                  <option value="3">3rd Grade</option>
+                                  <option value="4">4th Grade</option>
+                                  <option value="5">5th Grade</option>
+                                  <option value="6">6th Grade</option>
+                                  <option value="7">7th Grade</option>
+                                  <option value="8">8th Grade</option>
+                                  <option value="9">9th Grade</option>
+                                  <option value="10">10th Grade</option>
+                                  <option value="11">11th Grade</option>
+                                  <option value="12">12th Grade</option>
                               </select>
                           </div>
                       </div>
@@ -5869,6 +5877,12 @@
         if (!lessonTitle) {
           alert('Please enter a lesson title.');
           lessonTitleInput.focus();
+          return;
+        }
+
+        if (!lessonGrade) {
+          alert('Please select the grade that should receive this lesson.');
+          lessonGradeInput.focus();
           return;
         }
 
@@ -6762,6 +6776,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             timestamp: timestamp,
             fullDate: date,
             status: lesson.status || 'draft',
+            isPublished: lesson.is_public === true,
             hasChildVersion: lesson.has_child_version === true
           };
         });
@@ -6803,6 +6818,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 <div><label>Subject</label><span>${lesson.subject}</span></div>
                 <div><label>Grade</label><span>${lesson.grade}</span></div>
                 <div><label>Created by</label><span>${lesson.createdBy}</span></div>
+                <div><label>Visibility</label><span>${lesson.isPublished ? 'Published to linked grade' : 'Not published'}</span></div>
               </div>
               <div class="mll-actions-label">Actions</div>
               <div class="mll-actions">
@@ -6811,6 +6827,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 <a class="mll-word" title="Download DOCX" onclick="downloadLessonDocx('${lesson.id}')"><i class="fas fa-file-word"></i> Word</a>
                 <a class="mll-ppt" title="Download PPT" onclick="downloadLessonPPT('${lesson.id}')"><i class="fas fa-file-powerpoint"></i> PowerPoint</a>
                 <a class="mll-ask" title="FAQ" onclick="showLessonFAQ('${lesson.id}')"><i class="fas fa-circle-question"></i> FAQ</a>
+                <a class="mll-edit" title="${lesson.isPublished ? 'Unpublish lesson' : 'Publish lesson'}" onclick="toggleLessonPublication('${lesson.id}', ${lesson.isPublished ? 'false' : 'true'})"><i class="fas fa-${lesson.isPublished ? 'eye-slash' : 'paper-plane'}"></i> ${lesson.isPublished ? 'Unpublish' : 'Publish'}</a>
                 ${!lesson.hasChildVersion ? `<a class="mll-delete" title="Delete" onclick="deleteLesson('${lesson.id}')"><i class="fas fa-trash"></i> Delete</a>` : ''}
               </div>
             </div>
@@ -6913,6 +6930,33 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         } catch (err) {
           console.error('viewLesson error:', err);
           showToast('Error loading lesson: ' + (err.message || 'Unknown'), 'error');
+        }
+      }
+
+      async function toggleLessonPublication(lessonId, publish) {
+        const action = publish ? 'publish' : 'unpublish';
+        try {
+          const response = await fetch('/api/lessons/lesson/' + encodeURIComponent(lessonId), {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_public: !!publish })
+          });
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || ('Could not ' + action + ' lesson'));
+          }
+          showToast(
+            publish
+              ? 'Lesson published to linked students in this grade.'
+              : 'Lesson unpublished. Students can no longer access it.',
+            'success',
+            3500
+          );
+          await showMyLessonsPage();
+        } catch (err) {
+          console.error('Lesson publication update failed', err);
+          showToast(err.message || ('Could not ' + action + ' lesson'), 'error', 4000);
         }
       }
 

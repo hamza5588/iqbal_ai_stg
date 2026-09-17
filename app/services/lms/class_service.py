@@ -332,6 +332,31 @@ def student_in_class(student_id: int, class_id: int) -> bool:
     )
 
 
+def student_teacher_grade_links(student_id: int) -> List[tuple[int, str]]:
+    """Return active (teacher, grade) links for the student's enrolled classes."""
+    links = []
+    seen = set()
+    for school_class in list_student_classes(student_id):
+        grade = normalize_grade(school_class.grade_level)
+        if not grade:
+            continue
+        link = (school_class.teacher_id, grade)
+        if link not in seen:
+            seen.add(link)
+            links.append(link)
+    return links
+
+
+def student_can_access_teacher_grade(
+    student_id: int, teacher_id: int, grade_level: Optional[str]
+) -> bool:
+    """Whether a student is actively linked to this teacher for the lesson grade."""
+    lesson_grade = normalize_grade(grade_level)
+    if not lesson_grade:
+        return False
+    return (teacher_id, lesson_grade) in student_teacher_grade_links(student_id)
+
+
 def update_class(
     class_id: int,
     teacher_id: int,

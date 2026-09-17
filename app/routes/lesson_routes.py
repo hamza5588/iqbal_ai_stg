@@ -225,14 +225,28 @@ def _source_pdf_path_for_lesson(lesson: dict | None):
     return None
 
 
-def _can_access_lesson(lesson: dict, user_id: int) -> bool:
-    return bool(
-        lesson
-        and (
-            lesson.get("teacher_id") == user_id
-            or lesson.get("is_public", False)
-        )
+def _can_access_lesson(lesson: dict, user_id: int, user_role: str | None = None) -> bool:
+    if not lesson or not user_id:
+        return False
+    if lesson.get("teacher_id") == user_id or user_role == "admin":
+        return True
+    if (
+        user_role != "student"
+        or not lesson.get("is_public", False)
+        or lesson.get("has_child_version") is True
+    ):
+        return False
+    from app.services.lms.class_service import student_can_access_teacher_grade
+
+    return student_can_access_teacher_grade(
+        user_id, lesson.get("teacher_id"), lesson.get("grade_level")
     )
+
+
+def _has_publishable_grade(grade_level: str | None) -> bool:
+    from app.services.lms.grade_utils import normalize_grade
+
+    return normalize_grade(grade_level) is not None
 
 
 def _normalize_faq_question_text(question: str) -> str:
@@ -574,7 +588,7 @@ def create_lesson():
                 content='',  # Will be filled when lesson is complete
                 grade_level=grade_level,
                 focus_area=focus_area,
-                is_public=True  # Make lessons public by default
+                is_public=_has_publishable_grade(grade_level),
             )
             
             if not lesson_id:
@@ -771,7 +785,7 @@ def create_lesson_simple():
             content=content,
             grade_level=grade_level,
             focus_area=focus_area,
-            is_public=True,
+            is_public=_has_publishable_grade(grade_level),
             status='finalized',
             rag_thread_id=rag_thread_id,
             conversation_id=lesson_conversation_id,
@@ -861,7 +875,7 @@ def create_lesson_from_uploaded_document():
             grade_level=grade_level,
             focus_area=focus_area,
             file_name=source_name,
-            is_public=True,
+            is_public=_has_publishable_grade(grade_level),
             status='finalized',
             rag_thread_id=rag_thread_id,
             conversation_id=lesson_conversation_id,
@@ -886,6 +900,7 @@ def ask_general_question():
     """Ask a general question that will be answered using available lesson content"""
     try:
         data = request.get_json()
+
         question = data.get('question', '').strip()
         
         if not question:
@@ -988,7 +1003,7 @@ def get_my_lessons():
 def browse_lessons():
     """Browse public lessons for students with server-side pagination."""
     try:
-        from app.services.lms import curriculum_service, lesson_topic_service
+        from app.services.lms import class_service, curriculum_service, lesson_topic_service
 
         grade_level = request.args.get('grade_level')
         focus_area = request.args.get('focus_area')
@@ -1011,6 +1026,7 @@ def browse_lessons():
             per_page=per_page,
             search_term=search_term,
             topic_id=topic_id,
+            teacher_grade_links=class_service.student_teacher_grade_links(session['user_id']),
         )
         lessons = lesson_topic_service.enrich_lessons_with_topics(result['lessons'])
         return jsonify({
@@ -1038,7 +1054,18 @@ def search_lessons():
         if not search_term:
             return jsonify({'error': 'Search term is required'}), 400
         
-        lessons = LessonModel.search_lessons(search_term, grade_level=grade_level)
+        if session.get('role') == 'student':
+            from app.services.lms import class_service
+            result = LessonModel.get_public_latest_lessons_paginated(
+                grade_level=grade_level,
+                page=1,
+                per_page=100,
+                search_term=search_term,
+                teacher_grade_links=class_service.student_teacher_grade_links(session['user_id']),
+            )
+            lessons = result['lessons']
+        else:
+            lessons = LessonModel.search_lessons(search_term, grade_level=grade_level)
         return jsonify({
             'success': True,
             'lessons': lessons
@@ -1059,18 +1086,8 @@ def get_lesson(lesson_id):
         # Check if user can access this lesson
         user_id = session.get('user_id')
         user_role = session.get('role', 'student')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-        
-        # Users can access their own lessons (regardless of role)
-        if lesson_teacher_id == user_id:
-            pass  # Allow access - user owns this lesson
-        # If lesson is public, allow access for anyone
-        elif is_public:
-            pass  # Allow access - lesson is public
-        # Otherwise deny access
-        else:
-            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+        if not _can_access_lesson(lesson, user_id, user_role):
+            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id}")
             return jsonify({'error': 'Access denied'}), 403
         lesson = _apply_uploaded_document_formatting(lesson)
         
@@ -1094,18 +1111,8 @@ def view_lesson(lesson_id):
         # Check if user can access this lesson
         user_role = session.get('role', 'student')
         user_id = session.get('user_id')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-        
-        # Users can access their own lessons (regardless of role)
-        if lesson_teacher_id == user_id:
-            pass  # Allow access - user owns this lesson
-        # If lesson is public, allow access for anyone
-        elif is_public:
-            pass  # Allow access - lesson is public
-        # Otherwise deny access
-        else:
-            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+        if not _can_access_lesson(lesson, user_id, user_role):
+            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id}")
             return jsonify({'error': 'Access denied'}), 403
         
         # get_lesson_versions queries by (id == root_id OR parent_lesson_id == root_id).
@@ -1137,7 +1144,7 @@ def source_lesson_pdf(lesson_id):
             return jsonify({'error': 'Lesson not found'}), 404
 
         user_id = session.get('user_id')
-        if not _can_access_lesson(lesson, user_id):
+        if not _can_access_lesson(lesson, user_id, session.get('role')):
             return jsonify({'error': 'Access denied'}), 403
 
         if not _is_direct_uploaded_pdf_lesson(lesson):
@@ -1177,17 +1184,9 @@ def get_lesson_content_summary(lesson_id):
 
         user_id = session.get('user_id')
         user_role = session.get('role', 'student')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-
-        if lesson_teacher_id == user_id:
-            pass
-        elif is_public:
-            pass
-        else:
+        if not _can_access_lesson(lesson, user_id, user_role):
             logger.info(
-                f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} "
-                f"(teacher: {lesson_teacher_id}, public: {is_public})"
+                f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id}"
             )
             return jsonify({'error': 'Access denied'}), 403
 
@@ -1263,6 +1262,11 @@ def update_lesson(lesson_id):
             return jsonify({'error': 'Access denied'}), 403
         
         data = request.get_json()
+
+        if data.get('is_public') is True and not _has_publishable_grade(
+            data.get('grade_level', lesson.get('grade_level'))
+        ):
+            return jsonify({'error': 'Select a specific grade (1-12) before publishing this lesson.'}), 400
         
         # Check if new title already exists for this teacher (if title is being changed)
         new_title = data.get('title')
@@ -1354,18 +1358,8 @@ def download_lesson(lesson_id):
         # Check if user can access this lesson
         user_role = session.get('role', 'student')
         user_id = session.get('user_id')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-        
-        # Users can access their own lessons (regardless of role)
-        if lesson_teacher_id == user_id:
-            pass  # Allow access - user owns this lesson
-        # If lesson is public, allow access for anyone
-        elif is_public:
-            pass  # Allow access - lesson is public
-        # Otherwise deny access
-        else:
-            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+        if not _can_access_lesson(lesson, user_id, user_role):
+            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id}")
             return jsonify({'error': 'Access denied'}), 403
         
         # Create lesson structure for DOCX generation
@@ -1412,18 +1406,8 @@ def download_lesson_ppt(lesson_id):
     # Check if user can access this lesson
     user_role = session.get('role', 'student')
     user_id = session.get('user_id')
-    lesson_teacher_id = lesson.get('teacher_id')
-    is_public = lesson.get('is_public', False)
-    
-    # Users can access their own lessons (regardless of role)
-    if lesson_teacher_id == user_id:
-        pass  # Allow access - user owns this lesson
-    # If lesson is public, allow access for anyone
-    elif is_public:
-        pass  # Allow access - lesson is public
-    # Otherwise deny access
-    else:
-        logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+    if not _can_access_lesson(lesson, user_id, user_role):
+        logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id}")
         return jsonify({'error': 'Access denied'}), 403
 
     # Prepare lesson data for PPT generation
@@ -1479,18 +1463,8 @@ def download_lesson_pdf(lesson_id):
         # Check if user can access this lesson
         user_role = session.get('role', 'student')
         user_id = session.get('user_id')
-        lesson_teacher_id = lesson.get('teacher_id')
-        is_public = lesson.get('is_public', False)
-        
-        # Users can access their own lessons (regardless of role)
-        if lesson_teacher_id == user_id:
-            pass  # Allow access - user owns this lesson
-        # If lesson is public, allow access for anyone
-        elif is_public:
-            pass  # Allow access - lesson is public
-        # Otherwise deny access
-        else:
-            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id} (teacher: {lesson_teacher_id}, public: {is_public})")
+        if not _can_access_lesson(lesson, user_id, user_role):
+            logger.info(f"Access denied for user {user_id} (role: {user_role}) to lesson {lesson_id}")
             return jsonify({'error': 'Access denied'}), 403
 
         # Try to generate PDF using reportlab (preferred method)
@@ -1692,7 +1666,7 @@ def ask_lesson_question():
 
     user_id = session['user_id']
     lesson = LessonModel.get_lesson_by_id(int(lesson_id))
-    if not lesson or not _can_access_lesson(lesson, int(user_id)):
+    if not lesson or not _can_access_lesson(lesson, int(user_id), session.get('role')):
         return jsonify({'error': 'Lesson not found or access denied'}), 404
     allowed, retry_after = _check_and_record_lesson_qa_rate(int(user_id))
     if not allowed:
