@@ -328,7 +328,7 @@ def test_update_lesson_tool_syncs_existing_my_lessons_row():
     assert m, "update_lesson_tool body not found"
     body = m.group(0)
     assert "_sync_saved_lesson_row(str(thread_id), content)" in body
-    assert "get_lesson_by_rag_thread_id" in RAG_SERVICE_SRC
+    assert "get_lessons_by_rag_thread_id" in RAG_SERVICE_SRC
 
 
 def test_lesson_persist_fallback_retries_when_tool_called_but_failed():
@@ -348,7 +348,7 @@ def test_create_lesson_simple_updates_existing_row_for_same_thread():
     m = re.search(r"def create_lesson_simple\(\):.*?\n@bp\.route", LESSON_ROUTES_SRC, re.S)
     assert m, "create_lesson_simple body not found"
     body = m.group(0)
-    assert "get_lesson_by_rag_thread_id" in body
+    assert "get_lessons_by_rag_thread_id" in body
     assert "updated_existing" in body
     # Re-save must not overwrite the real title with the frontend's auto-suffix.
     update_call = re.search(r"LessonModel\(existing_lesson\['id'\]\)\.update_lesson\((.*?)\)", body, re.S)

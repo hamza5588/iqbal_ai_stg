@@ -1632,8 +1632,12 @@ def start_practice():
 @bp.route("/practice/sessions/<int:session_id>", methods=["GET"])
 @login_required
 def get_practice(session_id: int):
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
     try:
-        return json_success(practice_service.get_session_question(session_id))
+        return json_success(
+            practice_service.get_session_question(session_id, _current_user_id())
+        )
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 
@@ -1641,10 +1645,14 @@ def get_practice(session_id: int):
 @bp.route("/practice/sessions/<int:session_id>/answer", methods=["POST"])
 @login_required
 def practice_answer(session_id: int):
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
     body = request.get_json(silent=True) or {}
     try:
         return json_success(
-            practice_service.submit_answer(session_id, int(body["selected_option_index"]))
+            practice_service.submit_answer(
+                session_id, int(body["selected_option_index"]), _current_user_id()
+            )
         )
     except (KeyError, TypeError, ValueError) as e:
         return json_error(str(e), code="validation_error")
@@ -1655,8 +1663,12 @@ def practice_answer(session_id: int):
 @bp.route("/practice/sessions/<int:session_id>/hint", methods=["POST"])
 @login_required
 def practice_hint(session_id: int):
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
     try:
-        return json_success(practice_service.request_hint(session_id))
+        return json_success(
+            practice_service.request_hint(session_id, _current_user_id())
+        )
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 

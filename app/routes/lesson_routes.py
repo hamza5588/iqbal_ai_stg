@@ -1028,7 +1028,22 @@ def browse_lessons():
             topic_id=topic_id,
             teacher_grade_links=class_service.student_teacher_grade_links(session['user_id']),
         )
-        lessons = lesson_topic_service.enrich_lessons_with_topics(result['lessons'])
+        # Defense in depth: never trust only the listing query for access control.
+        # Re-check every returned row against the student's active class enrollment.
+        visible_lessons = [
+            lesson for lesson in result['lessons']
+            if class_service.student_can_access_teacher_grade(
+                session['user_id'], lesson.get('teacher_id'), lesson.get('grade_level')
+            )
+        ]
+        lessons = lesson_topic_service.enrich_lessons_with_topics(visible_lessons)
+        if len(visible_lessons) != len(result['lessons']):
+            logger.warning(
+                "Removed %s unauthorized lesson(s) from browse response for student %s",
+                len(result['lessons']) - len(visible_lessons), session['user_id'],
+            )
+            result['total'] = len(visible_lessons)
+            result['total_pages'] = 1
         return jsonify({
             'success': True,
             'lessons': lessons,
@@ -1063,7 +1078,12 @@ def search_lessons():
                 search_term=search_term,
                 teacher_grade_links=class_service.student_teacher_grade_links(session['user_id']),
             )
-            lessons = result['lessons']
+            lessons = [
+                lesson for lesson in result['lessons']
+                if class_service.student_can_access_teacher_grade(
+                    session['user_id'], lesson.get('teacher_id'), lesson.get('grade_level')
+                )
+            ]
         else:
             lessons = LessonModel.search_lessons(search_term, grade_level=grade_level)
         return jsonify({

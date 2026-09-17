@@ -4206,13 +4206,10 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
         from app.utils.lesson_similarity import is_likely_same_lesson
         same_lesson = is_likely_same_lesson(previous, content)
 
-        # Fragment / coverage guards apply only when this is an EDIT of the current
-        # lesson. A teacher asking for a second, different lesson in the same chat
-        # (e.g. quadratic already drafted, now "create a lesson on nature of roots")
-        # is supposed to replace the in-progress draft. Treating that as a dropped
-        # section would block the new lesson, and syncing it into My Lessons would
-        # overwrite the first saved row.
-        if same_lesson and previous and len(previous) > 200 and len(content) < 0.5 * len(previous):
+        # Never let a short tool argument destroy a complete lesson. Similarity is
+        # deliberately not used here: a fragment can have low similarity precisely
+        # because it contains only the newly requested section or confirmation.
+        if previous and len(previous) > 200 and len(content) < 0.5 * len(previous):
             result["reason"] = (
                 "This looks like only part of the lesson, not the complete current lesson. "
                 "Call update_lesson_tool again with the FULL lesson text (all existing "
@@ -4220,7 +4217,7 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
             )
             return json.dumps(result)
 
-        if same_lesson and previous and len(previous) > 200 and content != previous:
+        if previous and len(previous) > 200 and content != previous:
             user_id_for_check = _get_user_id_for_thread(thread_id)
             if not _lesson_update_still_covers_previous(previous, content, user_id_for_check):
                 result["reason"] = (
@@ -4235,12 +4232,9 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
         thread_row.last_lesson_text = content
         if title:
             thread_row.lesson_title = title
-        # lesson_finalized is a display flag only (set/cleared by finalize_lesson_tool).
-        # An edit of the same lesson does not touch it. A brand-new lesson in this
-        # thread is not yet saved, so clear the flag so the next Save inserts a new row
-        # instead of looking like a re-finalize of the previous one.
-        if previous and not same_lesson:
-            thread_row.lesson_finalized = False
+        # Editing content must not silently change the finalized/saved state. New
+        # lessons should use a new lesson flow/thread instead of overloading an
+        # already-finalized thread and risking loss of its saved content.
         db.commit()
 
         # Keep My Lessons in sync only for edits of an already-saved lesson. A

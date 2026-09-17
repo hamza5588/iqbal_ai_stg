@@ -90,6 +90,7 @@ class _FakeChatGroq:
 
 @pytest.fixture(autouse=True)
 def _patch_chat_groq(monkeypatch):
+    monkeypatch.setenv("LLM_TELEMETRY_ENABLED", "false")
     if hasattr(llm_factory, "ChatGroq"):
         monkeypatch.setattr(llm_factory, "ChatGroq", _FakeChatGroq)
         monkeypatch.setattr(llm_factory, "GROQ_AVAILABLE", True)

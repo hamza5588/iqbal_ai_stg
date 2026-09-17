@@ -15,17 +15,26 @@ _p = _ROOT / "app" / "services" / "lms" / "tutor_service.py"
 def _load():
     # Stub the two app modules tutor_service imports at module load so it
     # loads without a DB / sqlalchemy.
-    for name in ("app", "app.services", "app.services.lms",
-                 "app.services.lms.performance_service", "app.utils",
-                 "app.utils.groq_rate_limit", "app.utils.llm_factory"):
-        sys.modules.setdefault(name, types.ModuleType(name))
-    sys.modules["app.services.lms.performance_service"].get_student_mastery = lambda *_a, **_k: []
-    sys.modules["app.utils.groq_rate_limit"].invoke_with_groq_rate_limit = lambda f, **_k: f()
-    sys.modules["app.utils.llm_factory"].create_llm = lambda **_k: None
-    spec = importlib.util.spec_from_file_location("_tutor_under_test", _p)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    names = ("app", "app.services", "app.services.lms",
+             "app.services.lms.performance_service", "app.utils",
+             "app.utils.groq_rate_limit", "app.utils.llm_factory")
+    previous = {name: sys.modules.get(name) for name in names}
+    try:
+        for name in names:
+            sys.modules[name] = types.ModuleType(name)
+        sys.modules["app.services.lms.performance_service"].get_student_mastery = lambda *_a, **_k: []
+        sys.modules["app.utils.groq_rate_limit"].invoke_with_groq_rate_limit = lambda f, **_k: f()
+        sys.modules["app.utils.llm_factory"].create_llm = lambda **_k: None
+        spec = importlib.util.spec_from_file_location("_tutor_under_test", _p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    finally:
+        for name, old_module in previous.items():
+            if old_module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = old_module
 
 
 T = _load()

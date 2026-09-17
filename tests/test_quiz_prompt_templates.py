@@ -31,12 +31,15 @@ TEMPLATES = {
     "_PAIRING_PROMPT": (_PAIRING_PROMPT, {"questions", "answers"}),
     "_LATEX_NORMALIZE_PROMPT": (_LATEX_NORMALIZE_PROMPT, {"questions"}),
     "_MCQ_PROMPT": (_MCQ_PROMPT, {"question", "question_latex", "answer", "answer_latex", "retry_hint"}),
-    "_CONTENT_MCQ_PROMPT": (_CONTENT_MCQ_PROMPT, {"count", "topic", "content", "retry_hint"}),
+    "_CONTENT_MCQ_PROMPT": (
+        _CONTENT_MCQ_PROMPT,
+        {"count", "topic", "content", "retry_hint", "level_line", "exclude_block"},
+    ),
     "_REMEDIATION_PROMPT": (
         _REMEDIATION_PROMPT,
         {
             "count", "topic_name", "topic_description", "score_percent",
-            "difficulty", "purpose_label", "exclude_block", "retry_hint",
+            "difficulty", "purpose_label", "exclude_block", "retry_hint", "grade_level",
         },
     ),
 }

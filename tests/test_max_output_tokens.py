@@ -29,6 +29,7 @@ class _FakeChatOpenAI:
 
 @pytest.fixture(autouse=True)
 def _patch_chat_openai(monkeypatch):
+    monkeypatch.setenv("LLM_TELEMETRY_ENABLED", "false")
     monkeypatch.setattr(llm_factory, "ChatOpenAI", _FakeChatOpenAI)
     _FakeChatOpenAI.last_kwargs = None
     yield
