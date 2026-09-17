@@ -4824,6 +4824,7 @@
         // to bleed across chats).
         window.currentRAGThreadId = null;
         window.currentRAGConversationId = null;
+        window.currentLessonChatAlreadySaved = false;
         try {
           localStorage.removeItem('teacher_currentRAGThreadId');
           localStorage.removeItem('teacher_currentRAGConversationId');
@@ -4973,6 +4974,10 @@
       }
 
       async function refreshSaveLessonAvailability() {
+        if (window.currentLessonChatAlreadySaved) {
+          setSaveLessonButtonsVisible(false);
+          return;
+        }
         let canSave = !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
         if (window.currentRAGThreadId) {
           try {
@@ -7045,6 +7050,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         } catch (e) {
           console.warn('Could not load linked PDF conversation', e);
         }
+        // This PDF is already a saved lesson. Keep its chat available for Q&A,
+        // but do not offer Save again and create a duplicate lesson.
+        window.currentLessonChatAlreadySaved = true;
+        setSaveLessonButtonsVisible(false);
         showToast('PDF chat context opened. Ask your question in the chat box.', 'success', 3500);
       }
 
@@ -10110,6 +10119,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       // Save Lesson from Chat (prefer RAG finalized/in-progress lesson over local template so we save actual AI lesson)
       async function saveLessonFromChat() {
+        if (window.currentLessonChatAlreadySaved) {
+          setSaveLessonButtonsVisible(false);
+          showToast('This lesson is already saved in My Lessons.', 'info', 2500);
+          return;
+        }
         let pdfData = currentPDFData;
         let lessonContent = currentLessonMarkdown;
 
