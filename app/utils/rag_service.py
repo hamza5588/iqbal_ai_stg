@@ -2520,12 +2520,11 @@ def ingest_pdf(
         )
         _send_progress("vector_store", 85, f"Inserted {len(chunks)} vectors.")
 
-        try:
-            if file_path.exists():
-                file_path.unlink()
-                logger.info(f"Deleted uploaded PDF file: {file_path}")
-        except Exception as e:
-            logger.error(f"Failed to delete uploaded PDF file {file_path}: {e}")
+        # Keep the original upload on disk. Direct/as-is lessons render this
+        # file with pdf.js so layout, images, tables, and hyperlinks stay
+        # exactly as the teacher uploaded them. The temporary processing copy
+        # below is still removed.
+        logger.info("Preserved uploaded PDF file for source preview: %s", file_path)
 
         _send_progress("cleanup", 95, "Cleaning up temporary files...")
 

@@ -1864,6 +1864,20 @@
       #viewLessonModal .vl-older-notice-slot { margin-left: 0; }
     }
 
+    #viewLessonModal.vl-source-pdf-mode .vl-draft-panel {
+      display: none;
+    }
+
+    #viewLessonModal.vl-source-pdf-mode .vl-content-header,
+    #viewLessonModal.vl-source-pdf-mode .vl-content-card,
+    #viewLessonModal.vl-source-pdf-mode .vl-older-notice-slot {
+      margin-left: 0;
+    }
+
+    #viewLessonModal.vl-source-pdf-mode .vl-toolbar .vl-tab:first-child {
+      display: none;
+    }
+
     #viewLessonCurrent,
     #expandedLessonPreviewContent {
       font-size: 0.96rem;
@@ -1932,6 +1946,79 @@
     #viewLessonCurrent .uploaded-doc-page p,
     #expandedLessonPreviewContent .uploaded-doc-page p {
       margin: 0.35rem 0;
+    }
+
+    .source-pdf-viewer {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      align-items: center;
+      background: #eef2f7;
+      border: 1px solid #d8e0eb;
+      border-radius: 8px;
+      padding: 18px;
+      min-height: 420px;
+    }
+
+    .source-pdf-toolbar {
+      align-self: stretch;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .source-pdf-toolbar a {
+      color: #166534;
+      text-decoration: underline;
+    }
+
+    .source-pdf-chat-btn {
+      border: 1px solid #16a34a;
+      background: #16a34a;
+      color: #fff;
+      border-radius: 7px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .source-pdf-chat-btn:hover {
+      background: #15803d;
+    }
+
+    .source-pdf-page {
+      position: relative;
+      background: #fff;
+      box-shadow: 0 16px 36px -26px rgba(15, 23, 42, 0.75);
+    }
+
+    .source-pdf-page canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    .source-pdf-link-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .source-pdf-link-layer a {
+      position: absolute;
+      pointer-events: auto;
+      background: rgba(14, 165, 233, 0.08);
+      border-radius: 2px;
+    }
+
+    .source-pdf-link-layer a:hover {
+      outline: 2px solid rgba(14, 165, 233, 0.55);
+      background: rgba(14, 165, 233, 0.15);
     }
 
     #expandedLessonPreviewModal {
@@ -6802,6 +6889,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 content: v.content,
                 title: v.title,
                 summary: v.summary,
+                source_pdf_url: v.source_pdf_url || null,
+                source_view_mode: v.source_view_mode || null,
               };
             }),
             status: lesson.status || 'draft',
@@ -6811,6 +6900,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             rag_thread_id: lesson.rag_thread_id || null,
             conversation_id: lesson.conversation_id || null,
             summary: targetVersion.summary || lesson.summary || null,
+            source_pdf_url: targetVersion.source_pdf_url || lesson.source_pdf_url || null,
+            source_view_mode: targetVersion.source_view_mode || lesson.source_view_mode || null,
           };
           await populateViewLessonModal(forModal);
           showViewLessonModal();
@@ -6818,6 +6909,143 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           console.error('viewLesson error:', err);
           showToast('Error loading lesson: ' + (err.message || 'Unknown'), 'error');
         }
+      }
+
+      function setViewLessonSourcePdfMode(enabled) {
+        const modal = document.getElementById('viewLessonModal');
+        if (modal) modal.classList.toggle('vl-source-pdf-mode', !!enabled);
+        const finalizeBtn = document.getElementById('finalizeVersionBtn');
+        if (finalizeBtn && enabled) {
+          finalizeBtn.classList.add('hidden');
+          finalizeBtn.disabled = true;
+        } else if (finalizeBtn) {
+          finalizeBtn.disabled = false;
+        }
+      }
+
+      function ensurePdfJsReady() {
+        if (!window.pdfjsLib) return false;
+        try {
+          if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+          }
+        } catch (e) {
+          console.warn('Failed to configure pdf.js worker', e);
+        }
+        return true;
+      }
+
+      async function renderSourcePdfLesson(container, pdfUrl) {
+        if (!container) return;
+        const lessonForChat = window.currentViewedLessonData || {};
+        const chatButton = lessonForChat.rag_thread_id
+          ? '<button type="button" class="source-pdf-chat-btn" onclick="openLessonSourceChat()"><i class="fas fa-comments"></i> Chat with PDF</button>'
+          : '';
+        container._pdfRenderGen = (container._pdfRenderGen || 0) + 1;
+        const gen = container._pdfRenderGen;
+        container.classList.remove('tex2jax_process');
+        container.innerHTML =
+          '<div class="source-pdf-viewer">' +
+          '<div class="source-pdf-toolbar"><span><i class="fas fa-file-pdf"></i> Original PDF view</span>' +
+          '<span style="display:flex;align-items:center;gap:10px;">' + chatButton +
+          '<a href="' + escapeHtml(pdfUrl) + '" target="_blank" rel="noopener">Open PDF</a></span></div>' +
+          '<div class="text-gray-500 py-8"><i class="fas fa-spinner fa-spin"></i> Loading PDF...</div>' +
+          '</div>';
+
+        if (!ensurePdfJsReady()) {
+          container.innerHTML =
+            '<div class="source-pdf-viewer"><p class="text-red-700">PDF viewer library did not load.</p>' +
+            '<a href="' + escapeHtml(pdfUrl) + '" target="_blank" rel="noopener">Open PDF directly</a></div>';
+          return;
+        }
+
+        try {
+          const viewer = container.querySelector('.source-pdf-viewer');
+          const loadingTask = pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true });
+          const pdf = await loadingTask.promise;
+          if (container._pdfRenderGen !== gen) return;
+          viewer.innerHTML =
+            '<div class="source-pdf-toolbar"><span><i class="fas fa-file-pdf"></i> Original PDF view · ' +
+            pdf.numPages + ' page' + (pdf.numPages === 1 ? '' : 's') + '</span>' +
+            '<span style="display:flex;align-items:center;gap:10px;">' + chatButton +
+            '<a href="' + escapeHtml(pdfUrl) + '" target="_blank" rel="noopener">Open PDF</a></span></div>';
+
+          const availableWidth = Math.max(320, Math.min(viewer.clientWidth || 900, 980) - 42);
+          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            if (container._pdfRenderGen !== gen) return;
+            const page = await pdf.getPage(pageNum);
+            const baseViewport = page.getViewport({ scale: 1 });
+            const scale = Math.min(1.55, Math.max(0.65, availableWidth / baseViewport.width));
+            const viewport = page.getViewport({ scale: scale });
+            const pageWrap = document.createElement('div');
+            pageWrap.className = 'source-pdf-page';
+            pageWrap.style.width = viewport.width + 'px';
+            pageWrap.style.height = viewport.height + 'px';
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+            canvas.style.width = viewport.width + 'px';
+            canvas.style.height = viewport.height + 'px';
+            pageWrap.appendChild(canvas);
+            const linkLayer = document.createElement('div');
+            linkLayer.className = 'source-pdf-link-layer';
+            pageWrap.appendChild(linkLayer);
+            viewer.appendChild(pageWrap);
+
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            const annotations = await page.getAnnotations({ intent: 'display' });
+            annotations.forEach(function (annotation) {
+              const href = annotation.url || annotation.unsafeUrl || '';
+              if (!href || !annotation.rect) return;
+              const rect = viewport.convertToViewportRectangle(annotation.rect);
+              const left = Math.min(rect[0], rect[2]);
+              const top = Math.min(rect[1], rect[3]);
+              const width = Math.abs(rect[0] - rect[2]);
+              const height = Math.abs(rect[1] - rect[3]);
+              const a = document.createElement('a');
+              a.href = href;
+              a.target = '_blank';
+              a.rel = 'noopener noreferrer';
+              a.title = href;
+              a.style.left = left + 'px';
+              a.style.top = top + 'px';
+              a.style.width = width + 'px';
+              a.style.height = height + 'px';
+              linkLayer.appendChild(a);
+            });
+          }
+        } catch (err) {
+          console.error('PDF render failed', err);
+          container.innerHTML =
+            '<div class="source-pdf-viewer"><p class="text-red-700">Could not render this PDF preview.</p>' +
+            '<a href="' + escapeHtml(pdfUrl) + '" target="_blank" rel="noopener">Open PDF directly</a></div>';
+        }
+      }
+
+      async function openLessonSourceChat() {
+        const lesson = window.currentViewedLessonData || {};
+        if (!lesson.rag_thread_id) {
+          showToast('No PDF chat context is linked to this lesson.', 'warning');
+          return;
+        }
+        window.currentRAGThreadId = lesson.rag_thread_id;
+        try { localStorage.setItem('teacher_currentRAGThreadId', lesson.rag_thread_id); } catch (e) {}
+        if (lesson.conversation_id) {
+          window.currentRAGConversationId = lesson.conversation_id;
+          try { localStorage.setItem('teacher_currentRAGConversationId', String(lesson.conversation_id)); } catch (e) {}
+        }
+        closeViewLessonModal();
+        enableChatTab();
+        showChatTab();
+        try {
+          if (lesson.conversation_id) {
+            await loadChatPromise(lesson.conversation_id);
+          }
+        } catch (e) {
+          console.warn('Could not load linked PDF conversation', e);
+        }
+        showToast('PDF chat context opened. Ask your question in the chat box.', 'success', 3500);
       }
 
       // Render markdown into an element and apply post-processing (math/code formatting)
@@ -6862,6 +7090,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const sourceEl = document.getElementById('viewLessonCurrent');
         const expandedEl = document.getElementById('expandedLessonPreviewContent');
         if (!sourceEl || !expandedEl) return;
+        const lesson = window.currentViewedLessonData || {};
+        if (lesson.source_pdf_url) {
+          renderSourcePdfLesson(expandedEl, lesson.source_pdf_url);
+          return;
+        }
         expandedEl.innerHTML = sourceEl.innerHTML || '<p class="text-gray-500 italic">No content available.</p>';
       }
 
@@ -6885,13 +7118,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           subtitleEl.textContent = versionLabel ? `${lessonTitle} • ${versionLabel}` : lessonTitle;
         }
 
-        syncExpandedLessonPreviewFromCurrent();
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
         modal.style.visibility = 'visible';
         modal.style.opacity = '1';
         modal.style.pointerEvents = 'auto';
         document.body.style.overflow = 'hidden';
+        syncExpandedLessonPreviewFromCurrent();
       }
 
       function syncExpandedConversationSummaryFromCurrent() {
@@ -7272,8 +7505,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           // Populate current version preview
           const rawContent = lesson.content || lesson.body || 'No content yet';
           const currentEl = document.getElementById('viewLessonCurrent');
-          renderLessonMarkdown(currentEl, rawContent);
-          syncExpandedLessonPreviewFromCurrent();
+          const isSourcePdfLesson = !!lesson.source_pdf_url;
+          setViewLessonSourcePdfMode(isSourcePdfLesson);
+          if (isSourcePdfLesson) {
+            renderSourcePdfLesson(currentEl, lesson.source_pdf_url);
+          } else {
+            renderLessonMarkdown(currentEl, rawContent);
+            syncExpandedLessonPreviewFromCurrent();
+          }
           renderLessonSummaryText(lesson);
           renderConversationSummaryText(null);
           setConversationSummaryLoading(false);
@@ -7285,7 +7524,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
           // Load draft content from backend so edits persist across sessions
           const draftTextarea = document.getElementById('viewLessonDraft');
-          if (draftTextarea) {
+          if (draftTextarea && !isSourcePdfLesson) {
             let draftValue = '';
             try {
               const draftResponse = await fetch(`/api/lessons/lesson/${lesson.id}/get_draft`, {
@@ -7314,6 +7553,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             draftTextarea.oninput = function () {
               setFinalizeButtonVisible(true);
             };
+          } else if (draftTextarea) {
+            renderLessonMarkdown(draftTextarea, '');
+            setFinalizeButtonVisible(false);
           }
 
           // ── Version history panel ──────────────────────────────────────────────
@@ -7785,14 +8027,22 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           titleEl.textContent = target.title || window.currentViewedLessonData.title || 'Untitled Lesson';
         }
         const currentEl = document.getElementById('viewLessonCurrent');
-        if (currentEl) renderLessonMarkdown(currentEl, target.content || '');
-        syncExpandedLessonPreviewFromCurrent();
+        const targetPdfUrl = target.source_pdf_url || (window.currentViewedLessonData && window.currentViewedLessonData.source_pdf_url) || null;
+        setViewLessonSourcePdfMode(!!targetPdfUrl);
+        if (currentEl && targetPdfUrl) {
+          renderSourcePdfLesson(currentEl, targetPdfUrl);
+        } else if (currentEl) {
+          renderLessonMarkdown(currentEl, target.content || '');
+          syncExpandedLessonPreviewFromCurrent();
+        }
         if (window.currentViewedLessonData) {
           window.currentViewedLessonData.versionLessonId = target.id || window.currentViewedLessonData.versionLessonId;
           window.currentViewedLessonData.content = target.content || '';
           window.currentViewedLessonData.title = target.title || window.currentViewedLessonData.title;
           window.currentViewedLessonData.summary = target.summary || null;
           window.currentViewedLessonData.version = versionNumber;
+          window.currentViewedLessonData.source_pdf_url = targetPdfUrl;
+          window.currentViewedLessonData.source_view_mode = targetPdfUrl ? 'pdf' : null;
         }
         lessonSummaryRequestToken += 1;
         setLessonSummaryLoading(false);

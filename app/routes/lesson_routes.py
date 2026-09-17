@@ -13,6 +13,7 @@ from app.utils.decorators import login_required, teacher_required, student_requi
 from app.utils.db import get_db
 from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from app.utils.chat_lock import acquire_chat_lock, release_chat_lock
+from app.utils.rag_service import UPLOADED_FILES_DIR
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
 from sqlalchemy import func, or_, desc
@@ -192,11 +193,46 @@ def _format_uploaded_document_content(content: str, fallback_title: str = "Lesso
 def _apply_uploaded_document_formatting(lesson: dict | None) -> dict | None:
     if not isinstance(lesson, dict):
         return lesson
+    lesson = dict(lesson)
     content = lesson.get("content")
     if isinstance(content, str):
-        lesson = dict(lesson)
         lesson["content"] = _format_uploaded_document_content(content, lesson.get("title") or "Lesson")
+    pdf_path = _source_pdf_path_for_lesson(lesson)
+    if pdf_path is not None and _is_direct_uploaded_pdf_lesson(lesson):
+        lesson["source_pdf_url"] = f"/api/lessons/lesson/{lesson.get('id')}/source_pdf"
+        lesson["source_view_mode"] = "pdf"
     return lesson
+
+
+def _is_direct_uploaded_pdf_lesson(lesson: dict | None) -> bool:
+    if not isinstance(lesson, dict):
+        return False
+    content = str(lesson.get("content") or lesson.get("original_content") or "")
+    return bool(lesson.get("rag_thread_id")) and "Source document:" in content and "Page " in content
+
+
+def _source_pdf_path_for_lesson(lesson: dict | None):
+    if not isinstance(lesson, dict) or not lesson.get("rag_thread_id"):
+        return None
+    thread_id = str(lesson.get("rag_thread_id") or "")
+    matches = sorted(UPLOADED_FILES_DIR.glob(f"{thread_id}_*.pdf"))
+    for path in matches:
+        try:
+            if path.is_file():
+                return path
+        except OSError:
+            continue
+    return None
+
+
+def _can_access_lesson(lesson: dict, user_id: int) -> bool:
+    return bool(
+        lesson
+        and (
+            lesson.get("teacher_id") == user_id
+            or lesson.get("is_public", False)
+        )
+    )
 
 
 def _normalize_faq_question_text(question: str) -> str:
@@ -1091,6 +1127,40 @@ def view_lesson(lesson_id):
         return jsonify({'error': f'Failed to view lesson: {str(e)}'}), 500
 
 
+@bp.route('/lesson/<int:lesson_id>/source_pdf', methods=['GET'])
+@login_required
+def source_lesson_pdf(lesson_id):
+    """Stream the original uploaded PDF for direct/as-is lessons."""
+    try:
+        lesson = LessonModel.get_lesson_by_id(lesson_id)
+        if not lesson:
+            return jsonify({'error': 'Lesson not found'}), 404
+
+        user_id = session.get('user_id')
+        if not _can_access_lesson(lesson, user_id):
+            return jsonify({'error': 'Access denied'}), 403
+
+        if not _is_direct_uploaded_pdf_lesson(lesson):
+            return jsonify({'error': 'This lesson does not have an as-is source PDF view'}), 404
+
+        pdf_path = _source_pdf_path_for_lesson(lesson)
+        if pdf_path is None:
+            return jsonify({'error': 'Source PDF file not found'}), 404
+
+        download_name = lesson.get('file_name') or lesson.get('title') or 'lesson.pdf'
+        if not str(download_name).lower().endswith('.pdf'):
+            download_name = f"{download_name}.pdf"
+        return send_file(
+            str(pdf_path),
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=download_name,
+        )
+    except Exception as e:
+        logger.error("Error streaming lesson source PDF %s: %s", lesson_id, e, exc_info=True)
+        return jsonify({'error': 'Failed to load source PDF'}), 500
+
+
 def _is_placeholder_lesson_summary(summary):
     text = (summary or '').strip().lower()
     return (not text) or text in ('saved from chat.', 'saved from chat')
@@ -1601,7 +1671,7 @@ def download_lesson_pdf(lesson_id):
         return jsonify({'error': f'Failed to generate PDF: {str(e)}'}), 500
 
 @bp.route('/ask_question', methods=['POST'])
-@student_required
+@login_required
 def ask_lesson_question():
     """
     Student Q&A on a lesson (Approach 3: stateless flag).
@@ -1621,6 +1691,9 @@ def ask_lesson_question():
     from app.models.models import LessonChatHistory
 
     user_id = session['user_id']
+    lesson = LessonModel.get_lesson_by_id(int(lesson_id))
+    if not lesson or not _can_access_lesson(lesson, int(user_id)):
+        return jsonify({'error': 'Lesson not found or access denied'}), 404
     allowed, retry_after = _check_and_record_lesson_qa_rate(int(user_id))
     if not allowed:
         return jsonify({
