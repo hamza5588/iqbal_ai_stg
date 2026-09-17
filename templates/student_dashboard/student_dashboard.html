@@ -1885,6 +1885,28 @@
     #viewLessonModal .svc-body{
       flex:1; min-height:0; overflow-y:auto; padding:20px 24px 8px;
     }
+    #viewLessonModal .svc-body.source-pdf-mode{ padding:0; background:#eef2f7; }
+    #viewLessonModal .source-pdf-viewer{
+      display:flex; flex-direction:column; align-items:center; gap:18px;
+      min-height:420px; padding:16px; overflow-x:auto; background:#eef2f7;
+    }
+    #viewLessonModal .source-pdf-toolbar{
+      align-self:stretch; display:flex; align-items:center; justify-content:space-between;
+      gap:12px; color:#334155; font-size:13px; font-weight:700;
+    }
+    #viewLessonModal .source-pdf-toolbar a{ color:#166534; text-decoration:underline; }
+    #viewLessonModal .source-pdf-page{
+      position:relative; flex:0 0 auto; max-width:100%; background:#fff;
+      box-shadow:0 16px 36px -26px rgba(15,23,42,.75);
+    }
+    #viewLessonModal .source-pdf-page canvas{ display:block; max-width:100%; height:auto; }
+    #viewLessonModal .source-pdf-link-layer{ position:absolute; inset:0; pointer-events:none; }
+    #viewLessonModal .source-pdf-link-layer a{
+      position:absolute; pointer-events:auto; background:rgba(14,165,233,.08); border-radius:2px;
+    }
+    #viewLessonModal .source-pdf-link-layer a:hover{
+      outline:2px solid rgba(14,165,233,.55); background:rgba(14,165,233,.15);
+    }
     #viewLessonModal .svc-footer{
       display:flex; align-items:center; justify-content:space-between;
       padding:16px 22px 18px; gap:12px; flex-wrap:wrap; flex-shrink:0;
@@ -1915,6 +1937,8 @@
       #viewLessonModal .svc-ask{ justify-content:center; }
       #viewLessonModal .svc-exports{ justify-content:stretch; }
       #viewLessonModal .svc-docx, #viewLessonModal .svc-ppt{ flex:1; justify-content:center; }
+      #viewLessonModal .source-pdf-viewer{ padding:10px; }
+      #viewLessonModal .source-pdf-toolbar{ align-items:flex-start; flex-direction:column; }
     }
 
     .view-lesson-grid {
@@ -3343,6 +3367,7 @@
       }
     };
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
@@ -5097,7 +5122,8 @@
               subject: lesson.focus_area || lesson.subject || 'General',
               grade: lesson.grade_level || lesson.grade || 'General',
               content: currentVersion.content || lesson.content || '',
-              body: currentVersion.content || lesson.content || ''
+              body: currentVersion.content || lesson.content || '',
+              source_pdf_url: currentVersion.source_pdf_url || lesson.source_pdf_url || null
             });
             showViewLessonModal();
           }).catch(err => {
@@ -5329,16 +5355,96 @@
           // Populate lesson content with teacher-equivalent formatting pipeline
           const contentEl = document.getElementById('viewLessonCurrent');
           if (contentEl) {
-            const rawContent = (lesson.content || lesson.body || '').trim();
-            contentEl.innerHTML = formatLessonContentForView(rawContent);
-            contentEl.classList.add('markdown-content');
-            applyRenderedFormatting(contentEl);
+            if (lesson.source_pdf_url) {
+              contentEl.classList.add('source-pdf-mode');
+              renderStudentLessonPdf(contentEl, lesson.source_pdf_url);
+            } else {
+              contentEl.classList.remove('source-pdf-mode');
+              const rawContent = (lesson.content || lesson.body || '').trim();
+              contentEl.innerHTML = formatLessonContentForView(rawContent);
+              contentEl.classList.add('markdown-content');
+              applyRenderedFormatting(contentEl);
+            }
           }
 
           console.log('✅ populateViewLessonModal completed successfully');
         } catch (err) {
           console.error('❌ Error in populateViewLessonModal:', err);
           showToast('Error loading lesson: ' + (err.message || 'Unknown error'), 'error', 5000);
+        }
+      }
+
+      async function renderStudentLessonPdf(container, pdfUrl) {
+        if (!container || !pdfUrl) return;
+        const safeUrl = String(pdfUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        container._pdfRenderGeneration = (container._pdfRenderGeneration || 0) + 1;
+        const generation = container._pdfRenderGeneration;
+        container.innerHTML = '<div class="source-pdf-viewer">' +
+          '<div class="source-pdf-toolbar"><span><i class="fas fa-file-pdf"></i> Original PDF view</span>' +
+          '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">Open PDF</a></div>' +
+          '<div class="text-gray-500 py-8"><i class="fas fa-spinner fa-spin"></i> Loading PDF...</div></div>';
+
+        if (!window.pdfjsLib) {
+          container.innerHTML = '<div class="source-pdf-viewer"><p class="text-red-700">PDF viewer library did not load.</p>' +
+            '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">Open PDF directly</a></div>';
+          return;
+        }
+
+        try {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+          const viewer = container.querySelector('.source-pdf-viewer');
+          const pdf = await pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true }).promise;
+          if (container._pdfRenderGeneration !== generation) return;
+          viewer.innerHTML = '<div class="source-pdf-toolbar"><span><i class="fas fa-file-pdf"></i> Original PDF view &middot; ' +
+            pdf.numPages + ' page' + (pdf.numPages === 1 ? '' : 's') + '</span>' +
+            '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">Open PDF</a></div>';
+
+          const availableWidth = Math.max(280, Math.min(container.clientWidth || 900, 980) - 32);
+          for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+            if (container._pdfRenderGeneration !== generation) return;
+            const page = await pdf.getPage(pageNumber);
+            const baseViewport = page.getViewport({ scale: 1 });
+            const scale = Math.min(1.55, Math.max(0.5, availableWidth / baseViewport.width));
+            const viewport = page.getViewport({ scale: scale });
+            const pageWrap = document.createElement('div');
+            pageWrap.className = 'source-pdf-page';
+            pageWrap.style.width = viewport.width + 'px';
+            pageWrap.style.height = viewport.height + 'px';
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+            canvas.style.width = viewport.width + 'px';
+            canvas.style.height = viewport.height + 'px';
+            pageWrap.appendChild(canvas);
+
+            const linkLayer = document.createElement('div');
+            linkLayer.className = 'source-pdf-link-layer';
+            pageWrap.appendChild(linkLayer);
+            viewer.appendChild(pageWrap);
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+
+            const annotations = await page.getAnnotations({ intent: 'display' });
+            annotations.forEach(function (annotation) {
+              const href = annotation.url || annotation.unsafeUrl || '';
+              if (!href || !annotation.rect) return;
+              const rect = viewport.convertToViewportRectangle(annotation.rect);
+              const link = document.createElement('a');
+              link.href = href;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              link.title = href;
+              link.style.left = Math.min(rect[0], rect[2]) + 'px';
+              link.style.top = Math.min(rect[1], rect[3]) + 'px';
+              link.style.width = Math.abs(rect[0] - rect[2]) + 'px';
+              link.style.height = Math.abs(rect[1] - rect[3]) + 'px';
+              linkLayer.appendChild(link);
+            });
+          }
+        } catch (error) {
+          console.error('Student lesson PDF render failed', error);
+          container.innerHTML = '<div class="source-pdf-viewer"><p class="text-red-700">Could not render this PDF preview.</p>' +
+            '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">Open PDF directly</a></div>';
         }
       }
 

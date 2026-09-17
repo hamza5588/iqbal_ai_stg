@@ -947,6 +947,75 @@
       height: 0 !important;
       overflow: hidden !important;
     }
+
+    #studentLessonContent.student-source-pdf-content {
+      padding: 0;
+      background: #eef2f7;
+    }
+
+    .student-source-pdf-viewer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      min-height: 420px;
+      padding: 16px;
+      overflow-x: auto;
+      background: #eef2f7;
+    }
+
+    .student-source-pdf-toolbar {
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .student-source-pdf-toolbar a {
+      color: #166534;
+      text-decoration: underline;
+    }
+
+    .student-source-pdf-page {
+      position: relative;
+      flex: 0 0 auto;
+      max-width: 100%;
+      background: #fff;
+      box-shadow: 0 16px 36px -26px rgba(15, 23, 42, 0.75);
+    }
+
+    .student-source-pdf-page canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    .student-source-pdf-link-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .student-source-pdf-link-layer a {
+      position: absolute;
+      pointer-events: auto;
+      background: rgba(14, 165, 233, 0.08);
+      border-radius: 2px;
+    }
+
+    .student-source-pdf-link-layer a:hover {
+      outline: 2px solid rgba(14, 165, 233, 0.55);
+      background: rgba(14, 165, 233, 0.15);
+    }
+
+    @media (max-width: 640px) {
+      .student-source-pdf-viewer { padding: 10px; }
+      .student-source-pdf-toolbar { align-items: flex-start; flex-direction: column; }
+    }
   </style>
 </head>
 
@@ -11620,7 +11689,7 @@ async function initializeApp() {
                 
                 // Sort versions by version number (newest first)
                 const sortedVersions = versions.sort((a, b) => (b.version || 1) - (a.version || 1));
-                const currentVersion = sortedVersions[0]; // Newest version
+                const currentVersion = sortedVersions[0] || lesson; // Newest version
                 
                 // Store versions data for switching
                 window.currentLessonVersions = sortedVersions;
@@ -11925,8 +11994,8 @@ async function initializeApp() {
                                         <i class="fas fa-file-alt mr-3 text-blue-600"></i>Lesson Content
                                     </h3>
                                 </div>
-                                <div class="p-8 prose prose-blue max-w-none markdown-content zoomable-content" id="studentLessonContent" style="max-height: calc(94vh - 280px); overflow-y: auto;">
-                                    ${lesson.content ? formatLessonContentWithNumbers(lesson.content) : '<div class="text-center py-16"><i class="fas fa-file-alt text-5xl mb-4 text-gray-300"></i><p class="text-gray-500 text-lg font-medium">No content available</p></div>'}
+                                <div class="p-8 prose prose-blue max-w-none markdown-content zoomable-content${lesson.source_pdf_url ? ' student-source-pdf-content' : ''}" id="studentLessonContent" style="max-height: calc(94vh - 280px); overflow-y: auto;">
+                                    ${lesson.source_pdf_url ? '<div class="text-center py-16 text-gray-500"><i class="fas fa-spinner fa-spin text-2xl mb-3"></i><p>Loading original PDF...</p></div>' : (lesson.content ? formatLessonContentWithNumbers(lesson.content) : '<div class="text-center py-16"><i class="fas fa-file-alt text-5xl mb-4 text-gray-300"></i><p class="text-gray-500 text-lg font-medium">No content available</p></div>')}
                                 </div>
                             </div>
                         </div>
@@ -11966,8 +12035,95 @@ async function initializeApp() {
             studentModalContainer.innerHTML = studentModalContent;
             document.body.appendChild(studentModalContainer);
 
+            if (lesson.source_pdf_url) {
+                renderStudentSourcePdf(
+                    document.getElementById('studentLessonContent'),
+                    lesson.source_pdf_url
+                );
+            }
+
             // Load previous questions for this lesson
             loadStudentLessonChatHistory(lesson.id);
+        }
+
+        async function renderStudentSourcePdf(container, pdfUrl) {
+            if (!container || !pdfUrl) return;
+            const safePdfUrl = escapeHtml(pdfUrl);
+            container._pdfRenderGeneration = (container._pdfRenderGeneration || 0) + 1;
+            const generation = container._pdfRenderGeneration;
+            container.innerHTML = `
+                <div class="student-source-pdf-viewer">
+                    <div class="student-source-pdf-toolbar">
+                        <span><i class="fas fa-file-pdf mr-2"></i>Original PDF view</span>
+                        <a href="${safePdfUrl}" target="_blank" rel="noopener noreferrer">Open PDF</a>
+                    </div>
+                    <div class="text-gray-500 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Loading PDF...</div>
+                </div>`;
+
+            if (!window.pdfjsLib) {
+                container.innerHTML = `<div class="student-source-pdf-viewer"><p class="text-red-700">PDF viewer library did not load.</p><a href="${safePdfUrl}" target="_blank" rel="noopener noreferrer">Open PDF directly</a></div>`;
+                return;
+            }
+
+            try {
+                if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
+                }
+                const viewer = container.querySelector('.student-source-pdf-viewer');
+                const pdf = await pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true }).promise;
+                if (container._pdfRenderGeneration !== generation) return;
+                viewer.innerHTML = `
+                    <div class="student-source-pdf-toolbar">
+                        <span><i class="fas fa-file-pdf mr-2"></i>Original PDF view &middot; ${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'}</span>
+                        <a href="${safePdfUrl}" target="_blank" rel="noopener noreferrer">Open PDF</a>
+                    </div>`;
+
+                const availableWidth = Math.max(280, Math.min(container.clientWidth || 900, 980) - 32);
+                for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+                    if (container._pdfRenderGeneration !== generation) return;
+                    const page = await pdf.getPage(pageNumber);
+                    const baseViewport = page.getViewport({ scale: 1 });
+                    const scale = Math.min(1.55, Math.max(0.5, availableWidth / baseViewport.width));
+                    const viewport = page.getViewport({ scale });
+                    const pageWrap = document.createElement('div');
+                    pageWrap.className = 'student-source-pdf-page';
+                    pageWrap.style.width = viewport.width + 'px';
+                    pageWrap.style.height = viewport.height + 'px';
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.floor(viewport.width);
+                    canvas.height = Math.floor(viewport.height);
+                    canvas.style.width = viewport.width + 'px';
+                    canvas.style.height = viewport.height + 'px';
+                    pageWrap.appendChild(canvas);
+
+                    const linkLayer = document.createElement('div');
+                    linkLayer.className = 'student-source-pdf-link-layer';
+                    pageWrap.appendChild(linkLayer);
+                    viewer.appendChild(pageWrap);
+
+                    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                    const annotations = await page.getAnnotations({ intent: 'display' });
+                    annotations.forEach((annotation) => {
+                        const href = annotation.url || annotation.unsafeUrl || '';
+                        if (!href || !annotation.rect) return;
+                        const rect = viewport.convertToViewportRectangle(annotation.rect);
+                        const link = document.createElement('a');
+                        link.href = href;
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.title = href;
+                        link.style.left = Math.min(rect[0], rect[2]) + 'px';
+                        link.style.top = Math.min(rect[1], rect[3]) + 'px';
+                        link.style.width = Math.abs(rect[0] - rect[2]) + 'px';
+                        link.style.height = Math.abs(rect[1] - rect[3]) + 'px';
+                        linkLayer.appendChild(link);
+                    });
+                }
+            } catch (error) {
+                console.error('Student PDF render failed', error);
+                container.innerHTML = `<div class="student-source-pdf-viewer"><p class="text-red-700">Could not render this PDF preview.</p><a href="${safePdfUrl}" target="_blank" rel="noopener noreferrer">Open PDF directly</a></div>`;
+            }
         }
 
         // Toggle Lesson Details visibility in student lesson modal

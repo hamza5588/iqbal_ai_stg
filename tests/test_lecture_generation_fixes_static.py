@@ -17,6 +17,9 @@ RAG_SERVICE_SRC = (ROOT / "app" / "utils" / "rag_service.py").read_text(encoding
 RAG_VECTORSTORE_SRC = (ROOT / "app" / "utils" / "rag_vectorstore.py").read_text(encoding="utf-8")
 FORMATTER_SRC = (ROOT / "static" / "teacher" / "js" / "chat-response-formatter.js").read_text(encoding="utf-8")
 DASHBOARD_SRC = (ROOT / "templates" / "teacher_dashboard.html").read_text(encoding="utf-8")
+STUDENT_DASHBOARD_SRC = (
+    ROOT / "templates" / "student_dashboard" / "student_dashboard.html"
+).read_text(encoding="utf-8")
 
 
 # --- Issue 1: exhaustive retrieval ------------------------------------------------
@@ -26,6 +29,15 @@ def test_teach_topic_tool_defined_and_registered():
     tools_block = re.search(r"tools\s*=\s*\[(.*?)\]", RAG_SERVICE_SRC, re.S)
     assert tools_block, "tools list not found"
     assert "teach_topic_tool" in tools_block.group(1)
+
+
+def test_student_direct_pdf_lessons_use_pdfjs_with_clickable_links():
+    assert "source_pdf_url: currentVersion.source_pdf_url || lesson.source_pdf_url" in STUDENT_DASHBOARD_SRC
+    assert "renderStudentLessonPdf(contentEl, lesson.source_pdf_url)" in STUDENT_DASHBOARD_SRC
+    assert "pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true })" in STUDENT_DASHBOARD_SRC
+    assert "page.getAnnotations({ intent: 'display' })" in STUDENT_DASHBOARD_SRC
+    assert "source-pdf-link-layer" in STUDENT_DASHBOARD_SRC
+    assert "formatLessonContentForView(rawContent)" in STUDENT_DASHBOARD_SRC
 
 
 def test_teach_topic_tool_uses_page_range_query_not_topk_search():
