@@ -1108,7 +1108,12 @@ def get_quiz(quiz_id: int):
         uid = _current_user_id()
         if role == "student":
             if assessment.assessment_type == "diagnostic":
-                platform = assessment_service.get_active_platform_diagnostic()
+                from app.services.lms import class_service
+
+                student_grade = class_service.get_student_grade(uid)
+                platform = assessment_service.get_active_platform_diagnostic(
+                    grade_level=student_grade
+                )
                 if not platform or platform.id != quiz_id:
                     return json_error("Forbidden", code="forbidden", status=403)
             elif assessment.assessment_type == "quiz":

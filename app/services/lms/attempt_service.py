@@ -197,8 +197,12 @@ def start_attempt(
     is_diagnostic_retake = False
     if assessment.assessment_type == "diagnostic":
         from app.services.lms.assessment_service import get_active_platform_diagnostic
+        from app.services.lms import class_service
 
-        platform = get_active_platform_diagnostic()
+        # Must match GET /diagnostics/default: active diagnostic for THIS
+        # student's grade — not the globally latest published diagnostic.
+        student_grade = class_service.get_student_grade(student_id)
+        platform = get_active_platform_diagnostic(grade_level=student_grade)
         if not platform or platform.id != assessment_id:
             raise LMSValidationError("This diagnostic is not available")
         assignment_id = None

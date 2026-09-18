@@ -42,7 +42,10 @@ def create_assessment(
 
 
 def normalize_grade_level(grade_level: Optional[str]) -> str:
-    return (grade_level or "").strip()
+    """Normalize to canonical grade id ('8', '9', …) for storage/lookup."""
+    from app.services.lms.grade_utils import normalize_grade
+
+    return normalize_grade(grade_level) or ""
 
 
 def get_active_diagnostic_for_grade(grade_level: Optional[str]) -> Optional[Assessment]:
