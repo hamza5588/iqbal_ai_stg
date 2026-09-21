@@ -733,11 +733,16 @@ def default_diagnostic():
         )
     attempt_service.finalize_expired_diagnostic_if_needed(_current_user_id(), diag["id"])
     onboarding = student_profile_service.get_onboarding_status(_current_user_id())
-    completed_id = onboarding.get("diagnostic_assessment_id")
+    # Onboarding is already scoped to the currently published diagnostic.
+    completed_for_active = bool(onboarding.get("diagnostic_completed"))
     latest = attempt_service.get_latest_submitted_attempt(_current_user_id(), diag["id"])
+    if not completed_for_active and latest is not None:
+        completed_for_active = True
     timed_out = bool(latest and getattr(latest, "timed_out", False))
-    diag["diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
-    diag["any_diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
+    diag["diagnostic_completed"] = completed_for_active
+    diag["any_diagnostic_completed"] = bool(
+        onboarding.get("any_diagnostic_completed") or completed_for_active
+    )
     diag["diagnostic_timed_out"] = timed_out
     diag["diagnostic_timeout_message"] = (
         attempt_service.TIME_OVER_MESSAGE if timed_out else None
@@ -749,8 +754,8 @@ def default_diagnostic():
         diag["score_percent"] = round(100.0 * (latest.score or 0) / latest.max_score, 1)
     if timed_out:
         diag["message"] = attempt_service.TIME_OVER_MESSAGE
-    if diag["diagnostic_completed"] and completed_id:
-        diag["completed_assessment_id"] = completed_id
+    if completed_for_active:
+        diag["completed_assessment_id"] = diag["id"]
     return json_success(diag)
 
 

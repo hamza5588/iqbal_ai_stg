@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Iterable, Optional
 
-from app.models.lms_models import StudentProfile
+from app.models.lms_models import AssessmentAttempt, StudentProfile
 from app.services.lms import assignment_service, class_service
 from app.utils.db import get_db
 
@@ -33,6 +33,30 @@ def mark_diagnostic_complete(student_id: int, assessment_id: Optional[int] = Non
     return profile
 
 
+def clear_diagnostic_completion_for_assessments(assessment_ids: Iterable[int]) -> int:
+    """Clear completion flags for students who finished the given diagnostics.
+
+    Used when an admin archives/replaces a diagnostic so the new published
+    assessment becomes takeable on the student dashboard.
+    """
+    ids = [int(x) for x in assessment_ids if x is not None]
+    if not ids:
+        return 0
+    db = get_db()
+    profiles = (
+        db.query(StudentProfile)
+        .filter(StudentProfile.diagnostic_assessment_id.in_(ids))
+        .all()
+    )
+    for profile in profiles:
+        profile.diagnostic_completed = False
+        profile.diagnostic_completed_at = None
+        profile.diagnostic_assessment_id = None
+    if profiles:
+        db.commit()
+    return len(profiles)
+
+
 def set_current_learning_path(student_id: int, path_id: Optional[int]) -> StudentProfile:
     db = get_db()
     profile = get_or_create_profile(student_id)
@@ -42,19 +66,53 @@ def set_current_learning_path(student_id: int, path_id: Optional[int]) -> Studen
     return profile
 
 
+def _completed_active_diagnostic(student_id: int, profile: StudentProfile) -> tuple[bool, Optional[int]]:
+    """Whether the student has completed the currently published diagnostic for their grade."""
+    from app.services.lms.assessment_service import get_active_platform_diagnostic
+
+    active = get_active_platform_diagnostic(class_service.get_student_grade(student_id))
+    if active is None:
+        # Nothing published to take — keep historical flag so the gate does not
+        # force students into a 404 diagnostic flow.
+        return bool(profile.diagnostic_completed), profile.diagnostic_assessment_id
+
+    active_id = int(active.id)
+    if (
+        profile.diagnostic_completed
+        and profile.diagnostic_assessment_id is not None
+        and int(profile.diagnostic_assessment_id) == active_id
+    ):
+        return True, active_id
+
+    db = get_db()
+    submitted = (
+        db.query(AssessmentAttempt)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.assessment_id == active_id,
+            AssessmentAttempt.status == "submitted",
+        )
+        .first()
+    )
+    return submitted is not None, active_id
+
+
 def get_onboarding_status(student_id: int) -> dict:
     profile = get_or_create_profile(student_id)
     classes = class_service.list_student_classes(student_id)
     assignments = assignment_service.list_assignments_for_student(student_id)
     pending = [a for a in assignments if a.get("status") in ("not_started", "in_progress")]
 
-    needs_onboarding = not profile.diagnostic_completed
-    needs_diagnostic = not profile.diagnostic_completed
+    diagnostic_completed, active_assessment_id = _completed_active_diagnostic(student_id, profile)
+    needs_onboarding = not diagnostic_completed
+    needs_diagnostic = not diagnostic_completed
     return {
-        "diagnostic_completed": profile.diagnostic_completed,
-        "diagnostic_assessment_id": profile.diagnostic_assessment_id,
+        "diagnostic_completed": diagnostic_completed,
+        "diagnostic_assessment_id": (
+            active_assessment_id if diagnostic_completed else profile.diagnostic_assessment_id
+        ),
         "diagnostic_completed_at": profile.diagnostic_completed_at.isoformat()
-        if profile.diagnostic_completed_at
+        if diagnostic_completed and profile.diagnostic_completed_at
         else None,
         "current_learning_path_id": profile.current_learning_path_id,
         "enrolled_class_count": len(classes),
@@ -62,6 +120,8 @@ def get_onboarding_status(student_id: int) -> dict:
         "needs_onboarding": needs_onboarding,
         "needs_diagnostic": needs_diagnostic,
         "pending_assignments": pending[:10],
+        "any_diagnostic_completed": bool(profile.diagnostic_completed),
+        "active_diagnostic_assessment_id": active_assessment_id,
     }
 
 

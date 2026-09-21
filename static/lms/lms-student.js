@@ -240,7 +240,9 @@
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Loading diagnostic...</p>';
     try {
       var diag = await lmsApi('/api/lms/diagnostics/default');
-      if ((diag.diagnostic_completed || diag.any_diagnostic_completed || diag.diagnostic_timed_out) && diag.latest_attempt_id) {
+      // Only treat as done for *this* diagnostic. any_diagnostic_completed may
+      // still be true after an admin replaces an archived assessment.
+      if ((diag.diagnostic_completed || diag.diagnostic_timed_out) && diag.latest_attempt_id) {
         try {
           var prevResult = await lmsApi('/api/lms/attempts/' + diag.latest_attempt_id + '/results');
           renderDiagnosticResults(prevResult, { timedOut: !!prevResult.timed_out, alreadyDone: true });
@@ -252,7 +254,7 @@
         renderDiagnosticTimeOver(diag);
         return;
       }
-      if (diag.diagnostic_completed || diag.any_diagnostic_completed) {
+      if (diag.diagnostic_completed) {
         body.innerHTML = '<div class="lms-card"><p>You have already completed the diagnostic assessment' +
           (diag.title ? ': <strong>' + escapeHtml(diag.title) + '</strong>' : '') +
           '.</p><p class="lms-status" style="margin-top:8px;">Continue with your learning path or Learning Chat.</p></div>';

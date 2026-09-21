@@ -37,9 +37,19 @@ TIME_OVER_MESSAGE = (
 
 
 def _student_completed_diagnostic(student_id: int, assessment_id: int) -> bool:
+    """True only when this student finished *this* diagnostic assessment.
+
+    A global profile.diagnostic_completed flag from an older (now archived)
+    diagnostic must not block starting a newly published replacement.
+    """
     db = get_db()
     profile = db.query(StudentProfile).filter(StudentProfile.user_id == student_id).first()
-    if profile and profile.diagnostic_completed:
+    if (
+        profile
+        and profile.diagnostic_completed
+        and profile.diagnostic_assessment_id is not None
+        and int(profile.diagnostic_assessment_id) == int(assessment_id)
+    ):
         return True
     submitted = (
         db.query(AssessmentAttempt)

@@ -341,12 +341,20 @@ def publish_assessment(assessment_id: int) -> Assessment:
             )
             .all()
         )
+        replaced_ids = [other.id for other in others]
         for other in others:
             other.status = "archived"
+    else:
+        replaced_ids = []
 
     assessment.status = "published"
     db.commit()
     db.refresh(assessment)
+    if replaced_ids:
+        # Students who finished the replaced diagnostic must see the new one.
+        from app.services.lms import student_profile_service
+
+        student_profile_service.clear_diagnostic_completion_for_assessments(replaced_ids)
     return assessment
 
 
@@ -359,6 +367,9 @@ def archive_diagnostic(assessment_id: int) -> Assessment:
     assessment.status = "archived"
     db.commit()
     db.refresh(assessment)
+    from app.services.lms import student_profile_service
+
+    student_profile_service.clear_diagnostic_completion_for_assessments([assessment_id])
     return assessment
 
 
