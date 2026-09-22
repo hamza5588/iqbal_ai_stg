@@ -7601,15 +7601,42 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function setViewLessonDraftMarkdown(markdown, emptyHtml) {
+        const raw = markdown == null ? '' : String(markdown);
+        window._viewLessonDraftMarkdown = raw;
+        window._viewLessonDraftDirty = false;
+        const draftEl = document.getElementById('viewLessonDraft');
+        if (!draftEl) return;
+        draftEl.setAttribute('data-raw-markdown', raw);
+        renderLessonMarkdown(
+          draftEl,
+          raw,
+          emptyHtml || '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
+        );
+      }
+
+      function getViewLessonDraftMarkdown() {
+        const draftEl = document.getElementById('viewLessonDraft');
+        const stored = (
+          window._viewLessonDraftMarkdown != null
+            ? String(window._viewLessonDraftMarkdown)
+            : (draftEl && draftEl.getAttribute('data-raw-markdown')) || ''
+        ).trim();
+        // Prefer stored markdown (AI enhance / loaded draft) so finalize does not
+        // strip headings via contenteditable innerText.
+        if (stored && !window._viewLessonDraftDirty) {
+          return stored;
+        }
+        return draftEl ? (draftEl.innerText || '').trim() : '';
+      }
+
       function clearViewLessonDraftEditor() {
         const draftEl = document.getElementById('viewLessonDraft');
         if (draftEl) {
-          renderLessonMarkdown(
-            draftEl,
-            '',
-            '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
-          );
+          setViewLessonDraftMarkdown('');
         }
+        window._viewLessonDraftMarkdown = '';
+        window._viewLessonDraftDirty = false;
         const promptEl = document.getElementById('viewLessonPrompt');
         if (promptEl) promptEl.value = '';
         setFinalizeButtonVisible(false);
@@ -7901,18 +7928,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             } catch (e) {
               console.warn('get_draft error:', e);
             }
-            renderLessonMarkdown(
-              draftTextarea,
-              draftValue,
-              '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
-            );
-            // Finalize button should be hidden until user edits the draft.
-            setFinalizeButtonVisible(false);
+            setViewLessonDraftMarkdown(draftValue);
+            // Finalize button should be hidden until there is draft content / edits.
+            setFinalizeButtonVisible(!!String(draftValue || '').trim());
             draftTextarea.oninput = function () {
+              // Manual DOM edits no longer match stored markdown — fall back to
+              // editor text on save so user changes are not discarded.
+              window._viewLessonDraftDirty = true;
               setFinalizeButtonVisible(true);
             };
           } else if (draftTextarea) {
-            renderLessonMarkdown(draftTextarea, '');
+            setViewLessonDraftMarkdown('');
             setFinalizeButtonVisible(false);
           }
 
@@ -8231,9 +8257,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const improved = data.draft_content || '';
           const draftEl = document.getElementById('viewLessonDraft');
           if (draftEl) {
-            // Render improved content as formatted HTML while preserving text content for backend via innerText
-            renderLessonMarkdown(draftEl, improved);
-            // AI-generated draft is a valid draft change; allow finalization immediately.
+            // Keep markdown source of truth — do not rely on contenteditable
+            // innerText later (it strips # / ** / list markers).
+            setViewLessonDraftMarkdown(improved);
             setFinalizeButtonVisible(true);
           }
 
@@ -8257,8 +8283,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = draftEl ? (draftEl.innerText || '').trim() : '';
+        const draftContent = getViewLessonDraftMarkdown();
 
         try {
           const response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
@@ -8273,6 +8298,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             throw new Error(data.error || 'Failed to save draft');
           }
 
+          // Keep local markdown in sync with what we just persisted.
+          if (!window._viewLessonDraftDirty) {
+            window._viewLessonDraftMarkdown = draftContent;
+          }
           showToast('Draft saved!', 'success', 2000);
         } catch (e) {
           console.error('saveLessonDraftVisible error:', e);
@@ -8285,8 +8314,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = (draftEl ? draftEl.innerText : '').trim();
+        const draftContent = getViewLessonDraftMarkdown();
         if (!draftContent) {
           showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
           return;
@@ -8305,7 +8333,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         try {
-          // First, persist the current draft to the backend
+          // Persist markdown (not contenteditable innerText) so v2 keeps formatting.
           let response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -8883,7 +8911,18 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         if (lesson) {
           const subject = lesson.focus_area || lesson.focusArea || 'General';
-          const grade = lesson.grade_level || lesson.gradeLevel || 'General';
+          const rawGrade = String(lesson.grade_level || lesson.gradeLevel || '').trim();
+          const gradeDigits = (rawGrade.match(/\d{1,2}/) || [])[0] || '';
+          const grade = (gradeDigits && Number(gradeDigits) >= 1 && Number(gradeDigits) <= 12)
+            ? String(Number(gradeDigits))
+            : '';
+          const gradeOptions = [1,2,3,4,5,6,7,8,9,10,11,12].map(function (n) {
+            const label = n === 1 ? '1st Grade' : n === 2 ? '2nd Grade' : n === 3 ? '3rd Grade' : (n + 'th Grade');
+            return '<option value="' + n + '"' + (String(grade) === String(n) ? ' selected' : '') + '>' + label + '</option>';
+          }).join('');
+          const legacyGradeOption = (!grade && rawGrade)
+            ? ('<option value="' + rawGrade.replace(/"/g, '&quot;') + '" selected>' + rawGrade.replace(/</g, '') + ' (current)</option>')
+            : '';
 
           // Show edit modal
           const modalHtml = `
@@ -8928,11 +8967,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                   <div class="elm-field-content">
                     <label>Grade Level</label>
                     <select id="editLessonGrade">
-                      <option value="General" ${grade === 'General' ? 'selected' : ''}>General</option>
-                      <option value="Elementary" ${grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
-                      <option value="Middle School" ${grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
-                      <option value="High School" ${grade === 'High School' ? 'selected' : ''}>High School</option>
-                      <option value="College" ${grade === 'College' ? 'selected' : ''}>College</option>
+                      <option value="">Select grade</option>
+                      ${legacyGradeOption}
+                      ${gradeOptions}
                     </select>
                   </div>
                 </div>
@@ -8962,10 +8999,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       async function saveLessonEdit(lessonId) {
         const title = (document.getElementById('editLessonTitle')?.value || '').trim();
         const subject = document.getElementById('editLessonSubject')?.value || 'General';
-        const grade = document.getElementById('editLessonGrade')?.value || 'General';
+        const grade = (document.getElementById('editLessonGrade')?.value || '').trim();
 
         if (!title) {
           showToast('Lesson title is required.', 'warning', 3000);
+          return;
+        }
+        if (!grade) {
+          showToast('Grade is required.', 'warning', 3000);
           return;
         }
 
