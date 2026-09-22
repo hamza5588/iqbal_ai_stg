@@ -655,4 +655,34 @@
       btn.setAttribute('aria-label', 'Show class actions');
     }
   });
+
+  /** Topic-wise score table for diagnostic / quiz results (FEATURE-01/02). */
+  global.lmsFormatTopicBreakdownHtml = function (result, opts) {
+    opts = opts || {};
+    var rows = (result && (result.topic_breakdown || result.all_topics)) || [];
+    if (!rows.length) return '';
+    var title = opts.title || 'Topic-wise results';
+    var esc = typeof global.escapeHtml === 'function' ? global.escapeHtml : function (s) { return String(s || ''); };
+    var html = '<div class="lms-topic-breakdown">' +
+      '<h4 class="lms-topic-breakdown-title">' + esc(title) + '</h4>' +
+      '<table class="lms-topic-table"><thead><tr><th>Topic</th><th>Score</th><th>%</th></tr></thead><tbody>';
+    rows.forEach(function (t) {
+      var name = t.topic_name || t.name || ('Topic #' + (t.topic_id || ''));
+      var correct = t.correct;
+      var total = t.total;
+      if ((correct == null || total == null) && t.question_ids && t.question_ids.length && t.score_percent != null) {
+        total = t.question_ids.length;
+        correct = Math.round((Number(t.score_percent) * total) / 100);
+      }
+      var frac = (correct != null && total != null)
+        ? (Math.round(Number(correct)) + '/' + Math.round(Number(total)))
+        : '—';
+      var pct = t.score_percent != null
+        ? (Math.round(Number(t.score_percent) * 10) / 10) + '%'
+        : '—';
+      html += '<tr><td>' + esc(name) + '</td><td>' + esc(frac) + '</td><td>' + esc(pct) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  };
 })(window);

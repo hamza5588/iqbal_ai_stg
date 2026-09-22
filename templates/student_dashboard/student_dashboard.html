@@ -7910,6 +7910,15 @@
           return '<li>' + escapeHtml(a.title) + ' (' + a.status + ')</li>';
         }).join('') || '<li>No pending quizzes</li>';
         const progress = d.overall_progress != null ? Math.round(d.overall_progress) + '%' : '0%';
+        const pathProg = d.learning_path_progress || {};
+        const pathCompleted = pathProg.completed != null ? pathProg.completed : ((d.learning_path && d.learning_path.completed_count) || 0);
+        const pathTotal = pathProg.total != null ? pathProg.total : ((d.learning_path && d.learning_path.total_count) || 0);
+        const pathPercent = pathProg.percent != null
+          ? pathProg.percent
+          : (pathTotal ? Math.round(1000 * pathCompleted / pathTotal) / 10 : 0);
+        const pathCardValue = pathTotal
+          ? (pathCompleted + ' of ' + pathTotal + ' completed — ' + pathPercent + '%')
+          : 'No path yet';
         const pathHtml = renderLmsLearningPath(d.learning_path);
         const diagDone = d.onboarding && d.onboarding.diagnostic_completed;
         const banner = !diagDone
@@ -7927,7 +7936,8 @@
               <div class="lms-overview-actions">${overviewActions}</div>
             </div>
             <div class="lms-cards">
-              <div class="lms-card"><div class="lms-card-label">Overall Progress</div><div class="lms-card-value">${progress}</div></div>
+              <div class="lms-card"><div class="lms-card-label">Topic Mastery</div><div class="lms-card-value">${progress}</div></div>
+              <div class="lms-card"><div class="lms-card-label">Learning Path</div><div class="lms-card-value" style="font-size:1rem;line-height:1.35;">${escapeHtml(pathCardValue)}</div></div>
               <div class="lms-card"><div class="lms-card-label">Pending Quizzes</div><div class="lms-card-value">${(d.pending_assignments || []).length}</div><ul class="lms-card-list">${pending}</ul></div>
               <div class="lms-card"><div class="lms-card-label">Weak Topics</div><div class="lms-card-value">${(d.weak_topics || []).length}</div><ul class="lms-card-list">${weak}</ul></div>
               <div class="lms-card"><div class="lms-card-label">My Classes</div><div class="lms-card-value">${(d.classes || []).length}</div><ul class="lms-card-list">${(d.classes || []).map(function(c){ return '<li>' + escapeHtml(c.name) + '</li>'; }).join('') || '<li>Not enrolled yet</li>'}</ul></div>
@@ -7937,11 +7947,22 @@
               <canvas id="lmsMasteryPieChart" height="220"></canvas>
               <p id="lmsMasteryPieEmpty" class="lms-path-empty hidden">No topics assessed yet.</p>
             </div>
+            <div class="lms-card lms-topic-progress-panel" style="margin:16px 0;">
+              <div class="lms-card-label">Topic Progress</div>
+              <p class="lms-status" style="margin:4px 0 10px;">Compare diagnostic and quiz scores for each topic. New quizzes appear automatically.</p>
+              <div class="lms-field" style="max-width:280px;margin-bottom:12px;">
+                <label class="lms-label" for="lmsTopicProgressSelect">Topic</label>
+                <select id="lmsTopicProgressSelect" class="lms-select" onchange="renderLmsTopicProgressChart()"></select>
+              </div>
+              <canvas id="lmsTopicProgressChart" height="220"></canvas>
+              <p id="lmsTopicProgressEmpty" class="lms-path-empty hidden">Complete a diagnostic or quiz to see topic progress.</p>
+            </div>
             ${pathHtml}
             <div class="lms-path-panel"><h3>Quiz History</h3><div id="lmsAttemptHistory"></div></div>
           </div>`;
         if (typeof loadLmsAttemptHistory === 'function') loadLmsAttemptHistory('lmsAttemptHistory');
         renderLmsMasteryPieChart(d.mastery || []);
+        loadLmsTopicProgressChart();
       } catch (err) {
         el.innerHTML = '';
       }
@@ -7987,6 +8008,105 @@
         options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
       });
     }
+
+    var _lmsTopicProgressChart = null;
+    var _lmsTopicProgressData = [];
+
+    async function loadLmsTopicProgressChart() {
+      var select = document.getElementById('lmsTopicProgressSelect');
+      var canvas = document.getElementById('lmsTopicProgressChart');
+      var emptyMsg = document.getElementById('lmsTopicProgressEmpty');
+      if (!select || !canvas) return;
+      try {
+        const res = await fetch('/api/lms/students/me/progress/by-topic', { credentials: 'include' });
+        const body = await res.json();
+        const payload = body.data || body || {};
+        _lmsTopicProgressData = payload.topics || [];
+      } catch (e) {
+        _lmsTopicProgressData = [];
+      }
+      if (!_lmsTopicProgressData.length) {
+        select.innerHTML = '';
+        select.disabled = true;
+        canvas.classList.add('hidden');
+        if (emptyMsg) emptyMsg.classList.remove('hidden');
+        if (_lmsTopicProgressChart) { _lmsTopicProgressChart.destroy(); _lmsTopicProgressChart = null; }
+        return;
+      }
+      select.disabled = false;
+      select.innerHTML = _lmsTopicProgressData.map(function (t, i) {
+        return '<option value="' + i + '">' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + '</option>';
+      }).join('');
+      if (emptyMsg) emptyMsg.classList.add('hidden');
+      canvas.classList.remove('hidden');
+      renderLmsTopicProgressChart();
+    }
+
+    window.renderLmsTopicProgressChart = function () {
+      var select = document.getElementById('lmsTopicProgressSelect');
+      var canvas = document.getElementById('lmsTopicProgressChart');
+      var emptyMsg = document.getElementById('lmsTopicProgressEmpty');
+      if (!canvas || typeof Chart === 'undefined') return;
+      if (_lmsTopicProgressChart) { _lmsTopicProgressChart.destroy(); _lmsTopicProgressChart = null; }
+      var idx = select ? parseInt(select.value, 10) : 0;
+      var topic = _lmsTopicProgressData[idx];
+      if (!topic || !(topic.series || []).length) {
+        canvas.classList.add('hidden');
+        if (emptyMsg) emptyMsg.classList.remove('hidden');
+        return;
+      }
+      canvas.classList.remove('hidden');
+      if (emptyMsg) emptyMsg.classList.add('hidden');
+      var labels = topic.series.map(function (s) { return s.label || 'Assessment'; });
+      var data = topic.series.map(function (s) {
+        return s.score_percent != null ? Number(s.score_percent) : 0;
+      });
+      var colors = topic.series.map(function (s) {
+        return s.assessment_type === 'diagnostic' ? '#7c3aed' : '#0284c7';
+      });
+      _lmsTopicProgressChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Score %',
+            data: data,
+            backgroundColor: colors,
+            borderRadius: 6,
+            maxBarThickness: 48,
+          }],
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              title: { display: true, text: 'Percentage score' },
+            },
+            x: {
+              title: { display: true, text: 'Assessment' },
+              ticks: { maxRotation: 45, minRotation: 0 },
+            },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                afterLabel: function (ctx) {
+                  var point = topic.series[ctx.dataIndex];
+                  if (!point) return '';
+                  if (point.correct != null && point.total != null) {
+                    return point.correct + '/' + point.total + ' correct';
+                  }
+                  return '';
+                },
+              },
+            },
+          },
+        },
+      });
+    };
     function renderLmsLearningPath(path) {
       if (!path || !path.items || !path.items.length) {
         return '<div class="lms-path-panel"><h3>My Learning Path</h3><p class="lms-path-empty">Complete a quiz to get a personalized learning path based on your weak topics.</p></div>';
@@ -8248,8 +8368,16 @@
         var unansweredNote = (d.unanswered_count > 0)
           ? (' · ' + d.unanswered_count + ' unanswered scored as 0')
           : '';
-        resultEl.innerHTML = '<h3 style="font-weight:700;">Quiz Complete</h3><p>Score: ' + d.score + ' / ' + d.max_score +
-          ' (' + d.score_percent + '%)' + unansweredNote + '</p><p class="lms-status">Your learning path may update based on results.</p>';
+        var topicHtml = (typeof lmsFormatTopicBreakdownHtml === 'function')
+          ? lmsFormatTopicBreakdownHtml(d, { title: 'Topic-wise performance' })
+          : '';
+        var overallLine = (d.score != null && d.max_score != null)
+          ? (Math.round(d.score) + '/' + Math.round(d.max_score) + ' — ' + d.score_percent + '%' + unansweredNote)
+          : ((d.score_percent != null ? d.score_percent + '%' : '—') + unansweredNote);
+        resultEl.innerHTML = '<h3 style="font-weight:700;">Quiz Complete</h3>' +
+          '<p><strong>' + overallLine + '</strong></p>' +
+          topicHtml +
+          '<p class="lms-status">Your learning path may update based on results.</p>';
         loadLmsAssignments();
         if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
       } finally {

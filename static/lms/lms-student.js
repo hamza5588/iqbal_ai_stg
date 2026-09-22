@@ -841,8 +841,13 @@
 
     function topicChip(t, cls) {
       var p = Math.round(t.score_percent || 0);
-      var n = (t.question_ids && t.question_ids.length) || 0;
-      var frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+      var frac = '';
+      if (t.correct != null && t.total != null) {
+        frac = Math.round(t.correct) + ' of ' + Math.round(t.total) + ' correct';
+      } else {
+        var n = (t.question_ids && t.question_ids.length) || 0;
+        frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+      }
       return '<div class="lms-topic-chip ' + cls + '"><strong>' + p + '%</strong>' +
         escapeHtml(t.topic_name || t.name || 'Topic') +
         (frac ? '<span class="lms-topic-chip-frac">' + frac + '</span>' : '') + '</div>';
@@ -852,6 +857,9 @@
       : '<p class="lms-status">No weak topics detected yet.</p>';
     var strongHtml = strong.length
       ? strong.map(function (t) { return topicChip(t, 'strong'); }).join('')
+      : '';
+    var topicTable = (typeof lmsFormatTopicBreakdownHtml === 'function')
+      ? lmsFormatTopicBreakdownHtml(result, { title: 'Results by topic' })
       : '';
     var timedOutBanner = opts.timedOut
       ? '<div class="lms-diag-timeout-note">&#9203; ' +
@@ -869,6 +877,7 @@
       (scoreMeta ? ' &middot; <strong>' + scoreMeta + '</strong>' : '') + '</p>' +
       (pct != null ? '<div class="lms-diag-score-bar"><div class="lms-diag-score-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></div></div>' : '') +
       '</div>' +
+      topicTable +
       ((weak.length || strong.length)
         ? '<p class="lms-status lms-diag-explainer">Below, your questions are grouped by topic. Each tile is that topic\'s own score - the number above already adds up every question, strong topics included.</p>'
         : '') +

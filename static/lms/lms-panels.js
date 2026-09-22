@@ -441,14 +441,21 @@
       var items = await lmsApi('/api/lms/students/me/attempts');
       if (!items.length) { el.innerHTML = '<p class="lms-path-empty">No attempts yet.</p>'; return; }
       el.innerHTML = '<ul class="lms-card-list">' + items.map(function (a) {
-        // Only a submitted attempt has scored results to show - an
-        // in-progress/abandoned one has nothing to click through to yet.
         var clickable = a.status === 'submitted';
         var style = 'padding:10px;margin-bottom:6px;' + (clickable ? 'cursor:pointer;' : '');
         var onclick = clickable ? ' onclick="viewLmsAttemptResult(' + a.attempt_id + ')"' : '';
         var label = a.title || (a.assessment_type === 'diagnostic' ? 'Diagnostic Assessment' : 'Quiz #' + a.assessment_id);
+        var statusLabel;
+        if (a.status === 'submitted' && a.score != null && a.max_score != null) {
+          var pct = a.score_percent != null ? a.score_percent : Math.round(1000 * a.score / a.max_score) / 10;
+          statusLabel = Math.round(a.score) + '/' + Math.round(a.max_score) + ' — ' + pct + '%';
+        } else if (a.score_percent != null) {
+          statusLabel = a.score_percent + '%';
+        } else {
+          statusLabel = a.status;
+        }
         return '<li class="lms-card" style="' + style + '"' + onclick + '>' + escapeHtml(label) +
-          ' — <strong>' + (a.score_percent != null ? a.score_percent + '%' : a.status) + '</strong></li>';
+          ' — <strong>' + escapeHtml(String(statusLabel)) + '</strong></li>';
       }).join('') + '</ul>';
     } catch (e) { el.innerHTML = ''; }
   };
@@ -466,17 +473,28 @@
       var html = '<div class="lms-diag-score">' +
         '<div class="lms-diag-score-num">' + (pct != null ? pct + '%' : '—') + '</div>' +
         '<p class="lms-status">' +
-        (hasCounts ? '<strong>' + Math.round(r.score) + ' of ' + Math.round(r.max_score) + ' correct</strong>' : 'Score') +
+        (hasCounts ? '<strong>' + Math.round(r.score) + '/' + Math.round(r.max_score) + ' — ' +
+          (r.score_percent != null ? r.score_percent : pct) + '%</strong>' : 'Score') +
         (r.submitted_at ? ' &middot; ' + new Date(r.submitted_at).toLocaleString() : '') + '</p>' +
         (pct != null ? '<div class="lms-diag-score-bar"><div class="lms-diag-score-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></div></div>' : '') +
         '</div>';
       if (r.time_over) {
         html += '<p class="lms-status" style="text-align:center;">' + escapeHtml(r.message || 'Time expired before submission.') + '</p>';
       }
+      if (typeof lmsFormatTopicBreakdownHtml === 'function') {
+        html += lmsFormatTopicBreakdownHtml(r, {
+          title: r.assessment_type === 'diagnostic' ? 'Results by topic' : 'Topic-wise performance'
+        });
+      }
       function topicChip(t, cls) {
         var p = Math.round(t.score_percent || 0);
-        var n = (t.question_ids && t.question_ids.length) || 0;
-        var frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+        var frac = '';
+        if (t.correct != null && t.total != null) {
+          frac = Math.round(t.correct) + ' of ' + Math.round(t.total) + ' correct';
+        } else {
+          var n = (t.question_ids && t.question_ids.length) || 0;
+          frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+        }
         return '<div class="lms-topic-chip ' + cls + '"><strong>' + p + '%</strong>' +
           escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) +
           (frac ? '<span class="lms-topic-chip-frac">' + frac + '</span>' : '') + '</div>';

@@ -889,6 +889,40 @@ html.dark .lms-diag-clear-note,
 .lms-topic-chip.strong { background: var(--lms-green-light); color: var(--lms-green); }
 .lms-topic-chip.neutral { background: var(--lms-hover); color: var(--lms-muted); }
 
+.lms-topic-breakdown { margin: 16px 0 8px; }
+.lms-topic-breakdown-title {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--lms-text, #0f172a);
+}
+.lms-topic-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.lms-topic-table th,
+.lms-topic-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--lms-border, #e2e8f0);
+}
+.lms-topic-table th {
+  font-weight: 600;
+  color: var(--lms-muted, #64748b);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.lms-topic-table td:nth-child(2),
+.lms-topic-table th:nth-child(2),
+.lms-topic-table td:nth-child(3),
+.lms-topic-table th:nth-child(3) {
+  text-align: right;
+  white-space: nowrap;
+}
+.lms-topic-progress-panel { max-width: 720px; }
+
 /* Roster table */
 .lms-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; color: var(--lms-text); }
 .lms-table th, .lms-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--lms-border); }
