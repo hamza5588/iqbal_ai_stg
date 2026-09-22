@@ -36,34 +36,42 @@ def _content_tokens(name: str) -> set:
     return {t for t in _normalize(name).split() if t and t not in _GENERIC_TOKENS}
 
 
+# Near-duplicate merge threshold. Kept high on purpose: subset / substring
+# matching previously collapsed distinct curriculum areas (e.g. "Polynomials"
+# into "Cubic Polynomials", "System of Equations" into "Equations"), so the
+# teacher dashboard showed fewer topics than the student diagnostic results.
+_SIMILAR_TOPIC_JACCARD_MIN = 0.85
+
+
 def _find_similar_topic(topics, clean: str):
     """Reuse an existing near-duplicate topic instead of minting synonyms.
 
-    The AI weakness analyser names areas in free text, so the same concept
-    arrives as "Number Sense", "Number Sense Arithmetic", "Number Concepts", …
-    — each previously created a brand-new topic row, scattering one student's
-    mastery (and class analytics) across dozens of synonym topics.
+    Only exact content-token matches or very high Jaccard overlap with the
+    same specificity (token count) count as duplicates. Do NOT merge a short
+    label into a longer one (or vice versa) — those are usually distinct
+    assessment topics that teachers and students both need to see.
     """
-    normalized = _normalize(clean)
     want = _content_tokens(clean)
     if not want:
         return None
     best = None
     best_score = 0.0
     for topic in topics:
-        tn = _normalize(topic.name)
         have = _content_tokens(topic.name)
         if not have:
             continue
-        if want == have or want <= have or have <= want:
+        if want == have:
             return topic
-        if normalized and (normalized in tn or tn in normalized):
-            return topic
+        # Require comparable specificity so "Sequences" does not absorb
+        # "Sequences and Series", and "Cubic Polynomials" does not absorb
+        # "Polynomials".
+        if abs(len(want) - len(have)) > 1:
+            continue
         jaccard = len(want & have) / len(want | have)
         if jaccard > best_score:
             best_score = jaccard
             best = topic
-    return best if best_score >= 0.6 else None
+    return best if best_score >= _SIMILAR_TOPIC_JACCARD_MIN else None
 
 
 def resolve_topic_id_from_label(label: str) -> Optional[int]:
