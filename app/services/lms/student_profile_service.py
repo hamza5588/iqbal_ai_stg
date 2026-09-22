@@ -91,16 +91,19 @@ def get_student_dashboard(student_id: int) -> dict:
     # drop off here once mastered, not stay stuck showing the diagnostic's
     # original result forever. Falls back to the diagnostic-derived list
     # only when there's no live mastery data at all (e.g. brand-new
-    # student). Live entries always carry a real mastery_status, so this
-    # also removes the "UNKNOWN" badge diagnostic-only entries showed
-    # (lmsMasteryBadge() falls back to 'unknown' when status is missing).
+    # student).
+    #
+    # Weak Topics must match the Topic Mastery Breakdown pie "Weak" slice
+    # (mastery_status == weak / score < WEAK_THRESHOLD). Do NOT use the
+    # practice-until-~100% threshold here — that is for the learning path
+    # only — and never silently truncate to 5 while the pie shows all N.
     weak_topics = [
         {**m, "topic_name": m.get("topic_name") or f"Topic #{m['topic_id']}"}
         for m in mastery
-        if (m.get("score_percent") or 100) < performance_service.PRACTICE_TARGET_THRESHOLD
+        if performance_service.is_weak_mastery(m)
     ]
-    weak_topics.sort(key=lambda m: m.get("score_percent") or 0)
-    if not weak_topics:
+    weak_topics.sort(key=lambda m: performance_service.score_percent_value(m))
+    if not weak_topics and not mastery:
         weak_topics = _diagnostic_weak_topics(student_id)
     overall_progress = performance_service.get_overall_progress(student_id)
     learning_path = learning_path_service.ensure_learning_path(student_id)
@@ -124,10 +127,10 @@ def get_student_dashboard(student_id: int) -> dict:
     return {
         "onboarding": onboarding,
         "overall_progress": overall_progress,
-        "weak_topics": weak_topics[:5],
-        # Full per-topic mastery breakdown (all statuses) - powers the
-        # mastery pie chart. weak_topics above stays a filtered/sorted
-        # top-5 for the existing list view.
+        "weak_topics": weak_topics,
+        # Full per-topic mastery breakdown (all statuses) — powers the
+        # mastery pie chart. weak_topics above is the same "Weak" set the
+        # pie counts.
         "mastery": mastery,
         "pending_assignments": onboarding["pending_assignments"],
         "learning_path": learning_path,
