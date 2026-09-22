@@ -13124,6 +13124,13 @@ Align everything with the lesson objectives and do not invent missing informatio
         if (!pubRes.ok) throw new Error((pubBody.error && pubBody.error.message) || 'Publish failed');
         status.textContent = 'Assignment published! Students can see it in My Quizzes.';
         document.getElementById('lmsAssignForm').reset();
+        if (typeof lmsShowToast === 'function') {
+          lmsShowToast('Assignment published! Students can see it in My Quizzes.');
+        }
+        setTimeout(function () {
+          closeLmsAssignModal();
+          status.textContent = '';
+        }, 900);
       } catch (err) {
         status.textContent = 'Error: ' + err.message;
       } finally {
