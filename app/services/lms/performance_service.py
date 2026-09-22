@@ -311,13 +311,20 @@ def _topic_buckets_from_diagnostic_analysis(attempt, assessment) -> Optional[dic
 
     buckets: dict[int, dict] = {}
     for area in areas:
+        # Always resolve from the student-visible area name so synonym merges
+        # in a stale cache cannot collapse distinct topics for teacher analytics.
+        name = (area.get("topic_name") or "").strip()
         tid = area.get("topic_id")
+        if name:
+            topic = get_or_create_topic_from_pdf_label(name)
+            if topic:
+                tid = topic.id
         if not tid:
             continue
         graded = [qid for qid in (area.get("question_ids") or []) if qid in correct_by_q]
         if not graded:
             continue
-        bucket = buckets.setdefault(tid, {"correct": 0, "total": 0})
+        bucket = buckets.setdefault(int(tid), {"correct": 0, "total": 0})
         bucket["total"] += len(graded)
         bucket["correct"] += sum(1 for qid in graded if correct_by_q[qid])
     return buckets or None
@@ -391,6 +398,7 @@ def update_topic_scores_from_attempt(attempt_id: int) -> None:
 
 
 def get_student_mastery(student_id: int) -> List[dict]:
+    maybe_rebuild_stale_mastery(student_id)
     db = get_db()
     rows = (
         db.query(StudentTopicScore)
@@ -563,9 +571,14 @@ def get_weak_topics_for_student(student_id: int) -> List[dict]:
 # fully re-derives the profile; _needs_mastery_rebuild() detects the
 # stale state cheaply so get_student_dashboard() can self-heal an account
 # once on next load.
+#
+# Bumped again for BUG-02 (2026-09-21): aggressive synonym merge in
+# topic_resolver collapsed distinct assessment topics (e.g. Polynomials /
+# System of Equations / Sequences and Series) so teacher analytics showed
+# fewer rows than student diagnostic results.
 from datetime import datetime as _dt
 
-MASTERY_FIX_DEPLOYED_AT = _dt(2026, 9, 4, 4, 22, 0)
+MASTERY_FIX_DEPLOYED_AT = _dt(2026, 9, 21, 0, 0, 0)
 
 
 def _needs_mastery_rebuild(student_id: int) -> bool:

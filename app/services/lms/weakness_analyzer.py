@@ -311,13 +311,40 @@ def _backfill_all_topics(cached: dict) -> dict:
     return cached
 
 
+def _rebind_topic_ids(result: dict) -> tuple[dict, bool]:
+    """Re-map area topic_ids from topic_name via the current resolver.
+
+    Older caches may share one topic_id across several distinct area names
+    because the resolver used to merge on substring/subset. Rebinding keeps
+    student-visible names and teacher mastery rows 1:1 with those areas.
+    """
+    changed = False
+    for key in ("weak_topics", "strong_topics", "all_topics"):
+        entries = result.get(key) or []
+        for entry in entries:
+            name = (entry.get("topic_name") or "").strip()
+            if not name:
+                continue
+            topic = get_or_create_topic_from_pdf_label(name)
+            if not topic:
+                continue
+            if int(entry.get("topic_id") or 0) != int(topic.id):
+                entry["topic_id"] = topic.id
+                changed = True
+    return result, changed
+
+
 def _get_cached(assessment, attempt_id: int) -> Optional[dict]:
     meta = _parse_assessment_meta(assessment)
     cached = (meta.get("weakness_cache") or {}).get(str(attempt_id))
     if cached and isinstance(cached, dict):
         if _cache_looks_invalid(cached):
             return None
-        return _backfill_all_topics(cached)
+        cached = _backfill_all_topics(cached)
+        cached, rebound = _rebind_topic_ids(cached)
+        if rebound:
+            _set_cache(assessment, attempt_id, cached)
+        return cached
     return None
 
 
