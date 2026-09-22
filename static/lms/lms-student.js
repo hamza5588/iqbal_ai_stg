@@ -240,6 +240,20 @@
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Loading diagnostic...</p>';
     try {
       var diag = await lmsApi('/api/lms/diagnostics/default');
+      // Resume in-progress attempt immediately (close mid-test left dashboard
+      // saying "in progress" but orientation alone showed no questions).
+      // Check before the "already completed" branches so a live attempt wins.
+      if (diag.in_progress_attempt_id || diag.attempt_status === 'in_progress') {
+        await startDiagnosticQuiz(
+          diag.id,
+          diag.title || 'Diagnostic Assessment',
+          diag.question_count,
+          'Continue diagnostic',
+          diag.time_limit_minutes,
+          false
+        );
+        return;
+      }
       if ((diag.diagnostic_completed || diag.any_diagnostic_completed || diag.diagnostic_timed_out) && diag.latest_attempt_id) {
         try {
           var prevResult = await lmsApi('/api/lms/attempts/' + diag.latest_attempt_id + '/results');
@@ -269,6 +283,25 @@
       body.innerHTML = '<p class="lms-error">' + escapeHtml(loadMsg) + '</p>' +
         '<p class="lms-status">Contact your admin to upload the diagnostic assessment.</p>';
     }
+  };
+
+  /** Resume a specific in-progress diagnostic from Quiz History. */
+  window.resumeLmsDiagnostic = async function (assessmentId) {
+    ensureDiagnosticModal();
+    if (window._lmsNeedsDiagnostic) setLmsDiagnosticGate(true);
+    lmsOpenModal('lmsDiagnosticModal');
+    var body = document.getElementById('lmsDiagBody');
+    if (body) {
+      body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Continuing diagnostic...</p>';
+    }
+    await startDiagnosticQuiz(
+      assessmentId,
+      'Diagnostic Assessment',
+      null,
+      'Continue diagnostic',
+      null,
+      false
+    );
   };
 
   window.closeLmsDiagnostic = async function () {

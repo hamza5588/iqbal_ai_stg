@@ -441,14 +441,21 @@
       var items = await lmsApi('/api/lms/students/me/attempts');
       if (!items.length) { el.innerHTML = '<p class="lms-path-empty">No attempts yet.</p>'; return; }
       el.innerHTML = '<ul class="lms-card-list">' + items.map(function (a) {
-        // Only a submitted attempt has scored results to show - an
-        // in-progress/abandoned one has nothing to click through to yet.
-        var clickable = a.status === 'submitted';
+        var isDiag = a.assessment_type === 'diagnostic';
+        var clickable = a.status === 'submitted' || (a.status === 'in_progress' && isDiag);
         var style = 'padding:10px;margin-bottom:6px;' + (clickable ? 'cursor:pointer;' : '');
-        var onclick = clickable ? ' onclick="viewLmsAttemptResult(' + a.attempt_id + ')"' : '';
-        var label = a.title || (a.assessment_type === 'diagnostic' ? 'Diagnostic Assessment' : 'Quiz #' + a.assessment_id);
+        var onclick = '';
+        if (a.status === 'submitted') {
+          onclick = ' onclick="viewLmsAttemptResult(' + a.attempt_id + ')"';
+        } else if (a.status === 'in_progress' && isDiag) {
+          onclick = ' onclick="resumeLmsDiagnostic(' + a.assessment_id + ')"';
+        }
+        var label = a.title || (isDiag ? 'Diagnostic Assessment' : 'Quiz #' + a.assessment_id);
+        var statusLabel = a.score_percent != null
+          ? (a.score_percent + '%')
+          : (a.status === 'in_progress' ? 'In progress — tap to continue' : a.status);
         return '<li class="lms-card" style="' + style + '"' + onclick + '>' + escapeHtml(label) +
-          ' — <strong>' + (a.score_percent != null ? a.score_percent + '%' : a.status) + '</strong></li>';
+          ' — <strong>' + escapeHtml(String(statusLabel)) + '</strong></li>';
       }).join('') + '</ul>';
     } catch (e) { el.innerHTML = ''; }
   };
