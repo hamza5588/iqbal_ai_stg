@@ -112,6 +112,15 @@ def get_student_dashboard(student_id: int) -> dict:
                 current_step = item
                 break
 
+    path_completed = int((learning_path or {}).get("completed_count") or 0)
+    path_total = int((learning_path or {}).get("total_count") or 0)
+    path_percent = round(100.0 * path_completed / path_total, 1) if path_total else 0.0
+    learning_path_progress = {
+        "completed": path_completed,
+        "total": path_total,
+        "percent": path_percent,
+    }
+
     return {
         "onboarding": onboarding,
         "overall_progress": overall_progress,
@@ -122,6 +131,7 @@ def get_student_dashboard(student_id: int) -> dict:
         "mastery": mastery,
         "pending_assignments": onboarding["pending_assignments"],
         "learning_path": learning_path,
+        "learning_path_progress": learning_path_progress,
         "current_learning_path_step": current_step,
         "classes": [
             {"id": c.id, "name": c.name, "grade_level": c.grade_level}
