@@ -13290,8 +13290,13 @@ Align everything with the lesson objectives and do not invent missing informatio
           <input id="lmsQuizTitle" class="lms-input" type="text" required placeholder="Chapter 5 Post Test">
         </div>
         <div class="lms-field">
-          <label class="lms-label" for="lmsQuizPdfFile">Q&amp;A PDF</label>
+          <label class="lms-label" for="lmsQuizPdfFile">PDF (any content)</label>
           <input id="lmsQuizPdfFile" class="lms-file-input" type="file" accept=".pdf,application/pdf" required>
+          <p class="lms-status" style="margin-top:6px;">Upload any lesson/notes PDF. If it already has Q&amp;A, those are used; otherwise MCQs are generated from the content.</p>
+        </div>
+        <div class="lms-field">
+          <label class="lms-label" for="lmsQuizMcqCount">Number of MCQs</label>
+          <input id="lmsQuizMcqCount" class="lms-input" type="number" min="1" max="40" value="10" required>
         </div>
         <button type="submit" id="lmsQuizSubmitBtn" class="lms-btn lms-btn-primary">
           Upload &amp; Generate MCQs
@@ -13710,23 +13715,28 @@ Align everything with the lesson objectives and do not invent missing informatio
       e.preventDefault();
       const title = document.getElementById('lmsQuizTitle').value.trim();
       const file = document.getElementById('lmsQuizPdfFile').files[0];
-        if (!file) {
+      const countEl = document.getElementById('lmsQuizMcqCount');
+      const btn = document.getElementById('lmsQuizSubmitBtn');
+      const status = document.getElementById('lmsQuizStatus');
+      let questionCount = parseInt(countEl && countEl.value, 10);
+      if (!Number.isFinite(questionCount) || questionCount < 1) questionCount = 10;
+      if (questionCount > 40) questionCount = 40;
+      if (!file) {
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
       }
       var name = (file.name || '').toLowerCase();
       if (!name.endsWith('.pdf')) {
-        status.textContent = 'Error: This document does not match the required assessment format. Please upload a valid document.';
+        if (status) status.textContent = 'Error: This document does not match the required assessment format. Please upload a valid document.';
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
       }
-      const btn = document.getElementById('lmsQuizSubmitBtn');
-      const status = document.getElementById('lmsQuizStatus');
       btn.disabled = true;
-      status.textContent = 'Uploading PDF and starting conversion...';
+      status.textContent = 'Uploading PDF and generating ' + questionCount + ' MCQs...';
       const fd = new FormData();
       fd.append('title', title);
       fd.append('file', file);
+      fd.append('question_count', String(questionCount));
       try {
         const res = await fetch('/api/lms/quizzes/from-pdf', { method: 'POST', body: fd, credentials: 'include' });
         const data = await res.json();

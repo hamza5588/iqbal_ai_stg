@@ -387,14 +387,19 @@ def _validate_thread_id(thread_id: str, user_id: int) -> bool:
 @bp.route("/quizzes/from-pdf", methods=["POST"])
 @login_required
 def create_quiz_from_pdf():
-    """Upload Q&A PDF and run PDF→MCQ pipeline (async when Celery available)."""
+    """Upload any PDF and generate MCQs (async when Celery available)."""
     denied = _require_permission(Permissions.CREATE_QUIZ)
     if denied:
         return denied
 
     title = (request.form.get("title") or "Untitled Quiz").strip()
-    assessment_type = "quiz"
     topic_id = request.form.get("topic_id", type=int)
+    question_count = request.form.get("question_count", type=int)
+    if question_count is None:
+        question_count = request.form.get("mcq_count", type=int)
+    if question_count is None:
+        question_count = 10
+    question_count = max(1, min(40, int(question_count)))
     async_mode = request.form.get("async", "true").lower() != "false"
     if not current_app.config.get("USE_CELERY_FOR_INGESTION", False):
         async_mode = False
@@ -415,7 +420,7 @@ def create_quiz_from_pdf():
         created_by=_current_user_id(),
         title=title.strip(),
         assessment_type="quiz",
-        creation_mode="pdf_qa_auto",
+        creation_mode="pdf_ai",
     )
 
     try:
@@ -426,6 +431,7 @@ def create_quiz_from_pdf():
             user_id=_current_user_id(),
             topic_id=topic_id,
             async_mode=async_mode,
+            question_count=question_count,
         )
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
@@ -435,7 +441,10 @@ def create_quiz_from_pdf():
         return json_error(str(e), code="pipeline_error", status=500)
 
     status = 202 if result.get("async") else 200
-    return json_success({"assessment_id": a.id, **result}, status=status)
+    return json_success(
+        {"assessment_id": a.id, "requested_question_count": question_count, **result},
+        status=status,
+    )
 
 
 @bp.route("/quizzes/<int:quiz_id>/process-pdf", methods=["POST"])
@@ -449,6 +458,9 @@ def process_quiz_pdf(quiz_id: int):
     body = request.get_json(silent=True) or {}
     thread_id = body.get("thread_id") or request.form.get("thread_id")
     topic_id = body.get("topic_id")
+    question_count = body.get("question_count")
+    if question_count is None:
+        question_count = request.form.get("question_count", type=int)
     if not thread_id or not _validate_thread_id(thread_id, _current_user_id()):
         return json_error("Valid thread_id is required", code="validation_error")
 
@@ -458,6 +470,7 @@ def process_quiz_pdf(quiz_id: int):
             rag_thread_id=thread_id,
             user_id=_current_user_id(),
             topic_id=topic_id,
+            question_count=question_count,
         )
         return json_success(result)
     except LMSValidationError as e:
@@ -743,6 +756,7 @@ def default_diagnostic():
     onboarding = student_profile_service.get_onboarding_status(_current_user_id())
     completed_id = onboarding.get("diagnostic_assessment_id")
     latest = attempt_service.get_latest_submitted_attempt(_current_user_id(), diag["id"])
+    in_progress = attempt_service._find_in_progress_attempt(_current_user_id(), diag["id"])
     timed_out = bool(latest and getattr(latest, "timed_out", False))
     diag["diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
     diag["any_diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
@@ -750,6 +764,16 @@ def default_diagnostic():
     diag["diagnostic_timeout_message"] = (
         attempt_service.TIME_OVER_MESSAGE if timed_out else None
     )
+    if in_progress and not timed_out and not diag["diagnostic_completed"]:
+        diag["in_progress_attempt_id"] = in_progress.id
+        diag["attempt_status"] = "in_progress"
+        if getattr(in_progress, "expires_at", None):
+            from datetime import datetime
+
+            diag["remaining_seconds"] = max(
+                0, int((in_progress.expires_at - datetime.utcnow()).total_seconds())
+            )
+            diag["expires_at"] = in_progress.expires_at.isoformat() + "Z"
     if latest and latest.max_score:
         # A timed-out attempt now keeps the score for the answered questions.
         diag["latest_attempt_id"] = latest.id

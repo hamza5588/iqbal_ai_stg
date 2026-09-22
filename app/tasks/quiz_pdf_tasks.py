@@ -68,6 +68,7 @@ def process_pdf_quiz_task(
     user_id: int,
     topic_id: int | None = None,
     thread_id: str | None = None,
+    question_count: int | None = None,
 ):
     """Ingest PDF then run PDF→MCQ pipeline for an assessment."""
     self.update_state(state="PROCESSING", meta={"step": "ingest", "progress": 10, "message": "Ingesting PDF..."})
@@ -115,6 +116,7 @@ def process_pdf_quiz_task(
             rag_thread_id=thread_id,
             user_id=user_id,
             topic_id=topic_id,
+            question_count=question_count,
         )
         return {"success": True, **result}
     except Exception as exc:
@@ -146,6 +148,7 @@ def enqueue_or_run_pdf_quiz(
     topic_id: int | None = None,
     async_mode: bool = True,
     progress_job_id: str | None = None,
+    question_count: int | None = None,
 ) -> dict:
     """
     Save file to temp path and enqueue Celery task, or run synchronously if async unavailable.
@@ -175,6 +178,7 @@ def enqueue_or_run_pdf_quiz(
                 user_id=user_id,
                 topic_id=topic_id,
                 thread_id=thread_id,
+                question_count=question_count,
             )
             return {"async": True, "task_id": task.id, "thread_id": thread_id, "assessment_id": assessment_id}
         except Exception as exc:
@@ -202,6 +206,7 @@ def enqueue_or_run_pdf_quiz(
         rag_thread_id=thread_id,
         user_id=user_id,
         topic_id=topic_id,
+        question_count=question_count,
     )
     _set_upload_progress(progress_job_id, 88, "Saving generated questions...", stage="qa_save")
     try:
