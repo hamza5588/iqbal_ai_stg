@@ -543,8 +543,8 @@ def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bo
     submit_attempt (normal + client-signalled timeout) and
     finalize_expired_attempt (server-detected timeout).
 
-    Unanswered questions are simply not correct - they never force the
-    answered ones to zero.
+    Unanswered / skipped questions count as incorrect (0 points) toward
+    overall score; they never force already-answered questions to zero.
     """
     db = get_db()
     question_ids = attempt_question_ids(attempt)
@@ -554,16 +554,22 @@ def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bo
     answer_by_q = {a.question_id: a for a in answers}
 
     correct = 0
+    answered_count = 0
     topic_breakdown: Dict[int, dict] = {}
     for qid in question_ids:
         q = q_by_id.get(qid)
         if not q:
             continue
         ans = answer_by_q.get(qid)
-        is_correct = (
+        has_answer = (
             ans is not None
             and ans.selected_option_index is not None
-            and ans.selected_option_index == q.correct_option_index
+            and ans.selected_option_index >= 0
+        )
+        if has_answer:
+            answered_count += 1
+        is_correct = (
+            has_answer and ans.selected_option_index == q.correct_option_index
         )
         if ans:
             ans.is_correct = is_correct
@@ -578,6 +584,7 @@ def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bo
                 bucket["correct"] += 1
 
     max_score = float(len(question_ids)) or 1.0
+    unanswered_count = max(0, len(question_ids) - answered_count)
     attempt.score = correct
     attempt.max_score = max_score
     attempt.status = "submitted"
@@ -588,20 +595,33 @@ def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bo
 
     _run_post_submit_steps(attempt, assessment)
 
+    from app.services.lms import performance_service
+
+    enriched_breakdown = performance_service.topic_breakdown_for_attempt(attempt.id)
     result = {
         "attempt_id": attempt.id,
         "score": correct,
         "max_score": max_score,
         "score_percent": round(100.0 * correct / max_score, 2),
-        "topic_breakdown": list(topic_breakdown.values()),
+        "answered_count": answered_count,
+        "unanswered_count": unanswered_count,
+        "topic_breakdown": enriched_breakdown or list(topic_breakdown.values()),
         "assessment_type": assessment.assessment_type,
     }
+    analysis = performance_service.analyze_attempt(attempt.id)
+    result["weak_topics"] = analysis.get("weak_topics", [])
+    result["strong_topics"] = analysis.get("strong_topics", [])
+    result["all_topics"] = analysis.get("all_topics") or [
+        {
+            "topic_id": t["topic_id"],
+            "topic_name": t.get("topic_name"),
+            "score_percent": t.get("score_percent"),
+            "correct": t.get("correct"),
+            "total": t.get("total"),
+        }
+        for t in enriched_breakdown
+    ]
     if assessment.assessment_type == "diagnostic":
-        from app.services.lms import performance_service
-
-        analysis = performance_service.analyze_attempt(attempt.id)
-        result["weak_topics"] = analysis.get("weak_topics", [])
-        result["strong_topics"] = analysis.get("strong_topics", [])
         result["diagnostic_completed"] = True
     if timed_out:
         result["timed_out"] = True
@@ -636,27 +656,51 @@ def get_attempt_results(attempt_id: int) -> dict:
     score = attempt.score or 0.0
     assessment = get_assessment(attempt.assessment_id)
     timed_out = bool(getattr(attempt, "timed_out", False))
+    question_ids = attempt_question_ids(attempt)
+    db = get_db()
+    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
+    answered_ids = {
+        a.question_id
+        for a in answers
+        if a.selected_option_index is not None and a.selected_option_index >= 0
+    }
+    answered_count = sum(1 for qid in question_ids if qid in answered_ids)
+    unanswered_count = max(0, len(question_ids) - answered_count)
+    from app.services.lms import performance_service
+
+    breakdown = performance_service.topic_breakdown_for_attempt(attempt_id)
     result = {
         "attempt_id": attempt.id,
         "score": score,
         "max_score": max_score,
         "score_percent": round(100.0 * score / max_score, 2) if max_score else 0.0,
+        "answered_count": answered_count,
+        "unanswered_count": unanswered_count,
         "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
         "assessment_type": assessment.assessment_type,
         "timed_out": timed_out,
+        "topic_breakdown": breakdown,
     }
     if timed_out:
         # The timer ran out, but the answered questions still count - keep
         # the real score, just note that it was auto-submitted.
         result["time_over"] = True
         result["message"] = TIME_OVER_MESSAGE
+    analysis = performance_service.analyze_attempt(attempt_id)
+    result["weak_topics"] = analysis.get("weak_topics", [])
+    result["strong_topics"] = analysis.get("strong_topics", [])
+    result["all_topics"] = analysis.get("all_topics") or [
+        {
+            "topic_id": t["topic_id"],
+            "topic_name": t.get("topic_name"),
+            "score_percent": t.get("score_percent"),
+            "correct": t.get("correct"),
+            "total": t.get("total"),
+        }
+        for t in breakdown
+    ]
     if assessment.assessment_type == "diagnostic":
         result["diagnostic_completed"] = True
-        from app.services.lms import performance_service
-
-        analysis = performance_service.analyze_attempt(attempt_id)
-        result["weak_topics"] = analysis.get("weak_topics", [])
-        result["strong_topics"] = analysis.get("strong_topics", [])
     return result
 
 
@@ -694,6 +738,11 @@ def list_student_attempts(student_id: int, limit: int = 50) -> List[dict]:
             title = "Diagnostic Assessment"
         else:
             title = (s.title if s and s.title else None) or type_label.get(a_type, "Assessment")
+        score_val = None
+        max_score_val = None
+        if a.status == "submitted":
+            score_val = a.score
+            max_score_val = a.max_score
         result.append(
             {
                 "attempt_id": a.id,
@@ -702,6 +751,8 @@ def list_student_attempts(student_id: int, limit: int = 50) -> List[dict]:
                 "assessment_type": a_type,
                 "title": title,
                 "status": a.status,
+                "score": score_val,
+                "max_score": max_score_val,
                 "score_percent": pct,
                 "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,
             }

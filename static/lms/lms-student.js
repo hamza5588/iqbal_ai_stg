@@ -392,6 +392,7 @@
       (qn ? '<li><strong>' + escapeHtml(String(qn)) + ' questions</strong>, multiple choice.</li>' : '') +
       '<li><strong>About ' + mins + ' minutes.</strong> The timer starts when you press Start and is shown at the top.</li>' +
       '<li>You can <strong>move between questions freely</strong>, skip any question, and change your answers until you submit.</li>' +
+      '<li><strong>Unanswered questions score 0</strong>; questions you answered still count toward your score.</li>' +
       '<li>Use <strong>&ldquo;Explain this question&rdquo;</strong> if the wording is unclear — it rephrases the question without giving the answer.</li>' +
       '<li>Use the <strong>Workspace</strong> (rough sheet / notes) for any working out.</li>' +
       '<li>If time runs out it submits automatically, and <strong>every question you answered is still scored</strong>.</li>' +
@@ -763,15 +764,26 @@
     }
   };
 
-  window.confirmSubmitDiagnostic = function () {
+  window.confirmSubmitDiagnostic = async function () {
     var total = diagState.questions.length;
     var answered = diagAnsweredCount();
     var missing = total - answered;
     if (missing > 0) {
-      var ok = window.confirm(
+      var message =
         'You have ' + missing + ' unanswered question' + (missing === 1 ? '' : 's') +
-        '. Unanswered questions score 0. Submit anyway?'
-      );
+        '. Are you sure you want to submit?\n\n' +
+        'Unanswered questions score 0. Your answered questions still count.';
+      var ok;
+      if (typeof showInAppConfirm === 'function') {
+        ok = await showInAppConfirm(message, {
+          title: 'Submit diagnostic?',
+          confirmLabel: 'Submit',
+          cancelLabel: 'Go back',
+          iconClass: 'fas fa-exclamation-circle'
+        });
+      } else {
+        ok = window.confirm(message);
+      }
       if (!ok) return;
     }
     submitLmsDiagnostic();
@@ -851,13 +863,24 @@
     var countLabel = hasCounts
       ? Math.round(result.score) + ' of ' + Math.round(result.max_score) + ' questions correct'
       : '';
+    var unanswered = result.unanswered_count != null
+      ? Math.round(result.unanswered_count)
+      : (opts.unansweredCount != null ? Math.round(opts.unansweredCount) : 0);
+    var unansweredLabel = unanswered > 0
+      ? unanswered + ' unanswered · scored as 0'
+      : '';
     var weak = result.weak_topics || [];
     var strong = result.strong_topics || [];
 
     function topicChip(t, cls) {
       var p = Math.round(t.score_percent || 0);
-      var n = (t.question_ids && t.question_ids.length) || 0;
-      var frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+      var frac = '';
+      if (t.correct != null && t.total != null) {
+        frac = Math.round(t.correct) + ' of ' + Math.round(t.total) + ' correct';
+      } else {
+        var n = (t.question_ids && t.question_ids.length) || 0;
+        frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+      }
       return '<div class="lms-topic-chip ' + cls + '"><strong>' + p + '%</strong>' +
         escapeHtml(t.topic_name || t.name || 'Topic') +
         (frac ? '<span class="lms-topic-chip-frac">' + frac + '</span>' : '') + '</div>';
@@ -868,6 +891,9 @@
     var strongHtml = strong.length
       ? strong.map(function (t) { return topicChip(t, 'strong'); }).join('')
       : '';
+    var topicTable = (typeof lmsFormatTopicBreakdownHtml === 'function')
+      ? lmsFormatTopicBreakdownHtml(result, { title: 'Results by topic' })
+      : '';
     var timedOutBanner = opts.timedOut
       ? '<div class="lms-diag-timeout-note">&#9203; ' +
         escapeHtml(result.message || 'Time ran out — the questions you answered were scored.') +
@@ -875,14 +901,16 @@
       : (opts.alreadyDone
         ? '<div class="lms-diag-timeout-note">You have already completed the diagnostic. Here is how you did.</div>'
         : '');
+    var scoreMeta = [countLabel, unansweredLabel].filter(Boolean).join(' &middot; ');
     body.innerHTML =
       timedOutBanner +
       '<div class="lms-diag-score">' +
       '<div class="lms-diag-score-num">' + scoreLabel + '</div>' +
       '<p class="lms-status">Overall diagnostic score' +
-      (countLabel ? ' &middot; <strong>' + countLabel + '</strong>' : '') + '</p>' +
+      (scoreMeta ? ' &middot; <strong>' + scoreMeta + '</strong>' : '') + '</p>' +
       (pct != null ? '<div class="lms-diag-score-bar"><div class="lms-diag-score-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></div></div>' : '') +
       '</div>' +
+      topicTable +
       ((weak.length || strong.length)
         ? '<p class="lms-status lms-diag-explainer">Below, your questions are grouped by topic. Each tile is that topic\'s own score - the number above already adds up every question, strong topics included.</p>'
         : '') +

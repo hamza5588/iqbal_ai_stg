@@ -121,7 +121,17 @@ def process_pdf_quiz_task(
         return {"success": True, **result}
     except Exception as exc:
         logger.exception("PDF quiz Celery task failed for assessment %s", assessment_id)
-        _set_pdf_source_status(source.id, "failed", error_message=str(exc))
+        from app.services.quiz.assessment_doc_validation import (
+            AssessmentDocValidationError,
+            public_error_message,
+        )
+
+        msg = (
+            public_error_message(exc)
+            if isinstance(exc, AssessmentDocValidationError)
+            else str(exc)
+        )
+        _set_pdf_source_status(source.id, "failed", error_message=msg)
         raise
     finally:
         try:

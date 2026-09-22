@@ -408,16 +408,20 @@ def create_quiz_from_pdf():
     if not file or not file.filename:
         return json_error("PDF file is required", code="validation_error")
 
+    file_bytes = file.read()
+    try:
+        from app.services.quiz.assessment_doc_validation import assert_supported_assessment_file
+
+        assert_supported_assessment_file(file.filename, file_bytes, label="Assessment PDF")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
     a = assessment_service.create_assessment(
         created_by=_current_user_id(),
         title=title.strip(),
         assessment_type="quiz",
         creation_mode="pdf_ai",
     )
-
-    file_bytes = file.read()
-    if not file_bytes:
-        return json_error("Empty file", code="validation_error")
 
     try:
         result = enqueue_or_run_pdf_quiz(
@@ -429,6 +433,8 @@ def create_quiz_from_pdf():
             async_mode=async_mode,
             question_count=question_count,
         )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
     except ValueError as e:
         return json_error(str(e), code="llm_config_error", status=503)
     except Exception as e:
@@ -467,6 +473,8 @@ def process_quiz_pdf(quiz_id: int):
             question_count=question_count,
         )
         return json_success(result)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
     except Exception as e:
         return json_error(str(e), code="pipeline_error", status=500)
 
@@ -1525,6 +1533,15 @@ def my_progress_history():
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
     return json_success(analytics_service.get_progress_over_time(_current_user_id()))
+
+
+@bp.route("/students/me/progress/by-topic", methods=["GET"])
+@login_required
+def my_progress_by_topic():
+    """Per-topic score series across diagnostic and quiz attempts."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    return json_success(analytics_service.get_topic_assessment_series(_current_user_id()))
 
 
 @bp.route("/tutor/history", methods=["GET"])

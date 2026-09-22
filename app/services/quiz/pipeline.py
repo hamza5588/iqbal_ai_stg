@@ -7,6 +7,15 @@ from typing import List, Optional
 
 from app.models.lms_models import AssessmentQuestion, QuizPdfSource
 from app.services.lms import assessment_service, question_bank_service
+from app.services.quiz.assessment_doc_validation import (
+    AssessmentDocValidationError,
+    assert_nonempty_extracted_text,
+    assert_topic_or_key_area_available,
+    assert_valid_extraction,
+    assert_valid_mcqs,
+    assert_valid_pairs,
+    public_error_message,
+)
 from app.services.quiz.diagnostic_generator import generate_mcqs_from_content
 from app.services.quiz.mcq_converter import convert_pairs_batch, mcq_to_question_fields
 from app.services.quiz.models import MCQQuestion
@@ -87,8 +96,9 @@ def run_pdf_quiz_pipeline(
     """
     Build MCQs from a PDF.
 
-    Prefer a Q&A / answer-key layout when present. Otherwise (or when that fails),
-    generate the requested number of MCQs from the PDF content itself.
+    Diagnostics require a valid Q&A / answer-key layout (strict validation).
+    Quizzes prefer that layout when present; otherwise generate the requested
+    number of MCQs from general PDF content.
     """
     assessment = assessment_service.get_assessment(assessment_id)
     source = assessment_service.link_pdf_source(
@@ -103,10 +113,11 @@ def run_pdf_quiz_pipeline(
     if question_count is not None:
         wanted = _clamp_question_count(question_count)
 
+    is_diagnostic = assessment.assessment_type == "diagnostic"
+
     try:
         text = pdf_text or get_thread_full_text(rag_thread_id, user_id)
-        if not (text or "").strip():
-            raise ValueError("No PDF text found for thread — ingest PDF first")
+        assert_nonempty_extracted_text(text)
 
         creation_mode = "pdf_qa_auto"
         source_type = "pdf_qa_converted"
@@ -117,52 +128,86 @@ def run_pdf_quiz_pipeline(
         warnings: List[str] = []
         pair_answer_texts: List[Optional[str]] = []
 
-        # 1) Try structured Q&A extraction when the PDF has questions + answers.
-        try:
+        if is_diagnostic:
+            # Strict Q&A path for diagnostics (BUG-06 validation).
             extraction = extract_qa_from_text(text)
-            pairs = pair_questions_answers(extraction) or []
-            if pairs:
+            assert_valid_extraction(extraction)
+            pairs = pair_questions_answers(extraction)
+            assert_valid_pairs(pairs)
+            if wanted is not None and len(pairs) > wanted:
                 matched_total = len(pairs)
-                if wanted is not None and matched_total > wanted:
-                    pairs = pairs[:wanted]
-                    warnings.append(
-                        f"Using first {wanted} of {matched_total} matched Q&A pairs"
+                pairs = pairs[:wanted]
+                warnings.append(
+                    f"Using first {wanted} of {matched_total} matched Q&A pairs"
+                )
+            converted = convert_pairs_batch(
+                pairs, quiz_title=extraction.title or assessment.title
+            )
+            assert_valid_mcqs(converted)
+            assert_topic_or_key_area_available(
+                text,
+                assessment_type=assessment.assessment_type,
+                topic_id=topic_id,
+                mcq_questions=converted.questions,
+            )
+            batch_questions = list(converted.questions or [])
+            failed_conversions = list(converted.failed_conversions or [])
+            warnings.extend(list(extraction.warnings or []))
+            pair_answer_texts = [
+                pairs[i].answer_text if i < len(pairs) else None
+                for i in range(len(batch_questions))
+            ]
+        else:
+            # Quizzes: prefer Q&A when present, else generate from content.
+            try:
+                extraction = extract_qa_from_text(text)
+                pairs = pair_questions_answers(extraction) or []
+                if pairs:
+                    matched_total = len(pairs)
+                    if wanted is not None and matched_total > wanted:
+                        pairs = pairs[:wanted]
+                        warnings.append(
+                            f"Using first {wanted} of {matched_total} matched Q&A pairs"
+                        )
+                    converted = convert_pairs_batch(
+                        pairs, quiz_title=extraction.title or assessment.title
                     )
-                converted = convert_pairs_batch(
-                    pairs, quiz_title=extraction.title or assessment.title
+                    batch_questions = list(converted.questions or [])
+                    failed_conversions = list(converted.failed_conversions or [])
+                    warnings.extend(list(extraction.warnings or []))
+                    pair_answer_texts = [
+                        pairs[i].answer_text if i < len(pairs) else None
+                        for i in range(len(batch_questions))
+                    ]
+            except Exception as qa_exc:  # noqa: BLE001 - fall back to content MCQs
+                logger.info(
+                    "Q&A extraction unavailable for assessment %s (%s); using content MCQs",
+                    assessment_id,
+                    qa_exc,
                 )
-                batch_questions = list(converted.questions or [])
-                failed_conversions = list(converted.failed_conversions or [])
-                warnings.extend(list(extraction.warnings or []))
-                pair_answer_texts = [
-                    pairs[i].answer_text if i < len(pairs) else None
-                    for i in range(len(batch_questions))
-                ]
-        except Exception as qa_exc:  # noqa: BLE001 - fall back to content MCQs
-            logger.info(
-                "Q&A extraction unavailable for assessment %s (%s); using content MCQs",
-                assessment_id,
-                qa_exc,
-            )
-            warnings.append(f"Q&A extraction skipped: {qa_exc}")
-            pairs = []
-            batch_questions = []
+                warnings.append(f"Q&A extraction skipped: {qa_exc}")
+                pairs = []
+                batch_questions = []
+                extraction = None
 
-        # 2) Any PDF without usable Q&A pairs → generate MCQs from content.
-        if not batch_questions:
-            creation_mode = "pdf_ai"
-            source_type = "pdf_ai"
-            topic_name = (assessment.title or "Quiz").strip() or "Quiz"
-            gen_count = wanted if wanted is not None else 10
-            batch_questions = _generate_mcqs_from_any_pdf(text, topic_name, gen_count)
-            pair_answer_texts = [None] * len(batch_questions)
-            warnings.append(
-                f"Generated {len(batch_questions)} MCQs from PDF content (requested {gen_count})."
-            )
             if not batch_questions:
-                raise ValueError(
-                    "Could not create MCQs from this PDF. Try a clearer document or a different file."
+                creation_mode = "pdf_ai"
+                source_type = "pdf_ai"
+                topic_name = (assessment.title or "Quiz").strip() or "Quiz"
+                gen_count = wanted if wanted is not None else 10
+                batch_questions = _generate_mcqs_from_any_pdf(text, topic_name, gen_count)
+                pair_answer_texts = [None] * len(batch_questions)
+                warnings.append(
+                    f"Generated {len(batch_questions)} MCQs from PDF content "
+                    f"(requested {gen_count})."
                 )
+                if not batch_questions:
+                    raise AssessmentDocValidationError(
+                        detail=(
+                            "Could not create MCQs from this PDF. "
+                            "Try a clearer document or a different file."
+                        )
+                    )
 
         sections = parse_section_topics(text)
         question_pdf_topics: dict[str, str] = {}
@@ -202,7 +247,9 @@ def run_pdf_quiz_pipeline(
         assessment_service.add_questions(assessment_id, created_ids)
 
         if not created_ids:
-            raise ValueError("MCQ conversion failed — no questions were saved.")
+            raise AssessmentDocValidationError(
+                detail="MCQ conversion failed — no questions were saved."
+            )
 
         extract_conf = (
             float(getattr(extraction, "confidence", 0.75) or 0.75) if extraction else 0.75
@@ -274,6 +321,14 @@ def run_pdf_quiz_pipeline(
             "requires_review": overall < 0.85,
             "extraction_status": "completed",
         }
+    except AssessmentDocValidationError as exc:
+        logger.warning(
+            "PDF quiz format validation failed for assessment %s: %s",
+            assessment_id,
+            exc.detail or str(exc),
+        )
+        _set_pdf_source_status(source.id, "failed", error_message=public_error_message(exc))
+        raise
     except Exception as exc:
         logger.exception("PDF quiz pipeline failed for assessment %s", assessment_id)
         _set_pdf_source_status(source.id, "failed", error_message=str(exc))

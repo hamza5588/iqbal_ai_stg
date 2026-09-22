@@ -3668,7 +3668,107 @@
     #chatInputArea .tt-input-divider{ width:1px; height:26px; background:#eee; }
     #chatInputArea .tt-util-bar button i{ color:inherit; }
     #chatInputArea #saveLessonBtn{ color:var(--primary-color); }
+    #chatInputArea #saveLessonBtn.save-ready-pulse{
+      animation: saveReadyPulse 1.4s ease-in-out 2;
+    }
+    @keyframes saveReadyPulse{
+      0%,100%{ box-shadow:none; transform:scale(1); }
+      50%{ box-shadow:0 0 0 6px rgba(14,124,107,.18); transform:scale(1.03); }
+    }
     #chatInputArea #downloadChatBtn{ color:#1d4ed8; }
+
+    /* Lesson save flow coach strip */
+    .lesson-save-flow{
+      display:none;
+      margin:0 0 10px;
+      padding:10px 12px;
+      border:1px solid #d8efe9;
+      border-radius:14px;
+      background:linear-gradient(180deg,#f4fbf8 0%,#ffffff 100%);
+    }
+    .lesson-save-flow.is-visible{ display:block; }
+    .lesson-save-flow-head{
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+      margin-bottom:8px;
+    }
+    .lesson-save-flow-head strong{
+      font-size:13px; color:#0b5f53; font-weight:700;
+    }
+    .lesson-save-flow-help{
+      border:none; background:transparent; color:var(--primary-color);
+      font-size:12px; font-weight:700; cursor:pointer; padding:0;
+    }
+    .lesson-save-flow-steps{
+      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;
+    }
+    .lesson-save-step{
+      border:1px solid #e5e7eb; border-radius:12px; padding:8px;
+      background:#fff; text-align:center; min-height:74px;
+    }
+    .lesson-save-step .n{
+      width:22px; height:22px; border-radius:999px; margin:0 auto 6px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:800; background:#e8f5f1; color:#0b5f53;
+    }
+    .lesson-save-step .t{
+      font-size:11px; line-height:1.35; color:#374151; font-weight:600;
+    }
+    .lesson-save-step.is-done{ border-color:#a7e0d2; background:#f3fbf8; }
+    .lesson-save-step.is-done .n{ background:#0e7c6b; color:#fff; }
+    .lesson-save-step.is-active{
+      border-color:#0e7c6b; box-shadow:0 0 0 2px rgba(14,124,107,.12);
+    }
+    .lesson-save-step.is-active .n{ background:#0e7c6b; color:#fff; }
+    .lesson-save-flow-hint{
+      margin-top:8px; font-size:12px; color:#4b5563; line-height:1.4;
+    }
+
+    /* Lesson save flow guidance modal */
+    .lesson-save-guide{
+      position:fixed; inset:0; z-index:200020;
+      display:none; align-items:center; justify-content:center;
+      padding:16px; background:rgba(5,20,22,.55);
+    }
+    .lesson-save-guide.is-open{ display:flex; }
+    .lesson-save-guide-card{
+      width:min(460px,100%); background:#fff; border-radius:20px;
+      box-shadow:0 20px 60px rgba(0,0,0,.35); overflow:hidden;
+    }
+    .lesson-save-guide-body{ padding:24px 24px 8px; }
+    .lesson-save-guide-body h3{
+      margin:0 0 8px; font-size:20px; font-weight:800; color:#111;
+    }
+    .lesson-save-guide-body p{
+      margin:0 0 14px; font-size:14px; color:#4b5563; line-height:1.45;
+    }
+    .lesson-save-guide-list{
+      margin:0; padding:0; list-style:none; display:grid; gap:10px;
+    }
+    .lesson-save-guide-list li{
+      display:flex; gap:10px; align-items:flex-start;
+      padding:10px 12px; border-radius:12px; background:#f8faf9;
+      border:1px solid #e8efec;
+    }
+    .lesson-save-guide-list li.is-focus{
+      background:#eef9f5; border-color:#a7e0d2;
+    }
+    .lesson-save-guide-list .n{
+      width:24px; height:24px; border-radius:999px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      background:#0e7c6b; color:#fff; font-size:12px; font-weight:800;
+    }
+    .lesson-save-guide-list .c{ font-size:13px; color:#1f2937; line-height:1.4; }
+    .lesson-save-guide-list .c strong{ display:block; margin-bottom:2px; }
+    .lesson-save-guide-footer{
+      display:flex; justify-content:flex-end; gap:8px;
+      padding:16px 24px 20px;
+    }
+    .lesson-save-guide-footer button{
+      border:none; border-radius:10px; padding:10px 14px;
+      font-weight:700; font-size:13px; cursor:pointer;
+    }
+    .lesson-save-guide-cancel{ background:#f3f4f6; color:#374151; }
+    .lesson-save-guide-ok{ background:#0e7c6b; color:#fff; }
 
     /* Per-message Listen/Copy actions row — matches new_ui .card-actions */
     #chatMessages .msg-actions{
@@ -4055,6 +4155,18 @@
       <!-- Modern ChatGPT-style Bottom Chat Input Area: flex-shrink-0 so it stays at bottom when messages scroll -->
       <div id="chatInputArea" class="flex-shrink-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200 shadow-lg">
         <div class="max-w-4xl mx-auto px-3 md:px-4">
+          <div id="lessonSaveFlowStrip" class="lesson-save-flow" aria-live="polite">
+            <div class="lesson-save-flow-head">
+              <strong>How to save a lesson</strong>
+              <button type="button" class="lesson-save-flow-help" onclick="showLessonSaveFlowGuidance('help')">See steps</button>
+            </div>
+            <div class="lesson-save-flow-steps">
+              <div class="lesson-save-step" data-step="1"><div class="n">1</div><div class="t">Create the lesson in chat</div></div>
+              <div class="lesson-save-step" data-step="2"><div class="n">2</div><div class="t">Type “save this lesson”</div></div>
+              <div class="lesson-save-step" data-step="3"><div class="n">3</div><div class="t">Click Save → My Lessons</div></div>
+            </div>
+            <div id="lessonSaveFlowHint" class="lesson-save-flow-hint">Create a lesson first, then ask to save it in chat, then click Save.</div>
+          </div>
           <!-- Voice Input Status (hidden by default) -->
           <div id="voiceStatus" class="voice-status rounded-lg p-3 mb-3 hidden bg-blue-50 border border-blue-200">
             <div class="flex items-center justify-between">
@@ -4109,10 +4221,15 @@
             <!-- Action Buttons (Right Side - Compact on mobile) -->
             <div class="flex items-center gap-2 md:gap-4 flex-shrink-0 tt-util-bar">
               <!-- Save Lesson Button (hidden on mobile) -->
-              <button id="saveLessonBtn" onclick="saveLessonFromChat()" title="Save lesson"
+              <button id="saveLessonBtn" onclick="saveLessonFromChat()" title="Save lesson to My Lessons"
                 class="hidden md:flex items-center justify-center gap-2 text-gray-700 hover:text-primary-700 transition-colors text-sm md:text-base font-semibold"
-                aria-label="Save lesson">
+                aria-label="Save lesson to My Lessons">
                 <i class="fas fa-save"></i><span>Save</span>
+              </button>
+              <button type="button" id="saveLessonHelpBtn" onclick="showLessonSaveFlowGuidance('help')" title="How to save a lesson"
+                class="hidden md:inline-flex items-center justify-center text-primary-700 hover:text-primary-800 transition-colors text-sm font-semibold"
+                aria-label="How to save a lesson">
+                <i class="fas fa-circle-question"></i>
               </button>
 
               <!-- Download Chat Button (hidden on mobile) -->
@@ -4959,6 +5076,7 @@
 
       function setSaveLessonButtonsVisible(isVisible) {
         const saveBtn = document.getElementById('saveLessonBtn');
+        const helpBtn = document.getElementById('saveLessonHelpBtn');
         const floatingSaveItem = document.getElementById('floatingSaveLessonItem');
         if (saveBtn) {
           if (isVisible) {
@@ -4966,31 +5084,184 @@
             saveBtn.classList.add('md:flex');
           } else {
             saveBtn.classList.add('hidden');
+            saveBtn.classList.remove('md:flex');
+            saveBtn.classList.remove('save-ready-pulse');
           }
+        }
+        if (helpBtn) {
+          // Keep the help affordance visible whenever the teacher is in a lesson chat.
+          const showHelp = isVisible || !!window.currentRAGThreadId || !!(currentPDFData);
+          helpBtn.classList.toggle('hidden', !showHelp);
+          if (showHelp) helpBtn.classList.add('md:inline-flex');
+          else helpBtn.classList.remove('md:inline-flex');
         }
         if (floatingSaveItem) {
           floatingSaveItem.classList.toggle('hidden', !isVisible);
         }
+        updateLessonSaveFlowStrip();
       }
+
+      async function getLessonSaveReadiness() {
+        const localDraft = !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
+        let lastLessonText = localDraft ? String(currentLessonMarkdown).trim() : '';
+        let lessonFinalized = false;
+        if (window.currentRAGThreadId) {
+          try {
+            const res = await fetch(
+              '/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson',
+              { method: 'GET', credentials: 'include' }
+            );
+            const data = await res.json().catch(function () { return {}; });
+            if (res.ok && data && data.success) {
+              if ((data.last_lesson_text || '').trim()) {
+                lastLessonText = (data.last_lesson_text || '').trim();
+              }
+              lessonFinalized = !!data.lesson_finalized;
+            }
+          } catch (e) {
+            console.warn('Failed to evaluate lesson save readiness:', e);
+          }
+        }
+        const hasDraft = !!(lastLessonText && lastLessonText.trim());
+        let step = 1;
+        if (hasDraft && lessonFinalized) step = 3;
+        else if (hasDraft) step = 2;
+        return {
+          hasDraft: hasDraft,
+          lessonFinalized: lessonFinalized,
+          lastLessonText: lastLessonText,
+          step: step,
+          canSaveToMyLessons: hasDraft && lessonFinalized,
+        };
+      }
+
+      function updateLessonSaveFlowStrip(forcedStep) {
+        const strip = document.getElementById('lessonSaveFlowStrip');
+        const hint = document.getElementById('lessonSaveFlowHint');
+        if (!strip) return;
+        const inLessonChat = !!window.currentRAGThreadId || !!currentPDFData || !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
+        strip.classList.toggle('is-visible', inLessonChat && !window.currentLessonChatAlreadySaved);
+        const step = forcedStep || window._lessonSaveFlowStep || 1;
+        window._lessonSaveFlowStep = step;
+        strip.querySelectorAll('.lesson-save-step').forEach(function (el) {
+          const n = parseInt(el.getAttribute('data-step'), 10);
+          el.classList.toggle('is-active', n === step);
+          el.classList.toggle('is-done', n < step);
+        });
+        if (hint) {
+          if (step <= 1) {
+            hint.textContent = 'Step 1: Create or generate a lesson in this chat first.';
+          } else if (step === 2) {
+            hint.textContent = 'Step 2: Type “save this lesson” (or “finalize”) in chat. Chat save prepares the draft — it is not My Lessons yet.';
+          } else {
+            hint.textContent = 'Step 3: Click Save to add this lesson to My Lessons. You can create another lesson in this same chat afterward.';
+          }
+        }
+      }
+
+      function ensureLessonSaveGuideModal() {
+        let root = document.getElementById('lessonSaveGuideModal');
+        if (root) return root;
+        root = document.createElement('div');
+        root.id = 'lessonSaveGuideModal';
+        root.className = 'lesson-save-guide';
+        root.setAttribute('role', 'dialog');
+        root.setAttribute('aria-modal', 'true');
+        root.innerHTML =
+          '<div class="lesson-save-guide-card">' +
+          '<div class="lesson-save-guide-body">' +
+          '<h3 id="lessonSaveGuideTitle">How to save a lesson</h3>' +
+          '<p id="lessonSaveGuideLead">Follow these steps so the lesson reaches My Lessons.</p>' +
+          '<ol class="lesson-save-guide-list">' +
+          '<li data-step="1"><div class="n">1</div><div class="c"><strong>Create the lesson</strong>Upload a PDF / ask IQBAL AI to create the lesson in this chat.</div></li>' +
+          '<li data-step="2"><div class="n">2</div><div class="c"><strong>Ask to save in chat</strong>Type “save this lesson” so the draft is finalized. Chat confirmation is not My Lessons yet.</div></li>' +
+          '<li data-step="3"><div class="n">3</div><div class="c"><strong>Click Save</strong>Press the Save button to store it in My Lessons. You can repeat this for another lesson in the same chat.</div></li>' +
+          '</ol>' +
+          '</div>' +
+          '<div class="lesson-save-guide-footer">' +
+          '<button type="button" class="lesson-save-guide-cancel" id="lessonSaveGuideCancel">Close</button>' +
+          '<button type="button" class="lesson-save-guide-ok" id="lessonSaveGuideOk">Got it</button>' +
+          '</div></div>';
+        document.body.appendChild(root);
+        function close() {
+          root.classList.remove('is-open');
+          document.body.style.overflow = '';
+        }
+        root.addEventListener('click', function (e) {
+          if (e.target === root) close();
+        });
+        document.getElementById('lessonSaveGuideCancel').addEventListener('click', close);
+        document.getElementById('lessonSaveGuideOk').addEventListener('click', function () {
+          close();
+          const input = document.getElementById('messageInput');
+          if (input && window._lessonSaveGuideFocusChat) {
+            input.focus();
+            if (!input.value.trim() && window._lessonSaveGuidePrefill) {
+              input.value = window._lessonSaveGuidePrefill;
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }
+        });
+        return root;
+      }
+
+      function showLessonSaveFlowGuidance(reason) {
+        const root = ensureLessonSaveGuideModal();
+        const title = document.getElementById('lessonSaveGuideTitle');
+        const lead = document.getElementById('lessonSaveGuideLead');
+        const step = window._lessonSaveFlowStep || 1;
+        let focusStep = step;
+        window._lessonSaveGuideFocusChat = false;
+        window._lessonSaveGuidePrefill = '';
+
+        if (reason === 'no_content') {
+          if (title) title.textContent = 'Create a lesson before saving';
+          if (lead) lead.textContent = 'Save is for My Lessons. First create a lesson in this chat, then ask to save it, then click Save.';
+          focusStep = 1;
+        } else if (reason === 'need_chat_save') {
+          if (title) title.textContent = 'Almost — finalize in chat first';
+          if (lead) lead.textContent = 'A draft exists, but it is not ready for My Lessons yet. Type “save this lesson” in chat, wait for confirmation, then click Save.';
+          focusStep = 2;
+          window._lessonSaveGuideFocusChat = true;
+          window._lessonSaveGuidePrefill = 'save this lesson';
+        } else {
+          if (title) title.textContent = 'How to save a lesson';
+          if (lead) lead.textContent = 'Use this order every time — including when you create another lesson in the same chat.';
+        }
+
+        root.querySelectorAll('.lesson-save-guide-list li').forEach(function (el) {
+          const n = parseInt(el.getAttribute('data-step'), 10);
+          el.classList.toggle('is-focus', n === focusStep);
+        });
+        updateLessonSaveFlowStrip(focusStep);
+        root.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+      }
+      window.showLessonSaveFlowGuidance = showLessonSaveFlowGuidance;
 
       async function refreshSaveLessonAvailability() {
         if (window.currentLessonChatAlreadySaved) {
           setSaveLessonButtonsVisible(false);
+          updateLessonSaveFlowStrip(1);
           return;
         }
-        let canSave = !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
-        if (window.currentRAGThreadId) {
-          try {
-            const res = await fetch('/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson', { method: 'GET', credentials: 'include' });
-            const data = await res.json().catch(function () { return {}; });
-            if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
-              canSave = true;
-            }
-          } catch (e) {
-            console.warn('Failed to evaluate finalized lesson availability:', e);
+        const readiness = await getLessonSaveReadiness();
+        window._lessonSaveFlowStep = readiness.step;
+        // Show Save when a draft exists so premature clicks can open guidance.
+        setSaveLessonButtonsVisible(readiness.hasDraft);
+        updateLessonSaveFlowStrip(readiness.step);
+        const saveBtn = document.getElementById('saveLessonBtn');
+        if (saveBtn) {
+          if (readiness.canSaveToMyLessons) {
+            saveBtn.classList.add('save-ready-pulse');
+            saveBtn.title = 'Ready — click to save this lesson to My Lessons';
+          } else {
+            saveBtn.classList.remove('save-ready-pulse');
+            saveBtn.title = readiness.hasDraft
+              ? 'Draft ready — first type “save this lesson” in chat, then click Save'
+              : 'Save lesson to My Lessons';
           }
         }
-        setSaveLessonButtonsVisible(canSave);
       }
 
       // Save current PDF data to localStorage
@@ -5592,9 +5863,12 @@
                           <div class="pu1-field">
                               <div class="pu1-field-label">
                                 <span class="pu1-field-icon"><i class="fas fa-graduation-cap"></i></span>
-                                <span>Grade Level</span>
+                                <span>Grade Level <span class="text-red-500">*</span></span>
                               </div>
-                              <select id="lessonGrade" class="pu1-input border-2 border-emerald-600 focus:border-emerald-700">
+                              <select id="lessonGrade"
+                                      class="pu1-input border-2 border-emerald-600 focus:border-emerald-700"
+                                      onchange="clearLessonGradeFormError()"
+                                      required>
                                   <option value="">Select grade</option>
                                   <option value="1">1st Grade</option>
                                   <option value="2">2nd Grade</option>
@@ -5609,6 +5883,10 @@
                                   <option value="11">11th Grade</option>
                                   <option value="12">12th Grade</option>
                               </select>
+                              <div id="lessonGradeError" class="text-red-600 text-xs md:text-sm mt-2 hidden flex items-start gap-2 bg-red-50 p-2 md:p-3 rounded-lg border border-red-200" role="alert">
+                                  <i class="fas fa-exclamation-circle flex-shrink-0 mt-0.5 text-sm md:text-base"></i>
+                                  <span id="lessonGradeErrorText" class="font-medium"></span>
+                              </div>
                           </div>
                       </div>
 
@@ -5828,6 +6106,30 @@
         }
       }
 
+      function clearLessonGradeFormError() {
+        const wrap = document.getElementById('lessonGradeError');
+        const textEl = document.getElementById('lessonGradeErrorText');
+        const input = document.getElementById('lessonGrade');
+        if (wrap) wrap.classList.add('hidden');
+        if (textEl) textEl.textContent = '';
+        if (input) {
+          input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+          input.classList.add('border-emerald-600');
+        }
+      }
+
+      function showLessonGradeFormError(message) {
+        const wrap = document.getElementById('lessonGradeError');
+        const textEl = document.getElementById('lessonGradeErrorText');
+        const input = document.getElementById('lessonGrade');
+        if (textEl) textEl.textContent = message;
+        if (wrap) wrap.classList.remove('hidden');
+        if (input) {
+          input.classList.remove('border-emerald-600');
+          input.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+        }
+      }
+
       // Clear file selection
       function clearFileSelection() {
         const fileInput = document.getElementById('pdfFileInput');
@@ -5870,19 +6172,22 @@
         const lessonTitle = lessonTitleInput.value.trim();
         const lessonContext = lessonContextInput ? lessonContextInput.value.trim() : '';
         const lessonSubject = lessonSubjectInput ? lessonSubjectInput.value : 'General';
-        const lessonGrade = lessonGradeInput ? lessonGradeInput.value : 'General';
+        const lessonGrade = lessonGradeInput ? String(lessonGradeInput.value || '').trim() : '';
         const lessonMode = lessonModeInput ? lessonModeInput.value : 'generate';
 
         // Validation
+        clearLessonTitleFormError();
+        clearLessonGradeFormError();
+
         if (!lessonTitle) {
-          alert('Please enter a lesson title.');
+          showLessonTitleFormError('Lesson title is required.');
           lessonTitleInput.focus();
           return;
         }
 
         if (!lessonGrade) {
-          alert('Please select the grade that should receive this lesson.');
-          lessonGradeInput.focus();
+          showLessonGradeFormError('Grade is required.');
+          if (lessonGradeInput) lessonGradeInput.focus();
           return;
         }
 
@@ -7296,15 +7601,42 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function setViewLessonDraftMarkdown(markdown, emptyHtml) {
+        const raw = markdown == null ? '' : String(markdown);
+        window._viewLessonDraftMarkdown = raw;
+        window._viewLessonDraftDirty = false;
+        const draftEl = document.getElementById('viewLessonDraft');
+        if (!draftEl) return;
+        draftEl.setAttribute('data-raw-markdown', raw);
+        renderLessonMarkdown(
+          draftEl,
+          raw,
+          emptyHtml || '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
+        );
+      }
+
+      function getViewLessonDraftMarkdown() {
+        const draftEl = document.getElementById('viewLessonDraft');
+        const stored = (
+          window._viewLessonDraftMarkdown != null
+            ? String(window._viewLessonDraftMarkdown)
+            : (draftEl && draftEl.getAttribute('data-raw-markdown')) || ''
+        ).trim();
+        // Prefer stored markdown (AI enhance / loaded draft) so finalize does not
+        // strip headings via contenteditable innerText.
+        if (stored && !window._viewLessonDraftDirty) {
+          return stored;
+        }
+        return draftEl ? (draftEl.innerText || '').trim() : '';
+      }
+
       function clearViewLessonDraftEditor() {
         const draftEl = document.getElementById('viewLessonDraft');
         if (draftEl) {
-          renderLessonMarkdown(
-            draftEl,
-            '',
-            '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
-          );
+          setViewLessonDraftMarkdown('');
         }
+        window._viewLessonDraftMarkdown = '';
+        window._viewLessonDraftDirty = false;
         const promptEl = document.getElementById('viewLessonPrompt');
         if (promptEl) promptEl.value = '';
         setFinalizeButtonVisible(false);
@@ -7596,18 +7928,17 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             } catch (e) {
               console.warn('get_draft error:', e);
             }
-            renderLessonMarkdown(
-              draftTextarea,
-              draftValue,
-              '<span class="text-gray-400 italic">Draft will appear here after applying AI or making manual edits...</span>'
-            );
-            // Finalize button should be hidden until user edits the draft.
-            setFinalizeButtonVisible(false);
+            setViewLessonDraftMarkdown(draftValue);
+            // Finalize button should be hidden until there is draft content / edits.
+            setFinalizeButtonVisible(!!String(draftValue || '').trim());
             draftTextarea.oninput = function () {
+              // Manual DOM edits no longer match stored markdown — fall back to
+              // editor text on save so user changes are not discarded.
+              window._viewLessonDraftDirty = true;
               setFinalizeButtonVisible(true);
             };
           } else if (draftTextarea) {
-            renderLessonMarkdown(draftTextarea, '');
+            setViewLessonDraftMarkdown('');
             setFinalizeButtonVisible(false);
           }
 
@@ -7926,9 +8257,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           const improved = data.draft_content || '';
           const draftEl = document.getElementById('viewLessonDraft');
           if (draftEl) {
-            // Render improved content as formatted HTML while preserving text content for backend via innerText
-            renderLessonMarkdown(draftEl, improved);
-            // AI-generated draft is a valid draft change; allow finalization immediately.
+            // Keep markdown source of truth — do not rely on contenteditable
+            // innerText later (it strips # / ** / list markers).
+            setViewLessonDraftMarkdown(improved);
             setFinalizeButtonVisible(true);
           }
 
@@ -7952,8 +8283,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = draftEl ? (draftEl.innerText || '').trim() : '';
+        const draftContent = getViewLessonDraftMarkdown();
 
         try {
           const response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
@@ -7968,6 +8298,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             throw new Error(data.error || 'Failed to save draft');
           }
 
+          // Keep local markdown in sync with what we just persisted.
+          if (!window._viewLessonDraftDirty) {
+            window._viewLessonDraftMarkdown = draftContent;
+          }
           showToast('Draft saved!', 'success', 2000);
         } catch (e) {
           console.error('saveLessonDraftVisible error:', e);
@@ -7980,8 +8314,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const lessonId = window.currentViewLessonId;
         if (!lessonId) return;
 
-        const draftEl = document.getElementById('viewLessonDraft');
-        const draftContent = (draftEl ? draftEl.innerText : '').trim();
+        const draftContent = getViewLessonDraftMarkdown();
         if (!draftContent) {
           showToast('Draft is empty. Please edit the content before finalizing.', 'warning', 3000);
           return;
@@ -8000,7 +8333,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         try {
-          // First, persist the current draft to the backend
+          // Persist markdown (not contenteditable innerText) so v2 keeps formatting.
           let response = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -8578,7 +8911,18 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         if (lesson) {
           const subject = lesson.focus_area || lesson.focusArea || 'General';
-          const grade = lesson.grade_level || lesson.gradeLevel || 'General';
+          const rawGrade = String(lesson.grade_level || lesson.gradeLevel || '').trim();
+          const gradeDigits = (rawGrade.match(/\d{1,2}/) || [])[0] || '';
+          const grade = (gradeDigits && Number(gradeDigits) >= 1 && Number(gradeDigits) <= 12)
+            ? String(Number(gradeDigits))
+            : '';
+          const gradeOptions = [1,2,3,4,5,6,7,8,9,10,11,12].map(function (n) {
+            const label = n === 1 ? '1st Grade' : n === 2 ? '2nd Grade' : n === 3 ? '3rd Grade' : (n + 'th Grade');
+            return '<option value="' + n + '"' + (String(grade) === String(n) ? ' selected' : '') + '>' + label + '</option>';
+          }).join('');
+          const legacyGradeOption = (!grade && rawGrade)
+            ? ('<option value="' + rawGrade.replace(/"/g, '&quot;') + '" selected>' + rawGrade.replace(/</g, '') + ' (current)</option>')
+            : '';
 
           // Show edit modal
           const modalHtml = `
@@ -8623,11 +8967,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                   <div class="elm-field-content">
                     <label>Grade Level</label>
                     <select id="editLessonGrade">
-                      <option value="General" ${grade === 'General' ? 'selected' : ''}>General</option>
-                      <option value="Elementary" ${grade === 'Elementary' ? 'selected' : ''}>Elementary</option>
-                      <option value="Middle School" ${grade === 'Middle School' ? 'selected' : ''}>Middle School</option>
-                      <option value="High School" ${grade === 'High School' ? 'selected' : ''}>High School</option>
-                      <option value="College" ${grade === 'College' ? 'selected' : ''}>College</option>
+                      <option value="">Select grade</option>
+                      ${legacyGradeOption}
+                      ${gradeOptions}
                     </select>
                   </div>
                 </div>
@@ -8657,10 +8999,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       async function saveLessonEdit(lessonId) {
         const title = (document.getElementById('editLessonTitle')?.value || '').trim();
         const subject = document.getElementById('editLessonSubject')?.value || 'General';
-        const grade = document.getElementById('editLessonGrade')?.value || 'General';
+        const grade = (document.getElementById('editLessonGrade')?.value || '').trim();
 
         if (!title) {
           showToast('Lesson title is required.', 'warning', 3000);
+          return;
+        }
+        if (!grade) {
+          showToast('Grade is required.', 'warning', 3000);
           return;
         }
 
@@ -10168,10 +10514,24 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           showToast('This lesson is already saved in My Lessons.', 'info', 2500);
           return;
         }
-        let pdfData = currentPDFData;
-        let lessonContent = currentLessonMarkdown;
 
-        // When we have a RAG thread, always try to get the actual AI lesson from backend first (not the upload template)
+        const readiness = await getLessonSaveReadiness();
+        window._lessonSaveFlowStep = readiness.step;
+        updateLessonSaveFlowStrip(readiness.step);
+
+        if (!readiness.hasDraft) {
+          showLessonSaveFlowGuidance('no_content');
+          return;
+        }
+
+        if (!readiness.lessonFinalized) {
+          showLessonSaveFlowGuidance('need_chat_save');
+          return;
+        }
+
+        let pdfData = currentPDFData;
+        let lessonContent = readiness.lastLessonText;
+
         if (window.currentRAGThreadId) {
           try {
             const res = await fetch('/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson', { method: 'GET', credentials: 'include' });
@@ -10179,6 +10539,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
               lessonContent = (data.last_lesson_text || '').trim();
               pdfData = pdfData || { title: (data.lesson_title || '').trim() || 'Lesson from RAG', subject: 'General', grade: 'General' };
+              if ((data.lesson_title || '').trim() && pdfData && !pdfData.title) {
+                pdfData.title = (data.lesson_title || '').trim();
+              }
             }
           } catch (e) {
             console.warn('Failed to fetch RAG finalized lesson:', e);
@@ -10186,7 +10549,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         if (!lessonContent) {
-          showToast('No lesson to save. Please upload a PDF, create a lesson, or finalize a lesson in chat first.', 'warning', 3000);
+          showLessonSaveFlowGuidance('no_content');
           return;
         }
 
@@ -10318,6 +10681,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
           addAssistantMessage(formatted);
           await refreshSaveLessonAvailability();
+          if (window._lessonSaveFlowStep === 3) {
+            showToast('Ready for My Lessons — click Save (step 3). Chat finalize alone does not finish this.', 'info', 4500);
+          } else if (window._lessonSaveFlowStep === 2) {
+            updateLessonSaveFlowStrip(2);
+          } else if (window._lessonSaveFlowStep === 1 && window.currentRAGThreadId) {
+            updateLessonSaveFlowStrip(1);
+          }
         } catch (e) {
           if (currentChatId === requestChatId) {
             const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
@@ -10896,7 +11266,15 @@ To continue your learning journey:
 
         const finalTitle = getUniqueLessonTitle(baseTitle);
         const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
-        const gradeLevel = (pdfData && pdfData.grade) ? String(pdfData.grade) : (pdfData && pdfData.gradeLevel) || 'General';
+        const gradeLevel = (
+          (pdfData && pdfData.grade) ? String(pdfData.grade).trim()
+            : (pdfData && pdfData.gradeLevel) ? String(pdfData.gradeLevel).trim()
+              : ''
+        );
+        if (!gradeLevel) {
+          showToast('Grade is required.', 'error', 3500);
+          return;
+        }
         const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
 
         showToast('Saving lesson to My Lessons...', 'info', 2000);
@@ -10970,6 +11348,15 @@ To continue your learning journey:
             currentLessonMarkdown = null;
             clearPDFDataFromStorage();
             setSaveLessonButtonsVisible(false);
+            window._lessonSaveFlowStep = 1;
+            updateLessonSaveFlowStrip(1);
+            const strip = document.getElementById('lessonSaveFlowStrip');
+            const hint = document.getElementById('lessonSaveFlowHint');
+            if (strip) strip.classList.add('is-visible');
+            if (hint) {
+              hint.textContent = 'Saved to My Lessons. Create another lesson in this chat, ask to save it, then click Save again.';
+            }
+            showToast('Tip: For the next lesson, create → type “save this lesson” → click Save.', 'info', 4500);
           } else {
             showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
           }
@@ -13075,6 +13462,14 @@ Align everything with the lesson objectives and do not invent missing informatio
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
       }
+      var diagName = (file.name || '').toLowerCase();
+      var targetName = (targetFile.name || '').toLowerCase();
+      if (!diagName.endsWith('.pdf') || !targetName.endsWith('.pdf')) {
+        document.getElementById('lmsDiagStatus').textContent =
+          'Error: This document does not match the required assessment format. Please upload a valid document.';
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
       const btn = document.getElementById('lmsDiagUploadBtn');
       const status = document.getElementById('lmsDiagStatus');
       const banner = document.getElementById('lmsDiagSuccessBanner');
@@ -13321,6 +13716,8 @@ Align everything with the lesson objectives and do not invent missing informatio
       const title = document.getElementById('lmsQuizTitle').value.trim();
       const file = document.getElementById('lmsQuizPdfFile').files[0];
       const countEl = document.getElementById('lmsQuizMcqCount');
+      const btn = document.getElementById('lmsQuizSubmitBtn');
+      const status = document.getElementById('lmsQuizStatus');
       let questionCount = parseInt(countEl && countEl.value, 10);
       if (!Number.isFinite(questionCount) || questionCount < 1) questionCount = 10;
       if (questionCount > 40) questionCount = 40;
@@ -13328,8 +13725,12 @@ Align everything with the lesson objectives and do not invent missing informatio
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
       }
-      const btn = document.getElementById('lmsQuizSubmitBtn');
-      const status = document.getElementById('lmsQuizStatus');
+      var name = (file.name || '').toLowerCase();
+      if (!name.endsWith('.pdf')) {
+        if (status) status.textContent = 'Error: This document does not match the required assessment format. Please upload a valid document.';
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
       btn.disabled = true;
       status.textContent = 'Uploading PDF and generating ' + questionCount + ' MCQs...';
       const fd = new FormData();
@@ -13339,7 +13740,11 @@ Align everything with the lesson objectives and do not invent missing informatio
       try {
         const res = await fetch('/api/lms/quizzes/from-pdf', { method: 'POST', body: fd, credentials: 'include' });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || data.message || 'Upload failed');
+        if (!res.ok) {
+          var errMsg = (data.error && data.error.message) || data.message || 'Upload failed';
+          if (typeof errMsg !== 'string') errMsg = 'Upload failed';
+          throw new Error(errMsg);
+        }
         _lmsCurrentAssessmentId = data.data?.assessment_id || data.assessment_id;
         status.textContent = data.data?.async ? 'Processing in background...' : 'Conversion complete.';
         startLmsPoll();

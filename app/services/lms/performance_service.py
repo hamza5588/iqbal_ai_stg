@@ -311,13 +311,20 @@ def _topic_buckets_from_diagnostic_analysis(attempt, assessment) -> Optional[dic
 
     buckets: dict[int, dict] = {}
     for area in areas:
+        # Always resolve from the student-visible area name so synonym merges
+        # in a stale cache cannot collapse distinct topics for teacher analytics.
+        name = (area.get("topic_name") or "").strip()
         tid = area.get("topic_id")
+        if name:
+            topic = get_or_create_topic_from_pdf_label(name)
+            if topic:
+                tid = topic.id
         if not tid:
             continue
         graded = [qid for qid in (area.get("question_ids") or []) if qid in correct_by_q]
         if not graded:
             continue
-        bucket = buckets.setdefault(tid, {"correct": 0, "total": 0})
+        bucket = buckets.setdefault(int(tid), {"correct": 0, "total": 0})
         bucket["total"] += len(graded)
         bucket["correct"] += sum(1 for qid in graded if correct_by_q[qid])
     return buckets or None
@@ -391,6 +398,7 @@ def update_topic_scores_from_attempt(attempt_id: int) -> None:
 
 
 def get_student_mastery(student_id: int) -> List[dict]:
+    maybe_rebuild_stale_mastery(student_id)
     db = get_db()
     rows = (
         db.query(StudentTopicScore)
@@ -434,6 +442,52 @@ def get_overall_progress(student_id: int) -> float:
     return round(weighted / total_weight, 2)
 
 
+def topic_breakdown_for_attempt(attempt_id: int) -> List[dict]:
+    """Per-topic correct/total/% for a submitted attempt (diagnostic or quiz).
+
+    Uses the same resolution path as ``update_topic_scores_from_attempt`` so
+    results UI, mastery writes, and progress charts stay aligned.
+    """
+    db = get_db()
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt or attempt.status != "submitted":
+        return []
+
+    assessment = get_assessment(attempt.assessment_id)
+    is_diagnostic = assessment.assessment_type == "diagnostic"
+    if is_diagnostic:
+        repair_diagnostic_topic_meta(assessment)
+        assessment = get_assessment(attempt.assessment_id)
+
+    timed_out = bool(getattr(attempt, "timed_out", False))
+    by_topic: Optional[dict[int, dict]] = None
+    if is_diagnostic and not timed_out:
+        by_topic = _topic_buckets_from_diagnostic_analysis(attempt, assessment)
+    if by_topic is None:
+        by_topic = _topic_buckets_from_question_resolution(
+            attempt, assessment, exclude_unanswered=timed_out
+        )
+
+    out: List[dict] = []
+    for tid, stats in (by_topic or {}).items():
+        total = int(stats.get("total") or 0)
+        correct = int(stats.get("correct") or 0)
+        if total <= 0:
+            continue
+        pct = round(100.0 * correct / total, 2)
+        out.append(
+            {
+                "topic_id": tid,
+                "topic_name": _topic_display_name(tid),
+                "correct": correct,
+                "total": total,
+                "score_percent": pct,
+            }
+        )
+    out.sort(key=lambda row: (row.get("topic_name") or "").lower())
+    return out
+
+
 def analyze_attempt(attempt_id: int) -> dict:
     db = get_db()
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
@@ -446,37 +500,23 @@ def analyze_attempt(attempt_id: int) -> dict:
 
         return analyze_diagnostic_attempt(attempt_id)
 
-    from app.services.lms.attempt_service import attempt_question_ids
-
-    q_ids = attempt_question_ids(attempt)
-    questions = db.query(Question).filter(Question.id.in_(q_ids)).all()
-    answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
-    ans_map = {a.question_id: a for a in answers}
-
-    by_topic: dict[int, dict] = {}
-    for q in questions:
-        topic_id = _resolve_question_topic_id(q, assessment)
-        if not topic_id:
-            continue
-        bucket = by_topic.setdefault(
-            topic_id, {"topic_id": topic_id, "correct": 0, "total": 0}
-        )
-        bucket["total"] += 1
-        ans = ans_map.get(q.id)
-        if ans and ans.is_correct:
-            bucket["correct"] += 1
-
-    weak, strong = [], []
-    for tid, stats in by_topic.items():
-        pct = 100.0 * stats["correct"] / stats["total"] if stats["total"] else 0.0
-        topic_name = _topic_display_name(tid)
-        entry = {"topic_id": tid, "topic_name": topic_name, "score_percent": round(pct, 2)}
-        if pct < WEAK_THRESHOLD:
+    breakdown = topic_breakdown_for_attempt(attempt_id)
+    weak, strong, all_topics = [], [], []
+    for row in breakdown:
+        entry = {
+            "topic_id": row["topic_id"],
+            "topic_name": row["topic_name"],
+            "score_percent": row["score_percent"],
+            "correct": row["correct"],
+            "total": row["total"],
+        }
+        all_topics.append(entry)
+        if row["score_percent"] < WEAK_THRESHOLD:
             weak.append(entry)
-        elif pct >= 80.0:
+        elif row["score_percent"] >= 80.0:
             strong.append(entry)
 
-    return {"weak_topics": weak, "strong_topics": strong}
+    return {"weak_topics": weak, "strong_topics": strong, "all_topics": all_topics}
 
 
 def get_diagnostic_weak_topics(student_id: int, assessment_id: Optional[int] = None) -> List[dict]:
@@ -531,9 +571,14 @@ def get_weak_topics_for_student(student_id: int) -> List[dict]:
 # fully re-derives the profile; _needs_mastery_rebuild() detects the
 # stale state cheaply so get_student_dashboard() can self-heal an account
 # once on next load.
+#
+# Bumped again for BUG-02 (2026-09-21): aggressive synonym merge in
+# topic_resolver collapsed distinct assessment topics (e.g. Polynomials /
+# System of Equations / Sequences and Series) so teacher analytics showed
+# fewer rows than student diagnostic results.
 from datetime import datetime as _dt
 
-MASTERY_FIX_DEPLOYED_AT = _dt(2026, 9, 4, 4, 22, 0)
+MASTERY_FIX_DEPLOYED_AT = _dt(2026, 9, 21, 0, 0, 0)
 
 
 def _needs_mastery_rebuild(student_id: int) -> bool:

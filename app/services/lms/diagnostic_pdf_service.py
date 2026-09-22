@@ -215,6 +215,14 @@ def upload_diagnostic_bundle(
 
         raise LMSValidationError("Diagnostic Q&A PDF is empty")
 
+    from app.services.quiz.assessment_doc_validation import assert_supported_assessment_file
+
+    assert_supported_assessment_file(
+        diagnostic_filename,
+        diagnostic_file_bytes,
+        label="Diagnostic Q&A PDF",
+    )
+
     grade = assessment_service.normalize_grade_level(grade_level)
     if not grade:
         raise LMSValidationError("Grade level is required for diagnostic upload")
@@ -258,6 +266,9 @@ def upload_diagnostic_bundle(
         tfname = tgt.get("filename") or f"target_{idx + 1}.pdf"
         if not tbytes:
             continue
+        from app.services.quiz.assessment_doc_validation import assert_supported_assessment_file
+
+        assert_supported_assessment_file(tfname, tbytes, label="Target content PDF")
         thread_id = _ingest_target_pdf(
             teacher_id,
             tbytes,

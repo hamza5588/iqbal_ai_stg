@@ -451,9 +451,17 @@
           onclick = ' onclick="resumeLmsDiagnostic(' + a.assessment_id + ')"';
         }
         var label = a.title || (isDiag ? 'Diagnostic Assessment' : 'Quiz #' + a.assessment_id);
-        var statusLabel = a.score_percent != null
-          ? (a.score_percent + '%')
-          : (a.status === 'in_progress' ? 'In progress — tap to continue' : a.status);
+        var statusLabel;
+        if (a.status === 'submitted' && a.score != null && a.max_score != null) {
+          var pct = a.score_percent != null ? a.score_percent : Math.round(1000 * a.score / a.max_score) / 10;
+          statusLabel = Math.round(a.score) + '/' + Math.round(a.max_score) + ' — ' + pct + '%';
+        } else if (a.score_percent != null) {
+          statusLabel = a.score_percent + '%';
+        } else if (a.status === 'in_progress') {
+          statusLabel = 'In progress — tap to continue';
+        } else {
+          statusLabel = a.status;
+        }
         return '<li class="lms-card" style="' + style + '"' + onclick + '>' + escapeHtml(label) +
           ' — <strong>' + escapeHtml(String(statusLabel)) + '</strong></li>';
       }).join('') + '</ul>';
@@ -473,17 +481,28 @@
       var html = '<div class="lms-diag-score">' +
         '<div class="lms-diag-score-num">' + (pct != null ? pct + '%' : '—') + '</div>' +
         '<p class="lms-status">' +
-        (hasCounts ? '<strong>' + Math.round(r.score) + ' of ' + Math.round(r.max_score) + ' correct</strong>' : 'Score') +
+        (hasCounts ? '<strong>' + Math.round(r.score) + '/' + Math.round(r.max_score) + ' — ' +
+          (r.score_percent != null ? r.score_percent : pct) + '%</strong>' : 'Score') +
         (r.submitted_at ? ' &middot; ' + new Date(r.submitted_at).toLocaleString() : '') + '</p>' +
         (pct != null ? '<div class="lms-diag-score-bar"><div class="lms-diag-score-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></div></div>' : '') +
         '</div>';
       if (r.time_over) {
         html += '<p class="lms-status" style="text-align:center;">' + escapeHtml(r.message || 'Time expired before submission.') + '</p>';
       }
+      if (typeof lmsFormatTopicBreakdownHtml === 'function') {
+        html += lmsFormatTopicBreakdownHtml(r, {
+          title: r.assessment_type === 'diagnostic' ? 'Results by topic' : 'Topic-wise performance'
+        });
+      }
       function topicChip(t, cls) {
         var p = Math.round(t.score_percent || 0);
-        var n = (t.question_ids && t.question_ids.length) || 0;
-        var frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+        var frac = '';
+        if (t.correct != null && t.total != null) {
+          frac = Math.round(t.correct) + ' of ' + Math.round(t.total) + ' correct';
+        } else {
+          var n = (t.question_ids && t.question_ids.length) || 0;
+          frac = n ? (Math.round((p * n) / 100) + ' of ' + n + ' correct') : '';
+        }
         return '<div class="lms-topic-chip ' + cls + '"><strong>' + p + '%</strong>' +
           escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) +
           (frac ? '<span class="lms-topic-chip-frac">' + frac + '</span>' : '') + '</div>';
