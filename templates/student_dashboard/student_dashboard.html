@@ -8334,6 +8334,27 @@
       renderLmsQuestion();
     }
     async function submitLmsQuiz() {
+      var totalQ = (_lmsQuizQuestions && _lmsQuizQuestions.length) || 0;
+      var answeredQ = Object.keys(_lmsSavedAnswers || {}).length;
+      var missingQ = totalQ - answeredQ;
+      if (missingQ > 0) {
+        var quizMsg =
+          'You have ' + missingQ + ' unanswered question' + (missingQ === 1 ? '' : 's') +
+          '. Are you sure you want to submit?\n\n' +
+          'Unanswered questions score 0. Your answered questions still count.';
+        var quizOk;
+        if (typeof showInAppConfirm === 'function') {
+          quizOk = await showInAppConfirm(quizMsg, {
+            title: 'Submit quiz?',
+            confirmLabel: 'Submit',
+            cancelLabel: 'Go back',
+            iconClass: 'fas fa-exclamation-circle'
+          });
+        } else {
+          quizOk = window.confirm(quizMsg);
+        }
+        if (!quizOk) return;
+      }
       if (typeof showWaitOverlay === 'function') showWaitOverlay('Submitting quiz...');
       try {
         const res = await fetch('/api/lms/attempts/' + _lmsAttemptId + '/submit', {
@@ -8344,12 +8365,15 @@
         document.getElementById('lmsQuizTaking').classList.add('hidden');
         const resultEl = document.getElementById('lmsQuizResult');
         resultEl.classList.remove('hidden');
+        var unansweredNote = (d.unanswered_count > 0)
+          ? (' · ' + d.unanswered_count + ' unanswered scored as 0')
+          : '';
         var topicHtml = (typeof lmsFormatTopicBreakdownHtml === 'function')
           ? lmsFormatTopicBreakdownHtml(d, { title: 'Topic-wise performance' })
           : '';
         var overallLine = (d.score != null && d.max_score != null)
-          ? (Math.round(d.score) + '/' + Math.round(d.max_score) + ' — ' + d.score_percent + '%')
-          : ((d.score_percent != null ? d.score_percent + '%' : '—'));
+          ? (Math.round(d.score) + '/' + Math.round(d.max_score) + ' — ' + d.score_percent + '%' + unansweredNote)
+          : ((d.score_percent != null ? d.score_percent + '%' : '—') + unansweredNote);
         resultEl.innerHTML = '<h3 style="font-weight:700;">Quiz Complete</h3>' +
           '<p><strong>' + overallLine + '</strong></p>' +
           topicHtml +
