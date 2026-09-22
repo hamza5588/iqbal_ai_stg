@@ -20,6 +20,7 @@ from app.utils.rag_service import (
 )
 from app.utils.groq_rate_limit import GroqRateLimitError, GroqBusyError
 from app.utils.chat_lock import acquire_chat_lock, release_chat_lock
+from app.utils.chat_progress import clear_progress
 from app.utils.db import get_db
 from app.models.database_models import RAGThread, RAGPrompt, UserDocument, RAGChunk, RAGHeading
 from app.services.chat_service import ChatService
@@ -1656,9 +1657,21 @@ def chat():
                 'message': response_content,
                 'thread_id': thread_id,
                 'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-                'has_document': thread_has_document(thread_id)
+                'has_document': thread_has_document(thread_id),
+                **(
+                    {'code': 'TPM_RATE_LIMITED'}
+                    if (
+                        'token limit exceeded' in (response_content or '').lower()
+                        or 'rate limit reached' in (response_content or '').lower()
+                    )
+                    else {}
+                ),
             })
         finally:
+            try:
+                clear_progress(str(thread_id) if thread_id else "")
+            except Exception:
+                pass
             release_chat_lock(chat_lock_handle)
 
     except GroqRateLimitError as rl_exc:

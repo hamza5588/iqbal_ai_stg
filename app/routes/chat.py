@@ -1865,7 +1865,10 @@ def get_user_info():
 @login_required
 def speech_to_text():
     """
-    Convert uploaded speech audio to text using local Whisper base model.
+    Convert uploaded speech audio to text.
+
+    STT_PROVIDER=openai (default) uses paid OpenAI Whisper.
+    STT_PROVIDER=local uses the on-server Whisper base model.
 
     Expects multipart/form-data with field "audio".
     Returns JSON: {"text": "..."} on success.
@@ -1880,23 +1883,35 @@ def speech_to_text():
 
         from tempfile import NamedTemporaryFile
 
-        model = _get_whisper_model()
-        if model is None:
-            return jsonify({'error': 'Speech-to-text unavailable (model could not be loaded)'}), 503
-
+        provider = (os.getenv("STT_PROVIDER") or "openai").strip().lower()
         tmp_path = None
         try:
             with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
                 audio_file.save(tmp.name)
                 tmp_path = tmp.name
 
-            result = model.transcribe(
-                tmp_path,
-                fp16=False,      # important if no GPU
-                language="en"    # optional but faster if known
-            )
+            if provider == "openai":
+                client = _get_openai_client()
+                with open(tmp_path, "rb") as f:
+                    transcription = client.audio.transcriptions.create(
+                        model=os.getenv("OPENAI_STT_MODEL", "whisper-1"),
+                        file=f,
+                        response_format="json",
+                    )
+                text = (getattr(transcription, "text", None) or "").strip()
+                if not text and isinstance(transcription, dict):
+                    text = (transcription.get("text") or "").strip()
+            else:
+                model = _get_whisper_model()
+                if model is None:
+                    return jsonify({'error': 'Speech-to-text unavailable (model could not be loaded)'}), 503
+                result = model.transcribe(
+                    tmp_path,
+                    fp16=False,
+                    language="en"
+                )
+                text = (result.get("text") or "").strip()
 
-            text = result.get("text", "").strip()
             if not text:
                 return jsonify({'error': 'Transcription failed'}), 500
 
@@ -2008,7 +2023,10 @@ def clean_text_for_tts(text: str) -> str:
 @login_required
 def text_to_speech():
     """
-    Convert text to speech using gTTS.
+    Convert text to speech.
+
+    TTS_PROVIDER=openai (default) uses paid OpenAI TTS.
+    TTS_PROVIDER=local uses gTTS.
     Cleans symbols before sending text to TTS.
     """
     try:
@@ -2020,6 +2038,26 @@ def text_to_speech():
 
         # ✅ Clean text before TTS
         text = clean_text_for_tts(text)
+
+        provider = (os.getenv("TTS_PROVIDER") or "openai").strip().lower()
+        if provider == "openai":
+            client = _get_openai_client()
+            speech = client.audio.speech.create(
+                model=os.getenv("OPENAI_TTS_MODEL", "tts-1"),
+                voice=os.getenv("OPENAI_TTS_VOICE", "alloy"),
+                input=text,
+            )
+            audio_bytes = getattr(speech, "content", None)
+            if audio_bytes is None and hasattr(speech, "read"):
+                audio_bytes = speech.read()
+            audio_fp = BytesIO(audio_bytes or b"")
+            audio_fp.seek(0)
+            return send_file(
+                audio_fp,
+                mimetype='audio/mpeg',
+                as_attachment=False,
+                download_name='tts.mp3'
+            )
 
         # Detect language; fallback to English
         try:
