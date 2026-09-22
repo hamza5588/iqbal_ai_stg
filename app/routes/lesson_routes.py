@@ -472,6 +472,25 @@ def create_lesson():
         logger.error(f"Exception details:", exc_info=True)
         return jsonify({'error': f'Failed to process request: {str(e)}'}), 500
 
+
+def _find_existing_same_lesson_in_thread(teacher_id, rag_thread_id, content):
+    """Return the saved lesson in this thread that ``content`` is an edit of, if any."""
+    if not rag_thread_id or not (content or "").strip():
+        return None
+    for candidate in LessonModel.get_lessons_by_rag_thread_id(teacher_id, rag_thread_id):
+        if is_likely_same_lesson(candidate.get('content'), content):
+            return candidate
+    return None
+
+
+def _lesson_name_conflict_payload():
+    return {
+        'error': 'This lesson title is already used in this conversation. Please choose a different title.',
+        'code': 'LESSON_NAME_CONFLICT',
+        'name_conflict': True,
+    }
+
+
 @bp.route('/create', methods=['POST'])
 @login_required
 def create_lesson_simple():
@@ -520,23 +539,13 @@ def create_lesson_simple():
         # A thread can already have several saved lessons (save A, then generate B in the
         # same chat). Match against every row for this thread, not just the newest, so a
         # re-save of A after B exists still updates A instead of inserting a third copy.
-        existing_lesson = None
-        if rag_thread_id:
-            for candidate in LessonModel.get_lessons_by_rag_thread_id(
-                session['user_id'], rag_thread_id
-            ):
-                if is_likely_same_lesson(candidate.get('content'), content):
-                    existing_lesson = candidate
-                    break
+        existing_lesson = _find_existing_same_lesson_in_thread(
+            session['user_id'], rag_thread_id, content
+        )
         if existing_lesson:
-            # Deliberately keep the EXISTING title rather than the incoming one: the frontend's
-            # client-side uniqueness check (getUniqueLessonTitle in teacher_dashboard.html) has
-            # no way to know in advance that this save will become an update rather than a new
-            # lesson, so on a re-save it sees the original title as "already used" (by this very
-            # lesson) and appends "- Lesson Saved" / "- Lesson Saved 2" / etc. each time. Since
-            # this is an update to the SAME lesson, not a new one, that auto-suffixed title must
-            # never overwrite the real one - re-saving an edited lesson should update its
-            # content, not make its name grow a new suffix on every save.
+            # Keep the EXISTING title rather than the incoming one. The frontend may
+            # send a newly typed name only when creating a *different* lesson; a
+            # re-save of this same lesson must not rename it.
             updated = LessonModel(existing_lesson['id']).update_lesson(
                 summary=summary or f"Lesson on {focus_area} for {grade_level}",
                 content=content,
@@ -556,9 +565,11 @@ def create_lesson_simple():
                 'updated_existing': True,
             })
 
-        # Check if lesson title already exists for this teacher
-        if LessonModel.check_title_exists(session['user_id'], title):
-            return jsonify({'error': 'This lesson title is already used. Please choose a different title.'}), 400
+        # New lesson in this thread: uniqueness is (thread_id + lesson name). Returning a
+        # structured conflict (not a generic 400) lets the frontend prompt for a unique
+        # name instead of failing the save with an error toast.
+        if LessonModel.check_title_exists(session['user_id'], title, rag_thread_id=rag_thread_id):
+            return jsonify(_lesson_name_conflict_payload()), 409
 
         # Create the lesson
         lesson_id = LessonModel.create_lesson(
@@ -591,6 +602,55 @@ def create_lesson_simple():
     except Exception as e:
         logger.error(f"Error creating lesson: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to create lesson: {str(e)}'}), 500
+
+@bp.route('/check_save_conflict', methods=['POST'])
+@login_required
+def check_save_conflict():
+    """Pre-check whether saving this lesson would collide on name in the current thread.
+
+    Distinguishes a re-save of an already-saved lesson (content is an edit of an
+    existing row in this thread — no conflict) from a second, different lesson that
+    reuses the same title (conflict — the client should prompt for a unique name).
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        data = request.get_json() or {}
+        title = (data.get('title') or '').strip()
+        content = (data.get('content') or '').strip()
+        rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip() or None
+
+        if not title:
+            return jsonify({
+                'conflict': True,
+                'empty_title': True,
+                'would_update': False,
+                'code': 'EMPTY_LESSON_NAME',
+            })
+
+        existing_same = _find_existing_same_lesson_in_thread(
+            session['user_id'], rag_thread_id, content
+        )
+        if existing_same:
+            return jsonify({
+                'conflict': False,
+                'would_update': True,
+                'name_conflict': False,
+            })
+
+        exists = LessonModel.check_title_exists(
+            session['user_id'], title, rag_thread_id=rag_thread_id
+        )
+        return jsonify({
+            'conflict': bool(exists),
+            'would_update': False,
+            'name_conflict': bool(exists),
+            'code': 'LESSON_NAME_CONFLICT' if exists else None,
+        })
+    except Exception as e:
+        logger.error(f"Error checking lesson save conflict: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Failed to check lesson name: {str(e)}'}), 500
 
 @bp.route('/ask_question_general', methods=['POST'])
 @login_required
@@ -1568,16 +1628,21 @@ def create_lesson_version(lesson_id):
 @bp.route('/check_title_exists', methods=['GET'])
 @teacher_required
 def check_title_exists():
-    """Check if a lesson title already exists for the current teacher"""
+    """Check if a lesson title already exists for the current teacher.
+
+    Optional ``thread_id`` / ``rag_thread_id`` scopes the check to one chat thread
+    so a second lesson in the same conversation can be renamed before save.
+    """
     try:
         title = request.args.get('title', '').strip()
         if not title:
             return jsonify({'exists': False})
         
         teacher_id = session['user_id']
-        exists = LessonModel.check_title_exists(teacher_id, title)
+        rag_thread_id = (request.args.get('thread_id') or request.args.get('rag_thread_id') or '').strip() or None
+        exists = LessonModel.check_title_exists(teacher_id, title, rag_thread_id=rag_thread_id)
         
-        return jsonify({'exists': exists})
+        return jsonify({'exists': exists, 'name_conflict': bool(exists)})
         
     except Exception as e:
         logger.error(f"Error checking title existence: {str(e)}", exc_info=True)
