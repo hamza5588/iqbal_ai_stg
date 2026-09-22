@@ -4946,7 +4946,7 @@
             subject: lesson.focus_area || lesson.subject || 'General',
             grade: lesson.grade_level || lesson.grade || 'General',
             createdBy: lesson.teacher_name || lesson.createdBy || 'Teacher',
-            versionLabel: 'v' + (lesson.version || 1),
+            versionLabel: 'v' + (lesson.version_number || lesson.version || 1),
             timestamp: timestamp,
             fullDate: date,
             status: lesson.status || 'draft',
@@ -5122,6 +5122,7 @@
               title: lesson.title,
               subject: lesson.focus_area || lesson.subject || 'General',
               grade: lesson.grade_level || lesson.grade || 'General',
+              version: currentVersion.version_number || currentVersion.version || lesson.version_number || lesson.version || 1,
               content: currentVersion.content || lesson.content || '',
               body: currentVersion.content || lesson.content || '',
               source_pdf_url: currentVersion.source_pdf_url || lesson.source_pdf_url || null
@@ -5347,10 +5348,12 @@
             titleEl.textContent = lesson.title || 'Untitled Lesson';
           }
 
-          // Populate subtitle (subject + grade)
+          // Populate subtitle (subject + grade + version)
           const subtitleEl = document.getElementById('viewLessonSubtitle');
           if (subtitleEl) {
-            subtitleEl.textContent = `${lesson.subject || 'General'} • Grade ${lesson.grade || 'N/A'}`;
+            const ver = lesson.version_number || lesson.version || '';
+            const verLabel = ver ? (' • v' + ver) : '';
+            subtitleEl.textContent = `${lesson.subject || 'General'} • Grade ${lesson.grade || 'N/A'}${verLabel}`;
           }
 
           // Populate lesson content with teacher-equivalent formatting pipeline
@@ -6320,7 +6323,7 @@
           
           <div class="mt-4 text-xs text-gray-500 text-center">
             <p><strong>Lesson:</strong> ${lesson.title}</p>
-            <p><strong>Version:</strong> v${lesson.version || 1}</p>
+            <p><strong>Version:</strong> v${lesson.version_number || lesson.version || 1}</p>
           </div>
           
           <button onclick="this.closest('.fixed').remove()" 

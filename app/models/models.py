@@ -185,6 +185,8 @@ class LessonModel:
         # Add teacher_name if requested and available
         if include_teacher_name and hasattr(lesson_instance, 'teacher'):
             result['teacher_name'] = lesson_instance.teacher.username if lesson_instance.teacher else None
+        # Prefer version_number for clients: legacy `version` column stays 1 on every row.
+        result['version'] = result.get('version_number') or result.get('version') or 1
         return result
     
     @staticmethod
