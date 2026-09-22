@@ -359,6 +359,7 @@
       (qn ? '<li><strong>' + escapeHtml(String(qn)) + ' questions</strong>, multiple choice.</li>' : '') +
       '<li><strong>About ' + mins + ' minutes.</strong> The timer starts when you press Start and is shown at the top.</li>' +
       '<li>You can <strong>move between questions freely</strong>, skip any question, and change your answers until you submit.</li>' +
+      '<li><strong>Unanswered questions score 0</strong>; questions you answered still count toward your score.</li>' +
       '<li>Use <strong>&ldquo;Explain this question&rdquo;</strong> if the wording is unclear — it rephrases the question without giving the answer.</li>' +
       '<li>Use the <strong>Workspace</strong> (rough sheet / notes) for any working out.</li>' +
       '<li>If time runs out it submits automatically, and <strong>every question you answered is still scored</strong>.</li>' +
@@ -730,15 +731,26 @@
     }
   };
 
-  window.confirmSubmitDiagnostic = function () {
+  window.confirmSubmitDiagnostic = async function () {
     var total = diagState.questions.length;
     var answered = diagAnsweredCount();
     var missing = total - answered;
     if (missing > 0) {
-      var ok = window.confirm(
+      var message =
         'You have ' + missing + ' unanswered question' + (missing === 1 ? '' : 's') +
-        '. Unanswered questions score 0. Submit anyway?'
-      );
+        '. Are you sure you want to submit?\n\n' +
+        'Unanswered questions score 0. Your answered questions still count.';
+      var ok;
+      if (typeof showInAppConfirm === 'function') {
+        ok = await showInAppConfirm(message, {
+          title: 'Submit diagnostic?',
+          confirmLabel: 'Submit',
+          cancelLabel: 'Go back',
+          iconClass: 'fas fa-exclamation-circle'
+        });
+      } else {
+        ok = window.confirm(message);
+      }
       if (!ok) return;
     }
     submitLmsDiagnostic();
@@ -818,6 +830,12 @@
     var countLabel = hasCounts
       ? Math.round(result.score) + ' of ' + Math.round(result.max_score) + ' questions correct'
       : '';
+    var unanswered = result.unanswered_count != null
+      ? Math.round(result.unanswered_count)
+      : (opts.unansweredCount != null ? Math.round(opts.unansweredCount) : 0);
+    var unansweredLabel = unanswered > 0
+      ? unanswered + ' unanswered · scored as 0'
+      : '';
     var weak = result.weak_topics || [];
     var strong = result.strong_topics || [];
 
@@ -842,12 +860,13 @@
       : (opts.alreadyDone
         ? '<div class="lms-diag-timeout-note">You have already completed the diagnostic. Here is how you did.</div>'
         : '');
+    var scoreMeta = [countLabel, unansweredLabel].filter(Boolean).join(' &middot; ');
     body.innerHTML =
       timedOutBanner +
       '<div class="lms-diag-score">' +
       '<div class="lms-diag-score-num">' + scoreLabel + '</div>' +
       '<p class="lms-status">Overall diagnostic score' +
-      (countLabel ? ' &middot; <strong>' + countLabel + '</strong>' : '') + '</p>' +
+      (scoreMeta ? ' &middot; <strong>' + scoreMeta + '</strong>' : '') + '</p>' +
       (pct != null ? '<div class="lms-diag-score-bar"><div class="lms-diag-score-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></div></div>' : '') +
       '</div>' +
       ((weak.length || strong.length)
