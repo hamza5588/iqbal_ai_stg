@@ -176,6 +176,25 @@ def compute_mastery_status(score_percent: float, previous: Optional[float] = Non
     return "needs_practice"
 
 
+def score_percent_value(row: dict, default: float = 100.0) -> float:
+    """Read score_percent safely — 0.0 is a real score, not 'missing'."""
+    raw = row.get("score_percent") if isinstance(row, dict) else None
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def is_weak_mastery(row: dict) -> bool:
+    """Match Topic Mastery Breakdown pie 'Weak' slice (status or < WEAK_THRESHOLD)."""
+    status = (row.get("mastery_status") or "").strip().lower()
+    if status == "weak":
+        return True
+    return score_percent_value(row) < WEAK_THRESHOLD
+
+
 # Keep blended sample_size bounded so later evidence still moves the score.
 _MAX_BLEND_SAMPLE = 20
 
@@ -556,7 +575,7 @@ def get_weak_topics_for_student(student_id: int) -> List[dict]:
         return [
             r
             for r in rows
-            if (r.get("score_percent") or 100) < PRACTICE_TARGET_THRESHOLD
+            if score_percent_value(r) < PRACTICE_TARGET_THRESHOLD
         ]
     return get_diagnostic_weak_topics(student_id)
 
