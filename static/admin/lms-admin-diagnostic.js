@@ -552,6 +552,14 @@
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       return;
     }
+    var diagName = (diagFile.name || '').toLowerCase();
+    if (!diagName.endsWith('.pdf') || targetFiles.some(function (f) {
+      return !((f.name || '').toLowerCase().endsWith('.pdf'));
+    })) {
+      status.textContent = 'Error: This document does not match the required assessment format. Please upload a valid document.';
+      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      return;
+    }
     if (!grade) {
       alert('Select a grade for this diagnostic.');
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();

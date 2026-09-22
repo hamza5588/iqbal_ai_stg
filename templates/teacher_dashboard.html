@@ -13070,6 +13070,14 @@ Align everything with the lesson objectives and do not invent missing informatio
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
       }
+      var diagName = (file.name || '').toLowerCase();
+      var targetName = (targetFile.name || '').toLowerCase();
+      if (!diagName.endsWith('.pdf') || !targetName.endsWith('.pdf')) {
+        document.getElementById('lmsDiagStatus').textContent =
+          'Error: This document does not match the required assessment format. Please upload a valid document.';
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
       const btn = document.getElementById('lmsDiagUploadBtn');
       const status = document.getElementById('lmsDiagStatus');
       const banner = document.getElementById('lmsDiagSuccessBanner');
@@ -13315,7 +13323,13 @@ Align everything with the lesson objectives and do not invent missing informatio
       e.preventDefault();
       const title = document.getElementById('lmsQuizTitle').value.trim();
       const file = document.getElementById('lmsQuizPdfFile').files[0];
-      if (!file) {
+        if (!file) {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
+      var name = (file.name || '').toLowerCase();
+      if (!name.endsWith('.pdf')) {
+        status.textContent = 'Error: This document does not match the required assessment format. Please upload a valid document.';
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
       }
@@ -13329,7 +13343,11 @@ Align everything with the lesson objectives and do not invent missing informatio
       try {
         const res = await fetch('/api/lms/quizzes/from-pdf', { method: 'POST', body: fd, credentials: 'include' });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || data.message || 'Upload failed');
+        if (!res.ok) {
+          var errMsg = (data.error && data.error.message) || data.message || 'Upload failed';
+          if (typeof errMsg !== 'string') errMsg = 'Upload failed';
+          throw new Error(errMsg);
+        }
         _lmsCurrentAssessmentId = data.data?.assessment_id || data.assessment_id;
         status.textContent = data.data?.async ? 'Processing in background...' : 'Conversion complete.';
         startLmsPoll();
