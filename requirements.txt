@@ -205,3 +205,6 @@ langgraph-checkpoint-sqlite
 langgraph-checkpoint-postgres
 langgraph-prebuilt
 langgraph-sdk
+
+# ---- Tests ----
+pytest
