@@ -1001,6 +1001,10 @@
             '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsLaunchPathStep(\'' + escapeHtml(item.item_type) + '\',' + (item.item_id || 'null') + ',' + item.id + ')">Start</button> ' +
             '<button type="button" class="lms-btn lms-btn-secondary" onclick="markLmsPathItemComplete(' + item.id + ')">Mark done</button></div>';
         }
+      } else if (isDone && item.item_type === 'practice' && item.item_id === 0) {
+        action = '<div class="lms-path-action">' +
+          '<span class="lms-status" style="font-size:.75rem;">Step completed</span> ' +
+          '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:6px;font-size:.75rem;" onclick="openDeficiencyChat(true)">Practice again</button></div>';
       }
       return '<li class="' + cls + '">' +
         '<div class="lms-path-check">' + check + '</div>' +

@@ -312,18 +312,18 @@ def ensure_learning_path(student_id: int) -> Optional[dict]:
     )
     newest_attempt = _newest_submitted_attempt_at(student_id)
 
-    # Heal accounts from before this fix: an untouched auto-regenerated
-    # practice path stacked on top of a completed one, with no new
-    # assessment since -> the completed path is the real state.
+    # Heal accounts hit by the progress-reset bug: an untouched auto-regenerated
+    # practice path stacked on top of a completed Learning Chat step. Keep the
+    # completed path even when weak topics remain (further practice is via
+    # Weak Topics / Practice again — not by wiping progress back to 0%).
     if (
         latest.status == "active"
         and completed_practice
         and latest.id != completed_practice.id
         and _is_untouched_single_practice(latest)
-        and not path_generator.get_weak_topics(student_id)
         and (
             newest_attempt is None
-            or (completed_practice.created_at and completed_practice.created_at >= newest_attempt)
+            or (latest.created_at and newest_attempt <= latest.created_at)
         )
     ):
         latest.status = "archived"
@@ -333,18 +333,12 @@ def ensure_learning_path(student_id: int) -> Optional[dict]:
 
     d = _path_to_dict(latest)
 
-    # A finished Learning Chat step should stay finished only when the student
-    # has reached the practice target. If topic mastery is still below 100%,
-    # create the next practice round so the dashboard does not strand the
-    # student at e.g. 87%.
-    if latest.status == "completed" and any(
-        it.get("item_type") in ("practice", "enrichment") for it in d.get("items", [])
-    ):
-        weak = path_generator.get_weak_topics(student_id)
-        if weak:
-            refreshed = refresh_learning_path(student_id)
-            if refreshed and refreshed.id != latest.id:
-                return get_path_with_items(student_id) or d
+    # Do NOT auto-mint a fresh 0% practice path just because Learning Chat
+    # finished and topics are still below ~100%. That wiped the completed
+    # step on every dashboard reload (DIL: progress never sticks after
+    # practice). New paths are created only when a diagnostic/quiz is
+    # submitted (attempt_service -> refresh_learning_path). Further
+    # practice is available from the Weak Topics tile / Open Learning Chat.
 
     # Legacy multi-step / quiz-item path format -> regenerate once into the
     # current single-practice-step format.

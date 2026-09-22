@@ -947,15 +947,36 @@ def explain_with_tutor(
 
 
 def _mark_learning_path_chat_complete(student_id: int) -> None:
-    from app.services.lms import learning_path_service
+    """Mark the active Learning Chat practice/enrichment step done.
 
+    Prefer the active path; if none (edge race), fall back to the newest
+    unfinished practice/enrichment path for this student.
+    """
+    from app.services.lms import learning_path_service
+    from app.models.lms_models import LearningPath
+
+    db = get_db()
     path = learning_path_service.get_active_path_for_student(student_id)
     if not path:
+        path = (
+            db.query(LearningPath)
+            .filter(
+                LearningPath.student_id == student_id,
+                LearningPath.status.in_(("active", "completed")),
+            )
+            .order_by(LearningPath.id.desc())
+            .first()
+        )
+    if not path:
         return
-    db = get_db()
+
+    marked = False
     for item in path.items:
-        if item.item_type in ("practice", "enrichment") and item.item_id == 0:
+        if item.item_type in ("practice", "enrichment") and item.status != "completed":
             item.status = "completed"
             item.completed_at = datetime.utcnow()
-    path.status = "completed"
-    db.commit()
+            marked = True
+    if marked or path.status != "completed":
+        path.status = "completed"
+        path.updated_at = datetime.utcnow()
+        db.commit()
