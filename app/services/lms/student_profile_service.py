@@ -117,7 +117,9 @@ def get_student_dashboard(student_id: int) -> dict:
 
     path_completed = int((learning_path or {}).get("completed_count") or 0)
     path_total = int((learning_path or {}).get("total_count") or 0)
-    path_percent = round(100.0 * path_completed / path_total, 1) if path_total else 0.0
+    path_percent = (learning_path or {}).get("percent")
+    if path_percent is None:
+        path_percent = round(100.0 * path_completed / path_total, 1) if path_total else 0.0
     learning_path_progress = {
         "completed": path_completed,
         "total": path_total,

@@ -7920,7 +7920,7 @@
           ? pathProg.percent
           : (pathTotal ? Math.round(1000 * pathCompleted / pathTotal) / 10 : 0);
         const pathCardValue = pathTotal
-          ? (pathCompleted + ' of ' + pathTotal + ' completed — ' + pathPercent + '%')
+          ? (pathCompleted + ' of ' + pathTotal + ' topics cleared — ' + pathPercent + '%')
           : 'No path yet';
         const pathHtml = renderLmsLearningPath(d.learning_path);
         const diagDone = d.onboarding && d.onboarding.diagnostic_completed;
