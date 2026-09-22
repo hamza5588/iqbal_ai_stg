@@ -239,6 +239,7 @@
         '<select id="lmsAnalyticsClassSelect" class="lms-select" onchange="loadLmsAnalyticsData()">' + opts + '</select></div>' +
         '<div class="lms-tabs">' +
         '<button type="button" class="lms-tab active" data-tab="topics" onclick="switchLmsAnalyticsTab(\'topics\')">Topic Performance</button>' +
+        '<button type="button" class="lms-tab" data-tab="progress" onclick="switchLmsAnalyticsTab(\'progress\')">Topic Progress</button>' +
         '<button type="button" class="lms-tab" data-tab="quizzes" onclick="switchLmsAnalyticsTab(\'quizzes\')">Quiz Results</button>' +
         '<button type="button" class="lms-tab" data-tab="struggling" onclick="switchLmsAnalyticsTab(\'struggling\')">Struggling Students</button>' +
         '<button type="button" class="lms-tab" data-tab="roster" onclick="switchLmsAnalyticsTab(\'roster\')">Roster</button></div>' +
@@ -277,6 +278,28 @@
             ? '<div class="lms-card lms-card-warn" style="margin-top:12px;"><strong>Insight:</strong> ' +
               topics.filter(function (t) { return (t.weak_student_count || 0) >= 1; }).length +
               ' topic(s) have struggling students. Click the count in each row to see names and scores.</div>' : '');
+      } else if (tab === 'progress') {
+        var rosterForProgress = await lmsApi('/api/lms/classes/' + classId + '/students');
+        if (!rosterForProgress.length) {
+          content.innerHTML = '<p class="lms-status">No students enrolled.</p>';
+          return;
+        }
+        var studentOpts = rosterForProgress.map(function (s, i) {
+          return '<option value="' + s.student_id + '"' + (i === 0 ? ' selected' : '') + '>' +
+            escapeHtml(s.username || s.email || ('#' + s.student_id)) + '</option>';
+        }).join('');
+        content.innerHTML =
+          '<p class="lms-status" style="margin:0 0 12px;">Pick a student and topic to see how scores improved across diagnostic and quizzes.</p>' +
+          '<div class="lms-field" style="max-width:280px;margin-bottom:12px;">' +
+          '<label class="lms-label" for="lmsTopicProgressStudentSelect">Student</label>' +
+          '<select id="lmsTopicProgressStudentSelect" class="lms-select" onchange="loadLmsTeacherTopicProgress()">' +
+          studentOpts + '</select></div>' +
+          '<div class="lms-field" style="max-width:280px;margin-bottom:12px;">' +
+          '<label class="lms-label" for="lmsTopicProgressSelect">Topic</label>' +
+          '<select id="lmsTopicProgressSelect" class="lms-select" onchange="renderLmsTeacherTopicProgressChart()" disabled></select></div>' +
+          '<canvas id="lmsTopicProgressChart" height="220"></canvas>' +
+          '<p id="lmsTopicProgressEmpty" class="lms-path-empty hidden">No diagnostic or quiz data for this student yet.</p>';
+        loadLmsTeacherTopicProgress();
       } else if (tab === 'quizzes') {
         var quizzes = await lmsApi('/api/lms/classes/' + classId + '/analytics/quizzes');
         content.innerHTML = quizzes.length
@@ -332,6 +355,123 @@
       options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
     });
   }
+
+  var _lmsTeacherTopicProgressChart = null;
+  var _lmsTeacherTopicProgressData = [];
+
+  window.loadLmsTeacherTopicProgress = async function () {
+    var classSel = document.getElementById('lmsAnalyticsClassSelect');
+    var studentSel = document.getElementById('lmsTopicProgressStudentSelect');
+    var topicSel = document.getElementById('lmsTopicProgressSelect');
+    var canvas = document.getElementById('lmsTopicProgressChart');
+    var emptyMsg = document.getElementById('lmsTopicProgressEmpty');
+    if (!classSel || !studentSel || !topicSel || !canvas) return;
+    var classId = classSel.value;
+    var studentId = studentSel.value;
+    topicSel.disabled = true;
+    topicSel.innerHTML = '';
+    canvas.classList.add('hidden');
+    if (emptyMsg) {
+      emptyMsg.classList.add('hidden');
+      emptyMsg.textContent = 'No diagnostic or quiz data for this student yet.';
+    }
+    if (_lmsTeacherTopicProgressChart) {
+      _lmsTeacherTopicProgressChart.destroy();
+      _lmsTeacherTopicProgressChart = null;
+    }
+    try {
+      var payload = await lmsApi(
+        '/api/lms/classes/' + classId + '/students/' + studentId + '/progress/by-topic'
+      );
+      _lmsTeacherTopicProgressData = (payload && payload.topics) || [];
+    } catch (e) {
+      _lmsTeacherTopicProgressData = [];
+      if (emptyMsg) {
+        emptyMsg.textContent = e.message || 'Could not load topic progress.';
+        emptyMsg.classList.remove('hidden');
+      }
+      return;
+    }
+    if (!_lmsTeacherTopicProgressData.length) {
+      if (emptyMsg) emptyMsg.classList.remove('hidden');
+      return;
+    }
+    topicSel.disabled = false;
+    topicSel.innerHTML = _lmsTeacherTopicProgressData.map(function (t, i) {
+      return '<option value="' + i + '">' +
+        escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + '</option>';
+    }).join('');
+    renderLmsTeacherTopicProgressChart();
+  };
+
+  window.renderLmsTeacherTopicProgressChart = function () {
+    var topicSel = document.getElementById('lmsTopicProgressSelect');
+    var canvas = document.getElementById('lmsTopicProgressChart');
+    var emptyMsg = document.getElementById('lmsTopicProgressEmpty');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (_lmsTeacherTopicProgressChart) {
+      _lmsTeacherTopicProgressChart.destroy();
+      _lmsTeacherTopicProgressChart = null;
+    }
+    var idx = topicSel ? parseInt(topicSel.value, 10) : 0;
+    var topic = _lmsTeacherTopicProgressData[idx];
+    if (!topic || !(topic.series || []).length) {
+      canvas.classList.add('hidden');
+      if (emptyMsg) emptyMsg.classList.remove('hidden');
+      return;
+    }
+    canvas.classList.remove('hidden');
+    if (emptyMsg) emptyMsg.classList.add('hidden');
+    var labels = topic.series.map(function (s) { return s.label || 'Assessment'; });
+    var data = topic.series.map(function (s) {
+      return s.score_percent != null ? Number(s.score_percent) : 0;
+    });
+    var colors = topic.series.map(function (s) {
+      return s.assessment_type === 'diagnostic' ? '#7c3aed' : '#0284c7';
+    });
+    _lmsTeacherTopicProgressChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Score %',
+          data: data,
+          backgroundColor: colors,
+          borderRadius: 6,
+          maxBarThickness: 48,
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            title: { display: true, text: 'Percentage score' },
+          },
+          x: {
+            title: { display: true, text: 'Assessment' },
+            ticks: { maxRotation: 45, minRotation: 0 },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              afterLabel: function (ctx) {
+                var point = topic.series[ctx.dataIndex];
+                if (!point) return '';
+                if (point.correct != null && point.total != null) {
+                  return point.correct + '/' + point.total + ' correct';
+                }
+                return '';
+              },
+            },
+          },
+        },
+      },
+    });
+  };
 
   /* ── Guided practice ── */
   ensureModal('lmsPracticeModal', 'Guided Practice', 'lms-modal-md');
