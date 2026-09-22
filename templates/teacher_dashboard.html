@@ -5592,9 +5592,12 @@
                           <div class="pu1-field">
                               <div class="pu1-field-label">
                                 <span class="pu1-field-icon"><i class="fas fa-graduation-cap"></i></span>
-                                <span>Grade Level</span>
+                                <span>Grade Level <span class="text-red-500">*</span></span>
                               </div>
-                              <select id="lessonGrade" class="pu1-input border-2 border-emerald-600 focus:border-emerald-700">
+                              <select id="lessonGrade"
+                                      class="pu1-input border-2 border-emerald-600 focus:border-emerald-700"
+                                      onchange="clearLessonGradeFormError()"
+                                      required>
                                   <option value="">Select grade</option>
                                   <option value="1">1st Grade</option>
                                   <option value="2">2nd Grade</option>
@@ -5609,6 +5612,10 @@
                                   <option value="11">11th Grade</option>
                                   <option value="12">12th Grade</option>
                               </select>
+                              <div id="lessonGradeError" class="text-red-600 text-xs md:text-sm mt-2 hidden flex items-start gap-2 bg-red-50 p-2 md:p-3 rounded-lg border border-red-200" role="alert">
+                                  <i class="fas fa-exclamation-circle flex-shrink-0 mt-0.5 text-sm md:text-base"></i>
+                                  <span id="lessonGradeErrorText" class="font-medium"></span>
+                              </div>
                           </div>
                       </div>
 
@@ -5828,6 +5835,30 @@
         }
       }
 
+      function clearLessonGradeFormError() {
+        const wrap = document.getElementById('lessonGradeError');
+        const textEl = document.getElementById('lessonGradeErrorText');
+        const input = document.getElementById('lessonGrade');
+        if (wrap) wrap.classList.add('hidden');
+        if (textEl) textEl.textContent = '';
+        if (input) {
+          input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+          input.classList.add('border-emerald-600');
+        }
+      }
+
+      function showLessonGradeFormError(message) {
+        const wrap = document.getElementById('lessonGradeError');
+        const textEl = document.getElementById('lessonGradeErrorText');
+        const input = document.getElementById('lessonGrade');
+        if (textEl) textEl.textContent = message;
+        if (wrap) wrap.classList.remove('hidden');
+        if (input) {
+          input.classList.remove('border-emerald-600');
+          input.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+        }
+      }
+
       // Clear file selection
       function clearFileSelection() {
         const fileInput = document.getElementById('pdfFileInput');
@@ -5870,19 +5901,22 @@
         const lessonTitle = lessonTitleInput.value.trim();
         const lessonContext = lessonContextInput ? lessonContextInput.value.trim() : '';
         const lessonSubject = lessonSubjectInput ? lessonSubjectInput.value : 'General';
-        const lessonGrade = lessonGradeInput ? lessonGradeInput.value : 'General';
+        const lessonGrade = lessonGradeInput ? String(lessonGradeInput.value || '').trim() : '';
         const lessonMode = lessonModeInput ? lessonModeInput.value : 'generate';
 
         // Validation
+        clearLessonTitleFormError();
+        clearLessonGradeFormError();
+
         if (!lessonTitle) {
-          alert('Please enter a lesson title.');
+          showLessonTitleFormError('Lesson title is required.');
           lessonTitleInput.focus();
           return;
         }
 
         if (!lessonGrade) {
-          alert('Please select the grade that should receive this lesson.');
-          lessonGradeInput.focus();
+          showLessonGradeFormError('Grade is required.');
+          if (lessonGradeInput) lessonGradeInput.focus();
           return;
         }
 
@@ -10896,7 +10930,15 @@ To continue your learning journey:
 
         const finalTitle = getUniqueLessonTitle(baseTitle);
         const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
-        const gradeLevel = (pdfData && pdfData.grade) ? String(pdfData.grade) : (pdfData && pdfData.gradeLevel) || 'General';
+        const gradeLevel = (
+          (pdfData && pdfData.grade) ? String(pdfData.grade).trim()
+            : (pdfData && pdfData.gradeLevel) ? String(pdfData.gradeLevel).trim()
+              : ''
+        );
+        if (!gradeLevel) {
+          showToast('Grade is required.', 'error', 3500);
+          return;
+        }
         const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
 
         showToast('Saving lesson to My Lessons...', 'info', 2000);
