@@ -533,8 +533,12 @@ def create_lesson():
                     return jsonify({'error': 'File size exceeds 100MB limit'}), 400
             
             # Validate required fields for lesson generation (prompt is now optional since we use interactive chat)
-            if not lesson_title or not focus_area or not grade_level:
-                return jsonify({'error': 'All required fields must be filled for lesson generation'}), 400
+            if not lesson_title:
+                return jsonify({'error': 'Title is required'}), 400
+            if not focus_area:
+                return jsonify({'error': 'Subject / focus area is required'}), 400
+            if not (grade_level or '').strip():
+                return jsonify({'error': 'Grade is required.'}), 400
             
             # Check if lesson title already exists for this teacher
             if LessonModel.check_title_exists(session['user_id'], lesson_title):
@@ -703,7 +707,7 @@ def create_lesson_simple():
         title = data.get('title', '').strip()
         content = data.get('content', '').strip()
         focus_area = data.get('focus_area', 'General')
-        grade_level = data.get('grade_level', 'General')
+        grade_level = (data.get('grade_level') or data.get('grade') or '').strip()
         summary = data.get('summary', '') or data.get('additional_notes', '')
         rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip() or None
         raw_conv_id = data.get('conversation_id')
@@ -719,6 +723,9 @@ def create_lesson_simple():
 
         if not content:
             return jsonify({'error': 'Content is required'}), 400
+
+        if not grade_level:
+            return jsonify({'error': 'Grade is required.'}), 400
 
         # Re-save detection: if this thread already has a saved lesson AND the content being
         # saved now is clearly an edited version of that same lesson (not a different, new
@@ -817,7 +824,7 @@ def create_lesson_from_uploaded_document():
         data = request.get_json() or {}
         title = (data.get('title') or '').strip()
         focus_area = (data.get('focus_area') or data.get('subject') or 'General').strip() or 'General'
-        grade_level = (data.get('grade_level') or data.get('grade') or 'General').strip() or 'General'
+        grade_level = (data.get('grade_level') or data.get('grade') or '').strip()
         summary = (data.get('summary') or data.get('additional_notes') or '').strip()
         rag_thread_id = (data.get('rag_thread_id') or data.get('thread_id') or '').strip()
         filename = (data.get('filename') or data.get('file_name') or '').strip() or None
@@ -831,6 +838,8 @@ def create_lesson_from_uploaded_document():
 
         if not title:
             return jsonify({'error': 'Title is required'}), 400
+        if not grade_level:
+            return jsonify({'error': 'Grade is required.'}), 400
         if not rag_thread_id:
             return jsonify({'error': 'Uploaded document thread_id is required'}), 400
         if LessonModel.check_title_exists(session['user_id'], title):
