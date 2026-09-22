@@ -1503,6 +1503,15 @@ def my_progress_history():
     return json_success(analytics_service.get_progress_over_time(_current_user_id()))
 
 
+@bp.route("/students/me/progress/by-topic", methods=["GET"])
+@login_required
+def my_progress_by_topic():
+    """Per-topic score series across diagnostic and quiz attempts."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    return json_success(analytics_service.get_topic_assessment_series(_current_user_id()))
+
+
 @bp.route("/tutor/history", methods=["GET"])
 @login_required
 def get_tutor_history():

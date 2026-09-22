@@ -263,6 +263,72 @@ def get_progress_over_time(student_id: int) -> List[dict]:
     ]
 
 
+def get_topic_assessment_series(student_id: int) -> dict:
+    """Per-topic scores across diagnostic + quiz attempts (chronological).
+
+    Powers the student Topic Progress chart: X = assessments that touched
+    the topic (dynamic — not hard-coded Quiz 1/2/3), Y = score_percent.
+    """
+    from app.services.lms.performance_service import topic_breakdown_for_attempt
+
+    db = get_db()
+    rows = (
+        db.query(AssessmentAttempt, Assessment)
+        .join(Assessment, Assessment.id == AssessmentAttempt.assessment_id)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.status == "submitted",
+            Assessment.assessment_type.in_(("diagnostic", "quiz")),
+        )
+        .order_by(
+            AssessmentAttempt.submitted_at.asc(),
+            AssessmentAttempt.id.asc(),
+        )
+        .all()
+    )
+
+    by_topic: dict[int, dict] = {}
+    for attempt, assessment in rows:
+        breakdown = topic_breakdown_for_attempt(attempt.id)
+        if not breakdown:
+            continue
+        if assessment.assessment_type == "diagnostic":
+            label = "Diagnostic"
+        else:
+            label = (assessment.title or "").strip() or f"Quiz #{assessment.id}"
+        for row in breakdown:
+            tid = row.get("topic_id")
+            if not tid:
+                continue
+            bucket = by_topic.setdefault(
+                tid,
+                {
+                    "topic_id": tid,
+                    "topic_name": row.get("topic_name") or f"Topic #{tid}",
+                    "series": [],
+                },
+            )
+            if not bucket.get("topic_name") and row.get("topic_name"):
+                bucket["topic_name"] = row["topic_name"]
+            bucket["series"].append(
+                {
+                    "assessment_id": assessment.id,
+                    "attempt_id": attempt.id,
+                    "label": label,
+                    "assessment_type": assessment.assessment_type,
+                    "correct": row.get("correct"),
+                    "total": row.get("total"),
+                    "score_percent": row.get("score_percent"),
+                    "submitted_at": (
+                        attempt.submitted_at.isoformat() if attempt.submitted_at else None
+                    ),
+                }
+            )
+
+    topics = sorted(by_topic.values(), key=lambda t: (t.get("topic_name") or "").lower())
+    return {"topics": topics}
+
+
 def pdf_source_analytics(teacher_id: int) -> dict:
     db = get_db()
     pdf_qs = (
