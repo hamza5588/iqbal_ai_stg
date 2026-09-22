@@ -8178,8 +8178,8 @@
       </div>
       <div class="lms-modal-body">
         <div id="lmsAssignmentList"></div>
-        <div id="lmsQuizTaking" class="hidden" style="margin-top:16px;"></div>
-        <div id="lmsQuizResult" class="hidden" style="margin-top:16px;"></div>
+        <div id="lmsQuizTaking" class="hidden"></div>
+        <div id="lmsQuizResult" class="hidden"></div>
       </div>
     </div>
   </div>
@@ -8222,6 +8222,32 @@
     let _lmsCurrentQ = 0;
     let _lmsSavedAnswers = {};
     let _lmsAssignmentId = null;
+    let _lmsQuizTitle = '';
+
+    function _lmsQuizShowList() {
+      var list = document.getElementById('lmsAssignmentList');
+      var taking = document.getElementById('lmsQuizTaking');
+      var result = document.getElementById('lmsQuizResult');
+      if (list) list.classList.remove('hidden');
+      if (taking) taking.classList.add('hidden');
+      if (result) result.classList.add('hidden');
+    }
+    function _lmsQuizShowTaking() {
+      var list = document.getElementById('lmsAssignmentList');
+      var taking = document.getElementById('lmsQuizTaking');
+      var result = document.getElementById('lmsQuizResult');
+      if (list) list.classList.add('hidden');
+      if (taking) taking.classList.remove('hidden');
+      if (result) result.classList.add('hidden');
+    }
+    function _lmsQuizShowResult() {
+      var list = document.getElementById('lmsAssignmentList');
+      var taking = document.getElementById('lmsQuizTaking');
+      var result = document.getElementById('lmsQuizResult');
+      if (list) list.classList.add('hidden');
+      if (taking) taking.classList.add('hidden');
+      if (result) result.classList.remove('hidden');
+    }
 
     function openLmsStudentHub() {
       if (window.lmsStudentNeedsDiagnostic && window.lmsStudentNeedsDiagnostic()) {
@@ -8229,40 +8255,59 @@
         openLmsDiagnostic();
         return;
       }
+      _lmsQuizShowList();
       lmsOpenModal('lmsStudentModal');
       loadLmsAssignments();
     }
     function closeLmsStudentHub() {
       lmsCloseModal('lmsStudentModal');
+      _lmsAttemptId = null;
+      _lmsQuizQuestions = [];
+      _lmsCurrentQ = 0;
+      _lmsSavedAnswers = {};
+      _lmsQuizShowList();
     }
     async function loadLmsAssignments() {
       const el = document.getElementById('lmsAssignmentList');
-      el.innerHTML = '<p>Loading...</p>';
+      el.innerHTML = '<p class="lms-status">Loading assignments...</p>';
       try {
         const res = await fetch('/api/lms/students/me/assignments', { credentials: 'include' });
         const body = await res.json();
         const items = body.data || body || [];
-        if (!items.length) { el.innerHTML = '<p>No assignments yet.</p>'; return; }
+        if (!items.length) {
+          el.innerHTML = '<p class="lms-path-empty">No assignments yet. When your teacher publishes a quiz, it will show up here.</p>';
+          return;
+        }
         el.innerHTML = items.map(function (a) {
+          var status = a.status || 'not_started';
+          var statusLabel = status.replace(/_/g, ' ');
           var action = '';
-          if (a.status === 'submitted' || a.can_start === false) {
-            var score = a.score_percent != null ? ' &middot; ' + a.score_percent + '%' : '';
-            action = '<span style="color:#16a34a;font-weight:600;font-size:.875rem;">Completed' + score + '</span>';
-          } else if (a.status === 'in_progress') {
-            action = '<button type="button" onclick="startLmsQuiz(' + a.quiz_id + ',' + a.assignment_id + ')" style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">Continue</button>';
+          var badgeCls = 'lms-assign-badge';
+          if (status === 'submitted' || a.can_start === false) {
+            badgeCls += ' is-done';
+            var score = a.score_percent != null ? (' · ' + Math.round(a.score_percent) + '%') : '';
+            action = '<span class="lms-assign-done">Completed' + score + '</span>';
+          } else if (status === 'in_progress') {
+            badgeCls += ' is-progress';
+            action = '<button type="button" class="lms-btn lms-btn-primary" data-title="' + escapeHtml(a.title || 'Quiz') + '" onclick="startLmsQuiz(' + a.quiz_id + ',' + a.assignment_id + ', this.getAttribute(\'data-title\'))">Continue</button>';
           } else {
-            action = '<button type="button" onclick="startLmsQuiz(' + a.quiz_id + ',' + a.assignment_id + ')" style="background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">Start</button>';
+            badgeCls += ' is-new';
+            action = '<button type="button" class="lms-btn lms-btn-primary" data-title="' + escapeHtml(a.title || 'Quiz') + '" onclick="startLmsQuiz(' + a.quiz_id + ',' + a.assignment_id + ', this.getAttribute(\'data-title\'))">Start</button>';
           }
-          return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">' +
-            '<div><strong>' + escapeHtml(a.title) + '</strong><br><span style="font-size:.875rem;color:#64748b;">Status: ' + a.status + '</span></div>' +
-            action + '</div>';
+          return '<div class="lms-assign-card">' +
+            '<div class="lms-assign-card-main">' +
+            '<div class="lms-assign-title">' + escapeHtml(a.title || 'Quiz') + '</div>' +
+            '<div class="lms-assign-meta"><span class="' + badgeCls + '">' + escapeHtml(statusLabel) + '</span></div>' +
+            '</div>' +
+            '<div class="lms-assign-card-action">' + action + '</div></div>';
         }).join('');
       } catch (err) {
-        el.innerHTML = '<p>Error: ' + err.message + '</p>';
+        el.innerHTML = '<p class="lms-error">Error: ' + escapeHtml(err.message) + '</p>';
       }
     }
-    async function startLmsQuiz(quizId, assignmentId) {
+    async function startLmsQuiz(quizId, assignmentId, title) {
       _lmsAssignmentId = assignmentId;
+      _lmsQuizTitle = title || 'Quiz';
       document.getElementById('lmsQuizResult').classList.add('hidden');
       if (typeof showWaitOverlay === 'function') showWaitOverlay('Starting quiz...');
       try {
@@ -8299,42 +8344,107 @@
       const body = await res.json();
       const d = body.data || body;
       _lmsQuizQuestions = d.questions || [];
-      _lmsSavedAnswers = d.saved_answers || {};
+      _lmsSavedAnswers = {};
+      var saved = d.saved_answers || {};
+      // Normalize keys to int indexes
+      Object.keys(saved).forEach(function (k) {
+        _lmsSavedAnswers[parseInt(k, 10)] = saved[k];
+      });
       _lmsCurrentQ = d.current_question_index != null ? d.current_question_index : 0;
-      document.getElementById('lmsQuizTaking').classList.remove('hidden');
+      if (_lmsCurrentQ < 0) _lmsCurrentQ = 0;
+      if (_lmsCurrentQ >= _lmsQuizQuestions.length) _lmsCurrentQ = Math.max(0, _lmsQuizQuestions.length - 1);
+      _lmsQuizShowTaking();
       renderLmsQuestion();
+    }
+    function _lmsQuizMapHtml() {
+      var total = _lmsQuizQuestions.length;
+      if (total <= 1) return '';
+      var chips = '';
+      for (var i = 0; i < total; i++) {
+        var state = (i === _lmsCurrentQ) ? 'current' : (_lmsSavedAnswers[i] !== undefined ? 'answered' : 'unanswered');
+        chips += '<button type="button" class="lms-qmap-cell ' + state + '" onclick="goLmsQuizQuestion(' + i + ')">' + (i + 1) + '</button>';
+      }
+      return '<div class="lms-qmap"><div class="lms-qmap-head">Jump to question</div><div class="lms-qmap-grid">' + chips + '</div></div>';
     }
     function renderLmsQuestion() {
       const el = document.getElementById('lmsQuizTaking');
-      if (_lmsCurrentQ >= _lmsQuizQuestions.length) {
-        el.innerHTML = '<button type="button" onclick="submitLmsQuiz()" style="background:var(--primary-600);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;">Submit Quiz</button>';
+      if (!_lmsQuizQuestions.length) {
+        el.innerHTML = '<p class="lms-error">No questions in this quiz.</p>' +
+          '<button type="button" class="lms-btn lms-btn-secondary" onclick="exitLmsQuizTaking()">Back to list</button>';
         return;
       }
-      const q = _lmsQuizQuestions[_lmsCurrentQ];
-      const savedIdx = _lmsSavedAnswers[_lmsCurrentQ];
-      const opts = (q.options || []).map(function (o, idx) {
-        const checked = savedIdx === idx ? ' checked' : '';
-        return '<label style="display:block;margin:8px 0;cursor:pointer;"><input type="radio" name="lmsOpt" value="' + idx + '"' + checked + '> ' +
-          o.label + '. ' + _lmsFmtOption(o) + '</label>';
+      const idx = _lmsCurrentQ;
+      const total = _lmsQuizQuestions.length;
+      const q = _lmsQuizQuestions[idx];
+      const savedIdx = _lmsSavedAnswers[idx];
+      const pct = Math.round(100 * (idx + 1) / total);
+      const opts = (q.options || []).map(function (o, oi) {
+        var sel = savedIdx === oi ? ' selected' : '';
+        return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectLmsQuizOption(' + oi + ')">' +
+          '<span class="lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
+          '<span class="lms-quiz-option-body">' + _lmsFmtOption(o) + '</span></button>';
       }).join('');
-      el.innerHTML = '<p><strong>Question ' + (_lmsCurrentQ + 1) + ' of ' + _lmsQuizQuestions.length + '</strong></p>' +
-        _lmsFmtQuestion(q) + opts +
-        '<button type="button" onclick="saveLmsAnswer()" style="margin-top:12px;background:#0284c7;color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;">Next</button>';
+
+      var backBtn = idx > 0
+        ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="prevLmsQuizQuestion()">Back</button>'
+        : '<button type="button" class="lms-btn lms-btn-secondary" onclick="exitLmsQuizTaking()">Exit</button>';
+      var nextBtn = idx < total - 1
+        ? '<button type="button" class="lms-btn lms-btn-primary" onclick="nextLmsQuizQuestion()">' +
+          (savedIdx === undefined ? 'Skip →' : 'Next') + '</button>'
+        : '';
+      var submitBtn = '<button type="button" class="lms-btn ' + (idx === total - 1 ? 'lms-btn-primary' : 'lms-btn-secondary') +
+        '" onclick="submitLmsQuiz()">Submit Quiz</button>';
+
+      el.innerHTML =
+        '<div class="lms-quiz-taking-head">' +
+        '<button type="button" class="lms-btn lms-btn-ghost" onclick="exitLmsQuizTaking()">← Assignments</button>' +
+        '<h3 class="lms-quiz-taking-title">' + escapeHtml(_lmsQuizTitle || 'Quiz') + '</h3></div>' +
+        '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
+        '<p class="lms-status">Question ' + (idx + 1) + ' of ' + total +
+        (Object.keys(_lmsSavedAnswers).length ? (' · ' + Object.keys(_lmsSavedAnswers).length + ' answered') : '') + '</p>' +
+        '<div class="lms-quiz-stem">' + _lmsFmtQuestion(q) + '</div>' +
+        opts +
+        _lmsQuizMapHtml() +
+        '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' +
+        '<div class="lms-quiz-nav">' +
+        '<div class="lms-quiz-nav-start">' + backBtn + '</div>' +
+        '<div class="lms-quiz-nav-end">' + nextBtn + ' ' + submitBtn + '</div>' +
+        '</div></div>';
       _lmsTypeset(el);
     }
-    async function saveLmsAnswer() {
-      const selected = document.querySelector('input[name="lmsOpt"]:checked');
-      if (!selected) { alert('Select an answer'); return; }
-      const q = _lmsQuizQuestions[_lmsCurrentQ];
-      await fetch('/api/lms/attempts/' + _lmsAttemptId + '/answer', {
+    function selectLmsQuizOption(optIdx) {
+      _lmsSavedAnswers[_lmsCurrentQ] = optIdx;
+      renderLmsQuestion();
+      // Persist in background (same pattern as diagnostic)
+      var q = _lmsQuizQuestions[_lmsCurrentQ];
+      if (!q || !_lmsAttemptId) return;
+      fetch('/api/lms/attempts/' + _lmsAttemptId + '/answer', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_id: q.question_id, selected_option_index: parseInt(selected.value, 10) })
-      });
-      _lmsSavedAnswers[_lmsCurrentQ] = parseInt(selected.value, 10);
-      _lmsCurrentQ++;
+        body: JSON.stringify({ question_id: q.question_id || q.id, selected_option_index: optIdx })
+      }).catch(function () { /* keep local selection */ });
+    }
+    function goLmsQuizQuestion(i) {
+      if (i < 0 || i >= _lmsQuizQuestions.length) return;
+      _lmsCurrentQ = i;
       renderLmsQuestion();
+    }
+    function nextLmsQuizQuestion() {
+      if (_lmsCurrentQ < _lmsQuizQuestions.length - 1) {
+        _lmsCurrentQ++;
+        renderLmsQuestion();
+      }
+    }
+    function prevLmsQuizQuestion() {
+      if (_lmsCurrentQ > 0) {
+        _lmsCurrentQ--;
+        renderLmsQuestion();
+      }
+    }
+    function exitLmsQuizTaking() {
+      _lmsQuizShowList();
+      loadLmsAssignments();
     }
     async function submitLmsQuiz() {
       var totalQ = (_lmsQuizQuestions && _lmsQuizQuestions.length) || 0;
@@ -8364,10 +8474,12 @@
           method: 'POST', credentials: 'include'
         });
         const body = await res.json();
+        if (!res.ok) {
+          throw new Error((body.error && body.error.message) || body.message || 'Submit failed');
+        }
         const d = body.data || body;
-        document.getElementById('lmsQuizTaking').classList.add('hidden');
+        _lmsQuizShowResult();
         const resultEl = document.getElementById('lmsQuizResult');
-        resultEl.classList.remove('hidden');
         var unansweredNote = (d.unanswered_count > 0)
           ? (' · ' + d.unanswered_count + ' unanswered scored as 0')
           : '';
@@ -8377,12 +8489,19 @@
         var overallLine = (d.score != null && d.max_score != null)
           ? (Math.round(d.score) + '/' + Math.round(d.max_score) + ' — ' + d.score_percent + '%' + unansweredNote)
           : ((d.score_percent != null ? d.score_percent + '%' : '—') + unansweredNote);
-        resultEl.innerHTML = '<h3 style="font-weight:700;">Quiz Complete</h3>' +
-          '<p><strong>' + overallLine + '</strong></p>' +
+        resultEl.innerHTML =
+          '<div class="lms-quiz-result-card">' +
+          '<div style="font-size:2rem;text-align:center;">🎉</div>' +
+          '<h3 style="font-weight:800;text-align:center;margin:8px 0;">Quiz Complete</h3>' +
+          '<p style="text-align:center;font-size:1.15rem;font-weight:700;">' + overallLine + '</p>' +
           topicHtml +
-          '<p class="lms-status">Your learning path may update based on results.</p>';
-        loadLmsAssignments();
+          '<p class="lms-status" style="text-align:center;">Your learning path may update based on results.</p>' +
+          '<div style="display:flex;justify-content:center;gap:8px;margin-top:16px;">' +
+          '<button type="button" class="lms-btn lms-btn-primary" onclick="exitLmsQuizTaking()">Back to assignments</button>' +
+          '</div></div>';
         if (typeof loadLmsStudentDashboard === 'function') loadLmsStudentDashboard();
+      } catch (err) {
+        if (typeof lmsShowToast === 'function') lmsShowToast(err.message || 'Submit failed', 'error');
       } finally {
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }

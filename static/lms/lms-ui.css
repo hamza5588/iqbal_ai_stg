@@ -794,6 +794,58 @@ html.dark .lms-diag-clear-note,
 .lms-qmap-cell.current { outline: 2px solid var(--lms-green); outline-offset: 1px; color: var(--lms-text); }
 .lms-qmap-cell.unanswered:hover { border-color: var(--lms-green); }
 
+/* Assignments & Quizzes list (student hub) */
+.lms-assign-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--lms-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  background: var(--lms-surface-2);
+}
+.lms-assign-card-main { min-width: 0; flex: 1; }
+.lms-assign-title { font-weight: 700; color: var(--lms-text); margin-bottom: 4px; }
+.lms-assign-meta { font-size: 0.8125rem; }
+.lms-assign-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.lms-assign-badge.is-new { background: #eff6ff; color: #1d4ed8; }
+.lms-assign-badge.is-progress { background: #fff7ed; color: #c2410c; }
+.lms-assign-badge.is-done { background: var(--lms-green-muted); color: var(--lms-green); }
+.lms-assign-done { color: var(--lms-green); font-weight: 700; font-size: 0.875rem; }
+.lms-quiz-taking-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.lms-quiz-taking-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--lms-text);
+}
+.lms-quiz-result-card { padding: 8px 4px 12px; }
+.lms-btn-ghost {
+  background: transparent;
+  border: none;
+  color: var(--lms-muted);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 8px;
+}
+.lms-btn-ghost:hover { color: var(--lms-text); }
+
 /* Diagnostic workspace (notepad + canvas) */
 .lms-diag-workspace {
   margin: 14px 0;
