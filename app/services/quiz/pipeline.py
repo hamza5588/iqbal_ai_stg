@@ -7,6 +7,15 @@ from typing import Optional
 
 from app.models.lms_models import AssessmentQuestion, QuizPdfSource
 from app.services.lms import assessment_service, question_bank_service
+from app.services.quiz.assessment_doc_validation import (
+    AssessmentDocValidationError,
+    assert_nonempty_extracted_text,
+    assert_topic_or_key_area_available,
+    assert_valid_extraction,
+    assert_valid_mcqs,
+    assert_valid_pairs,
+    public_error_message,
+)
 from app.services.quiz.mcq_converter import convert_pairs_batch, mcq_to_question_fields
 from app.services.quiz.section_topics import (
     parse_section_topics,
@@ -60,21 +69,21 @@ def run_pdf_quiz_pipeline(
 
     try:
         text = pdf_text or get_thread_full_text(rag_thread_id, user_id)
-        if not text.strip():
-            raise ValueError("No PDF text found for thread — ingest PDF first")
+        assert_nonempty_extracted_text(text)
 
         extraction: PDFExtractionResult = extract_qa_from_text(text)
+        assert_valid_extraction(extraction)
         pairs = pair_questions_answers(extraction)
-        if not pairs:
-            detail = (
-                f"Extracted {len(extraction.questions)} questions and "
-                f"{len(extraction.answers)} answers but could not match any pairs."
-            )
-            if extraction.warnings:
-                detail += " Warnings: " + "; ".join(extraction.warnings[:5])
-            raise ValueError(detail)
+        assert_valid_pairs(pairs)
 
         batch = convert_pairs_batch(pairs, quiz_title=extraction.title or assessment.title)
+        assert_valid_mcqs(batch)
+        assert_topic_or_key_area_available(
+            text,
+            assessment_type=assessment.assessment_type,
+            topic_id=topic_id,
+            mcq_questions=batch.questions,
+        )
 
         sections = parse_section_topics(text)
         question_pdf_topics: dict[str, str] = {}
@@ -113,10 +122,9 @@ def run_pdf_quiz_pipeline(
         assessment_service.add_questions(assessment_id, created_ids)
 
         if pairs and not created_ids:
-            detail = "MCQ conversion failed for all extracted questions."
-            if batch.failed_conversions:
-                detail += " " + "; ".join(batch.failed_conversions[:4])
-            raise ValueError(detail)
+            raise AssessmentDocValidationError(
+                detail="MCQ conversion failed for all extracted questions"
+            )
 
         overall = (
             sum(confidences) / len(confidences) * 0.5 + extraction.confidence * 0.5
@@ -179,6 +187,14 @@ def run_pdf_quiz_pipeline(
             "requires_review": overall < 0.85,
             "extraction_status": "completed",
         }
+    except AssessmentDocValidationError as exc:
+        logger.warning(
+            "PDF quiz format validation failed for assessment %s: %s",
+            assessment_id,
+            exc.detail or str(exc),
+        )
+        _set_pdf_source_status(source.id, "failed", error_message=public_error_message(exc))
+        raise
     except Exception as exc:
         logger.exception("PDF quiz pipeline failed for assessment %s", assessment_id)
         _set_pdf_source_status(source.id, "failed", error_message=str(exc))

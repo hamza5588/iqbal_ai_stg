@@ -403,16 +403,20 @@ def create_quiz_from_pdf():
     if not file or not file.filename:
         return json_error("PDF file is required", code="validation_error")
 
+    file_bytes = file.read()
+    try:
+        from app.services.quiz.assessment_doc_validation import assert_supported_assessment_file
+
+        assert_supported_assessment_file(file.filename, file_bytes, label="Assessment PDF")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
     a = assessment_service.create_assessment(
         created_by=_current_user_id(),
         title=title.strip(),
         assessment_type="quiz",
         creation_mode="pdf_qa_auto",
     )
-
-    file_bytes = file.read()
-    if not file_bytes:
-        return json_error("Empty file", code="validation_error")
 
     try:
         result = enqueue_or_run_pdf_quiz(
@@ -423,6 +427,8 @@ def create_quiz_from_pdf():
             topic_id=topic_id,
             async_mode=async_mode,
         )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
     except ValueError as e:
         return json_error(str(e), code="llm_config_error", status=503)
     except Exception as e:
@@ -454,6 +460,8 @@ def process_quiz_pdf(quiz_id: int):
             topic_id=topic_id,
         )
         return json_success(result)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
     except Exception as e:
         return json_error(str(e), code="pipeline_error", status=500)
 
