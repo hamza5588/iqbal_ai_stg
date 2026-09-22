@@ -266,8 +266,9 @@ def get_progress_over_time(student_id: int) -> List[dict]:
 def get_topic_assessment_series(student_id: int) -> dict:
     """Per-topic scores across diagnostic + quiz attempts (chronological).
 
-    Powers the student Topic Progress chart: X = assessments that touched
-    the topic (dynamic — not hard-coded Quiz 1/2/3), Y = score_percent.
+    Powers the teacher Topic Progress chart: X = assessments that touched
+    the topic (dynamic), Y = score_percent — so teachers can see topic-wise
+    improvement over time.
     """
     from app.services.lms.performance_service import topic_breakdown_for_attempt
 
@@ -327,6 +328,17 @@ def get_topic_assessment_series(student_id: int) -> dict:
 
     topics = sorted(by_topic.values(), key=lambda t: (t.get("topic_name") or "").lower())
     return {"topics": topics}
+
+
+def get_student_topic_progress_for_teacher(
+    teacher_id: int, class_id: int, student_id: int
+) -> dict:
+    """Topic-wise assessment history for one enrolled student (teacher analytics)."""
+    if not teacher_owns_class(teacher_id, class_id):
+        raise LMSValidationError("Not authorized")
+    if not any(e.student_id == student_id for e in list_class_students(class_id)):
+        raise LMSNotFoundError("Student not in class")
+    return get_topic_assessment_series(student_id)
 
 
 def pdf_source_analytics(teacher_id: int) -> dict:

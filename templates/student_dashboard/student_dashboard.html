@@ -7950,22 +7950,11 @@
               <canvas id="lmsMasteryPieChart" height="220"></canvas>
               <p id="lmsMasteryPieEmpty" class="lms-path-empty hidden">No topics assessed yet.</p>
             </div>
-            <div class="lms-card lms-topic-progress-panel" style="margin:16px 0;">
-              <div class="lms-card-label">Topic Progress</div>
-              <p class="lms-status" style="margin:4px 0 10px;">Compare diagnostic and quiz scores for each topic. New quizzes appear automatically.</p>
-              <div class="lms-field" style="max-width:280px;margin-bottom:12px;">
-                <label class="lms-label" for="lmsTopicProgressSelect">Topic</label>
-                <select id="lmsTopicProgressSelect" class="lms-select" onchange="renderLmsTopicProgressChart()"></select>
-              </div>
-              <canvas id="lmsTopicProgressChart" height="220"></canvas>
-              <p id="lmsTopicProgressEmpty" class="lms-path-empty hidden">Complete a diagnostic or quiz to see topic progress.</p>
-            </div>
             ${pathHtml}
             <div class="lms-path-panel"><h3>Quiz History</h3><div id="lmsAttemptHistory"></div></div>
           </div>`;
         if (typeof loadLmsAttemptHistory === 'function') loadLmsAttemptHistory('lmsAttemptHistory');
         renderLmsMasteryPieChart(d.mastery || []);
-        loadLmsTopicProgressChart();
       } catch (err) {
         el.innerHTML = '';
       }
@@ -8012,104 +8001,6 @@
       });
     }
 
-    var _lmsTopicProgressChart = null;
-    var _lmsTopicProgressData = [];
-
-    async function loadLmsTopicProgressChart() {
-      var select = document.getElementById('lmsTopicProgressSelect');
-      var canvas = document.getElementById('lmsTopicProgressChart');
-      var emptyMsg = document.getElementById('lmsTopicProgressEmpty');
-      if (!select || !canvas) return;
-      try {
-        const res = await fetch('/api/lms/students/me/progress/by-topic', { credentials: 'include' });
-        const body = await res.json();
-        const payload = body.data || body || {};
-        _lmsTopicProgressData = payload.topics || [];
-      } catch (e) {
-        _lmsTopicProgressData = [];
-      }
-      if (!_lmsTopicProgressData.length) {
-        select.innerHTML = '';
-        select.disabled = true;
-        canvas.classList.add('hidden');
-        if (emptyMsg) emptyMsg.classList.remove('hidden');
-        if (_lmsTopicProgressChart) { _lmsTopicProgressChart.destroy(); _lmsTopicProgressChart = null; }
-        return;
-      }
-      select.disabled = false;
-      select.innerHTML = _lmsTopicProgressData.map(function (t, i) {
-        return '<option value="' + i + '">' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + '</option>';
-      }).join('');
-      if (emptyMsg) emptyMsg.classList.add('hidden');
-      canvas.classList.remove('hidden');
-      renderLmsTopicProgressChart();
-    }
-
-    window.renderLmsTopicProgressChart = function () {
-      var select = document.getElementById('lmsTopicProgressSelect');
-      var canvas = document.getElementById('lmsTopicProgressChart');
-      var emptyMsg = document.getElementById('lmsTopicProgressEmpty');
-      if (!canvas || typeof Chart === 'undefined') return;
-      if (_lmsTopicProgressChart) { _lmsTopicProgressChart.destroy(); _lmsTopicProgressChart = null; }
-      var idx = select ? parseInt(select.value, 10) : 0;
-      var topic = _lmsTopicProgressData[idx];
-      if (!topic || !(topic.series || []).length) {
-        canvas.classList.add('hidden');
-        if (emptyMsg) emptyMsg.classList.remove('hidden');
-        return;
-      }
-      canvas.classList.remove('hidden');
-      if (emptyMsg) emptyMsg.classList.add('hidden');
-      var labels = topic.series.map(function (s) { return s.label || 'Assessment'; });
-      var data = topic.series.map(function (s) {
-        return s.score_percent != null ? Number(s.score_percent) : 0;
-      });
-      var colors = topic.series.map(function (s) {
-        return s.assessment_type === 'diagnostic' ? '#7c3aed' : '#0284c7';
-      });
-      _lmsTopicProgressChart = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Score %',
-            data: data,
-            backgroundColor: colors,
-            borderRadius: 6,
-            maxBarThickness: 48,
-          }],
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-              title: { display: true, text: 'Percentage score' },
-            },
-            x: {
-              title: { display: true, text: 'Assessment' },
-              ticks: { maxRotation: 45, minRotation: 0 },
-            },
-          },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                afterLabel: function (ctx) {
-                  var point = topic.series[ctx.dataIndex];
-                  if (!point) return '';
-                  if (point.correct != null && point.total != null) {
-                    return point.correct + '/' + point.total + ' correct';
-                  }
-                  return '';
-                },
-              },
-            },
-          },
-        },
-      });
-    };
     function renderLmsLearningPath(path) {
       if (!path || !path.items || !path.items.length) {
         return '<div class="lms-path-panel"><h3>My Learning Path</h3><p class="lms-path-empty">Complete a quiz to get a personalized learning path based on your weak topics.</p></div>';

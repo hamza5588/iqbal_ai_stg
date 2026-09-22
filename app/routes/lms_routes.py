@@ -1553,13 +1553,26 @@ def my_progress_history():
     return json_success(analytics_service.get_progress_over_time(_current_user_id()))
 
 
-@bp.route("/students/me/progress/by-topic", methods=["GET"])
+@bp.route(
+    "/classes/<int:class_id>/students/<int:student_id>/progress/by-topic",
+    methods=["GET"],
+)
 @login_required
-def my_progress_by_topic():
-    """Per-topic score series across diagnostic and quiz attempts."""
-    if _current_role() != "student":
-        return json_error("Students only", code="forbidden", status=403)
-    return json_success(analytics_service.get_topic_assessment_series(_current_user_id()))
+def student_progress_by_topic(class_id: int, student_id: int):
+    """Topic-wise score history for one student — teacher Class Analytics chart."""
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    try:
+        return json_success(
+            analytics_service.get_student_topic_progress_for_teacher(
+                _current_user_id(), class_id, student_id
+            )
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
 
 
 @bp.route("/tutor/history", methods=["GET"])
