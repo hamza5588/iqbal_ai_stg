@@ -3677,52 +3677,6 @@
     }
     #chatInputArea #downloadChatBtn{ color:#1d4ed8; }
 
-    /* Lesson save flow coach strip */
-    .lesson-save-flow{
-      display:none;
-      margin:0 0 10px;
-      padding:10px 12px;
-      border:1px solid #d8efe9;
-      border-radius:14px;
-      background:linear-gradient(180deg,#f4fbf8 0%,#ffffff 100%);
-    }
-    .lesson-save-flow.is-visible{ display:block; }
-    .lesson-save-flow-head{
-      display:flex; align-items:center; justify-content:space-between; gap:8px;
-      margin-bottom:8px;
-    }
-    .lesson-save-flow-head strong{
-      font-size:13px; color:#0b5f53; font-weight:700;
-    }
-    .lesson-save-flow-help{
-      border:none; background:transparent; color:var(--primary-color);
-      font-size:12px; font-weight:700; cursor:pointer; padding:0;
-    }
-    .lesson-save-flow-steps{
-      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;
-    }
-    .lesson-save-step{
-      border:1px solid #e5e7eb; border-radius:12px; padding:8px;
-      background:#fff; text-align:center; min-height:74px;
-    }
-    .lesson-save-step .n{
-      width:22px; height:22px; border-radius:999px; margin:0 auto 6px;
-      display:flex; align-items:center; justify-content:center;
-      font-size:11px; font-weight:800; background:#e8f5f1; color:#0b5f53;
-    }
-    .lesson-save-step .t{
-      font-size:11px; line-height:1.35; color:#374151; font-weight:600;
-    }
-    .lesson-save-step.is-done{ border-color:#a7e0d2; background:#f3fbf8; }
-    .lesson-save-step.is-done .n{ background:#0e7c6b; color:#fff; }
-    .lesson-save-step.is-active{
-      border-color:#0e7c6b; box-shadow:0 0 0 2px rgba(14,124,107,.12);
-    }
-    .lesson-save-step.is-active .n{ background:#0e7c6b; color:#fff; }
-    .lesson-save-flow-hint{
-      margin-top:8px; font-size:12px; color:#4b5563; line-height:1.4;
-    }
-
     /* Lesson save flow guidance modal */
     .lesson-save-guide{
       position:fixed; inset:0; z-index:200020;
@@ -4155,18 +4109,6 @@
       <!-- Modern ChatGPT-style Bottom Chat Input Area: flex-shrink-0 so it stays at bottom when messages scroll -->
       <div id="chatInputArea" class="flex-shrink-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200 shadow-lg">
         <div class="max-w-4xl mx-auto px-3 md:px-4">
-          <div id="lessonSaveFlowStrip" class="lesson-save-flow" aria-live="polite">
-            <div class="lesson-save-flow-head">
-              <strong>How to save a lesson</strong>
-              <button type="button" class="lesson-save-flow-help" onclick="showLessonSaveFlowGuidance('help')">See steps</button>
-            </div>
-            <div class="lesson-save-flow-steps">
-              <div class="lesson-save-step" data-step="1"><div class="n">1</div><div class="t">Create the lesson in chat</div></div>
-              <div class="lesson-save-step" data-step="2"><div class="n">2</div><div class="t">Type “save this lesson”</div></div>
-              <div class="lesson-save-step" data-step="3"><div class="n">3</div><div class="t">Click Save → My Lessons</div></div>
-            </div>
-            <div id="lessonSaveFlowHint" class="lesson-save-flow-hint">Create a lesson first, then ask to save it in chat, then click Save.</div>
-          </div>
           <!-- Voice Input Status (hidden by default) -->
           <div id="voiceStatus" class="voice-status rounded-lg p-3 mb-3 hidden bg-blue-50 border border-blue-200">
             <div class="flex items-center justify-between">
@@ -5136,27 +5078,9 @@
       }
 
       function updateLessonSaveFlowStrip(forcedStep) {
-        const strip = document.getElementById('lessonSaveFlowStrip');
-        const hint = document.getElementById('lessonSaveFlowHint');
-        if (!strip) return;
-        const inLessonChat = !!window.currentRAGThreadId || !!currentPDFData || !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
-        strip.classList.toggle('is-visible', inLessonChat && !window.currentLessonChatAlreadySaved);
-        const step = forcedStep || window._lessonSaveFlowStep || 1;
-        window._lessonSaveFlowStep = step;
-        strip.querySelectorAll('.lesson-save-step').forEach(function (el) {
-          const n = parseInt(el.getAttribute('data-step'), 10);
-          el.classList.toggle('is-active', n === step);
-          el.classList.toggle('is-done', n < step);
-        });
-        if (hint) {
-          if (step <= 1) {
-            hint.textContent = 'Step 1: Create or generate a lesson in this chat first.';
-          } else if (step === 2) {
-            hint.textContent = 'Step 2: Type “save this lesson” (or “finalize”) in chat. Chat save prepares the draft — it is not My Lessons yet.';
-          } else {
-            hint.textContent = 'Step 3: Click Save to add this lesson to My Lessons. You can create another lesson in this same chat afterward.';
-          }
-        }
+        // Inline strip was removed — it blocked the lesson view above chat.
+        // Keep step state for the optional help modal (?) only.
+        if (forcedStep) window._lessonSaveFlowStep = forcedStep;
       }
 
       function ensureLessonSaveGuideModal() {
@@ -11350,12 +11274,6 @@ To continue your learning journey:
             setSaveLessonButtonsVisible(false);
             window._lessonSaveFlowStep = 1;
             updateLessonSaveFlowStrip(1);
-            const strip = document.getElementById('lessonSaveFlowStrip');
-            const hint = document.getElementById('lessonSaveFlowHint');
-            if (strip) strip.classList.add('is-visible');
-            if (hint) {
-              hint.textContent = 'Saved to My Lessons. Create another lesson in this chat, ask to save it, then click Save again.';
-            }
             showToast('Tip: For the next lesson, create → type “save this lesson” → click Save.', 'info', 4500);
           } else {
             showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
