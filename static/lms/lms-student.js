@@ -983,17 +983,23 @@
       return '<div class="lms-path-panel"><h3>My Learning Path</h3><p class="lms-path-empty">Complete your diagnostic to unlock Learning Chat for weak areas.</p>' +
         '<button type="button" class="lms-btn lms-btn-primary" onclick="openLmsDiagnostic()">Take Diagnostic</button></div>';
     }
+    var weakProg = path.weak_area_progress || null;
     var steps = path.items.map(function (item) {
       var isDone = item.status === 'completed';
       var isCurrent = !isDone && path.current_step && path.current_step.id === item.id;
       var cls = 'lms-path-step' + (isDone ? ' completed' : '') + (isCurrent ? ' current' : '');
       var check = isDone ? '&#10003;' : (isCurrent ? '&#9679;' : '');
       var action = '';
-      if (isCurrent && !isDone) {
-        if (item.item_type === 'practice' && item.item_id === 0) {
-          action = '<div class="lms-path-action">' +
-            '<button type="button" class="lms-btn lms-btn-primary" onclick="openDeficiencyChat()">Open Learning Chat</button></div>';
-        } else if (item.item_type === 'enrichment') {
+      if (item.item_type === 'practice' && item.item_id === 0 && !isDone) {
+        var remain = weakProg && weakProg.weak_remaining != null ? weakProg.weak_remaining : null;
+        var hint = remain != null
+          ? ('<p class="lms-status" style="font-size:.75rem;margin:4px 0 0;">' + remain + ' weak topic' + (remain === 1 ? '' : 's') + ' still need practice</p>')
+          : '';
+        action = '<div class="lms-path-action">' +
+          '<button type="button" class="lms-btn lms-btn-primary" onclick="openDeficiencyChat()">Open Learning Chat</button>' +
+          hint + '</div>';
+      } else if (isCurrent && !isDone) {
+        if (item.item_type === 'enrichment') {
           action = '<div class="lms-path-action">' +
             '<button type="button" class="lms-btn lms-btn-primary" onclick="openDeficiencyChat(false, \'enrichment\')">Start challenge</button></div>';
         } else {
@@ -1003,7 +1009,7 @@
         }
       } else if (isDone && item.item_type === 'practice' && item.item_id === 0) {
         action = '<div class="lms-path-action">' +
-          '<span class="lms-status" style="font-size:.75rem;">Step completed</span> ' +
+          '<span class="lms-status" style="font-size:.75rem;">All weak topics cleared</span> ' +
           '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:6px;font-size:.75rem;" onclick="openDeficiencyChat(true)">Practice again</button></div>';
       }
       return '<li class="' + cls + '">' +
@@ -1012,8 +1018,13 @@
         '<div class="lms-path-step-title">' + escapeHtml(item.title || item.label || 'Step') + '</div>' +
         '<div class="lms-path-step-meta">' + escapeHtml(item.item_type) + '</div>' + action + '</div></li>';
     }).join('');
-    var pct = path.total_count ? Math.round(100 * (path.completed_count || 0) / path.total_count) : 0;
-    return '<div class="lms-path-panel"><h3>My Learning Path <span class="lms-path-pct" style="font-weight:400;font-size:.875rem;">(' + pct + '% done)</span></h3>' +
+    var pct = path.percent != null
+      ? Math.round(path.percent)
+      : (path.total_count ? Math.round(100 * (path.completed_count || 0) / path.total_count) : 0);
+    var pctLabel = weakProg && weakProg.total
+      ? (weakProg.cleared + ' of ' + weakProg.total + ' topics cleared — ' + pct + '% done')
+      : (pct + '% done');
+    return '<div class="lms-path-panel"><h3>My Learning Path <span class="lms-path-pct" style="font-weight:400;font-size:.875rem;">(' + escapeHtml(pctLabel) + ')</span></h3>' +
       '<ol class="lms-path-steps">' + steps + '</ol></div>';
   };
 

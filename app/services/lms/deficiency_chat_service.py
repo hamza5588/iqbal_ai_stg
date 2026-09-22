@@ -947,12 +947,13 @@ def explain_with_tutor(
 
 
 def _mark_learning_path_chat_complete(student_id: int) -> None:
-    """Mark the active Learning Chat practice/enrichment step done.
+    """After a Learning Chat session: update path from live Weak topics.
 
-    Prefer the active path; if none (edge race), fall back to the newest
-    unfinished practice/enrichment path for this student.
+    One session (e.g. only Inequality) must NOT mark the whole path 100%
+    complete while other topics are still Weak. Path completes only when
+    no Weak topics remain (or this was an enrichment challenge).
     """
-    from app.services.lms import learning_path_service
+    from app.services.lms import learning_path_service, performance_service
     from app.models.lms_models import LearningPath
 
     db = get_db()
@@ -970,13 +971,25 @@ def _mark_learning_path_chat_complete(student_id: int) -> None:
     if not path:
         return
 
-    marked = False
-    for item in path.items:
-        if item.item_type in ("practice", "enrichment") and item.status != "completed":
-            item.status = "completed"
-            item.completed_at = datetime.utcnow()
-            marked = True
-    if marked or path.status != "completed":
+    is_enrichment = any(i.item_type == "enrichment" for i in path.items)
+    mastery = performance_service.get_student_mastery(student_id)
+    still_weak = [m for m in mastery if performance_service.is_weak_mastery(m)]
+
+    if is_enrichment or (mastery and not still_weak):
+        for item in path.items:
+            if item.item_type in ("practice", "enrichment") and item.status != "completed":
+                item.status = "completed"
+                item.completed_at = datetime.utcnow()
         path.status = "completed"
         path.updated_at = datetime.utcnow()
         db.commit()
+        return
+
+    # Session finished but Weak topics remain — keep path open / in progress.
+    for item in path.items:
+        if item.item_type == "practice" and int(item.item_id or 0) == 0:
+            item.status = "in_progress"
+            item.completed_at = None
+    path.status = "active"
+    path.updated_at = datetime.utcnow()
+    db.commit()
