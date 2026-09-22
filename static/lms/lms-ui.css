@@ -421,6 +421,109 @@
 }
 .lms-tab.active { color: var(--lms-green); border-bottom-color: var(--lms-green); }
 
+/* Class Analytics — Topic Progress */
+.lms-analytics-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lms-analytics-progress-lead {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--lms-muted);
+  line-height: 1.45;
+}
+.lms-analytics-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+@media (max-width: 640px) {
+  .lms-analytics-filters { grid-template-columns: 1fr; }
+}
+.lms-analytics-filters .lms-field { margin: 0; max-width: none; }
+.lms-analytics-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lms-analytics-stat {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--lms-border);
+  border-radius: 10px;
+  background: var(--lms-surface-2);
+}
+.lms-analytics-stat-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lms-muted);
+}
+.lms-analytics-stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--lms-text);
+  line-height: 1.2;
+}
+.lms-analytics-stat-value.is-up { color: var(--lms-green-text); }
+.lms-analytics-stat-value.is-down { color: var(--lms-danger); }
+.lms-analytics-chart-card {
+  border: 1px solid var(--lms-border);
+  border-radius: 12px;
+  background: var(--lms-surface);
+  padding: 14px 16px 10px;
+}
+.lms-analytics-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.lms-analytics-chart-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--lms-text);
+}
+.lms-analytics-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.lms-analytics-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--lms-muted);
+}
+.lms-analytics-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.lms-analytics-legend-swatch.is-diagnostic { background: #7c3aed; }
+.lms-analytics-legend-swatch.is-quiz { background: #0ea5e9; }
+.lms-analytics-chart-wrap {
+  position: relative;
+  height: 280px;
+  width: 100%;
+}
+.lms-analytics-chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* Chat (tutor) */
 .lms-chat-messages {
   min-height: 220px;
