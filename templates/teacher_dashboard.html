@@ -13220,8 +13220,15 @@ Align everything with the lesson objectives and do not invent missing informatio
           Upload &amp; Generate MCQs
         </button>
       </form>
+      <div id="lmsQuizProgressWrap" class="lms-progress-wrap">
+        <div class="lms-progress-label">
+          <span id="lmsQuizProgressText">Preparing...</span>
+          <strong id="lmsQuizProgressPct">0%</strong>
+        </div>
+        <div class="lms-progress"><div id="lmsQuizProgressBar" class="lms-progress-bar"></div></div>
+      </div>
       <div id="lmsQuizStatus" class="lms-status"></div>
-      <div id="lmsQuizPreview"></div>
+      <div id="lmsQuizPreview" class="lms-quiz-preview"></div>
       </div>
       <div id="lmsQuizActions" class="lms-modal-footer" style="display:none;">
         <button type="button" class="lms-btn lms-btn-primary" onclick="publishLmsQuiz()">
@@ -13262,13 +13269,47 @@ Align everything with the lesson objectives and do not invent missing informatio
     }
 
     let _lmsCurrentAssessmentId = null;
+    let _lmsQuizTaskId = null;
     let _lmsPollTimer = null;
+    let _lmsQuizProgressTick = null;
     let _lmsDiagAssessmentId = null;
     let _lmsDiagThreadId = null;
     let _lmsDiagTopicsPoll = null;
     let _lmsCurriculumTopics = [];
 
     const LMS_DIAG_MCQ_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
+
+    function _setLmsQuizProgress(pct, text) {
+      const wrap = document.getElementById('lmsQuizProgressWrap');
+      const bar = document.getElementById('lmsQuizProgressBar');
+      const pctEl = document.getElementById('lmsQuizProgressPct');
+      const textEl = document.getElementById('lmsQuizProgressText');
+      if (wrap) wrap.classList.add('active');
+      if (bar) bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+      if (textEl && text) textEl.textContent = text;
+    }
+    function _resetLmsQuizProgress() {
+      if (_lmsQuizProgressTick) { clearInterval(_lmsQuizProgressTick); _lmsQuizProgressTick = null; }
+      const wrap = document.getElementById('lmsQuizProgressWrap');
+      const bar = document.getElementById('lmsQuizProgressBar');
+      if (wrap) wrap.classList.remove('active');
+      if (bar) bar.style.width = '0%';
+      const pctEl = document.getElementById('lmsQuizProgressPct');
+      if (pctEl) pctEl.textContent = '0%';
+    }
+    function _startLmsQuizProgressPulse(startPct, label) {
+      if (_lmsQuizProgressTick) clearInterval(_lmsQuizProgressTick);
+      let pct = startPct || 8;
+      _setLmsQuizProgress(pct, label || 'Processing PDF...');
+      _lmsQuizProgressTick = setInterval(function () {
+        // Soft crawl while waiting for real Celery progress (caps below done).
+        if (pct < 88) {
+          pct += (pct < 40 ? 2.2 : pct < 70 ? 1.1 : 0.4);
+          _setLmsQuizProgress(pct);
+        }
+      }, 1200);
+    }
 
     function lmsDiagMcqSelectHtml(selected) {
       return LMS_DIAG_MCQ_OPTIONS.map(function (n) {
@@ -13597,7 +13638,9 @@ Align everything with the lesson objectives and do not invent missing informatio
 
     function _resetLmsQuizModal() {
       stopLmsPoll();
+      _resetLmsQuizProgress();
       _lmsCurrentAssessmentId = null;
+      _lmsQuizTaskId = null;
       const form = document.getElementById('lmsPdfQuizForm');
       if (form) {
         form.reset();
@@ -13624,6 +13667,7 @@ Align everything with the lesson objectives and do not invent missing informatio
     function closeLmsQuizHub() {
       _hideLmsModal('lmsQuizHubModal');
       stopLmsPoll();
+      _resetLmsQuizProgress();
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
     }
     function stopLmsPoll() {
@@ -13651,6 +13695,7 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
       btn.disabled = true;
       status.textContent = 'Uploading PDF and generating ' + questionCount + ' MCQs...';
+      _startLmsQuizProgressPulse(6, 'Uploading PDF...');
       const fd = new FormData();
       fd.append('title', title);
       fd.append('file', file);
@@ -13663,14 +13708,22 @@ Align everything with the lesson objectives and do not invent missing informatio
           if (typeof errMsg !== 'string') errMsg = 'Upload failed';
           throw new Error(errMsg);
         }
-        _lmsCurrentAssessmentId = data.data?.assessment_id || data.assessment_id;
-        status.textContent = data.data?.async ? 'Processing in background...' : 'Conversion complete.';
+        const payload = data.data || data;
+        _lmsCurrentAssessmentId = payload.assessment_id;
+        _lmsQuizTaskId = payload.task_id || null;
+        _setLmsQuizProgress(18, payload.async ? 'Queued — ingesting PDF...' : 'Generating MCQs...');
+        status.textContent = payload.async
+          ? 'Processing in background (ingest → generate MCQs)...'
+          : 'Conversion running...';
         startLmsPoll();
       } catch (err) {
         status.textContent = 'Error: ' + err.message;
         btn.disabled = false;
+        _resetLmsQuizProgress();
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       }
+    }
+    function startLmsPoll() {
       stopLmsPoll();
       if (!_lmsCurrentAssessmentId) return;
       _lmsPollTimer = setInterval(pollLmsQuizStatus, 2000);
@@ -13679,10 +13732,11 @@ Align everything with the lesson objectives and do not invent missing informatio
     async function pollLmsQuizStatus() {
       if (!_lmsCurrentAssessmentId) return;
       const statusEl = document.getElementById('lmsQuizStatus');
-      const previewEl = document.getElementById('lmsQuizPreview');
       const actionsEl = document.getElementById('lmsQuizActions');
       try {
-        const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/pdf-status', { credentials: 'include' });
+        var url = '/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/pdf-status';
+        if (_lmsQuizTaskId) url += '?task_id=' + encodeURIComponent(_lmsQuizTaskId);
+        const res = await fetch(url, { credentials: 'include' });
         const body = await res.json();
         const d = body.data || body;
         const rawStatus = d.extraction_status || 'unknown';
@@ -13693,11 +13747,20 @@ Align everything with the lesson objectives and do not invent missing informatio
           completed: 'completed',
           failed: 'failed',
         }[rawStatus] || rawStatus;
+        if (d.progress != null) {
+          _setLmsQuizProgress(
+            Number(d.progress),
+            d.progress_message || ('Status: ' + statusLabel)
+          );
+        }
         statusEl.textContent = 'Status: ' + statusLabel +
           (d.overall_confidence != null ? ' | Confidence: ' + Math.round(d.overall_confidence * 100) + '%' : '') +
-          (d.question_count ? ' | Questions: ' + d.question_count : '');
+          (d.question_count ? ' | Questions: ' + d.question_count : '') +
+          (d.requested_question_count ? ' / ' + d.requested_question_count + ' requested' : '');
         if (rawStatus === 'completed') {
           stopLmsPoll();
+          _setLmsQuizProgress(100, 'Quiz ready');
+          setTimeout(_resetLmsQuizProgress, 700);
           const form = document.getElementById('lmsPdfQuizForm');
           if (form) form.style.display = 'none';
           await loadLmsQuizPreview();
@@ -13705,6 +13768,7 @@ Align everything with the lesson objectives and do not invent missing informatio
           if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         } else if (rawStatus === 'failed') {
           stopLmsPoll();
+          _resetLmsQuizProgress();
           const form = document.getElementById('lmsPdfQuizForm');
           if (form) form.style.display = '';
           const submitBtn = document.getElementById('lmsQuizSubmitBtn');
@@ -13732,12 +13796,21 @@ Align everything with the lesson objectives and do not invent missing informatio
       }
       previewEl.innerHTML = d.questions.map(function (item, idx) {
         const q = item.question || {};
-        const opts = (q.options || []).map(function (o) {
-          return '<li>' + o.label + '. ' + _lmsFmtOption(o) + '</li>';
+        const opts = (q.options || []).map(function (o, oidx) {
+          var isCorrect = q.correct_option_index === oidx;
+          return '<div class="lms-preview-opt' + (isCorrect ? ' is-correct' : '') + '">' +
+            '<span class="lms-preview-opt-label">' + escapeHtml(o.label || String.fromCharCode(65 + oidx)) + '.</span>' +
+            '<span class="lms-preview-opt-body">' + _lmsFmtOption(o) +
+            (isCorrect ? ' <span class="lms-preview-correct-mark">✓</span>' : '') +
+            '</span></div>';
         }).join('');
-        return '<div class="lms-diag-preview-card">' +
-          '<strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' + _lmsFmtQuestion(q) +
-          '<ul>' + opts + '</ul></div>';
+        return '<div class="lms-diag-preview-card lms-quiz-preview-card">' +
+          '<div class="lms-preview-stem"><strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' +
+          _lmsFmtText(
+            (typeof lmsQuestionText === 'function' ? lmsQuestionText(q) : (q.question_text || q.question_latex || '')),
+            true
+          ) + '</div>' +
+          '<div class="lms-preview-opts">' + opts + '</div></div>';
       }).join('');
       _lmsTypeset(previewEl);
     }

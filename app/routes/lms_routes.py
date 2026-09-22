@@ -483,7 +483,25 @@ def process_quiz_pdf(quiz_id: int):
 @login_required
 def quiz_pdf_status(quiz_id: int):
     try:
-        return json_success(assessment_service.get_pdf_processing_status(quiz_id))
+        data = assessment_service.get_pdf_processing_status(quiz_id)
+        task_id = (request.args.get("task_id") or "").strip()
+        if task_id:
+            try:
+                from celery.result import AsyncResult
+                from app.celery_app import celery
+
+                result = AsyncResult(task_id, app=celery)
+                meta = result.info if isinstance(result.info, dict) else {}
+                data["task_state"] = result.state
+                if meta.get("progress") is not None:
+                    data["progress"] = meta.get("progress")
+                if meta.get("message"):
+                    data["progress_message"] = meta.get("message")
+                if meta.get("step"):
+                    data["progress_step"] = meta.get("step")
+            except Exception:
+                pass
+        return json_success(data)
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 
