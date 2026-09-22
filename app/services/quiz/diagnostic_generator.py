@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_CONTEXT_CHARS = 6000
 
-_CONTENT_MCQ_PROMPT = """Generate {count} multiple-choice diagnostic question(s) based ONLY on the educational content below.
+_CONTENT_MCQ_PROMPT = """Generate exactly {count} multiple-choice diagnostic question(s) based ONLY on the educational content below.
 
 Topic / section: {topic}
 {level_line}
@@ -24,6 +24,7 @@ Content:
 {content}
 
 Rules:
+- Return exactly {count} questions — no fewer. If content is thin, still produce {count} distinct items by covering different facts/skills from the text.
 - Each question must have exactly 4 unique options labeled A, B, C, D.
 - Pitch every question at the target difficulty and grade level above. Do NOT
   drift easier or harder, and do NOT use skills from a higher grade.
@@ -31,7 +32,8 @@ Rules:
 - Distractors should reflect common student mistakes.
 - Option text must be the FULL choice, never only "A"/"B"/"C"/"D".
 - Do NOT prefix option text with the letter (write "a repeating decimal", not "B (a repeating decimal)").
-- Put LaTeX ONLY in latex fields (\\frac, \\sqrt, \\dots, \\log). Keep question_text and option text readable with normal spaces between words.
+- Put LaTeX ONLY in latex fields (\\frac, \\sqrt, \\dots, \\log, \\times). Keep question_text and option text readable with normal spaces between words (e.g. "1/2 × 2/3 = 1/3", not "1/2x2/3=2/3").
+- Prefer readable plain text with spaces for simple arithmetic; use latex fields for stacked fractions and equations.
 - Never copy a whole English sentence into a latex field with the spaces removed.
 - Set conversion_confidence between 0 and 1 for each question.
 - Set learning_concept to a short student-friendly skill name (3-8 words) for what the question tests — not the PDF heading or document title.
@@ -165,6 +167,7 @@ def generate_mcqs_from_content(
                 "MCQBatchResult",
                 [{"type": "value_error", "loc": ("questions",), "msg": "No questions generated", "input": []}],
             )
+        # Prefer exact count, but accept a short batch so the outer loop can retry/top-up.
         if len(batch.questions) > count:
             batch.questions = batch.questions[:count]
         return batch

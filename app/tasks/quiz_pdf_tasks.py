@@ -111,12 +111,28 @@ def process_pdf_quiz_task(
             meta={"step": "convert", "progress": 60, "message": "Converting to MCQs..."},
         )
 
+        def pipeline_progress(step: str, progress: int, message: str):
+            # Map pipeline 60–100 onto celery meta already past ingest.
+            mapped = max(60, min(99, progress))
+            try:
+                self.update_state(
+                    state="PROCESSING",
+                    meta={"step": step, "progress": mapped, "message": message},
+                )
+            except Exception as exc:
+                logger.warning("Failed to update quiz pipeline progress: %s", exc)
+
         result = run_pdf_quiz_pipeline(
             assessment_id=assessment_id,
             rag_thread_id=thread_id,
             user_id=user_id,
             topic_id=topic_id,
             question_count=question_count,
+            progress_callback=pipeline_progress,
+        )
+        self.update_state(
+            state="SUCCESS",
+            meta={"step": "done", "progress": 100, "message": "Quiz ready"},
         )
         return {"success": True, **result}
     except Exception as exc:

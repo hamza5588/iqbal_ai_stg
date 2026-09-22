@@ -441,6 +441,21 @@ def get_pdf_processing_status(assessment_id: int) -> dict:
             "extraction_status": "pending" if assessment.creation_mode == "pdf_qa_auto" else "none",
         }
     src = assessment.pdf_source
+    requested = None
+    try:
+        db = get_db()
+        latest = (
+            db.query(PdfQaExtraction)
+            .filter(PdfQaExtraction.quiz_pdf_source_id == src.id)
+            .order_by(PdfQaExtraction.id.desc())
+            .first()
+        )
+        if latest and latest.raw_extraction_json:
+            raw = json.loads(latest.raw_extraction_json)
+            if isinstance(raw, dict) and raw.get("requested_question_count") is not None:
+                requested = raw.get("requested_question_count")
+    except Exception:
+        requested = None
     return {
         "assessment_id": assessment_id,
         "source_id": src.id,
@@ -448,6 +463,7 @@ def get_pdf_processing_status(assessment_id: int) -> dict:
         "overall_confidence": src.overall_confidence,
         "error_message": src.error_message,
         "question_count": len(assessment.questions),
+        "requested_question_count": requested,
         "requires_review": assessment.requires_review,
     }
 
