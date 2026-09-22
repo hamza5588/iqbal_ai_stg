@@ -3668,7 +3668,107 @@
     #chatInputArea .tt-input-divider{ width:1px; height:26px; background:#eee; }
     #chatInputArea .tt-util-bar button i{ color:inherit; }
     #chatInputArea #saveLessonBtn{ color:var(--primary-color); }
+    #chatInputArea #saveLessonBtn.save-ready-pulse{
+      animation: saveReadyPulse 1.4s ease-in-out 2;
+    }
+    @keyframes saveReadyPulse{
+      0%,100%{ box-shadow:none; transform:scale(1); }
+      50%{ box-shadow:0 0 0 6px rgba(14,124,107,.18); transform:scale(1.03); }
+    }
     #chatInputArea #downloadChatBtn{ color:#1d4ed8; }
+
+    /* Lesson save flow coach strip */
+    .lesson-save-flow{
+      display:none;
+      margin:0 0 10px;
+      padding:10px 12px;
+      border:1px solid #d8efe9;
+      border-radius:14px;
+      background:linear-gradient(180deg,#f4fbf8 0%,#ffffff 100%);
+    }
+    .lesson-save-flow.is-visible{ display:block; }
+    .lesson-save-flow-head{
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+      margin-bottom:8px;
+    }
+    .lesson-save-flow-head strong{
+      font-size:13px; color:#0b5f53; font-weight:700;
+    }
+    .lesson-save-flow-help{
+      border:none; background:transparent; color:var(--primary-color);
+      font-size:12px; font-weight:700; cursor:pointer; padding:0;
+    }
+    .lesson-save-flow-steps{
+      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;
+    }
+    .lesson-save-step{
+      border:1px solid #e5e7eb; border-radius:12px; padding:8px;
+      background:#fff; text-align:center; min-height:74px;
+    }
+    .lesson-save-step .n{
+      width:22px; height:22px; border-radius:999px; margin:0 auto 6px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:800; background:#e8f5f1; color:#0b5f53;
+    }
+    .lesson-save-step .t{
+      font-size:11px; line-height:1.35; color:#374151; font-weight:600;
+    }
+    .lesson-save-step.is-done{ border-color:#a7e0d2; background:#f3fbf8; }
+    .lesson-save-step.is-done .n{ background:#0e7c6b; color:#fff; }
+    .lesson-save-step.is-active{
+      border-color:#0e7c6b; box-shadow:0 0 0 2px rgba(14,124,107,.12);
+    }
+    .lesson-save-step.is-active .n{ background:#0e7c6b; color:#fff; }
+    .lesson-save-flow-hint{
+      margin-top:8px; font-size:12px; color:#4b5563; line-height:1.4;
+    }
+
+    /* Lesson save flow guidance modal */
+    .lesson-save-guide{
+      position:fixed; inset:0; z-index:200020;
+      display:none; align-items:center; justify-content:center;
+      padding:16px; background:rgba(5,20,22,.55);
+    }
+    .lesson-save-guide.is-open{ display:flex; }
+    .lesson-save-guide-card{
+      width:min(460px,100%); background:#fff; border-radius:20px;
+      box-shadow:0 20px 60px rgba(0,0,0,.35); overflow:hidden;
+    }
+    .lesson-save-guide-body{ padding:24px 24px 8px; }
+    .lesson-save-guide-body h3{
+      margin:0 0 8px; font-size:20px; font-weight:800; color:#111;
+    }
+    .lesson-save-guide-body p{
+      margin:0 0 14px; font-size:14px; color:#4b5563; line-height:1.45;
+    }
+    .lesson-save-guide-list{
+      margin:0; padding:0; list-style:none; display:grid; gap:10px;
+    }
+    .lesson-save-guide-list li{
+      display:flex; gap:10px; align-items:flex-start;
+      padding:10px 12px; border-radius:12px; background:#f8faf9;
+      border:1px solid #e8efec;
+    }
+    .lesson-save-guide-list li.is-focus{
+      background:#eef9f5; border-color:#a7e0d2;
+    }
+    .lesson-save-guide-list .n{
+      width:24px; height:24px; border-radius:999px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      background:#0e7c6b; color:#fff; font-size:12px; font-weight:800;
+    }
+    .lesson-save-guide-list .c{ font-size:13px; color:#1f2937; line-height:1.4; }
+    .lesson-save-guide-list .c strong{ display:block; margin-bottom:2px; }
+    .lesson-save-guide-footer{
+      display:flex; justify-content:flex-end; gap:8px;
+      padding:16px 24px 20px;
+    }
+    .lesson-save-guide-footer button{
+      border:none; border-radius:10px; padding:10px 14px;
+      font-weight:700; font-size:13px; cursor:pointer;
+    }
+    .lesson-save-guide-cancel{ background:#f3f4f6; color:#374151; }
+    .lesson-save-guide-ok{ background:#0e7c6b; color:#fff; }
 
     /* Per-message Listen/Copy actions row — matches new_ui .card-actions */
     #chatMessages .msg-actions{
@@ -4055,6 +4155,18 @@
       <!-- Modern ChatGPT-style Bottom Chat Input Area: flex-shrink-0 so it stays at bottom when messages scroll -->
       <div id="chatInputArea" class="flex-shrink-0 bg-white z-30 py-2 md:py-4 border-t border-gray-200 shadow-lg">
         <div class="max-w-4xl mx-auto px-3 md:px-4">
+          <div id="lessonSaveFlowStrip" class="lesson-save-flow" aria-live="polite">
+            <div class="lesson-save-flow-head">
+              <strong>How to save a lesson</strong>
+              <button type="button" class="lesson-save-flow-help" onclick="showLessonSaveFlowGuidance('help')">See steps</button>
+            </div>
+            <div class="lesson-save-flow-steps">
+              <div class="lesson-save-step" data-step="1"><div class="n">1</div><div class="t">Create the lesson in chat</div></div>
+              <div class="lesson-save-step" data-step="2"><div class="n">2</div><div class="t">Type “save this lesson”</div></div>
+              <div class="lesson-save-step" data-step="3"><div class="n">3</div><div class="t">Click Save → My Lessons</div></div>
+            </div>
+            <div id="lessonSaveFlowHint" class="lesson-save-flow-hint">Create a lesson first, then ask to save it in chat, then click Save.</div>
+          </div>
           <!-- Voice Input Status (hidden by default) -->
           <div id="voiceStatus" class="voice-status rounded-lg p-3 mb-3 hidden bg-blue-50 border border-blue-200">
             <div class="flex items-center justify-between">
@@ -4109,10 +4221,15 @@
             <!-- Action Buttons (Right Side - Compact on mobile) -->
             <div class="flex items-center gap-2 md:gap-4 flex-shrink-0 tt-util-bar">
               <!-- Save Lesson Button (hidden on mobile) -->
-              <button id="saveLessonBtn" onclick="saveLessonFromChat()" title="Save lesson"
+              <button id="saveLessonBtn" onclick="saveLessonFromChat()" title="Save lesson to My Lessons"
                 class="hidden md:flex items-center justify-center gap-2 text-gray-700 hover:text-primary-700 transition-colors text-sm md:text-base font-semibold"
-                aria-label="Save lesson">
+                aria-label="Save lesson to My Lessons">
                 <i class="fas fa-save"></i><span>Save</span>
+              </button>
+              <button type="button" id="saveLessonHelpBtn" onclick="showLessonSaveFlowGuidance('help')" title="How to save a lesson"
+                class="hidden md:inline-flex items-center justify-center text-primary-700 hover:text-primary-800 transition-colors text-sm font-semibold"
+                aria-label="How to save a lesson">
+                <i class="fas fa-circle-question"></i>
               </button>
 
               <!-- Download Chat Button (hidden on mobile) -->
@@ -4959,6 +5076,7 @@
 
       function setSaveLessonButtonsVisible(isVisible) {
         const saveBtn = document.getElementById('saveLessonBtn');
+        const helpBtn = document.getElementById('saveLessonHelpBtn');
         const floatingSaveItem = document.getElementById('floatingSaveLessonItem');
         if (saveBtn) {
           if (isVisible) {
@@ -4966,31 +5084,184 @@
             saveBtn.classList.add('md:flex');
           } else {
             saveBtn.classList.add('hidden');
+            saveBtn.classList.remove('md:flex');
+            saveBtn.classList.remove('save-ready-pulse');
           }
+        }
+        if (helpBtn) {
+          // Keep the help affordance visible whenever the teacher is in a lesson chat.
+          const showHelp = isVisible || !!window.currentRAGThreadId || !!(currentPDFData);
+          helpBtn.classList.toggle('hidden', !showHelp);
+          if (showHelp) helpBtn.classList.add('md:inline-flex');
+          else helpBtn.classList.remove('md:inline-flex');
         }
         if (floatingSaveItem) {
           floatingSaveItem.classList.toggle('hidden', !isVisible);
         }
+        updateLessonSaveFlowStrip();
       }
+
+      async function getLessonSaveReadiness() {
+        const localDraft = !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
+        let lastLessonText = localDraft ? String(currentLessonMarkdown).trim() : '';
+        let lessonFinalized = false;
+        if (window.currentRAGThreadId) {
+          try {
+            const res = await fetch(
+              '/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson',
+              { method: 'GET', credentials: 'include' }
+            );
+            const data = await res.json().catch(function () { return {}; });
+            if (res.ok && data && data.success) {
+              if ((data.last_lesson_text || '').trim()) {
+                lastLessonText = (data.last_lesson_text || '').trim();
+              }
+              lessonFinalized = !!data.lesson_finalized;
+            }
+          } catch (e) {
+            console.warn('Failed to evaluate lesson save readiness:', e);
+          }
+        }
+        const hasDraft = !!(lastLessonText && lastLessonText.trim());
+        let step = 1;
+        if (hasDraft && lessonFinalized) step = 3;
+        else if (hasDraft) step = 2;
+        return {
+          hasDraft: hasDraft,
+          lessonFinalized: lessonFinalized,
+          lastLessonText: lastLessonText,
+          step: step,
+          canSaveToMyLessons: hasDraft && lessonFinalized,
+        };
+      }
+
+      function updateLessonSaveFlowStrip(forcedStep) {
+        const strip = document.getElementById('lessonSaveFlowStrip');
+        const hint = document.getElementById('lessonSaveFlowHint');
+        if (!strip) return;
+        const inLessonChat = !!window.currentRAGThreadId || !!currentPDFData || !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
+        strip.classList.toggle('is-visible', inLessonChat && !window.currentLessonChatAlreadySaved);
+        const step = forcedStep || window._lessonSaveFlowStep || 1;
+        window._lessonSaveFlowStep = step;
+        strip.querySelectorAll('.lesson-save-step').forEach(function (el) {
+          const n = parseInt(el.getAttribute('data-step'), 10);
+          el.classList.toggle('is-active', n === step);
+          el.classList.toggle('is-done', n < step);
+        });
+        if (hint) {
+          if (step <= 1) {
+            hint.textContent = 'Step 1: Create or generate a lesson in this chat first.';
+          } else if (step === 2) {
+            hint.textContent = 'Step 2: Type “save this lesson” (or “finalize”) in chat. Chat save prepares the draft — it is not My Lessons yet.';
+          } else {
+            hint.textContent = 'Step 3: Click Save to add this lesson to My Lessons. You can create another lesson in this same chat afterward.';
+          }
+        }
+      }
+
+      function ensureLessonSaveGuideModal() {
+        let root = document.getElementById('lessonSaveGuideModal');
+        if (root) return root;
+        root = document.createElement('div');
+        root.id = 'lessonSaveGuideModal';
+        root.className = 'lesson-save-guide';
+        root.setAttribute('role', 'dialog');
+        root.setAttribute('aria-modal', 'true');
+        root.innerHTML =
+          '<div class="lesson-save-guide-card">' +
+          '<div class="lesson-save-guide-body">' +
+          '<h3 id="lessonSaveGuideTitle">How to save a lesson</h3>' +
+          '<p id="lessonSaveGuideLead">Follow these steps so the lesson reaches My Lessons.</p>' +
+          '<ol class="lesson-save-guide-list">' +
+          '<li data-step="1"><div class="n">1</div><div class="c"><strong>Create the lesson</strong>Upload a PDF / ask IQBAL AI to create the lesson in this chat.</div></li>' +
+          '<li data-step="2"><div class="n">2</div><div class="c"><strong>Ask to save in chat</strong>Type “save this lesson” so the draft is finalized. Chat confirmation is not My Lessons yet.</div></li>' +
+          '<li data-step="3"><div class="n">3</div><div class="c"><strong>Click Save</strong>Press the Save button to store it in My Lessons. You can repeat this for another lesson in the same chat.</div></li>' +
+          '</ol>' +
+          '</div>' +
+          '<div class="lesson-save-guide-footer">' +
+          '<button type="button" class="lesson-save-guide-cancel" id="lessonSaveGuideCancel">Close</button>' +
+          '<button type="button" class="lesson-save-guide-ok" id="lessonSaveGuideOk">Got it</button>' +
+          '</div></div>';
+        document.body.appendChild(root);
+        function close() {
+          root.classList.remove('is-open');
+          document.body.style.overflow = '';
+        }
+        root.addEventListener('click', function (e) {
+          if (e.target === root) close();
+        });
+        document.getElementById('lessonSaveGuideCancel').addEventListener('click', close);
+        document.getElementById('lessonSaveGuideOk').addEventListener('click', function () {
+          close();
+          const input = document.getElementById('messageInput');
+          if (input && window._lessonSaveGuideFocusChat) {
+            input.focus();
+            if (!input.value.trim() && window._lessonSaveGuidePrefill) {
+              input.value = window._lessonSaveGuidePrefill;
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }
+        });
+        return root;
+      }
+
+      function showLessonSaveFlowGuidance(reason) {
+        const root = ensureLessonSaveGuideModal();
+        const title = document.getElementById('lessonSaveGuideTitle');
+        const lead = document.getElementById('lessonSaveGuideLead');
+        const step = window._lessonSaveFlowStep || 1;
+        let focusStep = step;
+        window._lessonSaveGuideFocusChat = false;
+        window._lessonSaveGuidePrefill = '';
+
+        if (reason === 'no_content') {
+          if (title) title.textContent = 'Create a lesson before saving';
+          if (lead) lead.textContent = 'Save is for My Lessons. First create a lesson in this chat, then ask to save it, then click Save.';
+          focusStep = 1;
+        } else if (reason === 'need_chat_save') {
+          if (title) title.textContent = 'Almost — finalize in chat first';
+          if (lead) lead.textContent = 'A draft exists, but it is not ready for My Lessons yet. Type “save this lesson” in chat, wait for confirmation, then click Save.';
+          focusStep = 2;
+          window._lessonSaveGuideFocusChat = true;
+          window._lessonSaveGuidePrefill = 'save this lesson';
+        } else {
+          if (title) title.textContent = 'How to save a lesson';
+          if (lead) lead.textContent = 'Use this order every time — including when you create another lesson in the same chat.';
+        }
+
+        root.querySelectorAll('.lesson-save-guide-list li').forEach(function (el) {
+          const n = parseInt(el.getAttribute('data-step'), 10);
+          el.classList.toggle('is-focus', n === focusStep);
+        });
+        updateLessonSaveFlowStrip(focusStep);
+        root.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+      }
+      window.showLessonSaveFlowGuidance = showLessonSaveFlowGuidance;
 
       async function refreshSaveLessonAvailability() {
         if (window.currentLessonChatAlreadySaved) {
           setSaveLessonButtonsVisible(false);
+          updateLessonSaveFlowStrip(1);
           return;
         }
-        let canSave = !!(currentLessonMarkdown && String(currentLessonMarkdown).trim());
-        if (window.currentRAGThreadId) {
-          try {
-            const res = await fetch('/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson', { method: 'GET', credentials: 'include' });
-            const data = await res.json().catch(function () { return {}; });
-            if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
-              canSave = true;
-            }
-          } catch (e) {
-            console.warn('Failed to evaluate finalized lesson availability:', e);
+        const readiness = await getLessonSaveReadiness();
+        window._lessonSaveFlowStep = readiness.step;
+        // Show Save when a draft exists so premature clicks can open guidance.
+        setSaveLessonButtonsVisible(readiness.hasDraft);
+        updateLessonSaveFlowStrip(readiness.step);
+        const saveBtn = document.getElementById('saveLessonBtn');
+        if (saveBtn) {
+          if (readiness.canSaveToMyLessons) {
+            saveBtn.classList.add('save-ready-pulse');
+            saveBtn.title = 'Ready — click to save this lesson to My Lessons';
+          } else {
+            saveBtn.classList.remove('save-ready-pulse');
+            saveBtn.title = readiness.hasDraft
+              ? 'Draft ready — first type “save this lesson” in chat, then click Save'
+              : 'Save lesson to My Lessons';
           }
         }
-        setSaveLessonButtonsVisible(canSave);
       }
 
       // Save current PDF data to localStorage
@@ -10168,10 +10439,24 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           showToast('This lesson is already saved in My Lessons.', 'info', 2500);
           return;
         }
-        let pdfData = currentPDFData;
-        let lessonContent = currentLessonMarkdown;
 
-        // When we have a RAG thread, always try to get the actual AI lesson from backend first (not the upload template)
+        const readiness = await getLessonSaveReadiness();
+        window._lessonSaveFlowStep = readiness.step;
+        updateLessonSaveFlowStrip(readiness.step);
+
+        if (!readiness.hasDraft) {
+          showLessonSaveFlowGuidance('no_content');
+          return;
+        }
+
+        if (!readiness.lessonFinalized) {
+          showLessonSaveFlowGuidance('need_chat_save');
+          return;
+        }
+
+        let pdfData = currentPDFData;
+        let lessonContent = readiness.lastLessonText;
+
         if (window.currentRAGThreadId) {
           try {
             const res = await fetch('/api/rag/thread/' + encodeURIComponent(window.currentRAGThreadId) + '/finalized-lesson', { method: 'GET', credentials: 'include' });
@@ -10179,6 +10464,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
               lessonContent = (data.last_lesson_text || '').trim();
               pdfData = pdfData || { title: (data.lesson_title || '').trim() || 'Lesson from RAG', subject: 'General', grade: 'General' };
+              if ((data.lesson_title || '').trim() && pdfData && !pdfData.title) {
+                pdfData.title = (data.lesson_title || '').trim();
+              }
             }
           } catch (e) {
             console.warn('Failed to fetch RAG finalized lesson:', e);
@@ -10186,7 +10474,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         if (!lessonContent) {
-          showToast('No lesson to save. Please upload a PDF, create a lesson, or finalize a lesson in chat first.', 'warning', 3000);
+          showLessonSaveFlowGuidance('no_content');
           return;
         }
 
@@ -10318,6 +10606,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
           addAssistantMessage(formatted);
           await refreshSaveLessonAvailability();
+          if (window._lessonSaveFlowStep === 3) {
+            showToast('Ready for My Lessons — click Save (step 3). Chat finalize alone does not finish this.', 'info', 4500);
+          } else if (window._lessonSaveFlowStep === 2) {
+            updateLessonSaveFlowStrip(2);
+          } else if (window._lessonSaveFlowStep === 1 && window.currentRAGThreadId) {
+            updateLessonSaveFlowStrip(1);
+          }
         } catch (e) {
           if (currentChatId === requestChatId) {
             const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
@@ -10970,6 +11265,15 @@ To continue your learning journey:
             currentLessonMarkdown = null;
             clearPDFDataFromStorage();
             setSaveLessonButtonsVisible(false);
+            window._lessonSaveFlowStep = 1;
+            updateLessonSaveFlowStrip(1);
+            const strip = document.getElementById('lessonSaveFlowStrip');
+            const hint = document.getElementById('lessonSaveFlowHint');
+            if (strip) strip.classList.add('is-visible');
+            if (hint) {
+              hint.textContent = 'Saved to My Lessons. Create another lesson in this chat, ask to save it, then click Save again.';
+            }
+            showToast('Tip: For the next lesson, create → type “save this lesson” → click Save.', 'info', 4500);
           } else {
             showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
           }

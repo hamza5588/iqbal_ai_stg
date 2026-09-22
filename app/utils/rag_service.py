@@ -4261,8 +4261,8 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
 @tool
 def finalize_lesson_tool(thread_id: str) -> str:
     """
-    Finalize and permanently save the lesson you have been building in this conversation,
-    so it becomes available in "My Lessons" and to students.
+    Finalize the lesson draft you have been building in this conversation so it is
+    ready for the teacher to click the Save button and store it in My Lessons.
 
     Call this tool whenever the user's intent - in ANY wording, in any language - is to
     save, finalize, complete, or lock in the lesson (for example: "save this as a lesson",
@@ -4271,9 +4271,10 @@ def finalize_lesson_tool(thread_id: str) -> str:
     exact words yourself; if their intent is to persist the lesson, call this tool.
 
     Returns a JSON string with "success" (true/false) and "reason". Only tell the user the
-    lesson was saved if success is true. If success is false, explain the reason to them
-    instead of claiming it was saved - never say the lesson was saved unless this tool
-    actually returned success=true for this call.
+    draft was finalized if success is true. If success is false, explain the reason to them
+    instead of claiming it was saved. Important: this tool prepares the draft — the teacher
+    must still click the Save button to add it to My Lessons. Say that clearly after success
+    (e.g. "Draft finalized — click Save to add it to My Lessons.").
 
     Always include the current conversation's thread_id when calling this tool.
     """
@@ -4349,7 +4350,9 @@ def finalize_lesson_tool(thread_id: str) -> str:
         result["success"] = True
         result["already_finalized"] = already_finalized
         result["reason"] = (
-            "Lesson re-saved with the latest content." if already_finalized else "Lesson saved."
+            "Draft re-finalized with the latest content. Click Save to update My Lessons."
+            if already_finalized
+            else "Draft finalized. Click Save to add this lesson to My Lessons."
         )
         logger.info(
             "finalize_lesson_tool: thread_id=%s user_id=%s success=True already_finalized=%s",
@@ -5194,9 +5197,11 @@ DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF = (
     "example because it looks like only a fragment), call it again with the actual complete lesson text.\n"
     "- Whenever the user's intent, in any wording or language, is to save/finalize/complete/lock in the lesson "
     "you have been building (e.g. \"save this as a lesson\", \"finalize this\", \"please save it\", "
-    "\"make this final\"), call finalize_lesson_tool(thread_id='{thread_id}'). Only tell the user the lesson "
-    "was saved if that tool call returns success=true; if it returns success=false, tell them the reason "
-    "it gives instead of claiming it was saved. If the document does not have enough content to build a lesson "
+    "\"make this final\"), call finalize_lesson_tool(thread_id='{thread_id}'). Only tell the user the draft "
+    "was finalized if that tool call returns success=true; if it returns success=false, tell them the reason "
+    "it gives instead of claiming it was saved. After a successful finalize, clearly tell them to click the "
+    "Save button to add the lesson to My Lessons — do not claim it is already in My Lessons from chat alone. "
+    "If the document does not have enough content to build a lesson "
     "on the requested topic, say so plainly (e.g. \"this document doesn't have enough content on X to build a "
     "lesson\") - do not call finalize_lesson_tool or use lesson-saved/lesson-status language for that case.\n"
     "- You may use multiple tool calls in one turn when needed (for example long lectures, full-document summaries, or multi-part questions).\n"
