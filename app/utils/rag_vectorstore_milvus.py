@@ -138,11 +138,11 @@ def similarity_search(
     filtered = [r for r in out if float(r.get("score", 999)) <= max_l2]
     if not filtered and out:
         logger.warning(
-            "similarity_search: all %d hits above RAG_MAX_L2_DISTANCE=%s; keeping top unfiltered hits as fallback",
+            "similarity_search: all %d hits above RAG_MAX_L2_DISTANCE=%s; returning no hits",
             len(out),
             max_l2,
         )
-        out = out[: min(3, len(out))]
+        out = []
     else:
         out = filtered
     logger.info(
