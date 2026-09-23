@@ -249,6 +249,103 @@ def _salvage_partial_structured_json(text: str) -> Optional[dict]:
     }
 
 
+def _coerce_jsonish_value(raw: str) -> Any:
+    text = (raw or "").strip()
+    if not text:
+        return text
+    if text.startswith("{") or text.startswith("["):
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+        closed = _close_truncated_json(text)
+        if closed:
+            try:
+                return json.loads(closed)
+            except json.JSONDecodeError:
+                pass
+        if text.startswith("["):
+            objs = _iter_balanced_objects(text)
+            if objs:
+                out = []
+                for obj_text in objs:
+                    try:
+                        out.append(json.loads(obj_text))
+                    except json.JSONDecodeError:
+                        continue
+                if out:
+                    return out
+        salvaged = _salvage_partial_structured_json(text)
+        if salvaged is not None:
+            return salvaged
+    return text
+
+
+def _parse_xml_tool_call_args(text: str) -> Optional[dict]:
+    """Parse Groq XML-ish tool dumps: <parameter=name>value</parameter> (incl. truncated)."""
+    if "<parameter=" not in text and "<function=" not in text:
+        return None
+
+    data: dict[str, Any] = {}
+    for match in re.finditer(r"<parameter=([A-Za-z0-9_]+)>\s*", text):
+        name = match.group(1)
+        start = match.end()
+        end = text.find("</parameter>", start)
+        if end >= 0:
+            raw_value = text[start:end].strip()
+        else:
+            next_m = re.search(r"\n?\s*<parameter=", text[start:])
+            raw_value = (
+                text[start : start + next_m.start()].strip()
+                if next_m
+                else text[start:].strip()
+            )
+        if not raw_value:
+            continue
+        if name == "confidence":
+            try:
+                data[name] = float(raw_value)
+            except ValueError:
+                data[name] = 0.7
+            continue
+        if name in ("questions", "answers", "warnings") or raw_value[:1] in "{[":
+            data[name] = _coerce_jsonish_value(raw_value)
+        else:
+            data[name] = raw_value
+
+    if not data:
+        return None
+
+    # If questions landed as a salvaged object with nested questions, unwrap.
+    questions = data.get("questions")
+    if isinstance(questions, dict) and "questions" in questions:
+        data["questions"] = questions.get("questions") or []
+        if "answers" not in data and questions.get("answers"):
+            data["answers"] = questions.get("answers")
+
+    if not data.get("questions") and not data.get("answers"):
+        # Truncated XML may only have a questions array fragment after the tag.
+        q_tag = re.search(r"<parameter=questions>\s*", text)
+        if q_tag:
+            fragment = text[q_tag.end() :]
+            coerced = _coerce_jsonish_value(fragment)
+            if isinstance(coerced, list) and coerced:
+                data["questions"] = coerced
+            elif isinstance(coerced, dict) and coerced.get("questions"):
+                data["questions"] = coerced["questions"]
+
+    if not data.get("questions") and not data.get("answers"):
+        return None
+
+    data.setdefault("format_detected", data.get("format_detected") or "unknown")
+    data.setdefault("confidence", 0.7)
+    data.setdefault(
+        "warnings",
+        ["Recovered structured output from truncated XML tool call"],
+    )
+    return data
+
+
 def _coerce_failed_generation_data(failed_raw: object) -> Optional[object]:
     if isinstance(failed_raw, dict):
         return failed_raw
@@ -259,14 +356,22 @@ def _coerce_failed_generation_data(failed_raw: object) -> Optional[object]:
     if not text:
         return None
 
-    # Tool-call wrapper: PDFExtractionResult({...}) or name + JSON body.
-    if not text.startswith("{") and not text.startswith("["):
-        brace = text.find("{")
-        if brace >= 0:
-            text = text[brace:]
+    # Groq often returns XML-style tool calls instead of JSON.
+    xml_data = _parse_xml_tool_call_args(text)
+    if xml_data is not None:
+        return xml_data
 
-    candidates: List[str] = [text]
-    closed = _close_truncated_json(text)
+    # Tool-call wrapper: PDFExtractionResult({...}) or name + JSON body.
+    json_text = text
+    if not json_text.startswith("{") and not json_text.startswith("["):
+        brace = json_text.find("{")
+        bracket = json_text.find("[")
+        cut_candidates = [i for i in (brace, bracket) if i >= 0]
+        if cut_candidates:
+            json_text = json_text[min(cut_candidates) :]
+
+    candidates: List[str] = [json_text]
+    closed = _close_truncated_json(json_text)
     if closed and closed not in candidates:
         candidates.append(closed)
 
@@ -276,9 +381,21 @@ def _coerce_failed_generation_data(failed_raw: object) -> Optional[object]:
         except json.JSONDecodeError:
             continue
 
-    salvaged = _salvage_partial_structured_json(text)
+    salvaged = _salvage_partial_structured_json(json_text)
     if salvaged is not None:
         return salvaged
+
+    # Last resort: treat the whole blob as a questions array fragment.
+    if "[" in text:
+        coerced = _coerce_jsonish_value(text[text.find("[") :])
+        if isinstance(coerced, list) and coerced:
+            return {
+                "questions": coerced,
+                "answers": [],
+                "format_detected": "native_mcq_with_answer_key",
+                "confidence": 0.7,
+                "warnings": ["Recovered questions array from truncated tool call"],
+            }
     return None
 
 

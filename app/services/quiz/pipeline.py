@@ -213,6 +213,12 @@ def run_pdf_quiz_pipeline(
                 pairs, quiz_title=extraction.title or assessment.title
             )
             assert_valid_mcqs(converted)
+            # Some diagnostic PDFs are flat MCQ papers without SECTION/PART headings.
+            # Prefer recovered concepts; otherwise use a stable fallback so upload is not blocked.
+            if not parse_section_topics(text):
+                for mcq in converted.questions or []:
+                    if not (getattr(mcq, "learning_concept", None) or "").strip():
+                        mcq.learning_concept = "General"
             assert_topic_or_key_area_available(
                 text,
                 assessment_type=assessment.assessment_type,
