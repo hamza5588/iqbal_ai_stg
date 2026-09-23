@@ -359,13 +359,39 @@
 
   function lmsNormalizeMixedPercents(s) {
     s = String(s || '');
-    s = s.replace(/(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}\s*\\?%/g, '$1 $2/$3%');
+    var fracs = {
+      '½': '1/2', '⅓': '1/3', '⅔': '2/3', '¼': '1/4', '¾': '3/4',
+      '⅕': '1/5', '⅖': '2/5', '⅗': '3/5', '⅘': '4/5',
+      '⅙': '1/6', '⅚': '5/6', '⅛': '1/8', '⅜': '3/8', '⅝': '5/8', '⅞': '7/8'
+    };
+    Object.keys(fracs).forEach(function (g) {
+      s = s.split(g).join(' ' + fracs[g]);
+    });
+    s = s.replace(/\\%/g, '%');
+    s = s.replace(/(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}\s*%/g, '$1 $2/$3%');
     s = s.replace(/(\d+)\s+(\d+)\s+(\d+)\s*%/g, '$1 $2/$3%');
-    return s;
+    s = s.replace(/(^|[^\d/])(\d{2,})\/(\d+)\s*%/g, function (_m, pre, left, den) {
+      var denI = parseInt(den, 10);
+      if (!denI) return _m;
+      for (var digits = 1; digits <= 2; digits++) {
+        if (left.length <= digits) continue;
+        var whole = left.slice(0, -digits);
+        var num = left.slice(-digits);
+        var numI = parseInt(num, 10);
+        if (!whole || whole.charAt(0) === '0' || !numI) continue;
+        if (numI < denI) return pre + whole + ' ' + num + '/' + den + '%';
+      }
+      return _m;
+    });
+    return s.replace(/[ \t]+/g, ' ').trim();
   }
 
   function lmsIsMixedPercent(s) {
-    return /^\s*\d+\s+\d+\s*\/\s*\d+\s*%?\s*$/.test(s) || /^\s*\d+\s*\/\s*\d+\s*%?\s*$/.test(s);
+    return /^\s*\d+(?:\s+\d+\s*\/\s*\d+)?\s*%?\s*$/.test(s) || /^\s*\d+\s*\/\s*\d+\s*%?\s*$/.test(s);
+  }
+
+  function lmsIsPlainPercent(s) {
+    return /^\s*\d+(?:\s+\d+\s*\/\s*\d+)?\s*%\s*$/.test(String(s || ''));
   }
 
   function lmsLooksLikeProse(s) {
@@ -542,6 +568,7 @@
     if (!s) return '';
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
+    if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
       var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
       if (lmsLooksLikeProse(withoutDelims)) {
@@ -560,7 +587,7 @@
       var wrap = (!inline && /\\frac/.test(body)) ? ['\\[', '\\]'] : ['\\(', '\\)'];
       return colon[1] + ' ' + wrap[0] + lmsEscapePercentInMathBody(body) + wrap[1];
     }
-    if (lmsIsMixedPercent(recovered)) return recovered;
+    if (lmsIsPlainPercent(recovered) || lmsIsMixedPercent(recovered)) return recovered.replace(/\\%/g, '%');
     if (lmsLooksLikeMixedTextAndMath(recovered)) return lmsWrapMathIslands(recovered, inline);
     if (lmsLooksLikeProse(recovered)) return lmsWrapMathIslands(recovered, inline);
     // "x = 3 or x = -3", "a < b and b < c": a plain English connective joins

@@ -340,7 +340,7 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
     """Return questions without correct answers for student delivery."""
     attempt = get_attempt(attempt_id)
     _check_attempt_expired(attempt)
-    from app.services.quiz.math_text import wrap_for_mathjax
+    from app.services.quiz.math_text import to_render_string, wrap_for_mathjax
 
     db = get_db()
     q_ids = attempt_question_ids(attempt)
@@ -360,9 +360,7 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
                     "label": o.get("label"),
                     "text": text,
                     "latex": latex,
-                    # Delimiter-wrapped so MathJax always typesets it -
-                    # the client renders this verbatim.
-                    "render": wrap_for_mathjax(latex or text, inline=True),
+                    "render": to_render_string(text, latex, inline=True),
                 }
             )
         result.append(

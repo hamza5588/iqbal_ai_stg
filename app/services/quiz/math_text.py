@@ -262,12 +262,66 @@ def recover_latex(text: Optional[str]) -> str:
 
 _MIXED_FRAC_PCT_RE = re.compile(r"(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}\s*\\?%")
 _MIXED_SPACED_PCT_RE = re.compile(r"(\d+)\s+(\d+)\s+(\d+)\s*%")
+# Flattened PDF / OCR form: "162/3%" → "16 2/3%", "331/3%" → "33 1/3%"
+_SMASHED_MIXED_PCT_RE = re.compile(r"(?<![\d/])(\d{2,})/(\d+)\s*%")
+_PLAIN_PERCENT_RE = re.compile(r"^\d+(?:\s+\d+\s*/\s*\d+)?\s*%$")
+_UNICODE_VULGAR_FRAC = {
+    "½": "1/2",
+    "⅓": "1/3",
+    "⅔": "2/3",
+    "¼": "1/4",
+    "¾": "3/4",
+    "⅕": "1/5",
+    "⅖": "2/5",
+    "⅗": "3/5",
+    "⅘": "4/5",
+    "⅙": "1/6",
+    "⅚": "5/6",
+    "⅛": "1/8",
+    "⅜": "3/8",
+    "⅝": "5/8",
+    "⅞": "7/8",
+}
+
+
+def _unsquash_mixed_percent(match: re.Match[str]) -> str:
+    """Split smashed whole+num/den percents into '16 2/3%' style."""
+    left, den = match.group(1), match.group(2)
+    try:
+        den_i = int(den)
+    except ValueError:
+        return match.group(0)
+    if den_i <= 0:
+        return match.group(0)
+    for num_digits in (1, 2):
+        if len(left) <= num_digits:
+            continue
+        whole, num = left[:-num_digits], left[-num_digits:]
+        if not whole or whole.startswith("0"):
+            continue
+        try:
+            num_i = int(num)
+        except ValueError:
+            continue
+        if num_i <= 0:
+            continue
+        # Prefer a proper fraction (num < den); allow single-digit nums with
+        # small dens even when equal (rare) so 8/8-style stays smashed.
+        if num_i < den_i:
+            return f"{whole} {num}/{den}%"
+    return match.group(0)
 
 
 def normalize_mixed_percents(text: str) -> str:
-    """Keep 16 2/3% as a visible slash, not a stacked fraction or 16 2 3 %."""
-    s = _MIXED_FRAC_PCT_RE.sub(r"\1 \2/\3%", text or "")
+    """Keep 16 2/3% as a visible slash, not a stacked fraction or 162/3%."""
+    s = text or ""
+    for glyph, ascii_frac in _UNICODE_VULGAR_FRAC.items():
+        s = s.replace(glyph, f" {ascii_frac}")
+    s = s.replace("\\%", "%")
+    s = _MIXED_FRAC_PCT_RE.sub(r"\1 \2/\3%", s)
     s = _MIXED_SPACED_PCT_RE.sub(r"\1 \2/\3%", s)
+    s = _SMASHED_MIXED_PCT_RE.sub(_unsquash_mixed_percent, s)
+    s = re.sub(r"[ \t]+", " ", s).strip()
     return s
 
 
@@ -434,6 +488,11 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
     s = (text or "").strip()
     if not s:
         return text or ""
+    # Plain percents ("15%", "16 2/3%") must stay literal — wrapping them
+    # turns % into \% and leaves a visible backslash when MathJax skips.
+    plain_pct = normalize_mixed_percents(s)
+    if _PLAIN_PERCENT_RE.match(plain_pct):
+        return plain_pct
     if _HAS_DELIM_RE.search(s):
         return s
     prefixed = _INSTRUCTION_PREFIX_RE.match(s)
