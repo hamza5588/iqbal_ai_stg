@@ -265,9 +265,10 @@ def create_app():
         from werkzeug.exceptions import HTTPException
 
         if isinstance(e, HTTPException):
-            # Normal aborts (404, 403, etc.) aren't DB errors; let Flask's
-            # default handling deal with them unchanged.
-            raise e
+            # Must *return* HTTPException (404/403/etc.), not re-raise.
+            # Re-raising from an Exception handler makes Flask emit 500 —
+            # which broke removed routes like /api/lms/students/me/progress/by-topic.
+            return e
 
         try:
             from flask import g
