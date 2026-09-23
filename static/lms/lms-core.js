@@ -368,7 +368,8 @@
       s = s.split(g).join(' ' + fracs[g]);
     });
     s = s.replace(/\\%/g, '%');
-    s = s.replace(/(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}\s*%/g, '$1 $2/$3%');
+    s = s.replace(/\\(?:mathrm|text|textrm|mathsf)\s*\{([^{}]+)\}/g, '$1');
+    s = s.replace(/(\d+)\s*\\(?:t|d|c)?frac\s*\{(\d+)\}\s*\{(\d+)\}\s*%/g, '$1 $2/$3%');
     s = s.replace(/(\d+)\s+(\d+)\s+(\d+)\s*%/g, '$1 $2/$3%');
     s = s.replace(/(^|[^\d/])(\d{2,})\/(\d+)\s*%/g, function (_m, pre, left, den) {
       var denI = parseInt(den, 10);

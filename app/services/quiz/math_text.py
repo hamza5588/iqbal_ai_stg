@@ -264,7 +264,9 @@ def recover_latex(text: Optional[str]) -> str:
     return s.strip()
 
 
-_MIXED_FRAC_PCT_RE = re.compile(r"(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}\s*\\?%")
+_MIXED_FRAC_PCT_RE = re.compile(
+    r"(\d+)\s*\\(?:t|d|c)?frac\s*\{(\d+)\}\s*\{(\d+)\}\s*\\?%"
+)
 _MIXED_SPACED_PCT_RE = re.compile(r"(\d+)\s+(\d+)\s+(\d+)\s*%")
 # Flattened PDF / OCR form: "162/3%" → "16 2/3%", "331/3%" → "33 1/3%"
 _SMASHED_MIXED_PCT_RE = re.compile(r"(?<![\d/])(\d{2,})/(\d+)\s*%")
@@ -317,11 +319,16 @@ def _unsquash_mixed_percent(match: re.Match[str]) -> str:
 
 
 def normalize_mixed_percents(text: str) -> str:
-    """Keep 16 2/3% as a visible slash, not a stacked fraction or 162/3%."""
+    """Keep 16 2/3% as a visible slash, not a stacked fraction or 162/3%.
+
+    Handles extractor variants: \\frac, \\tfrac, \\dfrac, \\%, smashed 162/3%.
+    """
     s = text or ""
     for glyph, ascii_frac in _UNICODE_VULGAR_FRAC.items():
         s = s.replace(glyph, f" {ascii_frac}")
     s = s.replace("\\%", "%")
+    # Drop optional \\mathrm / \\text wrappers around digits in percent latex
+    s = re.sub(r"\\(?:mathrm|text|textrm|mathsf)\s*\{([^{}]+)\}", r"\1", s)
     s = _MIXED_FRAC_PCT_RE.sub(r"\1 \2/\3%", s)
     s = _MIXED_SPACED_PCT_RE.sub(r"\1 \2/\3%", s)
     s = _SMASHED_MIXED_PCT_RE.sub(_unsquash_mixed_percent, s)
