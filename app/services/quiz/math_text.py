@@ -254,7 +254,9 @@ def recover_latex(text: Optional[str]) -> str:
     s = re.sub(r"(\))\s*\^\s*(\d+)\b", r"\1^{\2}", s)
     s = recover_stacked_fraction(s)
     s = strip_inner_math_delims(s)
+    s = strip_english_dollar_spans(s)
     s = normalize_mixed_percents(s)
+    s = normalize_plain_ellipsis(s)
     s = re.sub(r"([0-9√π∞°}%])([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"(\})([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"[ \t]+", " ", s)
@@ -325,6 +327,40 @@ def normalize_mixed_percents(text: str) -> str:
     s = _SMASHED_MIXED_PCT_RE.sub(_unsquash_mixed_percent, s)
     s = re.sub(r"[ \t]+", " ", s).strip()
     return s
+
+
+# PDF prints plain "..." ; extractors often emit \ldots which MathJax never
+# typesets when the stem is prose (no \(...\) wrappers).
+_LATEX_ELLIPSIS_RE = re.compile(r"\\(?:ldots|cdots|dots)\b")
+# "$non - terminating$" etc. — English wrapped in $ $ renders italic + spaced hyphens.
+_ENGLISH_DOLLAR_SPAN_RE = re.compile(
+    r"(?<![\\$])\$([A-Za-z][A-Za-z]*(?:\s*-\s*[A-Za-z]+)+)\$"
+)
+
+
+def normalize_plain_ellipsis(text: str) -> str:
+    """Turn \\ldots / … into plain '...' so decimals match the printed PDF."""
+    s = text or ""
+    s = _LATEX_ELLIPSIS_RE.sub("...", s)
+    s = s.replace("…", "...")
+    # "18181818..." → "18181818 ..." (PDF spacing before the dots)
+    s = re.sub(r"(\d)\.\.\.(?=\s|$|[^\d.])", r"\1 ...", s)
+    # Collapse "5. 1818 ... ..." style doubles
+    s = re.sub(r"(?:\.\.\.\s*){2,}", "... ", s)
+    return re.sub(r"[ \t]+", " ", s).strip() if s else s
+
+
+def strip_english_dollar_spans(text: str) -> str:
+    """Unwrap $non - terminating$ style false math around hyphenated English."""
+
+    def repl(match: re.Match[str]) -> str:
+        inner = match.group(1)
+        # Real math keeps digits / TeX; English hyphen compounds collapse.
+        if re.search(r"[0-9\\^=_+]", inner):
+            return match.group(0)
+        return re.sub(r"\s*-\s*", "-", inner)
+
+    return _ENGLISH_DOLLAR_SPAN_RE.sub(repl, text or "")
 
 
 def _strip_math_delims(s: str) -> str:
@@ -555,6 +591,8 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
     plain_pct = normalize_mixed_percents(s)
     if _PLAIN_PERCENT_RE.match(plain_pct):
         return plain_pct
+    # Prose stems must not keep bare \ldots (shows as literal backslash-text).
+    s = normalize_plain_ellipsis(strip_english_dollar_spans(s))
     if _HAS_DELIM_RE.search(s):
         return s
     prefixed = _INSTRUCTION_PREFIX_RE.match(s)

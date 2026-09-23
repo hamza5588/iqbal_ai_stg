@@ -37,6 +37,7 @@ Rules:
 - Extract ONLY content that appears in the document. Do NOT invent questions or answers.
 - Handle varied layouts: separate Questions/Answers sections, inline Q&A, numbered lists, native MCQs, etc.
 - Preserve math notation; put LaTeX ONLY in latex fields. Text fields must be readable.
+- For repeating decimals use plain dots ("5.18181818 ..."), NEVER \\ldots / \\cdots in text.
 - Flattened PDF exponents (x2, a3b2) MUST be stored as latex x^{{2}}, a^{{3}}b^{{2}}. Never keep "4x2" or "a4b3".
 - A stacked fraction (numerator line then denominator line) MUST become \\frac{{num}}{{den}}.
   Example: Simplify / (a^3 b^2)(a^2 b^4) / ab^3 → latex \\frac{{(a^{{3}}b^{{2}})(a^{{2}}b^{{4}})}}{{ab^{{3}}}}.

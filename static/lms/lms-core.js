@@ -386,6 +386,22 @@
     return s.replace(/[ \t]+/g, ' ').trim();
   }
 
+  function lmsNormalizePlainEllipsis(s) {
+    s = String(s || '');
+    s = s.replace(/\\(?:ldots|cdots|dots)\b/g, '...');
+    s = s.replace(/…/g, '...');
+    s = s.replace(/(\d)\.\.\.(?=\s|$|[^\d.])/g, '$1 ...');
+    s = s.replace(/(?:\.\.\.\s*){2,}/g, '... ');
+    return s.replace(/[ \t]+/g, ' ').trim();
+  }
+
+  function lmsStripEnglishDollarSpans(s) {
+    return String(s || '').replace(/\$(?!\$)([A-Za-z][A-Za-z]*(?:\s*-\s*[A-Za-z]+)+)\$/g, function (m, inner) {
+      if (/[0-9\\^=_+]/.test(inner)) return m;
+      return inner.replace(/\s*-\s*/g, '-');
+    });
+  }
+
   function lmsIsMixedPercent(s) {
     return /^\s*\d+(?:\s+\d+\s*\/\s*\d+)?\s*%?\s*$/.test(s) || /^\s*\d+\s*\/\s*\d+\s*%?\s*$/.test(s);
   }
@@ -530,7 +546,9 @@
     t = lmsImplicitExponents(t);
     t = lmsRecoverStackedFraction(t);
     t = lmsStripInnerMathDelims(t);
+    t = lmsStripEnglishDollarSpans(t);
     t = lmsNormalizeMixedPercents(t);
+    t = lmsNormalizePlainEllipsis(t);
     t = t.replace(/([0-9√π∞°}%])([A-Za-z]{3,})/g, '$1 $2');
     t = t.replace(/(\})([A-Za-z]{3,})/g, '$1 $2');
     return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
@@ -599,6 +617,7 @@
     if (!s) return '';
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
+    s = lmsNormalizePlainEllipsis(lmsStripEnglishDollarSpans(s));
     if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
       var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
