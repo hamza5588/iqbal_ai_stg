@@ -27,6 +27,9 @@ from app.services.quiz.retry_utils import invoke_structured
 logger = logging.getLogger(__name__)
 
 _MAX_TEXT_CHARS = 80000
+# Full-document extraction of 20–40 MCQs needs a large completion budget; 4096 truncates mid-tool-call.
+_EXTRACTION_MAX_TOKENS = 16384
+_CHUNK_QUESTION_BATCH = 8
 
 _EXTRACTION_PROMPT = """You are extracting questions and answers from an educational PDF document.
 
@@ -303,8 +306,15 @@ def _result_from_harvest(pdf_text: str) -> Optional[PDFExtractionResult]:
         raw = letter or (item.get("answer") or "").strip()
         if raw:
             extracted_a.append(ExtractedAnswer(number=item["number"], text=raw))
-    if len(extracted_a) < max(4, int(0.8 * len(extracted_q))):
+    min_answers = max(2, int(0.5 * len(extracted_q)))
+    warnings: List[str] = []
+    if len(extracted_a) < min_answers:
         return None
+    if len(extracted_a) < max(4, int(0.8 * len(extracted_q))):
+        warnings.append(
+            f"Harvested only {len(extracted_a)}/{len(extracted_q)} answers; "
+            "post-processing may fill gaps from the answer key"
+        )
     try:
         extracted_q = _llm_normalize_math(extracted_q)
     except Exception as exc:
@@ -315,8 +325,138 @@ def _result_from_harvest(pdf_text: str) -> Optional[PDFExtractionResult]:
         answers=extracted_a,
         format_detected=fmt,
         confidence=0.94 if answers else 0.9,
-        warnings=[],
+        warnings=warnings,
     )
+
+
+def _answer_key_region(pdf_text: str) -> str:
+    lower = (pdf_text or "").lower()
+    start = -1
+    for marker in (
+        "answer key",
+        "answer sheet",
+        "answers",
+        "marking scheme",
+        "correct answers",
+    ):
+        idx = lower.rfind(marker)
+        if idx != -1:
+            start = max(start, idx)
+    if start < 0:
+        return ""
+    return pdf_text[start:]
+
+
+def _question_batches(pdf_text: str, batch_size: int = _CHUNK_QUESTION_BATCH) -> List[str]:
+    """Split a native MCQ paper into question batches (answer key appended to each)."""
+    from app.services.lms.mcq_utils import _QUESTION_START_RE
+
+    lower = (pdf_text or "").lower()
+    cut = len(pdf_text)
+    for marker in ("answer key", "answer sheet", "marking scheme", "correct answers"):
+        idx = lower.rfind(marker)
+        if idx != -1:
+            cut = min(cut, idx)
+    body = pdf_text[:cut]
+    key_region = pdf_text[cut:] if cut < len(pdf_text) else _answer_key_region(pdf_text)
+    starts = list(_QUESTION_START_RE.finditer(body))
+    if len(starts) < 2:
+        return [pdf_text]
+    batches: List[str] = []
+    for i in range(0, len(starts), batch_size):
+        begin = starts[i].start()
+        end = starts[i + batch_size].start() if i + batch_size < len(starts) else len(body)
+        chunk = body[begin:end].strip()
+        if key_region:
+            chunk = f"{chunk}\n\n{key_region}"
+        batches.append(chunk)
+    return batches or [pdf_text]
+
+
+def _merge_extractions(parts: List[PDFExtractionResult]) -> PDFExtractionResult:
+    questions: List[ExtractedQuestion] = []
+    answers: List[ExtractedAnswer] = []
+    warnings: List[str] = []
+    seen_q: set[str] = set()
+    seen_a: set[str] = set()
+    title = None
+    confidence = 0.0
+    format_detected = "unknown"
+    for part in parts:
+        if part.title and not title:
+            title = part.title
+        if part.format_detected and part.format_detected != "unknown":
+            format_detected = part.format_detected
+        confidence = max(confidence, float(part.confidence or 0.0))
+        warnings.extend(part.warnings or [])
+        for q in part.questions or []:
+            key = _normalize_number(q.number)
+            if key in seen_q:
+                continue
+            seen_q.add(key)
+            questions.append(q)
+        for a in part.answers or []:
+            key = _normalize_number(a.number)
+            if key in seen_a:
+                continue
+            seen_a.add(key)
+            answers.append(a)
+
+    def _q_key(q: ExtractedQuestion) -> tuple:
+        num = q.number
+        if isinstance(num, int):
+            return (0, num, "")
+        normalized = _normalize_number(num)
+        if normalized.isdigit():
+            return (0, int(normalized), "")
+        return (1, 0, normalized)
+
+    questions.sort(key=_q_key)
+    return PDFExtractionResult(
+        title=title,
+        questions=questions,
+        answers=answers,
+        format_detected=format_detected,
+        confidence=confidence or 0.7,
+        warnings=warnings,
+    )
+
+
+def _llm_extract_qa(text: str) -> PDFExtractionResult:
+    from app.utils.llm_factory import get_chat_model
+
+    llm = get_chat_model(temperature=0.1, max_tokens=_EXTRACTION_MAX_TOKENS)
+    try:
+        return invoke_structured(
+            llm, PDFExtractionResult, _EXTRACTION_PROMPT.format(text=text)
+        )
+    except Exception as full_exc:
+        logger.warning("Full-document Q&A extraction failed (%s); trying chunked extract", full_exc)
+        batches = _question_batches(text)
+        if len(batches) <= 1:
+            raise full_exc
+        parts: List[PDFExtractionResult] = []
+        last_err: Exception | None = full_exc
+        for idx, chunk in enumerate(batches):
+            try:
+                part = invoke_structured(
+                    llm,
+                    PDFExtractionResult,
+                    _EXTRACTION_PROMPT.format(text=chunk),
+                )
+                if part.questions or part.answers:
+                    parts.append(part)
+            except Exception as chunk_exc:
+                last_err = chunk_exc
+                logger.warning("Chunk %s/%s extraction failed: %s", idx + 1, len(batches), chunk_exc)
+        if not parts:
+            assert last_err is not None
+            raise last_err
+        merged = _merge_extractions(parts)
+        merged.warnings.append(
+            f"Used chunked extraction after full-document failure ({len(parts)}/{len(batches)} chunks)"
+        )
+        return merged
 
 
 def extract_qa_from_text(pdf_text: str) -> PDFExtractionResult:
@@ -336,12 +476,50 @@ def extract_qa_from_text(pdf_text: str) -> PDFExtractionResult:
             len(harvested.answers),
         )
         return harvested
-    from app.utils.llm_factory import get_chat_model
 
-    llm = get_chat_model(temperature=0.1, max_tokens=4096)
-    result: PDFExtractionResult = invoke_structured(
-        llm, PDFExtractionResult, _EXTRACTION_PROMPT.format(text=text)
-    )
+    try:
+        result = _llm_extract_qa(text)
+    except Exception as exc:
+        # Last resort: accept a thinner harvest (questions only) so upload is not a dead end.
+        thin = harvest_native_mcqs(text)
+        key = harvest_answer_key(text)
+        if len(thin) >= 4 and key:
+            logger.warning(
+                "LLM extraction failed (%s); falling back to deterministic harvest (%s Q, %s A)",
+                exc,
+                len(thin),
+                len(key),
+            )
+            extracted_q = [
+                _enrich_question_math(
+                    ExtractedQuestion(
+                        number=item["number"],
+                        text=item["text"],
+                        latex=item.get("latex"),
+                        options=[
+                            ExtractedOption(label=o["label"], text=o["text"], latex=o.get("latex"))
+                            for o in item["options"]
+                        ],
+                    )
+                )
+                for item in thin
+            ]
+            ans_map = {_normalize_number(n): letter for n, letter in key}
+            extracted_a = [
+                ExtractedAnswer(number=item["number"], text=ans_map[_normalize_number(item["number"])])
+                for item in thin
+                if _normalize_number(item["number"]) in ans_map
+            ]
+            result = PDFExtractionResult(
+                questions=extracted_q,
+                answers=extracted_a,
+                format_detected="native_mcq_with_answer_key",
+                confidence=0.85,
+                warnings=[f"LLM extraction failed; used deterministic harvest: {exc}"],
+            )
+        else:
+            raise
+
     if not result.warnings:
         result.warnings = []
     result = _postprocess_extraction(result, text)

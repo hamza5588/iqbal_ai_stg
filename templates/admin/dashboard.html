@@ -425,85 +425,588 @@
 
             <!-- Diagnostic Assessment Section (Admin only) -->
             <div id="diagnostic-section" class="section hidden">
-                <h2 class="text-3xl font-bold text-gray-800 mb-2">Diagnostic Assessment</h2>
-                <p class="text-gray-600 mb-6">Upload one platform diagnostic per grade. Students take the diagnostic for their own grade only once.
-                    AI calculates the timer based on each question's difficulty.</p>
+                <style>
+                    #diagnostic-section {
+                        --d-ink: #0f172a;
+                        --d-muted: #64748b;
+                        --d-line: #e2e8f0;
+                        --d-cyan: #05B0FC;
+                        --d-cyan-deep: #0284c7;
+                        --d-bg: #f8fafc;
+                    }
+                    #diagnostic-section .d-page-head {
+                        display: flex;
+                        flex-wrap: wrap;
+                        align-items: flex-end;
+                        justify-content: space-between;
+                        gap: 1rem;
+                        margin-bottom: 1.25rem;
+                    }
+                    #diagnostic-section .d-page-head h2 {
+                        font-size: 1.75rem;
+                        font-weight: 800;
+                        color: var(--d-ink);
+                        letter-spacing: -0.03em;
+                        line-height: 1.2;
+                    }
+                    #diagnostic-section .d-page-head p {
+                        color: var(--d-muted);
+                        font-size: 0.92rem;
+                        margin-top: 0.25rem;
+                        max-width: 36rem;
+                    }
+                    #diagnostic-section .d-stats {
+                        display: flex;
+                        gap: 0.5rem;
+                        flex-wrap: wrap;
+                    }
+                    #diagnostic-section .d-stat {
+                        background: #fff;
+                        border: 1px solid var(--d-line);
+                        border-radius: 0.65rem;
+                        padding: 0.5rem 0.85rem;
+                        min-width: 4.75rem;
+                    }
+                    #diagnostic-section .d-stat b {
+                        display: block;
+                        font-size: 1.1rem;
+                        color: var(--d-ink);
+                        line-height: 1.1;
+                    }
+                    #diagnostic-section .d-stat span {
+                        font-size: 0.65rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.06em;
+                        color: var(--d-muted);
+                        font-weight: 700;
+                    }
+                    #diagnostic-section .d-note {
+                        background: #fffbeb;
+                        border: 1px solid #fde68a;
+                        color: #92400e;
+                        border-radius: 0.65rem;
+                        padding: 0.65rem 0.85rem;
+                        font-size: 0.84rem;
+                        margin-bottom: 1rem;
+                    }
+                    #diagnostic-section .d-hub {
+                        background: #fff;
+                        border: 1px solid var(--d-line);
+                        border-radius: 0.9rem;
+                        overflow: hidden;
+                        margin-bottom: 1.25rem;
+                        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+                    }
+                    #diagnostic-section .d-tabs {
+                        display: flex;
+                        gap: 0;
+                        border-bottom: 1px solid var(--d-line);
+                        background: var(--d-bg);
+                        padding: 0 0.5rem;
+                    }
+                    #diagnostic-section .d-tab {
+                        border: none;
+                        background: transparent;
+                        color: var(--d-muted);
+                        font-weight: 700;
+                        font-size: 0.88rem;
+                        padding: 0.9rem 1.1rem;
+                        cursor: pointer;
+                        border-bottom: 2px solid transparent;
+                        margin-bottom: -1px;
+                        transition: color 0.15s ease, border-color 0.15s ease;
+                    }
+                    #diagnostic-section .d-tab:hover { color: var(--d-ink); }
+                    #diagnostic-section .d-tab.is-active {
+                        color: var(--d-cyan-deep);
+                        border-bottom-color: var(--d-cyan);
+                        background: #fff;
+                    }
+                    #diagnostic-section .d-tab-panel { display: none; padding: 1.15rem 1.25rem 1.35rem; }
+                    #diagnostic-section .d-tab-panel.is-active { display: block; }
+                    #diagnostic-section .d-label {
+                        display: block;
+                        font-size: 0.78rem;
+                        font-weight: 700;
+                        color: #334155;
+                        margin-bottom: 0.3rem;
+                    }
+                    #diagnostic-section .d-help {
+                        font-size: 0.75rem;
+                        color: var(--d-muted);
+                        margin-bottom: 0.35rem;
+                    }
+                    #diagnostic-section .d-input,
+                    #diagnostic-section .d-select {
+                        width: 100%;
+                        border: 1px solid #cbd5e1;
+                        border-radius: 0.55rem;
+                        padding: 0.55rem 0.7rem;
+                        font-size: 0.9rem;
+                        background: #fff;
+                        color: var(--d-ink);
+                    }
+                    #diagnostic-section .d-input:focus,
+                    #diagnostic-section .d-select:focus {
+                        outline: none;
+                        border-color: var(--d-cyan);
+                        box-shadow: 0 0 0 3px rgba(5, 176, 252, 0.15);
+                    }
+                    #diagnostic-section .d-drop {
+                        position: relative;
+                        display: flex;
+                        align-items: center;
+                        gap: 0.75rem;
+                        border: 1.5px dashed #cbd5e1;
+                        border-radius: 0.65rem;
+                        background: var(--d-bg);
+                        padding: 0.75rem 0.9rem;
+                        cursor: pointer;
+                        transition: border-color 0.15s ease, background 0.15s ease;
+                    }
+                    #diagnostic-section .d-drop:hover,
+                    #diagnostic-section .d-drop.is-dragover {
+                        border-color: var(--d-cyan);
+                        background: #eff9ff;
+                    }
+                    #diagnostic-section .d-drop i {
+                        color: var(--d-cyan);
+                        font-size: 1.1rem;
+                        width: 1.5rem;
+                        text-align: center;
+                    }
+                    #diagnostic-section .d-drop strong {
+                        display: block;
+                        font-size: 0.88rem;
+                        color: var(--d-ink);
+                    }
+                    #diagnostic-section .d-drop span {
+                        display: block;
+                        font-size: 0.72rem;
+                        color: var(--d-muted);
+                    }
+                    #diagnostic-section .d-drop input[type="file"] {
+                        position: absolute;
+                        inset: 0;
+                        opacity: 0;
+                        cursor: pointer;
+                    }
+                    #diagnostic-section .d-drop.is-disabled {
+                        opacity: 0.45;
+                        pointer-events: none;
+                    }
+                    #diagnostic-section .d-grade-pills {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 0.4rem;
+                        margin-top: 0.45rem;
+                    }
+                    #diagnostic-section .d-grade-pill {
+                        border: 1px solid #cbd5e1;
+                        background: #fff;
+                        color: #334155;
+                        border-radius: 0.5rem;
+                        padding: 0.4rem 0.7rem;
+                        font-size: 0.8rem;
+                        font-weight: 700;
+                        cursor: pointer;
+                    }
+                    #diagnostic-section .d-grade-pill:hover {
+                        border-color: var(--d-cyan);
+                        color: var(--d-cyan-deep);
+                    }
+                    #diagnostic-section .d-grade-pill.is-selected {
+                        background: var(--d-cyan);
+                        border-color: var(--d-cyan);
+                        color: #fff;
+                    }
+                    #diagnostic-section .d-btn {
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 0.4rem;
+                        border: none;
+                        border-radius: 0.55rem;
+                        padding: 0.7rem 1.1rem;
+                        font-weight: 700;
+                        font-size: 0.9rem;
+                        color: #fff;
+                        background: var(--d-cyan);
+                        cursor: pointer;
+                        transition: background 0.15s ease;
+                    }
+                    #diagnostic-section .d-btn:hover { background: var(--d-cyan-deep); }
+                    #diagnostic-section .d-btn:disabled {
+                        opacity: 0.5;
+                        cursor: not-allowed;
+                    }
+                    #diagnostic-section .d-btn-block { width: 100%; }
+                    #diagnostic-section .d-file-list {
+                        list-style: none;
+                        margin: 0.4rem 0 0;
+                        padding: 0;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 0.3rem;
+                    }
+                    #diagnostic-section .d-file-list li {
+                        display: flex;
+                        align-items: center;
+                        gap: 0.45rem;
+                        background: var(--d-bg);
+                        border: 1px solid var(--d-line);
+                        border-radius: 0.45rem;
+                        padding: 0.35rem 0.55rem;
+                        font-size: 0.8rem;
+                    }
+                    #diagnostic-section .d-lib {
+                        background: #fff;
+                        border: 1px solid var(--d-line);
+                        border-radius: 0.9rem;
+                        padding: 1rem 1.15rem 1.15rem;
+                    }
+                    #diagnostic-section .d-lib-head {
+                        display: flex;
+                        flex-wrap: wrap;
+                        align-items: flex-end;
+                        justify-content: space-between;
+                        gap: 0.75rem;
+                        margin-bottom: 0.85rem;
+                        padding-bottom: 0.75rem;
+                        border-bottom: 1px solid var(--d-line);
+                    }
+                    #diagnostic-section .d-lib-head h3 {
+                        font-size: 1.05rem;
+                        font-weight: 800;
+                        color: var(--d-ink);
+                    }
+                    #diagnostic-section .d-lib-head p {
+                        font-size: 0.82rem;
+                        color: var(--d-muted);
+                        margin-top: 0.15rem;
+                    }
+                    #diagnostic-section .d-filters {
+                        display: inline-flex;
+                        gap: 0.2rem;
+                        background: var(--d-bg);
+                        border-radius: 0.55rem;
+                        padding: 0.2rem;
+                    }
+                    #diagnostic-section .d-filter {
+                        border: none;
+                        background: transparent;
+                        color: var(--d-muted);
+                        font-size: 0.75rem;
+                        font-weight: 700;
+                        padding: 0.35rem 0.65rem;
+                        border-radius: 0.4rem;
+                        cursor: pointer;
+                    }
+                    #diagnostic-section .d-filter.is-active {
+                        background: #fff;
+                        color: var(--d-cyan-deep);
+                        box-shadow: 0 1px 2px rgba(15,23,42,0.06);
+                    }
+                    #diagnostic-section .d-filter .count {
+                        margin-left: 0.2rem;
+                        color: #94a3b8;
+                        font-size: 0.68rem;
+                    }
+                    #diagnostic-section .d-rows {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 0.65rem;
+                    }
+                    #diagnostic-section .d-row {
+                        border: 1px solid var(--d-line);
+                        border-radius: 0.7rem;
+                        padding: 0.85rem 0.95rem;
+                        background: #fff;
+                        transition: border-color 0.15s ease;
+                    }
+                    #diagnostic-section .d-row:hover { border-color: #bae6fd; }
+                    #diagnostic-section .d-row.is-muted {
+                        background: #fafbfc;
+                        opacity: 0.9;
+                    }
+                    #diagnostic-section .d-row-top {
+                        display: flex;
+                        flex-wrap: wrap;
+                        align-items: flex-start;
+                        justify-content: space-between;
+                        gap: 0.75rem;
+                    }
+                    #diagnostic-section .d-chips {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 0.3rem;
+                        margin-bottom: 0.35rem;
+                    }
+                    #diagnostic-section .d-chip {
+                        font-size: 0.65rem;
+                        font-weight: 800;
+                        letter-spacing: 0.04em;
+                        text-transform: uppercase;
+                        border-radius: 0.35rem;
+                        padding: 0.2rem 0.45rem;
+                    }
+                    #diagnostic-section .d-chip.grade { background: #e0f2fe; color: #0369a1; }
+                    #diagnostic-section .d-chip.unset { background: #f1f5f9; color: #64748b; }
+                    #diagnostic-section .d-chip.live { background: #d1fae5; color: #047857; }
+                    #diagnostic-section .d-chip.draft { background: #f1f5f9; color: #475569; }
+                    #diagnostic-section .d-chip.archived { background: #e2e8f0; color: #64748b; }
+                    #diagnostic-section .d-chip.warn { background: #fef3c7; color: #b45309; }
+                    #diagnostic-section .d-row-title {
+                        font-size: 0.98rem;
+                        font-weight: 800;
+                        color: var(--d-ink);
+                    }
+                    #diagnostic-section .d-row-meta {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 0.75rem;
+                        margin-top: 0.25rem;
+                        font-size: 0.78rem;
+                        color: var(--d-muted);
+                    }
+                    #diagnostic-section .d-actions {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 0.4rem;
+                        align-items: center;
+                    }
+                    #diagnostic-section .d-action {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 0.35rem;
+                        border: 1px solid var(--d-line);
+                        background: #fff;
+                        color: #334155;
+                        font-size: 0.78rem;
+                        font-weight: 700;
+                        padding: 0.4rem 0.7rem;
+                        border-radius: 0.45rem;
+                        cursor: pointer;
+                        white-space: nowrap;
+                    }
+                    #diagnostic-section .d-action:hover { background: var(--d-bg); }
+                    #diagnostic-section .d-action.primary {
+                        background: var(--d-cyan);
+                        border-color: var(--d-cyan);
+                        color: #fff;
+                    }
+                    #diagnostic-section .d-action.primary:hover { background: var(--d-cyan-deep); }
+                    #diagnostic-section .d-action.danger {
+                        color: #dc2626;
+                        border-color: #fecaca;
+                    }
+                    #diagnostic-section .d-action.danger:hover { background: #fef2f2; }
+                    #diagnostic-section .d-pdfs {
+                        margin-top: 0.65rem;
+                        border-top: 1px solid #f1f5f9;
+                        padding-top: 0.55rem;
+                    }
+                    #diagnostic-section .d-pdfs-label {
+                        font-size: 0.65rem;
+                        font-weight: 800;
+                        letter-spacing: 0.08em;
+                        text-transform: uppercase;
+                        color: #94a3b8;
+                        margin-bottom: 0.35rem;
+                    }
+                    #diagnostic-section .d-pdf-item {
+                        display: flex;
+                        align-items: center;
+                        gap: 0.45rem;
+                        font-size: 0.8rem;
+                        color: #334155;
+                        padding: 0.25rem 0;
+                    }
+                    #diagnostic-section .d-pdf-item i.fa-file-pdf { color: #f87171; }
+                    #diagnostic-section .d-pdf-x {
+                        margin-left: auto;
+                        border: none;
+                        background: transparent;
+                        color: #94a3b8;
+                        cursor: pointer;
+                        padding: 0.2rem 0.35rem;
+                        border-radius: 0.3rem;
+                    }
+                    #diagnostic-section .d-pdf-x:hover { color: #dc2626; background: #fef2f2; }
+                    #diagnostic-section .d-pdf-empty {
+                        font-size: 0.8rem;
+                        color: #b45309;
+                    }
+                    #diagnostic-section .d-empty {
+                        text-align: center;
+                        padding: 1.75rem 1rem;
+                        color: var(--d-muted);
+                        font-size: 0.9rem;
+                    }
+                    #diagnostic-section .d-fields {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 0.75rem;
+                    }
+                    @media (max-width: 640px) {
+                        #diagnostic-section .d-fields { grid-template-columns: 1fr; }
+                    }
+                    #diagnostic-section .d-stack { display: flex; flex-direction: column; gap: 0.85rem; }
+                </style>
 
-                <div id="adminDiagActiveNote" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-amber-800" style="display:none;">
-                    One or more diagnostics are active. You can still upload another grade; remove a grade's diagnostic before replacing that same grade.
+                <div class="d-page-head">
+                    <div>
+                        <h2>Diagnostic Assessment</h2>
+                        <p>One diagnostic per grade. Publish a test, then append study PDFs for Learning Chat — always pick the grade first.</p>
+                    </div>
+                    <div class="d-stats" id="adminDiagStatRow">
+                        <div class="d-stat"><b id="adminDiagStatPublished">0</b><span>Live</span></div>
+                        <div class="d-stat"><b id="adminDiagStatGrades">0</b><span>Grades</span></div>
+                        <div class="d-stat"><b id="adminDiagStatTargets">0</b><span>PDFs</span></div>
+                    </div>
                 </div>
 
-                <div id="adminDiagList" class="mb-6"></div>
-
-                <div id="adminDiagAddTargetsSection" class="bg-white rounded-lg shadow-md p-6 mb-6" style="display:none;">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-2">Add Target Content PDFs</h3>
-                    <p class="text-sm text-gray-600 mb-4">Upload additional study material PDFs for Learning Chat. Students will use content from all uploaded target PDFs.</p>
-                    <form id="adminDiagAddTargetsForm" onsubmit="submitAdminAddTargetPdfs(event)" data-wait-message="Uploading PDFs...">
-                        <div class="mb-3">
-                            <input id="adminDiagAddTargetFiles" type="file" accept=".pdf,application/pdf" multiple
-                                class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
-                                onchange="updateAdminDiagAddTargetFileList()">
-                        </div>
-                        <ul id="adminDiagAddTargetFileList" class="text-sm text-gray-700 mb-3 space-y-1"></ul>
-                        <p id="adminDiagAddTargetStatus" class="text-sm text-gray-600 mb-3"></p>
-                        <button type="submit" id="adminDiagAddTargetBtn"
-                            class="bg-[#05B0FC] text-white px-5 py-2 rounded-lg hover:bg-blue-500 transition-colors">
-                            Upload Target PDFs
-                        </button>
-                    </form>
+                <div id="adminDiagActiveNote" class="d-note" style="display:none;">
+                    Live diagnostics are active. You can publish another grade. To replace a grade, remove its diagnostic first.
                 </div>
 
-                <div id="adminDiagUploadSection" class="bg-white rounded-lg shadow-md p-6">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Upload Diagnostic</h3>
-                    <form id="adminDiagnosticPdfForm" onsubmit="submitAdminDiagnostic(event)" data-wait-message="Uploading diagnostic..." data-wait-sticky>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1" for="adminDiagTitle">Title</label>
-                            <input id="adminDiagTitle" type="text" required
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2"
-                                placeholder="e.g. Grade 8 Math Diagnostic">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1" for="adminDiagGrade">Grade</label>
-                            <select id="adminDiagGrade" required
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2">
-                                <option value="">Select grade</option>
-                                <option value="6">6th Grade</option>
-                                <option value="7">7th Grade</option>
-                                <option value="8">8th Grade</option>
-                                <option value="9">9th Grade</option>
-                                <option value="10">10th Grade</option>
-                            </select>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1" for="adminDiagQaFile">Diagnostic Q&amp;A PDF</label>
-                            <p class="text-xs text-gray-500 mb-1">Questions + answer key — builds the student test.</p>
-                            <input id="adminDiagQaFile" type="file" accept=".pdf,application/pdf" required
-                                class="w-full text-sm">
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1" for="adminDiagTargetFiles">Target content PDF(s)</label>
-                            <p class="text-xs text-gray-500 mb-1">Study material for Learning Chat after diagnostic — select PDFs one at a time or hold Ctrl (Windows) / Cmd (Mac) to pick several at once.</p>
-                            <input id="adminDiagTargetFiles" type="file" accept=".pdf,application/pdf" multiple
-                                class="w-full text-sm border border-dashed border-gray-300 rounded-lg px-3 py-3 bg-gray-50 hover:bg-gray-100"
-                                onchange="updateAdminDiagTargetFileList()">
-                            <p id="adminDiagTargetFileCount" class="text-xs font-semibold text-[#05B0FC] mt-2" style="display:none;"></p>
-                            <ul id="adminDiagTargetFileList" class="mt-2 space-y-1 text-sm text-gray-700"></ul>
-                        </div>
-                        <div id="adminDiagProgressWrap" style="display:none;" class="mb-4">
-                            <div class="flex justify-between text-sm text-gray-600 mb-1">
-                                <span id="adminDiagProgressText">Uploading...</span>
-                                <strong id="adminDiagProgressPct">0%</strong>
-                            </div>
-                            <div class="w-full bg-gray-200 rounded-full h-2">
-                                <div id="adminDiagProgressBar" class="bg-[#05B0FC] h-2 rounded-full" style="width:0%"></div>
-                            </div>
-                        </div>
-                        <p id="adminDiagStatus" class="text-sm text-gray-600 mb-3"></p>
-                        <button type="submit" id="adminDiagUploadBtn"
-                            class="bg-[#05B0FC] text-white px-6 py-2 rounded-lg hover:bg-blue-500 transition-colors">
-                            Upload &amp; Publish Diagnostic
+                <div class="d-hub">
+                    <div class="d-tabs" role="tablist">
+                        <button type="button" class="d-tab is-active" id="adminDiagTabPublish" data-tab="publish" onclick="setAdminDiagUploadTab('publish')">
+                            Publish new
                         </button>
-                    </form>
+                        <button type="button" class="d-tab" id="adminDiagTabAppend" data-tab="append" onclick="setAdminDiagUploadTab('append')">
+                            Append targets
+                        </button>
+                    </div>
+
+                    <!-- Publish tab -->
+                    <div id="adminDiagUploadSection" class="d-tab-panel is-active" data-panel="publish">
+                        <form id="adminDiagnosticPdfForm" class="d-stack" onsubmit="submitAdminDiagnostic(event)" data-wait-message="Uploading diagnostic..." data-wait-sticky>
+                            <div class="d-fields">
+                                <div>
+                                    <label class="d-label" for="adminDiagTitle">Title</label>
+                                    <input id="adminDiagTitle" type="text" required class="d-input" placeholder="e.g. Grade 8 Math Diagnostic">
+                                </div>
+                                <div>
+                                    <label class="d-label" for="adminDiagGrade">Grade</label>
+                                    <select id="adminDiagGrade" required class="d-select">
+                                        <option value="">Select grade</option>
+                                        <option value="6">6th Grade</option>
+                                        <option value="7">7th Grade</option>
+                                        <option value="8">8th Grade</option>
+                                        <option value="9">9th Grade</option>
+                                        <option value="10">10th Grade</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="d-label" for="adminDiagQaFile">Diagnostic Q&amp;A PDF</label>
+                                <p class="d-help">Questions + answer key — builds the student test.</p>
+                                <label class="d-drop" id="adminDiagQaDrop">
+                                    <i class="fas fa-file-alt"></i>
+                                    <span>
+                                        <strong>Choose Q&amp;A PDF</strong>
+                                        <span>Click or drop · PDF only</span>
+                                    </span>
+                                    <input id="adminDiagQaFile" type="file" accept=".pdf,application/pdf" required
+                                        onchange="updateAdminDiagQaFileLabel()">
+                                </label>
+                                <p id="adminDiagQaFileLabel" class="text-xs text-slate-500 mt-1.5"></p>
+                            </div>
+
+                            <div>
+                                <label class="d-label" for="adminDiagTargetFiles">Target content PDF(s)</label>
+                                <p class="d-help">Study material for Learning Chat after the diagnostic.</p>
+                                <label class="d-drop" id="adminDiagTargetDrop" data-file-input="adminDiagTargetFiles">
+                                    <i class="fas fa-book"></i>
+                                    <span>
+                                        <strong>Choose target PDF(s)</strong>
+                                        <span>Ctrl/Cmd for multiple</span>
+                                    </span>
+                                    <input id="adminDiagTargetFiles" type="file" accept=".pdf,application/pdf" multiple
+                                        onchange="updateAdminDiagTargetFileList()">
+                                </label>
+                                <p id="adminDiagTargetFileCount" class="text-xs font-semibold text-[#05B0FC] mt-1.5" style="display:none;"></p>
+                                <ul id="adminDiagTargetFileList" class="d-file-list"></ul>
+                            </div>
+
+                            <div id="adminDiagProgressWrap" style="display:none;">
+                                <div class="flex justify-between text-sm text-slate-600 mb-1">
+                                    <span id="adminDiagProgressText">Uploading...</span>
+                                    <strong id="adminDiagProgressPct">0%</strong>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                    <div id="adminDiagProgressBar" class="bg-[#05B0FC] h-1.5 rounded-full transition-all" style="width:0%"></div>
+                                </div>
+                            </div>
+                            <p id="adminDiagStatus" class="text-sm text-slate-600"></p>
+                            <button type="submit" id="adminDiagUploadBtn" class="d-btn d-btn-block">
+                                <i class="fas fa-upload"></i>
+                                Upload &amp; Publish Diagnostic
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Append tab -->
+                    <div id="adminDiagAddTargetsSection" class="d-tab-panel" data-panel="append" style="display:none;">
+                        <form id="adminDiagAddTargetsForm" class="d-stack" onsubmit="submitAdminAddTargetPdfs(event)" data-wait-message="Uploading PDFs...">
+                            <div>
+                                <label class="d-label" for="adminDiagAddTargetGrade">Grade to update <span class="text-red-500">*</span></label>
+                                <p class="d-help" id="adminDiagTargetGradeHint">Required — PDFs append only to the grade you select.</p>
+                                <select id="adminDiagAddTargetGrade" required class="d-select"
+                                    onchange="onAdminDiagTargetGradeChange()">
+                                    <option value="">Select grade…</option>
+                                </select>
+                                <div id="adminDiagTargetGradePills" class="d-grade-pills" aria-label="Quick grade picker"></div>
+                            </div>
+
+                            <div id="adminDiagAppendDropWrap">
+                                <label class="d-label" for="adminDiagAddTargetFiles">Target content PDFs</label>
+                                <label class="d-drop is-disabled" id="adminDiagAddTargetDrop" data-file-input="adminDiagAddTargetFiles">
+                                    <i class="fas fa-file-pdf"></i>
+                                    <span>
+                                        <strong>Choose target PDF(s)</strong>
+                                        <span id="adminDiagAppendDropHint">Select a grade first</span>
+                                    </span>
+                                    <input id="adminDiagAddTargetFiles" type="file" accept=".pdf,application/pdf" multiple
+                                        onchange="updateAdminDiagAddTargetFileList()" disabled>
+                                </label>
+                                <ul id="adminDiagAddTargetFileList" class="d-file-list"></ul>
+                            </div>
+
+                            <p id="adminDiagAddTargetStatus" class="text-sm text-slate-600"></p>
+                            <button type="submit" id="adminDiagAddTargetBtn" class="d-btn d-btn-block" disabled>
+                                <i class="fas fa-plus"></i>
+                                Upload Target PDFs
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="d-lib">
+                    <div class="d-lib-head">
+                        <div>
+                            <h3>Library</h3>
+                            <p>Active diagnostics by default. Append study PDFs from a row, or browse archives.</p>
+                        </div>
+                        <div class="d-filters" id="adminDiagFilterTabs" role="tablist">
+                            <button type="button" class="d-filter is-active" data-filter="published" onclick="setAdminDiagListFilter('published')">
+                                Active<span class="count" id="adminDiagFilterCountPublished">0</span>
+                            </button>
+                            <button type="button" class="d-filter" data-filter="draft" onclick="setAdminDiagListFilter('draft')">
+                                Draft<span class="count" id="adminDiagFilterCountDraft">0</span>
+                            </button>
+                            <button type="button" class="d-filter" data-filter="archived" onclick="setAdminDiagListFilter('archived')">
+                                Archived<span class="count" id="adminDiagFilterCountArchived">0</span>
+                            </button>
+                            <button type="button" class="d-filter" data-filter="all" onclick="setAdminDiagListFilter('all')">
+                                All<span class="count" id="adminDiagFilterCountAll">0</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="adminDiagList"></div>
                 </div>
             </div>
 
