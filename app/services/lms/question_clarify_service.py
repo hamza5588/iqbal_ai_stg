@@ -28,7 +28,8 @@ _MAX_CHARS = 600
 
 # Bump when the prompt or the leak guard changes so old cached
 # clarifications (e.g. ones that leaked the method) are regenerated.
-_CLARIFY_VERSION = 2
+# v3: drop cached dumps of raw AIMessage when Qwen reasoning emptied content.
+_CLARIFY_VERSION = 3
 
 _CLARIFY_PROMPT = """A student on a diagnostic test cannot follow the WORDING of this
 multiple-choice question. Say the SAME question again in the simplest
@@ -132,6 +133,31 @@ def _fallback(stem: str) -> str:
     )
 
 
+def _message_text(resp) -> str:
+    """Pull usable text from an LLM response — never stringify the whole message object."""
+    content = getattr(resp, "content", None)
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str) and block.strip():
+                parts.append(block.strip())
+            elif isinstance(block, dict):
+                piece = block.get("text") or block.get("content") or ""
+                if isinstance(piece, str) and piece.strip():
+                    parts.append(piece.strip())
+            else:
+                piece = getattr(block, "text", None) or getattr(block, "content", None)
+                if isinstance(piece, str) and piece.strip():
+                    parts.append(piece.strip())
+        joined = "\n".join(parts).strip()
+        if joined:
+            return joined
+    # Never fall back to str(resp) — that dumps AIMessage metadata into the UI.
+    return ""
+
+
 def clarify_question(assessment_id: int, question_id: int, *, use_cache: bool = True) -> dict:
     db = get_db()
     assessment = get_assessment(assessment_id)
@@ -140,7 +166,7 @@ def clarify_question(assessment_id: int, question_id: int, *, use_cache: bool = 
 
     if use_cache:
         hit = _cached(assessment, question_id)
-        if hit:
+        if hit and "additional_kwargs=" not in hit and "response_metadata=" not in hit:
             return {"clarification": hit, "cached": True}
 
     q = db.query(Question).filter(Question.id == question_id).first()
@@ -160,7 +186,13 @@ def clarify_question(assessment_id: int, question_id: int, *, use_cache: bool = 
         from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
         from app.utils.llm_factory import get_chat_model
 
-        llm = get_chat_model(temperature=0.2, max_tokens=220)
+        # Qwen reasoning can consume a small max_tokens budget entirely
+        # (finish_reason=length, content=''). Leave headroom + prefer no reasoning.
+        llm = get_chat_model(temperature=0.2, max_tokens=1024)
+        try:
+            llm = llm.bind(reasoning_effort="none", reasoning_format="hidden")
+        except Exception:
+            pass
         prompt = _CLARIFY_PROMPT.format(
             stem=stem.strip()[:800],
             options="\n".join("- " + (o["text"] or "")[:120] for o in opt_display),
@@ -168,12 +200,18 @@ def clarify_question(assessment_id: int, question_id: int, *, use_cache: bool = 
         resp = invoke_with_groq_rate_limit(
             lambda: llm.invoke(prompt), description="diagnostic question clarify"
         )
-        text = getattr(resp, "content", None) or str(resp)
-        text = re.sub(r"\s+", " ", str(text).strip())[:_MAX_CHARS]
+        text = re.sub(r"\s+", " ", _message_text(resp))[:_MAX_CHARS]
         if text and not _looks_leaky(text, opt_display):
             clarification = text
         elif text:
             logger.info("Clarify for q%s rejected as leaky, using fallback", question_id)
+        else:
+            meta = getattr(resp, "response_metadata", None) or {}
+            logger.warning(
+                "Clarify for q%s returned empty content (finish_reason=%s); using fallback",
+                question_id,
+                meta.get("finish_reason"),
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Clarify LLM call failed for q%s: %s", question_id, exc)
 
