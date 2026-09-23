@@ -340,7 +340,7 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
     """Return questions without correct answers for student delivery."""
     attempt = get_attempt(attempt_id)
     _check_attempt_expired(attempt)
-    from app.services.quiz.math_text import to_render_string, wrap_for_mathjax
+    from app.services.quiz.math_text import merge_prose_and_math, to_render_string
 
     db = get_db()
     q_ids = attempt_question_ids(attempt)
@@ -363,12 +363,18 @@ def get_delivery_questions(attempt_id: int) -> List[dict]:
                     "render": to_render_string(text, latex, inline=True),
                 }
             )
+        # Merge stem + latex so prose questions that store math only in
+        # question_latex (e.g. "Which expression is equal to" + "(3x-2)^{2}")
+        # still render the full printed stem.
+        stem_display = merge_prose_and_math(q_text or q.question_text, q_latex)
         result.append(
             {
                 "question_id": q.id,
-                "question_text": q_text or q.question_text,
+                "question_text": stem_display or q.question_text,
                 "question_latex": q_latex,
-                "question_render": wrap_for_mathjax(q_latex or q_text or q.question_text, inline=False),
+                "question_render": to_render_string(
+                    q_text or q.question_text, q_latex, inline=False
+                ),
                 "options": safe_opts,
                 "sort_order": sort_order,
                 "difficulty": q.difficulty,

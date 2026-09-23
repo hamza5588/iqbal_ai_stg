@@ -546,10 +546,41 @@
     return /[a-zA-Z0-9]\^|\^{|[_^]|[=+\-*]|\\[a-zA-Z]+|[A-Za-z]\d/.test(s) || /\blog\b|\bsin\b|\bcos\b/.test(s);
   }
 
+  function lmsMathAlreadyInStem(stem, math) {
+    function compact(s) {
+      return String(s || '').replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, '').replace(/\s+/g, '');
+    }
+    var key = compact(math);
+    if (!key) return true;
+    var hay = compact(stem);
+    if (hay.indexOf(key) !== -1) return true;
+    var flat = key.replace(/\^\{([^{}]+)\}/g, '^$1');
+    return flat !== key && hay.indexOf(flat) !== -1;
+  }
+
+  function lmsMergeProseAndMath(text, latex) {
+    var t = String(text || '').trim();
+    var l = String(latex || '').trim();
+    if (!l) return t;
+    if (!t) return l;
+    if (lmsLooksLikeProse(l)) return t;
+    if (lmsMathAlreadyInStem(t, l)) return t;
+    var stemLike = lmsLooksLikeProse(t) || /^(simplify|find|solve|evaluate|compute|expand|factor)\s*:?\s*$/i.test(t) || /[:?]\s*$/.test(t);
+    if (stemLike) return (t + ' ' + l).trim();
+    if (/\\frac|\^\{|\^/.test(l)) return l;
+    return t || l;
+  }
+
   function lmsPickDisplayText(text, latex) {
     var t = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(lmsRecoverEatenBackslashCommands(text || ''))));
     var l = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(lmsRecoverEatenBackslashCommands(latex || ''))));
     if (lmsIsBrokenMathBlob(l)) l = '';
+    // Prose stem + separate math latex (common after PDF normalize).
+    if (t && l && !lmsLooksLikeProse(l) && (lmsLooksLikeProse(t) || /^(simplify|find|solve|evaluate|compute|expand|factor)\s*:?\s*$/i.test(t)) && !lmsMathAlreadyInStem(t, l)) {
+      var recoveredL = lmsRecoverLatex(l) || l;
+      var recoveredT = lmsRecoverLatex(t) || t;
+      return lmsMergeProseAndMath(recoveredT, recoveredL);
+    }
     if (lmsLooksLikeProse(t)) return lmsRecoverLatex(t) || t;
     var recovered = lmsRecoverLatex(l || t);
     if (recovered && (/\^\{/.test(recovered) || /\\frac/.test(recovered) || /\\times/.test(recovered)) && !lmsLooksLikeProse(recovered) && !lmsLooksLikeMixedTextAndMath(recovered)) {

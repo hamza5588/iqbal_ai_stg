@@ -45,7 +45,9 @@ Rules:
 - Extract EVERY numbered answer in the Answers / Answer Key / Answer Sheet section — do not stop early.
 - When the PDF already has multiple-choice options, extract each option's FULL text into question.options.
   Never store only the letter (A/B/C/D). Do not prefix option text with "A." / "B)" — the label is separate.
-- Question.text must be the stem only (no A/B/C/D lines).
+- Question.text must be the stem only (no A/B/C/D lines). Keep any math that is part of the
+  stem (e.g. "Which expression is equal to (3x-2)^2") — never drop a trailing expression.
+- Put a copy of stem math into question.latex as well for typesetting.
 - Answer-key letters (e.g. "1. B") go in answers as number + text "B".
 - When fractions or math are split across lines (e.g. "𝑥 = −" then "1/2"), merge them into one answer text.
 - Include "Solution set: ..." lines as part of the answer text when present.
@@ -226,8 +228,12 @@ Input JSON was copied from a PDF. Exponents are often flattened (x2 means x^2, a
 A fraction may appear as two lines under "Simplify:".
 
 Rules:
-- question.text = stem only (e.g. "Simplify:") — no A/B/C/D lines.
-- question.latex = the full math using \\frac and ^{{ }}.
+- question.text must keep the FULL printed stem, including any trailing math expression.
+  Example: "Which expression is equal to (3x-2)^2" — do NOT strip "(3x-2)^2" out of text.
+- For short instruction stems only ("Simplify:", "Expand:", "Factor:"), put the instruction in
+  question.text and the expression in question.latex.
+- question.latex = the math expression using \\frac and ^{{ }} (also duplicate it here when the
+  stem already includes it, so renderers can typeset exponents).
 - Each option keeps its original label and meaning; fill option.latex with proper TeX.
 - Never store only the letter A/B/C/D as option text.
 - Example stem latex: \\frac{{(a^{{3}}b^{{2}})(a^{{2}}b^{{4}})}}{{ab^{{3}}}}

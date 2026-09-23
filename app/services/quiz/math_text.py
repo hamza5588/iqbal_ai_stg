@@ -250,6 +250,8 @@ def recover_latex(text: Optional[str]) -> str:
     s = s.replace("−", "-").replace("×", "\\times ").replace("÷", "\\div ")
     s = _unicode_supers_to_latex(s)
     s = implicit_exponents_to_latex(s)
+    # Explicit powers on groups: (3x-2)^2 → (3x-2)^{2}
+    s = re.sub(r"(\))\s*\^\s*(\d+)\b", r"\1^{\2}", s)
     s = recover_stacked_fraction(s)
     s = strip_inner_math_delims(s)
     s = normalize_mixed_percents(s)
@@ -393,6 +395,55 @@ def looks_like_prose(text: str) -> bool:
     return len(real) >= 3
 
 
+def _compact_math_key(s: str) -> str:
+    """Normalize for containment checks (ignore spaces / $ / \\( \\))."""
+    t = (s or "").strip()
+    t = re.sub(r"\\\(|\\\)|\\\[|\\\]|\$+", "", t)
+    return re.sub(r"\s+", "", t)
+
+
+def math_already_in_stem(stem: str, math: str) -> bool:
+    """True when the latex body is already present in the English stem."""
+    key = _compact_math_key(math)
+    if not key:
+        return True
+    hay = _compact_math_key(stem)
+    if key in hay:
+        return True
+    # Flattened vs TeX: (3x-2)^2 vs (3x-2)^{2}
+    flat = re.sub(r"\^\{([^{}]+)\}", r"^\1", key)
+    return flat != key and flat in hay
+
+
+def merge_prose_and_math(text: Optional[str], latex: Optional[str]) -> str:
+    """Join an English stem with a separate math latex field.
+
+    Extraction often stores ``text="Which expression is equal to"`` and
+    ``latex="(3x-2)^{2}"``. Display must show both — never drop the math.
+    """
+    text_s = (text or "").strip()
+    latex_s = (latex or "").strip()
+    if not latex_s:
+        return text_s
+    if not text_s:
+        return latex_s
+    if looks_like_prose(latex_s):
+        return text_s
+    if math_already_in_stem(text_s, latex_s):
+        return text_s
+    stem_like = (
+        looks_like_prose(text_s)
+        or bool(_INSTRUCTION_RE.match(text_s))
+        or text_s.rstrip().endswith((":", "?"))
+    )
+    if stem_like:
+        return f"{text_s} {latex_s}".strip()
+    # Pure-math text vs richer latex: prefer latex (options / short expressions).
+    if "\\frac" in latex_s or "^{" in latex_s or "^" in latex_s:
+        return latex_s
+    return text_s or latex_s
+
+
 def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[str, Optional[str]]:
     """Return (display_text, latex) with reconstructed math for diagnostic MCQs."""
     # Repair BEFORE strip() - see recover_latex() for why the order matters.
@@ -402,6 +453,17 @@ def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[st
     latex_s = recover_eaten_backslash_commands(latex or "").strip() or None
     if latex_s:
         latex_s = unwrap_outer_math_if_prose(unsquash_english(unicodedata.normalize("NFKC", latex_s)))
+
+    # Short instruction + math in latex ("Simplify:" + fraction).
+    if text_s and latex_s and not looks_like_prose(latex_s):
+        if _INSTRUCTION_RE.match(text_s) or (
+            looks_like_prose(text_s) and not math_already_in_stem(text_s, latex_s)
+        ):
+            recovered_l = recover_latex(latex_s) or latex_s
+            recovered_t = recover_latex(text_s) or text_s
+            merged = merge_prose_and_math(recovered_t, recovered_l)
+            return merged, recovered_l
+
     if looks_like_prose(text_s):
         recovered_text = recover_latex(text_s)
         return recovered_text or text_s, None
@@ -516,4 +578,7 @@ def to_render_string(text: Optional[str], latex: Optional[str] = None, *, inline
     guarantee it is delimited for MathJax. This is what delivery sends as
     the ``render`` field so the client does not have to re-guess."""
     display, recovered_latex = recover_fields(text, latex)
-    return wrap_for_mathjax(recovered_latex or display, inline=inline)
+    # Prefer the merged stem (prose + math). Using latex alone drops
+    # "Which expression is equal to" when math lives in the latex field.
+    body = merge_prose_and_math(display, recovered_latex)
+    return wrap_for_mathjax(body, inline=inline)
