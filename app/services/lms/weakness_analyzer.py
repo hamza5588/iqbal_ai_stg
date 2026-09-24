@@ -420,6 +420,10 @@ def _analysis_covers_all_questions(analysis: dict, q_ids: List[int]) -> bool:
     for e in analysis.get("all_topics") or []:
         covered.update(int(x) for x in (e.get("question_ids") or []))
     return bool(q_ids) and set(q_ids).issubset(covered)
+
+
+def _cache_looks_invalid(cached: dict) -> bool:
+    """True when cached weakness labels are generic/heading junk and need a redo."""
     from app.services.quiz.concept_labeler import is_generic_concept
 
     all_entries = (
