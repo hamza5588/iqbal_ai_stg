@@ -254,7 +254,7 @@ def start_attempt(
         attempt_number = _submitted_diagnostic_count(student_id, assessment_id) + 1
         try:
             q_ids = diagnostic_variant_service.question_set_for_attempt(
-                assessment_id, attempt_number
+                assessment_id, attempt_number, student_id=student_id
             )
             if q_ids:
                 import json as _json

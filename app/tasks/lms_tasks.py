@@ -103,11 +103,18 @@ def variant_pool_prewarm_task(self, assessment_id: int) -> dict:
 
 
 def enqueue_variant_pool_prewarm(assessment_id: int) -> None:
-    """Fire-and-forget top-up of the diagnostic variant pool. Never runs
-    inline on a request thread - variant generation is slow and a retake
-    falls back to the original question for any slot without a variant."""
+    """Fire-and-forget top-up of the diagnostic variant pool.
+
+    Prefer Celery; if async is off, run a small inline top-up so retakes still
+    have something ready (full fill happens on the retake start path).
+    """
     if not _celery_async_enabled():
-        logger.debug("Celery async off - skipping variant pool prewarm for %s", assessment_id)
+        try:
+            from app.services.lms import diagnostic_variant_service
+
+            diagnostic_variant_service.ensure_variant_pool(assessment_id, max_generate=4)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Inline variant pool prewarm failed for %s: %s", assessment_id, exc)
         return
     try:
         variant_pool_prewarm_task.delay(assessment_id=assessment_id)

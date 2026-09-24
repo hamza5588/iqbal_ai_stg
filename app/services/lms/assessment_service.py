@@ -347,6 +347,16 @@ def publish_assessment(assessment_id: int) -> Assessment:
     assessment.status = "published"
     db.commit()
     db.refresh(assessment)
+
+    if assessment.assessment_type == "diagnostic":
+        try:
+            from app.services.lms import diagnostic_variant_service
+
+            # Pre-build same-concept / different-numbers variants for retakes.
+            diagnostic_variant_service.enqueue_pool_prewarm(assessment_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Variant pool prewarm on publish failed: %s", exc)
+
     return assessment
 
 
