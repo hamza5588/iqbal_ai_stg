@@ -416,6 +416,44 @@
     return s.replace(/[ \t]{2,}/g, ' ').trim();
   }
 
+  function lmsNormalizeTexSetBraces(s) {
+    s = String(s || '');
+    if (s.indexOf('\\{') === -1 && s.indexOf('\\}') === -1) return s;
+    var out = '';
+    var i = 0;
+    while (i < s.length) {
+      if (s.slice(i, i + 2) === '\\(' || s.slice(i, i + 2) === '\\[') {
+        var close = s.slice(i, i + 2) === '\\(' ? '\\)' : '\\]';
+        var end = s.indexOf(close, i + 2);
+        if (end < 0) {
+          out += s.slice(i).replace(/\\\{/g, '{').replace(/\\\}/g, '}');
+          break;
+        }
+        out += s.slice(i, end + 2);
+        i = end + 2;
+        continue;
+      }
+      if (s.charAt(i) === '$') {
+        var endD = s.indexOf('$', i + 1);
+        if (endD < 0) {
+          out += s.slice(i).replace(/\\\{/g, '{').replace(/\\\}/g, '}');
+          break;
+        }
+        out += s.slice(i, endD + 1);
+        i = endD + 1;
+        continue;
+      }
+      var next = s.length;
+      var a = s.indexOf('\\(', i);
+      var b = s.indexOf('\\[', i);
+      var c = s.indexOf('$', i);
+      [a, b, c].forEach(function (p) { if (p >= 0 && p < next) next = p; });
+      out += s.slice(i, next).replace(/\\\{/g, '{').replace(/\\\}/g, '}');
+      i = next;
+    }
+    return out;
+  }
+
   function lmsCompactMathKey(s) {
     return String(s || '')
       .replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, '')
@@ -626,6 +664,7 @@
     t = lmsNormalizeMixedPercents(t);
     t = lmsNormalizePlainEllipsis(t);
     t = lmsNormalizeLatexSpacing(t);
+    t = lmsNormalizeTexSetBraces(t);
     t = lmsDedupeRepeatedMath(t);
     t = t.replace(/([0-9√π∞°}%])([A-Za-z]{3,})/g, '$1 $2');
     t = t.replace(/(\})([A-Za-z]{3,})/g, '$1 $2');
@@ -696,6 +735,7 @@
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
     s = lmsNormalizeLatexSpacing(lmsNormalizePlainEllipsis(lmsStripEnglishDollarSpans(s)));
+    s = lmsNormalizeTexSetBraces(s);
     s = lmsDedupeRepeatedMath(s);
     if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {

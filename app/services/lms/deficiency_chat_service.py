@@ -150,6 +150,12 @@ def _mcq_to_queue_item(
     mcq, topic_id: int, topic_name: str, pdf_section: str, rag_thread_id: str,
     difficulty: str = "medium",
 ) -> Optional[dict]:
+    from app.services.quiz.display_format_qa import (
+        finalize_display_text,
+        finalize_option_text,
+        student_render,
+    )
+
     options = normalize_options(
         [{"label": o.label, "text": o.text, "latex": getattr(o, "latex", None)} for o in mcq.options]
     )
@@ -159,7 +165,18 @@ def _mcq_to_queue_item(
     if correct_idx is None:
         logger.warning("Skipping MCQ with unresolved correct label %s", mcq.correct_option_label)
         return None
-    q_text, q_latex = pick_display_fields(mcq.question_text, mcq.question_latex)
+    q_text, q_latex = finalize_display_text(mcq.question_text, mcq.question_latex)
+    safe_opts = []
+    for o in options:
+        ot, ol = finalize_option_text(o.get("text"), o.get("latex"))
+        safe_opts.append(
+            {
+                "label": o.get("label"),
+                "text": ot,
+                "latex": ol,
+                "render": student_render(ot, ol, inline=True),
+            }
+        )
     return {
         "topic_id": topic_id,
         "topic_name": topic_name,
@@ -167,7 +184,8 @@ def _mcq_to_queue_item(
         "rag_thread_id": rag_thread_id,
         "question_text": q_text or mcq.question_text,
         "question_latex": q_latex,
-        "options": options,
+        "question_render": student_render(q_text, q_latex, inline=False),
+        "options": safe_opts,
         "correct_option_index": correct_idx,
         "difficulty": difficulty if difficulty in _DIFF_RANK else "medium",
         "source": "target_pdf",
@@ -349,6 +367,34 @@ def _load_questions(session: DeficiencyChatSession) -> List[dict]:
         return []
 
 
+def _refresh_question_display(q: dict) -> dict:
+    """Re-run display finalize on a cached queue item (fixes old \\{ set braces)."""
+    from app.services.quiz.display_format_qa import (
+        finalize_display_text,
+        finalize_option_text,
+        student_render,
+    )
+
+    out = dict(q)
+    q_text, q_latex = finalize_display_text(out.get("question_text"), out.get("question_latex"))
+    out["question_text"] = q_text or out.get("question_text")
+    out["question_latex"] = q_latex
+    out["question_render"] = student_render(q_text, q_latex, inline=False)
+    refreshed_opts = []
+    for o in out.get("options") or []:
+        ot, ol = finalize_option_text(o.get("text"), o.get("latex"))
+        refreshed_opts.append(
+            {
+                **o,
+                "text": ot,
+                "latex": ol,
+                "render": student_render(ot, ol, inline=True),
+            }
+        )
+    out["options"] = refreshed_opts
+    return out
+
+
 def _save_questions(session: DeficiencyChatSession, questions: List[dict]) -> None:
     session.questions_json = json.dumps(questions, ensure_ascii=False)
 
@@ -396,7 +442,7 @@ def _session_state(session: DeficiencyChatSession) -> dict:
     total = len(questions)
     current = None
     if session.current_index < total:
-        q = dict(questions[session.current_index])
+        q = _refresh_question_display(dict(questions[session.current_index]))
         q.pop("correct_option_index", None)
         q["difficulty"] = q.get("difficulty") or "medium"
         current = q

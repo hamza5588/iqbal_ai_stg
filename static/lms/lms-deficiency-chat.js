@@ -10,12 +10,18 @@
     return escapeHtml(text == null ? '' : String(text));
   }
   function fmtOption(opt) {
+    if (opt && typeof opt.render === 'string' && opt.render) {
+      return fmtText(opt.render, true, true);
+    }
     var raw = (typeof window.lmsOptionText === 'function')
       ? window.lmsOptionText(opt)
       : ((opt && (opt.text || opt.latex)) || '');
     return fmtText(raw, true, true);
   }
   function fmtQuestion(q) {
+    if (q && typeof q.question_render === 'string' && q.question_render) {
+      return fmtText(q.question_render, false, true);
+    }
     var raw = (typeof window.lmsQuestionText === 'function')
       ? window.lmsQuestionText(q)
       : ((q && (q.question_text || q.question_latex)) || '');

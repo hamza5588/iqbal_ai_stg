@@ -258,6 +258,7 @@ def recover_latex(text: Optional[str]) -> str:
     s = normalize_mixed_percents(s)
     s = normalize_plain_ellipsis(s)
     s = normalize_latex_spacing(s)
+    s = normalize_tex_set_braces(s)
     s = dedupe_repeated_math(s)
     s = re.sub(r"([0-9√π∞°}%])([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"(\})([A-Za-z]{3,})", r"\1 \2", s)
@@ -464,6 +465,46 @@ def normalize_latex_spacing(text: str) -> str:
     s = re.sub(r",\s+", ", ", s)
     s = re.sub(r"[ \t]{2,}", " ", s)
     return s.strip()
+
+
+def normalize_tex_set_braces(text: str) -> str:
+    """Convert TeX set braces \\{ \\} to plain { } for student display.
+
+    Outside MathJax delimiters, ``\\{1, 2, 3\\}`` otherwise shows a visible
+    backslash. Plain braces match printed set notation.
+    """
+    s = text or ""
+    if "\\{" not in s and "\\}" not in s:
+        return s
+    # Leave content already inside \\( \\) / \\[ \\] / $...$ alone — MathJax
+    # needs the backslash there. Process outside those spans.
+    parts: list[str] = []
+    i = 0
+    n = len(s)
+    while i < n:
+        if s.startswith("\\(", i) or s.startswith("\\[", i):
+            end = s.find("\\)", i + 2) if s.startswith("\\(", i) else s.find("\\]", i + 2)
+            if end < 0:
+                parts.append(s[i:].replace("\\{", "{").replace("\\}", "}"))
+                break
+            close_len = 2
+            parts.append(s[i : end + close_len])
+            i = end + close_len
+            continue
+        if s[i] == "$":
+            end = s.find("$", i + 1)
+            if end < 0:
+                parts.append(s[i:].replace("\\{", "{").replace("\\}", "}"))
+                break
+            parts.append(s[i : end + 1])
+            i = end + 1
+            continue
+        # Plain segment until next math opener
+        next_ops = [p for p in (s.find("\\(", i), s.find("\\[", i), s.find("$", i)) if p >= 0]
+        j = min(next_ops) if next_ops else n
+        parts.append(s[i:j].replace("\\{", "{").replace("\\}", "}"))
+        i = j
+    return "".join(parts)
 
 
 def _first_half_matching_compact(chunk: str, target_compact: str) -> Optional[str]:
@@ -687,7 +728,9 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
         return plain_pct
     # Prose stems must not keep bare \ldots (shows as literal backslash-text).
     s = dedupe_repeated_math(
-        normalize_latex_spacing(normalize_plain_ellipsis(strip_english_dollar_spans(s)))
+        normalize_tex_set_braces(
+            normalize_latex_spacing(normalize_plain_ellipsis(strip_english_dollar_spans(s)))
+        )
     )
     if _HAS_DELIM_RE.search(s):
         return s

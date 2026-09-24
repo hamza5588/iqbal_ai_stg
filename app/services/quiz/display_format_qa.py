@@ -21,6 +21,7 @@ from app.services.quiz.math_text import (
     normalize_latex_spacing,
     normalize_mixed_percents,
     normalize_plain_ellipsis,
+    normalize_tex_set_braces,
     recover_fields,
     strip_english_dollar_spans,
     wrap_for_mathjax,
@@ -114,6 +115,7 @@ def finalize_display_text(text: Optional[str], latex: Optional[str] = None) -> t
     body = normalize_mixed_percents(body)
     body = normalize_plain_ellipsis(body)
     body = normalize_latex_spacing(body)
+    body = normalize_tex_set_braces(body)
     body = strip_trailing_content_already_in_stem(body)
     # If latex is fully inside the cleaned stem, drop it to avoid re-merge later.
     if recovered and _compact_math_key(recovered) in _compact_math_key(body):
@@ -128,6 +130,7 @@ def finalize_option_text(text: Optional[str], latex: Optional[str] = None) -> tu
     body = normalize_mixed_percents(body)
     body = normalize_plain_ellipsis(body)
     body = normalize_latex_spacing(body)
+    body = normalize_tex_set_braces(body)
     if recovered and _compact_math_key(recovered) in _compact_math_key(body):
         # Prefer plain percent / pair text without a redundant latex twin.
         if re.match(r"^\d+(?:\s+\d+\s*/\s*\d+)?\s*%$", body.strip()) or re.match(
