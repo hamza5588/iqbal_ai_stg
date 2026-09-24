@@ -350,6 +350,12 @@ def _generate_and_store_variant(assessment_id: int, orig_id: int) -> Optional[in
             meta = _parse_meta(assessment)
             pool: Dict[str, List[int]] = meta.setdefault("variant_pool", {})
             pool.setdefault(str(orig_id), []).append(q.id)
+            # Carry the original's concept so weak-topic analysis stays specific.
+            concepts = meta.setdefault("question_concepts", {})
+            pdf_topics = meta.get("question_pdf_topics") or {}
+            inherited = (concepts.get(str(orig_id)) or pdf_topics.get(str(orig_id)) or "").strip()
+            if inherited and inherited.lower() not in ("general", "practice", "misc"):
+                concepts[str(q.id)] = inherited
             _save_meta(assessment, meta)
             return q.id
         except Exception as exc:  # noqa: BLE001

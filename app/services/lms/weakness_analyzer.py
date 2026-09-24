@@ -73,17 +73,84 @@ def _save_assessment_meta(assessment, meta: dict) -> None:
 
 
 def _question_concept_label(question: Question, meta: dict) -> Optional[str]:
+    from app.services.quiz.concept_labeler import is_generic_concept
+
     concepts = meta.get("question_concepts") or {}
     label = concepts.get(str(question.id))
-    if label and str(label).strip():
+    if label and str(label).strip() and not is_generic_concept(str(label)):
         return str(label).strip()
 
     pdf_map = meta.get("question_pdf_topics") or {}
     pdf_label = pdf_map.get(str(question.id))
-    if pdf_label and str(pdf_label).strip() and not _looks_like_document_heading(str(pdf_label)):
+    if (
+        pdf_label
+        and str(pdf_label).strip()
+        and not _looks_like_document_heading(str(pdf_label))
+        and not is_generic_concept(str(pdf_label))
+    ):
         return _humanize_label(str(pdf_label))
 
     return None
+
+
+def _group_by_stored_concept(
+    questions: List[Question],
+    ans_map: dict,
+    meta: dict,
+) -> Optional[dict]:
+    """Deterministic grouping when real concept labels exist on most questions."""
+    groups: dict[str, dict] = {}
+    labeled = 0
+    for q in questions:
+        label = _question_concept_label(q, meta)
+        if not label:
+            continue
+        labeled += 1
+        bucket = groups.setdefault(label, {"correct": 0, "total": 0, "question_ids": []})
+        bucket["total"] += 1
+        bucket["question_ids"].append(q.id)
+        ans = ans_map.get(q.id)
+        if ans and ans.is_correct:
+            bucket["correct"] += 1
+
+    # Need multiple real topics covering most of the paper — otherwise let AI group.
+    min_coverage = max(3, int(0.6 * len(questions))) if questions else 0
+    if len(groups) < 2 or labeled < min_coverage:
+        return None
+    if len(groups) >= max(3, len(questions) // 2):
+        return None
+
+    weak, strong = [], []
+    for name, stats in groups.items():
+        pct = round(100.0 * stats["correct"] / stats["total"], 2) if stats["total"] else 0.0
+        topic = get_or_create_topic_from_pdf_label(name)
+        entry = {
+            "topic_id": topic.id if topic else 0,
+            "topic_name": name,
+            "score_percent": pct,
+            "question_ids": stats["question_ids"],
+        }
+        if pct < WEAK_THRESHOLD:
+            weak.append(entry)
+        elif pct >= _STRONG_THRESHOLD:
+            strong.append(entry)
+
+    all_topics = []
+    for name, stats in groups.items():
+        pct = round(100.0 * stats["correct"] / stats["total"], 2) if stats["total"] else 0.0
+        topic = get_or_create_topic_from_pdf_label(name)
+        all_topics.append(
+            {
+                "topic_id": topic.id if topic else 0,
+                "topic_name": name,
+                "score_percent": pct,
+                "question_ids": stats["question_ids"],
+            }
+        )
+
+    weak.sort(key=lambda x: x["score_percent"])
+    strong.sort(key=lambda x: x["score_percent"], reverse=True)
+    return {"weak_topics": weak, "strong_topics": strong, "all_topics": all_topics}
 
 
 def _looks_like_question_text(text: str) -> bool:
@@ -182,60 +249,6 @@ def _build_questions_block(questions: List[Question], ans_map: dict) -> str:
     return "\n".join(lines)
 
 
-def _group_by_stored_concept(
-    questions: List[Question],
-    ans_map: dict,
-    meta: dict,
-) -> Optional[dict]:
-    """Deterministic grouping when concept labels exist on questions."""
-    groups: dict[str, dict] = {}
-    for q in questions:
-        label = _question_concept_label(q, meta)
-        if not label:
-            continue
-        bucket = groups.setdefault(label, {"correct": 0, "total": 0, "question_ids": []})
-        bucket["total"] += 1
-        bucket["question_ids"].append(q.id)
-        ans = ans_map.get(q.id)
-        if ans and ans.is_correct:
-            bucket["correct"] += 1
-
-    if not groups or len(groups) >= max(3, len(questions) // 2):
-        return None
-
-    weak, strong = [], []
-    for name, stats in groups.items():
-        pct = round(100.0 * stats["correct"] / stats["total"], 2) if stats["total"] else 0.0
-        topic = get_or_create_topic_from_pdf_label(name)
-        entry = {
-            "topic_id": topic.id if topic else 0,
-            "topic_name": name,
-            "score_percent": pct,
-            "question_ids": stats["question_ids"],
-        }
-        if pct < WEAK_THRESHOLD:
-            weak.append(entry)
-        elif pct >= _STRONG_THRESHOLD:
-            strong.append(entry)
-
-    all_topics = []
-    for name, stats in groups.items():
-        pct = round(100.0 * stats["correct"] / stats["total"], 2) if stats["total"] else 0.0
-        topic = get_or_create_topic_from_pdf_label(name)
-        all_topics.append(
-            {
-                "topic_id": topic.id if topic else 0,
-                "topic_name": name,
-                "score_percent": pct,
-                "question_ids": stats["question_ids"],
-            }
-        )
-
-    weak.sort(key=lambda x: x["score_percent"])
-    strong.sort(key=lambda x: x["score_percent"], reverse=True)
-    return {"weak_topics": weak, "strong_topics": strong, "all_topics": all_topics}
-
-
 def _ai_analyze_weakness(
     assessment,
     questions: List[Question],
@@ -257,9 +270,13 @@ def _ai_analyze_weakness(
         return None
 
     def _to_entries(areas: List[WeakAreaItem]) -> List[dict]:
+        from app.services.quiz.concept_labeler import is_generic_concept
+
         entries = []
         for area in areas:
             name = _humanize_label(area.area_name)
+            if is_generic_concept(name):
+                continue
             topic = get_or_create_topic_from_pdf_label(name)
             entries.append(
                 {
@@ -288,9 +305,19 @@ def _ai_analyze_weakness(
 
 
 def _cache_looks_invalid(cached: dict) -> bool:
-    all_entries = (cached.get("weak_topics") or []) + (cached.get("strong_topics") or [])
+    from app.services.quiz.concept_labeler import is_generic_concept
+
+    all_entries = (
+        (cached.get("weak_topics") or [])
+        + (cached.get("strong_topics") or [])
+        + (cached.get("all_topics") or [])
+    )
     if not all_entries:
         return False
+    names = [(e.get("topic_name") or "").strip() for e in all_entries]
+    # Only "General" (or similar) — force a fresh AI / topic pass.
+    if names and all(is_generic_concept(n) or not n for n in names):
+        return True
     bad = sum(
         1
         for e in all_entries
@@ -385,11 +412,15 @@ def analyze_diagnostic_attempt(attempt_id: int, use_cache: bool = True) -> dict:
         return grouped
 
     # AI groups questions into broad topics (Fractions, Algebra, etc.) — never per-question labels.
-    if assessment.creation_mode in ("pdf_ai", "pdf_qa_auto", "mixed"):
-        ai_result = _ai_analyze_weakness(assessment, questions, ans_map)
-        if ai_result and (ai_result.get("weak_topics") or ai_result.get("strong_topics")):
-            _set_cache(assessment, attempt_id, ai_result)
-            return ai_result
+    # Always try this when stored concepts are missing/generic (e.g. old "General" uploads).
+    ai_result = _ai_analyze_weakness(assessment, questions, ans_map)
+    if ai_result and (
+        ai_result.get("all_topics")
+        or ai_result.get("weak_topics")
+        or ai_result.get("strong_topics")
+    ):
+        _set_cache(assessment, attempt_id, ai_result)
+        return ai_result
 
     # Concept metadata (question_concepts/question_pdf_topics) was empty or
     # missing, and AI grouping didn't produce anything usable either. Rather
