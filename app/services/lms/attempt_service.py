@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 from app.models.lms_models import AssessmentAttempt, AttemptAnswer, Question, StudentProfile
 from app.services.lms.assessment_service import get_assessment
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
-from app.services.lms.mcq_utils import options_from_json, pick_display_fields
+from app.services.lms.mcq_utils import options_from_json
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
