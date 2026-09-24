@@ -238,12 +238,13 @@
         '<div class="lms-field"><label class="lms-label">Select class</label>' +
         '<select id="lmsAnalyticsClassSelect" class="lms-select" onchange="loadLmsAnalyticsData()">' + opts + '</select></div>' +
         '<div class="lms-tabs">' +
-        '<button type="button" class="lms-tab active" data-tab="topics" onclick="switchLmsAnalyticsTab(\'topics\')">Topic Performance</button>' +
-        '<button type="button" class="lms-tab" data-tab="progress" onclick="switchLmsAnalyticsTab(\'progress\')">Topic Progress</button>' +
+        '<button type="button" class="lms-tab" data-tab="topics" hidden aria-hidden="true" onclick="switchLmsAnalyticsTab(\'topics\')">Topic Performance</button>' +
+        '<button type="button" class="lms-tab active" data-tab="progress" onclick="switchLmsAnalyticsTab(\'progress\')">Topic Progress</button>' +
         '<button type="button" class="lms-tab" data-tab="quizzes" onclick="switchLmsAnalyticsTab(\'quizzes\')">Quiz Results</button>' +
         '<button type="button" class="lms-tab" data-tab="struggling" onclick="switchLmsAnalyticsTab(\'struggling\')">Struggling Students</button>' +
         '<button type="button" class="lms-tab" data-tab="roster" onclick="switchLmsAnalyticsTab(\'roster\')">Roster</button></div>' +
         '<div id="lmsAnalyticsContent"><div class="lms-spinner"></div></div>';
+      window._lmsAnalyticsTab = 'progress';
       loadLmsAnalyticsData();
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
@@ -263,7 +264,7 @@
     var content = document.getElementById('lmsAnalyticsContent');
     if (!sel || !content) return;
     var classId = sel.value;
-    var tab = window._lmsAnalyticsTab || 'topics';
+    var tab = window._lmsAnalyticsTab || 'progress';
     content.innerHTML = '<div class="lms-spinner"></div>';
     try {
       if (tab === 'topics') {
