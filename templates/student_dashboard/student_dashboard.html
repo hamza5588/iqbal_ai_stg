@@ -7939,13 +7939,13 @@
               <div class="lms-overview-actions">${overviewActions}</div>
             </div>
             <div class="lms-cards">
-              <div class="lms-card"><div class="lms-card-label">Topic Mastery</div><div class="lms-card-value">${progress}</div></div>
+              <div class="lms-card" hidden aria-hidden="true"><div class="lms-card-label">Topic Mastery</div><div class="lms-card-value">${progress}</div></div>
               <div class="lms-card"><div class="lms-card-label">Learning Path</div><div class="lms-card-value" style="font-size:1rem;line-height:1.35;">${escapeHtml(pathCardValue)}</div></div>
               <div class="lms-card"><div class="lms-card-label">Pending Quizzes</div><div class="lms-card-value">${(d.pending_assignments || []).length}</div><ul class="lms-card-list">${pending}</ul></div>
               <div class="lms-card"><div class="lms-card-label">Weak Topics</div><div class="lms-card-value">${(d.weak_topics || []).length}</div><ul class="lms-card-list">${weak}</ul></div>
               <div class="lms-card"><div class="lms-card-label">My Classes</div><div class="lms-card-value">${(d.classes || []).length}</div><ul class="lms-card-list">${(d.classes || []).map(function(c){ return '<li>' + escapeHtml(c.name) + '</li>'; }).join('') || '<li>Not enrolled yet</li>'}</ul></div>
             </div>
-            <div class="lms-card" style="max-width:360px;margin:16px 0;">
+            <div class="lms-card" hidden aria-hidden="true" style="max-width:360px;margin:16px 0;">
               <div class="lms-card-label">Topic Mastery Breakdown</div>
               <canvas id="lmsMasteryPieChart" height="220"></canvas>
               <p id="lmsMasteryPieEmpty" class="lms-path-empty hidden">No topics assessed yet.</p>
