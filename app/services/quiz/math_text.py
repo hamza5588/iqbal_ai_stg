@@ -257,6 +257,7 @@ def recover_latex(text: Optional[str]) -> str:
     s = strip_english_dollar_spans(s)
     s = normalize_mixed_percents(s)
     s = normalize_plain_ellipsis(s)
+    s = normalize_latex_spacing(s)
     s = re.sub(r"([0-9√π∞°}%])([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"(\})([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"[ \t]+", " ", s)
@@ -439,10 +440,29 @@ def looks_like_prose(text: str) -> bool:
 
 
 def _compact_math_key(s: str) -> str:
-    """Normalize for containment checks (ignore spaces / $ / \\( \\))."""
+    """Normalize for containment checks (ignore spaces / $ / \\( \\) / spacing cmds)."""
     t = (s or "").strip()
     t = re.sub(r"\\\(|\\\)|\\\[|\\\]|\$+", "", t)
+    # \, \; \: \! \quad \qquad ~ — must not block "already in stem" matches
+    t = re.sub(r"\\(?:,|;|:|!|quad|qquad)\b|~", "", t)
     return re.sub(r"\s+", "", t)
+
+
+def normalize_latex_spacing(text: str) -> str:
+    """Turn TeX spacing into plain spaces so \\, / \\quad never show as raw text."""
+    s = text or ""
+    if not s:
+        return s
+    s = re.sub(r"\\,", " ", s)
+    s = re.sub(r"\\;", " ", s)
+    s = re.sub(r"\\:", " ", s)
+    s = re.sub(r"\\!", "", s)
+    s = re.sub(r"\\quad\b", " ", s)
+    s = re.sub(r"\\qquad\b", "  ", s)
+    s = s.replace("~", " ")
+    s = re.sub(r",\s+", ", ", s)
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    return s.strip()
 
 
 def math_already_in_stem(stem: str, math: str) -> bool:
@@ -599,7 +619,7 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
     if _PLAIN_PERCENT_RE.match(plain_pct):
         return plain_pct
     # Prose stems must not keep bare \ldots (shows as literal backslash-text).
-    s = normalize_plain_ellipsis(strip_english_dollar_spans(s))
+    s = normalize_latex_spacing(normalize_plain_ellipsis(strip_english_dollar_spans(s)))
     if _HAS_DELIM_RE.search(s):
         return s
     prefixed = _INSTRUCTION_PREFIX_RE.match(s)

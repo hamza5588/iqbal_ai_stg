@@ -39,6 +39,8 @@ Rules:
 - Preserve math notation; put LaTeX ONLY in latex fields. Text fields must be readable.
 - For repeating decimals use plain dots ("5.18181818 ..."), NEVER \\ldots / \\cdots in text.
 - For percent options use plain text only: "15%", "16 2/3%", "33 1/3%". Never \\%, \\frac, or \\tfrac.
+- Never put spacing-only TeX (\\,, \\quad) in option text — use a normal space: "(6, 3)" not "(6,\\, 3)".
+- Do not duplicate equations into both question.text and question.latex when the stem already includes them.
 - Flattened PDF exponents (x2, a3b2) MUST be stored as latex x^{{2}}, a^{{3}}b^{{2}}. Never keep "4x2" or "a4b3".
 - A stacked fraction (numerator line then denominator line) MUST become \\frac{{num}}{{den}}.
   Example: Simplify / (a^3 b^2)(a^2 b^4) / ab^3 → latex \\frac{{(a^{{3}}b^{{2}})(a^{{2}}b^{{4}})}}{{ab^{{3}}}}.

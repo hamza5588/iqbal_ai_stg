@@ -403,6 +403,19 @@
     });
   }
 
+  function lmsNormalizeLatexSpacing(s) {
+    s = String(s || '');
+    s = s.replace(/\\,/g, ' ');
+    s = s.replace(/\\;/g, ' ');
+    s = s.replace(/\\:/g, ' ');
+    s = s.replace(/\\!/g, '');
+    s = s.replace(/\\quad\b/g, ' ');
+    s = s.replace(/\\qquad\b/g, '  ');
+    s = s.replace(/~/g, ' ');
+    s = s.replace(/,\s+/g, ', ');
+    return s.replace(/[ \t]{2,}/g, ' ').trim();
+  }
+
   function lmsIsMixedPercent(s) {
     return /^\s*\d+(?:\s+\d+\s*\/\s*\d+)?\s*%?\s*$/.test(s) || /^\s*\d+\s*\/\s*\d+\s*%?\s*$/.test(s);
   }
@@ -550,6 +563,7 @@
     t = lmsStripEnglishDollarSpans(t);
     t = lmsNormalizeMixedPercents(t);
     t = lmsNormalizePlainEllipsis(t);
+    t = lmsNormalizeLatexSpacing(t);
     t = t.replace(/([0-9√π∞°}%])([A-Za-z]{3,})/g, '$1 $2');
     t = t.replace(/(\})([A-Za-z]{3,})/g, '$1 $2');
     return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
@@ -567,7 +581,10 @@
 
   function lmsMathAlreadyInStem(stem, math) {
     function compact(s) {
-      return String(s || '').replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, '').replace(/\s+/g, '');
+      return String(s || '')
+        .replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, '')
+        .replace(/\\(?:,|;|:|!|quad|qquad)\b|~/g, '')
+        .replace(/\s+/g, '');
     }
     var key = compact(math);
     if (!key) return true;
@@ -618,7 +635,7 @@
     if (!s) return '';
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
-    s = lmsNormalizePlainEllipsis(lmsStripEnglishDollarSpans(s));
+    s = lmsNormalizeLatexSpacing(lmsNormalizePlainEllipsis(lmsStripEnglishDollarSpans(s)));
     if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
       var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
