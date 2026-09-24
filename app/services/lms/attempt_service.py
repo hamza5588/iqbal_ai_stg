@@ -670,6 +670,15 @@ def get_attempt_results(attempt_id: int) -> dict:
     unanswered_count = max(0, len(question_ids) - answered_count)
     from app.services.lms import performance_service
 
+    # Analyze first so topic buckets cover every question, then refresh mastery
+    # rows so Topic Mastery % matches overall diagnostic score.
+    analysis = performance_service.analyze_attempt(attempt_id)
+    if assessment.assessment_type == "diagnostic":
+        try:
+            performance_service.update_topic_scores_from_attempt(attempt_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Mastery resync after diagnostic results failed: %s", exc)
+
     breakdown = performance_service.topic_breakdown_for_attempt(attempt_id)
     result = {
         "attempt_id": attempt.id,
@@ -688,7 +697,6 @@ def get_attempt_results(attempt_id: int) -> dict:
         # the real score, just note that it was auto-submitted.
         result["time_over"] = True
         result["message"] = TIME_OVER_MESSAGE
-    analysis = performance_service.analyze_attempt(attempt_id)
     result["weak_topics"] = analysis.get("weak_topics", [])
     result["strong_topics"] = analysis.get("strong_topics", [])
     result["all_topics"] = analysis.get("all_topics") or [
