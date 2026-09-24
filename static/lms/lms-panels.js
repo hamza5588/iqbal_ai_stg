@@ -325,10 +325,9 @@
       } else if (tab === 'struggling') {
         var struggling = await lmsApi('/api/lms/classes/' + classId + '/analytics/struggling');
         content.innerHTML = struggling.length
-          ? '<table class="lms-table"><thead><tr><th>Student</th><th>Progress</th><th>Weak Topics</th></tr></thead><tbody>' +
+          ? '<table class="lms-table"><thead><tr><th>Student</th><th>Weak Topics</th></tr></thead><tbody>' +
             struggling.map(function (s) {
               return '<tr><td>' + escapeHtml(s.username || ('#' + s.student_id)) + '</td>' +
-                '<td>' + (s.overall_progress != null ? Math.round(s.overall_progress) + '%' : '—') + '</td>' +
                 '<td class="lms-expand-cell">' + renderWeakTopicsCell(s) + '</td></tr>';
             }).join('') + '</tbody></table>'
           : '<p class="lms-status">No struggling students detected — great job!</p>';
