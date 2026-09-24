@@ -333,6 +333,14 @@ def run_pdf_quiz_pipeline(
         question_pdf_topics: dict[str, str] = {}
         question_concepts: dict[str, str] = {}
 
+        _report_progress(progress_callback, "save", 88, "Reviewing display format...")
+        try:
+            from app.services.quiz.display_format_qa import review_mcqs_for_display
+
+            batch_questions = review_mcqs_for_display(list(batch_questions))
+        except Exception as exc:
+            logger.warning("Display format review before save skipped: %s", exc)
+
         _report_progress(progress_callback, "save", 90, "Saving questions...")
         db = get_db()
         db.query(AssessmentQuestion).filter(

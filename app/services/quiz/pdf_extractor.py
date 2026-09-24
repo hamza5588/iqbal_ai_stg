@@ -232,13 +232,15 @@ Input JSON was copied from a PDF. Exponents are often flattened (x2 means x^2, a
 A fraction may appear as two lines under "Simplify:".
 
 Rules:
-- question.text must keep the FULL printed stem, including any trailing math expression.
+- question.text must keep the FULL printed stem, including any trailing math expression or sequence.
   Example: "Which expression is equal to (3x-2)^2" — do NOT strip "(3x-2)^2" out of text.
+  Example: "The arithmetic sequence 7, 12, 17, 22, ... continues..." — keep the sequence IN text once.
+- NEVER duplicate content: if text already has the equations/sequence/expression, set question.latex to null
+  (or only put TeX that is NOT already written in text).
 - For short instruction stems only ("Simplify:", "Expand:", "Factor:"), put the instruction in
   question.text and the expression in question.latex.
-- question.latex = the math expression using \\frac and ^{{ }} (also duplicate it here when the
-  stem already includes it, so renderers can typeset exponents).
-- Each option keeps its original label and meaning; fill option.latex with proper TeX.
+- Percent / pair options: prefer plain text "16 2/3%", "(6, 3)" — not \\tfrac / \\,.
+- Each option keeps its original label and meaning; fill option.latex with proper TeX only when needed.
 - Never store only the letter A/B/C/D as option text.
 - Example stem latex: \\frac{{(a^{{3}}b^{{2}})(a^{{2}}b^{{4}})}}{{ab^{{3}}}}
 - Example option latex: 4x^{{2}}-7x   or   a^{{4}}b^{{3}}

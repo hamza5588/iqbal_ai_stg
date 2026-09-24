@@ -770,6 +770,12 @@ def generate_diagnostic_questions(
             section_text = get_section_text(thread_id, user_id, topic_name, page)
 
             mcqs = generate_mcqs_from_content(section_text, topic_name, count)
+            try:
+                from app.services.quiz.display_format_qa import review_mcqs_for_display
+
+                mcqs = review_mcqs_for_display(list(mcqs))
+            except Exception:
+                pass
 
             for mcq in mcqs:
 

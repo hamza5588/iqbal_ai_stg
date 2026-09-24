@@ -182,19 +182,33 @@ def convert_pairs_batch(
             failed.append(f"{label}: {exc}")
             logger.warning("MCQ conversion failed for %s: %s", label, exc)
 
+    # LLM display QA before anything is saved / shown to students.
+    if questions:
+        try:
+            from app.services.quiz.display_format_qa import review_mcqs_for_display
+
+            questions = review_mcqs_for_display(questions)
+        except Exception as exc:
+            logger.warning("Display format review skipped: %s", exc)
+
     return MCQBatchResult(quiz_title=quiz_title, questions=questions, failed_conversions=failed)
 
 
 def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
     """Map MCQQuestion to question_bank_service fields with shuffled options."""
-    opts = [{"label": o.label, "text": o.text, "latex": o.latex} for o in mcq.options]
+    from app.services.quiz.display_format_qa import finalize_display_text, finalize_option_text
+
+    opts = []
+    for o in mcq.options:
+        ot, ol = finalize_option_text(o.text, o.latex)
+        opts.append({"label": o.label, "text": ot, "latex": ol})
     correct_idx = resolve_correct_option_index(opts, mcq.correct_option_label)
     if correct_idx is None:
         raise ValueError("Could not resolve correct option label to an index")
     shuffled, new_correct = shuffle_options(
         opts, correct_idx, preserve_order=bool(mcq.preserve_option_order)
     )
-    q_text, q_latex = pick_display_fields(mcq.question_text, mcq.question_latex)
+    q_text, q_latex = finalize_display_text(mcq.question_text, mcq.question_latex)
     return {
         "question_text": q_text or mcq.question_text,
         "question_latex": q_latex,
