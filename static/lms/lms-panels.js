@@ -315,9 +315,9 @@
       } else if (tab === 'quizzes') {
         var quizzes = await lmsApi('/api/lms/classes/' + classId + '/analytics/quizzes');
         content.innerHTML = quizzes.length
-          ? '<table class="lms-table"><thead><tr><th>Assignment</th><th>Completion</th><th>Avg Score</th><th>Student Scores</th></tr></thead><tbody>' +
+          ? '<table class="lms-table"><thead><tr><th>Assignment</th><th>Class Avg Score</th><th>Student Scores</th></tr></thead><tbody>' +
             quizzes.map(function (q) {
-              return '<tr><td>' + escapeHtml(q.title) + '</td><td>' + (q.completion_percent != null ? q.completion_percent + '%' : '—') + '</td>' +
+              return '<tr><td>' + escapeHtml(q.title) + '</td>' +
                 '<td>' + (q.avg_score_percent != null ? q.avg_score_percent + '%' : '—') + '</td>' +
                 '<td class="lms-expand-cell">' + renderQuizStudentScoresCell(q) + '</td></tr>';
             }).join('') + '</tbody></table>'
