@@ -258,6 +258,7 @@ def recover_latex(text: Optional[str]) -> str:
     s = normalize_mixed_percents(s)
     s = normalize_plain_ellipsis(s)
     s = normalize_latex_spacing(s)
+    s = dedupe_repeated_math(s)
     s = re.sub(r"([0-9√π∞°}%])([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"(\})([A-Za-z]{3,})", r"\1 \2", s)
     s = re.sub(r"[ \t]+", " ", s)
@@ -465,6 +466,72 @@ def normalize_latex_spacing(text: str) -> str:
     return s.strip()
 
 
+def _first_half_matching_compact(chunk: str, target_compact: str) -> Optional[str]:
+    """Grow a prefix of chunk until its compact math key equals target_compact."""
+    if not chunk or not target_compact:
+        return None
+    acc: list[str] = []
+    for ch in chunk:
+        acc.append(ch)
+        if _compact_math_key("".join(acc)) == target_compact:
+            result = "".join(acc).strip().rstrip(",").strip()
+            # Compact key ignores delimiters, so the cut may land before a
+            # closing \) / \] / $ — close any we opened.
+            if result.count("\\(") > result.count("\\)"):
+                result += "\\)"
+            if result.count("\\[") > result.count("\\]"):
+                result += "\\]"
+            if result.count("$") % 2 == 1:
+                result += "$"
+            return result
+    return None
+
+
+def dedupe_repeated_math(text: str) -> str:
+    """Collapse back-to-back duplicate equation blocks already stuck in stored stems.
+
+    e.g. ``...equations? x+y=9, x-y=3 x+y=9, x-y=3`` → one copy.
+    """
+    s = (text or "").strip()
+    if s.count("=") < 2:
+        return s
+
+    # Prefer splitting after the question's "?".
+    m = re.search(r"^(.*\?)\s*(.+)$", s, re.S)
+    if m:
+        prefix, rest = m.group(1), m.group(2).strip()
+        deduped = _dedupe_self_repeated_chunk(rest)
+        if deduped != rest:
+            return f"{prefix} {deduped}".strip()
+        return s
+
+    return _dedupe_self_repeated_chunk(s)
+
+
+def _dedupe_self_repeated_chunk(chunk: str) -> str:
+    compact = _compact_math_key(chunk)
+    n = len(compact)
+    if n < 6 or "=" not in compact:
+        return chunk
+    # Exact doubled compact key (AA).
+    if n % 2 == 0:
+        half = n // 2
+        if compact[:half] == compact[half:] and "=" in compact[:half]:
+            first = _first_half_matching_compact(chunk, compact[:half])
+            if first:
+                return first
+    # Near-half (comma / spacing drift between copies).
+    for half in range(max(3, n // 2 - 8), n // 2 + 9):
+        if half * 2 > n:
+            break
+        if compact[:half] == compact[half : half * 2] and "=" in compact[:half]:
+            if half * 2 == n or not compact[half * 2 :]:
+                first = _first_half_matching_compact(chunk, compact[:half])
+                if first:
+                    return first
+    return chunk
+
+
 def math_already_in_stem(stem: str, math: str) -> bool:
     """True when the latex body is already present in the English stem."""
     key = _compact_math_key(math)
@@ -619,7 +686,9 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
     if _PLAIN_PERCENT_RE.match(plain_pct):
         return plain_pct
     # Prose stems must not keep bare \ldots (shows as literal backslash-text).
-    s = normalize_latex_spacing(normalize_plain_ellipsis(strip_english_dollar_spans(s)))
+    s = dedupe_repeated_math(
+        normalize_latex_spacing(normalize_plain_ellipsis(strip_english_dollar_spans(s)))
+    )
     if _HAS_DELIM_RE.search(s):
         return s
     prefixed = _INSTRUCTION_PREFIX_RE.match(s)

@@ -416,6 +416,68 @@
     return s.replace(/[ \t]{2,}/g, ' ').trim();
   }
 
+  function lmsCompactMathKey(s) {
+    return String(s || '')
+      .replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, '')
+      .replace(/\\(?:,|;|:|!|quad|qquad)\b|~/g, '')
+      .replace(/\s+/g, '');
+  }
+
+  function lmsFirstHalfMatchingCompact(chunk, target) {
+    if (!chunk || !target) return '';
+    var acc = '';
+    for (var i = 0; i < chunk.length; i++) {
+      acc += chunk.charAt(i);
+      if (lmsCompactMathKey(acc) === target) {
+        var result = acc.replace(/[,\s]+$/, '').trim();
+        var openInline = (result.match(/\\\(/g) || []).length;
+        var closeInline = (result.match(/\\\)/g) || []).length;
+        if (openInline > closeInline) result += '\\)';
+        var openDisplay = (result.match(/\\\[/g) || []).length;
+        var closeDisplay = (result.match(/\\\]/g) || []).length;
+        if (openDisplay > closeDisplay) result += '\\]';
+        var dollars = (result.match(/\$/g) || []).length;
+        if (dollars % 2 === 1) result += '$';
+        return result;
+      }
+    }
+    return '';
+  }
+
+  function lmsDedupeSelfRepeatedChunk(chunk) {
+    var compact = lmsCompactMathKey(chunk);
+    var n = compact.length;
+    if (n < 6 || compact.indexOf('=') === -1) return chunk;
+    function tryHalf(half) {
+      if (half < 3 || half * 2 > n) return '';
+      if (compact.slice(0, half) !== compact.slice(half, half * 2)) return '';
+      if (compact.slice(0, half).indexOf('=') === -1) return '';
+      if (half * 2 !== n && compact.slice(half * 2)) return '';
+      return lmsFirstHalfMatchingCompact(chunk, compact.slice(0, half));
+    }
+    if (n % 2 === 0) {
+      var exact = tryHalf(n / 2);
+      if (exact) return exact;
+    }
+    for (var half = Math.max(3, Math.floor(n / 2) - 8); half <= Math.floor(n / 2) + 8; half++) {
+      var got = tryHalf(half);
+      if (got) return got;
+    }
+    return chunk;
+  }
+
+  function lmsDedupeRepeatedMath(s) {
+    s = String(s || '').trim();
+    if ((s.match(/=/g) || []).length < 2) return s;
+    var m = s.match(/^(.*\?)\s*([\s\S]+)$/);
+    if (m) {
+      var deduped = lmsDedupeSelfRepeatedChunk(m[2].trim());
+      if (deduped !== m[2].trim()) return (m[1] + ' ' + deduped).trim();
+      return s;
+    }
+    return lmsDedupeSelfRepeatedChunk(s);
+  }
+
   function lmsIsMixedPercent(s) {
     return /^\s*\d+(?:\s+\d+\s*\/\s*\d+)?\s*%?\s*$/.test(s) || /^\s*\d+\s*\/\s*\d+\s*%?\s*$/.test(s);
   }
@@ -564,6 +626,7 @@
     t = lmsNormalizeMixedPercents(t);
     t = lmsNormalizePlainEllipsis(t);
     t = lmsNormalizeLatexSpacing(t);
+    t = lmsDedupeRepeatedMath(t);
     t = t.replace(/([0-9√π∞°}%])([A-Za-z]{3,})/g, '$1 $2');
     t = t.replace(/(\})([A-Za-z]{3,})/g, '$1 $2');
     return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
@@ -581,10 +644,7 @@
 
   function lmsMathAlreadyInStem(stem, math) {
     function compact(s) {
-      return String(s || '')
-        .replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, '')
-        .replace(/\\(?:,|;|:|!|quad|qquad)\b|~/g, '')
-        .replace(/\s+/g, '');
+      return lmsCompactMathKey(s);
     }
     var key = compact(math);
     if (!key) return true;
@@ -636,6 +696,7 @@
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
     s = lmsNormalizeLatexSpacing(lmsNormalizePlainEllipsis(lmsStripEnglishDollarSpans(s)));
+    s = lmsDedupeRepeatedMath(s);
     if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
       var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
