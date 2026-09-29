@@ -21,26 +21,30 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_SRC = (ROOT / "templates" / "teacher_dashboard.html").read_text(encoding="utf-8")
+TEMPLATE_SRC = "\n".join(p.read_text(encoding="utf-8") for p in [  # teacher UI sources (formerly templates/teacher_dashboard.html)
+    ROOT / "static" / "teacher" / "js" / "teacher-core.js",
+    ROOT / "static" / "teacher" / "js" / "teacher-lms-hubs.js",
+    *sorted((ROOT / "templates" / "teacher").rglob("*.html")),
+])
 RAG_SERVICE_SRC = (ROOT / "app" / "utils" / "rag_service.py").read_text(encoding="utf-8")
 RAG_ROUTES_SRC = (ROOT / "app" / "routes" / "rag_routes.py").read_text(encoding="utf-8")
 
 
 def _clear_chat_context_body():
     m = re.search(r"function clearChatContext\(\)\s*\{(.*?)\n\s*\}", TEMPLATE_SRC, re.S)
-    assert m, "clearChatContext() not found in teacher_dashboard.html"
+    assert m, "clearChatContext() not found in teacher UI sources"
     return m.group(1)
 
 
 def _send_message_body():
     m = re.search(r"async function sendMessage\(\)(.*?)\n      \}\n", TEMPLATE_SRC, re.S)
-    assert m, "sendMessage() not found in teacher_dashboard.html"
+    assert m, "sendMessage() not found in teacher UI sources"
     return m.group(1)
 
 
 def _reset_chat_body():
     m = re.search(r"async function resetChat\(\)(.*?)\n      \}\n", TEMPLATE_SRC, re.S)
-    assert m, "resetChat() not found in teacher_dashboard.html (should now be async)"
+    assert m, "resetChat() not found in teacher UI sources (should now be async)"
     return m.group(1)
 
 

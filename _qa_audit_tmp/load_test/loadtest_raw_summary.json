@@ -1,0 +1,110 @@
+{
+  "total_requests": 4840,
+  "success_pct": 99.88,
+  "by_scenario": {
+    "diagnostic_submit": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 2.3,
+      "p95": 5.56,
+      "p99": 7.198
+    },
+    "login": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 0.979,
+      "p95": 1.959,
+      "p99": 3.508
+    },
+    "join_class": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 0.319,
+      "p95": 1.134,
+      "p99": 3.944
+    },
+    "dashboard": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 0.326,
+      "p95": 0.827,
+      "p99": 4.312
+    },
+    "learning_chat_start": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 8.343,
+      "p95": 12.728,
+      "p99": 14.915
+    },
+    "diagnostic_start": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 0.328,
+      "p95": 0.723,
+      "p99": 2.855
+    },
+    "quiz_answer": {
+      "success_pct": 100.0,
+      "count": 800,
+      "p50": 0.322,
+      "p95": 1.325,
+      "p99": 3.419
+    },
+    "diagnostic_questions": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 0.308,
+      "p95": 0.912,
+      "p99": 1.991
+    },
+    "diagnostic_answer": {
+      "success_pct": 100.0,
+      "count": 1600,
+      "p50": 0.305,
+      "p95": 1.473,
+      "p99": 3.958
+    },
+    "quiz_start": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 0.317,
+      "p95": 2.451,
+      "p99": 4.016
+    },
+    "learning_chat_explain": {
+      "success_pct": 100.0,
+      "count": 40,
+      "p50": 1.023,
+      "p95": 3.132,
+      "p99": 3.934
+    },
+    "learning_chat_answer": {
+      "success_pct": 99.0,
+      "count": 600,
+      "p50": 0.33,
+      "p95": 2.927,
+      "p99": 4.288
+    },
+    "quiz_submit": {
+      "success_pct": 100.0,
+      "count": 200,
+      "p50": 0.367,
+      "p95": 1.546,
+      "p99": 3.728
+    }
+  },
+  "top_errors": [
+    "learning_chat_answer: Session is not active",
+    "learning_chat_answer: Session is not active",
+    "learning_chat_answer: Session is not active",
+    "learning_chat_answer: Session is not active",
+    "learning_chat_answer: Session is not active",
+    "learning_chat_answer: Session is not active"
+  ],
+  "peak_spawned": 200,
+  "duration_sec": 1680.8,
+  "base_url": "https://209.23.10.34",
+  "timestamp": "2026-09-02 07:59:39 UTC",
+  "verdict": "PASS"
+}

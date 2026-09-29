@@ -1,0 +1,49 @@
+{# Screen 05 — Create New Quiz (PDF → MCQ). Element IDs are the ones submitLmsPdfQuiz / pollLmsQuizStatus /
+   publishLmsQuiz in teacher-lms-hubs.js use (unchanged from the legacy quiz hub). #}
+<div class="td-card accent" id="tdCreateQuizCard" hidden>
+  <div class="td-section-title">
+    <div class="td-icon-badge"><img src="{{ url_for('static', filename='teacher/icons/quizzes.png') }}" alt=""></div>
+    <div><h2>Create New Quiz</h2><p>Add quiz details to create a new quiz.</p></div>
+  </div>
+  <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)" data-wait-message="Generating quiz questions..." data-wait-sticky>
+    <div class="td-form-grid" style="grid-template-columns:1fr 1.3fr 1fr;">
+      <div class="td-field">
+        <label for="lmsQuizTitle">Quiz title <span class="req">*</span></label>
+        <input id="lmsQuizTitle" type="text" required placeholder="e.g. Chapter 5 Post Test">
+      </div>
+      <div class="td-field">
+        <label for="lmsQuizPdfFile">PDF (any content) <span class="req">*</span></label>
+        <label class="td-upload-box" for="lmsQuizPdfFile" style="flex-direction:row;gap:14px;justify-content:flex-start;text-align:left;padding:14px 18px;">
+          <span class="td-pdf-ic"><i class="fas fa-file-pdf"></i></span>
+          <span><b>Upload Your PDF</b><small>Drag &amp; drop your PDF file here or <span class="td-link">click to browse</span></small>
+            <span class="td-file-chosen" id="tdQuizFileName" hidden></span></span>
+        </label>
+        <input id="lmsQuizPdfFile" class="td-visually-hidden" type="file" accept=".pdf,application/pdf" required
+               onchange="tdQuizzes.onFileChosen(this)">
+      </div>
+      <div class="td-field">
+        <label for="lmsQuizMcqCount">Number of MCQs <span class="req">*</span></label>
+        <input id="lmsQuizMcqCount" type="number" min="1" max="40" value="10" required>
+      </div>
+    </div>
+    <p class="td-help">Upload any lesson/notes PDF. If it already has Q&amp;A, those are used; otherwise MCQs are generated from the content.</p>
+    <div class="td-form-actions">
+      <button type="button" class="td-btn td-btn-outline" onclick="tdQuizzes.closeCreate()">Cancel</button>
+      <button type="submit" id="lmsQuizSubmitBtn" class="td-btn td-btn-primary">Upload &amp; Generate MCQs</button>
+    </div>
+  </form>
+  <div id="lmsQuizProgressWrap" class="lms-progress-wrap">
+    <div class="lms-progress-label">
+      <span id="lmsQuizProgressText">Preparing...</span>
+      <strong id="lmsQuizProgressPct">0%</strong>
+    </div>
+    <div class="lms-progress"><div id="lmsQuizProgressBar" class="lms-progress-bar"></div></div>
+  </div>
+  <div id="lmsQuizStatus" class="td-status-line"></div>
+  <div id="lmsQuizPreview" class="lms-quiz-preview"></div>
+  {# publishLmsQuiz() disables the FIRST button in #lmsQuizActions — keep Publish first. #}
+  <div id="lmsQuizActions" class="td-form-actions" style="display:none;">
+    <button type="button" class="td-btn td-btn-primary" onclick="publishLmsQuiz()">Publish Quiz</button>
+    <button type="button" class="td-btn td-btn-outline" onclick="tdQuizzes.closeCreate()">Close</button>
+  </div>
+</div>

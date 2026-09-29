@@ -20,7 +20,11 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_SRC = (ROOT / "templates" / "teacher_dashboard.html").read_text(encoding="utf-8")
+TEMPLATE_SRC = "\n".join(p.read_text(encoding="utf-8") for p in [  # teacher UI sources (formerly templates/teacher_dashboard.html)
+    ROOT / "static" / "teacher" / "js" / "teacher-core.js",
+    ROOT / "static" / "teacher" / "js" / "teacher-lms-hubs.js",
+    *sorted((ROOT / "templates" / "teacher").rglob("*.html")),
+])
 RAG_SERVICE_SRC = (ROOT / "app" / "utils" / "rag_service.py").read_text(encoding="utf-8")
 
 BUGGY_HEURISTIC_FRONTEND = "aiResponse.length > 200 || (aiResponse.indexOf('#')"
@@ -35,7 +39,7 @@ def _save_lesson_to_my_lessons_body():
         TEMPLATE_SRC,
         re.S,
     )
-    assert m, "saveLessonToMyLessons() not found in teacher_dashboard.html"
+    assert m, "saveLessonToMyLessons() not found in teacher UI sources"
     return m.group(1)
 
 

@@ -1,0 +1,9 @@
+{# Screen 07 — Topic Progress: one row per enrolled student; expanding a row loads
+   /api/lms/classes/:id/students/:sid/progress/by-topic (topic bars + score-over-time chart). #}
+<div class="td-card td-card-flush">
+  <table class="td-data">
+    <thead><tr><th>Student</th><th>Grade</th><th>Overall Progress</th><th>Latest Score</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody id="tdAnaProgressRows"></tbody>
+  </table>
+  <div class="td-empty" id="tdAnaProgressEmpty" hidden></div>
+</div>

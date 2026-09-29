@@ -1,0 +1,388 @@
+{
+  "summary": {
+    "run_id": 1788292063,
+    "base_url": "https://209.23.10.34",
+    "assessment_id": 32,
+    "students": [
+      {
+        "email": "e2e_student_1788292063_1@iqbalai.com",
+        "username": "e2e_s1788292063_1",
+        "id": 19,
+        "index": 1,
+        "score_percent": 25.0,
+        "weak_topics": 3
+      },
+      {
+        "email": "e2e_student_1788292063_2@iqbalai.com",
+        "username": "e2e_s1788292063_2",
+        "id": 20,
+        "index": 2,
+        "score_percent": 37.5,
+        "weak_topics": 4
+      },
+      {
+        "email": "e2e_student_1788292063_3@iqbalai.com",
+        "username": "e2e_s1788292063_3",
+        "id": 21,
+        "index": 3,
+        "score_percent": 37.5,
+        "weak_topics": 4
+      }
+    ],
+    "passed": 47,
+    "failed": 3,
+    "total": 50
+  },
+  "steps": [
+    {
+      "phase": "Admin",
+      "step": "Upload Q&A + 3 targets",
+      "status": "pass",
+      "detail": "HTTP 201",
+      "data": "{\"data\": {\"assessment_id\": 32, \"async\": false, \"overall_confidence\": 0.958, \"question_count\": 8, \"status\": \"draft\", \"target_filenames\": [\"target_content_1.pdf\", \"target_content_2.pdf\", \"target_content_3.pdf\"], \"target_thread_id\": \"user_1_lms_1788292067_7aa9f8ae\", \"target_thread_ids\": [\"user_1_lms_1788292067_7aa9f8ae\", \"user_1_lms_1788292073_7a97bd0e\", \"user_1_lms_1788292074_24b728f2\"], \"thread_id\": \"user_1_lms_1788292075_5ebb424b\", \"title\": \"E2E Deep Diagnostic 1788292063\"}, \"success\": true}"
+    },
+    {
+      "phase": "Admin",
+      "step": "Upload progress complete",
+      "status": "pass",
+      "detail": "Diagnostic processing complete.",
+      "data": ""
+    },
+    {
+      "phase": "Admin",
+      "step": "Publish diagnostic",
+      "status": "pass",
+      "detail": "id=32",
+      "data": "{\"id\": 32, \"status\": \"published\", \"time_limit_minutes\": 5, \"title\": \"E2E Deep Diagnostic 1788292063\"}"
+    },
+    {
+      "phase": "Admin",
+      "step": "Target PDFs count = 3",
+      "status": "pass",
+      "detail": "count=3",
+      "data": "[{\"id\": 25, \"original_filename\": \"target_content_1.pdf\", \"rag_thread_id\": \"user_1_lms_1788292067_7aa9f8ae\", \"sort_order\": 0}, {\"id\": 26, \"original_filename\": \"target_content_2.pdf\", \"rag_thread_id\": \"user_1_lms_1788292073_7a97bd0e\", \"sort_order\": 1}, {\"id\": 27, \"original_filename\": \"target_content_3.pdf\", \"rag_thread_id\": \"user_1_lms_1788292074_24b728f2\", \"sort_order\": 2}]"
+    },
+    {
+      "phase": "Admin",
+      "step": "Single published diagnostic",
+      "status": "pass",
+      "detail": "published=1",
+      "data": ""
+    },
+    {
+      "phase": "Setup",
+      "step": "Create student 1",
+      "status": "pass",
+      "detail": "e2e_student_1788292063_1@iqbalai.com",
+      "data": "{\"user_id\": 19}"
+    },
+    {
+      "phase": "Setup",
+      "step": "Create student 2",
+      "status": "pass",
+      "detail": "e2e_student_1788292063_2@iqbalai.com",
+      "data": "{\"user_id\": 20}"
+    },
+    {
+      "phase": "Setup",
+      "step": "Create student 3",
+      "status": "pass",
+      "detail": "e2e_student_1788292063_3@iqbalai.com",
+      "data": "{\"user_id\": 21}"
+    },
+    {
+      "phase": "Student-1",
+      "step": "See published diagnostic",
+      "status": "pass",
+      "detail": "id=32",
+      "data": "{\"any_diagnostic_completed\": false, \"creation_mode\": \"pdf_qa_auto\", \"description\": \"{\\\"diagnostic_pdf_type\\\": \\\"qa\\\", \\\"target_rag_thread_id\\\": \\\"user_1_lms_1788292067_7aa9f8ae\\\", \\\"target_filename\\\": \\\"target_content_1.pdf\\\", \\\"target_rag_thread_ids\\\": [\\\"user_1_lms_1788292067_7aa9f8ae\\\", \\\"user_1_lms_1788292073_7a97bd0e\\\", \\\"user_1_lms_1788292074_24b728f2\\\"], \\\"target_filenames\\\": [\\\"target_content_1.pdf\\\", \\\"target_content_2.pdf\\\", \\\"target_content_3.pdf\\\"]}\", \"diagnostic_completed\": false, \"id\": 32, \"question_count\": 8, \"source\": \"platform\", \"status\": \"published\", \"time_limit_minutes\": 5, "
+    },
+    {
+      "phase": "Student-1",
+      "step": "Start diagnostic + timer",
+      "status": "pass",
+      "detail": "{\"attempt_id\": 21, \"remaining_seconds\": 296, \"expires_at\": \"2026-09-01T19:53:22.969016Z\"}",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Load questions",
+      "status": "pass",
+      "detail": "count=8",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Submit diagnostic",
+      "status": "pass",
+      "detail": "score=25.0% weak=3",
+      "data": "{\"assessment_type\": \"diagnostic\", \"attempt_id\": 21, \"diagnostic_completed\": true, \"max_score\": 8.0, \"score\": 2, \"score_percent\": 25.0, \"strong_topics\": [], \"topic_breakdown\": [], \"weak_topics\": [{\"question_ids\": [130, 133, 135], \"score_percent\": 0.0, \"topic_id\": 18, \"topic_name\": \"Basic Arithmetic\"}, {\"question_ids\": [131, 132, 136], \"score_percent\": 33.0, \"topic_id\": 7, \"topic_name\": \"General Knowledge\"}, {\"question_ids\": [134, 137], \"score_percent\": 50.0, \"topic_id\": 19, \"topic_name\": \"Document Interpretation\"}]}"
+    },
+    {
+      "phase": "Student-1",
+      "step": "Retake blocked",
+      "status": "pass",
+      "detail": "code=400",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "See published diagnostic",
+      "status": "pass",
+      "detail": "id=32",
+      "data": "{\"any_diagnostic_completed\": false, \"creation_mode\": \"pdf_qa_auto\", \"description\": \"{\\\"diagnostic_pdf_type\\\": \\\"qa\\\", \\\"target_rag_thread_id\\\": \\\"user_1_lms_1788292067_7aa9f8ae\\\", \\\"target_filename\\\": \\\"target_content_1.pdf\\\", \\\"target_rag_thread_ids\\\": [\\\"user_1_lms_1788292067_7aa9f8ae\\\", \\\"user_1_lms_1788292073_7a97bd0e\\\", \\\"user_1_lms_1788292074_24b728f2\\\"], \\\"target_filenames\\\": [\\\"target_content_1.pdf\\\", \\\"target_content_2.pdf\\\", \\\"target_content_3.pdf\\\"], \\\"weakness_cache\\\": {\\\"21\\\": {\\\"weak_topics\\\": [{\\\"topic_id\\\": 18, \\\"topic_name\\\": \\\"Basic Arithmetic\\\", \\\"score_percent\\\": 0.0, \\\"que"
+    },
+    {
+      "phase": "Student-2",
+      "step": "Start diagnostic + timer",
+      "status": "pass",
+      "detail": "{\"attempt_id\": 22, \"remaining_seconds\": 296, \"expires_at\": \"2026-09-01T19:53:29.703658Z\"}",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Load questions",
+      "status": "pass",
+      "detail": "count=8",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Submit diagnostic",
+      "status": "pass",
+      "detail": "score=37.5% weak=4",
+      "data": "{\"assessment_type\": \"diagnostic\", \"attempt_id\": 22, \"diagnostic_completed\": true, \"max_score\": 8.0, \"score\": 3, \"score_percent\": 37.5, \"strong_topics\": [{\"question_ids\": [134, 137], \"score_percent\": 100.0, \"topic_id\": 20, \"topic_name\": \"Reading Comprehension\"}], \"topic_breakdown\": [], \"weak_topics\": [{\"question_ids\": [130, 133, 135], \"score_percent\": 33.0, \"topic_id\": 9, \"topic_name\": \"Basic Math\"}, {\"question_ids\": [131], \"score_percent\": 0.0, \"topic_id\": 10, \"topic_name\": \"Geography\"}, {\"question_ids\": [132], \"score_percent\": 0.0, \"topic_id\": 11, \"topic_name\": \"Chemistry\"}, {\"question_ids\": "
+    },
+    {
+      "phase": "Student-2",
+      "step": "Retake blocked",
+      "status": "pass",
+      "detail": "code=400",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "See published diagnostic",
+      "status": "pass",
+      "detail": "id=32",
+      "data": "{\"any_diagnostic_completed\": false, \"creation_mode\": \"pdf_qa_auto\", \"description\": \"{\\\"diagnostic_pdf_type\\\": \\\"qa\\\", \\\"target_rag_thread_id\\\": \\\"user_1_lms_1788292067_7aa9f8ae\\\", \\\"target_filename\\\": \\\"target_content_1.pdf\\\", \\\"target_rag_thread_ids\\\": [\\\"user_1_lms_1788292067_7aa9f8ae\\\", \\\"user_1_lms_1788292073_7a97bd0e\\\", \\\"user_1_lms_1788292074_24b728f2\\\"], \\\"target_filenames\\\": [\\\"target_content_1.pdf\\\", \\\"target_content_2.pdf\\\", \\\"target_content_3.pdf\\\"], \\\"weakness_cache\\\": {\\\"21\\\": {\\\"weak_topics\\\": [{\\\"topic_id\\\": 18, \\\"topic_name\\\": \\\"Basic Arithmetic\\\", \\\"score_percent\\\": 0.0, \\\"que"
+    },
+    {
+      "phase": "Student-3",
+      "step": "Start diagnostic + timer",
+      "status": "pass",
+      "detail": "{\"attempt_id\": 23, \"remaining_seconds\": 296, \"expires_at\": \"2026-09-01T19:53:36.554607Z\"}",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Load questions",
+      "status": "pass",
+      "detail": "count=8",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Submit diagnostic",
+      "status": "pass",
+      "detail": "score=37.5% weak=4",
+      "data": "{\"assessment_type\": \"diagnostic\", \"attempt_id\": 23, \"diagnostic_completed\": true, \"max_score\": 8.0, \"score\": 3, \"score_percent\": 37.5, \"strong_topics\": [{\"question_ids\": [134, 137], \"score_percent\": 100.0, \"topic_id\": 19, \"topic_name\": \"Document Interpretation\"}], \"topic_breakdown\": [], \"weak_topics\": [{\"question_ids\": [130, 133, 135], \"score_percent\": 33.0, \"topic_id\": 17, \"topic_name\": \"Arithmetic\"}, {\"question_ids\": [131], \"score_percent\": 0.0, \"topic_id\": 21, \"topic_name\": \"World Capitals\"}, {\"question_ids\": [132], \"score_percent\": 0.0, \"topic_id\": 22, \"topic_name\": \"Water Chemistry\"}, {\"q"
+    },
+    {
+      "phase": "Student-3",
+      "step": "Retake blocked",
+      "status": "pass",
+      "detail": "code=400",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Learning path generated",
+      "status": "fail",
+      "detail": "steps=0",
+      "data": "{\"items\": [], \"message\": \"No learning path yet. Complete a quiz to generate one.\"}"
+    },
+    {
+      "phase": "Student-1",
+      "step": "Force-generate learning path",
+      "status": "pass",
+      "detail": "steps=1",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Has current step",
+      "status": "pass",
+      "detail": "Quiz #0",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Mark first path step complete",
+      "status": "pass",
+      "detail": "item_id=9",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Student progress API",
+      "status": "pass",
+      "detail": "keys=['learning_path', 'overall_progress', 'topics']",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Start Learning Chat",
+      "status": "pass",
+      "detail": "session=15",
+      "data": "{\"completed\": false, \"correct_count\": 0, \"current_index\": 0, \"current_question\": {\"answered\": false, \"correct\": null, \"options\": [{\"label\": \"A\", \"text\": \"x = 5\"}, {\"label\": \"B\", \"text\": \"x = 15\"}, {\"label\": \"C\", \"text\": \"x = -5\"}, {\"label\": \"D\", \"text\": \"x = \\\\frac{25}{3}\"}], \"pdf_section\": \"Basic Arithmetic\", \"question_latex\": \"3x + 5 = 20\", \"question_text\": \"Solve for x: \", \"rag_thread_id\": \"user_1_lms_1788292067_7aa9f8ae\", \"source\": \"target_pdf\", \"topic_id\": 18, \"topic_name\": \"Basic Arithmetic\"}, \"has_pdf\": true, \"pdf_label\": \"Teacher target content PDF\", \"session_id\": 15, \"status\": \"active"
+    },
+    {
+      "phase": "Student-1",
+      "step": "Answer practice question",
+      "status": "pass",
+      "detail": "{'data': {'completed': False, 'correct_count': 1, 'current_index': 1, 'current_question': {'answered': False, 'correct': None, 'options': [{'label': '",
+      "data": ""
+    },
+    {
+      "phase": "Student-1",
+      "step": "Tutor explain (PDF-grounded)",
+      "status": "pass",
+      "detail": "Sure! Let\u2019s look at the key idea from the target PDF on linear equations.\n\n### What the PDF tells us\nA linear equation i",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Learning path generated",
+      "status": "fail",
+      "detail": "steps=0",
+      "data": "{\"items\": [], \"message\": \"No learning path yet. Complete a quiz to generate one.\"}"
+    },
+    {
+      "phase": "Student-2",
+      "step": "Force-generate learning path",
+      "status": "pass",
+      "detail": "steps=1",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Has current step",
+      "status": "pass",
+      "detail": "Quiz #0",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Mark first path step complete",
+      "status": "pass",
+      "detail": "item_id=10",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Student progress API",
+      "status": "pass",
+      "detail": "keys=['learning_path', 'overall_progress', 'topics']",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Start Learning Chat",
+      "status": "pass",
+      "detail": "session=16",
+      "data": "{\"completed\": false, \"correct_count\": 0, \"current_index\": 0, \"current_question\": {\"answered\": false, \"correct\": null, \"options\": [{\"label\": \"A\", \"text\": \"x = 5\"}, {\"label\": \"B\", \"text\": \"x = 15\"}, {\"label\": \"C\", \"text\": \"x = -5\"}, {\"label\": \"D\", \"text\": \"x = 8\"}], \"pdf_section\": \"Basic Math\", \"question_latex\": \"3x + 5 = 20\", \"question_text\": \"Solve for x: 3x + 5 = 20.\", \"rag_thread_id\": \"user_1_lms_1788292067_7aa9f8ae\", \"source\": \"target_pdf\", \"topic_id\": 9, \"topic_name\": \"Basic Math\"}, \"has_pdf\": true, \"pdf_label\": \"Teacher target content PDF\", \"session_id\": 16, \"status\": \"active\", \"total_que"
+    },
+    {
+      "phase": "Student-2",
+      "step": "Answer practice question",
+      "status": "pass",
+      "detail": "{'data': {'completed': False, 'correct_count': 1, 'current_index': 1, 'current_question': {'answered': False, 'correct': None, 'options': [{'label': '",
+      "data": ""
+    },
+    {
+      "phase": "Student-2",
+      "step": "Tutor explain (PDF-grounded)",
+      "status": "pass",
+      "detail": "Sure! Let\u2019s look at the idea behind solving a linear equation like the one you have.\n\n**What the PDF tells us**\n\nA linea",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Learning path generated",
+      "status": "fail",
+      "detail": "steps=0",
+      "data": "{\"items\": [], \"message\": \"No learning path yet. Complete a quiz to generate one.\"}"
+    },
+    {
+      "phase": "Student-3",
+      "step": "Force-generate learning path",
+      "status": "pass",
+      "detail": "steps=1",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Has current step",
+      "status": "pass",
+      "detail": "Quiz #0",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Mark first path step complete",
+      "status": "pass",
+      "detail": "item_id=11",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Student progress API",
+      "status": "pass",
+      "detail": "keys=['learning_path', 'overall_progress', 'topics']",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Start Learning Chat",
+      "status": "pass",
+      "detail": "session=17",
+      "data": "{\"completed\": false, \"correct_count\": 0, \"current_index\": 0, \"current_question\": {\"answered\": false, \"correct\": null, \"options\": [{\"label\": \"A\", \"text\": \"x = 5\"}, {\"label\": \"B\", \"text\": \"x = 15 \\u00f7 3\"}, {\"label\": \"C\", \"text\": \"x = (20 - 5) \\u00f7 3\"}, {\"label\": \"D\", \"text\": \"x = (20 + 5) \\u00f7 3\"}], \"pdf_section\": \"Arithmetic\", \"question_latex\": \"3x + 5 = 20\", \"question_text\": \"Solve for x: 3x + 5 = 20 using inverse operations.\", \"rag_thread_id\": \"user_1_lms_1788292067_7aa9f8ae\", \"source\": \"target_pdf\", \"topic_id\": 17, \"topic_name\": \"Arithmetic\"}, \"has_pdf\": true, \"pdf_label\": \"Teacher tar"
+    },
+    {
+      "phase": "Student-3",
+      "step": "Answer practice question",
+      "status": "pass",
+      "detail": "{'data': {'completed': False, 'correct_count': 0, 'current_index': 1, 'current_question': {'answered': False, 'correct': None, 'options': [{'label': '",
+      "data": ""
+    },
+    {
+      "phase": "Student-3",
+      "step": "Tutor explain (PDF-grounded)",
+      "status": "pass",
+      "detail": "Sure! Let\u2019s look at the idea of solving a linear equation like the one in your PDF excerpt:\n\n**Linear equations \u2013\u202fax\u202f+\u202fb",
+      "data": ""
+    },
+    {
+      "phase": "Browser-e2e_student_1788292063_1",
+      "step": "Student dashboard loads",
+      "status": "pass",
+      "detail": "",
+      "data": ""
+    },
+    {
+      "phase": "Browser-e2e_student_1788292063_1",
+      "step": "Learning Path section visible",
+      "status": "pass",
+      "detail": "",
+      "data": ""
+    },
+    {
+      "phase": "Browser-e2e_student_1788292063_1",
+      "step": "Learning Chat modal opens",
+      "status": "pass",
+      "detail": "",
+      "data": ""
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{# Screens 02–04 — Classes. List/expand/roster rendered by static/teacher/js/teacher-classes.js. #}
+<div class="td-toolbar">
+  <div class="td-search">
+    <i class="fas fa-search"></i>
+    <input type="search" id="tdClassSearch" placeholder="Search classes" aria-label="Search classes" oninput="tdClasses.render()">
+  </div>
+  <button type="button" class="td-btn td-btn-primary" onclick="tdClasses.openCreate()"><i class="fas fa-plus"></i> Create Class</button>
+  <select id="tdClassGradeFilter" class="td-select" aria-label="Grade" onchange="tdClasses.render()">
+    <option value="">All grades</option>
+  </select>
+</div>
+<p class="td-desc">Create, organize, and share your classes.</p>
+
+<div class="td-subtabs-row">
+  <div class="td-subtabs"><button type="button" class="td-stab active" id="tdClassTabAll">All Classes</button></div>
+  <label class="td-sort">Sort:
+    <select id="tdClassSort" aria-label="Sort classes" onchange="tdClasses.render()">
+      <option value="latest">Latest</option>
+      <option value="name">Name A–Z</option>
+      <option value="grade">Grade</option>
+    </select>
+  </label>
+</div>
+
+{% include 'teacher/classes/create_form.html' %}
+
+<div id="tdClassList"></div>
+
+{% include 'teacher/classes/roster.html' %}
+{% include 'teacher/classes/add_students.html' %}

@@ -1,0 +1,147 @@
+/* View Lesson modal — new-UI layout (templates/teacher/lessons/view_lesson_modal.html).
+   Header + tabs + two columns: lesson content (left) and a sticky "Improve with AI" panel (right).
+   Uses the td- design tokens from teacher-dashboard.css. */
+
+#viewLessonModal.td-vl .view-lesson-modal-panel {
+  background: var(--td-bg);
+  border: 1px solid var(--td-line);
+  border-radius: 20px;
+  width: min(100%, 1320px);
+  font-family: 'Inter', sans-serif;
+  color: var(--td-ink);
+}
+#viewLessonModal.td-vl .view-lesson-modal-body { background: var(--td-bg); }
+
+/* ── Header ── */
+/* The panel is a flex column; long lesson/PDF content must not squash the header or tabs. */
+.td-vl-head, .td-vl-tabs { flex-shrink: 0; }
+.td-vl-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  padding: 18px 24px 14px; background: #fff; flex-wrap: wrap;
+}
+.td-vl-head-main { min-width: 0; flex: 1; }
+.td-vl-crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-muted); margin-bottom: 8px; }
+.td-vl-crumbs button { background: none; border: none; padding: 0; color: var(--td-blue-700); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.td-vl-crumbs button:hover { text-decoration: underline; }
+.td-vl-crumbs b { color: var(--td-ink); font-weight: 600; }
+.td-vl-title-row { display: flex; align-items: center; gap: 12px; }
+.td-vl-title-ic { width: 44px; height: 44px; border-radius: 12px; background: var(--td-blue-50); color: var(--td-blue-700); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+#viewLessonModal .td-vl-title-row h1 { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 700; color: var(--td-blue-900); margin: 0; line-height: 1.25; word-break: break-word; }
+.td-vl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; padding-left: 56px; }
+.td-vl-meta .td-pill i { font-size: 11px; }
+#viewLessonStatus { text-transform: capitalize; }
+.td-vl-meta-text { font-size: 13px; color: var(--td-muted); display: inline-flex; gap: 6px; align-items: center; }
+.td-vl-meta-text b { color: var(--td-blue-700); }
+
+.td-vl-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.td-vl-icon-btn {
+  width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--td-line); background: #fff;
+  color: var(--td-ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.td-vl-icon-btn:hover { border-color: var(--td-blue-500); color: var(--td-blue-700); background: var(--td-blue-50); }
+.td-vl-version { position: relative; }
+.td-vl-version-btn {
+  height: 40px; display: inline-flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: 10px;
+  border: 1px solid var(--td-blue-100); background: var(--td-blue-50); color: var(--td-blue-800);
+  font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.td-vl-version-btn:hover { border-color: var(--td-blue-500); }
+/* teacher-core.js tags the button from-amber-* while an older version is shown */
+.td-vl-version-btn.from-amber-50 { background: var(--td-amber-bg); border-color: #fcd34d; color: #92400e; }
+#viewLessonModal.td-vl .vl-version-list {
+  position: absolute; top: calc(100% + 6px); right: 0; left: auto; width: 280px; max-height: 280px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--td-line); border-radius: 12px; box-shadow: 0 16px 36px rgba(15, 23, 42, .14);
+  padding: 8px; z-index: 30;
+}
+
+/* ── Tabs ── */
+.td-vl-tabs { display: flex; gap: 6px; padding: 0 24px; background: #fff; border-bottom: 1px solid var(--td-line); overflow-x: auto; }
+.td-vl-tab {
+  background: none; border: none; border-bottom: 3px solid transparent; padding: 12px 14px; font-weight: 700; font-size: 14px;
+  color: var(--td-muted); cursor: pointer; display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; font-family: inherit;
+}
+.td-vl-tab:hover { color: var(--td-blue-700); }
+.td-vl-tab.active { color: var(--td-blue-700); border-bottom-color: var(--td-blue-700); }
+
+/* ── Body ── */
+.td-vl-body { padding: 20px 24px 28px; }
+#viewLessonModal.td-vl .vl-older-notice-slot { margin: 0 0 16px; }
+.td-vl-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.td-vl-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.td-vl-card { background: #fff; border: 1px solid var(--td-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+.td-vl-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--td-line); }
+.td-vl-card-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14.5px; color: var(--td-blue-900); }
+.td-vl-card-title .fa-star { color: #f5b301; }
+.td-vl-card-body { padding: 8px 28px 26px; }
+#viewLessonModal.td-vl #viewLessonCurrent { font-size: 15.5px; line-height: 1.75; color: #1f2937; }
+#viewLessonModal.td-vl #viewLessonCurrent :where(h1, h2, h3) { color: var(--td-blue-900); }
+
+/* Summaries */
+.td-vl-summaries { overflow: hidden; }
+.td-vl-sum-row { display: flex; align-items: center; gap: 14px; padding: 14px 20px; cursor: pointer; border-top: 1px solid var(--td-line); }
+.td-vl-summaries .td-vl-card-head + .td-vl-sum-row { border-top: none; }
+#viewLessonModal.td-vl .td-vl-sum-row:hover { background: #f8fbff; }
+#viewLessonModal.td-vl .td-vl-sum-row.open { background: var(--td-blue-50); }
+.td-vl-sum-ic { width: 38px; height: 38px; border-radius: 10px; background: var(--td-blue-50); color: var(--td-blue-700); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.td-vl-sum-row.open .td-vl-sum-ic { background: #fff; }
+.td-vl-sum-text { flex: 1; min-width: 0; }
+.td-vl-sum-text b { display: block; font-size: 14px; color: var(--td-ink); }
+.td-vl-sum-text small { font-size: 12.5px; color: var(--td-muted); }
+#viewLessonModal.td-vl .vl-chevron { color: var(--td-blue-700); transition: transform .15s ease; margin-left: auto; }
+#viewLessonModal.td-vl .vl-tl-item.open .vl-chevron { transform: rotate(180deg); }
+#viewLessonModal.td-vl .td-vl-sum-detail { padding: 6px 20px 18px 72px; border-top: none; background: var(--td-blue-50); }
+.td-vl-sum-detail-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 6px; }
+.td-vl-sum-detail-actions button { background: #fff; border: 1px solid var(--td-line); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: var(--td-blue-700); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.td-vl-sum-detail-actions button:hover { border-color: var(--td-blue-500); }
+#viewLessonModal.td-vl .vl-tl-detail-body { font-size: 14px; color: #334155; line-height: 1.7; max-height: 320px; overflow-y: auto; background: #fff; border: 1px solid var(--td-line); border-radius: 10px; padding: 12px 16px; }
+
+/* ── Improve with AI (sticky side panel) ── */
+.td-vl-side { position: sticky; top: 0; }
+.td-vl-side-card { padding: 18px; }
+.td-vl-side-head { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.td-vl-side-ic { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #2563eb, #1a56db); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+#viewLessonModal .td-vl-side-head h3 { font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; color: var(--td-blue-900); margin: 0; }
+.td-vl-side-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--td-muted); }
+.td-vl-steps { list-style: none; margin: 0 0 16px; padding: 12px 14px; background: var(--td-bg); border-radius: 12px; display: grid; gap: 8px; }
+.td-vl-steps li { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: #334155; line-height: 1.4; }
+.td-vl-steps li span { width: 20px; height: 20px; border-radius: 50%; background: var(--td-blue-700); color: #fff; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.td-vl-side-card label { display: block; font-size: 13px; font-weight: 700; color: var(--td-ink); margin: 0 0 6px; }
+.td-vl-side-card label .opt { color: var(--td-muted); font-weight: 500; }
+#viewLessonModal #viewLessonPrompt {
+  width: 100%; border: 1px solid var(--td-line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px;
+  font-family: inherit; background: var(--td-bg); color: var(--td-ink); resize: vertical; min-height: 76px;
+}
+#viewLessonModal #viewLessonPrompt:focus, .td-vl-draft:focus { outline: none; border-color: var(--td-blue-500); box-shadow: 0 0 0 3px rgba(59, 130, 246, .15); background: #fff; }
+.td-vl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 16px; }
+.td-vl-chips button { background: var(--td-blue-50); color: var(--td-blue-800); border: 1px solid transparent; border-radius: 20px; padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.td-vl-chips button:hover { border-color: #bfdbfe; }
+.td-vl-draft {
+  min-height: 150px; max-height: 300px; overflow-y: auto; border: 1px solid var(--td-line); border-radius: 10px;
+  padding: 10px 12px; font-size: 13.5px; line-height: 1.6; background: var(--td-bg); color: var(--td-ink);
+}
+.td-vl-draft:empty:before { content: attr(placeholder); color: #94a3b8; font-style: italic; }
+.td-vl-side-actions { display: grid; gap: 8px; margin-top: 14px; }
+.td-vl-side-actions .td-btn { width: 100%; }
+#viewLessonModal .td-btn.hidden { display: none; }
+.td-vl-finalize { background: var(--td-blue-900); color: #fff; }
+.td-vl-finalize:hover:not(:disabled) { background: #082c69; }
+
+/* "Use PDF as lesson" lessons have no draft editing: hide the AI panel + its tab, content takes the full width. */
+#viewLessonModal.vl-source-pdf-mode .td-vl-side,
+#viewLessonModal.vl-source-pdf-mode [data-vl-tab="improve"] { display: none; }
+#viewLessonModal.vl-source-pdf-mode .td-vl-grid { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 1024px) {
+  .td-vl-grid { grid-template-columns: minmax(0, 1fr); }
+  .td-vl-side { position: static; }
+}
+@media (max-width: 640px) {
+  .td-vl-head { padding: 14px 16px 10px; }
+  .td-vl-head-actions { width: 100%; justify-content: flex-end; }
+  .td-vl-meta { padding-left: 0; }
+  .td-vl-tabs, .td-vl-body { padding-left: 14px; padding-right: 14px; }
+  .td-vl-tabs { gap: 2px; }
+  .td-vl-tab { padding: 12px 8px; font-size: 13px; gap: 6px; }
+  .td-vl-card-body { padding: 6px 16px 20px; }
+  #viewLessonModal.td-vl .td-vl-sum-detail { padding-left: 20px; }
+}

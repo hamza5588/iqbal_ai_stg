@@ -1118,11 +1118,11 @@ def _get_openai_client():
 @login_required
 @teacher_required
 def teacher_dashboard():
-    """Render teacher dashboard (teacher-only). Teachers use this page only, not chat.html. Template: teacher_dashboard.html; assets: /teacher-static/."""
+    """Render teacher dashboard (teacher-only). Template: teacher/dashboard.html (per-screen partials under templates/teacher/)."""
     try:
-        return render_template('teacher_dashboard.html')
+        return render_template('teacher/dashboard.html')
     except Exception as e:
-        logger.error(f"Error serving teacher dashboard: {str(e)}")
+        logger.error(f"Error serving teacher dashboard: {str(e)}", exc_info=True)
         return redirect(url_for('chat.index'))
 
 

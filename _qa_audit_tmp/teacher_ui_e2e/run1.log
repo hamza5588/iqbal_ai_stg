@@ -1,0 +1,74 @@
+PASS  [Auth/shell] Teacher login lands on new teacher dashboard  http://127.0.0.1:5055/teacher-dashboard#lessons
+PASS  [Auth/shell] Top nav shows Lessons, Classes, Quizzes, Analytics, AI Tutor with correct icons  My Lessons, Classes, Quizzes, Analytics, AI Tutor
+PASS  [Auth/shell] Logo/branding matches new UI  /static/teacher/icons/iqbal-ai-logo.png
+PASS  [Auth/shell] Non-teacher cannot access teacher routes  student /teacher-dashboard -> 302 /; student /legacy/teacher-dashboard -> 302 /; anonymous -> 401 ; student /api/lms/classes/mine -> 200
+PASS  [Auth/shell] Deep link #analytics opens that view  http://127.0.0.1:5055/teacher-dashboard#analytics
+PASS  [Classes] Create class form works and persists  class #3 code OI10J48G (persists after reload)
+FAIL  [Classes] Add students (eligible list, multi-select + single add)  AssertionError: Locator expected to be visible
+Actual value: hidden 
+Call log:
+  - Expect "to_be_visible" with timeout 15000ms
+  - waiting for locator("#tdClassBody-3").locator("[data-slot=\"empty\"]")
+    33 × locator resolved to <p hidden="" class="td-desc" data-slot="empty">No eligible students found for this gr
+FAIL  [Classes] Roster displays enrolled students; remove + join-code flow  AssertionError: Locator expected to have count '3'
+Actual value: 0 
+Call log:
+  - Expect "to_have_count" with timeout 15000ms
+  - waiting for locator("#tdClassBody-3 tbody tr")
+    33 × locator resolved to 0 elements
+       - unexpected value "0"
+
+FAIL  [Quizzes] Quiz upload/create path (PDF → MCQ generate → preview → publish)  Error: Locator.inner_text: Error: strict mode violation: locator("#lmsQuizStatus") resolved to 2 elements:
+    1) <div id="lmsQuizStatus" class="td-status-line">Uploading PDF and generating 5 MCQs...</div> aka get_by_text("Uploading PDF and generating")
+    2) <div id="lmsQuizStatus" class="lms-status"></d
+FAIL  [Quizzes] Quizzes list loads (tabs, expand shows MCQs)  TimeoutError: APIRequestContext.fetch: Timeout 30000ms exceeded.
+Call log:
+  - → GET http://127.0.0.1:5055/api/lms/topics?subject=Math
+    - user-agent: Playwright/1.62.0 (x64; windows 10.0) python/3.13
+    - accept: */*
+    - accept-encoding: gzip,deflate,br
+    - cookie: session=.eJw1ijsOgCAQBe_yahopucyG6IsS5eM
+FAIL  [Lessons] Create lesson (Use PDF as lesson) → appears in list  TimeoutError: Page.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator(".td-navbtn[data-view=\"lessons\"]")
+    - locator resolved to <a href="#lessons" class="td-navbtn" data-view="lessons" onclick="tdShowView('lessons'); return false;">…</a>
+  - attempting click action
+    2 × waiting for element
+FAIL  [Lessons] Create lesson (Generate from PDF) → opens lesson chat in AI Tutor  TimeoutError: Page.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator(".td-navbtn[data-view=\"lessons\"]")
+    - locator resolved to <a href="#lessons" class="td-navbtn" data-view="lessons" onclick="tdShowView('lessons'); return false;">…</a>
+  - attempting click action
+    2 × waiting for element
+FAIL  [AI Tutor] Lesson chat: send message → response or graceful error  TimeoutError: Page.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator(".td-navbtn[data-view=\"tutor\"]")
+    - locator resolved to <a href="#tutor" class="td-navbtn" data-view="tutor" onclick="tdShowView('tutor'); return false;">…</a>
+  - attempting click action
+    2 × waiting for element to be v
+FAIL  [AI Tutor] Chat history dropdown lists and re-opens conversations  TimeoutError: Page.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator("#chatHistoryBtn")
+    - locator resolved to <button type="button" id="chatHistoryBtn" class="td-suggest-chip primary" onclick="toggleChatHistoryDropdown(event)">…</button>
+  - attempting click action
+    2 × waiting for element
+FAIL  [AI Tutor] Teaching Assistant: history load + send → reply or graceful error  TimeoutError: Page.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator("[data-tutor-mode=\"assistant\"]")
+    - locator resolved to <button type="button" data-tutor-mode="assistant" onclick="tdSetTutorMode('assistant')">…</button>
+  - attempting click action
+    2 × waiting for element to be visibl
+FAIL  [AI Tutor] Set Prompt modal opens from AI Tutor  TimeoutError: Page.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator("#view-tutor").locator("text=Set Prompt")
+    - locator resolved to <span>Set Prompt</span>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not visible
+    - retrying 
+PASS  [Cross-cutting] Mobile width: no horizontal overflow, nav usable  lessons:0px classes:0px quizzes:0px analytics:0px tutor:0px
+PASS  [Cross-cutting] No console-breaking JS errors on primary paths  0 errors
+PASS  [Cross-cutting] No missing static assets (icons/css/js 404s)  0 static failures (0 non-static 4xx/5xx logged)
+
+9/19 passed — report: C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\_qa_audit_tmp\teacher_ui_e2e\report.md
+EXIT=1

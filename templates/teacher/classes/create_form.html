@@ -1,0 +1,36 @@
+{# Screen 03 — Create New Class. POST /api/lms/classes {name, grade_level, description}.
+   "Your Teaching Grades" maps to PUT /api/lms/teachers/me/grades (limits the class grade options). #}
+<div class="td-card accent" id="tdCreateClassCard" hidden>
+  <div class="td-section-title">
+    <div class="td-icon-badge"><i class="fas fa-plus"></i></div>
+    <div><h2>Create New Class</h2><p>Add class details to create a new class.</p></div>
+  </div>
+  <form id="tdCreateClassForm" onsubmit="tdClasses.submitCreate(event)" data-wait-message="Creating class...">
+    <div class="td-form-grid" style="grid-template-columns:1.2fr 1.2fr 1fr 1.6fr;">
+      <div class="td-field">
+        <label for="tdClassName">Class Name <span class="req">*</span></label>
+        <input id="tdClassName" type="text" required maxlength="120" placeholder="e.g. Class 8 – Math">
+      </div>
+      <div class="td-field" id="tdTeachingGradesField">
+        <label for="tdTeachingGrades">Your Teaching Grades</label>
+        <div style="display:flex;gap:8px;">
+          <input id="tdTeachingGrades" type="text" placeholder="e.g. 8,9">
+          <button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdClasses.saveTeachingGrades()">Save</button>
+        </div>
+        <p class="td-help" id="tdTeachingGradesHint">Currently assigned: —</p>
+      </div>
+      <div class="td-field">
+        <label for="tdClassGrade">Grade <span class="req">*</span></label>
+        <select id="tdClassGrade" required><option value="">Select grade</option></select>
+      </div>
+      <div class="td-field">
+        <label for="tdClassDescription">Description <span class="opt">(Optional)</span></label>
+        <input id="tdClassDescription" type="text" maxlength="500" placeholder="Enter class description…">
+      </div>
+    </div>
+    <div class="td-form-actions">
+      <button type="button" class="td-btn td-btn-outline" onclick="tdClasses.closeCreate()">Cancel</button>
+      <button type="submit" class="td-btn td-btn-primary" id="tdCreateClassSubmit">Save Class</button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,67 @@
+# Release QA 1789631946
+Target: https://dil.iqbalai.com
+Result: 60 pass / 1 fail / 0 skip
+
+- ✅ **Infra** — GET /health HTTPS: {"status":"healthy"}
+
+- ✅ **Infra** — GET /api/lms/health: {"data":{"service":"lms","status":"ok"},"success":true}
+
+- ✅ **Infra** — TLS certificate valid for dil.iqbalai.com: 
+- ✅ **Assets** — /static/lms/lms-student.js: http=200 has=True
+- ✅ **Assets** — /static/lms/lms-core.js: http=200 has=True
+- ✅ **Assets** — /static/lms/lms-ui.css: http=200 has=True
+- ✅ **Assets** — /static/teacher/js/chat-response-formatter.js: http=200 has=True
+- ✅ **Security** — Anon diagnostic blocked: code=401
+- ✅ **Pages** — Login page: http=200
+- ✅ **Auth** — Admin login: admin@iqbalai.com
+- ✅ **Pages** — Admin dashboard: http=200 len=94998
+- ✅ **Admin** — Published platform diagnostic exists: published=1 total=14
+- ✅ **Auth** — Teacher login: relqa_teacher_1789631946@iqbalai.com
+- ✅ **Pages** — Teacher dashboard: http=200
+- ✅ **RBAC** — Teacher cannot upload diagnostic: code=403
+- ✅ **Teacher** — List quizzes: count=0
+- ✅ **Security** — Student dashboard requires login: http=401
+- ✅ **Setup** — Create student a: relqa_1789631946_a@iqbalai.com
+- ✅ **Auth** — Student A login: relqa_1789631946_a@iqbalai.com
+- ✅ **StudentA** — See default diagnostic: id=44 completed=False
+- ✅ **Pages** — Student dashboard + LMS JS: http=200 student_js=True
+- ✅ **StudentA** — Start diagnostic with timer: attempt=1843 remaining=2969 resumed=False
+- ✅ **StudentA** — Load questions: count=25
+- ✅ **Math** — No smashed English stems in payload: [{"difficulty": "easy", "options": [{"label": "A", "latex": null, "text": "\u221a25 and 0.4"}, {"label": "B", "latex": null, "text": "\u221a8 and \u03c0"}, {"label": "C", "latex": null, "text": "0.121212 ...and 7 8"}, {"label": "D", "latex"
+- ✅ **Math** — No glued words like √25and: [{"difficulty": "easy", "options": [{"label": "A", "latex": null, "text": "\u221a25 and 0.4"}, {"label": "B", "latex": null, "text": "\u221a8 and \u03c0"}, {"label": "C", "latex": null, "text": "0.121212 ...and 7 8"}, {"label": "D", "latex"
+- ✅ **Math** — No leftover \( inside \frac: [{"difficulty": "easy", "options": [{"label": "A", "latex": null, "text": "\u221a25 and 0.4"}, {"label": "B", "latex": null, "text": "\u221a8 and \u03c0"}, {"label": "C", "latex": null, "text": "0.121212 ...and 7 8"}, {"label": "D", "latex"
+- ✅ **Math** — No 16 2 3 % broken mixed numbers: [{"difficulty": "easy", "options": [{"label": "A", "latex": null, "text": "\u221a25 and 0.4"}, {"label": "B", "latex": null, "text": "\u221a8 and \u03c0"}, {"label": "C", "latex": null, "text": "0.121212 ...and 7 8"}, {"label": "D", "latex"
+- ✅ **Math** — Percent options keep a visible slash when mixed: [{"difficulty": "easy", "options": [{"label": "A", "latex": null, "text": "\u221a25 and 0.4"}, {"label": "B", "latex": null, "text": "\u221a8 and \u03c0"}, {"label": "C", "latex": null, "text": "0.121212 ...and 7 8"}, {"label": "D", "latex"
+- ✅ **StudentA** — Save 4–5 answers then leave: saved=5
+- ✅ **StudentA** — Reopen is NOT 'already completed': completed=False timed_out=False
+- ✅ **StudentA** — Resume same attempt: {"attempt_id": 1843, "resumed": true, "remaining_seconds": 2959, "timed_out": null}
+- ✅ **StudentA** — Saved answers + continue index restored: saved={'0': 0, '1': 1, '2': 2, '3': 3, '4': 0} current=5
+- ✅ **Setup** — Create student b: relqa_1789631946_b@iqbalai.com
+- ✅ **StudentB** — Start + one answer before timeout: attempt=1844
+- ❌ **Timeout** — SSH helper import: No module named 'paramiko'
+- ✅ **Setup** — Create student c: relqa_1789631946_c@iqbalai.com
+- ✅ **StudentC** — In-time submit scores (not forced 0): {"score": 7, "score_percent": 28.0, "timed_out": null, "diagnostic_completed": true}
+- ✅ **StudentC** — Retake blocked after real submit: code=400 {'error': {'code': 'validation_error', 'message': 'You have already completed the diagnostic assessment. Retakes are not allowed.'}, 'succes
+- ✅ **StudentC** — Completed diagnostic is not labeled time-over: completed=True timed_out=False
+- ✅ **StudentC** — Onboarding diagnostic_completed: {'current_learning_path_id': 1834, 'diagnostic_assessment_id': 44, 'diagnostic_completed': True, 'diagnostic_completed_at': '2026-09-17T08:00:13.015312', 'enrol
+- ✅ **StudentC** — Student dashboard API: keys=['classes', 'current_learning_path_step', 'learning_path', 'mastery', 'onboarding', 'overall_progress', 'pending_assignments', 'weak_topics']
+- ✅ **StudentC** — Learning path after diagnostic: steps=1
+- ✅ **StudentC** — Learning path has no Quiz #0 label: ['Learning Chat — practice weak areas']
+- ✅ **StudentC** — Start Learning Chat session: code=201 {'completed': False, 'correct_count': 0, 'current_index': 0, 'current_question': {'answered': False, 'correct': None, 'options': [{'label': 
+- ✅ **StudentC** — Learning Chat tutor explain: {"assist_level": 1, "assist_level_label": "Level 1 \u2013 Prompt", "next_assist_level": 2, "next_assist_level_label": "Level 2 \u2013 Hint", "reply": "**Factoring Quadratics (Class
+- ✅ **StudentC** — Assignments list: code=200
+- ✅ **JoinQuiz** — Teacher creates class with join code: code=0FBZVZQG class=36
+- ✅ **JoinQuiz** — Teacher creates own quiz: quiz_id=73
+- ✅ **JoinQuiz** — Teacher adds quiz question: question_id=350 http=201
+- ✅ **JoinQuiz** — Teacher attaches question to quiz: http=200
+- ✅ **JoinQuiz** — Teacher publishes quiz: {'data': {'id': 73, 'status': 'published'}, 'success': True}
+- ✅ **JoinQuiz** — Teacher assigns quiz to class: assignment=18
+- ✅ **JoinQuiz** — Teacher publishes assignment: {'data': {'id': 18, 'status': 'published'}, 'success': True}
+- ✅ **Setup** — Create student out: relqa_1789631946_out@iqbalai.com
+- ✅ **Setup** — Create student in: relqa_1789631946_in@iqbalai.com
+- ✅ **JoinQuiz** — Both students see the same platform diagnostic: out=44 in=44 platform=44
+- ✅ **JoinQuiz** — Student without join code sees no teacher quiz: []
+- ✅ **JoinQuiz** — Student without join code cannot start teacher quiz: code=400 {'error': {'code': 'validation_error', 'message': "Join your teacher's class with a class code to take this quiz."}, 'success': False}
+- ✅ **JoinQuiz** — Student joins teacher with class code: code=200 {'data': {'class_id': 36, 'status': 'active'}, 'success': True}
+- ✅ **JoinQuiz** — Joined student sees that teacher's quiz only: assignments=[{'assignment_id': 18, 'can_start': True, 'due_date': None, 'quiz_id': 73, 'score_percent': None, 'status': 'not_started', 'submitted_at': None, 'title': 'HW 1789631946'}]
+- ✅ **JoinQuiz** — Joined student can start that teacher's quiz: code=201 attempt=1846

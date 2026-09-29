@@ -12,11 +12,17 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_SRC = (ROOT / "templates" / "teacher_dashboard.html").read_text(encoding="utf-8")
+TEMPLATE_SRC = "\n".join(p.read_text(encoding="utf-8") for p in [  # teacher UI sources (formerly templates/teacher_dashboard.html)
+    ROOT / "static" / "teacher" / "js" / "teacher-core.js",
+    ROOT / "static" / "teacher" / "js" / "teacher-lms-hubs.js",
+    *sorted((ROOT / "templates" / "teacher").rglob("*.html")),
+])
 
 
 def test_current_teacher_id_is_derived_from_session():
-    assert "const CURRENT_TEACHER_ID = '{{ session.get(\"user_id\", \"\") }}';" in TEMPLATE_SRC
+    # The id is rendered from the session in templates/teacher/base.html and read by teacher-core.js.
+    assert "teacherId: {{ (session.get('user_id') or '') | tojson }}," in TEMPLATE_SRC
+    assert "const CURRENT_TEACHER_ID = String(window.TEACHER_CFG.teacherId || '');" in TEMPLATE_SRC
 
 
 def test_teacher_scoped_storage_key_helper_exists():

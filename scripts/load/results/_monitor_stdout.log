@@ -1,0 +1,35 @@
+Monitoring 209.23.10.34 every 60s for 1800s
+STOP CONDITION at 2026-09-03T15:16:51Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:16:51Z sample=1 load=0.05 0.12 0.12 1/561 1442264 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:18:26Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:18:26Z sample=2 load=0.18 0.16 0.13 1/561 1443684 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:20:00Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:20:00Z sample=3 load=0.50 0.26 0.17 1/573 1445118 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:21:35Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:21:35Z sample=4 load=0.42 0.31 0.20 1/603 1446618 groq_hits=1 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:23:11Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:23:11Z sample=5 load=1.17 0.53 0.28 2/613 1448091 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:24:47Z: unhealthy=True oom=False crashed=True
+2026-09-03T15:24:47Z sample=6 load=0.47 0.48 0.29 2/644 1449620 groq_hits=810 health_ok=False crashed=True
+STOP CONDITION at 2026-09-03T15:26:43Z: unhealthy=True oom=False crashed=True
+2026-09-03T15:26:43Z sample=7 load=0.37 0.41 0.28 2/645 1451204 groq_hits=1102 health_ok=False crashed=True
+STOP CONDITION at 2026-09-03T15:28:29Z: unhealthy=True oom=False crashed=True
+2026-09-03T15:28:29Z sample=8 load=0.41 0.43 0.30 2/641 1452760 groq_hits=624 health_ok=False crashed=True
+STOP CONDITION at 2026-09-03T15:30:24Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:30:24Z sample=9 load=0.53 0.46 0.32 3/640 1454413 groq_hits=960 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:32:00Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:32:00Z sample=10 load=0.57 0.56 0.37 1/641 1455983 groq_hits=2 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:33:36Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:33:36Z sample=11 load=0.25 0.44 0.35 1/638 1457429 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:35:11Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:35:11Z sample=12 load=0.14 0.35 0.32 1/635 1458943 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:36:45Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:36:45Z sample=13 load=0.11 0.27 0.29 1/635 1460404 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:38:39Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:38:39Z sample=14 load=0.02 0.18 0.26 1/639 1461922 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:40:37Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:40:37Z sample=15 load=0.06 0.15 0.23 3/642 1463467 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:42:22Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:42:22Z sample=16 load=0.00 0.10 0.20 1/638 1465088 groq_hits=0 health_ok=True crashed=True
+STOP CONDITION at 2026-09-03T15:44:25Z: unhealthy=False oom=False crashed=True
+2026-09-03T15:44:25Z sample=17 load=0.17 0.11 0.19 1/636 1466547 groq_hits=0 health_ok=True crashed=True

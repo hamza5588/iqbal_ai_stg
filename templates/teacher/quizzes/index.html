@@ -1,0 +1,28 @@
+{# Screens 05–06 — Quizzes. List rendered by static/teacher/js/teacher-quizzes.js. #}
+<div class="td-toolbar">
+  <div class="td-search">
+    <i class="fas fa-search"></i>
+    <input type="search" id="tdQuizSearch" placeholder="Search quizzes" aria-label="Search quizzes" oninput="tdQuizzes.render()">
+  </div>
+  <button type="button" class="td-btn td-btn-outline" onclick="tdQuizzes.openAssign()"><i class="fas fa-users"></i> Assign Quiz</button>
+  <button type="button" class="td-btn td-btn-primary" onclick="tdQuizzes.openCreate()"><i class="fas fa-plus"></i> Create Quiz</button>
+</div>
+
+<div class="td-subtabs-row">
+  <div class="td-subtabs" role="tablist">
+    <button type="button" class="td-stab active" data-quiz-tab="all" id="tdQuizTabAll" onclick="tdQuizzes.setTab('all')">All Quizzes</button>
+    <button type="button" class="td-stab" data-quiz-tab="published" id="tdQuizTabPublished" onclick="tdQuizzes.setTab('published')">Published</button>
+    <button type="button" class="td-stab" data-quiz-tab="draft" id="tdQuizTabDrafts" onclick="tdQuizzes.setTab('draft')">Drafts</button>
+  </div>
+  <label class="td-sort">Sort:
+    <select id="tdQuizSort" aria-label="Sort quizzes" onchange="tdQuizzes.render()">
+      <option value="latest">Latest</option>
+      <option value="title">Title A–Z</option>
+    </select>
+  </label>
+</div>
+
+{% include 'teacher/quizzes/create_form.html' %}
+{% include 'teacher/quizzes/assign.html' %}
+
+<div id="tdQuizList"></div>

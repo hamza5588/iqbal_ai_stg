@@ -81,3 +81,8 @@ new_ngnix.conf
 # Piper TTS model weights (large binaries — download locally, do not commit)
 piper_models/
 *.onnx
+# Large source PDFs and real user data (do not commit)
+Math IX (1) (1).pdf
+Students and Teachers for DIL SAATHI.xlsx
+_qa_audit_tmp/dil_saathi_users.json
+_qa_audit_tmp/dil_saathi_class_mapping.json

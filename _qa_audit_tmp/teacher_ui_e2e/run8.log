@@ -1,0 +1,30 @@
+PASS  [Auth/shell] Teacher login lands on new teacher dashboard  http://127.0.0.1:5055/teacher-dashboard#lessons
+PASS  [Auth/shell] Top nav shows Lessons, Classes, Quizzes, Analytics, AI Tutor with correct icons  My Lessons, Classes, Quizzes, Analytics, AI Tutor
+PASS  [Auth/shell] Logo/branding matches new UI  /static/teacher/icons/iqbal-ai-logo.png
+PASS  [Auth/shell] Non-teacher cannot access teacher routes  student /teacher-dashboard -> 302 /; student /legacy/teacher-dashboard -> 302 /; anonymous -> 401 ; student /api/lms/classes/mine -> 200
+PASS  [Auth/shell] Deep link #analytics opens that view  http://127.0.0.1:5055/teacher-dashboard#analytics
+PASS  [Classes] Create class form works and persists  class #10 code TEL2YWK6 (persists after reload)
+PASS  [Classes] Add students (eligible list, multi-select + single add)  added a+b (multi-select) and c (row Add); API roster = e2e_student_a, e2e_student_b, e2e_student_c
+PASS  [Classes] Roster displays enrolled students; remove + join-code flow  3 rows → removed C → 2 rows → C joined via code → 3 rows
+PASS  [Quizzes] Quiz upload/create path (PDF → MCQ generate → preview → publish)  5 MCQs generated; Status: completed | Confidence: 95% | Questions: 5 / 5 requested
+PASS  [Quizzes] Quizzes list loads (tabs, expand shows MCQs)  11 quizzes; 'E2E PDF Quiz 090143' expanded with 5 MCQs
+PASS  [Quizzes] Assign quiz to class works end-to-end  assignment #11 visible to student A
+PASS  [Quizzes] Students submit the assigned quiz (data for analytics)  e2e.student.a: 0/5.0; e2e.student.b: 5/5.0; tagged quiz e2e.student.b: 4/4.0; student C not submitted
+PASS  [Analytics] Topic progress renders real data  3 students; A overall 0% (API 0.0), latest 0%, 0 topic rows; B 100% with 2 topic rows + chart
+PASS  [Analytics] Quiz results collapsed ↔ expanded states work  collapsed (2 / 3 submitted) → expanded (3 student rows) → collapsed
+PASS  [Analytics] Struggling students view loads  2 struggling (matches API)
+PASS  [Analytics] Analytics roster progress matches API (no all-zeros when data exists)  UI progress == API for all 3; on-track/help/not-attempted = 1/1/1
+PASS  [Lessons] Create lesson (Use PDF as lesson) → appears in list  lesson #3
+PASS  [Lessons] List lessons loads from API (search, tabs, filters, pagination)  1 lessons; search + subject filter OK
+PASS  [Lessons] View / edit / publish / Word / PowerPoint / FAQ / delete flows  view, edit+save, Unpublish→Publish, word:E2E_Lesson_AsIs_090143_edited.docx, ppt:E2E_Lesson_AsIs_090143_edited.pptx, faq, delete
+PASS  [Lessons] Create lesson (Generate from PDF) → opens lesson chat in AI Tutor  switched to AI Tutor with the new PDF conversation
+PASS  [AI Tutor] Lesson chat: send message → response or graceful error  assistant: 'The document is a Mathematics Diagnostic Baseline Assessment designed for Grade IX students, covering various domains such as Number & Operations, Algebra, Measurement & Geometry, and Statistics & Pro'
+PASS  [AI Tutor] Chat history dropdown lists and re-opens conversations  14 conversations listed; first re-opened
+PASS  [AI Tutor] Teaching Assistant: history load + send → reply or graceful error  reply: 'AI  One effective tip for teaching fractions is to connect them to decimals and percentages. Show students how fractions can be converted to decimals and percen'; persisted history messages: 14
+PASS  [AI Tutor] Set Prompt modal opens from AI Tutor  opened + closed
+PASS  [Cross-cutting] Mobile width: no horizontal overflow, nav usable  lessons:0px classes:0px quizzes:0px analytics:0px tutor:0px
+PASS  [Cross-cutting] No console-breaking JS errors on primary paths  0 errors
+PASS  [Cross-cutting] No missing static assets (icons/css/js 404s)  0 static failures (0 non-static 4xx/5xx logged)
+
+27/27 passed — report: C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\_qa_audit_tmp\teacher_ui_e2e\report.md
+EXIT=0

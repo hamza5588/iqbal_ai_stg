@@ -1,0 +1,15 @@
+<header class="td-topbar">
+  <a class="td-brand" href="#lessons" onclick="tdShowView('lessons'); return false;" aria-label="Iqbal AI — Teacher Dashboard">
+    <img src="{{ url_for('static', filename='teacher/icons/iqbal-ai-logo.png') }}" alt="IQBAL AI — Intelligent Learning Platform">
+  </a>
+  {% include 'teacher/partials/mainnav.html' %}
+  <div class="td-top-right">
+    <button type="button" class="td-avatar" id="userAvatar" onclick="tdToggleAvatarMenu(event)" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">T</button>
+    <div class="td-avatar-menu" id="tdAvatarMenu" hidden>
+      <div class="td-am-head"><b id="userName">Teacher</b><span>Teacher</span></div>
+      <button type="button" onclick="tdCloseAvatarMenu(); showRAGPromptModal();"><i class="fas fa-cog"></i> Set AI Prompt</button>
+      <button type="button" onclick="tdCloseAvatarMenu(); tdShowView('classes'); tdFocusTeachingGrades();"><i class="fas fa-graduation-cap"></i> Teaching Grades</button>
+      <button type="button" class="danger" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,38 @@
+{# Screens 07–11 — Class Analytics. Data loaded by static/teacher/js/teacher-analytics.js.
+   Topic Performance tab stays hidden (product decision d10856c); it is not rendered. #}
+<div class="td-section-title td-page-head">
+  <div class="td-icon-badge"><img src="{{ url_for('static', filename='teacher/icons/analytics.png') }}" alt=""></div>
+  <div><h2>Class Analytics</h2><p>Track student performance and progress in detail.</p></div>
+</div>
+
+<div class="td-ana-shell">
+  <div class="td-ana-filters">
+    <div class="td-field">
+      <label for="tdAnaClass">Select Class</label>
+      <select id="tdAnaClass" onchange="tdAnalytics.load()"><option value="">Loading classes…</option></select>
+    </div>
+    <div class="td-search">
+      <i class="fas fa-search"></i>
+      <input type="search" id="tdAnaSearch" placeholder="Search students…" aria-label="Search" oninput="tdAnalytics.rerender()">
+    </div>
+    <label class="td-sort" style="padding-bottom:0;">Sort:
+      <select id="tdAnaSort" class="td-select" style="min-width:130px;font-weight:600;" onchange="tdAnalytics.rerender()">
+        <option value="latest">Latest</option>
+        <option value="name">Name A–Z</option>
+        <option value="progress_asc">Progress ↑</option>
+        <option value="progress_desc">Progress ↓</option>
+      </select>
+    </label>
+  </div>
+  <div class="td-ana-tabs" role="tablist">
+    <button type="button" class="td-ana-tab active" data-ana-tab="progress" onclick="tdAnalytics.switchTab('progress')"><i class="fas fa-chart-column"></i> Topic Progress</button>
+    <button type="button" class="td-ana-tab" data-ana-tab="quizzes" onclick="tdAnalytics.switchTab('quizzes')"><i class="far fa-file-lines"></i> Quiz Results</button>
+    <button type="button" class="td-ana-tab" data-ana-tab="struggling" onclick="tdAnalytics.switchTab('struggling')"><i class="fas fa-user-group"></i> Struggling Students</button>
+    <button type="button" class="td-ana-tab" data-ana-tab="roster" onclick="tdAnalytics.switchTab('roster')"><i class="fas fa-list-ul"></i> Roster</button>
+  </div>
+</div>
+
+<div class="td-ana-panel" data-ana-panel="progress">{% include 'teacher/analytics/topic_progress.html' %}</div>
+<div class="td-ana-panel" data-ana-panel="quizzes" hidden>{% include 'teacher/analytics/quiz_results.html' %}</div>
+<div class="td-ana-panel" data-ana-panel="struggling" hidden>{% include 'teacher/analytics/struggling_students.html' %}</div>
+<div class="td-ana-panel" data-ana-panel="roster" hidden>{% include 'teacher/analytics/roster.html' %}</div>

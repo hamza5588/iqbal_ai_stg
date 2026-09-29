@@ -1,0 +1,9 @@
+{% extends 'teacher/base.html' %}
+{# Single authenticated entry (/teacher-dashboard). Each screen is a view switched by teacher-shell.js (#lessons, #classes, …). #}
+{% block content %}
+  <section id="view-lessons" class="td-view" data-view="lessons">{% include 'teacher/lessons/index.html' %}</section>
+  <section id="view-classes" class="td-view" data-view="classes">{% include 'teacher/classes/index.html' %}</section>
+  <section id="view-quizzes" class="td-view" data-view="quizzes">{% include 'teacher/quizzes/index.html' %}</section>
+  <section id="view-analytics" class="td-view" data-view="analytics">{% include 'teacher/analytics/index.html' %}</section>
+  <section id="view-tutor" class="td-view" data-view="tutor">{% include 'teacher/ai_tutor/chat.html' %}</section>
+{% endblock %}

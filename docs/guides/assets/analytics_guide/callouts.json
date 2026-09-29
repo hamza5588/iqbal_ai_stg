@@ -1,0 +1,220 @@
+{
+  "01_student_dashboard": [
+    {
+      "n": 1,
+      "tip": [
+        1236,
+        206
+      ],
+      "badge": [
+        1096,
+        136
+      ],
+      "label": "Take Diagnostic"
+    },
+    {
+      "n": 2,
+      "tip": [
+        423,
+        355
+      ],
+      "badge": [
+        283,
+        285
+      ],
+      "label": "Learning Path card"
+    },
+    {
+      "n": 3,
+      "tip": [
+        1201,
+        407
+      ],
+      "badge": [
+        1201,
+        317
+      ],
+      "label": "My Classes (not enrolled yet)"
+    }
+  ],
+  "02_student_diagnostic": [
+    {
+      "n": 1,
+      "tip": [
+        683,
+        349
+      ],
+      "badge": [
+        543,
+        279
+      ],
+      "label": "Question + answer choices"
+    },
+    {
+      "n": 2,
+      "tip": [
+        848,
+        735
+      ],
+      "badge": [
+        848,
+        645
+      ],
+      "label": "Next / Skip / Submit Diagnostic"
+    }
+  ],
+  "04_student_learning_path": [
+    {
+      "n": 1,
+      "tip": [
+        423,
+        251
+      ],
+      "badge": [
+        423,
+        161
+      ],
+      "label": "Learning Path progress"
+    },
+    {
+      "n": 2,
+      "tip": [
+        942,
+        251
+      ],
+      "badge": [
+        942,
+        161
+      ],
+      "label": "Weak Topics list"
+    },
+    {
+      "n": 3,
+      "tip": [
+        220,
+        530
+      ],
+      "badge": [
+        340,
+        460
+      ],
+      "label": "Topic Mastery pie chart"
+    }
+  ],
+  "05_teacher_dashboard": [
+    {
+      "n": 1,
+      "tip": [
+        806,
+        184
+      ],
+      "badge": [
+        806,
+        264
+      ],
+      "label": "Analytics button"
+    }
+  ],
+  "06_analytics_topics": [
+    {
+      "n": 1,
+      "tip": [
+        683,
+        290
+      ],
+      "badge": [
+        803,
+        220
+      ],
+      "label": "Class dropdown"
+    },
+    {
+      "n": 2,
+      "tip": [
+        306,
+        349
+      ],
+      "badge": [
+        306,
+        429
+      ],
+      "label": "Topic Performance tab"
+    },
+    {
+      "n": 3,
+      "tip": [
+        948,
+        452
+      ],
+      "badge": [
+        1068,
+        382
+      ],
+      "label": "Struggling students count"
+    }
+  ],
+  "11_analytics_chart_example": [
+    {
+      "n": 1,
+      "tip": [
+        450,
+        374
+      ],
+      "badge": [
+        450,
+        284
+      ],
+      "label": "Student dropdown"
+    },
+    {
+      "n": 2,
+      "tip": [
+        916,
+        374
+      ],
+      "badge": [
+        916,
+        284
+      ],
+      "label": "Topic dropdown"
+    },
+    {
+      "n": 3,
+      "tip": [
+        683,
+        681
+      ],
+      "badge": [
+        543,
+        611
+      ],
+      "label": "Chart bars (Diagnostic purple, Quiz cyan)"
+    }
+  ],
+  "08_analytics_quizzes": [
+    {
+      "n": 1,
+      "tip": [
+        587,
+        246
+      ],
+      "badge": [
+        587,
+        326
+      ],
+      "label": "Quiz Results tab"
+    },
+    {
+      "n": 2,
+      "tip": [
+        683,
+        371
+      ],
+      "badge": [
+        803,
+        301
+      ],
+      "label": "Assignment row (completion + avg score)"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{# Screen 04 — expanded class → Roster tab. Rows filled by tdClasses.renderRoster(). #}
+<template id="tdTplClassRoster">
+  <div class="td-table-wrap">
+    <table class="td-data">
+      <thead><tr><th>Student</th><th>Grade</th><th>Progress</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody data-slot="rows"></tbody>
+    </table>
+  </div>
+  <p class="td-desc" data-slot="empty" hidden style="margin-top:12px;">No students yet. Share the join code or add students from the <b>Add Students</b> tab.</p>
+</template>

@@ -1,0 +1,21 @@
+{# Screen 02 — expanded class → Add Students tab (eligible students by class grade). Filled by tdClasses.renderAddStudents(). #}
+<template id="tdTplClassAddStudents">
+  <div class="td-search" style="margin-bottom:12px;">
+    <i class="fas fa-search"></i>
+    <input type="search" data-slot="search" placeholder="Search students by name or email…" aria-label="Search students">
+  </div>
+  <div class="td-table-wrap">
+    <table class="td-data">
+      <thead><tr><th style="width:44px;"><input type="checkbox" data-slot="all" aria-label="Select all"></th><th>Student</th><th>Email</th><th>Grade</th><th style="text-align:right;">Action</th></tr></thead>
+      <tbody data-slot="rows"></tbody>
+    </table>
+  </div>
+  <p class="td-desc" data-slot="empty" hidden style="margin-top:12px;">No eligible students found for this grade.</p>
+  <div class="td-select-bar">
+    <b data-slot="count">0 students selected</b>
+    <div style="display:flex;gap:10px;">
+      <button type="button" class="td-btn td-btn-outline" data-slot="cancel">Cancel</button>
+      <button type="button" class="td-btn td-btn-primary" data-slot="addSelected" disabled>Add to Class</button>
+    </div>
+  </div>
+</template>

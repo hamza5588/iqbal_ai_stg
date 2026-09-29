@@ -1,0 +1,6 @@
+{
+  "ts_utc": "2026-09-03T15:11:30.779974+00:00",
+  "stdout": "     k      |           count            \n------------+----------------------------\n llm_events | 3781\n max_id     | 3781\n max_at     | 2026-09-03 13:55:38.477169\n(3 rows)\n\n provider | workflow |  n   \n----------+----------+------\n groq     | unknown  | 1313\n(1 row)\n\n",
+  "stderr": "",
+  "exit": 0
+}

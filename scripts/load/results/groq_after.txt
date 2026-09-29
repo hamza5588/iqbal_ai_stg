@@ -1,0 +1,42 @@
+ new_events |  ok  | fail 
+------------+------+------
+       1833 | 1455 |  378
+(1 row)
+
+ provider | workflow | success |   error_class   |  n   
+----------+----------+---------+-----------------+------
+ groq     | unknown  | t       |                 | 1455
+ groq     | unknown  | f       | RateLimitError  |  349
+ groq     | unknown  | f       | BadRequestError |   29
+(3 rows)
+
+       minute        | groq_calls | ok  | fail | students 
+---------------------+------------+-----+------+----------
+ 2026-09-03 15:21:00 |        129 | 124 |    5 |       18
+ 2026-09-03 15:22:00 |         70 |  70 |    0 |       13
+ 2026-09-03 15:23:00 |        207 | 203 |    4 |       45
+ 2026-09-03 15:24:00 |        216 | 157 |   59 |       70
+ 2026-09-03 15:25:00 |        162 | 122 |   40 |       51
+ 2026-09-03 15:26:00 |        196 | 138 |   58 |       64
+ 2026-09-03 15:27:00 |        227 | 146 |   81 |       82
+ 2026-09-03 15:28:00 |        178 | 139 |   39 |       56
+ 2026-09-03 15:29:00 |        198 | 156 |   42 |       70
+ 2026-09-03 15:30:00 |        213 | 164 |   49 |       51
+ 2026-09-03 15:31:00 |         37 |  36 |    1 |       12
+(11 rows)
+
+ students_with_groq | avg_groq_per_student | min_groq | max_groq | p50 | p95 
+--------------------+----------------------+----------+----------+-----+-----
+                200 |                 8.06 |        4 |       13 |   8 |  11
+(1 row)
+
+   error_class   |                                                                                         err                                                                                          |  n  
+-----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----
+ RateLimitError  | Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01jy7h1qgxf038e3a3wsaf1h1n` service tier `on_demand` on tokens per  | 349
+ BadRequestError | Error code: 400 - {'error': {'message': 'Tool choice is required, but model did not call a tool', 'type': 'invalid_request_error', 'code': 'tool_use_failed', 'failed_generation': ' |  16
+ BadRequestError | Error code: 400 - {'error': {'message': 'Failed to parse tool call arguments as JSON', 'type': 'invalid_request_error', 'code': 'tool_use_failed', 'failed_generation': '{"name": "D |   9
+ BadRequestError | Error code: 400 - {'error': {'message': 'Failed to parse tool call arguments as JSON', 'type': 'invalid_request_error', 'code': 'tool_use_failed', 'failed_generation': '{"name": "M |   3
+ BadRequestError | Error code: 400 - {'error': {'message': "Parsing failed. The model generated output that could not be parsed. Please adjust your prompt. See 'failed_generation' for more details.", |   1
+(5 rows)
+
+

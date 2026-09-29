@@ -753,7 +753,7 @@ def create_lesson_simple():
                     break
         if existing_lesson:
             # Deliberately keep the EXISTING title rather than the incoming one: the frontend's
-            # client-side uniqueness check (getUniqueLessonTitle in teacher_dashboard.html) has
+            # client-side uniqueness check (getUniqueLessonTitle in static/teacher/js/teacher-core.js) has
             # no way to know in advance that this save will become an update rather than a new
             # lesson, so on a re-save it sees the original title as "already used" (by this very
             # lesson) and appends "- Lesson Saved" / "- Lesson Saved 2" / etc. each time. Since

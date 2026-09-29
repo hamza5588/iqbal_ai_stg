@@ -1,0 +1,58 @@
+{# Mobile floating menu + chat context menu (verbatim from the legacy page). #}
+      <!-- Floating Menu -->
+      <div id="floatingMenu" class="floating-menu hidden-menu">
+        <div class="floating-menu-item" onclick="showCreateLessonWizard(); toggleFloatingMenu();">
+          <i class="fas fa-file-pdf"></i>
+          <span>Create Lesson</span>
+        </div>
+
+        <div id="floatingSaveLessonItem" class="floating-menu-item hidden" onclick="saveLessonFromChat(); toggleFloatingMenu();">
+          <i class="fas fa-save"></i>
+          <span>Save Lesson</span>
+        </div>
+
+        <div class="floating-menu-item" onclick="downloadChat(); toggleFloatingMenu();">
+          <i class="fas fa-download"></i>
+          <span>Download Chat</span>
+        </div>
+        <div class="floating-menu-item" onclick="resetChat(); toggleFloatingMenu();">
+          <i class="fas fa-redo"></i>
+          <span>Reset Chat</span>
+        </div>
+      </div>
+
+      <!-- Floating Action Button (Mobile Only) -->
+      <button id="floatingActionBtn" onclick="toggleFloatingMenu()" class="floating-action-button flex md:hidden"
+        title="More options" aria-label="More options">
+        <i class="fas fa-cog text-xl"></i>
+      </button>
+    <!-- Chat Menu Dropdown (radial) - matches new_ui/chatbot-main-screen/16-chat-context-menu.html -->
+    <div id="chatMenuDropdown" class="dropdown-menu ccm-menu">
+      <div class="ccm-pointer"></div>
+      <div class="ccm-circle">
+        <div class="ccm-circle-inner">
+          <div class="ccm-option ccm-rename" onclick="renameChat()">
+            <div class="ccm-opt-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#1a56db" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="ccm-opt-label">Rename Chat</div>
+            <div class="ccm-opt-chevron">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#1a56db" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="ccm-option ccm-delete" onclick="deleteCurrentChat()">
+            <div class="ccm-opt-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" stroke="#c0504d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="#c0504d" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <div class="ccm-opt-label">Delete Chat</div>
+            <div class="ccm-opt-chevron">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#c0504d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ccm-center-btn" onclick="event.stopPropagation();">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.38 8.38 0 01-9 8.4 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018.4-9h.5a8.48 8.48 0 018 8v.5z" stroke="#1f2937" stroke-width="1.6"/><circle cx="9" cy="11.5" r="1" fill="#1f2937"/><circle cx="12" cy="11.5" r="1" fill="#1f2937"/><circle cx="15" cy="11.5" r="1" fill="#1f2937"/></svg>
+        <div class="ccm-center-label">CHAT</div>
+      </div>
+    </div>

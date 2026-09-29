@@ -1,0 +1,32 @@
+{# Screen 11 — Roster: donut + stat tiles + student table (/api/lms/classes/:id/students). #}
+<div class="td-card">
+  <div class="td-donut-wrap">
+    <div class="td-donut" id="tdAnaDonut"><div class="td-donut-inner"><b id="tdAnaDonutTotal">0</b><span>Students</span></div></div>
+    <div class="td-legend" id="tdAnaLegend"></div>
+    <div class="td-stat-grid">
+      <div class="td-stat-box"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatTotal">0</b>Total Students</div>
+      <div class="td-stat-box green"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatOnTrack">0</b>On Track</div>
+      <div class="td-stat-box red"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatHelp">0</b>Needs Help</div>
+      <div class="td-stat-box grey"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatNone">0</b>Not Attempted</div>
+    </div>
+  </div>
+</div>
+<div class="td-card">
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:12px;">
+    <label class="td-sort" style="padding:0;">Status:
+      <select id="tdAnaRosterStatus" class="td-select" style="min-width:150px;font-weight:600;" onchange="tdAnalytics.rerender()">
+        <option value="">All</option>
+        <option value="on_track">On Track</option>
+        <option value="needs_help">Needs Help</option>
+        <option value="not_attempted">Not Attempted</option>
+      </select>
+    </label>
+  </div>
+  <div class="td-table-wrap">
+    <table class="td-data">
+      <thead><tr><th style="width:44px;">#</th><th>Student</th><th>Grade</th><th>Progress</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody id="tdAnaRosterRows"></tbody>
+    </table>
+  </div>
+  <div class="td-empty" id="tdAnaRosterEmpty" hidden></div>
+</div>

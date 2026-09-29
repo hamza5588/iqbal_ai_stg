@@ -1,0 +1,157 @@
+{# View Lesson modal — new-UI layout. Every id / onclick below is read by static/teacher/js/teacher-core.js
+   (populateViewLessonModal, version switching, draft/AI enhancement, finalize, summaries, source-PDF mode):
+   keep them. Keep `.view-lesson-modal-panel` (Expand) and the two `.vl-tl-item` rows in
+   #viewLessonSummaryTimeline (index 0 = conversation, 1 = lesson — toggleViewLessonTlPanel). #}
+<div id="viewLessonModal"
+  class="td-vl fixed inset-0 bg-black/45 backdrop-blur-[2px] flex items-start md:items-center justify-center z-[110] overflow-y-auto py-2 md:py-4 hidden"
+  role="dialog" aria-modal="true" aria-labelledby="viewLessonTitle">
+  <div class="view-lesson-modal-panel w-full mx-2 md:mx-4 my-auto">
+
+    <header class="td-vl-head">
+      <div class="td-vl-head-main">
+        <nav class="td-vl-crumbs" aria-label="Breadcrumb">
+          <button type="button" onclick="closeViewLessonModal()"><i class="fas fa-chevron-left"></i> My Lessons</button>
+          <span>/</span><b>View Lesson</b>
+        </nav>
+        <div class="td-vl-title-row">
+          <div class="td-vl-title-ic"><i class="fas fa-book-open"></i></div>
+          <h1 id="viewLessonTitle">Lesson Title</h1>
+        </div>
+        <div class="td-vl-meta">
+          <span class="td-pill"><i class="fas fa-book"></i> <span id="viewLessonSubject">General</span></span>
+          <span class="td-pill"><i class="fas fa-graduation-cap"></i> Grade <span id="viewLessonGrade">General</span></span>
+          <span class="td-pill" id="viewLessonStatus">Draft</span>
+          <span class="td-vl-meta-text"><i class="far fa-calendar"></i> Created <span id="viewLessonCreated">--</span></span>
+          <span class="td-vl-meta-text">Version <b id="viewLessonVersion">v1</b></span>
+        </div>
+      </div>
+
+      <div class="td-vl-head-actions">
+        <div class="td-vl-version">
+          <button id="versionDropdownBtn" type="button" class="td-vl-version-btn" aria-haspopup="listbox" title="Switch version">
+            <span id="currentVersionDisplay"><i class="fas fa-code-branch"></i> v1 (Current)</span>
+            <i id="versionDropdownIcon" class="fas fa-chevron-down"></i>
+          </button>
+          <div id="viewLessonVersions" class="vl-version-list hidden">
+            <p class="text-xs text-gray-500 py-2 text-center px-2">No versions yet</p>
+          </div>
+        </div>
+        <button id="expandMainLessonModalBtn" type="button" onclick="toggleMainLessonModalExpand()"
+          class="td-vl-icon-btn" title="Expand window" aria-label="Expand lesson modal">
+          <i id="expandMainLessonModalIcon" class="fas fa-expand"></i>
+        </button>
+        <button type="button" onclick="closeViewLessonModal()" class="td-vl-icon-btn" title="Close" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="td-vl-tabs" role="tablist" aria-label="Lesson sections">
+      <button type="button" class="td-vl-tab active" data-vl-tab="lesson" onclick="tdVlTab('lesson')"><i class="far fa-file-lines"></i> Lesson</button>
+      <button type="button" class="td-vl-tab" data-vl-tab="improve" onclick="tdVlTab('improve')"><i class="fas fa-wand-magic-sparkles"></i> Improve with AI</button>
+      <button type="button" class="td-vl-tab" data-vl-tab="summaries" onclick="tdVlTab('summaries')"><i class="far fa-comment-dots"></i> Summaries</button>
+    </div>
+
+    <div class="view-lesson-modal-body td-vl-body">
+      <div id="olderVersionNoticeSlot" class="vl-older-notice-slot hidden" aria-live="polite"></div>
+
+      <div class="td-vl-grid">
+        <div class="td-vl-main">
+          {# Lesson content #}
+          <section class="td-vl-card" id="tdVlLessonCard">
+            <div class="td-vl-card-head">
+              <div class="td-vl-card-title"><i class="fas fa-star"></i> Current Version</div>
+              <button id="expandLessonPreviewBtn" type="button" onclick="openExpandedLessonPreview()" class="td-btn td-btn-outline td-btn-sm" title="Open the lesson in a larger reader">
+                <i class="fas fa-up-right-and-down-left-from-center"></i> Full screen
+              </button>
+            </div>
+            <div class="td-vl-card-body">
+              <div id="viewLessonCurrent">
+                <p class="text-gray-500 italic">Content preview will appear here...</p>
+              </div>
+            </div>
+          </section>
+
+          {# Summaries (conversation + lesson) — each detail opens under its own row #}
+          <section class="td-vl-card td-vl-summaries" id="viewLessonSummaryTimeline">
+            <div class="td-vl-card-head">
+              <div class="td-vl-card-title"><i class="far fa-comment-dots"></i> Summaries</div>
+            </div>
+            <div class="vl-tl-item td-vl-sum-row" onclick="toggleViewLessonTlPanel('conv')" role="button" tabindex="0">
+              <div class="td-vl-sum-ic"><i class="far fa-comments"></i></div>
+              <div class="td-vl-sum-text"><b>Conversation Summary</b><small>What was discussed in the lesson chat</small></div>
+              <div class="vl-chevron"><i class="fas fa-chevron-down"></i></div>
+            </div>
+            <div id="viewLessonConvPanel" class="vl-tl-detail td-vl-sum-detail hidden">
+              <div class="td-vl-sum-detail-actions">
+                <div id="viewLessonConversationSummarySpinner" class="hidden" aria-live="polite"><i class="fas fa-spinner fa-spin"></i></div>
+                <button id="refreshConversationSummaryBtn" type="button"
+                  onclick="if(window.currentViewedLessonData) loadConversationSummaryForLesson(window.currentViewedLessonData, true);"
+                  title="Refresh summary" aria-label="Refresh conversation summary"><i class="fas fa-sync-alt"></i> Refresh</button>
+                <button id="expandConversationSummaryBtn" type="button" onclick="openExpandedConversationSummary()"
+                  title="Expand summary" aria-label="Expand conversation summary"><i class="fas fa-expand"></i> Expand</button>
+              </div>
+              <div id="viewLessonConversationSummaryContent" class="vl-tl-detail-body">
+                <p class="text-gray-500 italic">No summary available yet</p>
+              </div>
+            </div>
+            <div class="vl-tl-item td-vl-sum-row" onclick="toggleViewLessonTlPanel('lesson')" role="button" tabindex="0">
+              <div class="td-vl-sum-ic"><i class="far fa-rectangle-list"></i></div>
+              <div class="td-vl-sum-text"><b>Lesson Summary</b><small id="viewLessonSummaryTlSub">Click to view</small></div>
+              <div class="vl-chevron"><i class="fas fa-chevron-down"></i></div>
+            </div>
+            <div id="viewLessonLessonPanel" class="vl-tl-detail td-vl-sum-detail hidden">
+              <div class="td-vl-sum-detail-actions">
+                <div id="viewLessonLessonSummarySpinner" class="hidden" aria-live="polite"><i class="fas fa-spinner fa-spin"></i></div>
+              </div>
+              <div id="viewLessonStructuredSummary" class="vl-tl-detail-body">
+                <p class="text-gray-500 italic">No lesson summary available</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {# Improve with AI — hidden for "Use PDF as lesson" lessons (vl-source-pdf-mode) #}
+        <aside class="td-vl-side" id="tdVlImprove" aria-label="Improve with AI">
+          <div class="td-vl-card td-vl-side-card">
+            <div class="td-vl-side-head">
+              <div class="td-vl-side-ic"><i class="fas fa-wand-magic-sparkles"></i></div>
+              <div><h3>Improve with AI</h3><p>Create a new version of this lesson.</p></div>
+            </div>
+            <ol class="td-vl-steps">
+              <li><span>1</span>Describe the change (or edit the draft yourself)</li>
+              <li><span>2</span>Apply AI, review and <b>Save Draft</b></li>
+              <li><span>3</span><b>Finalize</b> to publish it as a new version</li>
+            </ol>
+
+            <label for="viewLessonPrompt">AI instructions <span class="opt">(optional)</span></label>
+            <textarea id="viewLessonPrompt" rows="3"
+              placeholder="e.g. Simplify the language for grade 8 and add two worked examples…"></textarea>
+            <div class="td-vl-chips" aria-label="Quick instructions">
+              <button type="button" onclick="tdVlAddInstruction('Simplify the language for the grade level.')">Simplify</button>
+              <button type="button" onclick="tdVlAddInstruction('Add worked examples for each key concept.')">Add examples</button>
+              <button type="button" onclick="tdVlAddInstruction('Add practice questions with answers at the end.')">Practice questions</button>
+              <button type="button" onclick="tdVlAddInstruction('Make the structure clearer with short sections and bullet points.')">Clearer structure</button>
+            </div>
+
+            <label>Draft <span class="opt">(AI-enhanced or manual edits)</span></label>
+            <div id="viewLessonDraft" contenteditable="true" class="td-vl-draft" style="white-space: pre-wrap;"
+              placeholder="Your draft appears here after applying AI — you can also type or paste edits directly."></div>
+
+            <div class="td-vl-side-actions">
+              <button type="button" onclick="applyPromptToLessonDraft()" class="td-btn td-btn-primary">
+                <i class="fas fa-wand-magic-sparkles"></i> Apply AI Enhancement
+              </button>
+              <button type="button" onclick="saveLessonDraftVisible()" class="td-btn td-btn-outline-blue">
+                <i class="fas fa-floppy-disk"></i> Save Draft
+              </button>
+              <button type="button" onclick="finalizeNewVersionLesson()" id="finalizeVersionBtn" class="hidden td-btn td-vl-finalize">
+                <i class="fas fa-check-circle"></i> Finalize New Version
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>

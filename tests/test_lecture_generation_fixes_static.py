@@ -16,7 +16,11 @@ ROOT = Path(__file__).resolve().parent.parent
 RAG_SERVICE_SRC = (ROOT / "app" / "utils" / "rag_service.py").read_text(encoding="utf-8")
 RAG_VECTORSTORE_SRC = (ROOT / "app" / "utils" / "rag_vectorstore.py").read_text(encoding="utf-8")
 FORMATTER_SRC = (ROOT / "static" / "teacher" / "js" / "chat-response-formatter.js").read_text(encoding="utf-8")
-DASHBOARD_SRC = (ROOT / "templates" / "teacher_dashboard.html").read_text(encoding="utf-8")
+DASHBOARD_SRC = "\n".join(p.read_text(encoding="utf-8") for p in [  # teacher UI sources (formerly templates/teacher_dashboard.html)
+    ROOT / "static" / "teacher" / "js" / "teacher-core.js",
+    ROOT / "static" / "teacher" / "js" / "teacher-lms-hubs.js",
+    *sorted((ROOT / "templates" / "teacher").rglob("*.html")),
+])
 STUDENT_DASHBOARD_SRC = (
     ROOT / "templates" / "student_dashboard" / "student_dashboard.html"
 ).read_text(encoding="utf-8")

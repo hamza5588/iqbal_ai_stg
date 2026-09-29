@@ -1,0 +1,40 @@
+{# Screen 01 — My Lessons. List rendered by tdRenderLessonsList() in teacher-core.js. #}
+<div class="td-toolbar">
+  <div class="td-search">
+    <i class="fas fa-search"></i>
+    <input type="search" id="lessonSearch" placeholder="Search lessons" aria-label="Search lessons" oninput="tdDebouncedLessonSearch(this.value)">
+  </div>
+  <button type="button" class="td-btn td-btn-primary" onclick="showCreateLessonWizard()"><i class="fas fa-plus"></i> Create Lesson</button>
+  <select id="tdLessonSubjectFilter" class="td-select" aria-label="Subject" onchange="tdLessonFilter.subject = this.value; tdRenderLessonsList();">
+    <option value="">All subjects</option>
+  </select>
+  <select id="tdLessonGradeFilter" class="td-select" aria-label="Grade" onchange="tdLessonFilter.grade = this.value; tdRenderLessonsList();">
+    <option value="">All grades</option>
+  </select>
+</div>
+<p class="td-desc">Create, organize, and share your next great lesson.</p>
+
+<div class="td-subtabs-row">
+  <div class="td-subtabs" role="tablist">
+    <button type="button" class="td-stab active" id="tdLessonTabAll" data-lesson-tab="all" onclick="tdLessonFilter.tab='all'; tdRenderLessonsList();">All lessons</button>
+    <button type="button" class="td-stab" id="tdLessonTabPublished" data-lesson-tab="published" onclick="tdLessonFilter.tab='published'; tdRenderLessonsList();">Published</button>
+    <button type="button" class="td-stab" id="tdLessonTabDrafts" data-lesson-tab="drafts" onclick="tdLessonFilter.tab='drafts'; tdRenderLessonsList();">Drafts</button>
+  </div>
+  <label class="td-sort">Sort:
+    <select aria-label="Sort lessons" onchange="tdLessonFilter.sort = this.value; tdRenderLessonsList();">
+      <option value="latest">Latest</option>
+      <option value="oldest">Oldest</option>
+      <option value="title">Title A–Z</option>
+    </select>
+  </label>
+</div>
+
+{% include 'teacher/lessons/create_form.html' %}
+
+<div id="tdLessonsList"></div>
+
+<div class="td-pagination">
+  <button type="button" id="prevBtn" onclick="previousPage()" disabled>Previous</button>
+  <span id="pageInfo">Page 1 of 1</span>
+  <button type="button" id="nextBtn" onclick="nextPage()" disabled>Next</button>
+</div>

@@ -1,0 +1,220 @@
+[
+  {
+    "role": "teacher",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "url": "https://dil.iqbalai.com/teacher-dashboard",
+    "surfaces": {
+      "Manage Classes": {
+        "opened": true,
+        "layout": {
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      },
+      "Create Quiz": {
+        "opened": true,
+        "layout": {
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      },
+      "Assign Quiz": {
+        "opened": true,
+        "layout": {
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      },
+      "Analytics": {
+        "opened": true,
+        "layout": {
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      }
+    },
+    "dashboardLoaded": true,
+    "layout": {
+      "viewport": 1440,
+      "documentWidth": 1440,
+      "horizontalOverflow": 0,
+      "clippedText": []
+    },
+    "myLessons": {
+      "opened": true,
+      "cards": 0,
+      "publishControls": 0,
+      "layout": {
+        "viewport": 1440,
+        "documentWidth": 1440,
+        "horizontalOverflow": 0,
+        "clippedText": []
+      }
+    },
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "failedResponses": []
+  },
+  {
+    "role": "student",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "url": "https://dil.iqbalai.com/student-dashboard",
+    "surfaces": {
+      "Join Class": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsJoinClassModal()\\\"]\").first\n"
+      },
+      "My Quizzes": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsStudentHub()\\\"]\").first\n"
+      },
+      "Diagnostic": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsDiagnostic()\\\"]\").first\n    - locator resolved to <button onclick=\"openLmsDiagnostic()\" class=\"lms-btn lms-btn-primary\">Take Diagnostic</butt"
+      },
+      "Practice": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsPracticePanel()\\\"]\").first\n    - locator resolved to <button type=\"button\" class=\"lms-fab\" onclick=\"openLmsPracticePanel()\">Practice</button>"
+      }
+    },
+    "dashboardLoaded": true,
+    "layout": {
+      "viewport": 1440,
+      "documentWidth": 1440,
+      "horizontalOverflow": 0,
+      "clippedText": []
+    },
+    "myLessons": {
+      "opened": false,
+      "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"#lessonsTabBtn\")\n    - locator resolved to <button id=\"lessonsTabBtn\" class=\"tt-tab active-tab\" onclick=\"showMyLessonsPage()\">\u2026</button>\n  - attempting click action\n"
+    },
+    "consoleErrors": [],
+    "failedResponses": []
+  },
+  {
+    "role": "teacher",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "url": "https://dil.iqbalai.com/teacher-dashboard",
+    "surfaces": {
+      "Manage Classes": {
+        "opened": true,
+        "layout": {
+          "viewport": 390,
+          "documentWidth": 390,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      },
+      "Create Quiz": {
+        "opened": true,
+        "layout": {
+          "viewport": 390,
+          "documentWidth": 390,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      },
+      "Assign Quiz": {
+        "opened": true,
+        "layout": {
+          "viewport": 390,
+          "documentWidth": 390,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      },
+      "Analytics": {
+        "opened": true,
+        "layout": {
+          "viewport": 390,
+          "documentWidth": 390,
+          "horizontalOverflow": 0,
+          "clippedText": []
+        }
+      }
+    },
+    "dashboardLoaded": true,
+    "layout": {
+      "viewport": 390,
+      "documentWidth": 390,
+      "horizontalOverflow": 0,
+      "clippedText": []
+    },
+    "myLessons": {
+      "opened": true,
+      "cards": 0,
+      "publishControls": 0,
+      "layout": {
+        "viewport": 390,
+        "documentWidth": 390,
+        "horizontalOverflow": 0,
+        "clippedText": []
+      }
+    },
+    "consoleErrors": [],
+    "failedResponses": []
+  },
+  {
+    "role": "student",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "url": "https://dil.iqbalai.com/student-dashboard",
+    "surfaces": {
+      "Join Class": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsJoinClassModal()\\\"]\").first\n"
+      },
+      "My Quizzes": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsStudentHub()\\\"]\").first\n"
+      },
+      "Diagnostic": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsDiagnostic()\\\"]\").first\n    - locator resolved to <button type=\"button\" class=\"lms-fab\" onclick=\"openLmsDiagnostic()\">Diagnostic</button>\n  -"
+      },
+      "Practice": {
+        "opened": false,
+        "error": "Locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator(\"button[onclick=\\\"openLmsPracticePanel()\\\"]\").first\n    - locator resolved to <button type=\"button\" class=\"lms-fab\" onclick=\"openLmsPracticePanel()\">Practice</button>"
+      }
+    },
+    "dashboardLoaded": true,
+    "layout": {
+      "viewport": 390,
+      "documentWidth": 390,
+      "horizontalOverflow": 0,
+      "clippedText": []
+    },
+    "myLessons": {
+      "opened": true,
+      "cards": 0,
+      "layout": {
+        "viewport": 390,
+        "documentWidth": 390,
+        "horizontalOverflow": 0,
+        "clippedText": []
+      }
+    },
+    "consoleErrors": [],
+    "failedResponses": []
+  }
+]

@@ -1,0 +1,52 @@
+/* Teacher dashboard — new-UI blue palette for the legacy screens (lesson chat, lesson modals, Set Prompt,
+   upload processing, LMS helpers). Those screens read the admin platform-theme variables (green by default,
+   see app/services/theme_service.py); on the teacher page they are remapped to the new design's blue scale.
+   Loaded after teacher-legacy.css + lms-ui.css and before teacher-dashboard.css. */
+:root {
+  --primary-color: #1a56db;
+  --primary-rgb: 26, 86, 219;
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #3b82f6;
+  --primary-500: #1a56db;
+  --primary-600: #1d4ed8;
+  --primary-700: #12408a;
+  --primary-800: #0b3d91;
+  --primary-900: #0a2e6e;
+  --iqbal-primary: #1a56db;
+  --iqbal-bg: #eff6ff;
+  --lms-green: #1a56db;
+  --lms-green-dark: #12408a;
+  --lms-green-light: #dbeafe;
+  --lms-green-muted: #eff6ff;
+  --lms-green-text: #12408a;
+  --lms-focus-ring: rgba(26, 86, 219, 0.30);
+  --gradient-primary: linear-gradient(135deg, #2563eb 0%, #1a56db 100%);
+  --gradient-primary-accent: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  --green: #1a56db;
+  --green-dark: #12408a;
+  --green-light: #dbeafe;
+  --green-mid: #3b82f6;
+  --green-pale: #e0ecff;
+  --green-muted: #eff6ff;
+  --border-soft: #c7dafc;
+  --green-50: #eff6ff;
+  --green-100: #dbeafe;
+  --green-500: #3b82f6;
+  --green-600: #1a56db;
+  --green-700: #12408a;
+  --green-900: #0b3d91;
+  --theme-shadow-focus: rgba(26, 86, 219, 0.12);
+  --theme-shadow-btn: rgba(26, 86, 219, 0.35);
+  --theme-shadow-soft: rgba(26, 86, 219, 0.15);
+  --theme-accent-light: #60a5fa;
+  --theme-accent-bright: #93c5fd;
+  --vl-green-900: #0b3d91;
+  --vl-green-700: #12408a;
+  --vl-green-600: #1a56db;
+  --vl-green-500: #3b82f6;
+  --vl-lime-500: #60a5fa;
+  --brand-bar: #0b3d91;
+}

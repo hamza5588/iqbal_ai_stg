@@ -1,0 +1,315 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "login 200 json": {
+                    "passes": 200,
+                    "fails": 0,
+                    "name": "login 200 json",
+                    "path": "::login 200 json",
+                    "id": "8aed93f0679896b62bda553b41388745"
+                },
+                "dashboard 200": {
+                    "id": "834732e3e331ab0c1efa32a058e51217",
+                    "passes": 200,
+                    "fails": 0,
+                    "name": "dashboard 200",
+                    "path": "::dashboard 200"
+                },
+                "onboarding 200": {
+                    "id": "a666fb7d6a7c83686a0f5d6e81931f4d",
+                    "passes": 200,
+                    "fails": 0,
+                    "name": "onboarding 200",
+                    "path": "::onboarding 200"
+                },
+                "diagnostic start": {
+                    "name": "diagnostic start",
+                    "path": "::diagnostic start",
+                    "id": "0f1254c1f22bb3b4147dea5caf9328f9",
+                    "passes": 200,
+                    "fails": 0
+                },
+                "diagnostic questions": {
+                    "fails": 0,
+                    "name": "diagnostic questions",
+                    "path": "::diagnostic questions",
+                    "id": "30f914fdc4463363cca5b87e554a9581",
+                    "passes": 200
+                },
+                "diagnostic answer 200": {
+                    "name": "diagnostic answer 200",
+                    "path": "::diagnostic answer 200",
+                    "id": "0d4fb932d18f432d77f0fbd1f33ea55e",
+                    "passes": 1600,
+                    "fails": 0
+                },
+                "diagnostic submit": {
+                    "name": "diagnostic submit",
+                    "path": "::diagnostic submit",
+                    "id": "294c375aa2ce0d6890b88f0313cb4754",
+                    "passes": 200,
+                    "fails": 0
+                },
+                "retake denied": {
+                    "path": "::retake denied",
+                    "id": "8474e40b6784ab9657079b9bbd269c94",
+                    "passes": 200,
+                    "fails": 0,
+                    "name": "retake denied"
+                },
+                "learning chat start": {
+                    "passes": 200,
+                    "fails": 0,
+                    "name": "learning chat start",
+                    "path": "::learning chat start",
+                    "id": "baf78f3041107803ff96df53275b4360"
+                },
+                "quiz start": {
+                    "name": "quiz start",
+                    "path": "::quiz start",
+                    "id": "96cde605d4a55173375757a6c0f838d9",
+                    "passes": 200,
+                    "fails": 0
+                },
+                "quiz submit": {
+                    "name": "quiz submit",
+                    "path": "::quiz submit",
+                    "id": "a4abc3ba352d6b9a2017ddb1649b5b28",
+                    "passes": 200,
+                    "fails": 0
+                }
+            }
+    },
+    "metrics": {
+        "http_req_receiving": {
+            "min": 0,
+            "med": 0.8145,
+            "max": 951.5258,
+            "p(90)": 5.352100000000001,
+            "p(95)": 6.8854,
+            "avg": 19.321356814177676
+        },
+        "http_req_blocked": {
+            "med": 0,
+            "max": 683.4676,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 11.940421224997408,
+            "min": 0
+        },
+        "learning_chat_completed": {
+            "count": 192,
+            "rate": 0.11359889337486553
+        },
+        "http_5xx": {
+            "passes": 0,
+            "fails": 9629,
+            "value": 0
+        },
+        "fail_login": {
+            "passes": 0,
+            "fails": 200,
+            "value": 0
+        },
+        "http_req_tls_handshaking": {
+            "med": 0,
+            "max": 357.929,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 6.123743372370192,
+            "min": 0
+        },
+        "diagnostic_completed": {
+            "count": 200,
+            "rate": 0.11833218059881827
+        },
+        "fail_quiz_complete": {
+            "passes": 0,
+            "fails": 200,
+            "value": 0
+        },
+        "checks": {
+            "passes": 3600,
+            "fails": 0,
+            "value": 1
+        },
+        "vus": {
+            "max": 200,
+            "value": 2,
+            "min": 1
+        },
+        "http_req_sending": {
+            "min": 0,
+            "med": 0,
+            "max": 1.5424,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.025229443465644097
+        },
+        "scenario_non_llm": {
+            "avg": 576.7165832357014,
+            "min": 267,
+            "med": 288,
+            "max": 14248,
+            "p(90)": 840,
+            "p(95)": 1764.4000000000015
+        },
+        "http_req_duration": {
+            "p(95)": 1649.6121400000075,
+            "avg": 560.8060268939814,
+            "min": 267.2161,
+            "med": 287.7884,
+            "max": 14248.3344,
+            "p(90)": 440.8484600000003
+        },
+        "fail_diagnostic_submit": {
+            "passes": 0,
+            "fails": 200,
+            "value": 0
+        },
+        "http_req_waiting": {
+            "med": 286.315,
+            "max": 14248.3344,
+            "p(90)": 350.0741800000001,
+            "p(95)": 1635.103560000001,
+            "avg": 541.4594406363381,
+            "min": 266.6484
+        },
+        "data_received": {
+            "count": 32912112,
+            "rate": 19472.80990536267
+        },
+        "http_429": {
+            "passes": 0,
+            "fails": 9629,
+            "value": 0
+        },
+        "journey_complete": {
+            "count": 200,
+            "rate": 0.11833218059881827
+        },
+        "iteration_duration": {
+            "avg": 16783.167391817038,
+            "min": 15000.0008,
+            "med": 15000.5899,
+            "max": 207893.0729,
+            "p(90)": 15000.994359999999,
+            "p(95)": 15001.164980000001
+        },
+        "fail_learning_chat_start": {
+            "passes": 0,
+            "fails": 200,
+            "value": 0
+        },
+        "http_reqs": {
+            "count": 9649,
+            "rate": 5.708936052989987
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 561.0299396017039,
+            "min": 267.2161,
+            "med": 287.7884,
+            "max": 14248.3344,
+            "p(90)": 441.1659,
+            "p(95)": 1657.7825
+        },
+        "vus_max": {
+            "min": 200,
+            "max": 200,
+            "value": 200
+        },
+        "journey_started": {
+            "count": 200,
+            "rate": 0.11833218059881827
+        },
+        "scenario_learning_chat": {
+            "max": 14248,
+            "p(90)": 9195.900000000001,
+            "p(95)": 10391.249999999996,
+            "avg": 2328.15,
+            "min": 270,
+            "med": 291
+        },
+        "scenario_llm_explain": {
+            "min": 803,
+            "med": 942.5,
+            "max": 1968,
+            "p(90)": 1102.1000000000001,
+            "p(95)": 1273.7999999999997,
+            "avg": 995.075
+        },
+        "fail_diagnostic_start": {
+            "passes": 0,
+            "fails": 200,
+            "value": 0
+        },
+        "scenario_quiz": {
+            "avg": 368.4816666666667,
+            "min": 273,
+            "med": 290,
+            "max": 3605,
+            "p(90)": 367.10000000000014,
+            "p(95)": 727.5499999999986
+        },
+        "scenario_diagnostic": {
+            "avg": 522.3318181818182,
+            "min": 274,
+            "med": 290,
+            "max": 7481,
+            "p(90)": 1388.4000000000046,
+            "p(95)": 2414.4499999999975
+        },
+        "http_req_connecting": {
+            "max": 357.0859,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 5.807433754793242,
+            "min": 0,
+            "med": 0
+        },
+        "scenario_dashboard": {
+            "avg": 296.2475,
+            "min": 274,
+            "med": 294,
+            "max": 489,
+            "p(90)": 312,
+            "p(95)": 320.04999999999995
+        },
+        "quiz_completed": {
+            "count": 200,
+            "rate": 0.11833218059881827
+        },
+        "iterations": {
+            "rate": 9.905586837927077,
+            "count": 16742
+        },
+        "http_req_failed": {
+            "passes": 8,
+            "fails": 9641,
+            "thresholds": {
+                "rate<0.05": false
+            },
+            "value": 0.0008291014612913255
+        },
+        "scenario_login": {
+            "avg": 868.97,
+            "min": 827,
+            "med": 859,
+            "max": 1822,
+            "p(90)": 904.1,
+            "p(95)": 917.05
+        },
+        "data_sent": {
+            "count": 4203345,
+            "rate": 2486.954898295699
+        },
+        "explain_success": {
+            "count": 40,
+            "rate": 0.023666436119763653
+        }
+    }
+}

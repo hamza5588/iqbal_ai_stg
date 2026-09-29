@@ -1,0 +1,10 @@
+{
+  "started_utc": "2026-09-03T13:40:00Z",
+  "llm_usage_events_max_id_before": 2499,
+  "peak_users": 200,
+  "explain_all": true,
+  "base_url": "https://209.23.10.34",
+  "diagnostic_id": 44,
+  "quiz_id": 34,
+  "assignment_id": 3
+}

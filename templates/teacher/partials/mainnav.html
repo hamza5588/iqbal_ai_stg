@@ -1,0 +1,15 @@
+{% set nav_items = [
+  ('lessons', 'My Lessons', 'my-lessons.png'),
+  ('classes', 'Classes', 'classes.png'),
+  ('quizzes', 'Quizzes', 'quizzes.png'),
+  ('analytics', 'Analytics', 'analytics.png'),
+  ('tutor', 'AI Tutor', 'ai-tutor.png'),
+] %}
+<nav class="td-mainnav" aria-label="Teacher sections">
+  {% for key, label, icon in nav_items %}
+  <a href="#{{ key }}" class="td-navbtn" data-view="{{ key }}" onclick="tdShowView('{{ key }}'); return false;">
+    <img src="{{ url_for('static', filename='teacher/icons/' ~ icon) }}" alt="" aria-hidden="true">
+    <span>{{ label }}</span>
+  </a>
+  {% endfor %}
+</nav>

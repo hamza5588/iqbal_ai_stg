@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>{% block title %}Teacher Dashboard | Iqbal AI{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='teacher/icons/iqbal-ai-logo.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
+
+  {% include 'partials/platform_theme_head.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/markdown-styles.css') }}" />
+
+  <!-- Tailwind is still required by the lesson/prompt modals rendered from teacher-core.js -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  {% include 'teacher/partials/tailwind_config.html' %}
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <script src="{{ url_for('static', filename='js/in-app-confirm.js') }}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="{{ url_for('static', filename='teacher/js/chat-response-formatter.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/markdown-parser.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/backend-formatter.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/markdown-examples.js') }}"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-legacy.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-theme.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-view-lesson.css') }}">
+
+  <!-- MathJax v3: TeX delimiters, skip code blocks, no automatic typeset -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'], ignoreHtmlClass: 'tex2jax_ignore', processHtmlClass: 'tex2jax_process' },
+      startup: { typeset: false }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    window.typesetMathIn = function (node) {
+      if (!window.MathJax || !node) return Promise.resolve();
+      try { return MathJax.typesetPromise([node]); } catch (err) { return Promise.reject(err); }
+    };
+    window.insertHtmlAndTypeset = function (container, html) {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = html;
+      container.appendChild(wrapper);
+      return window.typesetMathIn(wrapper);
+    };
+  </script>
+
+  {# Values the static teacher scripts need from Jinja. #}
+  {# Legacy modals render these logo slots; both use the new-UI logo. #}
+  {% set logo_dark_on_light %}<img class="td-legacy-logo" src="{{ url_for('static', filename='teacher/icons/iqbal-ai-logo.png') }}" alt="IQBAL AI" style="height:38px;width:auto;">{% endset %}
+  {% set logo_dark %}<img class="td-legacy-logo" src="{{ url_for('static', filename='teacher/icons/iqbal-ai-logo.png') }}" alt="IQBAL AI" style="height:32px;width:auto;">{% endset %}
+  <script>
+    window.TEACHER_CFG = {
+      teacherId: {{ (session.get('user_id') or '') | tojson }},
+      aiIconUrl: {{ url_for('static', filename='teacher/icons/ai-chat-bot.png') | tojson }},
+      logoDarkOnLight: {{ logo_dark_on_light | tojson }},
+      logoDark: {{ logo_dark | tojson }},
+      icons: {
+        lessons: {{ url_for('static', filename='teacher/icons/my-lessons.png') | tojson }},
+        classes: {{ url_for('static', filename='teacher/icons/classes.png') | tojson }},
+        quizzes: {{ url_for('static', filename='teacher/icons/quizzes.png') | tojson }},
+        analytics: {{ url_for('static', filename='teacher/icons/analytics.png') | tojson }},
+        tutor: {{ url_for('static', filename='teacher/icons/ai-tutor.png') | tojson }},
+        chatBot: {{ url_for('static', filename='teacher/icons/ai-chat-bot.png') | tojson }}
+      }
+    };
+  </script>
+</head>
+
+<body class="td-body">
+  <div id="toastContainer" class="fixed top-4 right-4 z-[200000] space-y-3 pointer-events-none"></div>
+
+  <div id="loading-overlay" class="fixed inset-0 bg-white z-50 flex items-center justify-center transition-opacity duration-300">
+    <div class="text-center">
+      <div class="td-spinner"></div>
+      <p style="color:var(--td-blue-700);font-weight:600;">Loading Teacher Dashboard...</p>
+    </div>
+  </div>
+
+  <div class="td-app">
+    {% include 'teacher/partials/topbar.html' %}
+    <main class="td-main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {% include 'teacher/partials/legacy_modals.html' %}
+  {% include 'teacher/partials/lms_modals.html' %}
+
+  {# Order matches the legacy page: teacher-core, then lms-core, then the LMS hub helpers (overrides depend on it). #}
+  <script src="{{ url_for('static', filename='teacher/js/teacher-shell.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-core.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-lms-hubs.js') }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-classes.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-quizzes.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-analytics.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+
+</html>

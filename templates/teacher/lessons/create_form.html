@@ -1,0 +1,85 @@
+{# Screen 01 — inline "Create New Lesson" card. Element IDs are the ones processCreateLessonStep1() /
+   setupFileUpload() in teacher-core.js read; step 2 (ingest progress) opens in a processing modal. #}
+<div class="td-card accent" id="tdCreateLessonCard" hidden>
+  <div class="td-section-title">
+    <div class="td-icon-badge"><i class="fas fa-plus"></i></div>
+    <div><h2>Create New Lesson</h2><p>Add lesson details to create a new lesson.</p></div>
+  </div>
+
+  <div class="td-form-grid td-lesson-grid">
+    <div class="td-field td-upload-col">
+      <div id="dropZone" class="td-upload-box" role="button" tabindex="0" aria-label="Upload PDF">
+        <div class="td-pdf-ic"><i class="fas fa-file-pdf"></i></div>
+        <b>Upload Your PDF</b>
+        <small>Drag &amp; drop your PDF file here or <a class="td-link">click to browse</a></small>
+        <small>(up to 100MB)</small>
+      </div>
+      <input type="file" id="pdfFileInput" accept=".pdf" class="hidden" hidden>
+      <div id="fileError" class="td-field-error hidden"><i class="fas fa-exclamation-triangle"></i> <span id="fileErrorText"></span></div>
+      <div id="selectedFileDisplay" class="hidden" style="margin-top:8px;">
+        <div style="display:flex;align-items:center;gap:10px;background:var(--td-green-bg);border-radius:10px;padding:8px 12px;">
+          <i class="fas fa-check-circle" style="color:var(--td-green);"></i>
+          <div style="flex:1;min-width:0;">
+            <b id="selectedFileName" style="display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></b>
+            <small id="selectedFileSize" style="color:var(--td-muted);"></small>
+          </div>
+          <button type="button" onclick="clearFileSelection()" aria-label="Remove file" style="background:none;border:none;color:var(--td-green);cursor:pointer;"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="td-field">
+      <label for="lessonTitle">Lesson Title <span class="req">*</span></label>
+      <input type="text" id="lessonTitle" placeholder="e.g., 'Introduction to Algebra'" oninput="clearLessonTitleFormError()" required>
+      <div id="lessonTitleError" class="td-field-error hidden" role="alert"><span id="lessonTitleErrorText"></span></div>
+    </div>
+
+    <div class="td-field">
+      <label for="lessonSubject">Subject</label>
+      <select id="lessonSubject">
+        <option value="General">General</option>
+        <option value="Math">Mathematics</option>
+        <option value="Science">Science</option>
+        <option value="English">English</option>
+        <option value="History">History</option>
+        <option value="Biology">Biology</option>
+        <option value="Chemistry">Chemistry</option>
+        <option value="Physics">Physics</option>
+      </select>
+    </div>
+
+    <div class="td-field">
+      <label for="lessonGrade">Grade Level <span class="req">*</span></label>
+      <select id="lessonGrade" onchange="clearLessonGradeFormError()" required>
+        <option value="">Select grade</option>
+        {% for g in range(1, 13) %}
+        <option value="{{ g }}">{{ g }}{{ 'st' if g == 1 else ('nd' if g == 2 else ('rd' if g == 3 else 'th')) }} Grade</option>
+        {% endfor %}
+      </select>
+      <div id="lessonGradeError" class="td-field-error hidden" role="alert"><span id="lessonGradeErrorText"></span></div>
+    </div>
+
+    <div class="td-field td-context-col">
+      <label for="lessonContext">Lesson Context <span class="opt">(Optional)</span></label>
+      <textarea id="lessonContext" rows="2" maxlength="500"
+        oninput="document.getElementById('lessonContextCount').textContent = this.value.length"
+        placeholder="Describe the lesson content, target audience, or any specific requirements…"></textarea>
+      <span class="td-char-count"><span id="lessonContextCount">0</span>/500</span>
+    </div>
+  </div>
+
+  <div class="td-field" style="margin-top:6px;">
+    <label>Lesson Output</label>
+    <div class="td-radio-row" style="margin-top:0;">
+      <label class="td-radio-opt"><input type="radio" name="lessonOutputMode" value="generate" checked>
+        <div><b>Generate from PDF</b><span>Use chat to create an AI lesson from the uploaded PDF.</span></div></label>
+      <label class="td-radio-opt"><input type="radio" name="lessonOutputMode" value="as_is">
+        <div><b>Use PDF as lesson</b><span>Show the uploaded document text directly as the lesson.</span></div></label>
+    </div>
+  </div>
+
+  <div class="td-form-actions">
+    <button type="button" class="td-btn td-btn-outline" onclick="tdCloseCreateLesson()">Cancel</button>
+    <button type="button" id="nextStepButton" class="td-btn td-btn-primary" onclick="processCreateLessonStep1()">Upload &amp; Process</button>
+  </div>
+</div>

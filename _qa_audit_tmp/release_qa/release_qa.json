@@ -1,0 +1,377 @@
+{
+  "base_url": "https://dil.iqbalai.com",
+  "run_id": 1789631946,
+  "counts": {
+    "PASS": 60,
+    "FAIL": 1,
+    "skip": 0
+  },
+  "cases": [
+    {
+      "area": "Infra",
+      "name": "GET /health HTTPS",
+      "status": "PASS",
+      "detail": "{\"status\":\"healthy\"}\n"
+    },
+    {
+      "area": "Infra",
+      "name": "GET /api/lms/health",
+      "status": "PASS",
+      "detail": "{\"data\":{\"service\":\"lms\",\"status\":\"ok\"},\"success\":true}\n"
+    },
+    {
+      "area": "Infra",
+      "name": "TLS certificate valid for dil.iqbalai.com",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "area": "Assets",
+      "name": "/static/lms/lms-student.js",
+      "status": "PASS",
+      "detail": "http=200 has=True"
+    },
+    {
+      "area": "Assets",
+      "name": "/static/lms/lms-core.js",
+      "status": "PASS",
+      "detail": "http=200 has=True"
+    },
+    {
+      "area": "Assets",
+      "name": "/static/lms/lms-ui.css",
+      "status": "PASS",
+      "detail": "http=200 has=True"
+    },
+    {
+      "area": "Assets",
+      "name": "/static/teacher/js/chat-response-formatter.js",
+      "status": "PASS",
+      "detail": "http=200 has=True"
+    },
+    {
+      "area": "Security",
+      "name": "Anon diagnostic blocked",
+      "status": "PASS",
+      "detail": "code=401"
+    },
+    {
+      "area": "Pages",
+      "name": "Login page",
+      "status": "PASS",
+      "detail": "http=200"
+    },
+    {
+      "area": "Auth",
+      "name": "Admin login",
+      "status": "PASS",
+      "detail": "admin@iqbalai.com"
+    },
+    {
+      "area": "Pages",
+      "name": "Admin dashboard",
+      "status": "PASS",
+      "detail": "http=200 len=94998"
+    },
+    {
+      "area": "Admin",
+      "name": "Published platform diagnostic exists",
+      "status": "PASS",
+      "detail": "published=1 total=14"
+    },
+    {
+      "area": "Auth",
+      "name": "Teacher login",
+      "status": "PASS",
+      "detail": "relqa_teacher_1789631946@iqbalai.com"
+    },
+    {
+      "area": "Pages",
+      "name": "Teacher dashboard",
+      "status": "PASS",
+      "detail": "http=200"
+    },
+    {
+      "area": "RBAC",
+      "name": "Teacher cannot upload diagnostic",
+      "status": "PASS",
+      "detail": "code=403"
+    },
+    {
+      "area": "Teacher",
+      "name": "List quizzes",
+      "status": "PASS",
+      "detail": "count=0"
+    },
+    {
+      "area": "Security",
+      "name": "Student dashboard requires login",
+      "status": "PASS",
+      "detail": "http=401"
+    },
+    {
+      "area": "Setup",
+      "name": "Create student a",
+      "status": "PASS",
+      "detail": "relqa_1789631946_a@iqbalai.com"
+    },
+    {
+      "area": "Auth",
+      "name": "Student A login",
+      "status": "PASS",
+      "detail": "relqa_1789631946_a@iqbalai.com"
+    },
+    {
+      "area": "StudentA",
+      "name": "See default diagnostic",
+      "status": "PASS",
+      "detail": "id=44 completed=False"
+    },
+    {
+      "area": "Pages",
+      "name": "Student dashboard + LMS JS",
+      "status": "PASS",
+      "detail": "http=200 student_js=True"
+    },
+    {
+      "area": "StudentA",
+      "name": "Start diagnostic with timer",
+      "status": "PASS",
+      "detail": "attempt=1843 remaining=2969 resumed=False"
+    },
+    {
+      "area": "StudentA",
+      "name": "Load questions",
+      "status": "PASS",
+      "detail": "count=25"
+    },
+    {
+      "area": "Math",
+      "name": "No smashed English stems in payload",
+      "status": "PASS",
+      "detail": "[{\"difficulty\": \"easy\", \"options\": [{\"label\": \"A\", \"latex\": null, \"text\": \"\\u221a25 and 0.4\"}, {\"label\": \"B\", \"latex\": null, \"text\": \"\\u221a8 and \\u03c0\"}, {\"label\": \"C\", \"latex\": null, \"text\": \"0.121212 ...and 7 8\"}, {\"label\": \"D\", \"latex\""
+    },
+    {
+      "area": "Math",
+      "name": "No glued words like \u221a25and",
+      "status": "PASS",
+      "detail": "[{\"difficulty\": \"easy\", \"options\": [{\"label\": \"A\", \"latex\": null, \"text\": \"\\u221a25 and 0.4\"}, {\"label\": \"B\", \"latex\": null, \"text\": \"\\u221a8 and \\u03c0\"}, {\"label\": \"C\", \"latex\": null, \"text\": \"0.121212 ...and 7 8\"}, {\"label\": \"D\", \"latex\""
+    },
+    {
+      "area": "Math",
+      "name": "No leftover \\( inside \\frac",
+      "status": "PASS",
+      "detail": "[{\"difficulty\": \"easy\", \"options\": [{\"label\": \"A\", \"latex\": null, \"text\": \"\\u221a25 and 0.4\"}, {\"label\": \"B\", \"latex\": null, \"text\": \"\\u221a8 and \\u03c0\"}, {\"label\": \"C\", \"latex\": null, \"text\": \"0.121212 ...and 7 8\"}, {\"label\": \"D\", \"latex\""
+    },
+    {
+      "area": "Math",
+      "name": "No 16 2 3 % broken mixed numbers",
+      "status": "PASS",
+      "detail": "[{\"difficulty\": \"easy\", \"options\": [{\"label\": \"A\", \"latex\": null, \"text\": \"\\u221a25 and 0.4\"}, {\"label\": \"B\", \"latex\": null, \"text\": \"\\u221a8 and \\u03c0\"}, {\"label\": \"C\", \"latex\": null, \"text\": \"0.121212 ...and 7 8\"}, {\"label\": \"D\", \"latex\""
+    },
+    {
+      "area": "Math",
+      "name": "Percent options keep a visible slash when mixed",
+      "status": "PASS",
+      "detail": "[{\"difficulty\": \"easy\", \"options\": [{\"label\": \"A\", \"latex\": null, \"text\": \"\\u221a25 and 0.4\"}, {\"label\": \"B\", \"latex\": null, \"text\": \"\\u221a8 and \\u03c0\"}, {\"label\": \"C\", \"latex\": null, \"text\": \"0.121212 ...and 7 8\"}, {\"label\": \"D\", \"latex\""
+    },
+    {
+      "area": "StudentA",
+      "name": "Save 4\u20135 answers then leave",
+      "status": "PASS",
+      "detail": "saved=5"
+    },
+    {
+      "area": "StudentA",
+      "name": "Reopen is NOT 'already completed'",
+      "status": "PASS",
+      "detail": "completed=False timed_out=False"
+    },
+    {
+      "area": "StudentA",
+      "name": "Resume same attempt",
+      "status": "PASS",
+      "detail": "{\"attempt_id\": 1843, \"resumed\": true, \"remaining_seconds\": 2959, \"timed_out\": null}"
+    },
+    {
+      "area": "StudentA",
+      "name": "Saved answers + continue index restored",
+      "status": "PASS",
+      "detail": "saved={'0': 0, '1': 1, '2': 2, '3': 3, '4': 0} current=5"
+    },
+    {
+      "area": "Setup",
+      "name": "Create student b",
+      "status": "PASS",
+      "detail": "relqa_1789631946_b@iqbalai.com"
+    },
+    {
+      "area": "StudentB",
+      "name": "Start + one answer before timeout",
+      "status": "PASS",
+      "detail": "attempt=1844"
+    },
+    {
+      "area": "Timeout",
+      "name": "SSH helper import",
+      "status": "FAIL",
+      "detail": "No module named 'paramiko'"
+    },
+    {
+      "area": "Setup",
+      "name": "Create student c",
+      "status": "PASS",
+      "detail": "relqa_1789631946_c@iqbalai.com"
+    },
+    {
+      "area": "StudentC",
+      "name": "In-time submit scores (not forced 0)",
+      "status": "PASS",
+      "detail": "{\"score\": 7, \"score_percent\": 28.0, \"timed_out\": null, \"diagnostic_completed\": true}"
+    },
+    {
+      "area": "StudentC",
+      "name": "Retake blocked after real submit",
+      "status": "PASS",
+      "detail": "code=400 {'error': {'code': 'validation_error', 'message': 'You have already completed the diagnostic assessment. Retakes are not allowed.'}, 'succes"
+    },
+    {
+      "area": "StudentC",
+      "name": "Completed diagnostic is not labeled time-over",
+      "status": "PASS",
+      "detail": "completed=True timed_out=False"
+    },
+    {
+      "area": "StudentC",
+      "name": "Onboarding diagnostic_completed",
+      "status": "PASS",
+      "detail": "{'current_learning_path_id': 1834, 'diagnostic_assessment_id': 44, 'diagnostic_completed': True, 'diagnostic_completed_at': '2026-09-17T08:00:13.015312', 'enrol"
+    },
+    {
+      "area": "StudentC",
+      "name": "Student dashboard API",
+      "status": "PASS",
+      "detail": "keys=['classes', 'current_learning_path_step', 'learning_path', 'mastery', 'onboarding', 'overall_progress', 'pending_assignments', 'weak_topics']"
+    },
+    {
+      "area": "StudentC",
+      "name": "Learning path after diagnostic",
+      "status": "PASS",
+      "detail": "steps=1"
+    },
+    {
+      "area": "StudentC",
+      "name": "Learning path has no Quiz #0 label",
+      "status": "PASS",
+      "detail": "['Learning Chat \u2014 practice weak areas']"
+    },
+    {
+      "area": "StudentC",
+      "name": "Start Learning Chat session",
+      "status": "PASS",
+      "detail": "code=201 {'completed': False, 'correct_count': 0, 'current_index': 0, 'current_question': {'answered': False, 'correct': None, 'options': [{'label': "
+    },
+    {
+      "area": "StudentC",
+      "name": "Learning Chat tutor explain",
+      "status": "PASS",
+      "detail": "{\"assist_level\": 1, \"assist_level_label\": \"Level 1 \\u2013 Prompt\", \"next_assist_level\": 2, \"next_assist_level_label\": \"Level 2 \\u2013 Hint\", \"reply\": \"**Factoring Quadratics (Class"
+    },
+    {
+      "area": "StudentC",
+      "name": "Assignments list",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Teacher creates class with join code",
+      "status": "PASS",
+      "detail": "code=0FBZVZQG class=36"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Teacher creates own quiz",
+      "status": "PASS",
+      "detail": "quiz_id=73"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Teacher adds quiz question",
+      "status": "PASS",
+      "detail": "question_id=350 http=201"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Teacher attaches question to quiz",
+      "status": "PASS",
+      "detail": "http=200"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Teacher publishes quiz",
+      "status": "PASS",
+      "detail": "{'data': {'id': 73, 'status': 'published'}, 'success': True}"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Teacher assigns quiz to class",
+      "status": "PASS",
+      "detail": "assignment=18"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Teacher publishes assignment",
+      "status": "PASS",
+      "detail": "{'data': {'id': 18, 'status': 'published'}, 'success': True}"
+    },
+    {
+      "area": "Setup",
+      "name": "Create student out",
+      "status": "PASS",
+      "detail": "relqa_1789631946_out@iqbalai.com"
+    },
+    {
+      "area": "Setup",
+      "name": "Create student in",
+      "status": "PASS",
+      "detail": "relqa_1789631946_in@iqbalai.com"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Both students see the same platform diagnostic",
+      "status": "PASS",
+      "detail": "out=44 in=44 platform=44"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Student without join code sees no teacher quiz",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Student without join code cannot start teacher quiz",
+      "status": "PASS",
+      "detail": "code=400 {'error': {'code': 'validation_error', 'message': \"Join your teacher's class with a class code to take this quiz.\"}, 'success': False}"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Student joins teacher with class code",
+      "status": "PASS",
+      "detail": "code=200 {'data': {'class_id': 36, 'status': 'active'}, 'success': True}"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Joined student sees that teacher's quiz only",
+      "status": "PASS",
+      "detail": "assignments=[{'assignment_id': 18, 'can_start': True, 'due_date': None, 'quiz_id': 73, 'score_percent': None, 'status': 'not_started', 'submitted_at': None, 'title': 'HW 1789631946'}]"
+    },
+    {
+      "area": "JoinQuiz",
+      "name": "Joined student can start that teacher's quiz",
+      "status": "PASS",
+      "detail": "code=201 attempt=1846"
+    }
+  ]
+}

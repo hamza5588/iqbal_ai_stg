@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IQBAL AI — Analytics — Roster</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue-900:#0b3d91; --blue-800:#12408a; --blue-700:#1a56db; --blue-600:#2563eb; --blue-500:#3b82f6;
+  --blue-100:#dbeafe; --blue-50:#eff6ff; --ink:#1e293b; --muted:#64748b; --line:#e2e8f0;
+  --green:#16a34a; --green-bg:#dcfce7; --amber:#d97706; --amber-bg:#fef3c7; --red:#dc2626; --red-bg:#fee2e2;
+  --bg:#f4f7fc; --card:#ffffff;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+body{margin:0;font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+h1,h2,h3,.brand{font-family:'Poppins',sans-serif;}
+a{text-decoration:none;color:inherit;}
+
+/* HEADER */
+header.topbar{
+  background:#fff;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 24px;padding-top:calc(10px + env(safe-area-inset-top,0px));
+  position:sticky;top:0;z-index:50;gap:12px;
+}
+.brand-block{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.brand-text h1{font-size:22px;font-weight:800;margin:0;color:var(--blue-800);letter-spacing:-0.5px;}
+.brand-text h1 span{color:var(--blue-500);}
+.brand-text p{margin:0;font-size:11px;color:var(--muted);font-weight:500;}
+nav.mainnav{display:flex;gap:28px;flex:1;justify-content:center;flex-wrap:wrap;}
+nav.mainnav button{
+  background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-family:'Inter',sans-serif;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 2px;
+  border-bottom:2.5px solid transparent;
+}
+nav.mainnav button .ic{font-size:22px;line-height:1;}
+nav.mainnav button.active{color:var(--blue-700);border-bottom-color:var(--blue-700);}
+.top-right{display:flex;align-items:center;gap:14px;flex-shrink:0;}
+.bell{position:relative;font-size:20px;color:var(--blue-800);cursor:pointer;}
+.bell::after{content:'';position:absolute;top:-2px;right:-2px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:1.5px solid #fff;}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--blue-800);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Poppins',sans-serif;}
+
+main{max-width:1400px;margin:0 auto;padding:20px 24px 60px;}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:16px;align-items:center;}
+.toolbar input[type=text], .toolbar input[type=search]{
+  flex:2;min-width:160px;border:1px solid var(--line);border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;background:var(--bg);
+}
+.toolbar select{border:1px solid var(--line);border-radius:10px;padding:11px 14px;font-size:14px;background:var(--bg);font-family:inherit;color:var(--ink);}
+.btn{border:none;border-radius:10px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;}
+.btn-primary{background:var(--blue-700);color:#fff;}
+.btn-primary:hover{background:var(--blue-800);}
+.btn-outline{background:#fff;border:1px solid var(--line)!important;color:var(--ink);}
+.btn-green{background:#16a34a;color:#fff;}
+.btn-danger-outline{background:#fff;color:var(--red);border:1px solid #fecaca!important;}
+
+.subtabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap;}
+.subtabs .stab{padding:10px 2px;font-weight:700;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer;font-size:14.5px;}
+.subtabs .stab.active{color:var(--blue-700);border-color:var(--blue-700);}
+
+.desc{color:var(--muted);font-size:14px;margin:0 0 14px;}
+.section-title{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+.section-title .icon-badge{width:44px;height:44px;border-radius:12px;background:var(--blue-50);display:flex;align-items:center;justify-content:center;font-size:22px;}
+.section-title h2{margin:0;font-size:20px;color:var(--blue-900);}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px;}
+.card.accent{border-left:5px solid var(--blue-600);}
+
+/* Create form grid */
+.form-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr 1.4fr;gap:16px;margin-top:14px;}
+.form-grid .full{grid-column:1/-1;}
+.field label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px;}
+.field input,.field select,.field textarea{
+  width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:14px;font-family:inherit;background:var(--bg);
+}
+.upload-box{border:2px dashed #bcd2f5;border-radius:12px;background:var(--blue-50);padding:26px 16px;text-align:center;}
+.upload-box .pdf-ic{font-size:34px;}
+.upload-box b{display:block;margin:6px 0 2px;}
+.upload-box small{color:var(--muted);}
+.radio-row{display:flex;gap:14px;margin-top:12px;}
+.radio-opt{flex:1;border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;}
+.radio-opt input{margin-top:3px;}
+.radio-opt b{display:block;font-size:14px;}
+.radio-opt span{font-size:12.5px;color:var(--muted);}
+.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+
+/* list rows */
+.list-row{display:flex;gap:16px;padding:18px 4px;border-bottom:1px solid var(--line);}
+.list-row:last-child{border-bottom:none;}
+.tag-bar{width:6px;border-radius:4px;background:var(--blue-700);align-self:stretch;flex-shrink:0;}
+.row-body{flex:1;min-width:0;}
+.row-top{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;justify-content:space-between;}
+.title-chip{display:flex;align-items:center;gap:12px;}
+.title-chip .avatar-sm{width:38px;height:38px;border-radius:10px;background:var(--blue-100);color:var(--blue-800);display:flex;align-items:center;justify-content:center;font-weight:800;font-family:'Poppins',sans-serif;flex-shrink:0;}
+.title-chip h3{margin:0;font-size:16px;}
+.meta-line{display:flex;gap:26px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;}
+.meta-line div span.label{display:block;color:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.4px;}
+.meta-line div b{font-size:13.5px;}
+.pill{display:inline-flex;align-items:center;gap:6px;background:var(--blue-100);color:var(--blue-800);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;}
+.pill.green{background:var(--green-bg);color:var(--green);}
+.pill.orange{background:var(--amber-bg);color:var(--amber);}
+.actions-line{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;font-size:13px;font-weight:700;color:var(--blue-700);}
+.actions-line a{display:flex;align-items:center;gap:5px;cursor:pointer;}
+.actions-line a.danger{color:var(--red);}
+.side-meta{text-align:right;flex-shrink:0;font-size:13px;color:var(--muted);}
+.version-chip{border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:12.5px;font-weight:700;color:var(--ink);}
+
+/* progress bar */
+.progress-track{background:var(--line);border-radius:20px;height:9px;width:150px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:8px;}
+.progress-fill{height:100%;background:var(--blue-600);border-radius:20px;}
+.progress-fill.red{background:var(--red);}
+.progress-fill.amber{background:var(--amber);}
+
+table.data{width:100%;border-collapse:collapse;font-size:14px;}
+table.data th{text-align:left;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.4px;padding:10px 8px;border-bottom:1px solid var(--line);}
+table.data td{padding:14px 8px;border-bottom:1px solid var(--line);vertical-align:middle;}
+table.data tr:last-child td{border-bottom:none;}
+.status-badge{padding:4px 12px;border-radius:16px;font-size:12px;font-weight:700;}
+.status-good{background:var(--green-bg);color:var(--green);}
+.status-avg{background:var(--amber-bg);color:var(--amber);}
+.status-help{background:var(--red-bg);color:var(--red);}
+
+/* donut */
+.donut-wrap{display:flex;gap:28px;align-items:center;flex-wrap:wrap;}
+.donut{width:150px;height:150px;border-radius:50%;background:conic-gradient(var(--blue-600) 0% 75%, var(--red) 75% 80%, #e2e8f0 80% 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.donut-inner{width:96px;height:96px;background:#fff;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.donut-inner b{font-size:26px;color:var(--blue-900);}
+.donut-inner span{font-size:12px;color:var(--muted);}
+.legend-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:16px;}
+.stat-box{background:var(--blue-50);border-radius:12px;padding:16px;text-align:center;}
+.stat-box b{font-size:26px;display:block;color:var(--blue-900);}
+.stat-box.green{background:var(--green-bg);}
+.stat-box.red{background:var(--red-bg);}
+.stat-box.grey{background:#f1f5f9;}
+
+/* AI Tutor */
+.chat-wrap{display:flex;gap:16px;height:70vh;min-height:420px;}
+.chat-hist{width:260px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;flex-shrink:0;overflow-y:auto;}
+.chat-hist h4{margin:2px 6px 10px;font-size:11px;color:var(--muted);letter-spacing:.5px;}
+.chat-hist .h-item{padding:10px 10px;border-radius:9px;font-size:13.5px;font-weight:600;display:flex;gap:8px;align-items:center;cursor:pointer;}
+.chat-hist .h-item.active{background:var(--blue-50);color:var(--blue-700);}
+.chat-main{flex:1;background:#fff;border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;}
+.chat-body{flex:1;padding:20px;overflow-y:auto;}
+.bubble{display:flex;gap:12px;max-width:640px;margin-bottom:14px;}
+.bubble .bot-ic{width:38px;height:38px;border-radius:50%;background:var(--blue-50);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.bubble .msg{background:var(--blue-50);border-radius:14px;padding:14px 16px;font-size:14.5px;}
+.chat-input-row{border-top:1px solid var(--line);padding:12px;}
+.suggest-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+.suggest-chip{background:var(--blue-50);color:var(--blue-700);border-radius:20px;padding:8px 14px;font-size:13px;font-weight:700;display:flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap;}
+.chat-inputbar{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:6px 6px 6px 16px;}
+.chat-inputbar input{border:none;outline:none;flex:1;font-size:14px;font-family:inherit;}
+.send-btn{background:var(--blue-700);color:#fff;border:none;border-radius:9px;padding:11px 20px;font-weight:700;display:flex;gap:6px;align-items:center;}
+
+.pagination{display:flex;justify-content:center;gap:10px;margin-top:22px;}
+.pagination button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13.5px;color:var(--muted);}
+
+/* Section visibility */
+.section{display:none;}
+.section.active{display:block;}
+
+/* Responsive */
+@media (max-width:980px){
+  .form-grid{grid-template-columns:1fr 1fr;}
+  .chat-wrap{flex-direction:column;height:auto;}
+  .chat-hist{width:100%;order:2;}
+  .stat-grid{grid-template-columns:repeat(2,1fr);}
+}
+@media (max-width:720px){
+  header.topbar{flex-wrap:wrap;padding:10px 14px;}
+  nav.mainnav{order:3;width:100%;justify-content:space-between;gap:6px;padding-top:6px;border-top:1px solid var(--line);}
+  nav.mainnav button{font-size:10.5px;}
+  nav.mainnav button .ic{font-size:19px;}
+  .brand-text p{display:none;}
+  main{padding:14px 12px 40px;}
+  .form-grid{grid-template-columns:1fr;}
+  .toolbar{flex-direction:column;align-items:stretch;}
+  .row-top{flex-direction:column;}
+  .side-meta{text-align:left;}
+  .meta-line{gap:14px;}
+  table.data{display:block;overflow-x:auto;white-space:nowrap;}
+  .donut-wrap{justify-content:center;}
+}
+</style>
+<style>
+nav.mainnav a.navbtn{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 2px;border-bottom:2.5px solid transparent;text-decoration:none;}
+nav.mainnav a.navbtn .ic{font-size:22px;line-height:1;}
+nav.mainnav a.navbtn.active{color:var(--blue-700);border-bottom-color:var(--blue-700);}
+
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand-block">
+    <svg width="38" height="38" viewBox="0 0 64 64"><path d="M6 40 C14 20, 30 8, 30 8 C24 20, 26 30, 34 34 C42 38, 52 34, 58 22 C56 40, 42 52, 26 50 C34 54, 44 54, 50 50 C40 60, 20 60, 10 48 C6 44, 6 42, 6 40Z" fill="#1a56db"/><circle cx="42" cy="18" r="2.2" fill="#fff"/><path d="M46 4 L47.2 7 L50.5 7.3 L48 9.5 L48.8 12.8 L46 11 L43.2 12.8 L44 9.5 L41.5 7.3 L44.8 7Z" fill="#1a56db"/></svg>
+    <div class="brand-text"><h1>IQBAL <span>AI</span></h1><p>Intelligent Learning Platform</p></div>
+  </div>
+  <nav class="mainnav"><a href="01-lessons.html" class="navbtn"><span class="ic">📖</span>My Lessons</a>
+<a href="02-classes-addstudents.html" class="navbtn"><span class="ic">🖼️</span>Classes</a>
+<a href="05-quizzes.html" class="navbtn"><span class="ic">📋</span>Quizzes</a>
+<a href="07-analytics-topic-progress.html" class="navbtn active"><span class="ic">📈</span>Analytics</a>
+<a href="12-ai-tutor-chat-history.html" class="navbtn"><span class="ic">🤖</span>AI Tutor</a>
+</nav>
+  <div class="top-right"><div class="bell">🔔</div><div class="avatar">H</div></div>
+</header>
+<main>
+
+<div class="card" style="max-width:1200px;margin:0 auto;padding:0;overflow:hidden;">
+  <div style="background:var(--blue-50);padding:18px 24px;display:flex;justify-content:space-between;align-items:center;">
+    <div class="section-title" style="margin:0;"><div class="icon-badge">📊</div><h2>Class Analytics</h2></div>
+    <div style="font-size:20px;color:var(--muted);cursor:pointer;">✕</div>
+  </div>
+  <div style="padding:20px 24px;">
+    <div class="field" style="max-width:400px;"><label>Select class</label><select><option>8th class (8th)</option></select></div>
+    <div class="subtabs" style="margin-top:16px;">
+      <div class="stab">📶 Topic Progress</div><div class="stab">📄 Quiz Results</div><div class="stab">👥 Struggling Students</div><div class="stab active">👤 Roster</div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="donut-wrap">
+        <div class="donut"><div class="donut-inner"><b>20</b><span>Students</span></div></div>
+        <div><div><span class="legend-dot" style="background:var(--blue-600);"></span>On Track — 15 (75%)</div>
+        <div style="margin-top:6px;"><span class="legend-dot" style="background:var(--red);"></span>Needs Help — 1 (5%)</div>
+        <div style="margin-top:6px;"><span class="legend-dot" style="background:#cbd5e1;"></span>Not Attempted — 4 (20%)</div></div>
+        <div class="stat-grid" style="flex:1;">
+          <div class="stat-box"><b>20</b>Total Students</div>
+          <div class="stat-box green"><b>15</b>On Track</div>
+          <div class="stat-box red"><b>1</b>Needs Help</div>
+          <div class="stat-box grey"><b>4</b>Not Attempted</div>
+        </div>
+      </div>
+      <div class="toolbar" style="margin-top:20px;">
+        <input type="search" placeholder="🔍 Search students…">
+        <select style="margin-left:auto;"><option>Status: All</option></select>
+      </div>
+      <table class="data">
+        <tr><th>#</th><th>Student</th><th>Grade</th><th>Progress</th><th>Status</th><th>Actions</th></tr>
+        <tr><td>1</td><td>🅷 Hamza555888</td><td>8th Grade</td><td>29% <span class="progress-track"><span class="progress-fill red" style="width:29%;"></span></span></td><td><span class="status-badge status-help">NEEDS HELP</span></td><td><button class="btn btn-outline">View Details</button></td></tr>
+        <tr><td>2</td><td>🅂 Sara Ahmed</td><td>8th Grade</td><td>72% <span class="progress-track"><span class="progress-fill" style="width:72%;"></span></span></td><td><span class="status-badge status-good">ON TRACK</span></td><td><button class="btn btn-outline">View Details</button></td></tr>
+        <tr><td>3</td><td>🅷 Hassan Raza</td><td>8th Grade</td><td>65% <span class="progress-track"><span class="progress-fill" style="width:65%;"></span></span></td><td><span class="status-badge status-good">ON TRACK</span></td><td><button class="btn btn-outline">View Details</button></td></tr>
+        <tr><td>4</td><td>🅰 Ayesha Malik</td><td>8th Grade</td><td>40% <span class="progress-track"><span class="progress-fill amber" style="width:40%;"></span></span></td><td><span class="status-badge status-help">NEEDS HELP</span></td><td><button class="btn btn-outline">View Details</button></td></tr>
+        <tr><td>5</td><td>🅱 Bilal Ahmed</td><td>8th Grade</td><td>88% <span class="progress-track"><span class="progress-fill" style="width:88%;"></span></span></td><td><span class="status-badge status-good">ON TRACK</span></td><td><button class="btn btn-outline">View Details</button></td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+</main>
+
+</body>
+</html>

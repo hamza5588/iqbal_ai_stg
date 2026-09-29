@@ -1,0 +1,16 @@
+{
+ "01_create_lesson_file_selected": [],
+ "03_lessons_list": [],
+ "04_version_dropdown": [],
+ "05_view_lesson_modal": [],
+ "06_edit_lesson_modal": [],
+ "07_faq_modal": [],
+ "08_chat_history": [],
+ "09_chat_conversation": [],
+ "10_chat_conversation_top": [],
+ "11_long_prompt": [],
+ "12_chat_context_menu": [],
+ "13_save_guide": [],
+ "14_set_prompt": [],
+ "15_teaching_assistant": []
+}

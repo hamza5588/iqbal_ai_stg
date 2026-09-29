@@ -1,0 +1,4 @@
+2026-09-03T15:44:25Z unhealthy=False oom=False crashed=True
+health={"status":"healthy"}
+lms={"data":{"service":"lms","status":"ok"},"success":true}
+compose_down={.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status}

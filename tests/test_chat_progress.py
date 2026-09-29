@@ -3,7 +3,7 @@ Tests for the live "what is the AI doing right now" progress indicator.
 
 Backend: app/utils/chat_progress.py (Redis-backed, best-effort, never raises) and its wiring
 into rag_service.py's chat_node/rag_tool/teach_topic_tool/list_topics_whole_doc_tool/
-get_page_tool/finalize_lesson_tool. Frontend: templates/teacher_dashboard.html polls
+get_page_tool/finalize_lesson_tool. Frontend: static/teacher/js/teacher-core.js polls
 GET /api/rag/chat-progress/<thread_id> every 800ms while a chat turn is in flight and updates
 the "AI is thinking..." label instead of leaving it static.
 
@@ -19,7 +19,11 @@ chat_progress = pytest.importorskip("app.utils.chat_progress")
 ROOT = Path(__file__).resolve().parent.parent
 RAG_SERVICE_SRC = (ROOT / "app" / "utils" / "rag_service.py").read_text(encoding="utf-8")
 RAG_ROUTES_SRC = (ROOT / "app" / "routes" / "rag_routes.py").read_text(encoding="utf-8")
-DASHBOARD_SRC = (ROOT / "templates" / "teacher_dashboard.html").read_text(encoding="utf-8")
+DASHBOARD_SRC = "\n".join(p.read_text(encoding="utf-8") for p in [  # teacher UI sources (formerly templates/teacher_dashboard.html)
+    ROOT / "static" / "teacher" / "js" / "teacher-core.js",
+    ROOT / "static" / "teacher" / "js" / "teacher-lms-hubs.js",
+    *sorted((ROOT / "templates" / "teacher").rglob("*.html")),
+])
 
 
 class _FakeRedis:

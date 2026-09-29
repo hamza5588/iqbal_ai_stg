@@ -1,0 +1,33 @@
+{# Screen 06 — Assign Quiz. Element IDs are the ones loadLmsAssignOptions / submitLmsAssignment use
+   (POST /api/lms/assignments → POST /api/lms/assignments/:id/publish). #}
+<div class="td-card accent" id="tdAssignQuizCard" hidden>
+  <div class="td-section-title">
+    <div class="td-icon-badge"><i class="fas fa-users"></i></div>
+    <div><h2>Assign Quiz</h2><p>Select class and published quiz to assign to students.</p></div>
+  </div>
+  <form id="lmsAssignForm" onsubmit="submitLmsAssignment(event)" data-wait-message="Publishing assignment...">
+    <div class="td-form-grid">
+      <div class="td-field">
+        <label for="lmsAssignTitle">Assignment title <span class="req">*</span></label>
+        <input id="lmsAssignTitle" type="text" required placeholder="e.g. Week 3 Quiz">
+      </div>
+      <div class="td-field">
+        <label for="lmsAssignClass">Class <span class="req">*</span></label>
+        <select id="lmsAssignClass" required></select>
+      </div>
+      <div class="td-field">
+        <label for="lmsAssignQuiz">Published quiz <span class="req">*</span></label>
+        <select id="lmsAssignQuiz" required></select>
+      </div>
+      <div class="td-field">
+        <label for="lmsAssignDue">Due date <span class="opt">(optional)</span></label>
+        <input id="lmsAssignDue" type="datetime-local">
+      </div>
+    </div>
+    <div class="td-form-actions">
+      <button type="button" class="td-btn td-btn-outline" onclick="closeLmsAssignModal()">Cancel</button>
+      <button type="submit" id="lmsAssignSubmitBtn" class="td-btn td-btn-primary">Create &amp; Publish</button>
+    </div>
+  </form>
+  <div id="lmsAssignStatus" class="td-status-line"></div>
+</div>

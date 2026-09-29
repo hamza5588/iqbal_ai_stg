@@ -1,0 +1,64 @@
+PASS  [Auth/shell] Teacher login lands on new teacher dashboard  http://127.0.0.1:5055/teacher-dashboard#lessons
+PASS  [Auth/shell] Top nav shows Lessons, Classes, Quizzes, Analytics, AI Tutor with correct icons  My Lessons, Classes, Quizzes, Analytics, AI Tutor
+PASS  [Auth/shell] Logo/branding matches new UI  /static/teacher/icons/iqbal-ai-logo.png
+PASS  [Auth/shell] Non-teacher cannot access teacher routes  student /teacher-dashboard -> 302 /; student /legacy/teacher-dashboard -> 302 /; anonymous -> 401 ; student /api/lms/classes/mine -> 200
+PASS  [Auth/shell] Deep link #analytics opens that view  http://127.0.0.1:5055/teacher-dashboard#analytics
+PASS  [Classes] Create class form works and persists  class #4 code U1G5AG8X (persists after reload)
+FAIL  [Classes] Add students (eligible list, multi-select + single add)  TimeoutError: Locator.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator("#tdClassBody-4").locator("tbody tr").filter(has_text="e2e_student_c").locator("text=Add")
+
+FAIL  [Classes] Roster displays enrolled students; remove + join-code flow  AssertionError: Locator expected to have count '3'
+Actual value: 0 
+Call log:
+  - Expect "to_have_count" with timeout 10000ms
+  - waiting for locator("#tdClassBody-4").locator("tbody tr")
+    23 × locator resolved to 0 elements
+       - unexpected value "0"
+
+PASS  [Quizzes] Quiz upload/create path (PDF → MCQ generate → preview → publish)  5 MCQs generated; Status: completed | Confidence: 95% | Questions: 5 / 5 requested
+PASS  [Quizzes] Quizzes list loads (tabs, expand shows MCQs)  2 quizzes; 'E2E PDF Quiz 080052' expanded with 5 MCQs
+PASS  [Quizzes] Assign quiz to class works end-to-end  assignment #2 visible to student A
+PASS  [Quizzes] Students submit the assigned quiz (data for analytics)  e2e.student.a: 0/5.0; e2e.student.b: 1/5.0; student C not submitted
+FAIL  [Analytics] Topic progress renders real data  AssertionError: Locator expected to have count '3'
+Actual value: 2 
+Call log:
+  - Expect "to_have_count" with timeout 15000ms
+  - waiting for locator("#tdAnaProgressRows tr[data-sid]")
+    - locator resolved to 0 elements
+    - unexpected value "0"
+    32 × locator resolved to 2 elements
+       - unexpected value "
+FAIL  [Analytics] Quiz results collapsed ↔ expanded states work  AssertionError: Locator expected to contain text '/ 3 submitted'
+Actual value: E2E Assignment 08005210%2 / 2 submitted - click to view 
+Call log:
+  - Expect "to_contain_text" with timeout 5000ms
+  - waiting for locator("#tdAnaQuizRows tr.td-clickable").filter(has_text="E2E Assignment 080052")
+    14 × locator resol
+PASS  [Analytics] Struggling students view loads  2 struggling (matches API)
+FAIL  [Analytics] Analytics roster progress matches API (no all-zeros when data exists)  AssertionError: Locator expected to have count '3'
+Actual value: 2 
+Call log:
+  - Expect "to_have_count" with timeout 15000ms
+  - waiting for locator("#tdAnaRosterRows tr")
+    33 × locator resolved to 2 elements
+       - unexpected value "2"
+
+PASS  [Lessons] Create lesson (Use PDF as lesson) → appears in list  lesson #3
+PASS  [Lessons] List lessons loads from API (search, tabs, filters, pagination)  1 lessons; search + subject filter OK
+PASS  [Lessons] View / edit / publish / Word / PowerPoint / FAQ / delete flows  view, edit+save, Unpublish→Publish, word:E2E_Lesson_AsIs_080052_edited.docx, ppt:E2E_Lesson_AsIs_080052_edited.pptx, faq, delete
+PASS  [Lessons] Create lesson (Generate from PDF) → opens lesson chat in AI Tutor  switched to AI Tutor with the new PDF conversation
+PASS  [AI Tutor] Lesson chat: send message → response or graceful error  assistant: 'The document is a Mathematics Diagnostic Baseline Assessment designed for Grade IX students, covering various domains such as Number & Operations, Algebra, Measurement & Geometry, and Statistics & Pro'
+FAIL  [AI Tutor] Chat history dropdown lists and re-opens conversations  TimeoutError: Locator.click: Timeout 20000ms exceeded.
+Call log:
+  - waiting for locator("#chatHistoryDropdown").locator(".chat-history-item").first
+    - locator resolved to <div class="chat-history-item active" onclick="if (window.tdShowView) tdShowView('tutor'); loadChat('4')">…</div>
+  - attempting click acti
+PASS  [AI Tutor] Teaching Assistant: history load + send → reply or graceful error  reply: 'AI  One effective tip for teaching fractions is to use visual aids, such as fraction circles or bars. These tools help students see the relationships between di'; persisted history messages: 2
+PASS  [AI Tutor] Set Prompt modal opens from AI Tutor  opened + closed
+PASS  [Cross-cutting] Mobile width: no horizontal overflow, nav usable  lessons:0px classes:0px quizzes:0px analytics:0px tutor:0px
+FAIL  [Cross-cutting] No console-breaking JS errors on primary paths  AssertionError: ['Failed to load resource: the server responded with a status of 500 (INTERNAL SERVER ERROR) @ http://127.0.0.1:5055/api/lms/classes/4/eligible-students', 'Failed to load resource: the server responded with a status of 403 (FORBIDDEN) @ http://127.0.0.1:5055/api/lms/classes/3/analytics/quizzes', "pa
+PASS  [Cross-cutting] No missing static assets (icons/css/js 404s)  0 static failures (5 non-static 4xx/5xx logged)
+
+20/27 passed — report: C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\_qa_audit_tmp\teacher_ui_e2e\report.md
+EXIT=1

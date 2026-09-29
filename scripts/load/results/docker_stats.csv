@@ -1,0 +1,190 @@
+ts_utc,container,cpu,mem,mem_pct,loadavg,health,lms_health,compose_down,groq_hits
+2026-09-03T15:16:51Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.05 0.12 0.12 1/561 1442264,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:16:51Z,0.00%,14.33MiB / 15.63GiB,0.09%,,0.05 0.12 0.12 1/561 1442264,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:16:51Z,0.65%,3.188GiB / 15.63GiB,20.40%,,0.05 0.12 0.12 1/561 1442264,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:16:51Z,0.16%,498.2MiB / 15.63GiB,3.11%,,0.05 0.12 0.12 1/561 1442264,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:16:51Z,0.01%,97.2MiB / 15.63GiB,0.61%,,0.05 0.12 0.12 1/561 1442264,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:16:51Z,0.40%,4.516MiB / 15.63GiB,0.03%,,0.05 0.12 0.12 1/561 1442264,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:16:51Z,4.12%,163.2MiB / 15.63GiB,1.02%,,0.05 0.12 0.12 1/561 1442264,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:18:26Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.18 0.16 0.13 1/561 1443684,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:18:26Z,0.36%,15.57MiB / 15.63GiB,0.10%,,0.18 0.16 0.13 1/561 1443684,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:18:26Z,3.68%,3.196GiB / 15.63GiB,20.45%,,0.18 0.16 0.13 1/561 1443684,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:18:26Z,0.08%,498.2MiB / 15.63GiB,3.11%,,0.18 0.16 0.13 1/561 1443684,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:18:26Z,1.21%,99.8MiB / 15.63GiB,0.62%,,0.18 0.16 0.13 1/561 1443684,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:18:26Z,0.40%,4.527MiB / 15.63GiB,0.03%,,0.18 0.16 0.13 1/561 1443684,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:18:26Z,7.98%,163.2MiB / 15.63GiB,1.02%,,0.18 0.16 0.13 1/561 1443684,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:20:00Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.50 0.26 0.17 1/573 1445118,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:20:00Z,2.31%,18.8MiB / 15.63GiB,0.12%,,0.50 0.26 0.17 1/573 1445118,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:20:00Z,25.47%,3.205GiB / 15.63GiB,20.51%,,0.50 0.26 0.17 1/573 1445118,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:20:00Z,0.06%,498.2MiB / 15.63GiB,3.11%,,0.50 0.26 0.17 1/573 1445118,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:20:00Z,5.70%,112MiB / 15.63GiB,0.70%,,0.50 0.26 0.17 1/573 1445118,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:20:00Z,0.44%,4.523MiB / 15.63GiB,0.03%,,0.50 0.26 0.17 1/573 1445118,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:20:00Z,7.56%,163.5MiB / 15.63GiB,1.02%,,0.50 0.26 0.17 1/573 1445118,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:21:35Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.42 0.31 0.20 1/603 1446618,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1
+2026-09-03T15:21:35Z,2.46%,21.68MiB / 15.63GiB,0.14%,,0.42 0.31 0.20 1/603 1446618,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1
+2026-09-03T15:21:35Z,26.96%,3.296GiB / 15.63GiB,21.09%,,0.42 0.31 0.20 1/603 1446618,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1
+2026-09-03T15:21:35Z,3.73%,579.9MiB / 15.63GiB,3.62%,,0.42 0.31 0.20 1/603 1446618,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1
+2026-09-03T15:21:35Z,7.07%,163.7MiB / 15.63GiB,1.02%,,0.42 0.31 0.20 1/603 1446618,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1
+2026-09-03T15:21:35Z,0.48%,4.691MiB / 15.63GiB,0.03%,,0.42 0.31 0.20 1/603 1446618,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1
+2026-09-03T15:21:35Z,2.82%,163.3MiB / 15.63GiB,1.02%,,0.42 0.31 0.20 1/603 1446618,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1
+2026-09-03T15:23:11Z,CPU %,MEM USAGE / LIMIT,MEM %,,1.17 0.53 0.28 2/613 1448091,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:23:11Z,2.98%,21.73MiB / 15.63GiB,0.14%,,1.17 0.53 0.28 2/613 1448091,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:23:11Z,138.84%,3.391GiB / 15.63GiB,21.70%,,1.17 0.53 0.28 2/613 1448091,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:23:11Z,0.04%,587.6MiB / 15.63GiB,3.67%,,1.17 0.53 0.28 2/613 1448091,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:23:11Z,16.31%,175.3MiB / 15.63GiB,1.10%,,1.17 0.53 0.28 2/613 1448091,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:23:11Z,0.42%,4.711MiB / 15.63GiB,0.03%,,1.17 0.53 0.28 2/613 1448091,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:23:11Z,4.96%,163.4MiB / 15.63GiB,1.02%,,1.17 0.53 0.28 2/613 1448091,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:24:47Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.47 0.48 0.29 2/644 1449620,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},810
+2026-09-03T15:24:47Z,1.28%,25.1MiB / 15.63GiB,0.16%,,0.47 0.48 0.29 2/644 1449620,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},810
+2026-09-03T15:24:47Z,72.89%,3.554GiB / 15.63GiB,22.74%,,0.47 0.48 0.29 2/644 1449620,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},810
+2026-09-03T15:24:47Z,0.69%,589.3MiB / 15.63GiB,3.68%,,0.47 0.48 0.29 2/644 1449620,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},810
+2026-09-03T15:24:47Z,19.43%,219.8MiB / 15.63GiB,1.37%,,0.47 0.48 0.29 2/644 1449620,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},810
+2026-09-03T15:24:47Z,0.56%,4.871MiB / 15.63GiB,0.03%,,0.47 0.48 0.29 2/644 1449620,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},810
+2026-09-03T15:24:47Z,7.58%,163.5MiB / 15.63GiB,1.02%,,0.47 0.48 0.29 2/644 1449620,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},810
+2026-09-03T15:26:43Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.37 0.41 0.28 2/645 1451204,"{""status"":""healthy""}","FAIL
+
+curl: (28) Operation timed out after 10000 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1102
+2026-09-03T15:26:43Z,1.41%,25.18MiB / 15.63GiB,0.16%,,0.37 0.41 0.28 2/645 1451204,"{""status"":""healthy""}","FAIL
+
+curl: (28) Operation timed out after 10000 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1102
+2026-09-03T15:26:43Z,44.38%,3.595GiB / 15.63GiB,23.00%,,0.37 0.41 0.28 2/645 1451204,"{""status"":""healthy""}","FAIL
+
+curl: (28) Operation timed out after 10000 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1102
+2026-09-03T15:26:43Z,69.71%,575.3MiB / 15.63GiB,3.60%,,0.37 0.41 0.28 2/645 1451204,"{""status"":""healthy""}","FAIL
+
+curl: (28) Operation timed out after 10000 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1102
+2026-09-03T15:26:43Z,11.36%,203.9MiB / 15.63GiB,1.27%,,0.37 0.41 0.28 2/645 1451204,"{""status"":""healthy""}","FAIL
+
+curl: (28) Operation timed out after 10000 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1102
+2026-09-03T15:26:43Z,0.60%,4.848MiB / 15.63GiB,0.03%,,0.37 0.41 0.28 2/645 1451204,"{""status"":""healthy""}","FAIL
+
+curl: (28) Operation timed out after 10000 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1102
+2026-09-03T15:26:43Z,4.71%,163.6MiB / 15.63GiB,1.02%,,0.37 0.41 0.28 2/645 1451204,"{""status"":""healthy""}","FAIL
+
+curl: (28) Operation timed out after 10000 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},1102
+2026-09-03T15:28:29Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.41 0.43 0.30 2/641 1452760,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},624
+2026-09-03T15:28:29Z,0.19%,24.39MiB / 15.63GiB,0.15%,,0.41 0.43 0.30 2/641 1452760,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},624
+2026-09-03T15:28:29Z,13.07%,3.671GiB / 15.63GiB,23.49%,,0.41 0.43 0.30 2/641 1452760,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},624
+2026-09-03T15:28:29Z,0.00%,580.1MiB / 15.63GiB,3.63%,,0.41 0.43 0.30 2/641 1452760,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},624
+2026-09-03T15:28:29Z,2.17%,207.7MiB / 15.63GiB,1.30%,,0.41 0.43 0.30 2/641 1452760,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},624
+2026-09-03T15:28:29Z,0.41%,4.902MiB / 15.63GiB,0.03%,,0.41 0.43 0.30 2/641 1452760,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},624
+2026-09-03T15:28:29Z,3.66%,163.8MiB / 15.63GiB,1.02%,,0.41 0.43 0.30 2/641 1452760,"FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received","FAIL
+
+curl: (28) Operation timed out after 10001 milliseconds with 0 bytes received",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},624
+2026-09-03T15:30:24Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.53 0.46 0.32 3/640 1454413,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},960
+2026-09-03T15:30:24Z,2.24%,22.06MiB / 15.63GiB,0.14%,,0.53 0.46 0.32 3/640 1454413,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},960
+2026-09-03T15:30:24Z,131.89%,3.688GiB / 15.63GiB,23.60%,,0.53 0.46 0.32 3/640 1454413,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},960
+2026-09-03T15:30:24Z,0.02%,587.4MiB / 15.63GiB,3.67%,,0.53 0.46 0.32 3/640 1454413,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},960
+2026-09-03T15:30:24Z,24.59%,213.2MiB / 15.63GiB,1.33%,,0.53 0.46 0.32 3/640 1454413,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},960
+2026-09-03T15:30:24Z,0.42%,4.902MiB / 15.63GiB,0.03%,,0.53 0.46 0.32 3/640 1454413,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},960
+2026-09-03T15:30:24Z,3.68%,163.9MiB / 15.63GiB,1.02%,,0.53 0.46 0.32 3/640 1454413,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},960
+2026-09-03T15:32:00Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.57 0.56 0.37 1/641 1455983,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},2
+2026-09-03T15:32:00Z,0.04%,18.94MiB / 15.63GiB,0.12%,,0.57 0.56 0.37 1/641 1455983,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},2
+2026-09-03T15:32:00Z,0.83%,3.713GiB / 15.63GiB,23.76%,,0.57 0.56 0.37 1/641 1455983,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},2
+2026-09-03T15:32:00Z,0.16%,555.3MiB / 15.63GiB,3.47%,,0.57 0.56 0.37 1/641 1455983,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},2
+2026-09-03T15:32:00Z,0.10%,195.3MiB / 15.63GiB,1.22%,,0.57 0.56 0.37 1/641 1455983,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},2
+2026-09-03T15:32:00Z,0.41%,4.895MiB / 15.63GiB,0.03%,,0.57 0.56 0.37 1/641 1455983,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},2
+2026-09-03T15:32:00Z,3.54%,164MiB / 15.63GiB,1.02%,,0.57 0.56 0.37 1/641 1455983,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},2
+2026-09-03T15:33:36Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.25 0.44 0.35 1/638 1457429,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:33:36Z,0.00%,15.09MiB / 15.63GiB,0.09%,,0.25 0.44 0.35 1/638 1457429,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:33:36Z,0.92%,3.713GiB / 15.63GiB,23.76%,,0.25 0.44 0.35 1/638 1457429,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:33:36Z,0.21%,555.3MiB / 15.63GiB,3.47%,,0.25 0.44 0.35 1/638 1457429,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:33:36Z,0.00%,195.3MiB / 15.63GiB,1.22%,,0.25 0.44 0.35 1/638 1457429,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:33:36Z,0.38%,4.879MiB / 15.63GiB,0.03%,,0.25 0.44 0.35 1/638 1457429,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:33:36Z,4.13%,164MiB / 15.63GiB,1.03%,,0.25 0.44 0.35 1/638 1457429,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:35:11Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.14 0.35 0.32 1/635 1458943,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:35:11Z,0.00%,15.09MiB / 15.63GiB,0.09%,,0.14 0.35 0.32 1/635 1458943,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:35:11Z,0.90%,3.713GiB / 15.63GiB,23.76%,,0.14 0.35 0.32 1/635 1458943,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:35:11Z,0.07%,555.3MiB / 15.63GiB,3.47%,,0.14 0.35 0.32 1/635 1458943,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:35:11Z,5.99%,195.3MiB / 15.63GiB,1.22%,,0.14 0.35 0.32 1/635 1458943,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:35:11Z,0.44%,4.855MiB / 15.63GiB,0.03%,,0.14 0.35 0.32 1/635 1458943,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:35:11Z,3.72%,164.1MiB / 15.63GiB,1.03%,,0.14 0.35 0.32 1/635 1458943,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:36:45Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.11 0.27 0.29 1/635 1460404,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:36:45Z,0.00%,15.09MiB / 15.63GiB,0.09%,,0.11 0.27 0.29 1/635 1460404,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:36:45Z,0.83%,3.713GiB / 15.63GiB,23.76%,,0.11 0.27 0.29 1/635 1460404,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:36:45Z,0.18%,555.3MiB / 15.63GiB,3.47%,,0.11 0.27 0.29 1/635 1460404,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:36:45Z,0.51%,193.5MiB / 15.63GiB,1.21%,,0.11 0.27 0.29 1/635 1460404,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:36:45Z,0.36%,4.805MiB / 15.63GiB,0.03%,,0.11 0.27 0.29 1/635 1460404,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:36:45Z,4.97%,164.2MiB / 15.63GiB,1.03%,,0.11 0.27 0.29 1/635 1460404,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:38:39Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.02 0.18 0.26 1/639 1461922,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:38:39Z,0.00%,15.09MiB / 15.63GiB,0.09%,,0.02 0.18 0.26 1/639 1461922,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:38:39Z,0.84%,3.712GiB / 15.63GiB,23.76%,,0.02 0.18 0.26 1/639 1461922,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:38:39Z,0.21%,555.3MiB / 15.63GiB,3.47%,,0.02 0.18 0.26 1/639 1461922,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:38:39Z,0.01%,193.5MiB / 15.63GiB,1.21%,,0.02 0.18 0.26 1/639 1461922,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:38:39Z,0.39%,4.809MiB / 15.63GiB,0.03%,,0.02 0.18 0.26 1/639 1461922,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:38:39Z,3.67%,164.4MiB / 15.63GiB,1.03%,,0.02 0.18 0.26 1/639 1461922,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:40:37Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.06 0.15 0.23 3/642 1463467,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:40:37Z,0.00%,15.09MiB / 15.63GiB,0.09%,,0.06 0.15 0.23 3/642 1463467,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:40:37Z,4.54%,3.712GiB / 15.63GiB,23.76%,,0.06 0.15 0.23 3/642 1463467,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:40:37Z,0.16%,555.3MiB / 15.63GiB,3.47%,,0.06 0.15 0.23 3/642 1463467,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:40:37Z,0.00%,193.5MiB / 15.63GiB,1.21%,,0.06 0.15 0.23 3/642 1463467,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:40:37Z,0.40%,4.805MiB / 15.63GiB,0.03%,,0.06 0.15 0.23 3/642 1463467,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:40:37Z,3.63%,164.6MiB / 15.63GiB,1.03%,,0.06 0.15 0.23 3/642 1463467,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:42:22Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.00 0.10 0.20 1/638 1465088,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:42:22Z,0.00%,15.09MiB / 15.63GiB,0.09%,,0.00 0.10 0.20 1/638 1465088,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:42:22Z,0.84%,3.712GiB / 15.63GiB,23.76%,,0.00 0.10 0.20 1/638 1465088,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:42:22Z,0.17%,555.3MiB / 15.63GiB,3.47%,,0.00 0.10 0.20 1/638 1465088,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:42:22Z,0.00%,193.5MiB / 15.63GiB,1.21%,,0.00 0.10 0.20 1/638 1465088,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:42:22Z,0.45%,4.805MiB / 15.63GiB,0.03%,,0.00 0.10 0.20 1/638 1465088,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:42:22Z,3.78%,164.4MiB / 15.63GiB,1.03%,,0.00 0.10 0.20 1/638 1465088,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:44:25Z,CPU %,MEM USAGE / LIMIT,MEM %,,0.17 0.11 0.19 1/636 1466547,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:44:25Z,0.00%,15.09MiB / 15.63GiB,0.09%,,0.17 0.11 0.19 1/636 1466547,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:44:25Z,0.87%,3.712GiB / 15.63GiB,23.76%,,0.17 0.11 0.19 1/636 1466547,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:44:25Z,0.07%,555.3MiB / 15.63GiB,3.47%,,0.17 0.11 0.19 1/636 1466547,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:44:25Z,0.53%,193.5MiB / 15.63GiB,1.21%,,0.17 0.11 0.19 1/636 1466547,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:44:25Z,0.38%,4.805MiB / 15.63GiB,0.03%,,0.17 0.11 0.19 1/636 1466547,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0
+2026-09-03T15:44:25Z,4.16%,164.5MiB / 15.63GiB,1.03%,,0.17 0.11 0.19 1/636 1466547,"{""status"":""healthy""}","{""data"":{""service"":""lms"",""status"":""ok""},""success"":true}",{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status};{.Name} {.Status},0

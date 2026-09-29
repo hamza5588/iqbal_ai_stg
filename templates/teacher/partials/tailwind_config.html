@@ -1,0 +1,203 @@
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+            display: ["Poppins", "Inter", "sans-serif"],
+          },
+          colors: {
+            // New teacher UI is blue: the legacy chat/lesson markup's green/emerald utilities render in the design's blue scale.
+            green: { 50: "#eff6ff", 100: "#dbeafe", 200: "#bfdbfe", 300: "#93c5fd", 400: "#60a5fa", 500: "#3b82f6", 600: "#1a56db", 700: "#1d4ed8", 800: "#12408a", 900: "#0b3d91" },
+            emerald: { 50: "#eff6ff", 100: "#dbeafe", 200: "#bfdbfe", 300: "#93c5fd", 400: "#60a5fa", 500: "#3b82f6", 600: "#1a56db", 700: "#1d4ed8", 800: "#12408a", 900: "#0b3d91" },
+            primary: {
+              50: "var(--primary-50)",
+              100: "var(--primary-100)",
+              200: "var(--primary-100)",
+              300: "var(--primary-300)",
+              400: "var(--primary-400)",
+              500: "var(--primary-color)",
+              600: "var(--primary-600)",
+              700: "var(--primary-700)",
+              800: "var(--primary-800)",
+              900: "var(--primary-900)",
+            },
+            secondary: {
+              50: "#f8fafc",
+              100: "#f1f5f9",
+              200: "#e2e8f0",
+              300: "#cbd5e1",
+              400: "#94a3b8",
+              500: "#64748b",
+              600: "#475569",
+              700: "#334155",
+              800: "#1e293b",
+              900: "#0f172a",
+            },
+            accent: {
+              50: "#fdf2f8",
+              100: "#fce7f3",
+              200: "#fbcfe8",
+              300: "#f9a8d4",
+              400: "#f472b6",
+              500: "#ec4899",
+              600: "#db2777",
+              700: "#be185d",
+              800: "#9d174d",
+              900: "#831843",
+            },
+            success: {
+              50: "var(--primary-50)",
+              100: "var(--primary-100)",
+              200: "var(--primary-100)",
+              300: "var(--primary-300)",
+              400: "var(--primary-400)",
+              500: "var(--primary-color)",
+              600: "var(--primary-600)",
+              700: "var(--primary-700)",
+              800: "var(--primary-800)",
+              900: "var(--primary-900)",
+            },
+            green: {
+              50: "var(--primary-50)",
+              100: "var(--primary-100)",
+              200: "var(--primary-100)",
+              300: "var(--primary-300)",
+              400: "var(--primary-400)",
+              500: "var(--primary-color)",
+              600: "var(--primary-600)",
+              700: "var(--primary-700)",
+              800: "var(--primary-800)",
+              900: "var(--primary-900)",
+            },
+            warning: {
+              50: "#fffbeb",
+              100: "#fef3c7",
+              200: "#fde68a",
+              300: "#fcd34d",
+              400: "#fbbf24",
+              500: "#f59e0b",
+              600: "#d97706",
+              700: "#b45309",
+              800: "#92400e",
+              900: "#78350f",
+            },
+            error: {
+              50: "#fef2f2",
+              100: "#fee2e2",
+              200: "#fecaca",
+              300: "#fca5a5",
+              400: "#f87171",
+              500: "#ef4444",
+              600: "#dc2626",
+              700: "#b91c1c",
+              800: "#991b1b",
+              900: "#7f1d1d",
+            },
+            surface: {
+              50: "#fafafa",
+              100: "#f5f5f5",
+              200: "#e5e5e5",
+              300: "#d4d4d4",
+              400: "#a3a3a3",
+              500: "#737373",
+              600: "#525252",
+              700: "#404040",
+              800: "#262626",
+              900: "#171717",
+            },
+          },
+          animation: {
+            "gradient-x": "gradient-x 15s ease infinite",
+            "gradient-y": "gradient-y 15s ease infinite",
+            "gradient-xy": "gradient-xy 15s ease infinite",
+            "float-slow": "float 8s ease-in-out infinite",
+            "float-slower": "float 12s ease-in-out infinite",
+            "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+            "slide-in-right": "slideInRight 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards",
+            "slide-in-up": "slideInUp 0.7s cubic-bezier(0.25,0.46,0.45,0.94) forwards",
+            "fade-in": "fadeIn 0.8s ease-out forwards",
+            "border-glow": "borderGlow 3s ease-in-out infinite",
+            shimmer: "shimmer 2s infinite linear",
+          },
+          keyframes: {
+            "gradient-y": {
+              "0%, 100%": {
+                "background-size": "400% 400%",
+                "background-position": "center top",
+              },
+              "50%": {
+                "background-size": "200% 200%",
+                "background-position": "center center",
+              },
+            },
+            "gradient-x": {
+              "0%, 100%": {
+                "background-size": "200% 200%",
+                "background-position": "left center",
+              },
+              "50%": {
+                "background-size": "200% 200%",
+                "background-position": "right center",
+              },
+            },
+            "gradient-xy": {
+              "0%, 100%": {
+                "background-position": "0% 0%",
+              },
+              "50%": {
+                "background-position": "100% 100%",
+              },
+            },
+            float: {
+              "0%, 100%": { transform: "translateY(0) translateX(0)" },
+              "33%": { transform: "translateY(-20px) translateX(10px)" },
+              "66%": { transform: "translateY(-10px) translateX(-10px)" },
+            },
+            "pulse-glow": {
+              "0%, 100%": {
+                "box-shadow": "0 0 20px rgba(14, 165, 233, 0.3)",
+                transform: "scale(1)",
+              },
+              "50%": {
+                "box-shadow": "0 0 40px rgba(14, 165, 233, 0.5)",
+                transform: "scale(1.05)",
+              },
+            },
+            slideInRight: {
+              from: { opacity: "0", transform: "translateX(30px)" },
+              to: { opacity: "1", transform: "translateX(0)" },
+            },
+            slideInUp: {
+              from: { opacity: "0", transform: "translateY(30px)" },
+              to: { opacity: "1", transform: "translateY(0)" },
+            },
+            fadeIn: {
+              from: { opacity: "0" },
+              to: { opacity: "1" },
+            },
+            borderGlow: {
+              "0%, 100%": {
+                "border-color": "rgba(14, 165, 233, 0.3)",
+                "box-shadow": "0 0 15px rgba(14, 165, 233, 0.2)",
+              },
+              "50%": {
+                "border-color": "rgba(236, 72, 153, 0.5)",
+                "box-shadow": "0 0 25px rgba(236, 72, 153, 0.3)",
+              },
+            },
+            shimmer: {
+              "0%": { "background-position": "-200px 0" },
+              "100%": { "background-position": "calc(200px + 100%) 0" },
+            },
+          },
+          backgroundImage: {
+            "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+            "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
+            "gradient-diagonal": "linear-gradient(135deg, var(--tw-gradient-stops))",
+          },
+        },
+      },
+    };
+  </script>

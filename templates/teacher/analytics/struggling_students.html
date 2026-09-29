@@ -1,0 +1,15 @@
+{# Screen 10 — Struggling Students (/analytics/struggling). Progress column stays hidden (product decision de29322).
+   Expanding a row shows weak topics + recent performance (/students/:sid/report). #}
+<div class="td-card">
+  <div class="td-section-title" style="margin-bottom:14px;">
+    <div class="td-icon-badge"><i class="fas fa-user-group"></i></div>
+    <div><h2>Struggling Students</h2><p>View students who are struggling and their weak topics.</p></div>
+  </div>
+  <div class="td-table-wrap">
+    <table class="td-data">
+      <thead><tr><th>Student</th><th>Weak Topics</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody id="tdAnaStrugglingRows"></tbody>
+    </table>
+  </div>
+  <div class="td-empty" id="tdAnaStrugglingEmpty" hidden></div>
+</div>
