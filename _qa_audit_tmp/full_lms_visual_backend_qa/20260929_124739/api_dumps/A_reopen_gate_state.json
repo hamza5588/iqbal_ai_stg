@@ -1,0 +1,8 @@
+{
+  "view": "diagnostic",
+  "needs": false,
+  "mandatory": false,
+  "allow": true,
+  "back": "inline-flex",
+  "backRect": 0
+}

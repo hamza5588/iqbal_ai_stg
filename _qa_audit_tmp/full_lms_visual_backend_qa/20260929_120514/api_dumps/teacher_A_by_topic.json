@@ -1,0 +1,91 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/21/students/43/progress/by-topic",
+  "body": {
+    "data": {
+      "topics": [
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 79,
+              "correct": 1,
+              "label": "Diagnostic",
+              "score_percent": 33.33,
+              "submitted_at": "2026-09-29T19:07:17.230487",
+              "total": 3
+            }
+          ],
+          "topic_id": 74,
+          "topic_name": "Geometry and Measurement"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 79,
+              "correct": 3,
+              "label": "Diagnostic",
+              "score_percent": 60.0,
+              "submitted_at": "2026-09-29T19:07:17.230487",
+              "total": 5
+            }
+          ],
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 79,
+              "correct": 3,
+              "label": "Diagnostic",
+              "score_percent": 60.0,
+              "submitted_at": "2026-09-29T19:07:17.230487",
+              "total": 5
+            }
+          ],
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 79,
+              "correct": 3,
+              "label": "Diagnostic",
+              "score_percent": 60.0,
+              "submitted_at": "2026-09-29T19:07:17.230487",
+              "total": 5
+            }
+          ],
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 79,
+              "correct": 9,
+              "label": "Diagnostic",
+              "score_percent": 69.23,
+              "submitted_at": "2026-09-29T19:07:17.230487",
+              "total": 13
+            }
+          ],
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence"
+        }
+      ]
+    },
+    "success": true
+  }
+}

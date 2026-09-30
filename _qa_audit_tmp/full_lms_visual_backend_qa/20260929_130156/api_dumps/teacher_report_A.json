@@ -1,0 +1,84 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/24/students/56/report",
+  "body": {
+    "data": {
+      "overall_progress": 62.16,
+      "recent_attempts": [
+        {
+          "assessment_id": 52,
+          "attempt_id": 91,
+          "score_percent": 60.0,
+          "submitted_at": "2026-09-29T20:06:13.930032"
+        },
+        {
+          "assessment_id": 25,
+          "attempt_id": 90,
+          "score_percent": 59.4,
+          "submitted_at": "2026-09-29T20:04:17.949018"
+        }
+      ],
+      "student_id": 56,
+      "topics": [
+        {
+          "last_assessed_at": "2026-09-29T20:05:04.182951",
+          "mastery_status": "weak",
+          "sample_size": 16,
+          "score_percent": 50.0,
+          "topic_id": 34,
+          "topic_name": "Geometry"
+        },
+        {
+          "last_assessed_at": "2026-09-29T20:04:24.898664",
+          "mastery_status": "mastered",
+          "sample_size": 3,
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T20:04:24.898664",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T20:04:24.898664",
+          "mastery_status": "mastered",
+          "sample_size": 3,
+          "score_percent": 100.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials"
+        },
+        {
+          "last_assessed_at": "2026-09-29T20:04:24.898664",
+          "mastery_status": "mastered",
+          "sample_size": 1,
+          "score_percent": 100.0,
+          "topic_id": 48,
+          "topic_name": "Statistics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T20:05:04.182951",
+          "mastery_status": "weak",
+          "sample_size": 7,
+          "score_percent": 42.857142857142854,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T20:04:24.898664",
+          "mastery_status": "mastered",
+          "sample_size": 2,
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities"
+        }
+      ],
+      "username": "qa_stu_a_130156"
+    },
+    "success": true
+  }
+}

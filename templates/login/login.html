@@ -10,8 +10,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --text-dark:#16241c;
-    --text-muted:#5c6b62;
+    --text-dark:#1e293b;
+    --text-muted:#64748b;
     --white:#ffffff;
     --error:#dc2626;
   }
@@ -32,7 +32,7 @@
   /* Header */
   header{
     position:relative;
-    background:#101314;
+    background:#0f172a;
     height:170px;
     display:flex;
     align-items:center;
@@ -44,7 +44,7 @@
     position:absolute;
     inset:0;
     background:
-      linear-gradient(120deg, rgba(10,15,12,0.88), rgba(10,15,12,0.6)),
+      linear-gradient(120deg, rgba(15,23,42,0.88), rgba(15,23,42,0.6)),
       repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 26px),
       repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 26px);
     z-index:1;
@@ -53,7 +53,7 @@
     position:relative;
     z-index:2;
     width:min(1100px, 92%);
-    background:rgba(20,24,21,0.55);
+    background:rgba(15,23,42,0.55);
     border:1px solid rgba(255,255,255,0.15);
     border-radius:14px;
     padding:16px 28px;
@@ -133,7 +133,7 @@
     align-items:center;
     gap:8px;
     background:#fff;
-    border:1px solid #d9e4dd;
+    border:1px solid #e2e8f0;
     border-radius:10px;
     padding:10px 16px;
     font-size:0.88rem;
@@ -159,7 +159,7 @@
     content:"";
     flex:1;
     height:1px;
-    background:#c6dccd;
+    background:#cbd5e1;
   }
 
   #login-error{
@@ -211,7 +211,7 @@
     outline:none;
     color:var(--text-dark);
   }
-  .input-wrap input::placeholder{ color:#9fb3a7; }
+  .input-wrap input::placeholder{ color:#94a3b8; }
   .input-wrap input:focus{
     border-color:var(--green-mid);
     box-shadow:0 0 0 3px var(--theme-shadow-focus);
@@ -224,7 +224,7 @@
     right:14px;
     top:50%;
     transform:translateY(-50%);
-    color:#9fb3a7;
+    color:#94a3b8;
     display:flex;
   }
   .input-wrap .input-icon.toggle{
@@ -232,7 +232,7 @@
     background:none;
     border:none;
     padding:0;
-    color:#9fb3a7;
+    color:#94a3b8;
   }
   .input-wrap .input-icon.toggle:hover{ color:var(--green); }
 
@@ -326,7 +326,7 @@
 
   .join-card{
     margin-top:auto;
-    background:radial-gradient(120% 140% at 30% 20%, #ffffff 0%, #dff2e6 60%, #cdeeda 100%);
+    background:radial-gradient(120% 140% at 30% 20%, #ffffff 0%, #dbeafe 60%, #bfdbfe 100%);
     border-radius:22px;
     padding:48px 36px;
     text-align:center;
@@ -403,8 +403,9 @@
     .panel{ min-height:auto; }
   }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}">
 </head>
-<body>
+<body class="nu-page nu-auth nu-login">
 
 <header>
   <div class="header-bar">

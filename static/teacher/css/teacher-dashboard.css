@@ -412,3 +412,7 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 /* Save-lesson guide */
 .lesson-save-guide-list li.is-focus { background: var(--td-blue-50); border-color: #bfdbfe; }
 .lesson-save-guide-ok:hover { background: var(--td-blue-800); }
+
+/* lmsShowToast() (lms-core.js) also calls the page showToast(); keep only the page toast so
+   success messages don't show twice (same fix as the student dashboard). */
+.td-body .lms-toast { display: none !important; }

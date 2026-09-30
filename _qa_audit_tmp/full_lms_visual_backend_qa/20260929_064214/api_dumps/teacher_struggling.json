@@ -1,0 +1,45 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/19/analytics/struggling",
+  "body": {
+    "data": [
+      {
+        "email": "qa.student.a.20260929_064214@test.local",
+        "enrolled_at": "2026-09-29T13:43:37.593965",
+        "is_struggling": true,
+        "overall_progress": 54.1,
+        "student_id": 35,
+        "username": "qa_stu_a_064214",
+        "weak_topic_count": 3,
+        "weak_topics": [
+          {
+            "score_percent": 38.46153846153846,
+            "topic_id": 49,
+            "topic_name": "Algebra Basics"
+          },
+          {
+            "score_percent": 55.55555555555556,
+            "topic_id": 34,
+            "topic_name": "Geometry"
+          },
+          {
+            "score_percent": 0.0,
+            "topic_id": 52,
+            "topic_name": "Triangle Properties"
+          }
+        ]
+      },
+      {
+        "email": "qa.student.c.20260929_064214@test.local",
+        "enrolled_at": "2026-09-29T13:43:37.608559",
+        "is_struggling": true,
+        "overall_progress": 0.0,
+        "student_id": 37,
+        "username": "qa_stu_c_064214",
+        "weak_topic_count": 0,
+        "weak_topics": []
+      }
+    ],
+    "success": true
+  }
+}

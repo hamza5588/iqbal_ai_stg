@@ -1,0 +1,53 @@
+{
+  "topic_progress": {
+    "ui": [
+      "Algebra Basics",
+      "Algebraic Equations",
+      "Geometry",
+      "Logarithms",
+      "Polynomials and Factors",
+      "Triangles"
+    ],
+    "api": [
+      "Algebra Basics",
+      "Inequalities and Graphs",
+      "Logarithms",
+      "Polynomials and Quadratics",
+      "Statistics and Averages",
+      "Triangle Congruence and Construction",
+      "Triangle Properties"
+    ],
+    "db": [
+      "Algebra Basics",
+      "Coordinate Geometry",
+      "Geometry",
+      "Geometry and Triangles",
+      "Inequalities and Equations",
+      "Inequalities and Linear Equations",
+      "Linear Inequalities",
+      "Logarithms",
+      "Polynomials",
+      "Polynomials and Quadratics",
+      "Statistics",
+      "Statistics and Averages",
+      "Triangle Properties",
+      "Triangles and Congruence"
+    ],
+    "ui_eq_api": false
+  },
+  "guided_practice": {
+    "topic_id": 69,
+    "ui": "No practice question available for this topic",
+    "db_active_questions_for_topic": 0
+  },
+  "backlink": {
+    "visible_after_submit": true,
+    "visible_on_reopen": true,
+    "js_state": {
+      "needs": false,
+      "mandatory": false,
+      "allow": true,
+      "btn": "inline-flex"
+    }
+  }
+}

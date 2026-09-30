@@ -166,6 +166,8 @@ def list_assignments_for_student(student_id: int) -> List[dict]:
         result.append(
             {
                 "assignment_id": assignment.id,
+                "class_id": assignment.class_id,
+                "attempt_id": sub.attempt_id if sub else None,
                 "title": assignment.title,
                 "quiz_id": assignment.quiz_id,
                 "due_date": assignment.due_date.isoformat() if assignment.due_date else None,

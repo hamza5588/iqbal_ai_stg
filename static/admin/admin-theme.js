@@ -23,13 +23,11 @@
     if (!grid) return;
     grid.innerHTML = Object.keys(presets).map(function (key) {
       var p = presets[key];
-      var active = key === activePreset ? ' ring-2 ring-offset-2 ring-[#05B0FC]' : '';
-      return '<button type="button" class="admin-theme-preset text-left p-3 rounded-lg border-2 transition-all' + active + '"' +
-        ' data-preset="' + esc(key) + '" data-primary="' + esc(p.primary) + '"' +
-        ' style="border-color:' + esc(p.primary) + ';background:' + esc(p.muted || p.light) + ';">' +
-        '<span class="inline-block w-8 h-8 rounded-full mb-2" style="background:' + esc(p.primary) + '"></span>' +
-        '<span class="block text-sm font-semibold text-gray-800">' + esc(p.name || key) + '</span>' +
-        '<span class="block text-xs text-gray-500">' + esc(p.primary) + '</span></button>';
+      var active = key === activePreset ? ' is-active' : '';
+      return '<button type="button" class="admin-theme-preset' + active + '"' +
+        ' data-preset="' + esc(key) + '" data-primary="' + esc(p.primary) + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        '<span class="ad-swatch" style="background:linear-gradient(135deg,' + esc(p.primary) + ' 0%,' + esc(p.secondary || p.primary) + ' 100%)"></span>' +
+        '<span><b>' + esc(p.name || key) + '</b><small>' + esc(p.primary) + '</small></span></button>';
     }).join('');
 
     grid.querySelectorAll('.admin-theme-preset').forEach(function (btn) {
@@ -37,9 +35,11 @@
         document.getElementById('adminThemePresetInput').value = btn.getAttribute('data-preset');
         document.getElementById('adminThemeCustomColor').value = btn.getAttribute('data-primary');
         grid.querySelectorAll('.admin-theme-preset').forEach(function (b) {
-          b.classList.remove('ring-2', 'ring-offset-2', 'ring-[#05B0FC]');
+          b.classList.remove('is-active');
+          b.setAttribute('aria-pressed', 'false');
         });
-        btn.classList.add('ring-2', 'ring-offset-2', 'ring-[#05B0FC]');
+        btn.classList.add('is-active');
+        btn.setAttribute('aria-pressed', 'true');
         previewTheme(btn.getAttribute('data-primary'));
       });
     });
@@ -58,8 +58,8 @@
       PRESETS = data.presets || {};
       var theme = data.theme || {};
       renderPresets(PRESETS, theme.preset);
-      document.getElementById('adminThemePresetInput').value = theme.preset || 'green';
-      document.getElementById('adminThemeCustomColor').value = theme.primary || '#166534';
+      document.getElementById('adminThemePresetInput').value = theme.preset || 'iqbal_blue';
+      document.getElementById('adminThemeCustomColor').value = theme.primary || '#1a56db';
       if (status) status.textContent = 'Active theme: ' + (theme.name || theme.preset);
     } catch (err) {
       if (status) status.textContent = 'Error loading theme: ' + err.message;
@@ -68,7 +68,7 @@
 
   window.saveAdminTheme = async function () {
     var status = document.getElementById('adminThemeStatus');
-    var preset = document.getElementById('adminThemePresetInput').value || 'green';
+    var preset = document.getElementById('adminThemePresetInput').value || 'iqbal_blue';
     var customColor = document.getElementById('adminThemeCustomColor').value;
     var useCustom = document.getElementById('adminThemeUseCustom').checked;
     try {

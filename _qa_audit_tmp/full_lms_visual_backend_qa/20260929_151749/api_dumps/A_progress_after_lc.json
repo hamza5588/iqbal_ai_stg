@@ -1,0 +1,79 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/progress",
+  "body": {
+    "data": {
+      "learning_path": {
+        "completed_count": 5,
+        "current_step": null,
+        "id": 80,
+        "items": [
+          {
+            "completed_at": "2026-09-29T22:19:38.888150",
+            "id": 86,
+            "item_id": 0,
+            "item_type": "practice",
+            "label": "Learning Chat \u2014 practice weak areas",
+            "sort_order": 0,
+            "status": "completed",
+            "title": "Learning Chat \u2014 practice weak areas"
+          }
+        ],
+        "percent": 100.0,
+        "status": "completed",
+        "title": "Personalized Learning Path",
+        "total_count": 5,
+        "weak_area_progress": {
+          "cleared": 5,
+          "percent": 100.0,
+          "total": 5,
+          "weak_remaining": 0
+        }
+      },
+      "overall_progress": 63.64,
+      "topics": [
+        {
+          "last_assessed_at": "2026-09-29T22:19:38.878913",
+          "mastery_status": "improving",
+          "sample_size": 18,
+          "score_percent": 61.111111111111114,
+          "topic_id": 34,
+          "topic_name": "Geometry"
+        },
+        {
+          "last_assessed_at": "2026-09-29T22:19:15.496060",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T22:19:15.496060",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 41,
+          "topic_name": "Polynomials and Factors"
+        },
+        {
+          "last_assessed_at": "2026-09-29T22:19:15.496060",
+          "mastery_status": "needs_practice",
+          "sample_size": 4,
+          "score_percent": 75.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T22:19:15.496060",
+          "mastery_status": "mastered",
+          "sample_size": 1,
+          "score_percent": 100.0,
+          "topic_id": 66,
+          "topic_name": "Statistics and Averages"
+        }
+      ]
+    },
+    "success": true
+  }
+}

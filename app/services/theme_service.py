@@ -13,8 +13,15 @@ logger = logging.getLogger(__name__)
 
 THEME_SETTING_KEY = "platform_theme"
 
-# Preset palettes — green matches current LMS default
+# Preset palettes — "iqbal_blue" is the new UI design (updated_new_ui) and the default
 THEME_PRESETS: Dict[str, Dict[str, str]] = {
+    "iqbal_blue": {
+        "primary": "#1a56db",
+        "secondary": "#12408a",
+        "light": "#dbeafe",
+        "muted": "#eff6ff",
+        "name": "Iqbal Blue",
+    },
     "green": {
         "primary": "#166534",
         "secondary": "#14532d",
@@ -80,7 +87,7 @@ THEME_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-DEFAULT_PRESET = "green"
+DEFAULT_PRESET = "iqbal_blue"
 
 
 def _hex_to_rgb(hex_color: str) -> Optional[Tuple[int, int, int]]:

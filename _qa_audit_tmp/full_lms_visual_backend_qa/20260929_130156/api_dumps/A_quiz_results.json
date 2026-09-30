@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/91/results",
+  "body": {
+    "data": {
+      "all_topics": [],
+      "answered_count": 5,
+      "assessment_type": "quiz",
+      "attempt_id": 91,
+      "max_score": 5.0,
+      "score": 3.0,
+      "score_percent": 60.0,
+      "strong_topics": [],
+      "submitted_at": "2026-09-29T20:06:13.930032",
+      "timed_out": false,
+      "topic_breakdown": [],
+      "unanswered_count": 0,
+      "weak_topics": []
+    },
+    "success": true
+  }
+}

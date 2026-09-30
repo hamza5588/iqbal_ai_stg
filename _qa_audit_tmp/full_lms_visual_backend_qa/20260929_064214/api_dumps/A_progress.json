@@ -1,0 +1,120 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/progress",
+  "body": {
+    "data": {
+      "learning_path": {
+        "completed_count": 7,
+        "current_step": {
+          "completed_at": null,
+          "id": 62,
+          "item_id": 0,
+          "item_type": "practice",
+          "label": "Learning Chat \u2014 practice weak areas",
+          "sort_order": 0,
+          "status": "in_progress",
+          "title": "Learning Chat \u2014 practice weak areas"
+        },
+        "id": 56,
+        "items": [
+          {
+            "completed_at": null,
+            "id": 62,
+            "item_id": 0,
+            "item_type": "practice",
+            "label": "Learning Chat \u2014 practice weak areas",
+            "sort_order": 0,
+            "status": "in_progress",
+            "title": "Learning Chat \u2014 practice weak areas"
+          }
+        ],
+        "percent": 77.8,
+        "status": "active",
+        "title": "Personalized Learning Path",
+        "total_count": 9,
+        "weak_area_progress": {
+          "cleared": 7,
+          "percent": 77.8,
+          "total": 9,
+          "weak_remaining": 2
+        }
+      },
+      "overall_progress": 64.0,
+      "topics": [
+        {
+          "last_assessed_at": "2026-09-29T13:45:08.699274",
+          "mastery_status": "mastered",
+          "sample_size": 10,
+          "score_percent": 100.0,
+          "topic_id": 34,
+          "topic_name": "Geometry"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:46:28.256181",
+          "mastery_status": "mastered",
+          "sample_size": 2,
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:46:28.256181",
+          "mastery_status": "needs_practice",
+          "sample_size": 6,
+          "score_percent": 66.66666666666667,
+          "topic_id": 36,
+          "topic_name": "Triangles"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:46:28.256181",
+          "mastery_status": "needs_practice",
+          "sample_size": 4,
+          "score_percent": 75.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:44:06.330446",
+          "mastery_status": "mastered",
+          "sample_size": 3,
+          "score_percent": 100.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:46:28.256181",
+          "mastery_status": "needs_practice",
+          "sample_size": 4,
+          "score_percent": 75.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:46:28.256181",
+          "mastery_status": "weak",
+          "sample_size": 13,
+          "score_percent": 38.46153846153846,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:45:08.699274",
+          "mastery_status": "weak",
+          "sample_size": 6,
+          "score_percent": 0.0,
+          "topic_id": 52,
+          "topic_name": "Triangle Properties"
+        },
+        {
+          "last_assessed_at": "2026-09-29T13:46:28.256181",
+          "mastery_status": "mastered",
+          "sample_size": 2,
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities"
+        }
+      ]
+    },
+    "success": true
+  }
+}

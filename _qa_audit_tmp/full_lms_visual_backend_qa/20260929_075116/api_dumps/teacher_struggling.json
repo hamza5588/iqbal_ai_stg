@@ -1,0 +1,50 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/20/analytics/struggling",
+  "body": {
+    "data": [
+      {
+        "email": "qa.student.a.20260929_075116@test.local",
+        "enrolled_at": "2026-09-29T14:53:10.509069",
+        "is_struggling": true,
+        "overall_progress": 62.3,
+        "student_id": 39,
+        "username": "qa_stu_a_075116",
+        "weak_topic_count": 4,
+        "weak_topics": [
+          {
+            "score_percent": 50.0,
+            "topic_id": 49,
+            "topic_name": "Algebra Basics"
+          },
+          {
+            "score_percent": 50.0,
+            "topic_id": 55,
+            "topic_name": "Coordinate Geometry"
+          },
+          {
+            "score_percent": 33.333333333333336,
+            "topic_id": 34,
+            "topic_name": "Geometry"
+          },
+          {
+            "score_percent": 0.0,
+            "topic_id": 69,
+            "topic_name": "Geometry and Triangles"
+          }
+        ]
+      },
+      {
+        "email": "qa.student.c.20260929_075116@test.local",
+        "enrolled_at": "2026-09-29T14:53:10.522875",
+        "is_struggling": true,
+        "overall_progress": 0.0,
+        "student_id": 41,
+        "username": "qa_stu_c_075116",
+        "weak_topic_count": 0,
+        "weak_topics": []
+      }
+    ],
+    "success": true
+  }
+}

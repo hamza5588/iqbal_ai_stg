@@ -1,0 +1,21 @@
+{% set sd_username = session.get('username') or 'Student' %}
+<header class="sd-topbar">
+  <a class="sd-brand" href="#diagnostic" onclick="sdShowView('diagnostic'); return false;" aria-label="Iqbal AI — Student Dashboard">
+    <img src="{{ url_for('static', filename='student/icons/iqbal-ai-logo.png') }}" alt="IQBAL AI — Intelligent Learning Platform">
+  </a>
+  {% include 'student/partials/mainnav.html' %}
+  <div class="sd-top-right">
+    <div class="sd-profile" id="userAvatar" role="button" tabindex="0" onclick="sdToggleAvatarMenu(event)"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sdToggleAvatarMenu(event);}"
+         aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+      <div class="sd-avatar">{{ sd_username[:1] | upper }}</div>
+      <b id="userName">{{ sd_username }}</b>
+      <i class="fas fa-chevron-down sd-caret"></i>
+    </div>
+    <div class="sd-avatar-menu" id="sdAvatarMenu" hidden>
+      <div class="sd-am-head"><b>{{ sd_username }}</b><span>Student</span></div>
+      <button type="button" onclick="sdCloseAvatarMenu(); openLmsJoinClassModal();"><i class="fas fa-plus"></i> Join a Class</button>
+      <button type="button" class="danger" onclick="sdCloseAvatarMenu(); logout();"><i class="fas fa-sign-out-alt"></i> Logout</button>
+    </div>
+  </div>
+</header>

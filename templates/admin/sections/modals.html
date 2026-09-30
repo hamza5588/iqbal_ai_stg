@@ -1,0 +1,120 @@
+<!-- Modals -->
+
+<!-- Create User Modal -->
+<div id="create-user-modal" class="ad-modal hidden" role="dialog" aria-modal="true" aria-labelledby="createUserTitle">
+    <div class="ad-modal-card">
+        <div class="ad-modal-head">
+            <div class="ad-icon-badge sm"><i class="fas fa-user-plus"></i></div>
+            <div><h3 id="createUserTitle">Create New User</h3><p>The account can sign in straight away.</p></div>
+            <button type="button" onclick="closeModal('create-user-modal')" class="ad-modal-close" aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="create-user-form" onsubmit="createUser(event)" data-wait-message="Creating user...">
+            <div class="ad-modal-body">
+                <div class="ad-form-grid">
+                    <div class="ad-field"><label for="create-username">Username *</label><input type="text" id="create-username" required></div>
+                    <div class="ad-field"><label for="create-role">Role *</label>
+                        <select id="create-role" required>
+                            <option value="student">Student</option>
+                            <option value="teacher">Teacher</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="ad-field full"><label for="create-email">Email *</label><input type="email" id="create-email" required></div>
+                    <div class="ad-field full"><label for="create-password">Password *</label><input type="password" id="create-password" required></div>
+                    <div class="ad-field"><label for="create-class-standard">Class Standard</label><input type="text" id="create-class-standard"></div>
+                    <div class="ad-field"><label for="create-medium">Medium</label><input type="text" id="create-medium"></div>
+                </div>
+            </div>
+            <div class="ad-modal-foot">
+                <button type="button" onclick="closeModal('create-user-modal')" class="ad-btn ad-btn-outline">Cancel</button>
+                <button type="submit" class="ad-btn ad-btn-primary">Create User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="edit-user-modal" class="ad-modal hidden" role="dialog" aria-modal="true" aria-labelledby="editUserTitle">
+    <div class="ad-modal-card">
+        <div class="ad-modal-head">
+            <div class="ad-icon-badge sm"><i class="fas fa-user-edit"></i></div>
+            <div><h3 id="editUserTitle">Edit User</h3><p>Update profile, role and subscription.</p></div>
+            <button type="button" onclick="closeModal('edit-user-modal')" class="ad-modal-close" aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="edit-user-form" onsubmit="updateUser(event)" data-wait-message="Saving user...">
+            <input type="hidden" id="edit-user-id">
+            <div class="ad-modal-body">
+                <div class="ad-form-grid">
+                    <div class="ad-field"><label for="edit-username">Username *</label><input type="text" id="edit-username" required></div>
+                    <div class="ad-field"><label for="edit-role">Role *</label>
+                        <select id="edit-role" required>
+                            <option value="student">Student</option>
+                            <option value="teacher">Teacher</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="ad-field full"><label for="edit-email">Email *</label><input type="email" id="edit-email" required></div>
+                    <div class="ad-field"><label for="edit-class-standard">Class Standard</label><input type="text" id="edit-class-standard"></div>
+                    <div class="ad-field"><label for="edit-medium">Medium</label><input type="text" id="edit-medium"></div>
+                    <div class="ad-field full"><label for="edit-subscription-tier">Subscription Tier</label>
+                        <select id="edit-subscription-tier">
+                            <option value="free">Free</option>
+                            <option value="pro">Pro</option>
+                            <option value="pro_plus">Pro Plus</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="ad-modal-foot">
+                <button type="button" onclick="closeModal('edit-user-modal')" class="ad-btn ad-btn-outline">Cancel</button>
+                <button type="submit" class="ad-btn ad-btn-primary">Update User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create Coupon Modal -->
+<div id="create-coupon-modal" class="ad-modal hidden" role="dialog" aria-modal="true" aria-labelledby="createCouponTitle">
+    <div class="ad-modal-card">
+        <div class="ad-modal-head">
+            <div class="ad-icon-badge sm"><i class="fas fa-ticket-alt"></i></div>
+            <div><h3 id="createCouponTitle">Create New Coupon</h3><p>Grants a subscription tier when redeemed.</p></div>
+            <button type="button" onclick="closeModal('create-coupon-modal')" class="ad-modal-close" aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="create-coupon-form" onsubmit="createCoupon(event)" data-wait-message="Creating coupon...">
+            <div class="ad-modal-body">
+                <div class="ad-form-grid">
+                    <div class="ad-field"><label for="create-coupon-code">Coupon Code *</label>
+                        <input type="text" id="create-coupon-code" required placeholder="e.g., SUMMER2024" class="uppercase">
+                        <p class="ad-help">Converted to uppercase</p>
+                    </div>
+                    <div class="ad-field"><label for="create-coupon-tier">Subscription Tier *</label>
+                        <select id="create-coupon-tier" required>
+                            <option value="pro">Pro</option>
+                            <option value="pro_plus">Pro Plus</option>
+                        </select>
+                    </div>
+                    <div class="ad-field full"><label for="create-coupon-description">Description</label><textarea id="create-coupon-description" rows="3"></textarea></div>
+                    <div class="ad-field"><label for="create-coupon-max-uses">Max Uses</label>
+                        <input type="number" id="create-coupon-max-uses" min="1" placeholder="Unlimited">
+                    </div>
+                    <div class="ad-field"><label for="create-coupon-expires">Expires At</label>
+                        <input type="datetime-local" id="create-coupon-expires">
+                        <p class="ad-help">Leave empty for no expiration</p>
+                    </div>
+                </div>
+            </div>
+            <div class="ad-modal-foot">
+                <button type="button" onclick="closeModal('create-coupon-modal')" class="ad-btn ad-btn-outline">Cancel</button>
+                <button type="submit" class="ad-btn ad-btn-primary">Create Coupon</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Notification Toast -->
+<div id="notification-toast" class="ad-toast hidden" role="status" aria-live="polite">
+    <div id="toast-icon" class="ad-toast-ic"></div>
+    <p id="toast-message"></p>
+    <button type="button" onclick="hideNotification()" aria-label="Dismiss"><i class="fas fa-times"></i></button>
+</div>

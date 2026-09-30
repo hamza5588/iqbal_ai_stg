@@ -21,9 +21,10 @@ DASHBOARD_SRC = "\n".join(p.read_text(encoding="utf-8") for p in [  # teacher UI
     ROOT / "static" / "teacher" / "js" / "teacher-lms-hubs.js",
     *sorted((ROOT / "templates" / "teacher").rglob("*.html")),
 ])
-STUDENT_DASHBOARD_SRC = (
-    ROOT / "templates" / "student_dashboard" / "student_dashboard.html"
-).read_text(encoding="utf-8")
+STUDENT_DASHBOARD_SRC = "\n".join(p.read_text(encoding="utf-8") for p in [  # student UI sources (formerly templates/student_dashboard/student_dashboard.html)
+    *sorted((ROOT / "static" / "student" / "js").glob("*.js")),
+    *sorted((ROOT / "templates" / "student").rglob("*.html")),
+])
 
 
 # --- Issue 1: exhaustive retrieval ------------------------------------------------
@@ -36,12 +37,12 @@ def test_teach_topic_tool_defined_and_registered():
 
 
 def test_student_direct_pdf_lessons_use_pdfjs_with_clickable_links():
-    assert "source_pdf_url: currentVersion.source_pdf_url || lesson.source_pdf_url" in STUDENT_DASHBOARD_SRC
-    assert "renderStudentLessonPdf(contentEl, lesson.source_pdf_url)" in STUDENT_DASHBOARD_SRC
+    assert "var pdfUrl = cur.source_pdf_url || l.source_pdf_url || null;" in STUDENT_DASHBOARD_SRC
+    assert "renderStudentLessonPdf(contentEl, pdfUrl)" in STUDENT_DASHBOARD_SRC
     assert "pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true })" in STUDENT_DASHBOARD_SRC
     assert "page.getAnnotations({ intent: 'display' })" in STUDENT_DASHBOARD_SRC
     assert "source-pdf-link-layer" in STUDENT_DASHBOARD_SRC
-    assert "formatLessonContentForView(rawContent)" in STUDENT_DASHBOARD_SRC
+    assert "contentEl.innerHTML = formatLessonContentForView(" in STUDENT_DASHBOARD_SRC
 
 
 def test_teach_topic_tool_uses_page_range_query_not_topk_search():

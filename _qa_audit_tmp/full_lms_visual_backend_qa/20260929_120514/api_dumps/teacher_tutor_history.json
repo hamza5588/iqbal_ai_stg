@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "url": "/api/lms/tutor/history?mode=teacher",
+  "body": {
+    "data": {
+      "has_long_term_memory": false,
+      "message_count": 2,
+      "messages": [
+        {
+          "created_at": "2026-09-29T19:12:52.167760",
+          "role": "user",
+          "text": "One tip for teaching fractions?"
+        },
+        {
+          "created_at": "2026-09-29T19:12:56.254761",
+          "role": "bot",
+          "text": "One effective tip for teaching fractions is to use visual aids. Incorporate tools like fraction circles, bars, or pie charts to help students visualize the concept of fractions as parts of a whole. This can make it easier for them to understand equivalence, addition, and subtraction of fractions. Additionally, using real-life examples, such as slicing a pizza or dividing a cake, can make the concept more relatable and engaging for students."
+        }
+      ]
+    },
+    "success": true
+  }
+}

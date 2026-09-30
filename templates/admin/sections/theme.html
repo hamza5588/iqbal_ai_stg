@@ -1,0 +1,30 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="theme-section" class="section hidden">
+    {{ page_head('Color Theme', 'Brand colour for the whole platform: dashboards, LMS and sign-in pages.', icon='fa-palette') }}
+
+    <div class="ad-card">
+        <div class="ad-card-head">
+            <div class="ad-section-title">
+                <div><h3>Preset themes</h3><p id="adminThemeStatus"></p></div>
+            </div>
+        </div>
+        <div id="adminThemePresets" class="ad-swatch-grid"></div>
+
+        <input type="hidden" id="adminThemePresetInput" value="iqbal_blue">
+
+        <label class="ad-check" for="adminThemeUseCustom">
+            <input type="checkbox" id="adminThemeUseCustom">
+            <span><b>Use a custom colour instead of a preset</b><span>Pick any brand colour. The preset selection is used when this is off.</span></span>
+        </label>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+            <input type="color" id="adminThemeCustomColor" value="#1a56db" disabled class="ad-color-input" aria-label="Custom brand colour">
+            <span class="ad-help" style="margin:0;">Custom brand colour</span>
+        </div>
+
+        <div class="ad-form-actions">
+            <button type="button" onclick="saveAdminTheme()" class="ad-btn ad-btn-primary"><i class="fas fa-save"></i>Save Theme for All Users</button>
+        </div>
+    </div>
+
+    <div class="ad-note"><i class="fas fa-info-circle"></i><span>The default is <b>Iqbal Blue</b> (#1a56db), the colour of the new design. Changes apply to every user on their next page load.</span></div>
+</div>

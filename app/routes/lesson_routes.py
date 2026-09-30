@@ -1022,6 +1022,8 @@ def browse_lessons():
         page = request.args.get('page', default=1, type=int)
         per_page = request.args.get('per_page', default=10, type=int)
         search_term = (request.args.get('q') or '').strip() or None
+        # Optional: only lessons of one enrolled class (teacher x grade link).
+        class_id = request.args.get('class_id', type=int)
 
         if not topic_id and topic_slug:
             topic = curriculum_service.get_topic_by_slug(topic_subject, topic_slug)
@@ -1035,7 +1037,7 @@ def browse_lessons():
             per_page=per_page,
             search_term=search_term,
             topic_id=topic_id,
-            teacher_grade_links=class_service.student_teacher_grade_links(session['user_id']),
+            teacher_grade_links=class_service.student_teacher_grade_links(session['user_id'], class_id=class_id),
         )
         # Defense in depth: never trust only the listing query for access control.
         # Re-check every returned row against the student's active class enrollment.

@@ -1,0 +1,149 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/79/results",
+  "body": {
+    "data": {
+      "all_topics": [
+        {
+          "correct": 3,
+          "question_ids": [
+            126,
+            127,
+            128,
+            129,
+            130
+          ],
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            131,
+            132,
+            133,
+            134,
+            135
+          ],
+          "score_percent": 60.0,
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            136,
+            137,
+            138,
+            139,
+            140
+          ],
+          "score_percent": 60.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations",
+          "total": 5
+        },
+        {
+          "correct": 9,
+          "question_ids": [
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153
+          ],
+          "score_percent": 69.23,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence",
+          "total": 13
+        },
+        {
+          "correct": 1,
+          "question_ids": [
+            154,
+            155,
+            156
+          ],
+          "score_percent": 33.33,
+          "topic_id": 74,
+          "topic_name": "Geometry and Measurement",
+          "total": 3
+        }
+      ],
+      "answered_count": 31,
+      "assessment_type": "diagnostic",
+      "attempt_id": 79,
+      "diagnostic_completed": true,
+      "max_score": 32.0,
+      "score": 19.0,
+      "score_percent": 59.38,
+      "strong_topics": [],
+      "submitted_at": "2026-09-29T19:07:17.230487",
+      "timed_out": false,
+      "topic_breakdown": [
+        {
+          "correct": 1,
+          "score_percent": 33.33,
+          "topic_id": 74,
+          "topic_name": "Geometry and Measurement",
+          "total": 3
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics",
+          "total": 5
+        },
+        {
+          "correct": 9,
+          "score_percent": 69.23,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence",
+          "total": 13
+        }
+      ],
+      "unanswered_count": 1,
+      "weak_topics": [
+        {
+          "correct": 1,
+          "question_ids": [
+            154,
+            155,
+            156
+          ],
+          "score_percent": 33.33,
+          "topic_id": 74,
+          "topic_name": "Geometry and Measurement",
+          "total": 3
+        }
+      ]
+    },
+    "success": true
+  }
+}

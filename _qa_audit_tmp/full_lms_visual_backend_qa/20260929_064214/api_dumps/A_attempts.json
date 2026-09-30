@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/attempts",
+  "body": {
+    "data": [
+      {
+        "assessment_id": 25,
+        "assessment_type": "diagnostic",
+        "assignment_id": null,
+        "attempt_id": 73,
+        "max_score": 32.0,
+        "score": 19.0,
+        "score_percent": 59.4,
+        "status": "submitted",
+        "submitted_at": "2026-09-29T13:43:56.580100",
+        "title": "Diagnostic Assessment"
+      }
+    ],
+    "success": true
+  }
+}

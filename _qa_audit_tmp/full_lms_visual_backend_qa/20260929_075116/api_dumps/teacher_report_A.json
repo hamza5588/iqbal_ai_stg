@@ -1,0 +1,140 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/20/students/39/report",
+  "body": {
+    "data": {
+      "overall_progress": 62.3,
+      "recent_attempts": [
+        {
+          "assessment_id": 48,
+          "attempt_id": 76,
+          "score_percent": 60.0,
+          "submitted_at": "2026-09-29T15:00:27.926943"
+        },
+        {
+          "assessment_id": 25,
+          "attempt_id": 75,
+          "score_percent": 59.4,
+          "submitted_at": "2026-09-29T14:53:32.306247"
+        }
+      ],
+      "student_id": 39,
+      "topics": [
+        {
+          "last_assessed_at": "2026-09-29T14:57:50.014832",
+          "mastery_status": "weak",
+          "sample_size": 3,
+          "score_percent": 33.333333333333336,
+          "topic_id": 34,
+          "topic_name": "Geometry"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:57:50.014832",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:57:50.014832",
+          "mastery_status": "needs_practice",
+          "sample_size": 4,
+          "score_percent": 75.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:57:50.014832",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:56:55.546343",
+          "mastery_status": "mastered",
+          "sample_size": 1,
+          "score_percent": 100.0,
+          "topic_id": 48,
+          "topic_name": "Statistics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:57:50.014832",
+          "mastery_status": "weak",
+          "sample_size": 2,
+          "score_percent": 50.0,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:55:26.266165",
+          "mastery_status": "needs_practice",
+          "sample_size": 15,
+          "score_percent": 60.0,
+          "topic_id": 52,
+          "topic_name": "Triangle Properties"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:55:26.266165",
+          "mastery_status": "weak",
+          "sample_size": 2,
+          "score_percent": 50.0,
+          "topic_id": 55,
+          "topic_name": "Coordinate Geometry"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:57:50.014832",
+          "mastery_status": "needs_practice",
+          "sample_size": 12,
+          "score_percent": 66.66666666666667,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:55:26.266165",
+          "mastery_status": "mastered",
+          "sample_size": 1,
+          "score_percent": 100.0,
+          "topic_id": 66,
+          "topic_name": "Statistics and Averages"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:55:26.266165",
+          "mastery_status": "improving",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:55:26.266165",
+          "mastery_status": "mastered",
+          "sample_size": 2,
+          "score_percent": 100.0,
+          "topic_id": 68,
+          "topic_name": "Linear Inequalities"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:57:24.883146",
+          "mastery_status": "weak",
+          "sample_size": 2,
+          "score_percent": 0.0,
+          "topic_id": 69,
+          "topic_name": "Geometry and Triangles"
+        },
+        {
+          "last_assessed_at": "2026-09-29T14:55:01.891673",
+          "mastery_status": "mastered",
+          "sample_size": 2,
+          "score_percent": 100.0,
+          "topic_id": 70,
+          "topic_name": "Inequalities and Linear Equations"
+        }
+      ],
+      "username": "qa_stu_a_075116"
+    },
+    "success": true
+  }
+}

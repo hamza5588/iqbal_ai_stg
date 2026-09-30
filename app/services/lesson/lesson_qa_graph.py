@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import time
 from typing import Optional, TypedDict, Literal, Dict, Any
 
@@ -542,6 +543,7 @@ def build_lesson_qa_graph():
 
 
 LESSON_QA_GRAPH = None
+_LESSON_QA_GRAPH_LOCK = threading.Lock()
 
 
 def init_lesson_qa_graph() -> None:
@@ -549,6 +551,17 @@ def init_lesson_qa_graph() -> None:
     global LESSON_QA_GRAPH
     LESSON_QA_GRAPH = build_lesson_qa_graph()
     logger.info("Lesson Q&A LangGraph initialized (Approach 3: stateless)")
+
+
+def _ensure_lesson_qa_graph() -> None:
+    """Build the graph on first use when startup skipped it (SKIP_EXTRA_STARTUP=true,
+    common for local runs) - lesson chat used to fail with a 500 in that case."""
+    if LESSON_QA_GRAPH is not None:
+        return
+    with _LESSON_QA_GRAPH_LOCK:
+        if LESSON_QA_GRAPH is None:
+            logger.warning("Lesson Q&A graph was not initialized at startup; building it now")
+            init_lesson_qa_graph()
 
 
 def invoke_lesson_qa(
@@ -568,8 +581,7 @@ def invoke_lesson_qa(
       - {"status": "needs_rag_confirmation", "permission_request": <payload_dict>}
       - {"status": "completed", "answer": <str>}
     """
-    if LESSON_QA_GRAPH is None:
-        raise RuntimeError("LESSON_QA_GRAPH is not initialized. Call init_lesson_qa_graph() at startup.")
+    _ensure_lesson_qa_graph()
 
     lesson_service = LessonService(api_key=None)
     result = LESSON_QA_GRAPH.invoke({

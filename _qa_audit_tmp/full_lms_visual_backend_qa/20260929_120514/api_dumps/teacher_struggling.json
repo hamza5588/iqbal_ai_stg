@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/21/analytics/struggling",
+  "body": {
+    "data": [],
+    "success": true
+  }
+}

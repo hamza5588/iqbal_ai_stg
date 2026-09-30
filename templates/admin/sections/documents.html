@@ -1,0 +1,26 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="documents-section" class="section hidden">
+    {{ page_head('Documents', 'PDFs uploaded by users for chat and lesson generation.', icon='fa-file-pdf') }}
+
+    <div class="ad-card ad-card-flush">
+        <div id="documents-table-container" class="ad-table-scroll">
+            <table class="ad-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>File Name</th>
+                        <th>User</th>
+                        <th>Size</th>
+                        <th>Uploaded</th>
+                        <th class="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="documents-tbody">
+                    <tr>
+                        <td colspan="6">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

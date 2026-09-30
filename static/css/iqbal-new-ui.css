@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap');
+
+/* Iqbal AI — new-UI consistency layer for every page outside the teacher/student dashboards
+   (auth, admin, settings). Same design system as updated_new_ui (teacher + student dashboards):
+   blue scale, #f4f7fc canvas, white cards with #e2e8f0 borders, Poppins headings / Inter body,
+   solid #1a56db primary buttons, blue focus rings.
+   Loaded LAST on a page (after its inline <style>); page hooks are body classes:
+     .nu-page  (all)   .nu-auth + .nu-login | .nu-reg | .nu-reset */
+
+/* ── Tokens: the admin platform theme (green by default) is remapped to the design blue ── */
+html:root {
+  --nu-blue-900: #0b3d91; --nu-blue-800: #12408a; --nu-blue-700: #1a56db; --nu-blue-600: #2563eb; --nu-blue-500: #3b82f6;
+  --nu-blue-100: #dbeafe; --nu-blue-50: #eff6ff; --nu-ink: #1e293b; --nu-muted: #64748b; --nu-line: #e2e8f0; --nu-bg: #f4f7fc;
+
+  --primary-color: #1a56db; --primary-rgb: 26, 86, 219;
+  --primary-50: #eff6ff; --primary-100: #dbeafe; --primary-200: #bfdbfe; --primary-300: #93c5fd; --primary-400: #3b82f6;
+  --primary-500: #1a56db; --primary-600: #1d4ed8; --primary-700: #12408a; --primary-800: #0b3d91; --primary-900: #0a2e6e;
+  --iqbal-primary: #1a56db; --iqbal-bg: #eff6ff; --brand-bar: #0b3d91;
+  --gradient-primary: linear-gradient(135deg, #2563eb 0%, #1a56db 100%);
+  --gradient-primary-accent: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  --lms-green: #1a56db; --lms-green-dark: #12408a; --lms-green-light: #dbeafe; --lms-green-muted: #eff6ff;
+  --green: #1a56db; --green-dark: #12408a; --green-light: #dbeafe; --green-mid: #2563eb; --green-pale: #e0ecff;
+  --green-50: #eff6ff; --green-100: #dbeafe; --green-500: #3b82f6; --green-600: #2563eb; --green-700: #1a56db; --green-900: #0b3d91;
+  --vl-green-500: #3b82f6; --vl-green-600: #1a56db; --vl-green-700: #12408a; --vl-green-900: #0b3d91;
+  --border-soft: #cbd5e1;
+  --theme-shadow-focus: rgba(26, 86, 219, .15); --theme-shadow-btn: rgba(26, 86, 219, .30); --theme-shadow-soft: rgba(26, 86, 219, .12);
+  --theme-accent-light: #60a5fa; --theme-accent-bright: #93c5fd;
+  --lime-500: #2563eb;
+}
+
+/* ── Base ── */
+body.nu-page { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: var(--nu-ink); background: var(--nu-bg) !important; -webkit-font-smoothing: antialiased; }
+.nu-page h1, .nu-page h2, .nu-page h3 { font-family: 'Poppins', 'Inter', sans-serif; letter-spacing: -.2px; }
+.nu-page input:focus, .nu-page select:focus, .nu-page textarea:focus { outline: none; }
+.nu-page img.iqbal-logo--image { max-width: 100%; }
+
+/* shared form + button language (auth) */
+.nu-auth input[type=email], .nu-auth input[type=password], .nu-auth input[type=text], .nu-auth select {
+  font-family: 'Inter', sans-serif; color: var(--nu-ink);
+}
+.nu-auth .input-wrap, .nu-auth .pw-box {
+  border-color: #cbd5e1 !important; border-radius: 10px !important; background: #fff; transition: border-color .15s, box-shadow .15s;
+}
+.nu-auth .input-wrap:focus-within, .nu-auth .pw-box:focus-within { border-color: var(--nu-blue-600) !important; box-shadow: 0 0 0 3px rgba(26, 86, 219, .15); }
+.nu-auth .input-wrap input:focus { box-shadow: none !important; }
+.nu-auth .input-wrap.invalid, .nu-auth .input-wrap input.field-invalid { border-color: #dc2626 !important; }
+.nu-auth .signin-btn, .nu-auth .btn-primary, .nu-auth button.primary, .nu-auth .btn-solid, .nu-auth .create-account-btn {
+  background: var(--nu-blue-700) !important; color: #fff !important; border: 0 !important; border-radius: 10px !important;
+  box-shadow: none; font-family: 'Inter', sans-serif; letter-spacing: 0;
+}
+.nu-auth .signin-btn:hover, .nu-auth .btn-primary:hover, .nu-auth button.primary:hover, .nu-auth .btn-solid:hover, .nu-auth .create-account-btn:hover {
+  background: var(--nu-blue-800) !important; opacity: 1; box-shadow: 0 6px 18px rgba(26, 86, 219, .25);
+}
+.nu-auth .btn-outline {
+  background: #fff !important; color: var(--nu-ink) !important; border: 1px solid var(--nu-line) !important; border-radius: 10px !important;
+}
+.nu-auth .btn-outline:hover { border-color: var(--nu-blue-500) !important; color: var(--nu-blue-700) !important; background: #fff !important; }
+.nu-auth .social-btn { border-radius: 10px; border-color: var(--nu-line); }
+
+/* ── Login ── */
+.nu-login header {
+  height: auto; background: #fff; border-bottom: 1px solid var(--nu-line); overflow: visible; position: sticky; top: 0; z-index: 20;
+}
+.nu-login header::before { display: none; }
+.nu-login .header-bar {
+  width: 100%; max-width: 1400px; margin: 0 auto; background: transparent; border: 0; border-radius: 0; backdrop-filter: none; padding: 12px 24px;
+}
+.nu-login .header-bar .btn { border-radius: 10px; padding: 10px 18px; letter-spacing: 0; }
+.nu-login main { margin: 36px auto 60px; align-items: stretch; }
+.nu-login .panel {
+  background: #fff; border: 1px solid var(--nu-line); border-radius: 16px; box-shadow: 0 8px 30px rgba(15, 23, 42, .05); min-height: 600px;
+}
+.nu-login .panel-left h1 { color: var(--nu-blue-900); font-weight: 700; }
+.nu-login .divider::before, .nu-login .divider::after { background: var(--nu-line); }
+.nu-login .panel-right { background: linear-gradient(160deg, #eff6ff 0%, #dbeafe 100%); border-color: #d6e4fb; }
+.nu-login .join-card { background: #fff; box-shadow: 0 10px 30px rgba(26, 86, 219, .10); border: 1px solid #dbe7fb; }
+.nu-login .join-card::before { display: none; }
+.nu-login .join-card h2 { color: var(--nu-blue-900); }
+.nu-login .forgot, .nu-login .secure, .nu-login .footer-note a { color: var(--nu-blue-700); }
+@media (max-width: 720px) {
+  .nu-login .header-bar { padding: 10px 14px; gap: 10px; }
+  .nu-login .header-bar .btn { padding: 8px 12px; font-size: .78rem; }
+  .nu-login main { margin-top: 18px; padding: 0 12px; }
+  .nu-login .panel { padding: 26px 20px; }
+}
+
+/* ── Registration flow (register email → email sent → complete registration) ── */
+.nu-reg .page-wrap { max-width: 680px; }
+.nu-reg .logo-badge { border: 1px solid var(--nu-line); box-shadow: 0 10px 30px rgba(26, 86, 219, .12); }
+.nu-reg .card { background: #fff !important; border: 1px solid var(--nu-line); border-radius: 18px !important; box-shadow: 0 8px 30px rgba(15, 23, 42, .05); }
+.nu-reg .card h1, .nu-reg .card .title { color: var(--nu-blue-900); }
+.nu-reg .email-form, .nu-reg .form-field, .nu-reg .info-box, .nu-reg .step-pill, .nu-reg .email-pill {
+  background: var(--nu-bg) !important; border: 1px solid var(--nu-line);
+}
+.nu-reg .form-field:focus-within { border-color: var(--nu-blue-500); box-shadow: 0 0 0 3px rgba(26, 86, 219, .12); }
+.nu-reg .form-field input, .nu-reg .form-field select {
+  background: #fff; border: 1px solid #cbd5e1 !important; border-radius: 10px !important;
+}
+.nu-reg .form-field input:focus, .nu-reg .form-field select:focus { border-color: var(--nu-blue-600) !important; box-shadow: 0 0 0 3px rgba(26, 86, 219, .15); }
+.nu-reg .divider::before, .nu-reg .divider::after { background: var(--nu-line) !important; }
+.nu-reg .page-footer { background: #fff; border: 1px solid var(--nu-line); }
+
+/* ── Password reset flow (enter email → verify OTP → new password) ── */
+body.nu-reset { background: var(--nu-bg) !important; }
+.nu-reset .left { background: linear-gradient(160deg, #eff6ff 0%, #dbeafe 70%, #cfe0fb 100%) !important; }
+.nu-reset .right, .nu-reset .main-col { background: transparent; }
+.nu-reset header {
+  background: #fff !important; border-bottom: 1px solid var(--nu-line); backdrop-filter: none !important; box-shadow: none !important;
+}
+.nu-reset .card, .nu-reset .panel, .nu-reset .side {
+  border: 1px solid var(--nu-line) !important; border-radius: 16px !important; box-shadow: 0 8px 30px rgba(15, 23, 42, .05) !important;
+}
+.nu-reset h1 { color: var(--nu-blue-900) !important; font-weight: 700 !important; }
+.nu-reset .side { background: linear-gradient(160deg, #eff6ff 0%, #dbeafe 100%) !important; }
+.nu-reset .step-label.active { color: var(--nu-blue-700) !important; font-weight: 600; }
+.nu-reset .art h2 { color: var(--nu-blue-900); }
+.nu-reset .circle.inactive { background: #e2e8f0; color: var(--nu-muted); }
+.nu-reset .line { background: var(--nu-line); }
+.nu-reset .line.done { background: var(--nu-blue-600); }
+.nu-reset .notice { background: var(--nu-blue-50) !important; border-color: #dbeafe !important; }
+.nu-reset .back-link, .nu-reset footer b { color: var(--nu-blue-700) !important; }
+.nu-reset .otp-row input { border-color: #cbd5e1 !important; border-radius: 10px !important; }
+.nu-reset .otp-row input:focus { border-color: var(--nu-blue-600) !important; box-shadow: 0 0 0 3px rgba(26, 86, 219, .15) !important; }
+.nu-reset .progress-fill { background: var(--nu-blue-600) !important; }
+@media (max-width: 900px) {
+  .nu-reset .logo { margin-bottom: 56px !important; }   /* clear the envelope letter (top:-30px) */
+}
+/* mobile: the 3-step stepper used fixed widths and overflowed small screens */
+@media (max-width: 720px) {
+  .nu-reset .stepper { width: 100%; justify-content: center; }
+  .nu-reset .step { width: auto !important; min-width: 0; flex: 0 1 auto; }
+  .nu-reset .line { width: auto !important; flex: 1 1 24px; min-width: 16px; max-width: 70px; }
+  .nu-reset .step-label { font-size: 11.5px; text-align: center; }
+  .nu-reset .right, .nu-reset .main-col { padding-left: 16px !important; padding-right: 16px !important; }
+  .nu-reset h1 { font-size: 28px !important; }
+  .nu-reset .card, .nu-reset .panel { padding: 22px !important; }
+  .nu-reset .otp-row { gap: 6px !important; }
+}
+
+/* Admin pages use static/admin/css/admin-console.css (ad- classes). */

@@ -1,0 +1,37 @@
+{# 03 — My Learning Path. Topic rows from the dashboard mastery data, path steps from the learning path,
+   quiz history from GET /api/lms/students/me/attempts (student-learning-path.js). #}
+{% include 'student/partials/stat_cards.html' %}
+
+<div class="sd-card">
+  <div class="sd-head-row">
+    <div class="sd-section-title">
+      <div class="sd-icon-badge"><img src="{{ url_for('static', filename='student/icons/my-learning-path.png') }}" alt=""></div>
+      <div><h2>My Learning Path</h2><p class="sd-desc">Personalized practice based on your diagnostic results to help you improve.</p></div>
+    </div>
+    <div class="sd-toolbar">
+      <div class="sd-search"><i class="fas fa-search"></i>
+        <input type="search" id="sdPathSearch" placeholder="Search learning path by topic..." oninput="sdRenderPathTopics()" aria-label="Search learning path">
+      </div>
+      <div class="sd-select"><label for="sdPathStatus">Status</label>
+        <select id="sdPathStatus" onchange="sdRenderPathTopics()">
+          <option value="">All topics</option>
+          <option value="available">Needs practice</option>
+          <option value="completed">Completed</option>
+        </select></div>
+    </div>
+  </div>
+  <div id="sdPathTopics" style="margin-top:16px;"><div class="sd-spinner"></div></div>
+</div>
+
+<div class="sd-card" id="sdPathStepsCard">
+  <div class="sd-head-row">
+    <div><h3 style="margin:0;color:var(--sd-blue-900);font-size:18px;">Path steps</h3><p class="sd-desc" id="sdPathStepsSub">Your next learning activities, in order.</p></div>
+  </div>
+  <div id="sdPathSteps" style="margin-top:12px;"></div>
+</div>
+
+<div class="sd-card">
+  <h3 style="margin:0 0 4px;color:var(--sd-blue-900);font-size:18px;">Quiz History</h3>
+  <p class="sd-desc">Every diagnostic and quiz you have attempted.</p>
+  <div id="sdAttemptHistory" style="margin-top:12px;"></div>
+</div>

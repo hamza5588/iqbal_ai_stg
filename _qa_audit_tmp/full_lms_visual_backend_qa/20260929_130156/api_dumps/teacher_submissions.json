@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/24/assignments/30/submissions",
+  "body": {
+    "data": [
+      {
+        "attempt_id": 91,
+        "score_percent": 60.0,
+        "status": "submitted",
+        "student_id": 56,
+        "submitted_at": "2026-09-29T20:06:13.987847"
+      },
+      {
+        "attempt_id": null,
+        "score_percent": null,
+        "status": "not_started",
+        "student_id": 58,
+        "submitted_at": null
+      }
+    ],
+    "success": true
+  }
+}

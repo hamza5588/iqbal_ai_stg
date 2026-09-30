@@ -1,0 +1,49 @@
+{# Shared LMS modals. IDs are the ones lms-*.js and student-*.js already use. #}
+
+<!-- Join a class (POST /api/lms/classes/join) -->
+<div id="lmsJoinClassModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsJoinClassModal()">
+  <div class="lms-modal lms-modal-sm" role="dialog" aria-modal="true" aria-labelledby="lmsJoinClassTitle">
+    <div class="lms-modal-header">
+      <h2 id="lmsJoinClassTitle">Join a Class</h2>
+      <button type="button" class="lms-modal-close" onclick="closeLmsJoinClassModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="lms-modal-body">
+      <p class="lms-status" id="lmsJoinGradeHint">Enter the join code from your teacher.</p>
+      <div class="lms-field">
+        <label class="lms-label" for="lmsJoinCodeInput">Join code</label>
+        <input id="lmsJoinCodeInput" type="text" class="lms-input" placeholder="e.g. AB12CD34" maxlength="12" style="text-transform:uppercase;"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();submitLmsJoinClass();}">
+      </div>
+      <div id="lmsJoinClassError" class="lms-error"></div>
+      <button type="button" class="sd-btn sd-btn-primary" style="width:100%;margin-top:8px;" onclick="submitLmsJoinClass()">Join Class</button>
+    </div>
+  </div>
+</div>
+
+<!-- Attempt result viewer (quiz history / View Detailed Report) -->
+<div id="lmsAttemptResultModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsAttemptResult()">
+  <div class="lms-modal" role="dialog" aria-modal="true">
+    <div class="lms-modal-header">
+      <h2>Quiz Result</h2>
+      <button type="button" class="lms-modal-close" onclick="closeLmsAttemptResult()" aria-label="Close">&times;</button>
+    </div>
+    <div class="lms-modal-body">
+      <div id="lmsAttemptResultBody"><p class="lms-status">Loading...</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Quiz taking (class assignments + learning-path quizzes) -->
+<div id="lmsStudentModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsStudentHub()">
+  <div class="lms-modal lms-modal-lg" role="dialog" aria-modal="true">
+    <div class="lms-modal-header">
+      <h2 id="lmsStudentModalTitle">Quiz</h2>
+      <button type="button" class="lms-modal-close" onclick="closeLmsStudentHub()" aria-label="Close">&times;</button>
+    </div>
+    <div class="lms-modal-body">
+      <div id="lmsAssignmentList"></div>
+      <div id="lmsQuizTaking" class="hidden"></div>
+      <div id="lmsQuizResult" class="hidden"></div>
+    </div>
+  </div>
+</div>

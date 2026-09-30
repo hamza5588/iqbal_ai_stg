@@ -1,0 +1,1134 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/84/questions",
+  "body": {
+    "data": {
+      "attempt_id": 84,
+      "current_question_index": 0,
+      "questions": [
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": "0.75",
+              "render": "0.75",
+              "text": "0.75"
+            },
+            {
+              "label": "B",
+              "latex": "\\frac{2}{7}",
+              "render": "\\(\\frac{2}{7}\\)",
+              "text": "\\frac{2}{7}"
+            },
+            {
+              "label": "C",
+              "latex": "\\text{sqrt}(2)",
+              "render": "sqrt(2)",
+              "text": "sqrt(2)"
+            },
+            {
+              "label": "D",
+              "latex": "4",
+              "render": "4",
+              "text": "4"
+            }
+          ],
+          "question_id": 126,
+          "question_latex": null,
+          "question_render": "Which number is irrational?",
+          "question_text": "Which number is irrational?",
+          "sort_order": 0,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": "3 + 5i",
+              "render": "3 + 5i",
+              "text": "3 + 5i"
+            },
+            {
+              "label": "B",
+              "latex": "-3 - 5i",
+              "render": "-3 - 5i",
+              "text": "-3 - 5i"
+            },
+            {
+              "label": "C",
+              "latex": "5 - 3i",
+              "render": "5 - 3i",
+              "text": "5 - 3i"
+            },
+            {
+              "label": "D",
+              "latex": "-3 + 5i",
+              "render": "-3 + 5i",
+              "text": "-3 + 5i"
+            }
+          ],
+          "question_id": 127,
+          "question_latex": null,
+          "question_render": "The conjugate of 3 - 5i is:",
+          "question_text": "The conjugate of 3 - 5i is:",
+          "sort_order": 1,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": "2",
+              "render": "2",
+              "text": "2"
+            },
+            {
+              "label": "B",
+              "latex": "3",
+              "render": "3",
+              "text": "3"
+            },
+            {
+              "label": "C",
+              "latex": "10",
+              "render": "10",
+              "text": "10"
+            },
+            {
+              "label": "D",
+              "latex": "100",
+              "render": "100",
+              "text": "100"
+            }
+          ],
+          "question_id": 128,
+          "question_latex": null,
+          "question_render": "log10 1000 equals:",
+          "question_text": "log10 1000 equals:",
+          "sort_order": 2,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": "\\text{log} 7",
+              "render": "log 7",
+              "text": "log 7"
+            },
+            {
+              "label": "B",
+              "latex": "\\text{log} 3",
+              "render": "log 3",
+              "text": "log 3"
+            },
+            {
+              "label": "C",
+              "latex": "1",
+              "render": "1",
+              "text": "1"
+            },
+            {
+              "label": "D",
+              "latex": "10",
+              "render": "10",
+              "text": "10"
+            }
+          ],
+          "question_id": 129,
+          "question_latex": null,
+          "question_render": "log 2 + log 5 (common log) equals:",
+          "question_text": "log 2 + log 5 (common log) equals:",
+          "sort_order": 3,
+          "time_limit_seconds": 60
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": "\\frac{1}{x} + 2",
+              "render": "\\(\\frac{1}{x} + 2\\)",
+              "text": "\\frac{1}{x} + 2"
+            },
+            {
+              "label": "B",
+              "latex": "x^{2} + 3x + 1",
+              "render": "\\(x^{2} + 3x + 1\\)",
+              "text": "x^{2} + 3x + 1"
+            },
+            {
+              "label": "C",
+              "latex": "\\text{sqrt}(x) + 1",
+              "render": "sqrt(x) + 1",
+              "text": "sqrt(x) + 1"
+            },
+            {
+              "label": "D",
+              "latex": "2^{x}",
+              "render": "\\(2^{x}\\)",
+              "text": "2^{x}"
+            }
+          ],
+          "question_id": 130,
+          "question_latex": null,
+          "question_render": "Which is a polynomial?",
+          "question_text": "Which is a polynomial?",
+          "sort_order": 4,
+          "time_limit_seconds": 60
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": "4",
+              "render": "4",
+              "text": "4"
+            },
+            {
+              "label": "B",
+              "latex": "5",
+              "render": "5",
+              "text": "5"
+            },
+            {
+              "label": "C",
+              "latex": "6",
+              "render": "6",
+              "text": "6"
+            },
+            {
+              "label": "D",
+              "latex": "13",
+              "render": "13",
+              "text": "13"
+            }
+          ],
+          "question_id": 131,
+          "question_latex": null,
+          "question_render": "If a+b=5 and a-b=1, then ab equals:",
+          "question_text": "If a+b=5 and a-b=1, then ab equals:",
+          "sort_order": 5,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": "(x+2)(x+6)",
+              "render": "(x+2)(x+6)",
+              "text": "(x+2)(x+6)"
+            },
+            {
+              "label": "B",
+              "latex": "(x+3)(x+4)",
+              "render": "(x+3)(x+4)",
+              "text": "(x+3)(x+4)"
+            },
+            {
+              "label": "C",
+              "latex": "(x+1)(x+12)",
+              "render": "(x+1)(x+12)",
+              "text": "(x+1)(x+12)"
+            },
+            {
+              "label": "D",
+              "latex": "(x-3)(x-4)",
+              "render": "(x-3)(x-4)",
+              "text": "(x-3)(x-4)"
+            }
+          ],
+          "question_id": 132,
+          "question_latex": null,
+          "question_render": "\\(x^{2} + 7x + 12\\)",
+          "question_text": "x^{2} + 7x + 12",
+          "sort_order": 6,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": "0",
+              "render": "0",
+              "text": "0"
+            },
+            {
+              "label": "B",
+              "latex": "1",
+              "render": "1",
+              "text": "1"
+            },
+            {
+              "label": "C",
+              "latex": "2",
+              "render": "2",
+              "text": "2"
+            },
+            {
+              "label": "D",
+              "latex": "-1",
+              "render": "-1",
+              "text": "-1"
+            }
+          ],
+          "question_id": 133,
+          "question_latex": null,
+          "question_render": "Remainder when \\(x^2 - 3x + 2\\) is divided by x-1 is:",
+          "question_text": "Remainder when x^2 - 3x + 2 is divided by x-1 is:",
+          "sort_order": 7,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "hard",
+          "options": [
+            {
+              "label": "A",
+              "latex": "36 x^{2} y^{3}",
+              "render": "\\(36 x^{2} y^{3}\\)",
+              "text": "36 x^{2} y^{3}"
+            },
+            {
+              "label": "B",
+              "latex": "6 x y",
+              "render": "6 x y",
+              "text": "6 x y"
+            },
+            {
+              "label": "C",
+              "latex": "12 x y",
+              "render": "12 x y",
+              "text": "12 x y"
+            },
+            {
+              "label": "D",
+              "latex": "3 x^{2} y^{3}",
+              "render": "\\(3 x^{2} y^{3}\\)",
+              "text": "3 x^{2} y^{3}"
+            }
+          ],
+          "question_id": 134,
+          "question_latex": null,
+          "question_render": "\\(HCF(12 x^{2} y, 18 x y^{3})\\)",
+          "question_text": "HCF(12 x^{2} y, 18 x y^{3})",
+          "sort_order": 8,
+          "time_limit_seconds": 120
+        },
+        {
+          "difficulty": "hard",
+          "options": [
+            {
+              "label": "A",
+              "latex": "\\text{HCF} + \\text{LCM}",
+              "render": "HCF + LCM",
+              "text": "HCF + LCM"
+            },
+            {
+              "label": "B",
+              "latex": "\\text{the larger expression}",
+              "render": "the larger expression",
+              "text": "the larger expression"
+            },
+            {
+              "label": "C",
+              "latex": "\\text{product of the two expressions}",
+              "render": "product of the two expressions",
+              "text": "product of the two expressions"
+            },
+            {
+              "label": "D",
+              "latex": "1",
+              "render": "1",
+              "text": "1"
+            }
+          ],
+          "question_id": 135,
+          "question_latex": null,
+          "question_render": "\\(HCF \\times LCM\\)",
+          "question_text": "HCF \\times LCM",
+          "sort_order": 9,
+          "time_limit_seconds": 120
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": "x=3",
+              "render": "x=3",
+              "text": "x=3"
+            },
+            {
+              "label": "B",
+              "latex": "x=5",
+              "render": "x=5",
+              "text": "x=5"
+            },
+            {
+              "label": "C",
+              "latex": "x=7",
+              "render": "x=7",
+              "text": "x=7"
+            },
+            {
+              "label": "D",
+              "latex": "x=15",
+              "render": "x=15",
+              "text": "x=15"
+            }
+          ],
+          "question_id": 136,
+          "question_latex": null,
+          "question_render": "3x + 7 = 22",
+          "question_text": "3x + 7 = 22",
+          "sort_order": 10,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": "x < -3",
+              "render": "x < -3",
+              "text": "x < -3"
+            },
+            {
+              "label": "B",
+              "latex": "x > -3",
+              "render": "x > -3",
+              "text": "x > -3"
+            },
+            {
+              "label": "C",
+              "latex": "x < 3",
+              "render": "x < 3",
+              "text": "x < 3"
+            },
+            {
+              "label": "D",
+              "latex": "x > 3",
+              "render": "x > 3",
+              "text": "x > 3"
+            }
+          ],
+          "question_id": 137,
+          "question_latex": null,
+          "question_render": "-2x < 6",
+          "question_text": "-2x < 6",
+          "sort_order": 11,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "a horizontal line",
+              "text": "a horizontal line"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "a vertical line",
+              "text": "a vertical line"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "a line through origin with slope 3",
+              "text": "a line through origin with slope 3"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "the x-axis",
+              "text": "the x-axis"
+            }
+          ],
+          "question_id": 138,
+          "question_latex": null,
+          "question_render": "The graph of x = 3 is:",
+          "question_text": "The graph of x = 3 is:",
+          "sort_order": 12,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "I",
+              "text": "I"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "II",
+              "text": "II"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "III",
+              "text": "III"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "IV",
+              "text": "IV"
+            }
+          ],
+          "question_id": 139,
+          "question_latex": null,
+          "question_render": "Point (2,-5) lies in quadrant:",
+          "question_text": "Point (2,-5) lies in quadrant:",
+          "sort_order": 13,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "x=3 only",
+              "text": "x=3 only"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "x=-3 only",
+              "text": "x=-3 only"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "x=3 or x=-3",
+              "text": "x=3 or x=-3"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "x=9 or x=-9",
+              "text": "x=9 or x=-9"
+            }
+          ],
+          "question_id": 140,
+          "question_latex": null,
+          "question_render": "\\(Solve x^2 - 9 = 0.\\)",
+          "question_text": "Solve x^2 - 9 = 0.",
+          "sort_order": 14,
+          "time_limit_seconds": 60
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "-36",
+              "text": "-36"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "0",
+              "text": "0"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "9",
+              "text": "9"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "36",
+              "text": "36"
+            }
+          ],
+          "question_id": 141,
+          "question_latex": null,
+          "question_render": "\\(Discriminant of x^2 + 6x + 9 = 0 is:\\)",
+          "question_text": "Discriminant of x^2 + 6x + 9 = 0 is:",
+          "sort_order": 15,
+          "time_limit_seconds": 60
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "SSS",
+              "text": "SSS"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "ASA",
+              "text": "ASA"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "RHS",
+              "text": "RHS"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "AAA",
+              "text": "AAA"
+            }
+          ],
+          "question_id": 142,
+          "question_latex": null,
+          "question_render": "Which condition proves congruence of right triangles using hypotenuse and one leg?",
+          "question_text": "Which condition proves congruence of right triangles using hypotenuse and one leg?",
+          "sort_order": 16,
+          "time_limit_seconds": 60
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "congruence always",
+              "text": "congruence always"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "similarity, not necessarily congruence",
+              "text": "similarity, not necessarily congruence"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "equal area only",
+              "text": "equal area only"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "they are right triangles",
+              "text": "they are right triangles"
+            }
+          ],
+          "question_id": 143,
+          "question_latex": null,
+          "question_render": "AAA for two triangles shows:",
+          "question_text": "AAA for two triangles shows:",
+          "sort_order": 17,
+          "time_limit_seconds": 60
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "are always equal",
+              "text": "are always equal"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "bisect each other",
+              "text": "bisect each other"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "are always perpendicular",
+              "text": "are always perpendicular"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "never intersect",
+              "text": "never intersect"
+            }
+          ],
+          "question_id": 144,
+          "question_latex": null,
+          "question_render": "Diagonals of a parallelogram:",
+          "question_text": "Diagonals of a parallelogram:",
+          "sort_order": 18,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "equal to the third side",
+              "text": "equal to the third side"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "perpendicular to the third side",
+              "text": "perpendicular to the third side"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "parallel to the third side and half as long",
+              "text": "parallel to the third side and half as long"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "twice the third side",
+              "text": "twice the third side"
+            }
+          ],
+          "question_id": 145,
+          "question_latex": null,
+          "question_render": "Midpoint theorem: the segment joining midpoints of two sides is:",
+          "question_text": "Midpoint theorem: the segment joining midpoints of two sides is:",
+          "sort_order": 19,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "closer to A than to B",
+              "text": "closer to A than to B"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "equidistant from A and B",
+              "text": "equidistant from A and B"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "the midpoint of AB only",
+              "text": "the midpoint of AB only"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "on line AB",
+              "text": "on line AB"
+            }
+          ],
+          "question_id": 146,
+          "question_latex": null,
+          "question_render": "A point on the perpendicular bisector of AB is:",
+          "question_text": "A point on the perpendicular bisector of AB is:",
+          "sort_order": 20,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "centroid",
+              "text": "centroid"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "or thocentre",
+              "text": "or thocentre"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "circumcentre",
+              "text": "circumcentre"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "incentre",
+              "text": "incentre"
+            }
+          ],
+          "question_id": 147,
+          "question_latex": null,
+          "question_render": "Angle bisectors of a triangle meet at the:",
+          "question_text": "Angle bisectors of a triangle meet at the:",
+          "sort_order": 21,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "2, 3, 6",
+              "text": "2, 3, 6"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "3, 4, 5",
+              "text": "3, 4, 5"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "1, 2, 3",
+              "text": "1, 2, 3"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "5, 1, 1",
+              "text": "5, 1, 1"
+            }
+          ],
+          "question_id": 148,
+          "question_latex": null,
+          "question_render": "Which lengths can be sides of a triangle?",
+          "question_text": "Which lengths can be sides of a triangle?",
+          "sort_order": 22,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "the shortest side",
+              "text": "the shortest side"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "the longest side",
+              "text": "the longest side"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "a median",
+              "text": "a median"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "always the base",
+              "text": "always the base"
+            }
+          ],
+          "question_id": 149,
+          "question_latex": null,
+          "question_render": "In a triangle, the side opposite the greatest angle is:",
+          "question_text": "In a triangle, the side opposite the greatest angle is:",
+          "sort_order": 23,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "three sides",
+              "text": "three sides"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "two sides and the included angle",
+              "text": "two sides and the included angle"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "two angles and no side",
+              "text": "two angles and no side"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "hypotenuse only",
+              "text": "hypotenuse only"
+            }
+          ],
+          "question_id": 150,
+          "question_latex": null,
+          "question_render": "SAS construction uses:",
+          "question_text": "SAS construction uses:",
+          "sort_order": 24,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "incentre",
+              "text": "incentre"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "circumcentre",
+              "text": "circumcentre"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "centroid",
+              "text": "centroid"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "or thocentre",
+              "text": "or thocentre"
+            }
+          ],
+          "question_id": 151,
+          "question_latex": null,
+          "question_render": "Medians of a triangle are concurrent at the:",
+          "question_text": "Medians of a triangle are concurrent at the:",
+          "sort_order": 25,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "16",
+              "text": "16"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "30",
+              "text": "30"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "60",
+              "text": "60"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "120",
+              "text": "120"
+            }
+          ],
+          "question_id": 152,
+          "question_latex": null,
+          "question_render": "Area of a triangle with base 10 and height 6 is:",
+          "question_text": "Area of a triangle with base 10 and height 6 is:",
+          "sort_order": 26,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "equal perimeters",
+              "text": "equal perimeters"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "equal areas",
+              "text": "equal areas"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "equal diagonals",
+              "text": "equal diagonals"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "congruent shapes",
+              "text": "congruent shapes"
+            }
+          ],
+          "question_id": 153,
+          "question_latex": null,
+          "question_render": "Parallelograms on the same base and between the same parallels have:",
+          "question_text": "Parallelograms on the same base and between the same parallels have:",
+          "sort_order": 27,
+          "time_limit_seconds": 90
+        },
+        {
+          "difficulty": "easy",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "5",
+              "text": "5"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "6",
+              "text": "6"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "7",
+              "text": "7"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "12",
+              "text": "12"
+            }
+          ],
+          "question_id": 154,
+          "question_latex": null,
+          "question_render": "In a right triangle with legs 3 and 4, the hypotenuse is:",
+          "question_text": "In a right triangle with legs 3 and 4, the hypotenuse is:",
+          "sort_order": 28,
+          "time_limit_seconds": 30
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "any triangle",
+              "text": "any triangle"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "equilateral only",
+              "text": "equilateral only"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "right-angled",
+              "text": "right-angled"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "obtuse only",
+              "text": "obtuse only"
+            }
+          ],
+          "question_id": 155,
+          "question_latex": null,
+          "question_render": "Pythagoras \\(a^2 + b^2 = c^2\\) applies when the triangle is:",
+          "question_text": "Pythagoras a^2 + b^2 = c^2 applies when the triangle is:",
+          "sort_order": 29,
+          "time_limit_seconds": 60
+        },
+        {
+          "difficulty": "hard",
+          "options": [
+            {
+              "label": "A",
+              "latex": "4",
+              "render": "4",
+              "text": "4"
+            },
+            {
+              "label": "B",
+              "latex": "5",
+              "render": "5",
+              "text": "5"
+            },
+            {
+              "label": "C",
+              "latex": "6",
+              "render": "6",
+              "text": "6"
+            },
+            {
+              "label": "D",
+              "latex": "7",
+              "render": "7",
+              "text": "7"
+            }
+          ],
+          "question_id": 156,
+          "question_latex": null,
+          "question_render": "\\[\\frac{(4-1)^{2} + (6-2)^{2}}{1}\\]",
+          "question_text": "\\frac{(4-1)^{2} + (6-2)^{2}}{1}",
+          "sort_order": 30,
+          "time_limit_seconds": 120
+        },
+        {
+          "difficulty": "hard",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "(4,4)",
+              "text": "(4,4)"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "(4,5)",
+              "text": "(4,5)"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "(8,10)",
+              "text": "(8,10)"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "(3,4)",
+              "text": "(3,4)"
+            }
+          ],
+          "question_id": 157,
+          "question_latex": null,
+          "question_render": "\\[\\frac{(2+6)}{2}, \\frac{(3+7)}{2}\\]",
+          "question_text": "\\frac{(2+6)}{2}, \\frac{(3+7)}{2}",
+          "sort_order": 31,
+          "time_limit_seconds": 120
+        }
+      ],
+      "saved_answers": {}
+    },
+    "success": true
+  }
+}

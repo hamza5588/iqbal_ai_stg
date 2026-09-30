@@ -1,0 +1,318 @@
+[
+  {
+    "step": "start",
+    "sts": {
+      "34": [
+        55.6,
+        "weak",
+        18
+      ],
+      "35": [
+        100.0,
+        "mastered",
+        2
+      ],
+      "36": [
+        66.7,
+        "needs_practice",
+        6
+      ],
+      "40": [
+        60.0,
+        "needs_practice",
+        5
+      ],
+      "42": [
+        100.0,
+        "mastered",
+        3
+      ],
+      "46": [
+        60.0,
+        "needs_practice",
+        5
+      ],
+      "48": [
+        100.0,
+        "mastered",
+        1
+      ],
+      "49": [
+        38.5,
+        "weak",
+        13
+      ],
+      "52": [
+        0.0,
+        "weak",
+        6
+      ],
+      "65": [
+        100.0,
+        "mastered",
+        2
+      ]
+    }
+  },
+  {
+    "step": "dashboard#1",
+    "secs": 0.1,
+    "db_changed": {},
+    "weak": [
+      "Algebra Basics",
+      "Geometry",
+      "Triangle Properties"
+    ],
+    "overall": 54.1
+  },
+  {
+    "step": "dashboard#2",
+    "secs": 0.0,
+    "db_changed": {},
+    "weak": [
+      "Algebra Basics",
+      "Geometry",
+      "Triangle Properties"
+    ],
+    "overall": 54.1
+  },
+  {
+    "step": "results#1",
+    "secs": 16.5,
+    "db_changed": {
+      "49": [
+        [
+          38.5,
+          "weak",
+          13
+        ],
+        [
+          0.0,
+          "weak",
+          4
+        ]
+      ],
+      "52": [
+        [
+          0.0,
+          "weak",
+          6
+        ],
+        [
+          66.7,
+          "improving",
+          12
+        ]
+      ],
+      "55": [
+        null,
+        [
+          100.0,
+          "mastered",
+          1
+        ]
+      ]
+    },
+    "breakdown": [
+      [
+        "Geometry",
+        11,
+        19
+      ],
+      [
+        "Inequalities",
+        2,
+        2
+      ],
+      [
+        "Logarithms",
+        3,
+        4
+      ],
+      [
+        "Polynomials",
+        3,
+        6
+      ]
+    ],
+    "all_topics": [
+      [
+        "Logarithms",
+        3,
+        5
+      ],
+      [
+        "Polynomials and Factors",
+        3,
+        5
+      ],
+      [
+        "Inequalities and Equations",
+        3,
+        4
+      ],
+      [
+        "Geometry",
+        9,
+        16
+      ],
+      [
+        "Statistics",
+        1,
+        1
+      ]
+    ]
+  },
+  {
+    "step": "results#2",
+    "secs": 21.6,
+    "db_changed": {
+      "34": [
+        [
+          55.6,
+          "weak",
+          18
+        ],
+        [
+          0.0,
+          "weak",
+          6
+        ]
+      ],
+      "35": [
+        [
+          100.0,
+          "mastered",
+          2
+        ],
+        [
+          100.0,
+          "mastered",
+          1
+        ]
+      ],
+      "36": [
+        [
+          66.7,
+          "needs_practice",
+          6
+        ],
+        [
+          100.0,
+          "mastered",
+          8
+        ]
+      ],
+      "46": [
+        [
+          60.0,
+          "needs_practice",
+          5
+        ],
+        [
+          100.0,
+          "mastered",
+          3
+        ]
+      ],
+      "49": [
+        [
+          0.0,
+          "weak",
+          4
+        ],
+        [
+          0.0,
+          "weak",
+          3
+        ]
+      ],
+      "55": [
+        [
+          100.0,
+          "mastered",
+          1
+        ],
+        [
+          66.7,
+          "needs_practice",
+          3
+        ]
+      ]
+    },
+    "breakdown": [
+      [
+        "Algebra Basics",
+        0,
+        4
+      ],
+      [
+        "Geometry",
+        10,
+        10
+      ],
+      [
+        "Linear Equations",
+        2,
+        2
+      ],
+      [
+        "Logarithms",
+        3,
+        5
+      ],
+      [
+        "Polynomials",
+        3,
+        3
+      ],
+      [
+        "Statistics",
+        1,
+        1
+      ],
+      [
+        "Triangle Properties",
+        0,
+        6
+      ]
+    ],
+    "all_topics": [
+      [
+        "Logarithms",
+        3,
+        5
+      ],
+      [
+        "Polynomials and Factors",
+        3,
+        5
+      ],
+      [
+        "Inequalities and Equations",
+        3,
+        4
+      ],
+      [
+        "Geometry",
+        9,
+        16
+      ],
+      [
+        "Statistics and Averages",
+        1,
+        1
+      ]
+    ]
+  },
+  {
+    "step": "dashboard#3",
+    "secs": 0.0,
+    "db_changed": {},
+    "weak": [
+      "Algebra Basics",
+      "Geometry"
+    ],
+    "overall": 65.96
+  }
+]

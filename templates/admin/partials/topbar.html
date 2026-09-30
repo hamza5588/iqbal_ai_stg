@@ -1,0 +1,26 @@
+{# Admin top bar: same white bar, logo and avatar menu as the student/teacher dashboards. #}
+{% set ad_user = session.get('username') or 'Admin' %}
+<header class="ad-topbar">
+  <button type="button" class="ad-menu-btn" onclick="adToggleSidebar()" aria-label="Open navigation" aria-controls="adSidebar" aria-expanded="false">
+    <i class="fas fa-bars"></i>
+  </button>
+  <a class="ad-brand" href="/admin/" aria-label="Iqbal AI — Admin Console">
+    <img src="{{ url_for('static', filename='images/iqbal-ai-logo-2026.png') }}" alt="IQBAL AI — Intelligent Learning Platform">
+    <span class="ad-console-pill">Admin Console</span>
+  </a>
+  <div class="ad-top-right">
+    <a class="ad-btn ad-btn-outline ad-btn-sm ad-back-app" href="/"><i class="fas fa-arrow-left"></i><span>Back to App</span></a>
+    <div class="ad-profile" id="adProfile" role="button" tabindex="0" onclick="adToggleAvatarMenu(event)"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();adToggleAvatarMenu(event);}"
+         aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+      <div class="ad-avatar">{{ ad_user[:1] | upper }}</div>
+      <b>{{ ad_user }}</b>
+      <i class="fas fa-chevron-down ad-caret"></i>
+    </div>
+    <div class="ad-avatar-menu" id="adAvatarMenu" hidden>
+      <div class="ad-am-head"><b>{{ ad_user }}</b><span>Administrator</span></div>
+      <a href="/"><i class="fas fa-home"></i> Back to App</a>
+      <a href="/auth/logout" class="danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+  </div>
+</header>

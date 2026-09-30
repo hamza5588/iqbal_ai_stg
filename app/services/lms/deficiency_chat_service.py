@@ -357,7 +357,9 @@ def _build_question_queue(
                 seen_texts.add(key)
                 queue.append(item)
 
-    return queue
+    from app.services.quiz.mcq_answer_check import verify_mcq_keys
+
+    return verify_mcq_keys(queue)
 
 
 def _load_questions(session: DeficiencyChatSession) -> List[dict]:
@@ -594,7 +596,9 @@ def _build_enrichment_queue(areas: List[dict], grade_level: Optional[str]) -> Li
             if key and key not in seen:
                 seen.add(key)
                 queue.append(item)
-    return queue
+    from app.services.quiz.mcq_answer_check import verify_mcq_keys
+
+    return verify_mcq_keys(queue)
 
 
 def start_session(

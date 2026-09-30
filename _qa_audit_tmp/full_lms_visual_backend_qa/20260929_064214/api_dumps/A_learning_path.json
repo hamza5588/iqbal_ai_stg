@@ -1,0 +1,43 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/learning-path",
+  "body": {
+    "data": {
+      "completed_count": 7,
+      "current_step": {
+        "completed_at": null,
+        "id": 62,
+        "item_id": 0,
+        "item_type": "practice",
+        "label": "Learning Chat \u2014 practice weak areas",
+        "sort_order": 0,
+        "status": "in_progress",
+        "title": "Learning Chat \u2014 practice weak areas"
+      },
+      "id": 56,
+      "items": [
+        {
+          "completed_at": null,
+          "id": 62,
+          "item_id": 0,
+          "item_type": "practice",
+          "label": "Learning Chat \u2014 practice weak areas",
+          "sort_order": 0,
+          "status": "in_progress",
+          "title": "Learning Chat \u2014 practice weak areas"
+        }
+      ],
+      "percent": 77.8,
+      "status": "active",
+      "title": "Personalized Learning Path",
+      "total_count": 9,
+      "weak_area_progress": {
+        "cleared": 7,
+        "percent": 77.8,
+        "total": 9,
+        "weak_remaining": 2
+      }
+    },
+    "success": true
+  }
+}

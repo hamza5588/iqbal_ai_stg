@@ -1,0 +1,18 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/onboarding-status",
+  "body": {
+    "data": {
+      "current_learning_path_id": null,
+      "diagnostic_assessment_id": null,
+      "diagnostic_completed": false,
+      "diagnostic_completed_at": null,
+      "enrolled_class_count": 1,
+      "needs_diagnostic": true,
+      "needs_onboarding": true,
+      "pending_assignment_count": 0,
+      "pending_assignments": []
+    },
+    "success": true
+  }
+}

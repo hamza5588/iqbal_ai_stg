@@ -1,0 +1,12 @@
+[
+  "GET /api/lms/students/me/dashboard \u2192 403",
+  "GET /api/lms/students/me/assignments \u2192 403",
+  "POST /api/lms/quizzes/53/start \u2192 403",
+  "POST /api/lms/classes/join \u2192 403",
+  "POST /api/lms/classes \u2192 403",
+  "GET /api/lms/classes/26/students \u2192 403",
+  "GET /api/lms/classes/26/analytics/quizzes \u2192 403",
+  "POST /api/lms/assignments \u2192 403",
+  "POST /api/lms/teacher/tutor \u2192 403",
+  "teacher /student-dashboard \u2192 302 /teacher-dashboard; student /teacher-dashboard \u2192 302 /"
+]

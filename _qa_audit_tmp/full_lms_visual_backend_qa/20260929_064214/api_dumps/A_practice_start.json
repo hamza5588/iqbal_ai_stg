@@ -1,0 +1,11 @@
+{
+  "status": 400,
+  "url": "/api/lms/practice/sessions",
+  "body": {
+    "error": {
+      "code": "validation_error",
+      "message": "No practice question available for this topic"
+    },
+    "success": false
+  }
+}

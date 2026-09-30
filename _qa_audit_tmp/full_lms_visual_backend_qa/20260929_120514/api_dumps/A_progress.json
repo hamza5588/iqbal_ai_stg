@@ -1,0 +1,88 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/progress",
+  "body": {
+    "data": {
+      "learning_path": {
+        "completed_count": 4,
+        "current_step": {
+          "completed_at": null,
+          "id": 69,
+          "item_id": 0,
+          "item_type": "practice",
+          "label": "Learning Chat \u2014 practice weak areas",
+          "sort_order": 0,
+          "status": "in_progress",
+          "title": "Learning Chat \u2014 practice weak areas"
+        },
+        "id": 63,
+        "items": [
+          {
+            "completed_at": null,
+            "id": 69,
+            "item_id": 0,
+            "item_type": "practice",
+            "label": "Learning Chat \u2014 practice weak areas",
+            "sort_order": 0,
+            "status": "in_progress",
+            "title": "Learning Chat \u2014 practice weak areas"
+          }
+        ],
+        "percent": 80.0,
+        "status": "active",
+        "title": "Personalized Learning Path",
+        "total_count": 5,
+        "weak_area_progress": {
+          "cleared": 4,
+          "percent": 80.0,
+          "total": 5,
+          "weak_remaining": 1
+        }
+      },
+      "overall_progress": 61.29,
+      "topics": [
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 13,
+          "score_percent": 69.23076923076923,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "weak",
+          "sample_size": 3,
+          "score_percent": 33.333333333333336,
+          "topic_id": 74,
+          "topic_name": "Geometry and Measurement"
+        }
+      ]
+    },
+    "success": true
+  }
+}

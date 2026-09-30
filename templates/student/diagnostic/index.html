@@ -1,0 +1,26 @@
+{# 01 — Diagnostic hub. Rows come from GET /api/lms/diagnostics/default + submitted diagnostic attempts (student-diagnostic.js). #}
+{% include 'student/partials/stat_cards.html' %}
+
+<div class="sd-card">
+  <div class="sd-head-row">
+    <div class="sd-section-title">
+      <div class="sd-icon-badge"><img src="{{ url_for('static', filename='student/icons/diagnostic.png') }}" alt=""></div>
+      <div><h2>Diagnostic</h2><p class="sd-desc">Take diagnostic assessments to identify your strengths and areas to improve.</p></div>
+    </div>
+    <div class="sd-toolbar">
+      <div class="sd-search"><i class="fas fa-search"></i>
+        <input type="search" id="sdDiagSearch" placeholder="Search diagnostic by title, subject, or grade..." oninput="sdRenderDiagnosticList()" aria-label="Search diagnostics">
+      </div>
+      <div class="sd-select"><label for="sdDiagSubject">Subject</label>
+        <select id="sdDiagSubject" onchange="sdRenderDiagnosticList()"><option value="">All subjects</option></select></div>
+      <div class="sd-select"><label for="sdDiagGrade">Grade</label>
+        <select id="sdDiagGrade" onchange="sdRenderDiagnosticList()"><option value="">All grades</option></select></div>
+    </div>
+  </div>
+  <div class="sd-subtabs" role="tablist">
+    <button type="button" class="sd-stab" data-diag-tab="all" onclick="sdSetDiagTab('all')">All (<span data-count="all">0</span>)</button>
+    <button type="button" class="sd-stab active" data-diag-tab="available" onclick="sdSetDiagTab('available')">Available (<span data-count="available">0</span>)</button>
+    <button type="button" class="sd-stab" data-diag-tab="taken" onclick="sdSetDiagTab('taken')">Taken (<span data-count="taken">0</span>)</button>
+  </div>
+  <div id="sdDiagList"><div class="sd-spinner"></div></div>
+</div>

@@ -290,7 +290,9 @@ def list_class_students_detailed(class_id: int, teacher_id: int) -> List[dict]:
                 "enrolled_at": enr.enrolled_at.isoformat() if enr.enrolled_at else None,
                 "overall_progress": progress,
                 "weak_topic_count": len(weak),
-                "is_struggling": len(weak) >= 2 or progress < WEAK_THRESHOLD,
+                "has_mastery_data": bool(mastery),
+                # No topic data yet (not attempted) is not "struggling": 0.0 there means "unknown".
+                "is_struggling": bool(mastery) and (len(weak) >= 2 or progress < WEAK_THRESHOLD),
             }
         )
     return roster
@@ -332,11 +334,46 @@ def student_in_class(student_id: int, class_id: int) -> bool:
     )
 
 
-def student_teacher_grade_links(student_id: int) -> List[tuple[int, str]]:
-    """Return active (teacher, grade) links for the student's enrolled classes."""
+def list_student_class_details(student_id: int) -> List[dict]:
+    """Student's active classes with teacher name and enrolment date (no join code)."""
+    db = get_db()
+    rows = (
+        db.query(SchoolClass, ClassEnrollment.enrolled_at, DBUser.username)
+        .join(ClassEnrollment, ClassEnrollment.class_id == SchoolClass.id)
+        .outerjoin(DBUser, DBUser.id == SchoolClass.teacher_id)
+        .filter(
+            ClassEnrollment.student_id == student_id,
+            ClassEnrollment.status == "active",
+            SchoolClass.is_active.is_(True),
+        )
+        .order_by(SchoolClass.name)
+        .all()
+    )
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "description": c.description,
+            "grade_level": c.grade_level,
+            "teacher_name": teacher_name,
+            "joined_at": enrolled_at.isoformat() if enrolled_at else None,
+        }
+        for c, enrolled_at, teacher_name in rows
+    ]
+
+
+def student_teacher_grade_links(
+    student_id: int, class_id: Optional[int] = None
+) -> List[tuple[int, str]]:
+    """Return active (teacher, grade) links for the student's enrolled classes.
+
+    With ``class_id``, only that enrolled class's link (empty if not enrolled).
+    """
     links = []
     seen = set()
     for school_class in list_student_classes(student_id):
+        if class_id is not None and school_class.id != class_id:
+            continue
         grade = normalize_grade(school_class.grade_level)
         if not grade:
             continue

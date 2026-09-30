@@ -1,0 +1,18 @@
+{# Page head used by every admin screen: icon badge + Poppins title + one-line purpose + actions.
+   `img` = file in static/admin/icons (illustrated icon, same set as the teacher/student nav);
+   otherwise `icon` = Font Awesome class. Actions go in the caller block:
+     {% call page_head('Users', 'Manage accounts.', icon='fa-users') %}<button …>{% endcall %} #}
+{% macro page_head(title, desc, icon=None, img=None) -%}
+<div class="ad-page-head">
+    <div class="ad-section-title">
+        <div class="ad-icon-badge{% if img %} has-img{% endif %}">
+            {%- if img %}<img src="{{ url_for('static', filename='admin/icons/' ~ img) }}" alt="" aria-hidden="true">
+            {%- else %}<i class="fas {{ icon }}"></i>{% endif -%}
+        </div>
+        <div><h2>{{ title }}</h2><p>{{ desc }}</p></div>
+    </div>
+    {%- if caller is defined %}
+    <div class="ad-head-actions">{{ caller() }}</div>
+    {%- endif %}
+</div>
+{%- endmacro %}

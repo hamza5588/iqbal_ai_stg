@@ -1,0 +1,43 @@
+{# Grouped admin navigation. `ad_page` = 'dashboard' | 'load_testing' | 'llm_telemetry'.
+   On the dashboard, section links switch in place (showSection); elsewhere they deep-link to /admin/#<section>. #}
+{% set ad_groups = [
+  ('Overview', [('dashboard', 'Dashboard', 'fa-chart-line', None)]),
+  ('People', [('users', 'User Management', 'fa-users', None)]),
+  ('Learning content', [
+    ('lessons', 'Lessons', 'fa-book-open', None),
+    ('documents', 'Documents', 'fa-file-pdf', None),
+    ('diagnostic', 'Diagnostic Assessment', 'fa-stethoscope', None),
+  ]),
+  ('AI configuration', [
+    ('settings', 'LLM Settings', 'fa-sliders-h', None),
+    ('prompts', 'RAG Prompts', 'fa-comment-dots', None),
+  ]),
+  ('Platform', [
+    ('coupons', 'Coupons', 'fa-ticket-alt', None),
+    ('theme', 'Color Theme', 'fa-palette', None),
+  ]),
+  ('Monitoring', [
+    ('load_testing', 'Load Testing', 'fa-tachometer-alt', '/admin/load-testing'),
+    ('llm_telemetry', 'LLM Telemetry', 'fa-coins', '/admin/llm-telemetry'),
+  ]),
+] %}
+<aside class="ad-sidebar" id="adSidebar" aria-label="Admin sections">
+  {% for group, items in ad_groups %}
+  <div class="ad-side-group">
+    <span class="ad-side-label">{{ group }}</span>
+    {% for key, label, icon, page_href in items %}
+      {% if page_href %}
+      <a href="{{ page_href }}" class="ad-side-link{% if ad_page == key %} active{% endif %}" data-page="{{ key }}"{% if ad_page == key %} aria-current="page"{% endif %}>
+      {% elif ad_page == 'dashboard' %}
+      <a href="#{{ key }}" class="ad-side-link{% if key == 'dashboard' %} active{% endif %}" data-section="{{ key }}" onclick="adGo('{{ key }}'); return false;">
+      {% else %}
+      <a href="/admin/#{{ key }}" class="ad-side-link" data-section="{{ key }}">
+      {% endif %}
+        <span class="ad-side-ic"><i class="fas {{ icon }}"></i></span>
+        <span>{{ label }}</span>
+      </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</aside>
+<div class="ad-scrim" onclick="adToggleSidebar(false)" hidden></div>

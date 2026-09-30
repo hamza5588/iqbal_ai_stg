@@ -1,0 +1,36 @@
+{
+  "ctx": {
+    "accounts": {},
+    "ids": {},
+    "git": "ui_integration_for_teacher @ 6c3c3ea Snapshot teacher UI integration, QA/load tooling and new UI design sources (+19 uncommitted paths)"
+  },
+  "results": [
+    {
+      "role": "Setup",
+      "feature": "Health: app responds at BASE_URL",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "ok: GET /auth/login 200",
+      "db": "n/a",
+      "evidence": "ui_integration_for_teacher @ 6c3c3ea Snapshot teacher UI integration, QA/load tooling and new UI design sources (+19 uncommitted paths)",
+      "shots": [],
+      "status": "PASS",
+      "secs": 0.4
+    },
+    {
+      "role": "Setup",
+      "feature": "Register TEACHER via UI \u2192 lands on /teacher-dashboard",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "AssertionError: http://127.0.0.1:5001/auth/verify_email/JH-NgwEbbUFt3YrvWYvVFwJgaSBlW3KmmshPtD8aiEU",
+      "shots": [
+        "screenshots/FAIL_01_register_teacher_via_ui_lands_on_teacher.png"
+      ],
+      "status": "FAIL",
+      "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 87, in run\n    out = fn(*a, **kw) or {}\n          ~~^^^^^^^^^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 220, in s_teacher\n    assert \"/teacher-dashboard\" in page.url, page.url\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: http://127.0.0.1:5001/auth/verify_email/JH-NgwEbbUFt3YrvWYvVFwJgaSBlW3KmmshPtD8aiEU\n",
+      "secs": 12.8
+    }
+  ]
+}

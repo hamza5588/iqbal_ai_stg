@@ -45,6 +45,21 @@
     tutorLoading: false
   };
 
+  /* The student dashboard hosts Learning Chat as a page view
+     (#lmsDeficiencyModal[data-inline]) with sdOpen/CloseLearningChatView. */
+  function isInlineDef() {
+    var el = document.getElementById('lmsDeficiencyModal');
+    return !!(el && el.hasAttribute('data-inline'));
+  }
+  function openDefSurface() {
+    if (isInlineDef() && typeof window.sdOpenLearningChatView === 'function') window.sdOpenLearningChatView();
+    else lmsOpenModal('lmsDeficiencyModal');
+  }
+  function closeDefSurface() {
+    if (isInlineDef() && typeof window.sdCloseLearningChatView === 'function') window.sdCloseLearningChatView();
+    else lmsCloseModal('lmsDeficiencyModal');
+  }
+
   function ensureDeficiencyModal() {
     if (document.getElementById('lmsDeficiencyModal')) return;
     var html =
@@ -66,39 +81,42 @@
 
   function renderTypingIndicator() {
     var label = defState._tutorReconnecting ? 'Connection dropped - reconnecting...' : 'Thinking...';
-    return '<div class="lms-chat-msg bot" id="lmsDeficiencyTyping">' +
-      '<div class="lms-chat-avatar">AI</div>' +
-      '<div class="lms-chat-bubble">' +
-      '<div class="lms-chat-typing"><span></span><span></span><span></span></div>' +
-      '<span class="lms-status" style="font-size:.75rem;margin:0 0 0 8px;">' + escapeHtml(label) + '</span>' +
-      '</div></div>';
+    return '<div class="sd-ai-bubble" id="lmsDeficiencyTyping">' +
+      '<div class="sd-bot-ic">AI</div>' +
+      '<div class="sd-msg"><span class="sd-typing"><span></span><span></span><span></span></span>' +
+      '<span class="sd-hint-line" style="margin-left:8px;">' + escapeHtml(label) + '</span></div></div>';
   }
 
+  // [label shown on the chip, text sent to the tutor]
   var TUTOR_SUGGESTED_PROMPTS = [
-    'Explain this in simpler words',
-    'Break it into small steps',
-    'Give me a hint',
-    'Show me an example',
-    'I still don\'t understand'
+    ['Simpler words', 'Explain this in simpler words'],
+    ['Break into steps', 'Break it into small steps'],
+    ['Give a hint', 'Give me a hint'],
+    ['Show example', 'Show me an example'],
+    ['I don\'t understand', 'I still don\'t understand']
   ];
+  var TUTOR_GREETING = 'Ask me anything about this question. I\'ll help step by step — starting with a small prompt, not the full answer.';
 
   function renderTutorMessages() {
     var html = defState.tutorHistory.map(function (m, i) {
       var role = m.role === 'user' ? 'user' : 'bot';
       var levelTag = m.levelLabel
-        ? '<div class="lms-status" style="font-size:.7rem;margin:0 0 4px;">' + escapeHtml(m.levelLabel) + '</div>'
+        ? '<div class="sd-level">' + escapeHtml(m.levelLabel) + '</div>'
         : '';
       var extra = '';
       if (role === 'bot' && m.retry) {
-        extra = '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:8px;" onclick="retryDeficiencyTutorMessage()">Try again</button>';
+        extra = '<div class="sd-msg-tools"><button type="button" onclick="retryDeficiencyTutorMessage()">Try again</button></div>';
       } else if (role === 'bot') {
-        extra = '<button type="button" class="lms-copy-btn" title="Copy" onclick="lmsCopyTutorMessage(' + i + ',this)">Copy</button>';
+        extra = '<div class="sd-msg-tools"><button type="button" title="Copy" onclick="lmsCopyTutorMessage(' + i + ',this)">Copy</button></div>';
       }
-      return '<div class="lms-chat-msg ' + role + '">' +
-        '<div class="lms-chat-avatar">' + (role === 'user' ? 'You' : 'AI') + '</div>' +
-        '<div class="lms-chat-bubble">' + levelTag +
+      return '<div class="sd-ai-bubble' + (role === 'user' ? ' user' : '') + '">' +
+        '<div class="sd-bot-ic">' + (role === 'user' ? 'You' : 'AI') + '</div>' +
+        '<div class="sd-msg">' + levelTag +
         (role === 'user' ? escapeHtml(m.text) : fmtText(m.text || '')) + extra + '</div></div>';
     }).join('');
+    if (!defState.tutorHistory.length) {
+      html = '<div class="sd-ai-bubble"><div class="sd-bot-ic">AI</div><div class="sd-msg">' + escapeHtml(TUTOR_GREETING) + '</div></div>';
+    }
     if (defState.tutorLoading) {
       html += renderTypingIndicator();
     }
@@ -106,11 +124,10 @@
   }
 
   function renderTutorSuggestedPrompts() {
-    if (defState.tutorLoading) return '';
-    return '<div class="lms-prompt-chips">' +
+    return '<div class="sd-chip-row">' +
       TUTOR_SUGGESTED_PROMPTS.map(function (p) {
-        return '<button type="button" class="lms-prompt-chip" onclick="sendDeficiencySuggestedPrompt(' +
-          JSON.stringify(p).replace(/"/g, '&quot;') + ')">' + escapeHtml(p) + '</button>';
+        return '<button type="button" class="sd-chip"' + (defState.tutorLoading ? ' disabled' : '') +
+          ' onclick="sendDeficiencySuggestedPrompt(' + JSON.stringify(p[1]).replace(/"/g, '&quot;') + ')">' + escapeHtml(p[0]) + '</button>';
       }).join('') + '</div>';
   }
 
@@ -153,7 +170,9 @@
         sendDeficiencyTutorMessage();
       }
     });
-    if (!defState.tutorLoading) {
+    // The tutor panel is always visible now; only pull focus once the
+    // student is actually using it (asked something / answered wrong).
+    if (!defState.tutorLoading && defState.tutorOpen) {
       input.focus();
     }
   }
@@ -168,12 +187,11 @@
       var tot = data.total_questions || 0;
       var aced = tot > 0 && got === tot;
       body.innerHTML =
-        '<div style="text-align:center;padding:24px;">' +
-        '<div style="font-size:2.4rem;">' + (aced ? '🏆' : '🎉') + '</div>' +
-        '<div style="font-size:1.6rem;font-weight:800;color:var(--primary-color);">' +
-        (aced ? 'Perfect run!' : 'Great effort!') + '</div>' +
-        '<p class="lms-status">You got ' + got + ' / ' + tot + ' right.</p>' +
-        '<button type="button" class="lms-btn lms-btn-primary" onclick="closeDeficiencyChat()">Close</button></div>';
+        '<div class="sd-done-card">' +
+        '<div class="sd-done-emoji">' + (aced ? '🏆' : '🎉') + '</div>' +
+        '<h3>' + (aced ? 'Perfect run!' : 'Great effort!') + '</h3>' +
+        '<p class="sd-desc">You got ' + got + ' / ' + tot + ' right.</p>' +
+        '<button type="button" class="sd-btn sd-btn-primary" style="margin-top:14px;" onclick="closeDeficiencyChat()">Back to Learning Path</button></div>';
       if (!defState._celebratedDone) {
         defState._celebratedDone = true;
         try { lmsFeedback.celebrate(aced ? 'Perfect run!' : 'Nice work!'); } catch (e) { /* ignore */ }
@@ -187,70 +205,70 @@
       ? Math.round(100 * (data.current_index + 1) / data.total_questions)
       : 0;
     var opts = (q.options || []).map(function (o, oi) {
-      var cls = 'lms-quiz-option';
+      var cls = 'sd-q-option lms-quiz-option';
       if (defState.selectedOption === oi) cls += ' selected';
       if (defState.lastWrongIndex === oi) cls += ' lms-opt-wrong';
       return '<button type="button" class="' + cls + '" onclick="selectDeficiencyOption(' + oi + ')">' +
-        '<span class="lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
-        '<span class="lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
+        '<span class="sd-radio"></span>' +
+        '<span class="sd-opt-label lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
+        '<span class="sd-opt-body lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
 
     var tutorLevelHint = data.tutor_assist_label
-      ? '<p class="lms-status" style="font-size:.75rem;margin-bottom:8px;">Next help: <strong>' + escapeHtml(data.tutor_assist_label) + '</strong> — I won\'t give the answer right away.</p>'
+      ? '<div class="sd-help-level">Next help: <b>' + escapeHtml(data.tutor_assist_label) + '</b><br>I won\'t give the answer right away.</div>'
       : '';
 
-    var sendDisabled = defState.tutorLoading ? ' disabled' : '';
-    var tutorSection = defState.tutorOpen
-      ? tutorLevelHint +
-        '<div id="lmsDeficiencyTutorMessages" class="lms-chat-messages">' +
-        (renderTutorMessages() || '<p class="lms-status">Ask a question — the tutor guides you step by step using your teacher\'s PDF.</p>') +
-        '</div>' +
-        renderTutorSuggestedPrompts() +
-        '<div class="lms-chat-input-row">' +
-        '<textarea id="lmsDeficiencyTutorInput" class="lms-textarea" rows="2" placeholder="I\'m stuck on this step... (Enter to send)"' +
-        (defState.tutorLoading ? ' disabled' : '') + '></textarea>' +
-        '<button type="button" id="lmsDeficiencyTutorSend" class="lms-btn lms-btn-secondary"' + sendDisabled +
-        ' onclick="sendDeficiencyTutorMessage()">Send</button></div>' +
-        '<p class="lms-status" style="font-size:.7rem;margin:6px 0 0;">Press Enter to send · Shift+Enter for new line</p>' +
-        '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:8px;" onclick="requestDeficiencyMoreHelp()"' +
-        (defState.tutorLoading ? ' disabled' : '') + '>Need more help</button>'
-      : '';
+    var loading = defState.tutorLoading ? ' disabled' : '';
+    var tutorSection =
+      tutorLevelHint +
+      '<div id="lmsDeficiencyTutorMessages" class="sd-chat-scroll">' + renderTutorMessages() + '</div>' +
+      renderTutorSuggestedPrompts() +
+      '<div class="sd-chat-inputbar">' +
+      '<div class="sd-chat-field">' +
+      '<textarea id="lmsDeficiencyTutorInput" rows="1" placeholder="I\'m stuck on this step... (Enter to send)"' + loading + '></textarea>' +
+      '<button type="button" class="sd-field-ic bulb" title="Need more help" aria-label="Need more help" onclick="requestDeficiencyMoreHelp()"' + loading + '><i class="far fa-lightbulb"></i></button>' +
+      '</div>' +
+      '<button type="button" id="lmsDeficiencyTutorSend" class="sd-send-btn"' + loading + ' onclick="sendDeficiencyTutorMessage()">Send</button></div>' +
+      '<p class="sd-hint-line">Press Enter to send · Shift+Enter for new line</p>';
 
     body.innerHTML =
-      '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
-      '<p class="lms-status">Question ' + (data.current_index + 1) + ' of ' + data.total_questions +
-      (q.topic_name ? ' · <strong>' + escapeHtml(q.topic_name) + '</strong>' : '') + '</p>' +
-      (data.has_pdf ? '<p class="lms-status" style="font-size:.75rem;">Questions from teacher target PDF · weak area: ' + escapeHtml((q && q.topic_name) || '') + '</p>' : '<p class="lms-status" style="font-size:.75rem;color:#991b1b;">Teacher has not uploaded target content PDF yet.</p>') +
-      '<h3 class="lms-quiz-stem">' + fmtQuestion(q) + '</h3>' +
+      '<div class="sd-split-body">' +
+      '<div class="sd-split-left">' +
+      '<div class="sd-track"><div class="sd-fill" style="width:' + pct + '%"></div></div>' +
+      '<p class="sd-desc">Question ' + (data.current_index + 1) + ' of ' + data.total_questions +
+      (q.topic_name ? ' &nbsp;•&nbsp; <b style="color:var(--sd-blue-700);">' + escapeHtml(q.topic_name) + '</b>' : '') + '</p>' +
+      (data.has_pdf
+        ? '<p class="sd-desc" style="font-size:12.5px;">Questions from teacher target PDF - weak area: ' + escapeHtml((q && q.topic_name) || '') + '</p>'
+        : '<p class="sd-desc" style="font-size:12.5px;color:#991b1b;">Teacher has not uploaded target content PDF yet.</p>') +
+      '<div class="sd-q-text lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
       opts +
-      '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;display:flex;flex-wrap:wrap;gap:8px;">' +
-      '<button type="button" class="lms-btn lms-btn-primary" onclick="submitDeficiencyAnswer()"' +
+      '<div class="sd-q-actions-row">' +
+      '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="submitDeficiencyAnswer()"' +
       (defState.selectedOption === null ? ' disabled' : '') + '>Submit Answer</button>' +
       (data.last_answer && data.last_answer.correct === false
-        ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="advanceDeficiencyQuestion()">Next question</button>'
+        ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="advanceDeficiencyQuestion()">Next question</button>'
         : '') +
-      '<button type="button" class="lms-btn lms-btn-secondary" onclick="toggleDeficiencyTutor()">Ask Tutor</button>' +
-      '<button type="button" class="lms-btn lms-btn-secondary" onclick="pauseDeficiencyChat()">Pause &amp; Exit</button>' +
-      '<button type="button" class="lms-btn lms-btn-ghost" title="Copy question text" onclick="lmsCopyDeficiencyQuestion(this)">&#128203; Copy</button>' +
+      '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="pauseDeficiencyChat()">Pause &amp; Exit</button>' +
+      '<button type="button" class="sd-icon-btn" title="Copy question text" onclick="lmsCopyDeficiencyQuestion(this)"><i class="far fa-clipboard"></i> Copy</button>' +
       // --lms-font-scale is a live CSS custom property - text resizes
       // immediately, no re-render needed.
-      '<button type="button" class="lms-btn lms-btn-ghost lms-font-btn" title="Smaller text" onclick="lmsStepFont(-1)">A-</button>' +
-      '<button type="button" class="lms-btn lms-btn-ghost lms-font-btn" title="Larger text" onclick="lmsStepFont(1)">A+</button>' +
-      '<button type="button" class="lms-btn lms-btn-ghost lms-sound-toggle" title="Sound cues" onclick="lmsToggleDeficiencySound(this)">' +
+      '<button type="button" class="sd-icon-btn lms-font-btn" title="Smaller text" onclick="lmsStepFont(-1)">A-</button>' +
+      '<button type="button" class="sd-icon-btn lms-font-btn" title="Larger text" onclick="lmsStepFont(1)">A+</button>' +
+      '<button type="button" class="sd-icon-btn lms-sound-toggle" title="Sound cues" onclick="lmsToggleDeficiencySound(this)">' +
       (lmsFeedback.soundEnabled() ? '🔊' : '🔇') + '</button></div>' +
-      tutorSection;
+      '</div>' +
+      '<div class="sd-split-right">' + tutorSection + '</div>' +
+      '</div>';
 
-    if (defState.tutorOpen) {
-      bindDeficiencyTutorInput();
-      scrollDeficiencyChatToBottom();
-    }
+    bindDeficiencyTutorInput();
+    scrollDeficiencyChatToBottom();
 
     typeset(body);
   }
 
   window.openDeficiencyChat = async function (forceNew, mode) {
     ensureDeficiencyModal();
-    lmsOpenModal('lmsDeficiencyModal');
+    openDefSurface();
     defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
     var body = document.getElementById('lmsDeficiencyBody');
     var isChallenge = mode === 'enrichment';
@@ -283,7 +301,7 @@
         await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/pause', { method: 'POST' });
       } catch (e) { /* ignore */ }
     }
-    lmsCloseModal('lmsDeficiencyModal');
+    closeDefSurface();
     defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
   };
 
@@ -411,6 +429,7 @@
     var input = document.getElementById('lmsDeficiencyTutorInput');
     var msg = (input && input.value || '').trim();
     if (!msg || !defState.sessionId) return;
+    defState.tutorOpen = true;
     defState.tutorHistory.push({ role: 'user', text: msg });
     if (input) input.value = '';
     defState.tutorLoading = true;

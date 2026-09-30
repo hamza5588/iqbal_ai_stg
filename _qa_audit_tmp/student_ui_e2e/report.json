@@ -1,0 +1,184 @@
+{
+  "base": "http://127.0.0.1:5057",
+  "run": "131215",
+  "results": [
+    {
+      "section": "Auth/shell",
+      "item": "Student login lands on new student dashboard",
+      "status": "PASS",
+      "evidence": "http://127.0.0.1:5057/student-dashboard#diagnostic-quiz",
+      "secs": 7.6
+    },
+    {
+      "section": "Auth/shell",
+      "item": "Top nav shows Diagnostic, My Learning Path, My Classes, AI Tutor with correct icons",
+      "status": "PASS",
+      "evidence": "Diagnostic, My Learning Path, My Classes, AI Tutor",
+      "secs": 0.0
+    },
+    {
+      "section": "Auth/shell",
+      "item": "Logo/branding matches new UI",
+      "status": "PASS",
+      "evidence": "IQBAL AI \u2014 Intelligent Learning Platform",
+      "secs": 0.0
+    },
+    {
+      "section": "Auth/shell",
+      "item": "Teacher/admin cannot stay on student dashboard (redirects)",
+      "status": "PASS",
+      "evidence": "teacher\u2192/teacher-dashboard; admin\u2192/admin/",
+      "secs": 0.1
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Diagnostic gate blocks gated features until complete (fresh student)",
+      "status": "PASS",
+      "evidence": "orientation forced; Learning Path / Classes / AI Tutor blocked",
+      "secs": 1.6
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Start diagnostic \u2192 orientation \u2192 quiz loads questions from API (timer visible)",
+      "status": "PASS",
+      "evidence": "32 questions, timer 41:14",
+      "secs": 1.2
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Math in questions/options renders (MathJax)",
+      "status": "PASS",
+      "evidence": "1 typeset math elements",
+      "secs": 0.6
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Tools: Explain this question, Workspace, question map",
+      "status": "PASS",
+      "evidence": "explain: 'In simpler words: Read it slowly, one part at a time. The question is asking: Wh'",
+      "secs": 0.4
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Answer questions (saved to API), submit with unanswered confirm, topic results shown",
+      "status": "PASS",
+      "evidence": "score 9%, 7 topic rows, gate unlocked",
+      "secs": 79.5
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Diagnostic hub loads real stats + Taken row with inline results (API match)",
+      "status": "PASS",
+      "evidence": "weak=6, taken score 9% = API",
+      "secs": 1.3
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Completed diagnostic is not restarted (existing rule: results shown; retake only via explicit button)",
+      "status": "PASS",
+      "evidence": "start \u2192 already_completed; UI shows previous results + explicit Retake button",
+      "secs": 0.2
+    },
+    {
+      "section": "Diagnostic",
+      "item": "Timeout auto-submit path (expired attempt is finalized and scored)",
+      "status": "PASS",
+      "evidence": "expired attempt auto-submitted, results + gate unlocked",
+      "secs": 30.7
+    },
+    {
+      "section": "Learning Path",
+      "item": "Path overview loads after diagnostic; weak topics / progress match API",
+      "status": "PASS",
+      "evidence": "7 topics (6 weak), progress '1 of 7 topics' = API",
+      "secs": 0.7
+    },
+    {
+      "section": "Learning Path",
+      "item": "Learning Chat (deficiency) starts and accepts an answer",
+      "status": "PASS",
+      "evidence": "wrong \u2192 feedback + Next question",
+      "secs": 1.6
+    },
+    {
+      "section": "Learning Path",
+      "item": "Tutor help (Need more help), advance, Pause & Exit still work",
+      "status": "PASS",
+      "evidence": "tutor reply \"Level 1 \u2013 Prompt\\n\\nNo problem! Let's start with the first step.\\n\\nDo you know what\"; advance=yes; paused back to path",
+      "secs": 6.6
+    },
+    {
+      "section": "Learning Path",
+      "item": "Guided practice (per topic) opens with a question and hint",
+      "status": "PASS",
+      "evidence": "MEDIUM  The graph of  \ud835\udc65 = 3  is: a horizontal line a vertical line a line throug | hint: Hint:  Suggest a strategy without solving.  Question: The gr",
+      "secs": 0.5
+    },
+    {
+      "section": "My Classes",
+      "item": "Join class via code; enrolled class loads with teacher + lessons (API match)",
+      "status": "PASS",
+      "evidence": "class 25 joined, 7 lessons",
+      "secs": 7.5
+    },
+    {
+      "section": "My Classes",
+      "item": "Assigned quiz visible, taken end-to-end, Review matches API",
+      "status": "PASS",
+      "evidence": "4 questions, score 0% = API",
+      "secs": 2.9
+    },
+    {
+      "section": "Lesson viewer",
+      "item": "Open lesson: content renders; Word + PowerPoint download",
+      "status": "PASS",
+      "evidence": "'Quadratic Equations 145157'; downloads ['Quadratic_Equations_145157.docx', 'Quadratic_Equations_145157.pptx']",
+      "secs": 4.3
+    },
+    {
+      "section": "Lesson viewer",
+      "item": "Lesson chat answers (or asks to use teacher PDF) and is saved as a conversation",
+      "status": "PASS",
+      "evidence": "reply 'Lesson Summary\\n\\nThis lesson introduces quadratic equations, detailing their definition, methods of s'; conversation saved",
+      "secs": 3.9
+    },
+    {
+      "section": "AI Tutor",
+      "item": "Send message via /api/lms/tutor/chat and get a response",
+      "status": "PASS",
+      "evidence": "\"First, let's break it down. You can think of 7 times 8 as adding 7 together 8 times.\\n\\nDoes that make\"",
+      "secs": 4.3
+    },
+    {
+      "section": "AI Tutor",
+      "item": "History restores on reload; Chat History lists lesson chat and opens it; clear works",
+      "status": "PASS",
+      "evidence": "restored, reopened lesson conversation, cleared (API empty)",
+      "secs": 3.2
+    },
+    {
+      "section": "Cross-cutting",
+      "item": "Mobile (390px): every main view usable, no horizontal scroll",
+      "status": "PASS",
+      "evidence": "diagnostic, learning-path, classes, tutor",
+      "secs": 9.8
+    },
+    {
+      "section": "Cross-cutting",
+      "item": "No JS errors (pageerror / console) on primary paths",
+      "status": "PASS",
+      "evidence": "0 page errors, 0 unexpected console errors",
+      "secs": 0.0
+    },
+    {
+      "section": "Cross-cutting",
+      "item": "No missing static assets (icons/css/js 404s)",
+      "status": "PASS",
+      "evidence": "0 static 404s",
+      "secs": 0.0
+    }
+  ],
+  "console_errors": [],
+  "page_errors": [],
+  "bad_static": []
+}

@@ -1,0 +1,14 @@
+{% set nav_items = [
+  ('diagnostic', 'Diagnostic', 'diagnostic.png'),
+  ('learning-path', 'My Learning Path', 'my-learning-path.png'),
+  ('classes', 'My Classes', 'classes.png'),
+  ('tutor', 'AI Tutor', 'ai-tutor.png'),
+] %}
+<nav class="sd-mainnav" aria-label="Student sections">
+  {% for key, label, icon in nav_items %}
+  <a href="#{{ key }}" class="sd-navbtn" data-view="{{ key }}" onclick="sdShowView('{{ key }}'); return false;">
+    <img src="{{ url_for('static', filename='student/icons/' ~ icon) }}" alt="" aria-hidden="true">
+    <span>{{ label }}</span>
+  </a>
+  {% endfor %}
+</nav>

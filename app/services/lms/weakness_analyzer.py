@@ -422,6 +422,18 @@ def _analysis_covers_all_questions(analysis: dict, q_ids: List[int]) -> bool:
     return bool(q_ids) and set(q_ids).issubset(covered)
 
 
+def _gradable_question_ids(q_ids: List[int], ans_map: dict) -> List[int]:
+    """Questions a stored analysis must cover: the ones with an answer row.
+
+    _recompute_area_scores() keeps only answered questions (an unanswered one
+    is scored 0 in the overall %, but never assigned a topic), so requiring
+    every attempt question here rejected the cache for any attempt with a
+    skipped question - every read then re-ran the AI grouping and got a
+    different answer (results screen, mastery and teacher analytics drifted).
+    """
+    return [q for q in q_ids if q in ans_map]
+
+
 def _cache_looks_invalid(cached: dict) -> bool:
     """True when cached weakness labels are generic/heading junk and need a redo."""
     from app.services.quiz.concept_labeler import is_generic_concept
@@ -495,10 +507,24 @@ def _get_cached(assessment, attempt_id: int) -> Optional[dict]:
 
 
 def _set_cache(assessment, attempt_id: int, result: dict) -> None:
-    meta = _parse_assessment_meta(assessment)
+    # The cache lives in the assessment row shared by every student taking this
+    # diagnostic: re-read (row-locked where the DB supports it) right before
+    # writing so a concurrent request's entry is merged, not overwritten.
+    db = get_db()
+    try:
+        fresh = (
+            db.query(type(assessment))
+            .filter(type(assessment).id == assessment.id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        ) or assessment
+    except Exception:  # noqa: BLE001 - never lose the result over a refresh hiccup
+        fresh = assessment
+    meta = _parse_assessment_meta(fresh)
     cache = meta.setdefault("weakness_cache", {})
     cache[str(attempt_id)] = result
-    _save_assessment_meta(assessment, meta)
+    _save_assessment_meta(fresh, meta)
 
 
 def analyze_diagnostic_attempt(attempt_id: int, use_cache: bool = True) -> dict:
@@ -524,7 +550,8 @@ def analyze_diagnostic_attempt(attempt_id: int, use_cache: bool = True) -> dict:
 
     if use_cache:
         cached = _get_cached(assessment, attempt_id)
-        if cached and _analysis_covers_all_questions(cached, q_ids):
+        gradable = _gradable_question_ids(q_ids, ans_map)
+        if cached and (not gradable or _analysis_covers_all_questions(cached, gradable)):
             # Still recompute scores from live answers + fill any edge orphans.
             fixed = _ensure_full_question_coverage(cached, questions, ans_map, meta)
             if fixed != cached:

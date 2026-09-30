@@ -1,0 +1,445 @@
+{
+  "checks": [
+    {
+      "name": "desktop section dashboard visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #dashboard",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section users visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #users",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section lessons visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #lessons",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section documents visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #documents",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section diagnostic visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #diagnostic",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section settings visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section prompts visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #prompts",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section coupons visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #coupons",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop section theme visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop hash #theme",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop deep link /admin/#users renders users",
+      "ok": true,
+      "detail": "50 rows"
+    },
+    {
+      "name": "desktop role pills rendered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop user search filters",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop overview 'View teachers' filters users",
+      "ok": true,
+      "detail": "10 teacher rows"
+    },
+    {
+      "name": "desktop community mix filled",
+      "ok": true,
+      "detail": "76% \u00b7 51"
+    },
+    {
+      "name": "desktop modal_create_user opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop modal_create_user closes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop modal_create_coupon opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop modal_create_coupon closes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop edit user modal opens prefilled",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop toast shows",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop theme presets rendered",
+      "ok": true,
+      "detail": "10 presets"
+    },
+    {
+      "name": "desktop theme preset select",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop avatar menu opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop load testing sidebar active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop load testing tab tests",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop load testing tab assets",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop load testing tab results",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop load testing tab settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop load testing -> sidebar Users deep link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop telemetry sidebar active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for dashboard",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section dashboard visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #dashboard",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for users",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section users visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #users",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for lessons",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section lessons visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #lessons",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for documents",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section documents visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #documents",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for diagnostic",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section diagnostic visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #diagnostic",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section settings visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for prompts",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section prompts visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #prompts",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for coupons",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section coupons visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #coupons",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile drawer opens for theme",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile section theme visible + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile hash #theme",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile deep link /admin/#users renders users",
+      "ok": true,
+      "detail": "50 rows"
+    },
+    {
+      "name": "mobile role pills rendered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile user search filters",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile overview 'View teachers' filters users",
+      "ok": true,
+      "detail": "10 teacher rows"
+    },
+    {
+      "name": "mobile community mix filled",
+      "ok": true,
+      "detail": "76% \u00b7 51"
+    },
+    {
+      "name": "mobile modal_create_user opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile modal_create_user closes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile modal_create_coupon opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile modal_create_coupon closes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile edit user modal opens prefilled",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile toast shows",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile theme presets rendered",
+      "ok": true,
+      "detail": "10 presets"
+    },
+    {
+      "name": "mobile theme preset select",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile avatar menu opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile load testing sidebar active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile load testing tab tests",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile load testing tab assets",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile load testing tab results",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile load testing tab settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile load testing -> sidebar Users deep link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile telemetry sidebar active",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "console_errors": [
+    "[desktop] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+    "[desktop] Failed to load resource: the server responded with a status of 500 (INTERNAL SERVER ERROR)",
+    "[mobile] Failed to load resource: the server responded with a status of 500 (INTERNAL SERVER ERROR)"
+  ],
+  "overflow": []
+}

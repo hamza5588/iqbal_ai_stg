@@ -1,0 +1,123 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/19/students/35/progress/by-topic",
+  "body": {
+    "data": {
+      "topics": [
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 73,
+              "correct": 1,
+              "label": "Diagnostic",
+              "score_percent": 20.0,
+              "submitted_at": "2026-09-29T13:43:56.580100",
+              "total": 5
+            }
+          ],
+          "topic_id": 49,
+          "topic_name": "Algebra Basics"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 73,
+              "correct": 9,
+              "label": "Diagnostic",
+              "score_percent": 100.0,
+              "submitted_at": "2026-09-29T13:43:56.580100",
+              "total": 9
+            }
+          ],
+          "topic_id": 34,
+          "topic_name": "Geometry"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 73,
+              "correct": 2,
+              "label": "Diagnostic",
+              "score_percent": 100.0,
+              "submitted_at": "2026-09-29T13:43:56.580100",
+              "total": 2
+            }
+          ],
+          "topic_id": 65,
+          "topic_name": "Inequalities"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 73,
+              "correct": 1,
+              "label": "Diagnostic",
+              "score_percent": 100.0,
+              "submitted_at": "2026-09-29T13:43:56.580100",
+              "total": 1
+            }
+          ],
+          "topic_id": 35,
+          "topic_name": "Linear Equations"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 73,
+              "correct": 3,
+              "label": "Diagnostic",
+              "score_percent": 75.0,
+              "submitted_at": "2026-09-29T13:43:56.580100",
+              "total": 4
+            }
+          ],
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 73,
+              "correct": 3,
+              "label": "Diagnostic",
+              "score_percent": 75.0,
+              "submitted_at": "2026-09-29T13:43:56.580100",
+              "total": 4
+            }
+          ],
+          "topic_id": 46,
+          "topic_name": "Polynomials"
+        },
+        {
+          "series": [
+            {
+              "assessment_id": 25,
+              "assessment_type": "diagnostic",
+              "attempt_id": 73,
+              "correct": 0,
+              "label": "Diagnostic",
+              "score_percent": 0.0,
+              "submitted_at": "2026-09-29T13:43:56.580100",
+              "total": 6
+            }
+          ],
+          "topic_id": 52,
+          "topic_name": "Triangle Properties"
+        }
+      ]
+    },
+    "success": true
+  }
+}

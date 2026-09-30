@@ -1,0 +1,50 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="prompts-section" class="section hidden">
+    {{ page_head('RAG Prompts', 'System instructions for PDF-upload chat (/api/rag/chat). Teacher-level RAG prompts are still prepended when set.', img='ai-chat-bot.png') }}
+
+    <div class="ad-card">
+        <p class="ad-help" style="margin:0 0 14px;">User-level RAG prompts from the API are still prepended above this block when set.
+            In the &quot;PDF uploaded&quot; field you may use placeholders
+            <code class="ad-code">{filename}</code>, <code class="ad-code">{page_info}</code>, <code class="ad-code">{thread_id}</code>
+            (for tool calls). <b>Load current</b> shows the active text (including built-in defaults if nothing was saved yet).</p>
+        <div id="rag-prompt-limits-box" class="ad-note hidden" style="margin-bottom:18px;">
+            <div>
+                <p style="margin:0 0 6px;font-weight:700;">Token budget (Groq / GPT-OSS models)</p>
+                <p class="ad-help" style="margin:0 0 6px;" id="rag-prompt-limits-doc"></p>
+                <ul class="list-disc list-inside" style="font-size:12.5px;line-height:1.7;" id="rag-prompt-limits-list"></ul>
+                <p class="ad-help">Each field below is capped so the rest of the context can hold
+                    multi-turn chat (user/assistant pairs), tool results, completion, and the teacher&rsquo;s custom RAG prompt.</p>
+            </div>
+        </div>
+
+        <div class="ad-field">
+            <label for="rag-prompt-with-pdf">When a PDF is uploaded</label>
+            <textarea id="rag-prompt-with-pdf" rows="14" class="font-mono"
+                placeholder="System instructions with placeholders {filename}, {page_info}, {thread_id}"
+                oninput="updateRagAdminTokenEstimates()"></textarea>
+            <p class="ad-help">Estimated tokens: <span id="rag-est-with-pdf">0</span> / <span class="rag-max-tok">—</span></p>
+        </div>
+
+        <div class="ad-field">
+            <label for="rag-prompt-no-pdf">When no PDF is uploaded</label>
+            <textarea id="rag-prompt-no-pdf" rows="4" class="font-mono"
+                placeholder="System message before a document is attached"
+                oninput="updateRagAdminTokenEstimates()"></textarea>
+            <p class="ad-help">Estimated tokens: <span id="rag-est-no-pdf">0</span> / <span class="rag-max-tok">—</span></p>
+        </div>
+
+        <p id="rag-prompt-status" class="ad-status-line"></p>
+
+        <div class="ad-form-actions">
+            <button type="button" onclick="resetRagSystemPrompt()" class="ad-btn ad-btn-danger-outline" style="margin-right:auto;">
+                <i class="fas fa-undo"></i>Reset to built-in defaults
+            </button>
+            <button type="button" onclick="loadRagSystemPrompt()" class="ad-btn ad-btn-outline">
+                <i class="fas fa-sync"></i>Load current
+            </button>
+            <button type="button" onclick="saveRagSystemPrompt()" class="ad-btn ad-btn-primary">
+                <i class="fas fa-save"></i>Save RAG prompts
+            </button>
+        </div>
+    </div>
+</div>

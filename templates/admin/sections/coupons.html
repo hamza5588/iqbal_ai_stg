@@ -1,0 +1,28 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="coupons-section" class="section hidden">
+    {% call page_head('Coupons', 'Codes that unlock Pro or Pro Plus subscriptions.', icon='fa-ticket-alt') %}
+        <button type="button" onclick="showCreateCouponModal()" class="ad-btn ad-btn-primary"><i class="fas fa-plus"></i>Create Coupon</button>
+    {% endcall %}
+
+    <div class="ad-card ad-card-flush">
+        <div id="coupons-table-container" class="ad-table-scroll">
+            <table class="ad-table">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Tier</th>
+                        <th>Used</th>
+                        <th>Max Uses</th>
+                        <th>Status</th>
+                        <th class="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="coupons-tbody">
+                    <tr>
+                        <td colspan="6">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

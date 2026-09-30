@@ -1,0 +1,46 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/19/analytics/quizzes",
+  "body": {
+    "data": [
+      {
+        "assignment_id": 25,
+        "avg_score_percent": null,
+        "completion_percent": 0.0,
+        "due_date": null,
+        "overdue_count": 3,
+        "quiz_id": 47,
+        "student_results": [
+          {
+            "max_score": null,
+            "score": null,
+            "score_percent": null,
+            "status": "not_started",
+            "student_id": 35,
+            "username": "qa_stu_a_064214"
+          },
+          {
+            "max_score": null,
+            "score": null,
+            "score_percent": null,
+            "status": "not_started",
+            "student_id": 36,
+            "username": "qa_stu_b_064214"
+          },
+          {
+            "max_score": null,
+            "score": null,
+            "score_percent": null,
+            "status": "not_started",
+            "student_id": 37,
+            "username": "qa_stu_c_064214"
+          }
+        ],
+        "submitted_count": 0,
+        "title": "QA Assignment 20260929_064214",
+        "total_students": 3
+      }
+    ],
+    "success": true
+  }
+}

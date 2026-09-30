@@ -1,0 +1,33 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/attempts",
+  "body": {
+    "data": [
+      {
+        "assessment_id": 48,
+        "assessment_type": "quiz",
+        "assignment_id": 26,
+        "attempt_id": 76,
+        "max_score": 5.0,
+        "score": 3.0,
+        "score_percent": 60.0,
+        "status": "submitted",
+        "submitted_at": "2026-09-29T15:00:27.926943",
+        "title": "QA PDF Quiz 20260929_075116"
+      },
+      {
+        "assessment_id": 25,
+        "assessment_type": "diagnostic",
+        "assignment_id": null,
+        "attempt_id": 75,
+        "max_score": 32.0,
+        "score": 19.0,
+        "score_percent": 59.4,
+        "status": "submitted",
+        "submitted_at": "2026-09-29T14:53:32.306247",
+        "title": "Diagnostic Assessment"
+      }
+    ],
+    "success": true
+  }
+}

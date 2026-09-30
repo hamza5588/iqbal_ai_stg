@@ -1,0 +1,189 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/80/questions",
+  "body": {
+    "data": {
+      "attempt_id": 80,
+      "current_question_index": 0,
+      "questions": [
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "0.75",
+              "text": "0.75"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "2/7",
+              "text": "2/7"
+            },
+            {
+              "label": "C",
+              "latex": "\u221a2",
+              "render": "\u221a2",
+              "text": "\u221a2"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "4",
+              "text": "4"
+            }
+          ],
+          "question_id": 260,
+          "question_latex": null,
+          "question_render": "Which number is irrational?",
+          "question_text": "Which number is irrational?",
+          "sort_order": 0,
+          "time_limit_seconds": null
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "3 + 5i",
+              "text": "3 + 5i"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "-3 - 5i",
+              "text": "-3 - 5i"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "5 - 3i",
+              "text": "5 - 3i"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "-3 + 5i",
+              "text": "-3 + 5i"
+            }
+          ],
+          "question_id": 261,
+          "question_latex": null,
+          "question_render": "The conjugate of 3 - 5i is:",
+          "question_text": "The conjugate of 3 - 5i is:",
+          "sort_order": 1,
+          "time_limit_seconds": null
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "2",
+              "text": "2"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "3",
+              "text": "3"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "10",
+              "text": "10"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "100",
+              "text": "100"
+            }
+          ],
+          "question_id": 262,
+          "question_latex": null,
+          "question_render": "log10 1000 equals:",
+          "question_text": "log10 1000 equals:",
+          "sort_order": 2,
+          "time_limit_seconds": null
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "log 7",
+              "text": "log 7"
+            },
+            {
+              "label": "B",
+              "latex": null,
+              "render": "log 3",
+              "text": "log 3"
+            },
+            {
+              "label": "C",
+              "latex": null,
+              "render": "1",
+              "text": "1"
+            },
+            {
+              "label": "D",
+              "latex": null,
+              "render": "10",
+              "text": "10"
+            }
+          ],
+          "question_id": 263,
+          "question_latex": null,
+          "question_render": "log 2 + log 5 (common log) equals:",
+          "question_text": "log 2 + log 5 (common log) equals:",
+          "sort_order": 3,
+          "time_limit_seconds": null
+        },
+        {
+          "difficulty": "medium",
+          "options": [
+            {
+              "label": "A",
+              "latex": null,
+              "render": "1/x + 2",
+              "text": "1/x + 2"
+            },
+            {
+              "label": "B",
+              "latex": "x^{2} + 3x + 1",
+              "render": "\\(x^{2} + 3x + 1\\)",
+              "text": "x^{2} + 3x + 1"
+            },
+            {
+              "label": "C",
+              "latex": "\\sqrt{x} + 1",
+              "render": "\\(\\sqrt{x} + 1\\)",
+              "text": "\\sqrt{x} + 1"
+            },
+            {
+              "label": "D",
+              "latex": "2^{x}",
+              "render": "\\(2^{x}\\)",
+              "text": "2^{x}"
+            }
+          ],
+          "question_id": 264,
+          "question_latex": null,
+          "question_render": "Which is a polynomial?",
+          "question_text": "Which is a polynomial?",
+          "sort_order": 4,
+          "time_limit_seconds": null
+        }
+      ],
+      "saved_answers": {}
+    },
+    "success": true
+  }
+}

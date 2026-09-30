@@ -10,8 +10,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --text-dark:#16241c;
-  --text-muted:#5c6b62;
+  --text-dark:#1e293b;
+  --text-muted:#64748b;
 }
 *{box-sizing:border-box; margin:0; padding:0;}
 body{
@@ -33,7 +33,7 @@ a{ text-decoration:none; }
 .logo-badge{
   position:absolute; top:-56px; left:50%; transform:translateX(-50%);
   width:112px; height:112px; border-radius:50%;
-  background:#fff; box-shadow:0 10px 30px rgba(20,80,40,0.12);
+  background:#fff; box-shadow:0 10px 30px rgba(26,86,219,0.12);
   display:flex; align-items:center; justify-content:center;
   z-index:5; border:6px solid #fff;
 }
@@ -52,7 +52,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 .email-pill{
   display:inline-flex; align-items:center; gap:10px;
   background:#fff; border-radius:30px; padding:10px 22px 10px 10px; margin-bottom:30px;
-  box-shadow:0 2px 10px rgba(20,80,40,0.06); font-weight:600; font-size:0.95rem;
+  box-shadow:0 2px 10px rgba(26,86,219,0.06); font-weight:600; font-size:0.95rem;
 }
 .email-pill .icon-circ{
   width:30px; height:30px; border-radius:50%; background:var(--green-mid);
@@ -63,12 +63,12 @@ h1.title span{ color:var(--green); font-weight:700; }
 .progress-step{ display:flex; flex-direction:column; align-items:center; width:150px; }
 .progress-circle{
   width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-  font-weight:700; font-size:1rem; margin-bottom:8px; background:#fff; border:2px solid #d7e6dc; color:#9fb3a7;
+  font-weight:700; font-size:1rem; margin-bottom:8px; background:#fff; border:2px solid #dbe7fb; color:#94a3b8;
 }
 .progress-circle.done{ background:linear-gradient(135deg,var(--green-dark),var(--green-mid)); border-color:transparent; color:#fff; }
-.progress-line{ flex:1; height:2px; background:#d7e6dc; margin-top:22px; min-width:40px; }
+.progress-line{ flex:1; height:2px; background:#dbe7fb; margin-top:22px; min-width:40px; }
 .progress-line.done{ background:var(--green-mid); }
-.progress-label{ font-size:0.82rem; font-weight:700; color:#9fb3a7; }
+.progress-label{ font-size:0.82rem; font-weight:700; color:#94a3b8; }
 .progress-label.active{ color:var(--green); }
 .progress-sub{ font-size:0.72rem; color:var(--text-muted); margin-top:2px; line-height:1.3; }
 
@@ -94,13 +94,14 @@ h1.title span{ color:var(--green); font-weight:700; }
 .link-note{ font-size:0.88rem; color:var(--text-muted); }
 .link-note a{ color:var(--green); font-weight:700; }
 
-.page-footer{ background:#f5f8f6; border-radius:14px; padding:10px 24px; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:26px; }
+.page-footer{ background:#f8fafc; border-radius:14px; padding:10px 24px; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:26px; }
 .page-footer .brand{ color:var(--green); font-weight:700; }
 
 @media (max-width:640px){ .card{ padding:70px 22px 32px; } .progress-step{ width:100px; } }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}">
 </head>
-<body>
+<body class="nu-page nu-auth nu-reg">
 <div class="page-wrap">
   <div class="logo-badge">
     {% with variant='icon' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
@@ -108,27 +109,27 @@ h1.title span{ color:var(--green); font-weight:700; }
   <div class="card">
 
     <svg class="illustration" viewBox="0 0 200 180" xmlns="http://www.w3.org/2000/svg">
-      <g fill="#8fd6a6">
+      <g fill="#93c5fd">
         <path d="M18 40 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z"/>
         <path d="M182 46 l2.5 5.5 5.5 2.5 -5.5 2.5 -2.5 5.5 -2.5 -5.5 -5.5 -2.5 5.5 -2.5 z"/>
         <path d="M170 20 l2 4.5 4.5 2 -4.5 2 -2 4.5 -2 -4.5 -4.5 -2 4.5 -2 z"/>
       </g>
-      <circle cx="188" cy="80" r="3" fill="none" stroke="#8fd6a6" stroke-width="2"/>
-      <circle cx="182" cy="100" r="2" fill="none" stroke="#8fd6a6" stroke-width="2"/>
+      <circle cx="188" cy="80" r="3" fill="none" stroke="#93c5fd" stroke-width="2"/>
+      <circle cx="182" cy="100" r="2" fill="none" stroke="#93c5fd" stroke-width="2"/>
       <g transform="translate(8,70) rotate(-18)">
-        <path d="M0 14 L34 0 L14 8 L10 26 L6 16 Z" fill="#bfe6cc"/>
+        <path d="M0 14 L34 0 L14 8 L10 26 L6 16 Z" fill="#bfdbfe"/>
       </g>
-      <path d="M20 66 q10 6 16 16" stroke="#bfe6cc" stroke-width="2" fill="none" stroke-dasharray="2 4"/>
+      <path d="M20 66 q10 6 16 16" stroke="#bfdbfe" stroke-width="2" fill="none" stroke-dasharray="2 4"/>
       <g transform="translate(45,45)">
-        <path d="M0 30 L55 0 L110 30 L110 95 Q110 100 105 100 L5 100 Q0 100 0 95 Z" fill="#1f9c46"/>
-        <path d="M0 30 L55 60 L110 30 L110 95 Q110 100 105 100 L5 100 Q0 100 0 95 Z" fill="#2fae52"/>
-        <path d="M0 30 L55 60 L110 30" fill="none" stroke="#0e5c2f" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M0 95 L38 62" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
-        <path d="M110 95 L72 62" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+        <path d="M0 30 L55 0 L110 30 L110 95 Q110 100 105 100 L5 100 Q0 100 0 95 Z" fill="#2563eb"/>
+        <path d="M0 30 L55 60 L110 30 L110 95 Q110 100 105 100 L5 100 Q0 100 0 95 Z" fill="#3b82f6"/>
+        <path d="M0 30 L55 60 L110 30" fill="none" stroke="#12408a" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M0 95 L38 62" stroke="#12408a" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+        <path d="M110 95 L72 62" stroke="#12408a" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
       </g>
       <g transform="translate(75,42)">
         <rect x="-2" y="-2" width="59" height="59" rx="14" fill="#ffffff"/>
-        <path d="M27.5 4 L46 11 V26 C46 38 38 45 27.5 50 C17 45 9 38 9 26 V11 Z" fill="#1f9c46"/>
+        <path d="M27.5 4 L46 11 V26 C46 38 38 45 27.5 50 C17 45 9 38 9 26 V11 Z" fill="#2563eb"/>
         <path d="M18 27 L24.5 33.5 L38 20" stroke="#ffffff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
       </g>
     </svg>
@@ -149,13 +150,13 @@ h1.title span{ color:var(--green); font-weight:700; }
       </div>
       <div class="progress-line done"></div>
       <div class="progress-step">
-        <div class="progress-circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb3a7" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+        <div class="progress-circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
         <div class="progress-label">2. Check Inbox</div>
         <div class="progress-sub">Check your inbox<br>or spam folder</div>
       </div>
       <div class="progress-line"></div>
       <div class="progress-step">
-        <div class="progress-circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb3a7" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+        <div class="progress-circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
         <div class="progress-label">3. Activate Account</div>
         <div class="progress-sub">Click the link to verify<br>your email address</div>
       </div>
@@ -178,7 +179,7 @@ h1.title span{ color:var(--green); font-weight:700; }
         </button>
       </form>
       <a class="btn btn-outline" href="{{ url_for('auth.register_email') }}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         Change Email
       </a>
     </div>

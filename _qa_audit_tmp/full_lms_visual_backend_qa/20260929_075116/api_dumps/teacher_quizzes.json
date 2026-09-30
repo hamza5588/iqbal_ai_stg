@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "url": "/api/lms/quizzes",
+  "body": {
+    "data": [
+      {
+        "id": 48,
+        "status": "published",
+        "title": "QA PDF Quiz 20260929_075116"
+      }
+    ],
+    "success": true
+  }
+}

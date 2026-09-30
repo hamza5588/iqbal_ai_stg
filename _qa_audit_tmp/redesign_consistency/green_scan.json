@@ -1,0 +1,1117 @@
+{
+  "auth/login": [
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(76, 175, 80)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(76, 175, 80)"
+      ]
+    }
+  ],
+  "auth/register_email": [],
+  "auth/email_sent": [],
+  "auth/register": [
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(76, 175, 80)"
+      ]
+    }
+  ],
+  "auth/forgot_password": [],
+  "auth/verify_otp": [],
+  "auth/reset_password": [],
+  "admin/Dashboard": [
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500",
+      "text": "Teachers\n\n9",
+      "hits": [
+        "border rgb(22, 163, 74)"
+      ]
+    }
+  ],
+  "admin/User Management": [],
+  "admin/RAG prompts": [],
+  "admin/Coupons": [],
+  "admin/Lessons": [],
+  "admin/Documents": [],
+  "admin/Diagnostic Assessment": [
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "d-chip live",
+      "text": "LIVE",
+      "hits": [
+        "color rgb(4, 120, 87)",
+        "bg rgb(209, 250, 229)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "d-chip live",
+      "text": "LIVE",
+      "hits": [
+        "color rgb(4, 120, 87)",
+        "bg rgb(209, 250, 229)"
+      ]
+    }
+  ],
+  "admin/Color Theme": [
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "admin-theme-preset text-left p-3 rounded-lg border-2 transition-all",
+      "text": "Emerald\n#10b981",
+      "hits": [
+        "border rgb(16, 185, 129)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "inline-block w-8 h-8 rounded-full mb-2",
+      "text": "",
+      "hits": [
+        "bg rgb(16, 185, 129)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "admin-theme-preset text-left p-3 rounded-lg border-2 transition-all ri",
+      "text": "Iqbal Green\n#166534",
+      "hits": [
+        "border rgb(22, 101, 52)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "inline-block w-8 h-8 rounded-full mb-2",
+      "text": "",
+      "hits": [
+        "bg rgb(22, 101, 52)"
+      ]
+    }
+  ],
+  "admin/Settings": [],
+  "admin/Load Testing": [],
+  "admin/LLM Telemetry": [
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "bg-white rounded-xl shadow p-4 border-l-4 border-green-500",
+      "text": "Total tokens\n\n\u2014",
+      "hits": [
+        "border rgb(22, 163, 74)"
+      ]
+    }
+  ],
+  "student/diagnostic": [
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    }
+  ],
+  "student/learning-path": [
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    }
+  ],
+  "student/classes": [
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "sd-pill green round",
+      "text": "Active",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    }
+  ],
+  "student/tutor": [
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "sd-toast success",
+      "text": "Restored your tutor conversation",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    }
+  ],
+  "teacher/lessons": [],
+  "teacher/classes": [
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "td-avatar-sm",
+      "text": "",
+      "hits": [
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "td-avatar-sm",
+      "text": "",
+      "hits": [
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "td-avatar-sm",
+      "text": "",
+      "hits": [
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "td-avatar-sm",
+      "text": "",
+      "hits": [
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "td-avatar-sm",
+      "text": "",
+      "hits": [
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "8TH GRADE",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "button",
+      "id": "",
+      "cls": "td-btn td-btn-green td-btn-sm",
+      "text": "Manage",
+      "hits": [
+        "bg rgb(22, 163, 74)"
+      ]
+    }
+  ],
+  "teacher/quizzes": [
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    },
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-pill green",
+      "text": "Published",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    },
+    {
+      "tag": "path",
+      "id": "",
+      "cls": "",
+      "text": "",
+      "hits": [
+        "svg-fill rgb(22, 163, 74)"
+      ]
+    }
+  ],
+  "teacher/analytics": [
+    {
+      "tag": "span",
+      "id": "",
+      "cls": "td-status-badge td-status-good",
+      "text": "Good",
+      "hits": [
+        "color rgb(22, 163, 74)",
+        "bg rgb(220, 252, 231)"
+      ]
+    }
+  ],
+  "teacher/tutor": []
+}

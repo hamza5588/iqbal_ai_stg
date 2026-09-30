@@ -1,0 +1,105 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/dashboard",
+  "body": {
+    "data": {
+      "classes": [
+        {
+          "grade_level": "7",
+          "id": 21,
+          "name": "QA Class 7 20260929_120514"
+        }
+      ],
+      "current_learning_path_step": null,
+      "learning_path": {
+        "completed_count": 5,
+        "current_step": null,
+        "id": 63,
+        "items": [
+          {
+            "completed_at": "2026-09-29T19:09:03.760173",
+            "id": 69,
+            "item_id": 0,
+            "item_type": "practice",
+            "label": "Learning Chat \u2014 practice weak areas",
+            "sort_order": 0,
+            "status": "completed",
+            "title": "Learning Chat \u2014 practice weak areas"
+          }
+        ],
+        "percent": 100.0,
+        "status": "completed",
+        "title": "Personalized Learning Path",
+        "total_count": 5,
+        "weak_area_progress": {
+          "cleared": 5,
+          "percent": 100.0,
+          "total": 5,
+          "weak_remaining": 0
+        }
+      },
+      "learning_path_progress": {
+        "completed": 5,
+        "percent": 100.0,
+        "total": 5
+      },
+      "mastery": [
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 13,
+          "score_percent": 69.23076923076923,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:09:03.752923",
+          "mastery_status": "improving",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 74,
+          "topic_name": "Geometry and Measurement"
+        }
+      ],
+      "onboarding": {
+        "current_learning_path_id": 63,
+        "diagnostic_assessment_id": 25,
+        "diagnostic_completed": true,
+        "diagnostic_completed_at": "2026-09-29T19:07:30.996444",
+        "enrolled_class_count": 1,
+        "needs_diagnostic": false,
+        "needs_onboarding": false,
+        "pending_assignment_count": 0,
+        "pending_assignments": []
+      },
+      "overall_progress": 63.64,
+      "pending_assignments": [],
+      "weak_topics": []
+    },
+    "success": true
+  }
+}

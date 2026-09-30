@@ -1,0 +1,42 @@
+PASS    [Setup] Health: app responds at BASE_URL :: ui_integration_for_teacher @ 6c3c3ea Snapshot teacher UI integration, QA/load tooling and new UI design sources (+46 uncommitted paths)
+PASS    [Setup] Register TEACHER via UI → lands on /teacher-dashboard :: qa.teacher.20260929_151749@test.local → http://127.0.0.1:5057/teacher-dashboard#lessons
+PASS    [Setup] Register STUDENTS A, B, C via UI (grade 7) → land on /student-dashboard :: A: id=65 grade=7th; B: id=66 grade=7th; C: id=67 grade=7th
+PASS    [Teacher] Shell: nav labels + icons, logo, no broken images :: My Lessons, Classes, Quizzes, Analytics, AI Tutor
+PASS    [Teacher] Classes: teaching grade + create class form persists (UI → API → DB) :: class_id=26 join_code=7M5ZYYT9
+PASS    [Teacher] Add Students tab adds A + C (UI → roster API → class_enrollments) :: 
+PASS    [Student] Before diagnostic: gate forces diagnostic; Join/Tutor/Path blocked; Learning Path locked (API) :: 
+PASS    [Student] Diagnostic: start → real questions (API count) → timer counts down :: Q1 UI='Which number is irrational?' API id=None
+PASS    [Student] Math renders on diagnostic (MathJax, no red/broken TeX, no raw LaTeX) :: question #1
+PASS    [Student] Diagnostic submit (deliberate mix) → results by topic; UI = API = DB (attempt, answers, topic scores) :: expected 19 correct; UI 59%
+PASS    [Student] Retake rule: start again returns the finished attempt; UI shows results + explicit Retake only :: retake exists only as explicit 'Retake with new questions' (retake:true) — product rule to confirm
+PASS    [Student] Diagnostic hub: stat cards + Taken row = API dashboard/attempts = DB :: UI 59%
+PASS    [Student] Learning Path overview after diagnostic = dashboard/learning-path/progress APIs = DB mastery :: 
+PASS    [Student] Learning Chat: start, wrong answer → tutor help → correct answers; progress updates (UI+API+StudentTopicScore) :: 
+PASS    [Cross-role] S3b: viewing diagnostic results (read-only) must not change mastery / progress :: 
+FAIL    [Student] Guided practice (per-topic) opens; hint or graceful error (API + DB) :: TimeoutError: Locator.get_attribute: Timeout 60000ms exceeded.
+Call log:
+  - waiting for locator("#sdPathTopics").locator("text=/Guided practice|Practice again/").first
+
+PASS    [Teacher] Quizzes: PDF → MCQ generate → preview → publish (UI → API → DB) :: 
+PASS    [Teacher] Assign quiz to class via UI → assignment published (API + DB) :: 
+PASS    [Student] My Classes: enrolled class (API = DB) with assignment visible :: 
+PASS    [Student] Take assigned quiz in UI (deliberate 3 of 5) → Review = API results = DB attempt/submission :: expected 3 correct; UI 60% (3 correct)
+PASS    [Student] Attempts history: rows = API; View Result modal = API results :: modal 60%
+PASS    [Teacher] Lessons: create (Use PDF as lesson, grade 7) + publish; list = my_lessons API = DB :: 
+PASS    [Student] Lesson viewer: class lesson opens, content renders (browse_lessons?class_id = UI = DB) :: 
+PASS    [Student] Lesson chat: ask question → answer persisted as conversation (API + DB) :: 
+PASS    [Student] AI Tutor: send → reply; history API + DB; reload restores; clear empties :: 'First, we need a common denominator for the fractions. The denominators are 4 and 8. What is the least common multiple o'
+PASS    [Student] Join class via code (Student B, diagnostic done BEFORE joining) — UI + API + DB :: 
+PASS    [Teacher] Classes roster tab: A, B, C listed (UI = API = DB) :: 
+PASS    [Teacher] Analytics Topic Progress: A's % = roster API = student progress API = DB; detail shows topics :: UI 64%
+PASS    [Teacher] Analytics Quiz Results collapsed ↔ expanded = analytics/quizzes API = assignment_submissions DB :: UI row: 'Q\nqa_stu_a_151749\n\t3 / 5 (60%)\t3\t5\tAverage\tView Details'
+PASS    [Teacher] Analytics Struggling = struggling API; consistent with weak mastery in DB :: 
+PASS    [Teacher] Analytics Roster: progress per student = API = DB (not all zeros); late-enrolled B included :: late-enroll B: roster 81.25 = own progress 81.25 (diagnostic taken before join counts)
+PASS    [Teacher] Student report endpoint = student-facing scores (same ids) :: 
+PASS    [Teacher] AI Tutor: Teaching Assistant send → reply; history API + DB :: 'AI\n\nOne effective tip for teaching fractions is to use visual aids. In corporate tools like fraction'
+PASS    [Cross-role] S5: reload / re-login keeps submitted diagnostic + enrollment :: 
+PASS    [Cross-role] S6: role isolation on role-gated APIs + dashboards :: 
+PASS    [Cross-cutting] Mobile 390px: student + teacher main views, no horizontal overflow :: 
+PASS    [Cross-cutting] No JS page errors; no 404 static assets; failed API calls listed :: API 4xx/5xx seen: []
+
+{'PASS': 36, 'FAIL': 1, 'BLOCKED': 0} → C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\_qa_audit_tmp\full_lms_visual_backend_qa\20260929_151749\REPORT.md

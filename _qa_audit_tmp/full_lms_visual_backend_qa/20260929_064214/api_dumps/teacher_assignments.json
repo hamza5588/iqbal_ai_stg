@@ -1,0 +1,11 @@
+{
+  "status": 400,
+  "url": "/api/lms/assignments",
+  "body": {
+    "error": {
+      "code": "error",
+      "message": "class_id is required for teachers"
+    },
+    "success": false
+  }
+}

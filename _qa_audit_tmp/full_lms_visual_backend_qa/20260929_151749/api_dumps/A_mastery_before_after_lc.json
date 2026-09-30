@@ -1,0 +1,75 @@
+{
+  "before": {
+    "34": [
+      56.2,
+      "weak",
+      16
+    ],
+    "40": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "41": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "42": [
+      75.0,
+      "needs_practice",
+      4
+    ],
+    "66": [
+      100.0,
+      "mastered",
+      1
+    ]
+  },
+  "after": {
+    "34": [
+      61.1,
+      "improving",
+      18
+    ],
+    "40": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "41": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "42": [
+      75.0,
+      "needs_practice",
+      4
+    ],
+    "66": [
+      100.0,
+      "mastered",
+      1
+    ]
+  },
+  "changed": {
+    "34": [
+      [
+        56.2,
+        "weak",
+        16
+      ],
+      [
+        61.1,
+        "improving",
+        18
+      ]
+    ]
+  },
+  "session_row": [
+    2,
+    2,
+    "completed"
+  ]
+}

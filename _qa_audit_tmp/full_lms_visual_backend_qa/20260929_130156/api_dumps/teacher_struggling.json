@@ -1,0 +1,31 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/24/analytics/struggling",
+  "body": {
+    "data": [
+      {
+        "email": "qa.student.a.20260929_130156@test.local",
+        "enrolled_at": "2026-09-29T20:03:59.473036",
+        "has_mastery_data": true,
+        "is_struggling": true,
+        "overall_progress": 62.16,
+        "student_id": 56,
+        "username": "qa_stu_a_130156",
+        "weak_topic_count": 2,
+        "weak_topics": [
+          {
+            "score_percent": 42.857142857142854,
+            "topic_id": 49,
+            "topic_name": "Algebra Basics"
+          },
+          {
+            "score_percent": 50.0,
+            "topic_id": 34,
+            "topic_name": "Geometry"
+          }
+        ]
+      }
+    ],
+    "success": true
+  }
+}

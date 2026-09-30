@@ -1,0 +1,347 @@
+{
+  "base": "http://127.0.0.1:5057",
+  "checks": [
+    {
+      "name": "desktop: Dashboard opens (active + #dashboard)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Users opens (active + #users)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Lessons opens (active + #lessons)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Documents opens (active + #documents)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Diagnostic opens (active + #diagnostic)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: LLM Settings opens (active + #settings)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: RAG Prompts opens (active + #prompts)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Coupons opens (active + #coupons)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Color Theme opens (active + #theme)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: users load via deep link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Teachers sub-tab filters list",
+      "ok": true,
+      "detail": "{'teacher'}"
+    },
+    {
+      "name": "desktop: user empty state",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "name": "desktop: lessons table rendered (not stuck loading)",
+      "ok": true,
+      "detail": "18\tQA Lesson 20260929_151749\tqa_teacher_"
+    },
+    {
+      "name": "desktop: documents table rendered (not stuck loading)",
+      "ok": true,
+      "detail": "No documents yet  PDFs uploaded for chat"
+    },
+    {
+      "name": "desktop: coupons table rendered (not stuck loading)",
+      "ok": true,
+      "detail": "No coupons yet  Create a coupon to grant"
+    },
+    {
+      "name": "desktop: diagnostic library rendered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: diagnostic 4 workflow steps",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: diagnostic 'Add study PDFs' tab",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: diagnostic library filters",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: LLM settings loaded (provider selected)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: RAG prompt loaded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: theme presets",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: theme preview select (not saved)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: create coupon",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: delete coupon",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: create user",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: edit modal prefilled",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: delete user",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: avatar menu (Back to App, Logout)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Load Testing shell + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Load Testing tab tests",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Load Testing tab assets",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Load Testing tab results",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Load Testing tab settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: Load Testing -> /admin/#diagnostic deep link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop: LLM Telemetry shell + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Dashboard opens (active + #dashboard)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Users opens (active + #users)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Lessons opens (active + #lessons)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Documents opens (active + #documents)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Diagnostic opens (active + #diagnostic)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: LLM Settings opens (active + #settings)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: RAG Prompts opens (active + #prompts)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Coupons opens (active + #coupons)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Color Theme opens (active + #theme)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: users load via deep link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Teachers sub-tab filters list",
+      "ok": true,
+      "detail": "{'teacher'}"
+    },
+    {
+      "name": "mobile: user empty state",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "name": "mobile: lessons table rendered (not stuck loading)",
+      "ok": true,
+      "detail": "18\tQA Lesson 20260929_151749\tqa_teacher_"
+    },
+    {
+      "name": "mobile: documents table rendered (not stuck loading)",
+      "ok": true,
+      "detail": "No documents yet  PDFs uploaded for chat"
+    },
+    {
+      "name": "mobile: coupons table rendered (not stuck loading)",
+      "ok": true,
+      "detail": "No coupons yet  Create a coupon to grant"
+    },
+    {
+      "name": "mobile: diagnostic library rendered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: diagnostic 4 workflow steps",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: diagnostic 'Add study PDFs' tab",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: diagnostic library filters",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: LLM settings loaded (provider selected)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: RAG prompt loaded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: theme presets",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: theme preview select (not saved)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: avatar menu (Back to App, Logout)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Load Testing shell + active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Load Testing tab tests",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Load Testing tab assets",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Load Testing tab results",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Load Testing tab settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: Load Testing -> /admin/#diagnostic deep link",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile: LLM Telemetry shell + active",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "static_errors": [],
+  "page_errors": [],
+  "api_errors": [
+    "[desktop] 500 /admin/llm-telemetry/api/summary?days=7&traffic_source=production",
+    "[mobile] 500 /admin/llm-telemetry/api/summary?days=7&traffic_source=production"
+  ],
+  "overflow": []
+}

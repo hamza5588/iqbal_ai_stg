@@ -194,15 +194,18 @@ def get_class_roster_summary(class_id: int, teacher_id: int) -> List[dict]:
             for m in weak
         ]
         weak_topics.sort(key=lambda x: (x["topic_name"] or "").lower())
+        progress = get_overall_progress(enr.student_id)
         roster.append(
             {
                 "student_id": enr.student_id,
                 "username": user.username if user else None,
                 "email": user.useremail if user else None,
-                "overall_progress": get_overall_progress(enr.student_id),
+                "overall_progress": progress,
                 "weak_topic_count": len(weak_topics),
                 "weak_topics": weak_topics,
-                "is_struggling": len(weak_topics) >= 2 or get_overall_progress(enr.student_id) < WEAK_THRESHOLD,
+                "has_mastery_data": bool(mastery),
+                # No topic data yet (not attempted) is not "struggling": 0.0 there means "unknown".
+                "is_struggling": bool(mastery) and (len(weak_topics) >= 2 or progress < WEAK_THRESHOLD),
                 "enrolled_at": enr.enrolled_at.isoformat() if enr.enrolled_at else None,
             }
         )
@@ -243,7 +246,10 @@ def get_student_report(student_id: int, teacher_id: int, class_id: int) -> dict:
 
 def get_struggling_students(class_id: int, teacher_id: int, threshold: float = WEAK_THRESHOLD) -> List[dict]:
     roster = get_class_roster_summary(class_id, teacher_id)
-    return [r for r in roster if r.get("is_struggling") or r.get("overall_progress", 100) < threshold]
+    return [
+        r for r in roster
+        if r.get("is_struggling") or (r.get("has_mastery_data") and r.get("overall_progress", 100) < threshold)
+    ]
 
 
 def get_progress_over_time(student_id: int) -> List[dict]:

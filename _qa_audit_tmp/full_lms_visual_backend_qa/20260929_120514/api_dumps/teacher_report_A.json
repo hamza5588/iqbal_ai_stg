@@ -1,0 +1,68 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/21/students/43/report",
+  "body": {
+    "data": {
+      "overall_progress": 63.64,
+      "recent_attempts": [
+        {
+          "assessment_id": 49,
+          "attempt_id": 80,
+          "score_percent": 60.0,
+          "submitted_at": "2026-09-29T19:11:55.722767"
+        },
+        {
+          "assessment_id": 25,
+          "attempt_id": 79,
+          "score_percent": 59.4,
+          "submitted_at": "2026-09-29T19:07:17.230487"
+        }
+      ],
+      "student_id": 43,
+      "topics": [
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 13,
+          "score_percent": 69.23076923076923,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:07:30.943611",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:09:03.752923",
+          "mastery_status": "improving",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 74,
+          "topic_name": "Geometry and Measurement"
+        }
+      ],
+      "username": "qa_stu_a_120514"
+    },
+    "success": true
+  }
+}

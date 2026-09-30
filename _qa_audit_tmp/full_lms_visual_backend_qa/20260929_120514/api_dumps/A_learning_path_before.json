@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/learning-path",
+  "body": {
+    "data": {
+      "items": [],
+      "message": "No learning path yet. Complete a quiz to generate one."
+    },
+    "success": true
+  }
+}

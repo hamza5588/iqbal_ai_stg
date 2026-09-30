@@ -1158,10 +1158,7 @@ def student_dashboard():
         lms_onboarding = student_profile_service.get_onboarding_status(session['user_id'])
     except Exception as e:
         logger.warning("Failed to load LMS onboarding status: %s", e)
-    return render_template(
-        'student_dashboard/student_dashboard.html',
-        lms_onboarding=lms_onboarding,
-    )
+    return render_template('student/dashboard.html', lms_onboarding=lms_onboarding)
 
 
 def _render_legacy_chat():

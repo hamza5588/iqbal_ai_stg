@@ -1,0 +1,33 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/24/students",
+  "body": {
+    "data": [
+      {
+        "email": "qa.student.a.20260929_130156@test.local",
+        "enrolled_at": "2026-09-29T20:03:59.473036",
+        "grade_label": "7th Grade",
+        "grade_level": "7",
+        "has_mastery_data": false,
+        "is_struggling": false,
+        "overall_progress": 0.0,
+        "student_id": 56,
+        "username": "qa_stu_a_130156",
+        "weak_topic_count": 0
+      },
+      {
+        "email": "qa.student.c.20260929_130156@test.local",
+        "enrolled_at": "2026-09-29T20:03:59.488290",
+        "grade_label": "7th Grade",
+        "grade_level": "7",
+        "has_mastery_data": false,
+        "is_struggling": false,
+        "overall_progress": 0.0,
+        "student_id": 58,
+        "username": "qa_stu_c_130156",
+        "weak_topic_count": 0
+      }
+    ],
+    "success": true
+  }
+}

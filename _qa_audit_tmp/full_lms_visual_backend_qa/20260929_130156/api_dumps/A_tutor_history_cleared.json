@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "url": "/api/lms/tutor/history?mode=student",
+  "body": {
+    "data": {
+      "has_long_term_memory": false,
+      "message_count": 0,
+      "messages": []
+    },
+    "success": true
+  }
+}

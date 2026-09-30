@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/mine",
+  "body": {
+    "data": [
+      {
+        "description": "Full LMS QA class",
+        "grade_level": "7",
+        "id": 26,
+        "joined_at": "2026-09-29T22:23:14.276024",
+        "name": "QA Class 7 20260929_151749",
+        "teacher_name": "qa_teacher_151749"
+      }
+    ],
+    "success": true
+  }
+}

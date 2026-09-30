@@ -1,0 +1,148 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/dashboard",
+  "body": {
+    "data": {
+      "classes": [
+        {
+          "grade_level": "7",
+          "id": 22,
+          "name": "QA Class 7 20260929_122404"
+        }
+      ],
+      "current_learning_path_step": {
+        "completed_at": null,
+        "id": 74,
+        "item_id": 0,
+        "item_type": "practice",
+        "label": "Learning Chat \u2014 practice weak areas",
+        "sort_order": 0,
+        "status": "in_progress",
+        "title": "Learning Chat \u2014 practice weak areas"
+      },
+      "learning_path": {
+        "completed_count": 6,
+        "current_step": {
+          "completed_at": null,
+          "id": 74,
+          "item_id": 0,
+          "item_type": "practice",
+          "label": "Learning Chat \u2014 practice weak areas",
+          "sort_order": 0,
+          "status": "in_progress",
+          "title": "Learning Chat \u2014 practice weak areas"
+        },
+        "id": 68,
+        "items": [
+          {
+            "completed_at": null,
+            "id": 74,
+            "item_id": 0,
+            "item_type": "practice",
+            "label": "Learning Chat \u2014 practice weak areas",
+            "sort_order": 0,
+            "status": "in_progress",
+            "title": "Learning Chat \u2014 practice weak areas"
+          }
+        ],
+        "percent": 85.7,
+        "status": "active",
+        "title": "Personalized Learning Path",
+        "total_count": 7,
+        "weak_area_progress": {
+          "cleared": 6,
+          "percent": 85.7,
+          "total": 7,
+          "weak_remaining": 1
+        }
+      },
+      "learning_path_progress": {
+        "completed": 6,
+        "percent": 85.7,
+        "total": 7
+      },
+      "mastery": [
+        {
+          "last_assessed_at": "2026-09-29T19:26:25.949145",
+          "mastery_status": "mastered",
+          "sample_size": 2,
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:26:25.949145",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:26:25.949145",
+          "mastery_status": "needs_practice",
+          "sample_size": 5,
+          "score_percent": 60.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:26:58.640574",
+          "mastery_status": "weak",
+          "sample_size": 7,
+          "score_percent": 42.857142857142854,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:26:25.949145",
+          "mastery_status": "needs_practice",
+          "sample_size": 12,
+          "score_percent": 66.66666666666667,
+          "topic_id": 52,
+          "topic_name": "Triangle Properties"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:26:25.949145",
+          "mastery_status": "mastered",
+          "sample_size": 1,
+          "score_percent": 100.0,
+          "topic_id": 55,
+          "topic_name": "Coordinate Geometry"
+        },
+        {
+          "last_assessed_at": "2026-09-29T19:26:25.949145",
+          "mastery_status": "mastered",
+          "sample_size": 2,
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities"
+        }
+      ],
+      "onboarding": {
+        "current_learning_path_id": 68,
+        "diagnostic_assessment_id": 25,
+        "diagnostic_completed": true,
+        "diagnostic_completed_at": "2026-09-29T19:26:26.005633",
+        "enrolled_class_count": 1,
+        "needs_diagnostic": false,
+        "needs_onboarding": false,
+        "pending_assignment_count": 0,
+        "pending_assignments": []
+      },
+      "overall_progress": 64.71,
+      "pending_assignments": [],
+      "weak_topics": [
+        {
+          "last_assessed_at": "2026-09-29T19:26:58.640574",
+          "mastery_status": "weak",
+          "sample_size": 7,
+          "score_percent": 42.857142857142854,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics"
+        }
+      ]
+    },
+    "success": true
+  }
+}

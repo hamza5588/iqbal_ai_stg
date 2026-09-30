@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "url": "/api/lms/classes/mine",
+  "body": {
+    "data": [
+      {
+        "description": "Full LMS QA class",
+        "grade_level": "7",
+        "id": 21,
+        "join_code": "QX557NM0",
+        "name": "QA Class 7 20260929_120514",
+        "student_count": 0
+      }
+    ],
+    "success": true
+  }
+}

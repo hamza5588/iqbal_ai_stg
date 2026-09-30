@@ -1,0 +1,31 @@
+{# 06 — Lesson viewer: lesson content (left) + lesson chat (right). student-lessons.js #}
+<div class="sd-lesson-modal">
+  <div class="sd-lesson-head">
+    <div class="sd-lh-title"><i class="fas fa-book-open"></i><span id="viewLessonTitle">Lesson</span></div>
+    <div class="sd-lh-actions">
+      <button type="button" class="sd-mini-btn word" onclick="downloadLessonDocx(window.currentViewLessonId)"><i class="far fa-file-word"></i> Word</button>
+      <button type="button" class="sd-mini-btn ppt" onclick="downloadLessonPPT(window.currentViewLessonId)"><i class="far fa-file-powerpoint"></i> PowerPoint</button>
+      <button type="button" class="sd-close-x" onclick="closeViewLessonModal()" aria-label="Close lesson"><i class="fas fa-times"></i></button>
+    </div>
+  </div>
+  <div class="sd-lesson-body">
+    <div class="sd-lesson-left">
+      <p class="sd-lesson-sub" id="viewLessonSubtitle"></p>
+      <h2 class="sd-lesson-title" id="sdLessonHeading">Lesson</h2>
+      <div id="viewLessonCurrent" class="sd-lesson-content markdown-content lesson-content-formatted"><div class="sd-spinner"></div></div>
+    </div>
+    <div class="sd-lesson-right">
+      <div id="sdLessonChatMessages" class="sd-chat-scroll" aria-live="polite"></div>
+      <div id="voiceStatus" class="sd-voice-status sd-hidden">Listening... <button type="button" class="sd-btn sd-btn-xs sd-btn-outline" onclick="stopVoiceInput()">Stop</button></div>
+      <div class="sd-chat-inputbar">
+        <div class="sd-chat-field">
+          <textarea id="messageInput" rows="1" placeholder="Type your question about this lesson..." aria-label="Ask about this lesson"
+                    onkeydown="handleKeyDown(event)" oninput="autoResizeTextarea(this)"></textarea>
+          <button type="button" id="speakerBtn" class="sd-field-ic" title="Read the last answer aloud" aria-label="Read aloud" onclick="toggleTextToSpeech()"><i class="fas fa-volume-up"></i></button>
+          <button type="button" id="micBtn" class="sd-field-ic" title="Voice input" aria-label="Voice input" onclick="toggleVoiceInput()"><i class="fas fa-microphone"></i></button>
+        </div>
+        <button type="button" id="sendBtn" class="sd-send-btn" onclick="sendMessage()"><i class="fas fa-paper-plane"></i><span class="sd-send-label">Send</span></button>
+      </div>
+    </div>
+  </div>
+</div>

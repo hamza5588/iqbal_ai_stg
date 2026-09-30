@@ -1,0 +1,236 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/87/results",
+  "body": {
+    "data": {
+      "all_topics": [
+        {
+          "correct": 3,
+          "question_ids": [
+            126,
+            127,
+            128,
+            129,
+            130
+          ],
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            131,
+            132,
+            133,
+            134,
+            135
+          ],
+          "score_percent": 60.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials",
+          "total": 5
+        },
+        {
+          "correct": 2,
+          "question_ids": [
+            136,
+            137
+          ],
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities",
+          "total": 2
+        },
+        {
+          "correct": 2,
+          "question_ids": [
+            138,
+            141
+          ],
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations",
+          "total": 2
+        },
+        {
+          "correct": 8,
+          "question_ids": [
+            142,
+            143,
+            146,
+            147,
+            148,
+            151,
+            152,
+            153
+          ],
+          "score_percent": 100.0,
+          "topic_id": 52,
+          "topic_name": "Triangle Properties",
+          "total": 8
+        },
+        {
+          "correct": 0,
+          "question_ids": [
+            139,
+            140,
+            144,
+            145,
+            149,
+            150,
+            154,
+            155
+          ],
+          "score_percent": 0.0,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 8
+        },
+        {
+          "correct": 1,
+          "question_ids": [
+            156
+          ],
+          "score_percent": 100.0,
+          "topic_id": 48,
+          "topic_name": "Statistics",
+          "total": 1
+        }
+      ],
+      "answered_count": 31,
+      "assessment_type": "diagnostic",
+      "attempt_id": 87,
+      "diagnostic_completed": true,
+      "max_score": 32.0,
+      "score": 19.0,
+      "score_percent": 59.38,
+      "strong_topics": [
+        {
+          "correct": 2,
+          "question_ids": [
+            136,
+            137
+          ],
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities",
+          "total": 2
+        },
+        {
+          "correct": 2,
+          "question_ids": [
+            138,
+            141
+          ],
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations",
+          "total": 2
+        },
+        {
+          "correct": 8,
+          "question_ids": [
+            142,
+            143,
+            146,
+            147,
+            148,
+            151,
+            152,
+            153
+          ],
+          "score_percent": 100.0,
+          "topic_id": 52,
+          "topic_name": "Triangle Properties",
+          "total": 8
+        },
+        {
+          "correct": 1,
+          "question_ids": [
+            156
+          ],
+          "score_percent": 100.0,
+          "topic_id": 48,
+          "topic_name": "Statistics",
+          "total": 1
+        }
+      ],
+      "submitted_at": "2026-09-29T19:49:35.988736",
+      "timed_out": false,
+      "topic_breakdown": [
+        {
+          "correct": 0,
+          "score_percent": 0.0,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 8
+        },
+        {
+          "correct": 2,
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities",
+          "total": 2
+        },
+        {
+          "correct": 2,
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations",
+          "total": 2
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials",
+          "total": 5
+        },
+        {
+          "correct": 1,
+          "score_percent": 100.0,
+          "topic_id": 48,
+          "topic_name": "Statistics",
+          "total": 1
+        },
+        {
+          "correct": 8,
+          "score_percent": 100.0,
+          "topic_id": 52,
+          "topic_name": "Triangle Properties",
+          "total": 8
+        }
+      ],
+      "unanswered_count": 1,
+      "weak_topics": [
+        {
+          "correct": 0,
+          "question_ids": [
+            139,
+            140,
+            144,
+            145,
+            149,
+            150,
+            154,
+            155
+          ],
+          "score_percent": 0.0,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 8
+        }
+      ]
+    },
+    "success": true
+  }
+}

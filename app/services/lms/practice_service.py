@@ -21,6 +21,55 @@ def get_active_session(student_id: int, topic_id: Optional[int] = None) -> Optio
     return q.order_by(PracticeSession.updated_at.desc()).first()
 
 
+def _diagnostic_question_for_topic(student_id: int, topic_id: int) -> Optional[int]:
+    """A question for a topic that exists only as a diagnostic AI grouping.
+
+    Diagnostic topics are named by the AI grouping and have no question-bank
+    rows (questions.topic_id is empty), so practice on them used to fail with
+    "No practice question available". Use the student's own diagnostic
+    questions from that topic instead - ones they got wrong first.
+    """
+    from app.models.lms_models import Assessment, AssessmentAttempt, AttemptAnswer
+    from app.services.lms.topic_resolver import get_or_create_topic_from_pdf_label
+    from app.services.lms.weakness_analyzer import analyze_diagnostic_attempt
+
+    db = get_db()
+    attempts = (
+        db.query(AssessmentAttempt)
+        .join(Assessment, Assessment.id == AssessmentAttempt.assessment_id)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.status == "submitted",
+            Assessment.assessment_type == "diagnostic",
+        )
+        .order_by(AssessmentAttempt.submitted_at.desc())
+        .limit(3)
+        .all()
+    )
+    for attempt in attempts:
+        for area in analyze_diagnostic_attempt(attempt.id).get("all_topics") or []:
+            area_tid = int(area.get("topic_id") or 0)
+            if area_tid != int(topic_id):
+                named = get_or_create_topic_from_pdf_label(area.get("topic_name") or "")
+                if not named or named.id != int(topic_id):
+                    continue
+            qids = [int(q) for q in area.get("question_ids") or []]
+            if not qids:
+                continue
+            wrong = {
+                a.question_id
+                for a in db.query(AttemptAnswer).filter(
+                    AttemptAnswer.attempt_id == attempt.id, AttemptAnswer.question_id.in_(qids)
+                )
+                if not a.is_correct
+            }
+            for qid in [q for q in qids if q in wrong] + [q for q in qids if q not in wrong]:
+                q = db.query(Question).filter(Question.id == qid, Question.is_active.is_(True)).first()
+                if q:
+                    return q.id
+    return None
+
+
 def start_session(
     student_id: int,
     topic_id: Optional[int] = None,
@@ -67,6 +116,8 @@ def start_session(
             .first()
         )
         question_id = q.id if q else None
+        if not question_id:
+            question_id = _diagnostic_question_for_topic(student_id, topic_id)
     if not question_id:
         raise LMSValidationError("No practice question available for this topic")
 

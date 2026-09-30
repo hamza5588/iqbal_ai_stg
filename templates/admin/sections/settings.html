@@ -1,0 +1,121 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="settings-section" class="section hidden">
+    {% call page_head('LLM Settings', 'Provider, default models, API keys and answer quality for every chat.', img='ai-tutor.png') %}
+        <button type="button" onclick="saveLLMSettings()" class="ad-btn ad-btn-primary"><i class="fas fa-save"></i>Save All Settings</button>
+    {% endcall %}
+
+    <!-- Active Provider Selection -->
+    <div class="ad-card">
+        <div class="ad-card-head">
+            <div class="ad-section-title">
+                <div class="ad-icon-badge sm"><i class="fas fa-plug"></i></div>
+                <div><h3>Active Provider</h3><p>The LLM provider used for all chat requests system-wide.</p></div>
+            </div>
+        </div>
+        <div class="ad-radio-row">
+            <label class="ad-radio-opt" for="provider-openai">
+                <input type="radio" name="active-provider" value="OPENAI" id="provider-openai">
+                <span><b>OpenAI</b><span>GPT-4o family</span></span>
+            </label>
+            <label class="ad-radio-opt" for="provider-groq">
+                <input type="radio" name="active-provider" value="GROQ" id="provider-groq">
+                <span><b>Groq</b><span>GPT-OSS, Llama and Qwen models</span></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- OpenAI Settings -->
+    <div class="ad-card">
+        <div class="ad-card-head">
+            <div class="ad-section-title">
+                <div class="ad-icon-badge sm"><i class="fas fa-robot"></i></div>
+                <div><h3>OpenAI Configuration</h3><p>Keys are encrypted and never shown in plaintext.</p></div>
+            </div>
+        </div>
+        <div class="ad-form-grid">
+            <div class="ad-field">
+                <label for="openai-api-key">OpenAI API Key</label>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="password" id="openai-api-key" placeholder="sk-..." style="flex:1;min-width:0;">
+                    <span id="openai-key-status" class="ad-help" style="margin:0;"></span>
+                </div>
+                <p class="ad-help">Leave empty to keep the current key.</p>
+            </div>
+            <div class="ad-field">
+                <label for="openai-default-model">Default Model</label>
+                <select id="openai-default-model">
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </select>
+            </div>
+        </div>
+        <label class="ad-check" for="openai-allow-user-selection">
+            <input type="checkbox" id="openai-allow-user-selection">
+            <span><b>Allow users to select their own OpenAI model</b></span>
+        </label>
+    </div>
+
+    <!-- Groq Settings -->
+    <div class="ad-card">
+        <div class="ad-card-head">
+            <div class="ad-section-title">
+                <div class="ad-icon-badge sm"><i class="fas fa-microchip"></i></div>
+                <div><h3>Groq Configuration</h3><p>Keys are encrypted and never shown in plaintext.</p></div>
+            </div>
+        </div>
+        <div class="ad-form-grid">
+            <div class="ad-field">
+                <label for="groq-api-key">Groq API Key</label>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="password" id="groq-api-key" placeholder="gsk_..." style="flex:1;min-width:0;">
+                    <span id="groq-key-status" class="ad-help" style="margin:0;"></span>
+                </div>
+                <p class="ad-help">Leave empty to keep the current key.</p>
+            </div>
+            <div class="ad-field">
+                <label for="groq-default-model">Default Model</label>
+                <select id="groq-default-model">
+                    <optgroup label="GPT-OSS Models">
+                        <option value="openai/gpt-oss-120b">GPT-OSS 120B</option>
+                    </optgroup>
+                    <optgroup label="Llama Models">
+                        <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile</option>
+                        <option value="llama-3.1-70b-versatile">Llama 3.1 70B Versatile</option>
+                        <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant</option>
+                        <option value="llama-3-70b-8192">Llama 3 70B 8192</option>
+                        <option value="llama-3-8b-8192">Llama 3 8B 8192</option>
+                    </optgroup>
+                    <optgroup label="Qwen Models">
+                        <option value="qwen/qwen3.6-27b">Qwen3.6 27B</option>
+                    </optgroup>
+                </select>
+            </div>
+        </div>
+        <label class="ad-check" for="groq-allow-user-selection">
+            <input type="checkbox" id="groq-allow-user-selection">
+            <span><b>Allow users to select their own Groq model</b><span>GPT-OSS, Llama or Qwen</span></span>
+        </label>
+    </div>
+
+    <!-- Answer quality gate -->
+    <div class="ad-card">
+        <div class="ad-card-head">
+            <div class="ad-section-title">
+                <div class="ad-icon-badge sm"><i class="fas fa-shield-alt"></i></div>
+                <div><h3>Answer Quality Gate</h3><p>After a chat reply, run an extra check (and rewrite if needed) so the answer stays grounded in the PDF. Turn this off for faster replies.</p></div>
+            </div>
+        </div>
+        <label class="ad-check" for="rag-answer-quality-gate" style="margin-top:0;">
+            <input type="checkbox" id="rag-answer-quality-gate" checked>
+            <span><b>Enable answer quality gate</b><span>On by default. Applies to lecture generation always, and to PDF/Q&amp;A replies only when the answer looks like filler. Takes effect on the next request.</span></span>
+        </label>
+    </div>
+
+    <!-- Save Button -->
+    <div class="ad-form-actions">
+        <button type="button" onclick="saveLLMSettings()" class="ad-btn ad-btn-primary"><i class="fas fa-save"></i>Save All Settings</button>
+    </div>
+</div>

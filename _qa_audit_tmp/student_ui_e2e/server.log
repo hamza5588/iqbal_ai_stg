@@ -1,0 +1,841 @@
+2026-09-29 04:51:11,439 - app.utils.db - INFO - Database engine created for: sqlite:///C:/Users/user/Desktop/iqbalai-v1.1/iqbal_ai_stg/instance/iqbalai_local.db (pid=13180)
+2026-09-29 04:51:11,469 - app.utils.db - INFO - Database tables created/verified successfully
+2026-09-29 04:51:11,592 - app.utils.db - INFO - Migrated 0 existing lessons
+2026-09-29 04:51:11,601 - app.utils.db - WARNING - RAG migration warning: No module named 'migrations'
+2026-09-29 04:51:11,605 - app.utils.rag_vectorstore - INFO - RAG vector store: Chroma (local)
+2026-09-29 04:51:12,865 - app.utils.rag_vectorstore_chroma - INFO - Chroma collection ready: rag_vectors_sentence_transformers_all_MiniLM_L6_v2_384
+2026-09-29 04:51:12,866 - app.utils.db - INFO - RAG vector store (Chroma) health check passed
+2026-09-29 04:51:12,866 - app.utils.db - INFO - Database initialized successfully
+2026-09-29 04:51:12,874 - app.utils.admin_init - INFO - Admin account already exists: admin (admin@iqbalai.com)
+2026-09-29 04:51:12,874 - app.utils.admin_init - INFO - Admin can login with email: admin@iqbalai.com
+Template folder exists at: C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\templates
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+2026-09-29 04:51:18,600 - app.services.lesson.lesson_qa_graph - INFO - Lesson Q&A LangGraph initialized (Approach 3: stateless)
+INFO: Configured headings extraction queue: headings
+2026-09-29 04:51:19,521 - app.tasks.ingest_tasks - INFO - Configured headings extraction queue: headings
+2026-09-29 04:51:19,529 - lesson_check - INFO - ================================================================================
+2026-09-29 04:51:19,530 - lesson_check - INFO - Lesson Check Logger Initialized
+2026-09-29 04:51:19,530 - lesson_check - INFO - ================================================================================
+Flask app template folder: C:\Users\user\Desktop\iqbalai-v1.1\iqbal_ai_stg\templates
+Celery disabled for ingestion (USE_CELERY_FOR_INGESTION=false). PDF ingestion will run in-process.
+ * Serving Flask app 'app'
+ * Debug mode: off
+2026-09-29 04:51:20,347 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5056
+2026-09-29 04:51:20,347 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-09-29 04:51:21,644 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:21] "GET /auth/login HTTP/1.1" 200 -
+2026-09-29 04:51:37,222 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:37] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:51:37,256 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:37] "GET /auth/login HTTP/1.1" 200 -
+2026-09-29 04:51:37,487 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:37] "GET /static/css/iqbal-logo.css HTTP/1.1" 200 -
+2026-09-29 04:51:37,502 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:37] "GET /static/css/platform-theme-bindings.css HTTP/1.1" 200 -
+2026-09-29 04:51:37,503 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:37] "GET /static/css/wait-overlay.css HTTP/1.1" 200 -
+2026-09-29 04:51:37,504 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:37] "GET /static/js/wait-overlay.js HTTP/1.1" 200 -
+2026-09-29 04:51:37,506 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:37] "GET /static/teacher/css/theme-colors.css HTTP/1.1" 200 -
+2026-09-29 04:51:40,173 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/images/forgot-password-bg.jpg HTTP/1.1" 200 -
+2026-09-29 04:51:40,173 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/images/iqbal-ai-icon-mask.png HTTP/1.1" 200 -
+2026-09-29 04:51:40,647 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:51:40,748 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /student-dashboard HTTP/1.1" 200 -
+2026-09-29 04:51:40,763 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/css/ui-scale.css HTTP/1.1" 200 -
+2026-09-29 04:51:40,766 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "[36mGET /static/teacher/css/theme-colors.css HTTP/1.1[0m" 304 -
+2026-09-29 04:51:40,771 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "[36mGET /static/css/iqbal-logo.css HTTP/1.1[0m" 304 -
+2026-09-29 04:51:40,775 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "[36mGET /static/css/platform-theme-bindings.css HTTP/1.1[0m" 304 -
+2026-09-29 04:51:40,778 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "[36mGET /static/css/wait-overlay.css HTTP/1.1[0m" 304 -
+2026-09-29 04:51:40,786 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/teacher/css/markdown-styles.css HTTP/1.1" 200 -
+2026-09-29 04:51:40,787 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "[36mGET /static/js/wait-overlay.js HTTP/1.1[0m" 304 -
+2026-09-29 04:51:40,790 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/js/in-app-confirm.js HTTP/1.1" 200 -
+2026-09-29 04:51:40,793 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/teacher/js/chat-response-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:51:40,804 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/teacher/js/markdown-parser.js HTTP/1.1" 200 -
+2026-09-29 04:51:40,809 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/teacher/js/backend-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:51:40,816 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/lms/lms-ui.css HTTP/1.1" 200 -
+2026-09-29 04:51:40,827 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/student/css/student-dashboard.css HTTP/1.1" 200 -
+2026-09-29 04:51:40,830 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:40] "GET /static/teacher/js/markdown-examples.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,877 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/icons/iqbal-ai-logo.png HTTP/1.1" 200 -
+2026-09-29 04:51:43,877 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/icons/diagnostic.png HTTP/1.1" 200 -
+2026-09-29 04:51:43,888 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/icons/my-learning-path.png HTTP/1.1" 200 -
+2026-09-29 04:51:43,889 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/icons/classes.png HTTP/1.1" 200 -
+2026-09-29 04:51:43,896 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/js/student-shell.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,898 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/lms/lms-core.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,906 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/lms/lms-panels.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,908 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/lms/lms-student.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,917 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/lms/lms-deficiency-chat.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,917 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/js/student-quiz.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,927 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/js/student-diagnostic.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,928 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/js/student-lessons.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,938 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/js/student-learning-path.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,939 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/js/student-classes.js HTTP/1.1" 200 -
+2026-09-29 04:51:43,946 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:43] "GET /static/student/js/student-tutor.js HTTP/1.1" 200 -
+2026-09-29 04:51:46,099 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:46] "GET /static/student/icons/ai-tutor.png HTTP/1.1" 200 -
+2026-09-29 04:51:46,440 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:46] "GET /api/lms/users/me/grade-profile HTTP/1.1" 200 -
+2026-09-29 04:51:46,445 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:46] "GET /api/lms/students/me/onboarding-status HTTP/1.1" 200 -
+2026-09-29 04:51:46,531 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:46] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+2026-09-29 04:51:46,569 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:46] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:51:47,740 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:47] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:51:48,357 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:48] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:51:48,370 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:48] "[32mGET /student-dashboard HTTP/1.1[0m" 302 -
+2026-09-29 04:51:48,381 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:48] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:51:48,387 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:48] "[32mGET /student-dashboard HTTP/1.1[0m" 302 -
+2026-09-29 04:51:48,398 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:48] "GET /api/lms/students/me/onboarding-status HTTP/1.1" 200 -
+2026-09-29 04:51:49,968 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:49] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+2026-09-29 04:51:50,054 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:50] "[35m[1mPOST /api/lms/quizzes/25/start HTTP/1.1[0m" 201 -
+2026-09-29 04:51:50,127 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:50] "GET /api/lms/attempts/70/questions HTTP/1.1" 200 -
+2026-09-29 04:51:54,193 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:54] "POST /api/lms/attempts/70/questions/126/clarify HTTP/1.1" 200 -
+2026-09-29 04:51:54,298 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:54] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:54,465 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:54] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:54,665 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:54] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:54,854 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:54] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:55,015 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:55] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:55,179 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:55] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:55,364 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:55] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:55,549 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:55] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:55,748 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:55] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:55,933 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:55] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:56,098 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:56] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:56,280 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:56] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:56,467 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:56] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:56,648 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:56] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:56,817 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:56] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:56,998 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:56] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:57,214 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:57] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:57,379 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:57] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:57,578 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:57] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:57,747 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:57] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:57,941 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:57] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:58,113 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:58] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:58,305 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:58] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:58,482 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:58] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:58,651 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:58] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:58,831 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:58] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:58,997 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:58] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:59,163 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:59] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:59,334 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:59] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:59,513 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:59] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:59,680 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:59] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:51:59,865 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:51:59] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:00,031 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:00] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:00,196 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:00] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:00,368 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:00] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:00,548 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:00] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:00,717 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:00] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:00,897 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:00] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:01,073 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:01] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:01,247 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:01] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:01,406 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:01] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:01,580 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:01] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:01,733 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:01] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:01,915 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:01] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:02,064 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:02] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:02,229 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:02] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:02,381 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:02] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:02,563 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:02] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:02,739 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:02] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:02,915 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:02] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:03,100 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:03] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:03,289 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:03] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:03,447 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:03] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:03,630 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:03] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:03,780 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:03] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:03,963 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:03] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:04,137 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:04] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:04,312 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:04] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:04,481 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:04] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:04,647 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:04] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,683 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,696 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,708 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,718 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,729 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,739 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,749 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,760 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,770 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,779 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,789 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,799 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,808 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,817 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,827 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,837 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,846 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,855 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,864 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,874 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,883 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,892 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,903 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,912 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,922 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,931 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,948 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,957 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,966 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:52:05,975 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:52:05] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:52:06,083 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:52:06,085 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:52:07,766 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:52:14,400 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:52:14,600 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:52:14,602 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:52:15,447 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:52:21,374 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Weak area Logarithms has no relevant target-PDF section - generating grade-appropriate questions for the skill
+2026-09-29 04:52:21,457 - app.services.lms.deficiency_chat_service - INFO - Weak area Logarithms has no relevant target-PDF section - generating grade-appropriate questions for the skill
+INFO: No target PDF questions for Logarithms - using grade-fit AI
+2026-09-29 04:52:21,457 - app.services.lms.deficiency_chat_service - INFO - No target PDF questions for Logarithms - using grade-fit AI
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:52:21,461 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:52:21,463 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:52:22,337 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:52:30,261 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Weak area Polynomials has no relevant target-PDF section - generating grade-appropriate questions for the skill
+2026-09-29 04:52:30,310 - app.services.lms.deficiency_chat_service - INFO - Weak area Polynomials has no relevant target-PDF section - generating grade-appropriate questions for the skill
+INFO: No target PDF questions for Polynomials - using grade-fit AI
+2026-09-29 04:52:30,311 - app.services.lms.deficiency_chat_service - INFO - No target PDF questions for Polynomials - using grade-fit AI
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:52:30,312 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:52:30,315 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:52:31,375 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:52:38,095 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:52:38,140 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:52:38,141 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=4096 (applied=True)
+2026-09-29 04:52:39,152 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=4096 (applied=True)
+2026-09-29 04:52:47,551 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:52:47,577 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:52:47,578 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=4096 (applied=True)
+2026-09-29 04:52:48,505 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=4096 (applied=True)
+2026-09-29 04:52:57,818 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: No target PDF questions for Geometry - using grade-fit AI
+2026-09-29 04:52:57,829 - app.services.lms.deficiency_chat_service - INFO - No target PDF questions for Geometry - using grade-fit AI
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:52:57,830 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:52:57,831 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:52:58,763 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:53:05,631 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Weak area Statistics has no relevant target-PDF section - generating grade-appropriate questions for the skill
+2026-09-29 04:53:05,654 - app.services.lms.deficiency_chat_service - INFO - Weak area Statistics has no relevant target-PDF section - generating grade-appropriate questions for the skill
+INFO: No target PDF questions for Statistics - using grade-fit AI
+2026-09-29 04:53:05,654 - app.services.lms.deficiency_chat_service - INFO - No target PDF questions for Statistics - using grade-fit AI
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:05,655 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:05,656 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:53:06,545 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:53:10,622 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Weak area Algebra Basics has no relevant target-PDF section - generating grade-appropriate questions for the skill
+2026-09-29 04:53:10,638 - app.services.lms.deficiency_chat_service - INFO - Weak area Algebra Basics has no relevant target-PDF section - generating grade-appropriate questions for the skill
+INFO: No target PDF questions for Algebra Basics - using grade-fit AI
+2026-09-29 04:53:10,638 - app.services.lms.deficiency_chat_service - INFO - No target PDF questions for Algebra Basics - using grade-fit AI
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:10,639 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:10,640 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:53:11,456 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:53:16,163 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:16,210 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:16,211 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:17,042 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:22,211 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:22,331 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:22,333 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:23,195 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:29,569 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:53:29,657 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:29] "POST /api/lms/attempts/70/submit HTTP/1.1" 200 -
+2026-09-29 04:53:29,709 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:29] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:53:30,551 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,560 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,568 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,576 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,585 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,593 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,604 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,612 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,621 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,630 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,641 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,652 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,665 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,680 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,689 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,697 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,705 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,716 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,726 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,736 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,746 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,754 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,762 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,772 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,781 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,789 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,797 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,805 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,812 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,820 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "POST /api/lms/attempts/70/answer HTTP/1.1" 200 -
+2026-09-29 04:53:30,860 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:53:30,878 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+2026-09-29 04:53:30,886 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:53:30,911 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+2026-09-29 04:53:30,937 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:53:30,941 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:30] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:31,083 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:31,084 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:31,851 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:38,999 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:39,104 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:39,105 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:39,878 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:45,055 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:45,168 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:45,169 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:46,055 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:50,958 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:53:51,042 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:51] "GET /api/lms/attempts/70/results HTTP/1.1" 200 -
+2026-09-29 04:53:51,465 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:51] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:53:52,067 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:52] "[35m[1mPOST /api/lms/quizzes/25/start HTTP/1.1[0m" 201 -
+2026-09-29 04:53:52,086 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:52] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:53:52,106 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:53:52] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:52,140 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:52,141 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:52,996 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:57,741 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:53:57,853 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:53:57,854 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:53:59,108 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:03,556 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:03,665 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:03,667 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:04,636 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:10,112 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:54:10,206 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:10] "GET /api/lms/attempts/70/results HTTP/1.1" 200 -
+2026-09-29 04:54:10,242 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:10] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:54:10,291 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:10] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:54:10,310 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:10] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+2026-09-29 04:54:10,313 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:10] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:54:10,344 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:10] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+2026-09-29 04:54:10,349 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:10] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:10,387 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:10,388 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:11,233 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:15,578 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:15,691 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:15,692 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:16,597 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:20,452 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:20,597 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:20,599 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:21,565 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:25,450 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:54:25,596 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:25] "GET /api/lms/attempts/70/results HTTP/1.1" 200 -
+2026-09-29 04:54:25,599 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:25] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:54:25,637 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:25] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+2026-09-29 04:54:25,691 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:25] "[35m[1mPOST /api/lms/quizzes/25/start HTTP/1.1[0m" 201 -
+2026-09-29 04:54:25,746 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:25] "GET /api/lms/attempts/71/questions HTTP/1.1" 200 -
+2026-09-29 04:54:25,763 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:25] "POST /api/lms/attempts/71/answer HTTP/1.1" 200 -
+2026-09-29 04:54:26,060 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:26] "GET /auth/login HTTP/1.1" 200 -
+2026-09-29 04:54:26,084 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:26] "GET /static/css/iqbal-logo.css HTTP/1.1" 200 -
+2026-09-29 04:54:26,088 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:26] "GET /static/css/platform-theme-bindings.css HTTP/1.1" 200 -
+2026-09-29 04:54:26,088 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:26] "GET /static/css/wait-overlay.css HTTP/1.1" 200 -
+2026-09-29 04:54:26,089 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:26] "GET /static/teacher/css/theme-colors.css HTTP/1.1" 200 -
+2026-09-29 04:54:26,090 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:26] "GET /static/js/wait-overlay.js HTTP/1.1" 200 -
+2026-09-29 04:54:28,450 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/images/forgot-password-bg.jpg HTTP/1.1" 200 -
+2026-09-29 04:54:28,450 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/images/iqbal-ai-icon-mask.png HTTP/1.1" 200 -
+2026-09-29 04:54:28,667 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:54:28,692 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /student-dashboard HTTP/1.1" 200 -
+2026-09-29 04:54:28,711 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/css/ui-scale.css HTTP/1.1" 200 -
+2026-09-29 04:54:28,714 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "[36mGET /static/teacher/css/theme-colors.css HTTP/1.1[0m" 304 -
+2026-09-29 04:54:28,717 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "[36mGET /static/css/platform-theme-bindings.css HTTP/1.1[0m" 304 -
+2026-09-29 04:54:28,721 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "[36mGET /static/css/iqbal-logo.css HTTP/1.1[0m" 304 -
+2026-09-29 04:54:28,728 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "[36mGET /static/css/wait-overlay.css HTTP/1.1[0m" 304 -
+2026-09-29 04:54:28,733 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "[36mGET /static/js/wait-overlay.js HTTP/1.1[0m" 304 -
+2026-09-29 04:54:28,735 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/teacher/css/markdown-styles.css HTTP/1.1" 200 -
+2026-09-29 04:54:28,740 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/js/in-app-confirm.js HTTP/1.1" 200 -
+2026-09-29 04:54:28,743 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/teacher/js/chat-response-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:54:28,750 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/teacher/js/markdown-parser.js HTTP/1.1" 200 -
+2026-09-29 04:54:28,756 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/teacher/js/backend-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:54:28,757 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/teacher/js/markdown-examples.js HTTP/1.1" 200 -
+2026-09-29 04:54:28,761 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/lms/lms-ui.css HTTP/1.1" 200 -
+2026-09-29 04:54:28,762 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:28] "GET /static/student/css/student-dashboard.css HTTP/1.1" 200 -
+2026-09-29 04:54:31,843 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/icons/iqbal-ai-logo.png HTTP/1.1" 200 -
+2026-09-29 04:54:31,845 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/icons/diagnostic.png HTTP/1.1" 200 -
+2026-09-29 04:54:31,867 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/icons/my-learning-path.png HTTP/1.1" 200 -
+2026-09-29 04:54:31,869 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/icons/classes.png HTTP/1.1" 200 -
+2026-09-29 04:54:31,882 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/js/student-shell.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,885 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/lms/lms-core.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,896 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/lms/lms-panels.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,897 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/lms/lms-student.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,915 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/lms/lms-deficiency-chat.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,915 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/js/student-quiz.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,926 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/js/student-lessons.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,939 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/js/student-diagnostic.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,945 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/js/student-learning-path.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,971 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/js/student-classes.js HTTP/1.1" 200 -
+2026-09-29 04:54:31,973 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:31] "GET /static/student/js/student-tutor.js HTTP/1.1" 200 -
+2026-09-29 04:54:32,092 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:32] "GET /static/student/icons/ai-tutor.png HTTP/1.1" 200 -
+2026-09-29 04:54:32,657 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:32] "GET /api/lms/users/me/grade-profile HTTP/1.1" 200 -
+2026-09-29 04:54:32,671 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:32] "GET /api/lms/students/me/onboarding-status HTTP/1.1" 200 -
+INFO: Finalizing expired diagnostic attempt 71 (scoring answered questions)
+2026-09-29 04:54:32,722 - app.services.lms.attempt_service - INFO - Finalizing expired diagnostic attempt 71 (scoring answered questions)
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:32,769 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:32,771 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:32,960 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:54:32] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:34,026 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:38,979 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:39,124 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:39,126 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:40,107 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:44,815 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:44,968 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:44,970 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:45,988 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:53,306 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:54:53,413 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:54:53,414 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:54:54,363 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:00,296 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Weak area Statistics has no relevant target-PDF section - generating grade-appropriate questions for the skill
+2026-09-29 04:55:00,341 - app.services.lms.deficiency_chat_service - INFO - Weak area Statistics has no relevant target-PDF section - generating grade-appropriate questions for the skill
+INFO: No target PDF questions for Statistics - using grade-fit AI
+2026-09-29 04:55:00,341 - app.services.lms.deficiency_chat_service - INFO - No target PDF questions for Statistics - using grade-fit AI
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:00,342 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:00,343 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:55:01,488 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.55, max_tokens=4096 (applied=True)
+2026-09-29 04:55:06,611 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:06,649 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:06,650 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:07,501 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:11,636 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:55:11,677 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:11] "GET /api/lms/diagnostics/default HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:11,698 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:11,699 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:12,514 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:16,578 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:55:16,673 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:16] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:16,688 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:16,689 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:17,535 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:22,077 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:55:22,145 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:22] "GET /api/lms/attempts/71/results HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:22,205 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:22,206 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:23,019 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.2, max_tokens=2048 (applied=True)
+2026-09-29 04:55:27,453 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:55:27,525 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:27] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:28,617 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:28] "GET /api/lms/students/me/onboarding-status HTTP/1.1" 200 -
+2026-09-29 04:55:28,803 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:28] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:55:28,827 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:28] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:28,835 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:28] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:55:28,892 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:28] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:29,626 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:29] "[35m[1mPOST /api/lms/deficiency/sessions HTTP/1.1[0m" 201 -
+2026-09-29 04:55:29,627 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:29] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:55:29,846 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:29] "POST /api/lms/deficiency/sessions/24/answer HTTP/1.1" 200 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:31,264 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:31,266 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:31,380 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:31] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=512 (applied=True)
+2026-09-29 04:55:32,138 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=512 (applied=True)
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:32,140 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:32,141 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=220 (applied=True)
+2026-09-29 04:55:32,923 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=220 (applied=True)
+2026-09-29 04:55:34,673 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:55:34,686 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:34] "POST /api/lms/deficiency/sessions/24/explain HTTP/1.1" 200 -
+2026-09-29 04:55:35,307 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "POST /api/lms/deficiency/sessions/24/pause HTTP/1.1" 200 -
+2026-09-29 04:55:35,318 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "POST /api/lms/deficiency/sessions/24/pause HTTP/1.1" 200 -
+2026-09-29 04:55:35,359 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:55:35,373 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:35,377 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:55:35,481 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "[31m[1mPOST /api/lms/practice/sessions HTTP/1.1[0m" 400 -
+2026-09-29 04:55:35,679 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:55:35,691 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:55:35,722 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "[35m[1mPOST /api/lms/classes HTTP/1.1[0m" 201 -
+2026-09-29 04:55:35,748 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "[35m[1mPOST /api/lms/assignments HTTP/1.1[0m" 201 -
+2026-09-29 04:55:35,763 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "POST /api/lms/assignments/24/publish HTTP/1.1" 200 -
+2026-09-29 04:55:35,984 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:35] "GET /auth/login HTTP/1.1" 200 -
+2026-09-29 04:55:36,004 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:36] "GET /static/teacher/css/theme-colors.css HTTP/1.1" 200 -
+2026-09-29 04:55:36,010 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:36] "GET /static/css/iqbal-logo.css HTTP/1.1" 200 -
+2026-09-29 04:55:36,011 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:36] "GET /static/css/platform-theme-bindings.css HTTP/1.1" 200 -
+2026-09-29 04:55:36,012 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:36] "GET /static/css/wait-overlay.css HTTP/1.1" 200 -
+2026-09-29 04:55:36,016 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:36] "GET /static/js/wait-overlay.js HTTP/1.1" 200 -
+2026-09-29 04:55:38,470 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/images/iqbal-ai-icon-mask.png HTTP/1.1" 200 -
+2026-09-29 04:55:38,470 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/images/forgot-password-bg.jpg HTTP/1.1" 200 -
+2026-09-29 04:55:38,706 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:55:38,730 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /student-dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:38,749 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/css/ui-scale.css HTTP/1.1" 200 -
+2026-09-29 04:55:38,754 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "[36mGET /static/teacher/css/theme-colors.css HTTP/1.1[0m" 304 -
+2026-09-29 04:55:38,761 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "[36mGET /static/css/platform-theme-bindings.css HTTP/1.1[0m" 304 -
+2026-09-29 04:55:38,763 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "[36mGET /static/css/iqbal-logo.css HTTP/1.1[0m" 304 -
+2026-09-29 04:55:38,764 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "[36mGET /static/css/wait-overlay.css HTTP/1.1[0m" 304 -
+2026-09-29 04:55:38,772 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/teacher/css/markdown-styles.css HTTP/1.1" 200 -
+2026-09-29 04:55:38,774 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "[36mGET /static/js/wait-overlay.js HTTP/1.1[0m" 304 -
+2026-09-29 04:55:38,777 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/teacher/js/chat-response-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:55:38,779 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/js/in-app-confirm.js HTTP/1.1" 200 -
+2026-09-29 04:55:38,783 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/teacher/js/markdown-parser.js HTTP/1.1" 200 -
+2026-09-29 04:55:38,787 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/teacher/js/backend-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:55:38,791 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/lms/lms-ui.css HTTP/1.1" 200 -
+2026-09-29 04:55:38,799 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/teacher/js/markdown-examples.js HTTP/1.1" 200 -
+2026-09-29 04:55:38,799 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:38] "GET /static/student/css/student-dashboard.css HTTP/1.1" 200 -
+2026-09-29 04:55:42,326 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/icons/iqbal-ai-logo.png HTTP/1.1" 200 -
+2026-09-29 04:55:42,326 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/icons/diagnostic.png HTTP/1.1" 200 -
+2026-09-29 04:55:42,335 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/icons/my-learning-path.png HTTP/1.1" 200 -
+2026-09-29 04:55:42,340 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/icons/classes.png HTTP/1.1" 200 -
+2026-09-29 04:55:42,355 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/js/student-shell.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,355 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/lms/lms-core.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,368 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/lms/lms-panels.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,369 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/lms/lms-student.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,377 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/lms/lms-deficiency-chat.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,382 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/js/student-quiz.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,390 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/js/student-lessons.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,395 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/js/student-diagnostic.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,402 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/js/student-learning-path.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,405 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/js/student-classes.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,416 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/js/student-tutor.js HTTP/1.1" 200 -
+2026-09-29 04:55:42,496 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /static/student/icons/ai-tutor.png HTTP/1.1" 200 -
+2026-09-29 04:55:42,592 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /api/lms/users/me/grade-profile HTTP/1.1" 200 -
+2026-09-29 04:55:42,599 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /api/lms/students/me/onboarding-status HTTP/1.1" 200 -
+2026-09-29 04:55:42,636 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "[33mGET /api/lms/diagnostics/default HTTP/1.1[0m" 404 -
+2026-09-29 04:55:42,638 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:55:42,654 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:42] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:43,586 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:43] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:55:44,213 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lms/topics?subject=Math HTTP/1.1" 200 -
+2026-09-29 04:55:44,220 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lms/classes/mine HTTP/1.1" 200 -
+2026-09-29 04:55:44,225 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lms/students/me/assignments HTTP/1.1" 200 -
+2026-09-29 04:55:44,226 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:55:44,257 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lms/users/me/grade-profile HTTP/1.1" 200 -
+2026-09-29 04:55:44,552 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "POST /api/lms/classes/join HTTP/1.1" 200 -
+2026-09-29 04:55:44,583 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:44,585 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lms/classes/mine HTTP/1.1" 200 -
+2026-09-29 04:55:44,590 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lms/students/me/assignments HTTP/1.1" 200 -
+2026-09-29 04:55:44,657 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lessons/browse_lessons?class_id=18&page=1&per_page=50 HTTP/1.1" 200 -
+2026-09-29 04:55:44,672 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:44] "GET /api/lessons/browse_lessons?class_id=18&per_page=50 HTTP/1.1" 200 -
+2026-09-29 04:55:45,258 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:45] "[35m[1mPOST /api/lms/quizzes/46/start HTTP/1.1[0m" 201 -
+2026-09-29 04:55:45,280 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:45] "GET /api/lms/attempts/72/questions HTTP/1.1" 200 -
+2026-09-29 04:55:45,645 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:45] "POST /api/lms/attempts/72/answer HTTP/1.1" 200 -
+2026-09-29 04:55:45,911 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:45] "POST /api/lms/attempts/72/answer HTTP/1.1" 200 -
+2026-09-29 04:55:46,191 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:46] "POST /api/lms/attempts/72/answer HTTP/1.1" 200 -
+2026-09-29 04:55:46,430 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:46] "POST /api/lms/attempts/72/answer HTTP/1.1" 200 -
+2026-09-29 04:55:46,704 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:46] "POST /api/lms/attempts/72/submit HTTP/1.1" 200 -
+2026-09-29 04:55:46,730 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:46] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:55:47,558 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:47] "GET /api/lms/classes/mine HTTP/1.1" 200 -
+2026-09-29 04:55:47,564 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:47] "GET /api/lms/students/me/assignments HTTP/1.1" 200 -
+2026-09-29 04:55:47,585 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:47] "GET /api/lessons/browse_lessons?class_id=18&page=1&per_page=50 HTTP/1.1" 200 -
+2026-09-29 04:55:47,669 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:47] "GET /api/lms/attempts/72/results HTTP/1.1" 200 -
+2026-09-29 04:55:47,706 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:47] "GET /api/lms/students/me/assignments HTTP/1.1" 200 -
+2026-09-29 04:55:47,733 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:47] "GET /api/lms/attempts/72/results HTTP/1.1" 200 -
+INFO: Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:55:48,322 - app.models.models - INFO - Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:55:48,325 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:48] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+INFO: get_lesson_versions for lesson 11: found 1 versions
+2026-09-29 04:55:48,331 - app.models.models - INFO - get_lesson_versions for lesson 11: found 1 versions
+INFO: Versions data: [{'id': 11, 'teacher_id': 12, 'title': 'Quadratic Equations 145157', 'summary': 'Intro to quadratic equations', 'detailed_answer': None, 'learning_objectives': '', 'focus_area': 'Math', 'grade_level': '8', 'content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'file_name': None, 'rag_thread_id': None, 'conversation_id': None, 'created_at': '2026-09-28T21:51:57.664661', 'updated_at': '2026-09-28T21:51:57.665350', 'is_public': True, 'has_child_version': False, 'parent_lesson_id': None, 'version': 1, 'lesson_id': 'L1790632317651', 'version_number': 1, 'parent_version_id': None, 'original_content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'draft_content': None, 'status': 'finalized', 'teacher_name': 'e2e_teacher', 'is_original': True}]
+2026-09-29 04:55:48,331 - app.models.models - INFO - Versions data: [{'id': 11, 'teacher_id': 12, 'title': 'Quadratic Equations 145157', 'summary': 'Intro to quadratic equations', 'detailed_answer': None, 'learning_objectives': '', 'focus_area': 'Math', 'grade_level': '8', 'content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'file_name': None, 'rag_thread_id': None, 'conversation_id': None, 'created_at': '2026-09-28T21:51:57.664661', 'updated_at': '2026-09-28T21:51:57.665350', 'is_public': True, 'has_child_version': False, 'parent_lesson_id': None, 'version': 1, 'lesson_id': 'L1790632317651', 'version_number': 1, 'parent_version_id': None, 'original_content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'draft_content': None, 'status': 'finalized', 'teacher_name': 'e2e_teacher', 'is_original': True}]
+2026-09-29 04:55:48,333 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:48] "GET /api/lessons/lesson/11/view HTTP/1.1" 200 -
+2026-09-29 04:55:48,393 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:48] "GET /static/student/icons/ai-chat-bot.png HTTP/1.1" 200 -
+INFO: Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:55:48,490 - app.models.models - INFO - Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+INFO: RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:48,494 - app.services.lesson.rag_service - INFO - RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:48,494 - teacher_service - INFO - RAG service initialized
+2026-09-29 04:55:48,496 - teacher_service - INFO - RAG service initialized with persistent memory
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:48,498 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:48,500 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:49,378 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:49,378 - teacher_service - INFO - Multimodal LLM initialized for image descriptions (central provider)
+INFO: Student lesson service initialized
+2026-09-29 04:55:49,381 - app.services.lesson.student_service - INFO - Student lesson service initialized
+2026-09-29 04:55:49,492 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:49] "GET /api/lessons/download_lesson/11 HTTP/1.1" 200 -
+INFO: Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:55:49,557 - app.models.models - INFO - Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+INFO: RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:49,559 - app.services.lesson.rag_service - INFO - RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:49,559 - teacher_service - INFO - RAG service initialized
+2026-09-29 04:55:49,559 - teacher_service - INFO - RAG service initialized with persistent memory
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:49,560 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:49,561 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:50,381 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:50,382 - teacher_service - INFO - Multimodal LLM initialized for image descriptions (central provider)
+INFO: Student lesson service initialized
+2026-09-29 04:55:50,382 - app.services.lesson.student_service - INFO - Student lesson service initialized
+INFO: Created professional PowerPoint with 4 slides
+2026-09-29 04:55:50,770 - app.services.lesson.teacher_service - INFO - Created professional PowerPoint with 4 slides
+INFO: FAISS index deletion requested for lesson 11
+2026-09-29 04:55:50,779 - app.services.lesson_service - INFO - FAISS index deletion requested for lesson 11
+INFO: Deleted FAISS index after PPT download for lesson 11
+2026-09-29 04:55:50,781 - app.routes.lesson_routes - INFO - Deleted FAISS index after PPT download for lesson 11
+2026-09-29 04:55:50,782 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:50] "GET /api/lessons/download_lesson_ppt/11 HTTP/1.1" 200 -
+2026-09-29 04:55:51,671 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:51] "POST /create_conversation HTTP/1.1" 200 -
+2026-09-29 04:55:51,684 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:51] "PUT /update_conversation_title/34 HTTP/1.1" 200 -
+2026-09-29 04:55:51,700 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:51] "POST /save_message HTTP/1.1" 200 -
+INFO: Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:55:51,704 - app.models.models - INFO - Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+INFO: Lesson QA rate limiter: using Redis backend at redis://localhost:6379/0
+2026-09-29 04:55:51,781 - app.routes.lesson_routes - INFO - Lesson QA rate limiter: using Redis backend at redis://localhost:6379/0
+INFO: Chat lock: using Redis backend at redis://localhost:6379/0
+2026-09-29 04:55:51,815 - app.utils.chat_lock - INFO - Chat lock: using Redis backend at redis://localhost:6379/0
+INFO: RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:51,819 - app.services.lesson.rag_service - INFO - RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:51,819 - teacher_service - INFO - RAG service initialized
+2026-09-29 04:55:51,819 - teacher_service - INFO - RAG service initialized with persistent memory
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:51,821 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:51,822 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:52,663 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:52,663 - teacher_service - INFO - Multimodal LLM initialized for image descriptions (central provider)
+INFO: Student lesson service initialized
+2026-09-29 04:55:52,664 - app.services.lesson.student_service - INFO - Student lesson service initialized
+INFO: Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:55:52,694 - app.models.models - INFO - Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+INFO: can_answer_from_lesson_only: overview intent fast-path YES for question='Summarize this lesson in one sentence.'
+2026-09-29 04:55:52,696 - app.services.lesson.lesson_qa_graph - INFO - can_answer_from_lesson_only: overview intent fast-path YES for question='Summarize this lesson in one sentence.'
+INFO: decide_route lesson_id=11 covered=True has_rag=False allow_rag=False needs_confirmation=False needs_deny=False question='Summarize this lesson in one sentence.'
+2026-09-29 04:55:52,696 - app.services.lesson.lesson_qa_graph - INFO - decide_route lesson_id=11 covered=True has_rag=False allow_rag=False needs_confirmation=False needs_deny=False question='Summarize this lesson in one sentence.'
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:52,702 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:52,703 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:53,571 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+INFO: Created and cached openai LLM instance for user 31
+2026-09-29 04:55:53,571 - app.services.lesson.base_service - INFO - Created and cached openai LLM instance for user 31
+2026-09-29 04:55:57,325 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:57,358 - app.services.lesson.rag_service - INFO - RAG service initialized (embeddings will be loaded on first use)
+2026-09-29 04:55:57,359 - teacher_service - INFO - RAG service initialized
+2026-09-29 04:55:57,359 - teacher_service - INFO - RAG service initialized with persistent memory
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:57,363 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:57,365 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:57,373 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:57] "POST /api/lessons/ask_question HTTP/1.1" 200 -
+2026-09-29 04:55:57,396 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:57] "POST /save_message HTTP/1.1" 200 -
+2026-09-29 04:55:57,417 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:57] "GET /get_conversations?limit=200 HTTP/1.1" 200 -
+2026-09-29 04:55:58,022 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:58] "GET /api/lms/tutor/history?mode=student HTTP/1.1" 200 -
+2026-09-29 04:55:58,031 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:55:58] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:58,125 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:58,126 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:58,218 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:58,219 - teacher_service - INFO - Multimodal LLM initialized for image descriptions (central provider)
+INFO: Student lesson service initialized
+2026-09-29 04:55:58,219 - app.services.lesson.student_service - INFO - Student lesson service initialized
+INFO: Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:55:58,221 - app.models.models - INFO - Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:58,223 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:58,224 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=512 (applied=True)
+2026-09-29 04:55:59,474 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=512 (applied=True)
+INFO: Retrieved OPENAI API key (length: 164)
+2026-09-29 04:55:59,475 - app.utils.llm_factory - INFO - Retrieved OPENAI API key (length: 164)
+INFO: Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+2026-09-29 04:55:59,477 - app.utils.llm_factory - INFO - Creating LLM with provider=openai, model=gpt-4o-mini, has_api_key=True
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+2026-09-29 04:55:59,630 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.5, max_tokens=provider-default (applied=False)
+INFO: Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=220 (applied=True)
+2026-09-29 04:56:00,420 - app.utils.llm_factory - INFO - Initialized OpenAI LLM: model=gpt-4o-mini, temperature=0.4, max_tokens=220 (applied=True)
+2026-09-29 04:56:03,864 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO: Question logged to FAQ table for lesson 11: what is main concepts and methods covered in the lesson on quadratic equations
+2026-09-29 04:56:03,907 - app.routes.lesson_routes - INFO - Question logged to FAQ table for lesson 11: what is main concepts and methods covered in the lesson on quadratic equations
+2026-09-29 04:56:04,712 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-29 04:56:04,747 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:04] "POST /api/lms/tutor/chat HTTP/1.1" 200 -
+2026-09-29 04:56:05,323 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "GET /student-dashboard HTTP/1.1" 200 -
+2026-09-29 04:56:05,344 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/css/ui-scale.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,348 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/teacher/css/theme-colors.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,354 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/css/platform-theme-bindings.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,358 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/css/iqbal-logo.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,363 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/css/wait-overlay.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,370 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/teacher/css/markdown-styles.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,373 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/js/wait-overlay.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,375 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/js/in-app-confirm.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,380 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/lms/lms-ui.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,386 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/css/student-dashboard.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,389 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/teacher/js/chat-response-formatter.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,395 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/teacher/js/markdown-parser.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,399 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/teacher/js/backend-formatter.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,403 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/teacher/js/markdown-examples.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,409 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,414 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/icons/diagnostic.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,439 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/icons/my-learning-path.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,442 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/icons/classes.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,506 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/js/student-shell.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,510 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/lms/lms-core.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,514 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/lms/lms-panels.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,517 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/lms/lms-student.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,520 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/lms/lms-deficiency-chat.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,523 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/js/student-quiz.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,531 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/js/student-lessons.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,534 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/js/student-diagnostic.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,536 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/js/student-learning-path.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,542 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/icons/ai-tutor.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,544 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/js/student-classes.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,545 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/js/student-tutor.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,559 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "GET /api/lms/users/me/grade-profile HTTP/1.1" 200 -
+2026-09-29 04:56:05,568 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,571 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "GET /api/lms/students/me/onboarding-status HTTP/1.1" 200 -
+2026-09-29 04:56:05,588 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "[36mGET /static/student/icons/ai-chat-bot.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:05,597 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "GET /api/lms/tutor/history?mode=student HTTP/1.1" 200 -
+2026-09-29 04:56:05,616 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:05] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:56:06,177 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:06] "GET /get_conversations?limit=200 HTTP/1.1" 200 -
+INFO: Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:56:06,796 - app.models.models - INFO - Retrieved lesson ID 11 with title: 'Quadratic Equations 145157'
+2026-09-29 04:56:06,798 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:06] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+INFO: get_lesson_versions for lesson 11: found 1 versions
+2026-09-29 04:56:06,800 - app.models.models - INFO - get_lesson_versions for lesson 11: found 1 versions
+INFO: Versions data: [{'id': 11, 'teacher_id': 12, 'title': 'Quadratic Equations 145157', 'summary': 'Intro to quadratic equations', 'detailed_answer': None, 'learning_objectives': '', 'focus_area': 'Math', 'grade_level': '8', 'content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'file_name': None, 'rag_thread_id': None, 'conversation_id': None, 'created_at': '2026-09-28T21:51:57.664661', 'updated_at': '2026-09-28T21:51:57.665350', 'is_public': True, 'has_child_version': False, 'parent_lesson_id': None, 'version': 1, 'lesson_id': 'L1790632317651', 'version_number': 1, 'parent_version_id': None, 'original_content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'draft_content': None, 'status': 'finalized', 'teacher_name': 'e2e_teacher', 'is_original': True}]
+2026-09-29 04:56:06,800 - app.models.models - INFO - Versions data: [{'id': 11, 'teacher_id': 12, 'title': 'Quadratic Equations 145157', 'summary': 'Intro to quadratic equations', 'detailed_answer': None, 'learning_objectives': '', 'focus_area': 'Math', 'grade_level': '8', 'content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'file_name': None, 'rag_thread_id': None, 'conversation_id': None, 'created_at': '2026-09-28T21:51:57.664661', 'updated_at': '2026-09-28T21:51:57.665350', 'is_public': True, 'has_child_version': False, 'parent_lesson_id': None, 'version': 1, 'lesson_id': 'L1790632317651', 'version_number': 1, 'parent_version_id': None, 'original_content': '# Lesson Draft: Quadratic Equations\n\n## Short Summary\nThis lesson introduces students to quadratic equations, covering their definition, methods of solving them, and their applications in real-world problems.\n\n## Objectives\nAfter studying this unit, students will be able to:\n- Define quadratic equations.\n- Solve quadratic equations by factorization and completing the square.\n- Derive the quadratic formula $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$ and use it.\n\n## Key Concepts\n1. Standard form $ax^2 + bx + c = 0$, $a \\neq 0$.\n2. The discriminant $b^2 - 4ac$ decides the nature of the roots.\n\n## Practice\n- Solve $x^2 - 5x + 6 = 0$.\n- Solve $x^2 + 4x - 32 = 0$ by completing the square.', 'draft_content': None, 'status': 'finalized', 'teacher_name': 'e2e_teacher', 'is_original': True}]
+2026-09-29 04:56:06,804 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:06] "GET /api/lessons/lesson/11/view HTTP/1.1" 200 -
+2026-09-29 04:56:06,842 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:06] "GET /get_messages/34 HTTP/1.1" 200 -
+2026-09-29 04:56:06,950 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:06] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:06,990 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:06] "GET /get_conversations?limit=200 HTTP/1.1" 200 -
+2026-09-29 04:56:07,092 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:07] "DELETE /api/lms/tutor/history?mode=student HTTP/1.1" 200 -
+2026-09-29 04:56:08,601 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:08] "GET /api/lms/tutor/history?mode=student HTTP/1.1" 200 -
+2026-09-29 04:56:08,859 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:08] "GET /auth/login HTTP/1.1" 200 -
+2026-09-29 04:56:08,898 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:08] "GET /static/teacher/css/theme-colors.css HTTP/1.1" 200 -
+2026-09-29 04:56:08,908 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:08] "GET /static/css/iqbal-logo.css HTTP/1.1" 200 -
+2026-09-29 04:56:08,909 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:08] "GET /static/css/wait-overlay.css HTTP/1.1" 200 -
+2026-09-29 04:56:08,911 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:08] "GET /static/css/platform-theme-bindings.css HTTP/1.1" 200 -
+2026-09-29 04:56:08,913 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:08] "GET /static/js/wait-overlay.js HTTP/1.1" 200 -
+2026-09-29 04:56:11,036 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/images/forgot-password-bg.jpg HTTP/1.1" 200 -
+2026-09-29 04:56:11,038 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/images/iqbal-ai-icon-mask.png HTTP/1.1" 200 -
+2026-09-29 04:56:11,237 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "POST /auth/login HTTP/1.1" 200 -
+2026-09-29 04:56:11,255 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /student-dashboard HTTP/1.1" 200 -
+2026-09-29 04:56:11,273 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/css/ui-scale.css HTTP/1.1" 200 -
+2026-09-29 04:56:11,275 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "[36mGET /static/teacher/css/theme-colors.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:11,278 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "[36mGET /static/css/platform-theme-bindings.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:11,282 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "[36mGET /static/css/iqbal-logo.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:11,288 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "[36mGET /static/css/wait-overlay.css HTTP/1.1[0m" 304 -
+2026-09-29 04:56:11,293 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/teacher/css/markdown-styles.css HTTP/1.1" 200 -
+2026-09-29 04:56:11,293 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "[36mGET /static/js/wait-overlay.js HTTP/1.1[0m" 304 -
+2026-09-29 04:56:11,298 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/js/in-app-confirm.js HTTP/1.1" 200 -
+2026-09-29 04:56:11,312 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/teacher/js/chat-response-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:56:11,319 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/teacher/js/markdown-parser.js HTTP/1.1" 200 -
+2026-09-29 04:56:11,321 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/lms/lms-ui.css HTTP/1.1" 200 -
+2026-09-29 04:56:11,323 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/student/css/student-dashboard.css HTTP/1.1" 200 -
+2026-09-29 04:56:11,326 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/teacher/js/backend-formatter.js HTTP/1.1" 200 -
+2026-09-29 04:56:11,330 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:11] "GET /static/teacher/js/markdown-examples.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,209 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/icons/diagnostic.png HTTP/1.1" 200 -
+2026-09-29 04:56:15,209 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/icons/iqbal-ai-logo.png HTTP/1.1" 200 -
+2026-09-29 04:56:15,221 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/icons/my-learning-path.png HTTP/1.1" 200 -
+2026-09-29 04:56:15,223 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/icons/classes.png HTTP/1.1" 200 -
+2026-09-29 04:56:15,248 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/js/student-shell.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,249 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/lms/lms-core.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,257 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/lms/lms-panels.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,258 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/lms/lms-student.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,268 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/lms/lms-deficiency-chat.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,268 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/js/student-quiz.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,277 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/js/student-lessons.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,278 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/js/student-diagnostic.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,287 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/js/student-learning-path.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,287 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/js/student-classes.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,294 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/js/student-tutor.js HTTP/1.1" 200 -
+2026-09-29 04:56:15,588 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:15] "GET /static/student/icons/ai-tutor.png HTTP/1.1" 200 -
+2026-09-29 04:56:16,017 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:16] "GET /api/lms/users/me/grade-profile HTTP/1.1" 200 -
+2026-09-29 04:56:16,024 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:16] "GET /api/lms/students/me/onboarding-status HTTP/1.1" 200 -
+2026-09-29 04:56:16,061 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:16] "[33mGET /api/lms/diagnostics/default HTTP/1.1[0m" 404 -
+2026-09-29 04:56:16,065 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:16] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:56:16,086 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:16] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:56:16,748 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:16] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:18,520 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:18] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:18,533 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:18] "GET /api/lms/students/me/dashboard HTTP/1.1" 200 -
+2026-09-29 04:56:18,536 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:18] "GET /api/lms/students/me/attempts HTTP/1.1" 200 -
+2026-09-29 04:56:19,678 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:19] "GET /api/lms/topics?subject=Math HTTP/1.1" 200 -
+2026-09-29 04:56:19,683 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:19] "GET /api/lms/classes/mine HTTP/1.1" 200 -
+2026-09-29 04:56:19,690 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:19] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -
+2026-09-29 04:56:19,693 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:19] "GET /api/lms/students/me/assignments HTTP/1.1" 200 -
+2026-09-29 04:56:19,711 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:19] "GET /api/lessons/browse_lessons?class_id=18&page=1&per_page=50 HTTP/1.1" 200 -
+2026-09-29 04:56:20,853 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:20] "GET /api/lms/tutor/history?mode=student HTTP/1.1" 200 -
+2026-09-29 04:56:20,859 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:20] "GET /static/student/icons/ai-chat-bot.png HTTP/1.1" 200 -
+2026-09-29 04:56:20,881 - werkzeug - INFO - 127.0.0.1 - - [29/Sep/2026 04:56:20] "[36mGET /static/student/icons/iqbal-ai-logo.png HTTP/1.1[0m" 304 -

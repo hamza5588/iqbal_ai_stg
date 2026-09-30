@@ -670,15 +670,26 @@ def get_attempt_results(attempt_id: int) -> dict:
     unanswered_count = max(0, len(question_ids) - answered_count)
     from app.services.lms import performance_service
 
-    # Analyze first so topic buckets cover every question, then refresh mastery
-    # rows so Topic Mastery % matches overall diagnostic score.
+    # Read-only: topic mastery is written once, when the attempt is submitted
+    # (_score_and_finalize). Re-writing it here on every view overwrote Learning
+    # Chat progress and made Weak Topics / Overall Progress / teacher analytics
+    # change whenever anyone opened a result.
     analysis = performance_service.analyze_attempt(attempt_id)
     if assessment.assessment_type == "diagnostic":
-        try:
-            performance_service.update_topic_scores_from_attempt(attempt_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Mastery resync after diagnostic results failed: %s", exc)
+        from app.models.lms_models import StudentTopicScore
 
+        # One-time self-heal only: the post-submit mastery write is best-effort,
+        # so if it failed the student would have no topic scores at all.
+        has_scores = (
+            db.query(StudentTopicScore.id)
+            .filter(StudentTopicScore.student_id == attempt.student_id)
+            .first()
+        )
+        if not has_scores:
+            try:
+                performance_service.update_topic_scores_from_attempt(attempt_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Mastery backfill from diagnostic results failed: %s", exc)
     breakdown = performance_service.topic_breakdown_for_attempt(attempt_id)
     result = {
         "attempt_id": attempt.id,

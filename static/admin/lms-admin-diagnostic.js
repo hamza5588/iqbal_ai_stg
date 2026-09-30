@@ -260,7 +260,7 @@
         var sizeMb = (f.size / (1024 * 1024)).toFixed(2);
         return (
           '<li>' +
-          '<span class="text-[#05B0FC] font-bold">' +
+          '<span class="text-[#1a56db] font-bold">' +
           (idx + 1) +
           '.</span>' +
           '<span class="flex-1 truncate" title="' +

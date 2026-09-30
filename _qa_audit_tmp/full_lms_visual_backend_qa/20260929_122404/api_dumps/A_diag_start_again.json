@@ -1,0 +1,21 @@
+{
+  "status": 201,
+  "url": "/api/lms/quizzes/25/start",
+  "body": {
+    "data": {
+      "already_completed": true,
+      "assessment_id": 25,
+      "assessment_type": "diagnostic",
+      "attempt_id": 84,
+      "expires_at": "2026-09-29T20:07:17.893006Z",
+      "is_expired": false,
+      "max_score": 32.0,
+      "message": "You have already completed this diagnostic.",
+      "remaining_seconds": 2437,
+      "resumed": false,
+      "status": "submitted",
+      "time_limit_minutes": 41
+    },
+    "success": true
+  }
+}

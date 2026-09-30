@@ -1,13 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends 'admin/base.html' %}
+{% set ad_page = 'load_testing' %}
+{% from 'admin/partials/page_head.html' import page_head %}
+{% block title %}Load Testing{% endblock %}
+{% block main_class %}ad-legacy{% endblock %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
-    <title>Load Testing - Iqbal AI Admin</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% block head_extra %}
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
@@ -25,7 +22,7 @@
             theme: {
                 extend: {
                     colors: {
-                        'iqbal-primary': '#05B0FC',
+                        'iqbal-primary': '#1a56db',
                         'iqbal-bg': '#F0F9FF'
                     }
                 }
@@ -33,18 +30,9 @@
         }
     </script>
     <style>
-        .sidebar-item:hover {
-            background: linear-gradient(90deg, rgba(5, 176, 252, 0.1) 0%, transparent 100%);
-        }
-
-        .sidebar-item.active {
-            background: linear-gradient(90deg, rgba(5, 176, 252, 0.2) 0%, transparent 100%);
-            border-left: 3px solid #05B0FC;
-        }
-
         .tab-btn.active {
-            border-bottom: 2px solid #05B0FC;
-            color: #05B0FC;
+            border-bottom: 2px solid #1a56db;
+            color: #1a56db;
         }
 
         .test-running-blur {
@@ -64,98 +52,24 @@
             z-index: 40;
         }
 
-        /* Mobile Adjustments */
-        @media (max-width: 1024px) {
-            #main-container {
-                flex-direction: column;
-            }
-
-            aside {
-                width: 100%;
-                min-height: auto;
-                border-bottom: 1px solid #e5e7eb;
-                box-shadow: none;
-            }
-
-            aside>div {
-                padding: 1rem;
-            }
-
-            aside nav {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.5rem;
-            }
-
-            aside nav a {
-                flex: 1;
-                min-width: 120px;
-                justify-content: center;
-                padding: 0.5rem;
-                text-align: center;
-            }
-
-            main {
-                padding: 1.5rem;
-            }
-        }
-
         .overflow-x-auto {
             -webkit-overflow-scrolling: touch;
         }
     </style>
-</head>
+{% endblock %}
 
-<body class="bg-gray-50 min-h-screen">
-    <!-- Navigation Bar -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
-        <div class="px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <h1 class="text-2xl font-bold text-[#05B0FC]">Load Testing Console</h1>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/admin" class="text-gray-600 hover:text-[#05B0FC] transition-colors">
-                        <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
-                    </a>
-                </div>
-            </div>
-        </div>
-    </nav>
-
+{% block before_shell %}
     <div id="running-overlay"></div>
+{% endblock %}
 
-    <div id="main-container" class="flex transition-all duration-300">
-        <!-- Sidebar -->
-        <aside class="w-64 bg-white shadow-lg min-h-screen">
-            <div class="p-4">
-                <nav class="space-y-2">
-                    <a href="#" onclick="showTab('tests'); return false;"
-                        class="sidebar-item active flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
-                        <i class="fas fa-play-circle w-5 mr-3"></i>
-                        <span>Run Tests</span>
-                    </a>
-                    <a href="#" onclick="showTab('assets'); return false;"
-                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
-                        <i class="fas fa-database w-5 mr-3"></i>
-                        <span>Test Assets</span>
-                    </a>
-                    <a href="#" onclick="showTab('results'); return false;"
-                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
-                        <i class="fas fa-chart-bar w-5 mr-3"></i>
-                        <span>Results & Reports</span>
-                    </a>
-                    <a href="#" onclick="showTab('settings'); return false;"
-                        class="sidebar-item flex items-center px-4 py-3 text-gray-700 hover:text-[#05B0FC] transition-colors rounded-lg">
-                        <i class="fas fa-cog w-5 mr-3"></i>
-                        <span>Settings</span>
-                    </a>
-                </nav>
-            </div>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="flex-1 p-8">
+{% block content %}
+            {{ page_head('Load Testing', 'Run concurrency and quality tests against an environment, manage test assets and review reports.', icon='fa-tachometer-alt') }}
+            <nav class="ad-tabs" aria-label="Load testing views">
+                <a href="#" onclick="showTab('tests'); return false;" class="sidebar-item active"><i class="fas fa-play-circle"></i><span>Run Tests</span></a>
+                <a href="#" onclick="showTab('assets'); return false;" class="sidebar-item"><i class="fas fa-database"></i><span>Test Assets</span></a>
+                <a href="#" onclick="showTab('results'); return false;" class="sidebar-item"><i class="fas fa-chart-bar"></i><span>Results &amp; Reports</span></a>
+                <a href="#" onclick="showTab('settings'); return false;" class="sidebar-item"><i class="fas fa-cog"></i><span>Settings</span></a>
+            </nav>
 
             <!-- SETTINGS TAB -->
             <div id="settings-tab" class="tab-content hidden">
@@ -195,7 +109,7 @@
 
                         <div class="pt-4">
                             <button type="submit"
-                                class="bg-[#05B0FC] text-white px-6 py-2 rounded hover:bg-[#0490cf] transition-colors">
+                                class="bg-[#1a56db] text-white px-6 py-2 rounded hover:bg-[#12408a] transition-colors">
                                 Save Settings
                             </button>
                         </div>
@@ -218,12 +132,12 @@
                             <input type="checkbox" id="stress-test-toggle" class="sr-only peer"
                                 onchange="setStressTestMode(this.checked)">
                             <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2
-                                        peer-focus:ring-[#05B0FC] rounded-full peer
+                                        peer-focus:ring-[#1a56db] rounded-full peer
                                         peer-checked:after:translate-x-full peer-checked:after:border-white
                                         after:content-[''] after:absolute after:top-[2px] after:left-[2px]
                                         after:bg-white after:border-gray-300 after:border after:rounded-full
                                         after:h-5 after:w-5 after:transition-all
-                                        peer-checked:bg-[#05B0FC]"></div>
+                                        peer-checked:bg-[#1a56db]"></div>
                         </label>
                         <span id="stress-test-label" class="text-sm font-medium text-gray-700">Loading…</span>
                         <span id="stress-test-saving" class="text-xs text-gray-400 hidden">Saving…</span>
@@ -422,9 +336,10 @@
                     </table>
                 </div>
             </div>
+{% endblock %}
 
-        </main>
-    </div>
+{% block after_main %}
+
 
     <!-- Create Users Modal -->
     <div id="create-user-set-modal"
@@ -2549,6 +2464,4 @@
         loadMessageCSVs();
         updateFormFields();
     </script>
-</body>
-
-</html>
+{% endblock %}

@@ -1,0 +1,8 @@
+{# 02 — Diagnostic quiz page. lms-student.js renders orientation → questions → results into #lmsDiagBody
+   (data-inline = page view instead of the old modal). The back link is hidden while the diagnostic is mandatory. #}
+<div id="lmsDiagnosticModal" data-inline>
+  <button type="button" class="sd-backlink" id="lmsDiagCloseBtn" onclick="closeLmsDiagnostic()"><i class="fas fa-arrow-left"></i> Back to Diagnostic</button>
+  <div class="sd-quiz-card">
+    <div id="lmsDiagBody"><div class="sd-spinner"></div></div>
+  </div>
+</div>

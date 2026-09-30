@@ -17,7 +17,7 @@
     font-family:'Segoe UI',Arial,sans-serif;
     color:#111;
     background:
-      linear-gradient(160deg, rgba(242,249,244,0.92), rgba(217,240,224,0.92)),
+      linear-gradient(160deg, rgba(244,247,252,0.92), rgba(219,234,254,0.92)),
       url('{{ url_for('static', filename='images/forgot-password-bg.jpg') }}') center/cover no-repeat;
   }
   a{ text-decoration:none; }
@@ -148,8 +148,9 @@
     main{padding:0 16px;}
   }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}">
 </head>
-<body>
+<body class="nu-page nu-auth nu-reset nu-reset-2">
   <header>
     <div class="logo">{% with variant='dark-on-light', height='44px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}</div>
     <a href="{{ url_for('auth.forgot_password') }}" class="btn-outline">&larr; Back to Email</a>
@@ -178,7 +179,7 @@
     <div class="panel">
       <div class="side">
         <div class="shield-wrap">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z" stroke="#1c7c3e" stroke-width="1.6" fill="none"/><path d="M8.5 12 L11 14.5 L16 9" stroke="#1c7c3e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z" stroke="#1a56db" stroke-width="1.6" fill="none"/><path d="M8.5 12 L11 14.5 L16 9" stroke="#1a56db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <h3>Secure Verification</h3>
         <p>A verification code has been sent to your registered email.</p>
@@ -222,7 +223,7 @@
         <a href="{{ url_for('auth.forgot_password') }}" class="back-link">Back to Email</a>
         <hr>
         <div class="footnote">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" fill="#1c7c3e"/><path d="M8 11V7a4 4 0 018 0v4" stroke="#1c7c3e" stroke-width="2" fill="none"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" fill="#1a56db"/><path d="M8 11V7a4 4 0 018 0v4" stroke="#1a56db" stroke-width="2" fill="none"/></svg>
           Your verification code is encrypted and can only be used once.
         </div>
       </div>

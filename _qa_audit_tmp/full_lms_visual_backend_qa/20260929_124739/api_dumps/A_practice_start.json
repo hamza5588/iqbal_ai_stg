@@ -1,0 +1,11 @@
+{
+  "status": 201,
+  "url": "/api/lms/practice/sessions",
+  "body": {
+    "data": {
+      "resumed": true,
+      "session_id": 2
+    },
+    "success": true
+  }
+}

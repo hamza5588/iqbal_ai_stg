@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "url": "/api/lms/tutor/history?mode=student",
+  "body": {
+    "data": {
+      "has_long_term_memory": false,
+      "message_count": 2,
+      "messages": [
+        {
+          "created_at": "2026-09-29T20:06:32.487633",
+          "role": "user",
+          "text": "What is 3/4 + 1/8?"
+        },
+        {
+          "created_at": "2026-09-29T20:06:39.595516",
+          "role": "bot",
+          "text": "First, we need to find a common denominator for the fractions. The denominators are 4 and 8. What is the least common multiple of 4 and 8?"
+        }
+      ]
+    },
+    "success": true
+  }
+}

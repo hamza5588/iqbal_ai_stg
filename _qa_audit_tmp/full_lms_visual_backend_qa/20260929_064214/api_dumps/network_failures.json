@@ -1,0 +1,11 @@
+{
+  "all": [
+    "400 POST http://127.0.0.1:5001/api/lms/practice/sessions",
+    "500 POST http://127.0.0.1:5001/api/lessons/ask_question"
+  ],
+  "console": [
+    "Failed to load resource: the server responded with a status of 404 (NOT FOUND) @ http://127.0.0.1:5001/favicon.ico",
+    "Failed to load resource: the server responded with a status of 400 (BAD REQUEST) @ http://127.0.0.1:5001/api/lms/practice/sessions",
+    "Failed to load resource: the server responded with a status of 500 (INTERNAL SERVER ERROR) @ http://127.0.0.1:5001/api/lessons/ask_question"
+  ]
+}

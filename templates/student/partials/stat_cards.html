@@ -1,0 +1,21 @@
+{# Pending Diagnostic / Weak Topics / Learning Path Progress — filled from GET /api/lms/students/me/dashboard (student-shell.js). #}
+<div class="sd-top-cards" data-stat-cards>
+  <div class="sd-stat-card">
+    <div class="sd-ic-badge"><i class="far fa-file-alt"></i></div>
+    <div class="sd-stat-body"><h4>Pending Diagnostic</h4><b class="sd-big" data-stat="pending-diag">–</b><small>Assigned by Admin</small></div>
+  </div>
+  <div class="sd-stat-card warn">
+    <div class="sd-ic-badge"><i class="fas fa-exclamation-triangle"></i></div>
+    <div class="sd-stat-body">
+      <button type="button" class="sd-view-all" data-stat="weak-toggle" hidden onclick="sdToggleWeakChips(this)">View All <i class="fas fa-chevron-right"></i></button>
+      <h4>Weak Topics</h4><b class="sd-big" data-stat="weak-count">–</b>
+      <div class="sd-chips-collapsed" data-stat="weak-chips"></div>
+    </div>
+  </div>
+  <div class="sd-stat-card green">
+    <div class="sd-ic-badge"><i class="fas fa-signal"></i></div>
+    <div class="sd-stat-body"><h4>Learning Path Progress</h4><b class="sd-big" data-stat="path-label">–</b>
+      <div class="sd-progress-row"><span class="sd-progress-track"><span class="sd-progress-fill green" data-stat="path-fill" style="width:0%;"></span></span><span class="sd-pct" data-stat="path-pct">0%</span></div>
+    </div>
+  </div>
+</div>

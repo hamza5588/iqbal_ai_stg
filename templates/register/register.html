@@ -10,8 +10,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --text-dark:#16241c;
-  --text-muted:#5c6b62;
+  --text-dark:#1e293b;
+  --text-muted:#64748b;
   --error:#dc2626;
 }
 *{box-sizing:border-box; margin:0; padding:0;}
@@ -34,7 +34,7 @@ a{ text-decoration:none; }
 .logo-badge{
   position:absolute; top:-56px; left:50%; transform:translateX(-50%);
   width:112px; height:112px; border-radius:50%;
-  background:#fff; box-shadow:0 10px 30px rgba(20,80,40,0.12);
+  background:#fff; box-shadow:0 10px 30px rgba(26,86,219,0.12);
   display:flex; align-items:center; justify-content:center;
   z-index:5; border:6px solid #fff;
 }
@@ -54,13 +54,13 @@ h1.title span{ color:var(--green); font-weight:700; }
 .progress-step{ display:flex; flex-direction:column; align-items:center; width:120px; }
 .progress-circle{
   width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-  font-weight:700; font-size:1rem; margin-bottom:8px; background:#fff; border:2px solid #d7e6dc; color:#9fb3a7;
+  font-weight:700; font-size:1rem; margin-bottom:8px; background:#fff; border:2px solid #dbe7fb; color:#94a3b8;
 }
 .progress-circle.done{ background:linear-gradient(135deg,var(--green-dark),var(--green-mid)); border-color:transparent; color:#fff; }
 .progress-circle.active{ background:linear-gradient(135deg,var(--green-dark),var(--green-mid)); border-color:transparent; color:#fff; }
-.progress-line{ flex:1; height:2px; background:#d7e6dc; margin-top:22px; min-width:30px; }
+.progress-line{ flex:1; height:2px; background:#dbe7fb; margin-top:22px; min-width:30px; }
 .progress-line.done{ background:var(--green-mid); }
-.progress-label{ font-size:0.82rem; font-weight:700; color:#9fb3a7; }
+.progress-label{ font-size:0.82rem; font-weight:700; color:#94a3b8; }
 .progress-label.active{ color:var(--green); }
 
 #form-error{
@@ -82,7 +82,7 @@ h1.title span{ color:var(--green); font-weight:700; }
   width:100%; padding:10px 12px; border-radius:8px; border:1.5px solid var(--border-soft);
   font-size:0.88rem; font-family:'Inter',sans-serif; outline:none; color:var(--text-dark); background:#fff;
 }
-.field-body input::placeholder{ color:#a9bdb0; }
+.field-body input::placeholder{ color:#94a3b8; }
 .field-body input:focus,.field-body select:focus{ border-color:var(--green-mid); box-shadow:0 0 0 3px var(--theme-shadow-focus); }
 .field-body input.field-invalid,.field-body select.field-invalid{ border-color:var(--error); }
 .field-hint{ color:var(--error); font-size:0.76rem; margin-top:6px; display:none; }
@@ -91,7 +91,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 .strength-row{ margin-top:10px; }
 .strength-label{ font-size:0.76rem; font-weight:600; color:var(--text-muted); margin-bottom:6px; }
 .strength-bars{ display:flex; gap:5px; align-items:center; }
-.strength-bars .bar{ height:5px; flex:1; border-radius:3px; background:#e2ece5; }
+.strength-bars .bar{ height:5px; flex:1; border-radius:3px; background:#e2e8f0; }
 .strength-bars .bar.on{ background:var(--green-mid); }
 .strength-tag{ font-size:0.76rem; font-weight:700; color:var(--green); margin-left:8px; white-space:nowrap; }
 
@@ -111,11 +111,11 @@ h1.title span{ color:var(--green); font-weight:700; }
 .btn-primary:disabled{ opacity:0.75; cursor:default; transform:none; }
 
 .divider{ display:flex; align-items:center; gap:12px; margin:0 0 18px; color:var(--text-muted); font-size:0.75rem; font-weight:700; letter-spacing:0.5px; }
-.divider::before,.divider::after{ content:""; flex:1; height:1px; background:#c6dccd; }
+.divider::before,.divider::after{ content:""; flex:1; height:1px; background:#cbd5e1; }
 
 .social-row{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
 .social-btn{
-  display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #d9e4dd; border-radius:10px;
+  display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e2e8f0; border-radius:10px;
   padding:10px 18px; font-size:0.88rem; font-weight:600; color:var(--text-dark); opacity:0.6; cursor:not-allowed;
 }
 .social-btn.linkedin{ background:#0a66c2; color:#fff; border-color:#0a66c2; }
@@ -126,9 +126,9 @@ h1.title span{ color:var(--green); font-weight:700; }
 .trust-row{ display:flex; justify-content:center; gap:34px; flex-wrap:wrap; margin:26px 0 34px; font-size:0.82rem; color:var(--text-muted); font-weight:600; }
 .trust-row .item{ display:flex; align-items:center; gap:8px; }
 .trust-row .item .circ{ width:26px; height:26px; border-radius:50%; background:var(--green-pale); color:var(--green-dark); display:flex; align-items:center; justify-content:center; }
-.trust-divider{ width:1px; background:#d7e6dc; align-self:stretch; }
+.trust-divider{ width:1px; background:#dbe7fb; align-self:stretch; }
 
-.page-footer{ background:#f5f8f6; border-radius:14px; padding:10px 24px; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:26px; }
+.page-footer{ background:#f8fafc; border-radius:14px; padding:10px 24px; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:26px; }
 .page-footer .brand{ color:var(--green); font-weight:700; }
 
 @media (max-width:640px){
@@ -137,8 +137,9 @@ h1.title span{ color:var(--green); font-weight:700; }
   .progress-step{ width:90px; }
 }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}">
 </head>
-<body>
+<body class="nu-page nu-auth nu-reg">
 <div class="page-wrap">
   <div class="logo-badge">
     {% with variant='icon' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
@@ -146,36 +147,36 @@ h1.title span{ color:var(--green); font-weight:700; }
   <div class="card">
 
     <svg class="illustration" viewBox="0 0 220 170" xmlns="http://www.w3.org/2000/svg">
-      <g fill="#8fd6a6">
+      <g fill="#93c5fd">
         <path d="M14 24 l2.5 5.5 5.5 2.5 -5.5 2.5 -2.5 5.5 -2.5 -5.5 -5.5 -2.5 5.5 -2.5 z"/>
         <path d="M204 34 l2 4.5 4.5 2 -4.5 2 -2 4.5 -2 -4.5 -4.5 -2 4.5 -2 z"/>
       </g>
       <g transform="translate(10,110)">
-        <rect x="0" y="18" width="80" height="14" rx="3" fill="#1f9c46"/>
-        <rect x="6" y="4" width="68" height="14" rx="3" fill="#7cc954"/>
-        <rect x="12" y="-10" width="56" height="14" rx="3" fill="#0e5c2f"/>
+        <rect x="0" y="18" width="80" height="14" rx="3" fill="#2563eb"/>
+        <rect x="6" y="4" width="68" height="14" rx="3" fill="#60a5fa"/>
+        <rect x="12" y="-10" width="56" height="14" rx="3" fill="#12408a"/>
       </g>
       <g transform="translate(6,60)">
-        <path d="M42 0 L84 16 L42 32 L0 16 Z" fill="#16241c"/>
-        <path d="M42 32 L42 44 Q42 50 30 52 Q18 50 18 44 L18 30" fill="none" stroke="#16241c" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="84" cy="16" r="3" fill="#16241c"/>
-        <line x1="84" y1="16" x2="84" y2="40" stroke="#16241c" stroke-width="2"/>
-        <circle cx="84" cy="44" r="4" fill="#2fae52"/>
+        <path d="M42 0 L84 16 L42 32 L0 16 Z" fill="#1e293b"/>
+        <path d="M42 32 L42 44 Q42 50 30 52 Q18 50 18 44 L18 30" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="84" cy="16" r="3" fill="#1e293b"/>
+        <line x1="84" y1="16" x2="84" y2="40" stroke="#1e293b" stroke-width="2"/>
+        <circle cx="84" cy="44" r="4" fill="#3b82f6"/>
       </g>
       <g transform="translate(96,26)">
-        <rect x="0" y="0" width="112" height="76" rx="8" fill="#ffffff" stroke="#cfe4d6" stroke-width="2"/>
-        <rect x="10" y="10" width="92" height="46" rx="4" fill="#eaf7ee"/>
-        <circle cx="56" cy="33" r="14" fill="#1f9c46"/>
+        <rect x="0" y="0" width="112" height="76" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+        <rect x="10" y="10" width="92" height="46" rx="4" fill="#eff6ff"/>
+        <circle cx="56" cy="33" r="14" fill="#2563eb"/>
         <path d="M51 26 L64 33 L51 40 Z" fill="#ffffff"/>
-        <rect x="16" y="64" width="30" height="5" rx="2.5" fill="#bfe0c9"/>
-        <rect x="16" y="72" width="50" height="4" rx="2" fill="#d8ecdd"/>
-        <path d="M-6 76 L118 76 L128 92 L-16 92 Z" fill="#1f9c46"/>
-        <path d="M-6 76 L118 76 L124 86 L0 86 Z" fill="#2fae52"/>
+        <rect x="16" y="64" width="30" height="5" rx="2.5" fill="#bfdbfe"/>
+        <rect x="16" y="72" width="50" height="4" rx="2" fill="#dbeafe"/>
+        <path d="M-6 76 L118 76 L128 92 L-16 92 Z" fill="#2563eb"/>
+        <path d="M-6 76 L118 76 L124 86 L0 86 Z" fill="#3b82f6"/>
       </g>
       <g transform="translate(184,84)">
-        <rect x="4" y="26" width="20" height="18" rx="3" fill="#0e5c2f"/>
-        <path d="M14 26 C4 20 4 6 14 0 C24 6 24 20 14 26 Z" fill="#2fae52"/>
-        <path d="M14 26 C10 18 10 10 14 4" stroke="#0e5c2f" stroke-width="1.5" fill="none"/>
+        <rect x="4" y="26" width="20" height="18" rx="3" fill="#12408a"/>
+        <path d="M14 26 C4 20 4 6 14 0 C24 6 24 20 14 26 Z" fill="#3b82f6"/>
+        <path d="M14 26 C10 18 10 10 14 4" stroke="#12408a" stroke-width="1.5" fill="none"/>
       </g>
     </svg>
 
@@ -206,7 +207,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 
       <div class="form-grid">
         <div class="form-field">
-          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg></div>
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg></div>
           <div class="field-body">
             <label for="username">User Name*</label>
             <input type="text" id="username" name="username" placeholder="Enter your user name" required>
@@ -215,7 +216,7 @@ h1.title span{ color:var(--green); font-weight:700; }
         </div>
 
         <div class="form-field">
-          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
           <div class="field-body">
             <label for="password">Password*</label>
             <input type="password" id="password" name="password" placeholder="Enter your strong password" required>
@@ -231,7 +232,7 @@ h1.title span{ color:var(--green); font-weight:700; }
         </div>
 
         <div class="form-field">
-          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20v-1a6 6 0 0 1 8-5.7"/><circle cx="17" cy="9" r="2.8"/><path d="M13.5 20v-1a5.2 5.2 0 0 1 8-4.4"/></svg></div>
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20v-1a6 6 0 0 1 8-5.7"/><circle cx="17" cy="9" r="2.8"/><path d="M13.5 20v-1a5.2 5.2 0 0 1 8-4.4"/></svg></div>
           <div class="field-body">
             <label for="role">Role*</label>
             <select id="role" name="role" required onchange="handleRoleChange()">
@@ -244,7 +245,7 @@ h1.title span{ color:var(--green); font-weight:700; }
         </div>
 
         <div class="form-field" id="class-standard-field" style="display:none;">
-          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><path d="M22 10 12 4 2 10l10 6 10-6Z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></div>
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="1.8"><path d="M22 10 12 4 2 10l10 6 10-6Z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></div>
           <div class="field-body">
             <label for="class_standard">Class Standard</label>
             <select id="class_standard" name="class_standard">
@@ -269,7 +270,7 @@ h1.title span{ color:var(--green); font-weight:700; }
         </div>
 
         <div class="form-field">
-          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg></div>
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="1.8"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg></div>
           <div class="field-body">
             <label for="medium">Preferred Medium*</label>
             <select id="medium" name="medium" required>
@@ -282,7 +283,7 @@ h1.title span{ color:var(--green); font-weight:700; }
         </div>
 
         <div class="form-field full">
-          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
           <div class="field-body">
             <label for="confirm_password">Confirm Password*</label>
             <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm your password" required>
@@ -322,11 +323,11 @@ h1.title span{ color:var(--green); font-weight:700; }
 </div>
 
 <div class="trust-row">
-  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg></span> SSL Encrypted</div>
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg></span> SSL Encrypted</div>
   <div class="trust-divider"></div>
-  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span> GDPR Compliant</div>
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span> GDPR Compliant</div>
   <div class="trust-divider"></div>
-  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0e5c2f" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg></span> Privacy First</div>
+  <div class="item"><span class="circ"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg></span> Privacy First</div>
 </div>
 
 <div class="page-footer">&copy;2026 <span class="brand">Iqbal AI</span>. All Rights Reserved</div>

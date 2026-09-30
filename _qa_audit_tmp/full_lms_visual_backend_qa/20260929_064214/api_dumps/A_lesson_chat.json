@@ -1,0 +1,20 @@
+{
+  "status": 500,
+  "body": "{\"code\":\"INTERNAL_ERROR\",\"error\":\"Failed to generate an answer. Please try again.\"}\n",
+  "convs": [
+    [
+      36,
+      "Conversation with QA Lesson 20260929_064214"
+    ]
+  ],
+  "msgs": [
+    [
+      "user",
+      "What is this lesson about?"
+    ],
+    [
+      "bot",
+      "Failed to generate an answer. Please try again."
+    ]
+  ]
+}

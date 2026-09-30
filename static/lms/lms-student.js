@@ -119,6 +119,40 @@
     });
   }
 
+  /* The student dashboard renders the diagnostic as a full page view
+     (#lmsDiagnosticModal[data-inline]); it provides sdOpen/CloseDiagnosticView.
+     Anywhere else it is the original modal. */
+  function isInlineDiag() {
+    var el = document.getElementById('lmsDiagnosticModal');
+    return !!(el && el.hasAttribute('data-inline'));
+  }
+  function openDiagSurface() {
+    if (isInlineDiag() && typeof window.sdOpenDiagnosticView === 'function') window.sdOpenDiagnosticView();
+    else lmsOpenModal('lmsDiagnosticModal');
+  }
+  function closeDiagSurface() {
+    if (isInlineDiag() && typeof window.sdCloseDiagnosticView === 'function') window.sdCloseDiagnosticView();
+    else lmsCloseModal('lmsDiagnosticModal');
+  }
+  var DIAG_TITLE = 'Diagnostic Assessment';
+  function diagHeadHtml(progress) {
+    var sub = [];
+    var meta = window._lmsDiagMeta || {};
+    if (meta.subject) sub.push('Subject: ' + escapeHtml(meta.subject));
+    if (window.sdGradeLabel) sub.push('Grade: ' + escapeHtml(window.sdGradeLabel));
+    var right = '';
+    if (progress) {
+      right = '<div class="sd-quiz-head-right">' +
+        '<div id="lmsDiagTimer" class="sd-timer" style="display:none;"></div>' +
+        '<div class="sd-qprogress"><div class="sd-qp-top"><span>Question ' + progress.idx + ' of ' + progress.total + '</span><b>' + progress.pct + '%</b></div>' +
+        '<div class="sd-track"><div class="sd-fill" style="width:' + progress.pct + '%;"></div></div></div></div>';
+    }
+    return '<div class="sd-quiz-head">' +
+      '<div style="display:flex;gap:16px;align-items:center;min-width:0;"><div class="sd-ic-badge"><i class="far fa-file-alt"></i></div>' +
+      '<div><h3>' + DIAG_TITLE + '</h3>' + (sub.length ? '<div class="sd-desc"><span>' + sub.join('</span><span>') + '</span></div>' : '') + '</div></div>' +
+      right + '</div>';
+  }
+
   function ensureDiagnosticModal() {
     if (document.getElementById('lmsDiagnosticModal')) return;
     var html = '<div id="lmsDiagnosticModal" class="lms-modal-backdrop">' +
@@ -138,7 +172,7 @@
     var modal = document.getElementById('lmsDiagnosticModal');
     var closeBtn = document.getElementById('lmsDiagCloseBtn');
     var fab = document.querySelector('.lms-fab-bar');
-    if (modal) {
+    if (modal && !isInlineDiag()) {
       modal.onclick = locked
         ? null
         : function (e) { if (e.target === modal) closeLmsDiagnostic(); };
@@ -146,6 +180,7 @@
     if (closeBtn) closeBtn.style.display = locked ? 'none' : '';
     if (fab) fab.style.display = locked ? 'none' : '';
     document.body.classList.toggle('lms-diagnostic-gate-active', locked);
+    if (typeof window.sdOnDiagnosticGate === 'function') window.sdOnDiagnosticGate(!!locked);
   };
 
   window.lmsStudentNeedsDiagnostic = function () {
@@ -174,12 +209,12 @@
     if (timerEl) timerEl.style.display = 'none';
     var msg = (result && (result.message || result.diagnostic_timeout_message)) ||
       'Time is up. Your diagnostic was submitted automatically.';
-    body.innerHTML =
+    body.innerHTML = (isInlineDiag() ? diagHeadHtml(null) : '') +
       '<div class="lms-card lms-diag-timeover">' +
       '<p class="lms-diag-timeover-title">Time is up</p>' +
       '<p>' + escapeHtml(msg) + '</p>' +
       '<div class="lms-modal-footer" style="border:none;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap;">' +
-      '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic()">Continue</button>' +
+      '<button type="button" class="lms-btn lms-btn-primary sd-btn sd-btn-primary" onclick="closeLmsDiagnostic()">Continue</button>' +
       '</div></div>';
     unlockDiagnosticGate();
   }
@@ -201,11 +236,14 @@
   function updateTimerDisplay() {
     var el = document.getElementById('lmsDiagTimer');
     if (!el || diagState.remainingSeconds == null) return;
-    if (diagState.remainingSeconds <= 60) {
-      el.style.color = '#dc2626';
-    } else {
-      el.style.color = 'var(--primary-color)';
+    var urgent = diagState.remainingSeconds <= 60;
+    if (el.classList.contains('sd-timer')) {
+      el.classList.toggle('urgent', urgent);
+      el.innerHTML = '<i class="far fa-clock"></i> ' + formatDiagCountdown(diagState.remainingSeconds);
+      el.style.display = 'inline-flex';
+      return;
     }
+    el.style.color = urgent ? '#dc2626' : 'var(--primary-color)';
     el.textContent = formatDiagCountdown(diagState.remainingSeconds);
     el.style.display = 'block';
   }
@@ -232,14 +270,20 @@
     }, 1000);
   }
 
+  // Bumped on every open: a close that is still awaiting its answer re-save
+  // must not hide / reset a diagnostic that was reopened in the meantime.
+  var _diagOpenGen = 0;
+
   window.openLmsDiagnostic = async function () {
+    _diagOpenGen++;
     ensureDiagnosticModal();
     if (window._lmsNeedsDiagnostic) setLmsDiagnosticGate(true);
-    lmsOpenModal('lmsDiagnosticModal');
+    openDiagSurface();
     var body = document.getElementById('lmsDiagBody');
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Loading diagnostic...</p>';
     try {
       var diag = await lmsApi('/api/lms/diagnostics/default');
+      window._lmsDiagMeta = { id: diag.id, subject: diag.subject || 'Math', question_count: diag.question_count };
       // Resume in-progress attempt immediately (close mid-test left dashboard
       // saying "in progress" but orientation alone showed no questions).
       // Check before the "already completed" branches so a live attempt wins.
@@ -267,7 +311,7 @@
         return;
       }
       if (diag.diagnostic_completed || diag.any_diagnostic_completed) {
-        body.innerHTML = '<div class="lms-card"><p>You have already completed the diagnostic assessment' +
+        body.innerHTML = (isInlineDiag() ? diagHeadHtml(null) : '') + '<div class="lms-card"><p>You have already completed the diagnostic assessment' +
           (diag.title ? ': <strong>' + escapeHtml(diag.title) + '</strong>' : '') +
           '.</p><p class="lms-status" style="margin-top:8px;">Continue with your learning path or Learning Chat.</p></div>';
         unlockDiagnosticGate();
@@ -287,9 +331,10 @@
 
   /** Resume a specific in-progress diagnostic from Quiz History. */
   window.resumeLmsDiagnostic = async function (assessmentId) {
+    _diagOpenGen++;
     ensureDiagnosticModal();
     if (window._lmsNeedsDiagnostic) setLmsDiagnosticGate(true);
-    lmsOpenModal('lmsDiagnosticModal');
+    openDiagSurface();
     var body = document.getElementById('lmsDiagBody');
     if (body) {
       body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">Continuing diagnostic...</p>';
@@ -311,8 +356,10 @@
       }
       return;
     }
+    var gen = _diagOpenGen;
     if (diagState.attemptId && diagState.questions.length) {
       try { await persistDiagAnswers(); } catch (e) { /* ignore */ }
+      if (gen !== _diagOpenGen) return; // reopened while saving - leave the new session alone
       // Only drop the local backup once every answer actually made it to
       // the server - if some are still stuck (offline), keep them queued
       // so the next open / reconnect / periodic retry can finish the job.
@@ -322,7 +369,7 @@
     }
     clearDiagTimer();
     try { localStorage.removeItem('lmsDiagWs:' + (diagState.attemptId || 'x')); } catch (e) { /* ignore */ }
-    lmsCloseModal('lmsDiagnosticModal');
+    closeDiagSurface();
     diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {}, expiresAt: null, remainingSeconds: null, timerInterval: null };
     window._lmsDiagWorkspaceOpen = false;
     window._lmsDiagExplainCache = {};
@@ -380,8 +427,8 @@
     var mins = diag.time_limit_minutes ? Math.round(diag.time_limit_minutes) : 30;
     var qn = diag.question_count || '';
     var isRetake = !!diag._retake;
-    body.innerHTML =
-      '<div class="lms-diag-orient">' +
+    body.innerHTML = (isInlineDiag() ? diagHeadHtml(null) : '') +
+      '<div class="lms-diag-orient sd-orient">' +
       '<h3 class="lms-diag-orient-title">' + (isRetake ? 'Retaking the diagnostic' : 'Before you begin') + '</h3>' +
       '<p class="lms-diag-orient-lead">' +
       (isRetake
@@ -397,9 +444,9 @@
       '<li>Use the <strong>Workspace</strong> (rough sheet / notes) for any working out.</li>' +
       '<li>If time runs out it submits automatically, and <strong>every question you answered is still scored</strong>.</li>' +
       '</ul>' +
-      '<div class="lms-modal-footer" style="border:none;padding-top:8px;display:flex;gap:8px;flex-wrap:wrap;">' +
-      '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsBeginDiagnostic()">Start Diagnostic</button>' +
-      (window._lmsDiagnosticMandatory ? '' : '<button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnostic()">Not now</button>') +
+      '<div class="sd-orient-actions">' +
+      '<button type="button" class="lms-btn lms-btn-primary sd-btn sd-btn-primary" onclick="lmsBeginDiagnostic()">Start Diagnostic <i class="fas fa-chevron-right"></i></button>' +
+      (window._lmsDiagnosticMandatory ? '' : '<button type="button" class="lms-btn lms-btn-secondary sd-btn sd-btn-outline" onclick="closeLmsDiagnostic()">Not now</button>') +
       '</div></div>';
   }
 
@@ -520,57 +567,58 @@
     var qid = item.question_id || (q && q.id);
     var opts = (q.options || []).map(function (o, oi) {
       var sel = diagState.answers[idx] === oi ? ' selected' : '';
-      return '<button type="button" class="lms-quiz-option' + sel + '" onclick="selectDiagOption(' + idx + ',' + oi + ')">' +
-        '<span class="lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
-        '<span class="lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
+      return '<button type="button" class="sd-q-option lms-quiz-option' + sel + '" onclick="selectDiagOption(' + idx + ',' + oi + ')">' +
+        '<span class="sd-radio"></span>' +
+        '<span class="sd-opt-label lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
+        '<span class="sd-opt-body lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
 
-    var backBtn = idx > 0
-      ? '<button type="button" class="lms-btn lms-btn-secondary" onclick="prevDiagQuestion()">Back</button>'
-      : '';
+    // Previous is always shown (disabled on the first question), as in the design.
+    var backBtn = '<button type="button" class="sd-btn sd-btn-outline" onclick="prevDiagQuestion()"' + (idx > 0 ? '' : ' disabled') + '>Previous</button>';
     var nextBtn = idx < total - 1
-      ? '<button type="button" class="lms-btn lms-btn-primary" onclick="nextDiagQuestion()">' +
-        (diagState.answers[idx] === undefined ? 'Skip &rarr;' : 'Next') + '</button>'
+      ? '<button type="button" class="sd-btn sd-btn-primary" onclick="nextDiagQuestion()">' +
+        (diagState.answers[idx] === undefined ? 'Skip' : 'Next') + ' <i class="fas fa-chevron-right"></i></button>'
       : '';
-    var submitBtn = '<button type="button" class="lms-btn ' + (idx === total - 1 ? 'lms-btn-primary' : 'lms-btn-secondary') +
+    var submitBtn = '<button type="button" class="sd-btn ' + (idx === total - 1 ? 'sd-btn-primary' : 'sd-btn-outline blue') +
       '" onclick="confirmSubmitDiagnostic()">Submit Diagnostic</button>';
     var nav =
-      '<div class="lms-quiz-nav">' +
-      '<div class="lms-quiz-nav-start">' + backBtn + '</div>' +
-      '<div class="lms-quiz-nav-end">' + nextBtn + ' ' + submitBtn + '</div>' +
-      '</div>';
+      '<div class="sd-q-nav">' + backBtn +
+      '<div class="sd-q-nav-end">' + submitBtn + nextBtn + '</div></div>';
 
     var tools =
-      '<div class="lms-quiz-tools">' +
+      '<div class="sd-q-tools">' +
       (qid && typeof window.lmsExplainDiagQuestion === 'function'
-        ? '<button type="button" class="lms-quiz-tool" onclick="lmsExplainDiagQuestion(' + idx + ')">&#128172; Explain this question</button>' : '') +
+        ? '<button type="button" class="sd-icon-btn" onclick="lmsExplainDiagQuestion(' + idx + ')"><i class="far fa-comment-dots"></i> Explain this question</button>' : '') +
       (typeof window.toggleDiagWorkspace === 'function'
-        ? '<button type="button" class="lms-quiz-tool" onclick="toggleDiagWorkspace()">&#9998; Workspace</button>' : '') +
+        ? '<button type="button" class="sd-icon-btn' + (window._lmsDiagWorkspaceOpen ? ' active' : '') + '" onclick="toggleDiagWorkspace()"><i class="fas fa-pencil-alt"></i> Workspace</button>' : '') +
       (diagState.answers[idx] !== undefined
-        ? '<button type="button" class="lms-quiz-tool" onclick="clearDiagAnswer(' + idx + ')">Clear answer</button>'
+        ? '<button type="button" class="sd-icon-btn" onclick="clearDiagAnswer(' + idx + ')"><i class="fas fa-eraser"></i> Clear answer</button>'
         : '') +
-      '<button type="button" class="lms-quiz-tool" title="Copy question text" onclick="lmsCopyDiagQuestion(this)">&#128203; Copy</button>' +
+      '<button type="button" class="sd-icon-btn" title="Copy question text" onclick="lmsCopyDiagQuestion(this)"><i class="far fa-clipboard"></i> Copy</button>' +
       // --lms-font-scale is a live CSS custom property - text resizes
       // immediately, no re-render needed.
-      '<button type="button" class="lms-font-btn" title="Smaller text" onclick="lmsStepFont(-1)">A-</button>' +
-      '<button type="button" class="lms-font-btn" title="Larger text" onclick="lmsStepFont(1)">A+</button>' +
+      '<button type="button" class="sd-icon-btn lms-font-btn" title="Smaller text" onclick="lmsStepFont(-1)">A-</button>' +
+      '<button type="button" class="sd-icon-btn lms-font-btn" title="Larger text" onclick="lmsStepFont(1)">A+</button>' +
       '</div>';
 
-    var meta = '<p class="lms-status">Question ' + (idx + 1) + ' of ' + total;
-    if (diff) meta += ' &middot; ' + escapeHtml(diff);
-    if (qSecs) meta += ' &middot; ~' + qSecs + 's suggested';
-    meta += '</p>';
+    var meta = [];
+    if (diff) meta.push(escapeHtml(diff));
+    if (qSecs) meta.push('~' + qSecs + 's suggested');
 
     body.innerHTML =
-      '<div class="lms-quiz-progress"><div class="lms-quiz-progress-bar" style="width:' + pct + '%"></div></div>' +
-      meta +
-      '<div class="lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
+      diagHeadHtml({ idx: idx + 1, total: total, pct: pct }) +
+      '<div class="sd-q-box">' +
+      '<div class="sd-q-label">Question ' + (idx + 1) + '</div>' +
+      (meta.length ? '<p class="sd-q-meta">' + meta.join(' &middot; ') + '</p>' : '') +
+      '<div class="sd-q-text lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
       '<div id="lmsDiagExplain" class="lms-diag-explain" hidden></div>' +
       opts +
       tools +
       '<div id="lmsDiagWorkspaceHost"></div>' +
       diagQuestionMapHtml() +
-      '<div class="lms-modal-footer" style="border:none;padding:16px 0 0;margin:0;">' + nav + '</div>';
+      '</div>' +
+      nav;
+    updateTimerDisplay();
     typeset(body);
     // Re-show a clarification the student already asked for on this question.
     if (qid && window._lmsDiagExplainCache && window._lmsDiagExplainCache[qid]) {
@@ -647,6 +695,8 @@
     if (!host) return;
     if (window._lmsDiagWorkspaceOpen) window.mountDiagWorkspace();
     else host.innerHTML = '';
+    var btn = document.querySelector('#lmsDiagBody button[onclick="toggleDiagWorkspace()"]');
+    if (btn) btn.classList.toggle('active', !!window._lmsDiagWorkspaceOpen);
   };
 
   window.mountDiagWorkspace = function () {
@@ -902,6 +952,27 @@
         ? '<div class="lms-diag-timeout-note">You have already completed the diagnostic. Here is how you did.</div>'
         : '');
     var scoreMeta = [countLabel, unansweredLabel].filter(Boolean).join(' &middot; ');
+    var nextSteps =
+      (weak.length
+        ? '<p class="lms-status" style="margin-top:12px;">Practice weak areas in Learning Chat — one question at a time.</p>'
+        : '<div class="lms-diag-clear-note"><strong>&#127881; No areas of improvement.</strong> ' +
+          'You met the mark on every topic in this diagnostic. Keep it sharp with a short set of ' +
+          'above-level challenge questions built from your strongest topics.</div>');
+    var actionBtns =
+      (weak.length
+        ? '<button type="button" class="sd-btn sd-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>'
+        : '<button type="button" class="sd-btn sd-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat(false, \'enrichment\')">Start challenge</button>') +
+      '<button type="button" class="sd-btn sd-btn-outline" onclick="lmsRetakeDiagnostic()">Retake with new questions</button>' +
+      '<button type="button" class="sd-btn sd-btn-outline" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button>';
+    if (isInlineDiag() && typeof window.sdRenderResultBody === 'function') {
+      body.innerHTML = diagHeadHtml(null) + timedOutBanner +
+        '<div class="sd-result"><div class="sd-result-banner"><span class="sd-title">Diagnostic Result</span></div>' +
+        window.sdRenderResultBody(result) + '</div>' +
+        nextSteps +
+        '<div class="sd-orient-actions">' + actionBtns + '</div>';
+      typeset(body);
+      return;
+    }
     body.innerHTML =
       timedOutBanner +
       '<div class="lms-diag-score">' +
@@ -978,66 +1049,9 @@
     }
   };
 
-  window.renderLmsLearningPathEnhanced = function (path) {
-    if (!path || !path.items || !path.items.length) {
-      return '<div class="lms-path-panel"><h3>My Learning Path</h3><p class="lms-path-empty">Complete your diagnostic to unlock Learning Chat for weak areas.</p>' +
-        '<button type="button" class="lms-btn lms-btn-primary" onclick="openLmsDiagnostic()">Take Diagnostic</button></div>';
-    }
-    var weakProg = path.weak_area_progress || null;
-    var steps = path.items.map(function (item) {
-      var isDone = item.status === 'completed';
-      var isCurrent = !isDone && path.current_step && path.current_step.id === item.id;
-      var cls = 'lms-path-step' + (isDone ? ' completed' : '') + (isCurrent ? ' current' : '');
-      var check = isDone ? '&#10003;' : (isCurrent ? '&#9679;' : '');
-      var action = '';
-      if (item.item_type === 'practice' && item.item_id === 0 && !isDone) {
-        var remain = weakProg && weakProg.weak_remaining != null ? weakProg.weak_remaining : null;
-        var hint = remain != null
-          ? ('<p class="lms-status" style="font-size:.75rem;margin:4px 0 0;">' + remain + ' weak topic' + (remain === 1 ? '' : 's') + ' still need practice</p>')
-          : '';
-        action = '<div class="lms-path-action">' +
-          '<button type="button" class="lms-btn lms-btn-primary" onclick="openDeficiencyChat()">Open Learning Chat</button>' +
-          hint + '</div>';
-      } else if (isCurrent && !isDone) {
-        if (item.item_type === 'enrichment') {
-          action = '<div class="lms-path-action">' +
-            '<button type="button" class="lms-btn lms-btn-primary" onclick="openDeficiencyChat(false, \'enrichment\')">Start challenge</button></div>';
-        } else {
-          action = '<div class="lms-path-action">' +
-            '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsLaunchPathStep(\'' + escapeHtml(item.item_type) + '\',' + (item.item_id || 'null') + ',' + item.id + ')">Start</button> ' +
-            '<button type="button" class="lms-btn lms-btn-secondary" onclick="markLmsPathItemComplete(' + item.id + ')">Mark done</button></div>';
-        }
-      } else if (isDone && item.item_type === 'practice' && item.item_id === 0) {
-        action = '<div class="lms-path-action">' +
-          '<span class="lms-status" style="font-size:.75rem;">All weak topics cleared</span> ' +
-          '<button type="button" class="lms-btn lms-btn-secondary" style="margin-top:6px;font-size:.75rem;" onclick="openDeficiencyChat(true)">Practice again</button></div>';
-      }
-      return '<li class="' + cls + '">' +
-        '<div class="lms-path-check">' + check + '</div>' +
-        '<div class="lms-path-step-body">' +
-        '<div class="lms-path-step-title">' + escapeHtml(item.title || item.label || 'Step') + '</div>' +
-        '<div class="lms-path-step-meta">' + escapeHtml(item.item_type) + '</div>' + action + '</div></li>';
-    }).join('');
-    var pct = path.percent != null
-      ? Math.round(path.percent)
-      : (path.total_count ? Math.round(100 * (path.completed_count || 0) / path.total_count) : 0);
-    var pctLabel = weakProg && weakProg.total
-      ? (weakProg.cleared + ' of ' + weakProg.total + ' topics cleared — ' + pct + '% done')
-      : (pct + '% done');
-    return '<div class="lms-path-panel"><h3>My Learning Path <span class="lms-path-pct" style="font-weight:400;font-size:.875rem;">(' + escapeHtml(pctLabel) + ')</span></h3>' +
-      '<ol class="lms-path-steps">' + steps + '</ol></div>';
-  };
-
   document.addEventListener('pagehide', function () {
     if (diagState.attemptId && diagState.questions.length) {
       persistDiagAnswers().catch(function () {});
     }
-  });
-
-  document.addEventListener('DOMContentLoaded', function () {
-    if (typeof renderLmsLearningPath === 'function') {
-      window._renderLmsLearningPathOriginal = renderLmsLearningPath;
-    }
-    window.renderLmsLearningPath = renderLmsLearningPathEnhanced;
   });
 })();

@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "url": "/api/lms/assignments?class_id=26",
+  "body": {
+    "data": [
+      {
+        "id": 32,
+        "quiz_id": 53,
+        "title": "QA Assignment 20260929_151749"
+      }
+    ],
+    "success": true
+  }
+}

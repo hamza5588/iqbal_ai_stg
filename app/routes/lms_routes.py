@@ -1299,13 +1299,7 @@ def my_classes():
         )
     if role != "student":
         return json_error("Forbidden", code="forbidden", status=403)
-    classes_list = class_service.list_student_classes(uid)
-    return json_success(
-        [
-            {"id": c.id, "name": c.name, "description": c.description, "grade_level": c.grade_level}
-            for c in classes_list
-        ]
-    )
+    return json_success(class_service.list_student_class_details(uid))
 
 
 @bp.route("/students/me/onboarding-status", methods=["GET"])

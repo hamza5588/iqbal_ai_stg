@@ -1,0 +1,19 @@
+{# 05 — My Classes. Classes (GET /api/lms/classes/mine), their lessons (browse_lessons?class_id) and
+   quizzes (GET /api/lms/students/me/assignments) — student-classes.js. #}
+<div class="sd-card">
+  <div class="sd-head-row">
+    <div class="sd-section-title">
+      <div class="sd-icon-badge"><img src="{{ url_for('static', filename='student/icons/classes.png') }}" alt=""></div>
+      <div><h2>My Classes</h2><p class="sd-desc">Access your class lessons and quizzes. Join a class using a code.</p></div>
+    </div>
+    <div class="sd-toolbar">
+      <div class="sd-search"><i class="fas fa-search"></i>
+        <input type="search" id="sdClassSearch" placeholder="Search classes, lessons or quizzes..." oninput="sdRenderClasses()" aria-label="Search classes">
+      </div>
+      <div class="sd-select"><label for="lmsTopicFilter">Lesson topic</label>
+        <select id="lmsTopicFilter" onchange="sdOnLessonTopicChange(this.value)"><option value="">All topics</option></select></div>
+      <button type="button" class="sd-btn sd-btn-primary" onclick="openLmsJoinClassModal()"><i class="fas fa-plus"></i> Join Class</button>
+    </div>
+  </div>
+  <div id="sdClassList" style="margin-top:18px;"><div class="sd-spinner"></div></div>
+</div>

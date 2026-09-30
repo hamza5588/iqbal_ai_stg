@@ -1,0 +1,31 @@
+{# 07 — AI Tutor (POST /api/lms/tutor/chat, GET/DELETE /api/lms/tutor/history). The Chat History popover
+   also lists lesson conversations (GET /get_conversations). student-tutor.js #}
+<div class="sd-tutor-shell">
+  <div id="sdTutorMessages" class="sd-chat-scroll" aria-live="polite"></div>
+  <div class="sd-tutor-bottom">
+    <div class="sd-histpop" id="sdHistPop" hidden>
+      <h4>CHAT HISTORY</h4>
+      <div id="sdHistList"></div>
+      <div class="sd-h-foot">
+        <button type="button" id="sdHistMore" onclick="sdToggleAllConversations()">View all conversations <i class="fas fa-chevron-right"></i></button>
+        <button type="button" class="danger" onclick="clearLmsTutorHistory()">Clear tutor chat</button>
+      </div>
+    </div>
+    <div class="sd-chat-inputbar">
+      <div class="sd-chat-field">
+        <textarea id="lmsTutorInput" rows="1" placeholder="Type your question here..." aria-label="Ask the AI tutor"
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendLmsTutorMessage();}"></textarea>
+        <button type="button" id="sdTutorMic" class="sd-field-ic" title="Voice input" aria-label="Voice input" onclick="sdTutorVoice()"><i class="fas fa-microphone"></i></button>
+      </div>
+      <button type="button" id="sdTutorSend" class="sd-send-btn" onclick="sendLmsTutorMessage()"><i class="fas fa-paper-plane"></i><span class="sd-send-label">Send</span></button>
+    </div>
+    <div class="sd-chip-row" style="margin-bottom:0;">
+      <button type="button" class="sd-chip solid" id="sdHistToggle" onclick="sdToggleHistory(event)" aria-expanded="false"><i class="far fa-clock"></i> Chat History <i class="fas fa-chevron-up" style="font-size:10px;"></i></button>
+      <button type="button" class="sd-chip" onclick="sdTutorPrompt('Explain this concept: ')"><i class="far fa-lightbulb"></i> Explain this concept</button>
+      <button type="button" class="sd-chip" onclick="sdTutorPrompt('Solve this math problem step by step: ')"><i class="fas fa-calculator"></i> Solve a math problem</button>
+      <button type="button" class="sd-chip" onclick="sdTutorPrompt('Summarize this topic: ')"><i class="far fa-list-alt"></i> Summarize this topic</button>
+      <button type="button" class="sd-chip" onclick="sdTutorPrompt('Give me practice questions on: ')"><i class="far fa-question-circle"></i> Give me practice questions</button>
+      <button type="button" class="sd-chip" onclick="sdTutorPrompt('Help me with this homework: ')"><i class="fas fa-book-open"></i> Help with homework</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,52 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="users-section" class="section hidden">
+    {% call page_head('User Management', 'Create, edit and manage every teacher, student and admin account.', icon='fa-users') %}
+        <button type="button" onclick="showCreateUserModal()" class="ad-btn ad-btn-primary"><i class="fas fa-plus"></i>Create User</button>
+    {% endcall %}
+
+    {% set _st = stats or {} %}
+    {% set _t, _s, _all = _st.get('total_teachers', 0) or 0, _st.get('total_students', 0) or 0, _st.get('total_users', 0) or 0 %}
+    <!-- Filters: search + role sub-tabs (the select stays as the single source of truth for loadUsers()) -->
+    <div class="ad-toolbar">
+        <div class="ad-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="user-search" placeholder="Search by username or email..." oninput="loadUsers()" aria-label="Search users">
+        </div>
+        <select id="user-role-filter" onchange="adSyncUserRoleTabs(); loadUsers()" aria-label="Filter by role" class="ad-role-select">
+            <option value="all">All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="teacher">Teacher</option>
+            <option value="student">Student</option>
+        </select>
+    </div>
+    <div class="ad-subtabs" id="adUserRoleTabs" role="tablist" aria-label="Filter users by role">
+        <button type="button" role="tab" class="ad-stab active" data-role="all" onclick="adSetUserRole('all')">All users <span class="ad-count">{{ _all }}</span></button>
+        <button type="button" role="tab" class="ad-stab" data-role="teacher" onclick="adSetUserRole('teacher')">Teachers <span class="ad-count">{{ _t }}</span></button>
+        <button type="button" role="tab" class="ad-stab" data-role="student" onclick="adSetUserRole('student')">Students <span class="ad-count">{{ _s }}</span></button>
+        <button type="button" role="tab" class="ad-stab" data-role="admin" onclick="adSetUserRole('admin')">Admins &amp; other <span class="ad-count">{{ [_all - _t - _s, 0] | max }}</span></button>
+    </div>
+
+    <!-- Users Table -->
+    <div class="ad-card ad-card-flush">
+        <div id="users-table-container" class="ad-table-scroll">
+            <table class="ad-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Subscription</th>
+                        <th class="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                    <tr>
+                        <td colspan="6">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="users-pagination" class="ad-card-foot"></div>
+    </div>
+</div>

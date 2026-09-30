@@ -1,0 +1,61 @@
+{
+  "before": {
+    "34": [
+      61.1,
+      "improving",
+      18
+    ],
+    "40": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "41": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "42": [
+      75.0,
+      "needs_practice",
+      4
+    ],
+    "66": [
+      100.0,
+      "mastered",
+      1
+    ]
+  },
+  "after": {
+    "34": [
+      61.1,
+      "improving",
+      18
+    ],
+    "40": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "41": [
+      60.0,
+      "needs_practice",
+      5
+    ],
+    "42": [
+      75.0,
+      "needs_practice",
+      4
+    ],
+    "66": [
+      100.0,
+      "mastered",
+      1
+    ]
+  },
+  "changed": {},
+  "progress": [
+    63.64,
+    63.64
+  ]
+}

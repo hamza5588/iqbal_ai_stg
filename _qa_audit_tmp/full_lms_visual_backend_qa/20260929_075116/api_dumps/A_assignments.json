@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "url": "/api/lms/students/me/assignments",
+  "body": {
+    "data": [
+      {
+        "assignment_id": 26,
+        "attempt_id": null,
+        "can_start": true,
+        "class_id": 20,
+        "due_date": null,
+        "quiz_id": 48,
+        "score_percent": null,
+        "status": "not_started",
+        "submitted_at": null,
+        "title": "QA Assignment 20260929_075116"
+      }
+    ],
+    "success": true
+  }
+}

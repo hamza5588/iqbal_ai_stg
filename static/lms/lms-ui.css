@@ -67,7 +67,7 @@
 
 /* LMS action bar — teacher dashboard only. In-page toolbar docked under the
    black nav, replacing the fixed bottom-right .lms-fab-bar for this screen.
-   student_dashboard.html keeps using .lms-fab-bar/.lms-fab above, unchanged. */
+   (.lms-fab-bar above is no longer rendered by the student dashboard.) */
 .lms-action-bar {
   display: flex;
   align-items: center;

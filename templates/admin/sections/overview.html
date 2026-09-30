@@ -1,0 +1,97 @@
+<div id="dashboard-section" class="section">
+    <div class="ad-hero">
+        <div>
+            <h2>Welcome back, {{ session.get('username') or 'Admin' }}</h2>
+            <p>Here is what is happening across Iqbal AI.</p>
+        </div>
+        <span class="ad-date-chip"><i class="far fa-calendar"></i><span id="adTodayLabel"></span></span>
+    </div>
+
+    <div class="ad-stat-grid">
+        <div class="ad-stat">
+            <div class="ad-stat-top">
+                <div class="ad-stat-ic"><i class="fas fa-users"></i></div>
+                <div><h4>Total Users</h4><b class="ad-big" id="stat-total-users">-</b></div>
+            </div>
+            <button type="button" class="ad-stat-link" onclick="adOpenUsers('all')">Manage users <i class="fas fa-arrow-right"></i></button>
+        </div>
+        <div class="ad-stat">
+            <div class="ad-stat-top">
+                <div class="ad-stat-ic green"><i class="fas fa-chalkboard-teacher"></i></div>
+                <div><h4>Teachers</h4><b class="ad-big" id="stat-total-teachers">-</b></div>
+            </div>
+            <button type="button" class="ad-stat-link" onclick="adOpenUsers('teacher')">View teachers <i class="fas fa-arrow-right"></i></button>
+        </div>
+        <div class="ad-stat">
+            <div class="ad-stat-top">
+                <div class="ad-stat-ic purple"><i class="fas fa-user-graduate"></i></div>
+                <div><h4>Students</h4><b class="ad-big" id="stat-total-students">-</b></div>
+            </div>
+            <button type="button" class="ad-stat-link" onclick="adOpenUsers('student')">View students <i class="fas fa-arrow-right"></i></button>
+        </div>
+        <div class="ad-stat">
+            <div class="ad-stat-top">
+                <div class="ad-stat-ic amber"><i class="fas fa-book-open"></i></div>
+                <div><h4>Total Lessons</h4><b class="ad-big" id="stat-total-lessons">-</b></div>
+            </div>
+            <button type="button" class="ad-stat-link" onclick="adGo('lessons')">Open lessons <i class="fas fa-arrow-right"></i></button>
+        </div>
+        <div class="ad-stat">
+            <div class="ad-stat-top">
+                <div class="ad-stat-ic red"><i class="fas fa-file-pdf"></i></div>
+                <div><h4>Documents</h4><b class="ad-big" id="stat-total-documents">-</b></div>
+            </div>
+            <button type="button" class="ad-stat-link" onclick="adGo('documents')">Open documents <i class="fas fa-arrow-right"></i></button>
+        </div>
+        <div class="ad-stat">
+            <div class="ad-stat-top">
+                <div class="ad-stat-ic indigo"><i class="fas fa-ticket-alt"></i></div>
+                <div><h4>Coupons</h4><b class="ad-big" id="stat-total-coupons">-</b></div>
+            </div>
+            <button type="button" class="ad-stat-link" onclick="adGo('coupons')">Manage coupons <i class="fas fa-arrow-right"></i></button>
+        </div>
+    </div>
+
+    <div class="ad-overview-row">
+        <div class="ad-card">
+            <div class="ad-card-head">
+                <div class="ad-section-title">
+                    <div class="ad-icon-badge sm"><i class="fas fa-user-friends"></i></div>
+                    <div><h3>Community mix</h3><p>Share of accounts by role.</p></div>
+                </div>
+            </div>
+            <div class="ad-mix-bar" role="img" aria-label="Accounts by role" id="adMixBar">
+                <span id="adMixTeachers" style="width:0;background:#16a34a"></span>
+                <span id="adMixStudents" style="width:0;background:#7c3aed"></span>
+                <span id="adMixAdmins" style="width:0;background:#0b3d91"></span>
+            </div>
+            <div class="ad-mix-legend">
+                <div><span><i class="ad-dot" style="background:#16a34a"></i>Teachers</span><b id="adMixTeachersPct">0%</b></div>
+                <div><span><i class="ad-dot" style="background:#7c3aed"></i>Students</span><b id="adMixStudentsPct">0%</b></div>
+                <div><span><i class="ad-dot" style="background:#0b3d91"></i>Admins &amp; other</span><b id="adMixAdminsPct">0%</b></div>
+            </div>
+        </div>
+        <div class="ad-card">
+            <div class="ad-card-head">
+                <div class="ad-section-title">
+                    <div class="ad-icon-badge sm"><i class="fas fa-bolt"></i></div>
+                    <div><h3>Quick actions</h3><p>Common admin tasks, one click away.</p></div>
+                </div>
+            </div>
+            <div class="ad-quick-grid">
+                <button type="button" class="ad-quick" onclick="adGo('users'); showCreateUserModal();">
+                    <span class="ad-side-ic"><i class="fas fa-user-plus"></i></span><span><b>Create user</b><span class="sub">Add a teacher, student or admin</span></span>
+                </button>
+                <button type="button" class="ad-quick" onclick="adGo('diagnostic')">
+                    <span class="ad-side-ic"><i class="fas fa-stethoscope"></i></span><span><b>Publish diagnostic</b><span class="sub">One diagnostic per grade</span></span>
+                </button>
+                <button type="button" class="ad-quick" onclick="adGo('coupons'); showCreateCouponModal();">
+                    <span class="ad-side-ic"><i class="fas fa-ticket-alt"></i></span><span><b>Create coupon</b><span class="sub">Grant Pro or Pro Plus access</span></span>
+                </button>
+                <button type="button" class="ad-quick" onclick="adGo('settings')">
+                    <span class="ad-side-ic"><i class="fas fa-sliders-h"></i></span><span><b>LLM settings</b><span class="sub">Provider, models and keys</span></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

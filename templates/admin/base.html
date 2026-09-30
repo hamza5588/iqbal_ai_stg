@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+{# Admin Console shell: shared <head>, top bar, grouped sidebar and shell scripts.
+   Child templates set `ad_page` ('dashboard' | 'load_testing' | 'llm_telemetry') and fill:
+   title · head_extra · content (inside the content column) · after_main (modals, toasts) · scripts. #}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
+    <title>{% block title %}Admin Console{% endblock %} - Iqbal AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% block head_extra %}{% endblock %}
+    {% include 'partials/platform_theme_head.html' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin/css/admin-console.css') }}">
+</head>
+
+<body class="ad-body nu-page">
+    {% include 'admin/partials/topbar.html' %}
+    {% block before_shell %}{% endblock %}
+
+    <div id="main-container" class="ad-shell">
+        {% include 'admin/partials/sidebar.html' %}
+
+        <main class="ad-main {% block main_class %}{% endblock %}">
+            <div class="ad-main-inner">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    {% block after_main %}{% endblock %}
+
+    <script src="{{ url_for('static', filename='admin/js/admin-shell.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

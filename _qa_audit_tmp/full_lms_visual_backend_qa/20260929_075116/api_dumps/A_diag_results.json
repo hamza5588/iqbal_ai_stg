@@ -1,0 +1,169 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/75/results",
+  "body": {
+    "data": {
+      "all_topics": [
+        {
+          "correct": 3,
+          "question_ids": [
+            126,
+            127,
+            128,
+            129,
+            130
+          ],
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            131,
+            132,
+            133,
+            134,
+            135
+          ],
+          "score_percent": 60.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            136,
+            137,
+            140,
+            141
+          ],
+          "score_percent": 75.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations",
+          "total": 4
+        },
+        {
+          "correct": 8,
+          "question_ids": [
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153
+          ],
+          "score_percent": 66.67,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence",
+          "total": 12
+        },
+        {
+          "correct": 1,
+          "question_ids": [
+            154,
+            155,
+            156
+          ],
+          "score_percent": 33.33,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 3
+        },
+        {
+          "correct": 1,
+          "question_ids": [
+            138,
+            139
+          ],
+          "score_percent": 50.0,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics",
+          "total": 2
+        }
+      ],
+      "answered_count": 31,
+      "assessment_type": "diagnostic",
+      "attempt_id": 75,
+      "diagnostic_completed": true,
+      "max_score": 32.0,
+      "score": 19.0,
+      "score_percent": 59.38,
+      "strong_topics": [],
+      "submitted_at": "2026-09-29T14:53:32.306247",
+      "timed_out": false,
+      "topic_breakdown": [
+        {
+          "correct": 2,
+          "score_percent": 40.0,
+          "topic_id": 58,
+          "topic_name": "Geometry Basics",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "score_percent": 100.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations",
+          "total": 3
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "score_percent": 50.0,
+          "topic_id": 67,
+          "topic_name": "Polynomials and Quadratics",
+          "total": 6
+        },
+        {
+          "correct": 8,
+          "score_percent": 66.67,
+          "topic_id": 61,
+          "topic_name": "Triangles and Congruence",
+          "total": 12
+        }
+      ],
+      "unanswered_count": 1,
+      "weak_topics": [
+        {
+          "correct": 1,
+          "question_ids": [
+            154,
+            155,
+            156
+          ],
+          "score_percent": 33.33,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 3
+        },
+        {
+          "correct": 1,
+          "question_ids": [
+            138,
+            139
+          ],
+          "score_percent": 50.0,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics",
+          "total": 2
+        }
+      ]
+    },
+    "success": true
+  }
+}

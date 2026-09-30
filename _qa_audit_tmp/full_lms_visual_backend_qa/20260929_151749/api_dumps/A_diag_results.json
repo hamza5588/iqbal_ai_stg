@@ -1,0 +1,173 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/96/results",
+  "body": {
+    "data": {
+      "all_topics": [
+        {
+          "correct": 3,
+          "question_ids": [
+            126,
+            127,
+            128,
+            129,
+            130
+          ],
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            131,
+            132,
+            133,
+            134,
+            135
+          ],
+          "score_percent": 60.0,
+          "topic_id": 41,
+          "topic_name": "Polynomials and Factors",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            136,
+            137,
+            140,
+            141
+          ],
+          "score_percent": 75.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations",
+          "total": 4
+        },
+        {
+          "correct": 9,
+          "question_ids": [
+            138,
+            139,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155
+          ],
+          "score_percent": 56.25,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 16
+        },
+        {
+          "correct": 1,
+          "question_ids": [
+            156
+          ],
+          "score_percent": 100.0,
+          "topic_id": 66,
+          "topic_name": "Statistics and Averages",
+          "total": 1
+        }
+      ],
+      "answered_count": 31,
+      "assessment_type": "diagnostic",
+      "attempt_id": 96,
+      "diagnostic_completed": true,
+      "max_score": 32.0,
+      "score": 19.0,
+      "score_percent": 59.38,
+      "strong_topics": [
+        {
+          "correct": 1,
+          "question_ids": [
+            156
+          ],
+          "score_percent": 100.0,
+          "topic_id": 66,
+          "topic_name": "Statistics and Averages",
+          "total": 1
+        }
+      ],
+      "submitted_at": "2026-09-29T22:19:06.600535",
+      "timed_out": false,
+      "topic_breakdown": [
+        {
+          "correct": 9,
+          "score_percent": 56.25,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 16
+        },
+        {
+          "correct": 3,
+          "score_percent": 75.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations",
+          "total": 4
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 41,
+          "topic_name": "Polynomials and Factors",
+          "total": 5
+        },
+        {
+          "correct": 1,
+          "score_percent": 100.0,
+          "topic_id": 66,
+          "topic_name": "Statistics and Averages",
+          "total": 1
+        }
+      ],
+      "unanswered_count": 1,
+      "weak_topics": [
+        {
+          "correct": 9,
+          "question_ids": [
+            138,
+            139,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155
+          ],
+          "score_percent": 56.25,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 16
+        }
+      ]
+    },
+    "success": true
+  }
+}

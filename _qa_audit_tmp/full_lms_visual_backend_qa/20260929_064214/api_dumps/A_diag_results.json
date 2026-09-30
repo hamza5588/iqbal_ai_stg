@@ -1,0 +1,206 @@
+{
+  "status": 200,
+  "url": "/api/lms/attempts/73/results",
+  "body": {
+    "data": {
+      "all_topics": [
+        {
+          "correct": 3,
+          "question_ids": [
+            126,
+            127,
+            128,
+            129
+          ],
+          "score_percent": 75.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 4
+        },
+        {
+          "correct": 3,
+          "question_ids": [
+            130,
+            131,
+            132,
+            133
+          ],
+          "score_percent": 75.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials",
+          "total": 4
+        },
+        {
+          "correct": 2,
+          "question_ids": [
+            136,
+            137
+          ],
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities",
+          "total": 2
+        },
+        {
+          "correct": 2,
+          "question_ids": [
+            141,
+            142
+          ],
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations",
+          "total": 2
+        },
+        {
+          "correct": 7,
+          "question_ids": [
+            138,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155
+          ],
+          "score_percent": 53.85,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 13
+        },
+        {
+          "correct": 2,
+          "question_ids": [
+            134,
+            135,
+            139,
+            140,
+            143,
+            156
+          ],
+          "score_percent": 33.33,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics",
+          "total": 6
+        }
+      ],
+      "answered_count": 31,
+      "assessment_type": "diagnostic",
+      "attempt_id": 73,
+      "diagnostic_completed": true,
+      "max_score": 32.0,
+      "score": 19.0,
+      "score_percent": 59.38,
+      "strong_topics": [
+        {
+          "correct": 2,
+          "question_ids": [
+            136,
+            137
+          ],
+          "score_percent": 100.0,
+          "topic_id": 65,
+          "topic_name": "Inequalities",
+          "total": 2
+        },
+        {
+          "correct": 2,
+          "question_ids": [
+            141,
+            142
+          ],
+          "score_percent": 100.0,
+          "topic_id": 35,
+          "topic_name": "Linear Equations",
+          "total": 2
+        }
+      ],
+      "submitted_at": "2026-09-29T13:43:56.580100",
+      "timed_out": false,
+      "topic_breakdown": [
+        {
+          "correct": 9,
+          "score_percent": 56.25,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 16
+        },
+        {
+          "correct": 3,
+          "score_percent": 75.0,
+          "topic_id": 42,
+          "topic_name": "Inequalities and Equations",
+          "total": 4
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 40,
+          "topic_name": "Logarithms",
+          "total": 5
+        },
+        {
+          "correct": 3,
+          "score_percent": 60.0,
+          "topic_id": 46,
+          "topic_name": "Polynomials",
+          "total": 5
+        },
+        {
+          "correct": 1,
+          "score_percent": 100.0,
+          "topic_id": 48,
+          "topic_name": "Statistics",
+          "total": 1
+        }
+      ],
+      "unanswered_count": 1,
+      "weak_topics": [
+        {
+          "correct": 2,
+          "question_ids": [
+            134,
+            135,
+            139,
+            140,
+            143,
+            156
+          ],
+          "score_percent": 33.33,
+          "topic_id": 49,
+          "topic_name": "Algebra Basics",
+          "total": 6
+        },
+        {
+          "correct": 7,
+          "question_ids": [
+            138,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155
+          ],
+          "score_percent": 53.85,
+          "topic_id": 34,
+          "topic_name": "Geometry",
+          "total": 13
+        }
+      ]
+    },
+    "success": true
+  }
+}

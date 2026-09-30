@@ -1,0 +1,494 @@
+{
+  "ctx": {
+    "accounts": {
+      "teacher": "qa.teacher.20260929_075116@test.local",
+      "A": "qa.student.a.20260929_075116@test.local",
+      "B": "qa.student.b.20260929_075116@test.local",
+      "C": "qa.student.c.20260929_075116@test.local"
+    },
+    "ids": {
+      "teacher_id": 38,
+      "student_A": 39,
+      "student_B": 40,
+      "student_C": 41,
+      "class_id": 20,
+      "join_code": "P7CQH0OB",
+      "diag_attempt_A": 75,
+      "diagnostic_id": 25,
+      "deficiency_session_A": 28,
+      "pdf_quiz_id": 48,
+      "assignment_id": 26,
+      "quiz_attempt_A": 76,
+      "lesson_id": 13,
+      "diag_attempt_B": 77
+    },
+    "git": "ui_integration_for_teacher @ 6c3c3ea Snapshot teacher UI integration, QA/load tooling and new UI design sources (+19 uncommitted paths)"
+  },
+  "results": [
+    {
+      "role": "Setup",
+      "feature": "Health: app responds at BASE_URL",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "ok: GET /auth/login 200",
+      "db": "n/a",
+      "evidence": "ui_integration_for_teacher @ 6c3c3ea Snapshot teacher UI integration, QA/load tooling and new UI design sources (+19 uncommitted paths)",
+      "shots": [],
+      "status": "PASS",
+      "secs": 1.0
+    },
+    {
+      "role": "Setup",
+      "feature": "Register TEACHER via UI \u2192 lands on /teacher-dashboard",
+      "visual": "ok: screenshots/T00_teacher_landing.png",
+      "interaction": "ok: register_email \u2192 verify \u2192 register",
+      "api": "n/a",
+      "db": "ok: users.id=38 role=teacher",
+      "evidence": "qa.teacher.20260929_075116@test.local \u2192 http://127.0.0.1:5001/teacher-dashboard#lessons",
+      "shots": [],
+      "status": "PASS",
+      "secs": 25.0
+    },
+    {
+      "role": "Setup",
+      "feature": "Register STUDENTS A, B, C via UI (grade 7) \u2192 land on /student-dashboard",
+      "visual": "ok: screenshots/S00_student_landing_gate.png",
+      "interaction": "ok: 3\u00d7 register via UI",
+      "api": "n/a",
+      "db": "ok: A: id=39 grade=7th; B: id=40 grade=7th; C: id=41 grade=7th",
+      "evidence": "A: id=39 grade=7th; B: id=40 grade=7th; C: id=41 grade=7th",
+      "shots": [],
+      "status": "PASS",
+      "secs": 79.9
+    },
+    {
+      "role": "Teacher",
+      "feature": "Shell: nav labels + icons, logo, no broken images",
+      "visual": "ok: screenshots/T01_teacher_shell.png",
+      "interaction": "ok: nav rendered",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "My Lessons, Classes, Quizzes, Analytics, AI Tutor",
+      "shots": [],
+      "status": "PASS",
+      "secs": 0.8
+    },
+    {
+      "role": "Teacher",
+      "feature": "Classes: teaching grade + create class form persists (UI \u2192 API \u2192 DB)",
+      "visual": "ok: screenshots/T02_create_class_form.png",
+      "interaction": "ok: created via form",
+      "api": "ok: classes/mine has id=20 code=P7CQH0OB",
+      "db": "ok: classes row (38, '7', 'P7CQH0OB', 1)",
+      "evidence": "class_id=20 join_code=P7CQH0OB",
+      "shots": [],
+      "status": "PASS",
+      "secs": 2.5
+    },
+    {
+      "role": "Teacher",
+      "feature": "Add Students tab adds A + C (UI \u2192 roster API \u2192 class_enrollments)",
+      "visual": "ok: screenshots/T03_add_students.png",
+      "interaction": "ok: multi-select add",
+      "api": "ok: roster=['qa_stu_a_075116', 'qa_stu_c_075116']",
+      "db": "ok: enrollments=[(39, 'active'), (41, 'active')]",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 2.2
+    },
+    {
+      "role": "Student",
+      "feature": "Before diagnostic: gate forces diagnostic; Join/Tutor/Path blocked; Learning Path locked (API)",
+      "visual": "ok: screenshots/S01_gate_orientation.png",
+      "interaction": "ok: nav + join blocked",
+      "api": "ok: diagnostic_completed=false, path items=0",
+      "db": "ok: student_profiles=[(0,)]",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 2.2
+    },
+    {
+      "role": "Student",
+      "feature": "Diagnostic: start \u2192 real questions (API count) \u2192 timer counts down",
+      "visual": "ok: screenshots/S02_diag_in_quiz.png",
+      "interaction": "ok: timer 41:14\u219241:11",
+      "api": "ok: 32 questions, time_limit=41m",
+      "db": "ok: attempt 75 in_progress, expires_at=2026-09-29 15:34:27.923788",
+      "evidence": "Q1 UI='Which number is irrational?' API id=None",
+      "shots": [],
+      "status": "PASS",
+      "secs": 4.8
+    },
+    {
+      "role": "Student",
+      "feature": "Math renders on diagnostic (MathJax, no red/broken TeX, no raw LaTeX)",
+      "visual": "ok: screenshots/S02b_diag_math.png: 1 mjx, 0 merror, no raw TeX",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "question #1",
+      "shots": [],
+      "status": "PASS",
+      "secs": 2.5
+    },
+    {
+      "role": "Student",
+      "feature": "Diagnostic submit (deliberate mix) \u2192 results by topic; UI = API = DB (attempt, answers, topic scores)",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "AssertionError: (6, 5)",
+      "shots": [
+        "screenshots/FAIL_09_diagnostic_submit_deliberate_mix_results.png"
+      ],
+      "status": "FAIL",
+      "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 87, in run\n    out = fn(*a, **kw) or {}\n          ~~^^^^^^^^^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 429, in s_diag_submit\n    assert rows.count() == len(bd), (rows.count(), len(bd))\n           ^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (6, 5)\n",
+      "secs": 109.5
+    },
+    {
+      "role": "Student",
+      "feature": "Retake rule: start again returns the finished attempt; UI shows results + explicit Retake only",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "TimeoutError: Locator.scroll_into_view_if_needed: Timeout 59983ms exceeded.\nCall log:\n  - attempting scroll into view action\n    2 \u00d7 waiting for element to be stable\n      - element is not visible\n    - retrying scroll into view action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be stable\n      - element is not visible\n    - retrying scroll into view action\n      - waiting 100ms\n    113 \u00d7 waiting for element to be stable\n        - element is not visible\n      - retrying scroll into view action\n        - waiting 500ms\n",
+      "shots": [
+        "screenshots/FAIL_10_retake_rule_start_again_returns_the_fini.png"
+      ],
+      "status": "FAIL",
+      "trace": "^^^^^^^\n        )\n        ^\n    )\n    ^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_sync_base.py\", line 115, in _sync\n    return task.result()\n           ~~~~~~~~~~~^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_locator.py\", line 621, in scroll_into_view_if_needed\n    return await self._with_element(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n    )\n    ^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_locator.py\", line 118, in _with_element\n    return await task(\n           ^^^^^^^^^^^\n    ...<2 lines>...\n    )\n    ^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_element_handle.py\", line 112, in scroll_into_view_if_needed\n    await self._channel.send(\n        \"scrollIntoViewIfNeeded\", self._frame._timeout, locals_to_params(locals())\n    )\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_connection.py\", line 76, in send\n    return await self._connection.wrap_api_call(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n    )\n    ^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_connection.py\", line 632, in wrap_api_call\n    raise rewrite_error(error, f\"{parsed_st['apiName']}: {error}\") from None\nplaywright._impl._errors.TimeoutError: Locator.scroll_into_view_if_needed: Timeout 59983ms exceeded.\nCall log:\n  - attempting scroll into view action\n    2 \u00d7 waiting for element to be stable\n      - element is not visible\n    - retrying scroll into view action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be stable\n      - element is not visible\n    - retrying scroll into view action\n      - waiting 100ms\n    113 \u00d7 waiting for element to be stable\n        - element is not visible\n      - retrying scroll into view action\n        - waiting 500ms\n\n",
+      "secs": 88.7
+    },
+    {
+      "role": "Student",
+      "feature": "Diagnostic hub: stat cards + Taken row = API dashboard/attempts = DB",
+      "visual": "ok: screenshots/S04_diag_hub.png",
+      "interaction": "ok: Taken \u2192 View Results",
+      "api": "ok: weak=4 chips match",
+      "db": "ok: score (19.0, 32.0); weak rows=3",
+      "evidence": "UI 59%",
+      "shots": [],
+      "status": "PASS",
+      "secs": 29.3
+    },
+    {
+      "role": "Student",
+      "feature": "Learning Path overview after diagnostic = dashboard/learning-path/progress APIs = DB mastery",
+      "visual": "ok: screenshots/S05_learning_path.png",
+      "interaction": "ok: nav",
+      "api": "ok: 12 topics/3 weak, 1 steps, path '9 of 12 topics', overall_progress=62.71",
+      "db": "ok: weak set equal; weighted avg 62.71",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 1.6
+    },
+    {
+      "role": "Student",
+      "feature": "Learning Chat: start, wrong answer \u2192 tutor help \u2192 correct answers; progress updates (UI+API+StudentTopicScore)",
+      "visual": "ok: screenshots/S06_learning_chat.png, screenshots/S06c_learning_chat_done.png",
+      "interaction": "ok: 5 answers, 1 deliberate wrong + tutor; tutor: Level 1 \u2013 Prompt  No problem! Let's focus on the first step.; key marked WRONG for q3 (stored correct_option_index=2); key marked WRONG for q4 (stored correct_option_index=1)",
+      "api": "ok: overall 62.71 \u2192 62.5; weak 3; path '10 of 13 topics'",
+      "db": "ok: session 28 (5, 3, 'completed'); 2 topic score rows changed: [(49, ((0.0, 'weak', 1), (75.0, 'improving', 4))), (69, (None, (0.0, 'weak', 2)))]",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 20.9
+    },
+    {
+      "role": "Cross-role",
+      "feature": "S3b: viewing diagnostic results (read-only) must not change mastery / progress",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "AssertionError: GET /attempts/75/results rewrote StudentTopicScore: 4 rows changed [(34, ((56.2, 'weak', 16), (33.3, 'weak', 3))), (46, ((60.0, 'improving', 5), (60.0, 'needs_practice', 5))), (49, ((75.0, 'improving', 4), (50.0, 'weak', 2))), (61, (None, (66.7, 'needs_practice', 12)))]; overall_progress 62.5 \u2192 62.3 (screenshots/X03_results_view_after_practice.png)",
+      "shots": [
+        "screenshots/FAIL_14_s3b_viewing_diagnostic_results_read_only.png"
+      ],
+      "status": "FAIL",
+      "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 87, in run\n    out = fn(*a, **kw) or {}\n          ~~^^^^^^^^^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 610, in s_results_idempotent\n    assert not changed and p0 == p1, f\"GET /attempts/{ctx['ids']['diag_attempt_A']}/results rewrote StudentTopicScore: {len(changed)} rows changed {list(changed.items())[:4]}; overall_progress {p0} \u2192 {p1} ({v})\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: GET /attempts/75/results rewrote StudentTopicScore: 4 rows changed [(34, ((56.2, 'weak', 16), (33.3, 'weak', 3))), (46, ((60.0, 'improving', 5), (60.0, 'needs_practice', 5))), (49, ((75.0, 'improving', 4), (50.0, 'weak', 2))), (61, (None, (66.7, 'needs_practice', 12)))]; overall_progress 62.5 \u2192 62.3 (screenshots/X03_results_view_after_practice.png)\n",
+      "secs": 28.8
+    },
+    {
+      "role": "Student",
+      "feature": "Guided practice (per-topic) opens; hint or graceful error (API + DB)",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "TimeoutError: Locator.click: Timeout 60000ms exceeded.\nCall log:\n  - waiting for locator(\"#sdPathTopics\").locator(\"text=/Guided practice|Practice again/\").first\n    - locator resolved to <button type=\"button\" onclick=\"openLmsPracticePanel(69)\" class=\"sd-btn sd-btn-outline sd-btn-sm\">\u2026</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    116 \u00d7 waiting for element to be visible, enabled and stable\n        - element is not visible\n      - retrying click action\n        - waiting 500ms\n",
+      "shots": [
+        "screenshots/FAIL_15_guided_practice_per_topic_opens_hint_or_.png"
+      ],
+      "status": "FAIL",
+      "trace": "^^^^^^^^^^^^^^^^^\n    ...<11 lines>...\n        )\n        ^\n    )\n    ^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_sync_base.py\", line 115, in _sync\n    return task.result()\n           ~~~~~~~~~~~^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_locator.py\", line 165, in click\n    return await self._frame._click(self._selector, strict=True, **params)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_frame.py\", line 594, in _click\n    await self._channel.send(\"click\", self._timeout, locals_to_params(locals()))\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_connection.py\", line 76, in send\n    return await self._connection.wrap_api_call(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n    )\n    ^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\venv\\Lib\\site-packages\\playwright\\_impl\\_connection.py\", line 632, in wrap_api_call\n    raise rewrite_error(error, f\"{parsed_st['apiName']}: {error}\") from None\nplaywright._impl._errors.TimeoutError: Locator.click: Timeout 60000ms exceeded.\nCall log:\n  - waiting for locator(\"#sdPathTopics\").locator(\"text=/Guided practice|Practice again/\").first\n    - locator resolved to <button type=\"button\" onclick=\"openLmsPracticePanel(69)\" class=\"sd-btn sd-btn-outline sd-btn-sm\">\u2026</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    116 \u00d7 waiting for element to be visible, enabled and stable\n        - element is not visible\n      - retrying click action\n        - waiting 500ms\n\n",
+      "secs": 60.7
+    },
+    {
+      "role": "Teacher",
+      "feature": "Quizzes: PDF \u2192 MCQ generate \u2192 preview \u2192 publish (UI \u2192 API \u2192 DB)",
+      "visual": "ok: screenshots/T04_quiz_create.png, screenshots/T04b_quiz_preview.png, screenshots/T05_quizzes_list.png",
+      "interaction": "ok: 5 MCQs generated + published",
+      "api": "ok: quiz 48 status=published; list count 1 = UI",
+      "db": "ok: assessments ('published', 38, 'quiz'); 5 questions",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 84.1
+    },
+    {
+      "role": "Teacher",
+      "feature": "Assign quiz to class via UI \u2192 assignment published (API + DB)",
+      "visual": "ok: screenshots/T06_assign_quiz.png",
+      "interaction": "ok: assign form",
+      "api": "ok: assignment 26 listed",
+      "db": "ok: assignments (26, 'published', 20, 48, 38)",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 0.9
+    },
+    {
+      "role": "Student",
+      "feature": "My Classes: enrolled class (API = DB) with assignment visible",
+      "visual": "ok: screenshots/S08_my_classes.png",
+      "interaction": "ok: class expanded",
+      "api": "ok: classes/mine=20; assignment 26 not_started",
+      "db": "ok: enrollment ('active', '2026-09-29 14:53:10.509069')",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 0.9
+    },
+    {
+      "role": "Student",
+      "feature": "Take assigned quiz in UI (deliberate 3 of 5) \u2192 Review = API results = DB attempt/submission",
+      "visual": "ok: screenshots/S09_quiz_taking.png, screenshots/S09b_quiz_result.png, screenshots/S09c_quiz_review.png",
+      "interaction": "ok: 5 answered via UI",
+      "api": "ok: results 3.0/5.0 60.0%",
+      "db": "ok: attempt ('submitted', 3.0, 5.0); submission ('submitted', 76)",
+      "evidence": "expected 3 correct; UI 60% (3 correct)",
+      "shots": [],
+      "status": "PASS",
+      "secs": 4.6
+    },
+    {
+      "role": "Student",
+      "feature": "Attempts history: rows = API; View Result modal = API results",
+      "visual": "ok: screenshots/S10_attempt_result_modal.png",
+      "interaction": "ok: View Result modal",
+      "api": "ok: 2 attempts",
+      "db": "ok: 2 attempt rows",
+      "evidence": "modal 60%",
+      "shots": [],
+      "status": "PASS",
+      "secs": 1.3
+    },
+    {
+      "role": "Teacher",
+      "feature": "Lessons: create (Use PDF as lesson, grade 7) + publish; list = my_lessons API = DB",
+      "visual": "ok: screenshots/T07_lesson_create.png, screenshots/T07b_lesson_view.png, screenshots/T07c_lessons_list.png",
+      "interaction": "ok: create + publish + view",
+      "api": "ok: my_lessons total 1 = UI rows",
+      "db": "ok: lessons 13 (38, '7', 1, 'finalized')",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 9.7
+    },
+    {
+      "role": "Student",
+      "feature": "Lesson viewer: class lesson opens, content renders (browse_lessons?class_id = UI = DB)",
+      "visual": "ok: screenshots/S11_lesson_viewer.png",
+      "interaction": "ok: View",
+      "api": "ok: 1 lessons for class",
+      "db": "ok: 1 public grade-7 lessons by teacher",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 5.8
+    },
+    {
+      "role": "Student",
+      "feature": "Lesson chat: ask question \u2192 answer persisted as conversation (API + DB)",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "AssertionError: POST /api/lessons/ask_question -> 500 {\"code\":\"INTERNAL_ERROR\",\"error\":\"Failed to generate an answer. Please try again.\"}\n; UI shows graceful message; DB conversation [(38, 'Conversation with QA Lesson 20260929_075116')] msgs [('user', 'What is this lesson about?'), ('bot', 'Failed to generate an answer. Please try again.')]. Server started with SKIP_EXTRA_STARTUP=true (.env) \u2192 lesson Q&A graph not initialized  (screenshots/S12_lesson_chat.png)",
+      "shots": [
+        "screenshots/FAIL_23_lesson_chat_ask_question_answer_persiste.png"
+      ],
+      "status": "FAIL",
+      "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 87, in run\n    out = fn(*a, **kw) or {}\n          ~~^^^^^^^^^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 847, in s_lesson_chat\n    raise AssertionError(f\"POST /api/lessons/ask_question -> {r.status} {body[:120]}; UI shows graceful message; DB conversation {convs[:1]} msgs {msgs}. \"\n                         f\"Server started with SKIP_EXTRA_STARTUP=true (.env) \u2192 lesson Q&A graph not initialized {log} ({v})\")\nAssertionError: POST /api/lessons/ask_question -> 500 {\"code\":\"INTERNAL_ERROR\",\"error\":\"Failed to generate an answer. Please try again.\"}\n; UI shows graceful message; DB conversation [(38, 'Conversation with QA Lesson 20260929_075116')] msgs [('user', 'What is this lesson about?'), ('bot', 'Failed to generate an answer. Please try again.')]. Server started with SKIP_EXTRA_STARTUP=true (.env) \u2192 lesson Q&A graph not initialized  (screenshots/S12_lesson_chat.png)\n",
+      "secs": 3.5
+    },
+    {
+      "role": "Student",
+      "feature": "AI Tutor: send \u2192 reply; history API + DB; reload restores; clear empties",
+      "visual": "ok: screenshots/S13_ai_tutor.png",
+      "interaction": "ok: send, reload restore, clear",
+      "api": "ok: 2 msgs \u2192 0",
+      "db": "ok: tutor_chat_messages=[(2,)]",
+      "evidence": "'First, we need a common denominator for the fractions. The denominators are 4 and 8.\\n\\nWhat is the least common multiple '",
+      "shots": [],
+      "status": "PASS",
+      "secs": 9.3
+    },
+    {
+      "role": "Student",
+      "feature": "Join class via code (Student B, diagnostic done BEFORE joining) \u2014 UI + API + DB",
+      "visual": "ok: screenshots/S14_join_class_modal.png, screenshots/S14b_B_classes.png",
+      "interaction": "ok: join modal",
+      "api": "ok: classes/mine",
+      "db": "ok: enrollment [('active',)]",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 29.6
+    },
+    {
+      "role": "Teacher",
+      "feature": "Classes roster tab: A, B, C listed (UI = API = DB)",
+      "visual": "ok: screenshots/T08_roster.png",
+      "interaction": "ok: Roster tab",
+      "api": "ok: 3 students",
+      "db": "ok: 3 active enrollments",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 1.0
+    },
+    {
+      "role": "Teacher",
+      "feature": "Analytics Topic Progress: A's % = roster API = student progress API = DB; detail shows topics",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "AssertionError: (0, 6)",
+      "shots": [
+        "screenshots/FAIL_27_analytics_topic_progress_a_s_roster_api_.png"
+      ],
+      "status": "FAIL",
+      "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 87, in run\n    out = fn(*a, **kw) or {}\n          ~~^^^^^^^^^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 963, in t_topic_progress\n    assert nt == len(bt.get(\"topics\", [])), (nt, len(bt.get(\"topics\", [])))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (0, 6)\n",
+      "secs": 17.5
+    },
+    {
+      "role": "Teacher",
+      "feature": "Analytics Quiz Results collapsed \u2194 expanded = analytics/quizzes API = assignment_submissions DB",
+      "visual": "ok: screenshots/T10_quiz_results_collapsed.png, screenshots/T10b_quiz_results_expanded.png",
+      "interaction": "ok: collapse/expand",
+      "api": "ok: A 60.0%; submissions API [{\"attempt_id\": 76, \"score_percent\": 60.0, \"status\": \"submitted\", \"student_id\": 39, \"submitted_at\": \"2026-09-29T15:00:28",
+      "db": "ok: submissions [(39, 'submitted'), (41, 'not_started')]",
+      "evidence": "UI row: 'Q\\nqa_stu_a_075116\\n\\t3 / 5 (60%)\\t3\\t5\\tAverage\\tView Details'",
+      "shots": [],
+      "status": "PASS",
+      "secs": 1.9
+    },
+    {
+      "role": "Teacher",
+      "feature": "Analytics Struggling = struggling API; consistent with weak mastery in DB",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "AssertionError: rule(weak>=2 or overall<60) from DB = [39] but API struggling = [39, 41] ({39: 4, 40: 1, 41: 0})",
+      "shots": [
+        "screenshots/FAIL_29_analytics_struggling_struggling_api_cons.png"
+      ],
+      "status": "FAIL",
+      "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 87, in run\n    out = fn(*a, **kw) or {}\n          ~~^^^^^^^^^^\n  File \"C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\_qa_audit_tmp\\full_lms_visual_backend_qa\\playwright\\run_qa.py\", line 1007, in t_struggling\n    assert rule == api_ids, f\"rule(weak>=2 or overall<60) from DB = {sorted(rule)} but API struggling = {sorted(api_ids)} ({weak})\"\n           ^^^^^^^^^^^^^^^\nAssertionError: rule(weak>=2 or overall<60) from DB = [39] but API struggling = [39, 41] ({39: 4, 40: 1, 41: 0})\n",
+      "secs": 0.8
+    },
+    {
+      "role": "Teacher",
+      "feature": "Analytics Roster: progress per student = API = DB (not all zeros); late-enrolled B included",
+      "visual": "ok: screenshots/T12_analytics_roster.png",
+      "interaction": "ok: tab",
+      "api": "ok: qa_stu_a_075116: UI 62% API 62.3 DB 62.3; qa_stu_b_075116: UI 81% API 81.25 DB 81.25; qa_stu_c_075116: UI 0% API 0.0 DB None",
+      "db": "ok: weighted StudentTopicScore avg matches",
+      "evidence": "late-enroll B: roster 81.25 = own progress 81.25 (diagnostic taken before join counts)",
+      "shots": [],
+      "status": "PASS",
+      "secs": 1.0
+    },
+    {
+      "role": "Teacher",
+      "feature": "Student report endpoint = student-facing scores (same ids)",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "ok: 2 attempts + 14 topics match student APIs",
+      "db": "ok: topic scores match",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 0.0
+    },
+    {
+      "role": "Teacher",
+      "feature": "AI Tutor: Teaching Assistant send \u2192 reply; history API + DB",
+      "visual": "ok: screenshots/T13_teacher_tutor.png, screenshots/T13b_teacher_chat_history_view.png",
+      "interaction": "ok: send",
+      "api": "ok: 2 history msgs",
+      "db": "n/a",
+      "evidence": "'AI\\n\\nOne effective tip for teaching fractions is to use visual aids, such as fraction circles or bars'",
+      "shots": [],
+      "status": "PASS",
+      "secs": 10.0
+    },
+    {
+      "role": "Cross-role",
+      "feature": "S5: reload / re-login keeps submitted diagnostic + enrollment",
+      "visual": "ok: screenshots/X05_relogin.png",
+      "interaction": "ok: fresh login, no gate, class present",
+      "api": "n/a",
+      "db": "ok: diagnostic_completed=1",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 16.5
+    },
+    {
+      "role": "Cross-role",
+      "feature": "S6: role isolation on role-gated APIs + dashboards",
+      "visual": "n/a",
+      "interaction": "n/a",
+      "api": "ok: GET /api/lms/students/me/dashboard \u2192 403; GET /api/lms/students/me/assignments \u2192 403; POST /api/lms/quizzes/48/start \u2192 403; POST /api/lms/classes/join \u2192 403; POST /api/lms/classes \u2192 403; GET /api/lms/classes/20/students \u2192 403; GET /api/lms/classes/20/analytics/quizzes \u2192 403; POST /api/lms/assignments \u2192 403; POST /api/lms/teacher/tutor \u2192 403; teacher /student-dashboard \u2192 302 /teacher-dashboard; student /teacher-dashboard \u2192 302 /",
+      "db": "n/a",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 0.2
+    },
+    {
+      "role": "Cross-cutting",
+      "feature": "Mobile 390px: student + teacher main views, no horizontal overflow",
+      "visual": "ok: S:diagnostic:0px S:learning-path:0px S:classes:0px S:tutor:0px T:lessons:0px T:classes:0px T:quizzes:0px T:analytics:0px T:tutor:0px",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "",
+      "shots": [],
+      "status": "PASS",
+      "secs": 43.8
+    },
+    {
+      "role": "Cross-cutting",
+      "feature": "No JS page errors; no 404 static assets; failed API calls listed",
+      "visual": "ok: 0 static 404, 0 page errors",
+      "interaction": "n/a",
+      "api": "n/a",
+      "db": "n/a",
+      "evidence": "API 4xx/5xx seen: ['500 POST http://127.0.0.1:5001/api/lessons/ask_question']",
+      "shots": [],
+      "status": "PASS",
+      "secs": 0.0
+    }
+  ]
+}
