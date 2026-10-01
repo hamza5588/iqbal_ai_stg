@@ -222,17 +222,28 @@ def _run_canonical_extraction(
     _report_progress(progress_callback, "extract", 75, "Extracting MCQs...")
     extraction = parse_mcqs(canonical)
 
-    # Diagnostics REQUIRE an answer key present in the PDF; quizzes may
-    # tolerate missing keys and top up via the content-MCQ path. That is
-    # the same policy the legacy extractor followed - the new layer just
-    # enforces it deterministically instead of hoping the LLM catches it.
+    # Validation happens in two stages so partial-document issues drop the
+    # affected questions instead of killing the whole upload:
+    #
+    #   stage A - per-question option-shape issues (one question missing a
+    #       stem/option because of a multi-column layout glitch) are
+    #       demoted to warnings. The ``canonical_to_mcq_questions`` filter
+    #       drops those from the save batch, so bad data cannot reach the
+    #       DB. This matches "fail loud only on things that would corrupt
+    #       the quiz, not on things we can safely skip".
+    #   stage B - whole-document failures (missing answer-key entirely,
+    #       duplicate numbers, zero questions) still raise and surface a
+    #       clear error to the uploader. Those cannot be worked around.
+    _SKIPPABLE = {"wrong_option_count", "wrong_option_order", "empty_option"}
     report = validate_extraction(
         extraction,
         require_answer_key=is_diagnostic,
         expect_min_questions=1,
     )
-    if not report.ok:
-        detail = "; ".join(i.message for i in report.errors[:3])
+    fatal_errors = [i for i in report.errors if i.code not in _SKIPPABLE]
+    skipped_errors = [i for i in report.errors if i.code in _SKIPPABLE]
+    if fatal_errors:
+        detail = "; ".join(i.message for i in fatal_errors[:3])
         raise AssessmentDocValidationError(
             detail=f"PDF extraction validation failed: {detail}"
         )
@@ -247,6 +258,17 @@ def _run_canonical_extraction(
                 "answer-key entries. Verify the answer key is present in the PDF."
             )
         )
+    # Diagnostic uploads expect roughly the full question count. If a large
+    # fraction of the paper got dropped by the per-question filter above,
+    # that is itself a systemic failure the uploader must see.
+    total_parsed = len(extraction.mcqs)
+    if total_parsed and len(batch_questions) < max(1, int(0.5 * total_parsed)):
+        raise AssessmentDocValidationError(
+            detail=(
+                f"Only {len(batch_questions)} of {total_parsed} questions could "
+                f"be extracted cleanly. Please re-upload a clearer PDF."
+            )
+        )
     if wanted is not None and len(batch_questions) > wanted:
         batch_questions = batch_questions[:wanted]
         source_numbers = source_numbers[:wanted]
@@ -256,10 +278,19 @@ def _run_canonical_extraction(
         f"Parser: {parser.name} ({parser.version})",
     ]
     warnings.extend(i.message for i in report.warnings)
+    # Demoted per-question option-shape errors show up here too, so an
+    # operator reviewing the quiz can see which printed questions got
+    # dropped and why (e.g. "Question 22 has 5 options (expected 4)").
+    warnings.extend(f"[skipped] {i.message}" for i in skipped_errors)
+    if skipped_errors:
+        warnings.append(
+            f"Skipped {len(skipped_errors)} questions with option-shape issues; "
+            f"kept {len(batch_questions)} of {total_parsed} parsed."
+        )
     warnings.extend(canonical.warnings)
     warnings.extend(extraction.warnings)
     # Simple confidence proxy: 0.9 base minus 0.05 per warning, floored at 0.7.
-    confidence = max(0.7, 0.9 - 0.05 * len(report.warnings))
+    confidence = max(0.7, 0.9 - 0.05 * (len(report.warnings) + len(skipped_errors)))
     return (
         batch_questions,
         source_numbers,
