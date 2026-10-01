@@ -354,13 +354,19 @@ def run_pdf_quiz_pipeline(
         canonical_source_numbers: List[int] = []
         canonical_parser_name: Optional[str] = None
 
-        # New document-intelligence path (opt-in via QUIZ_DOCUMENT_PARSER).
-        # Runs BEFORE the legacy split so a passing canonical extraction
-        # short-circuits the RAG-text / LLM Q&A logic entirely. Falls
-        # through to the legacy path only when disabled or when no PDF
-        # bytes are available (e.g. the /process-pdf endpoint that only
-        # has a rag_thread_id).
-        if pdf_bytes and _canonical_parser_enabled():
+        # New document-intelligence path. Runs BEFORE the legacy split so a
+        # passing canonical extraction short-circuits the RAG-text / LLM Q&A
+        # logic. Skipped when disabled or when no PDF bytes are available
+        # (e.g. the /process-pdf endpoint that only has a rag_thread_id).
+        #
+        # Diagnostics always try it and fail loud. Quizzes only try it when
+        # the PDF looks like a Q&A / answer-key paper - a lesson-notes PDF has
+        # no printed questions to preserve, so it goes straight to the
+        # content-generation path below.
+        run_canonical = bool(pdf_bytes) and _canonical_parser_enabled() and (
+            is_diagnostic or _looks_like_qa_document(text)
+        )
+        if run_canonical:
             try:
                 (
                     batch_questions,
@@ -400,16 +406,31 @@ def run_pdf_quiz_pipeline(
                         }
 
                 extraction = _ExtractionShim()
-            except AssessmentDocValidationError:
-                # Validator said the PDF cannot be trusted - do NOT fall
-                # through to a silent legacy fallback. That silent
-                # fallback is the exact behavior the new architecture
-                # replaces.
-                raise
+            except AssessmentDocValidationError as exc:
+                if is_diagnostic:
+                    # Diagnostics need the printed numbering and answer key
+                    # intact - never fall back to a path that can renumber.
+                    raise
+                # Quizzes keep the pre-existing behavior: if the paper
+                # cannot be parsed as Q&A, build MCQs from the content.
+                # Logged + surfaced in warnings so the fallback is visible.
+                logger.warning(
+                    "Canonical extraction failed for quiz %s, using legacy quiz path: %s",
+                    assessment_id,
+                    exc.detail or exc,
+                )
+                warnings.append(
+                    f"Layout-aware Q&A extraction skipped: {exc.detail or exc}"
+                )
+                batch_questions = []
+                canonical_source_numbers = []
+                pair_answer_texts = []
+                extraction = None
 
-        if batch_questions:
-            # Canonical path already produced questions - skip the legacy
-            # diagnostic/quiz branches below.
+        canonical_used = bool(canonical_source_numbers)
+
+        if canonical_used and is_diagnostic:
+            # Canonical path already produced the diagnostic questions.
             pass
         elif is_diagnostic:
             # Strict Q&A path for diagnostics (BUG-06 validation).
@@ -451,8 +472,11 @@ def run_pdf_quiz_pipeline(
         else:
             # Quizzes: prefer Q&A when the PDF looks like an answer-key doc;
             # otherwise skip that LLM round-trip and generate from content.
-            try_qa = _looks_like_qa_document(text)
-            if try_qa:
+            if canonical_used:
+                # Q&A already extracted from the PDF layout; only the
+                # top-up / content-generation steps below still apply.
+                pass
+            elif _looks_like_qa_document(text):
                 _report_progress(progress_callback, "extract", 68, "Checking for Q&A layout...")
                 try:
                     extraction = extract_qa_from_text(text)
@@ -580,8 +604,15 @@ def run_pdf_quiz_pipeline(
             # architecture (spec Step 5 / Step 19: no ``idx + 1``). Fall
             # back to 1-based index for the legacy path where authoritative
             # source numbering is not available.
-            if idx < len(canonical_source_numbers):
-                q_source_number = canonical_source_numbers[idx]
+            if canonical_used:
+                # Printed number for PDF questions; content MCQs topped up
+                # after them have no source question, so store None rather
+                # than an index that could collide with a printed number.
+                q_source_number = (
+                    canonical_source_numbers[idx]
+                    if idx < len(canonical_source_numbers)
+                    else None
+                )
             else:
                 q_source_number = idx + 1
             q = question_bank_service.create_question(
