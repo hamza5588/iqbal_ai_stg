@@ -2021,10 +2021,14 @@ def ingest_pdf(
     filename: Optional[str] = None,
     progress_callback: Optional[callable] = None,
     user_id: Optional[int] = None,
+    preextracted_text: Optional[str] = None,
 ) -> dict:
     """
     Ingest PDF: chunk text -> PostgreSQL (RAGChunk), vectors -> Milvus/Chroma.
     user_id must be passed (never inferred from thread_id).
+
+    preextracted_text: optional full-document text (e.g. LlamaParse markdown).
+    When provided, page bodies are replaced so RAG chunks use that extraction.
     """
     def _send_progress(step: str, progress: int, message: str):
         if progress_callback:
@@ -2177,6 +2181,42 @@ def ingest_pdf(
             raise ValueError(
                 f"PDF loaded with {loader_used} but contains no extractable text content.{scanned_hint}"
             )
+
+        # Prefer LlamaParse (or other upstream) full-document text when provided.
+        if preextracted_text and str(preextracted_text).strip():
+            merged = str(preextracted_text).strip()
+            parts = [
+                p.strip()
+                for p in re.split(r"\f|\n\s*---\s*PAGE\s+BREAK\s*---\s*\n", merged)
+                if p.strip()
+            ]
+            if len(parts) == 1 and len(docs) > 1:
+                paras = [p for p in re.split(r"\n{2,}", merged) if p.strip()]
+                if len(paras) >= len(docs):
+                    chunk_size = max(1, len(paras) // len(docs))
+                    parts = []
+                    for i in range(0, len(paras), chunk_size):
+                        parts.append("\n\n".join(paras[i : i + chunk_size]))
+                    parts = parts[: len(docs)] or [merged]
+                else:
+                    parts = [merged]
+            for i, doc in enumerate(docs):
+                if i < len(parts):
+                    doc.page_content = parts[i]
+                else:
+                    doc.page_content = ""
+            valid_pages = [d for d in docs if d.page_content and d.page_content.strip()]
+            if not valid_pages:
+                # Keep at least one doc so ingest does not fail after a good extract.
+                docs[0].page_content = merged
+                valid_pages = [docs[0]]
+            loader_used = f"{loader_used}+llamaparse"
+            logger.info(
+                "RAG ingest using preextracted text (%s chars, loader=%s)",
+                len(merged),
+                loader_used,
+            )
+            _send_progress("loading", 28, "Using LlamaParse text for RAG chunks...")
 
         # If the document has both real text and embedded images, the text is
         # still fully processed below, but flag it so the caller can warn the

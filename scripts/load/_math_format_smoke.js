@@ -4,7 +4,12 @@ const path = require('path');
 const root = path.resolve(__dirname, '..', '..');
 const code = fs.readFileSync(path.join(root, 'static', 'lms', 'lms-core.js'), 'utf8');
 const window = {};
-const sandbox = { window, console };
+const document = {
+  addEventListener: function () {},
+  readyState: 'complete',
+  querySelectorAll: function () { return []; },
+};
+const sandbox = { window, document, console };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 
@@ -44,5 +49,35 @@ const q11p = prepare(pick(
 ));
 console.log('Q11 pick:', q11p);
 assert(q11p.indexOf('Which is the correct factorization of') === 0, 'Q11 pick+prep: ' + q11p);
+
+const slash = prepare('Simplify and reduce 4y/(y^2 - 1) - (y + 1)/(y - 1) to its lowest form.');
+console.log('slash:', slash);
+assert(slash.indexOf('\\frac{4y}') >= 0, 'slash→frac num: ' + slash);
+assert(slash.indexOf('4y/') < 0, 'slash leftover: ' + slash);
+
+const power = prepare('If a^x = y, where a > 0 and a ≠ 1, which is its logarithmic form?');
+console.log('power:', power);
+assert(/\\\(a\^x\s*=\s*y\\\)/.test(power) || /\\\(a\^x\\\)/.test(power), 'a^x wrap: ' + power);
+
+const loga = prepare('Find the value of a if log_a 8 = 3/2 where a > 0 and a ≠ 1.');
+console.log('loga:', loga);
+assert(/\\\(\\log_\{a\}/.test(loga) || loga.indexOf('\\(\\log_{a}') >= 0, 'log wrap: ' + loga);
+assert(loga.indexOf('\\frac{3}{2}') >= 0, '3/2 frac: ' + loga);
+
+// Server-style already-wrapped render must NOT grow extra backslashes.
+const rendered = prepare('Find the value of a if \\(\\log_{a} 8 = \\frac{3}{2}\\) where a > 0 and a ≠ 1.');
+console.log('rendered:', rendered);
+assert(rendered.indexOf('\\\\\\(') < 0, 'no triple backslash: ' + rendered);
+assert(rendered.indexOf('\\\\log') < 0, 'no doubled log: ' + rendered);
+assert(rendered.indexOf('\\(\\log_{a}') >= 0, 'keeps single wrap: ' + rendered);
+
+const times = prepare('find log (2 \\times 5)');
+console.log('times:', times);
+assert(times.indexOf('\\times') >= 0 && times.indexOf('\\(') >= 0, 'times wrap: ' + times);
+
+const broken = prepare('Find the value of a if \\\\\\(\\log_{a} 8 = \\\\frac{3}{2}\\\\\\) where a > 0.');
+console.log('broken:', broken);
+assert(broken.indexOf('\\\\\\(') < 0, 'repairs triple: ' + broken);
+assert(broken.indexOf('\\(\\log_{a}') >= 0 || broken.indexOf('\\log_{a}') >= 0, 'log ok: ' + broken);
 
 console.log('js_math_ok');

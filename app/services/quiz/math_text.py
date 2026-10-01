@@ -246,6 +246,70 @@ def recover_stacked_fraction(text: str) -> str:
     return text
 
 
+def promote_log_underscore(text: str) -> str:
+    """``log_a 8`` → ``\\log_{a} 8`` so the base typesets as a subscript.
+
+    Does not rematch already-TeX ``\\log`` (that would double the backslash).
+    """
+
+    def _repl(m: re.Match[str]) -> str:
+        fn = (m.group(2) or "log").lower()
+        base = m.group(3)
+        cmd = "\\ln" if fn == "ln" else "\\log"
+        return f"{m.group(1)}{cmd}_{{{base}}}"
+
+    return re.sub(
+        r"(^|[^\\A-Za-z0-9_])(log|ln)\s*_\{?([A-Za-z0-9]+)\}?",
+        _repl,
+        text or "",
+        flags=re.IGNORECASE,
+    )
+
+
+def promote_slash_fractions(text: str) -> str:
+    """Convert printable ``a/(b)`` and ``3/2`` into ``\\frac`` (horizontal bar).
+
+    Leaves mixed percents like ``16 2/3%`` alone.
+    """
+    s = text or ""
+    if _PLAIN_PERCENT_RE.match(s.strip()):
+        return s
+    if re.search(r"\d+\s+\d+\s*/\s*\d+\s*%", s) or re.match(r"^\s*\d+\s*/\s*\d+\s*%", s):
+        return s
+
+    def _paren_paren(m: re.Match[str]) -> str:
+        if "%" in m.group(0):
+            return m.group(0)
+        return f"\\frac{{{m.group(1).strip()}}}{{{m.group(2).strip()}}}"
+
+    def _atom_paren(m: re.Match[str]) -> str:
+        if "%" in m.group(0):
+            return m.group(0)
+        return f"\\frac{{{m.group(1).strip()}}}{{{m.group(2).strip()}}}"
+
+    def _simple(m: re.Match[str]) -> str:
+        return f"{m.group(1)}\\frac{{{m.group(2)}}}{{{m.group(3)}}}"
+
+    s = re.sub(r"\(([^()]{1,80})\)\s*/\s*\(([^()]{1,80})\)", _paren_paren, s)
+    s = re.sub(
+        r"((?:-?\d*[A-Za-z](?:\^\{[^}]+\}|\^[A-Za-z0-9]+|\d+)*|-?\d+(?:\.\d+)?))"
+        r"\s*/\s*\(([^()]{1,80})\)",
+        _atom_paren,
+        s,
+    )
+    s = re.sub(
+        r"(^|[^0-9A-Za-z./])(\d+)\s*/\s*(\d+)(?!\s*%)(?![0-9A-Za-z])",
+        _simple,
+        s,
+    )
+    return s
+
+
+def promote_inline_math_notation(text: str) -> str:
+    """Promote slash fractions + log_base so students see stacked frac / subscripts."""
+    return promote_slash_fractions(promote_log_underscore(text or ""))
+
+
 def recover_latex(text: Optional[str]) -> str:
     """Best-effort LaTeX body (no delimiters) from flattened PDF / stored MCQ text."""
     # Repair BEFORE strip(): a form-feed/tab/etc. artifact at the very start
@@ -263,6 +327,7 @@ def recover_latex(text: Optional[str]) -> str:
     # Explicit powers on groups: (3x-2)^2 → (3x-2)^{2}
     s = re.sub(r"(\))\s*\^\s*(\d+)\b", r"\1^{\2}", s)
     s = recover_stacked_fraction(s)
+    s = promote_inline_math_notation(s)
     s = strip_inner_math_delims(s)
     s = strip_english_dollar_spans(s)
     s = normalize_mixed_percents(s)
@@ -679,8 +744,9 @@ _MATH_CONNECTIVE_RE = re.compile(
 )
 _BARE_MATH_RE = re.compile(
     r"\\(?:frac|sqrt|times|div|cdot|pm|mp|leq|geq|neq|le|ge|ne|sum|int|"
-    r"alpha|beta|gamma|theta|pi|infty|circ|approx|left|right|overline|vec)\b"
-    r"|\^\{|_\{|[A-Za-z]\^\d|[A-Za-z]\^\{"
+    r"alpha|beta|gamma|theta|pi|infty|circ|approx|left|right|overline|vec|log|ln)\b"
+    r"|\^\{|_\{|[A-Za-z]\^\d|[A-Za-z]\^\{|[A-Za-z]\^[A-Za-z]"
+    r"|\\frac|\d+\s*/\s*\d+|\w\s*/\s*\("
 )
 _BRACE_1 = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
 # A single math token: number, one variable letter (not part of a word),
@@ -742,6 +808,7 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
             normalize_latex_spacing(normalize_plain_ellipsis(strip_english_dollar_spans(s)))
         )
     )
+    s = promote_inline_math_notation(s)
     if _HAS_DELIM_RE.search(s):
         return s
     prefixed = _INSTRUCTION_PREFIX_RE.match(s)

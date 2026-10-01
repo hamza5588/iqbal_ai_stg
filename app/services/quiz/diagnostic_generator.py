@@ -7,7 +7,11 @@ from typing import List, Optional
 from pydantic import ValidationError
 
 from app.services.quiz.models import MCQBatchResult, MCQQuestion
-from app.services.quiz.retry_utils import format_validation_errors, retry_on_validation_error
+from app.services.quiz.retry_utils import (
+    format_validation_errors,
+    invoke_structured,
+    retry_on_validation_error,
+)
 from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
 from app.utils.llm_factory import get_chat_model
 from app.utils.rag_vectorstore import query_all_chunks
@@ -35,7 +39,7 @@ Rules:
 - Put LaTeX ONLY in latex fields (\\frac, \\sqrt, \\dots, \\log, \\times). Keep question_text and option text readable with normal spaces between words (e.g. "1/2 × 2/3 = 1/3", not "1/2x2/3=2/3").
 - Prefer readable plain text with spaces for simple arithmetic; use latex fields for stacked fractions and equations.
 - Never copy a whole English sentence into a latex field with the spaces removed.
-- Set conversion_confidence between 0 and 1 for each question.
+- Set conversion_confidence between 0 and 1 for each question (numeric only, e.g. 0.9 — never words like "nine").
 - Set learning_concept to a short student-friendly skill name (3-8 words) for what the question tests — not the PDF heading or document title.
 - Do not invent facts not supported by the content.
 - Do NOT copy or lightly rephrase any question listed under "Already used (avoid repeating)".
@@ -138,8 +142,7 @@ def generate_mcqs_from_content(
     if count > 10:
         count = 10
 
-    llm = get_chat_model(temperature=0.4, max_tokens=4096)
-    structured = llm.with_structured_output(MCQBatchResult)
+    llm = get_chat_model(temperature=0.4, max_tokens=8192)
     retry_hint = ""
     level_line = _level_line(difficulty, grade_level, difficulty_ladder)
     exclude = exclude_question_texts or []
@@ -158,8 +161,9 @@ def generate_mcqs_from_content(
             retry_hint=retry_hint,
             exclude_block=exclude_block,
         )
+        # invoke_structured recovers Groq tool_use_failed / broken JSON args.
         batch: MCQBatchResult = invoke_with_groq_rate_limit(
-            lambda: structured.invoke(prompt),
+            lambda: invoke_structured(llm, MCQBatchResult, prompt),
             description=f"diagnostic MCQ gen ({topic})",
         )
         if not batch.questions:

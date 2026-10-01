@@ -6,6 +6,7 @@ import os
 import tempfile
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from app.celery_app import celery
 from app.services.quiz.pipeline import run_pdf_quiz_pipeline
@@ -59,6 +60,46 @@ def _write_shared_temp_file(file_bytes: bytes, filename: str) -> str:
         f.write(file_bytes)
     return temp_path
 
+
+def _try_llamaparse_text(
+    file_bytes: bytes,
+    filename: str,
+    *,
+    progress_callback=None,
+) -> Optional[str]:
+    """Extract PDF text with LlamaParse when enabled; None on skip/failure."""
+    try:
+        from app.services.quiz.llamaparse_extract import (
+            extract_pdf_text_llamaparse,
+            llamaparse_enabled,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LlamaParse import failed: %s", exc)
+        return None
+
+    if not llamaparse_enabled():
+        return None
+
+    if progress_callback:
+        try:
+            progress_callback("extract", 12, "Extracting PDF with LlamaParse...")
+        except Exception:
+            pass
+
+    try:
+        text = extract_pdf_text_llamaparse(file_bytes, filename=filename)
+        if text and text.strip():
+            logger.info("LlamaParse OK for %s (%s chars)", filename, len(text))
+            return text.strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "LlamaParse failed for %s; falling back to local PDF loaders: %s",
+            filename,
+            exc,
+        )
+    return None
+
+
 @celery.task(bind=True, name="app.tasks.quiz_pdf_tasks.process_pdf_quiz_task", queue="default")
 def process_pdf_quiz_task(
     self,
@@ -98,12 +139,18 @@ def process_pdf_quiz_task(
 
         from app.utils.rag_service import ingest_pdf
 
+        # Primary path: LlamaParse → text → ingest + LLM MCQ pipeline → FE.
+        llamaparse_text = _try_llamaparse_text(
+            file_bytes, filename, progress_callback=progress_callback
+        )
+
         ingest_pdf(
             file_bytes=file_bytes,
             thread_id=thread_id,
             filename=filename,
             progress_callback=progress_callback,
             user_id=user_id,
+            preextracted_text=llamaparse_text,
         )
 
         self.update_state(
@@ -122,10 +169,8 @@ def process_pdf_quiz_task(
             except Exception as exc:
                 logger.warning("Failed to update quiz pipeline progress: %s", exc)
 
-        # Pass the raw PDF bytes through to the pipeline so the new
-        # document-intelligence layer can do layout-aware extraction. When
-        # QUIZ_DOCUMENT_PARSER is unset the pipeline ignores this and runs
-        # the legacy RAG-text path unchanged.
+        # When LlamaParse succeeded, feed that text to the LLM path and skip
+        # the native byte-parser so quiz/diagnostic use one extract source.
         result = run_pdf_quiz_pipeline(
             assessment_id=assessment_id,
             rag_thread_id=thread_id,
@@ -133,7 +178,8 @@ def process_pdf_quiz_task(
             topic_id=topic_id,
             question_count=question_count,
             progress_callback=pipeline_progress,
-            pdf_bytes=file_bytes,
+            pdf_text=llamaparse_text,
+            pdf_bytes=None if llamaparse_text else file_bytes,
         )
         self.update_state(
             state="SUCCESS",
@@ -212,7 +258,26 @@ def enqueue_or_run_pdf_quiz(
 
     def _qa_progress(step: str, progress: int, message: str) -> None:
         mapped = 58 + int(max(0, min(100, progress)) * 0.12)
-        _set_upload_progress(progress_job_id, mapped, message or "Ingesting diagnostic Q&A PDF...", stage="qa_ingest")
+        _set_upload_progress(
+            progress_job_id,
+            mapped,
+            message or "Ingesting diagnostic Q&A PDF...",
+            stage="qa_ingest",
+        )
+
+    def _lp_progress(step: str, progress: int, message: str) -> None:
+        _set_upload_progress(
+            progress_job_id,
+            54,
+            message or "Extracting PDF with LlamaParse...",
+            stage="qa_ingest",
+        )
+
+    llamaparse_text = _try_llamaparse_text(
+        file_bytes,
+        filename,
+        progress_callback=_lp_progress if progress_job_id else None,
+    )
 
     ingest_pdf(
         file_bytes=file_bytes,
@@ -220,15 +285,19 @@ def enqueue_or_run_pdf_quiz(
         filename=filename,
         user_id=user_id,
         progress_callback=_qa_progress if progress_job_id else None,
+        preextracted_text=llamaparse_text,
     )
-    _set_upload_progress(progress_job_id, 72, "Extracting questions and answers...", stage="qa_extract")
+    _set_upload_progress(
+        progress_job_id, 72, "Extracting questions and answers...", stage="qa_extract"
+    )
     result = run_pdf_quiz_pipeline(
         assessment_id=assessment_id,
         rag_thread_id=thread_id,
         user_id=user_id,
         topic_id=topic_id,
         question_count=question_count,
-        pdf_bytes=file_bytes,
+        pdf_text=llamaparse_text,
+        pdf_bytes=None if llamaparse_text else file_bytes,
     )
     _set_upload_progress(progress_job_id, 88, "Saving generated questions...", stage="qa_save")
     try:

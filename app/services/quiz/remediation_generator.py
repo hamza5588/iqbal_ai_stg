@@ -7,7 +7,11 @@ from typing import List, Optional
 from pydantic import ValidationError
 
 from app.services.quiz.models import MCQBatchResult, MCQQuestion
-from app.services.quiz.retry_utils import format_validation_errors, retry_on_validation_error
+from app.services.quiz.retry_utils import (
+    format_validation_errors,
+    invoke_structured,
+    retry_on_validation_error,
+)
 from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
 from app.utils.llm_factory import get_chat_model
 
@@ -64,8 +68,7 @@ def generate_remediation_mcqs(
         "enrichment": "Enrichment / challenge for a student with no weak areas",
     }.get(purpose, "Guided practice on weak areas")
 
-    llm = get_chat_model(temperature=0.55, max_tokens=4096)
-    structured = llm.with_structured_output(MCQBatchResult)
+    llm = get_chat_model(temperature=0.55, max_tokens=8192)
     retry_hint = ""
 
     def _invoke() -> MCQBatchResult:
@@ -81,7 +84,7 @@ def generate_remediation_mcqs(
             retry_hint=retry_hint,
         )
         batch: MCQBatchResult = invoke_with_groq_rate_limit(
-            lambda: structured.invoke(prompt),
+            lambda: invoke_structured(llm, MCQBatchResult, prompt),
             description=f"remediation MCQ gen ({topic_name})",
         )
         if not batch.questions:
