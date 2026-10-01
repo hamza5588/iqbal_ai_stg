@@ -187,6 +187,7 @@ googleapis-common-protos
 kubernetes
 posthog
 stripe
+llama-parse
 
 # ---- Observability ----
 opentelemetry-api

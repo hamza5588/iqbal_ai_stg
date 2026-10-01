@@ -1,9 +1,10 @@
 """Pydantic models for PDF extraction and MCQ conversion."""
 from __future__ import annotations
 
+import re
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.services.lms.mcq_utils import (
     is_broken_math_blob,
@@ -84,6 +85,56 @@ class MCQQuestion(BaseModel):
         default=False,
         description="Keep A–D in PDF paper order so the answer key still matches",
     )
+
+    @field_validator("conversion_confidence", mode="before")
+    @classmethod
+    def _coerce_conversion_confidence(cls, value: object) -> float:
+        """Accept messy LLM values like ``0. nine`` / ``\"high\"`` instead of failing."""
+        if value is None or value == "":
+            return 0.85
+        if isinstance(value, (int, float)):
+            return max(0.0, min(1.0, float(value)))
+        if isinstance(value, str):
+            s = value.strip().lower().replace(" ", "")
+            word_map = {
+                "zero": 0.0,
+                "one": 1.0,
+                "two": 2.0,
+                "three": 3.0,
+                "four": 4.0,
+                "five": 5.0,
+                "six": 6.0,
+                "seven": 7.0,
+                "eight": 8.0,
+                "nine": 9.0,
+                "high": 0.9,
+                "medium": 0.7,
+                "low": 0.4,
+            }
+            if s in word_map:
+                n = word_map[s]
+                return max(0.0, min(1.0, n if n <= 1 else n / 10.0))
+            # "0.nine" / "0.9"
+            m = re.match(r"^(\d+)\.(zero|one|two|three|four|five|six|seven|eight|nine)$", s)
+            if m:
+                frac = {
+                    "zero": 0,
+                    "one": 1,
+                    "two": 2,
+                    "three": 3,
+                    "four": 4,
+                    "five": 5,
+                    "six": 6,
+                    "seven": 7,
+                    "eight": 8,
+                    "nine": 9,
+                }[m.group(2)]
+                return max(0.0, min(1.0, float(f"{m.group(1)}.{frac}")))
+            try:
+                return max(0.0, min(1.0, float(s)))
+            except ValueError:
+                return 0.85
+        return 0.85
 
     @model_validator(mode="after")
     def validate_mcq_structure(self) -> "MCQQuestion":

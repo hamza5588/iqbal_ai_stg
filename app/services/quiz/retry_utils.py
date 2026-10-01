@@ -18,6 +18,41 @@ _FAILED_GEN_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+_WORD_TO_DIGIT = {
+    "zero": "0",
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+}
+
+# e.g. "conversion_confidence": 0. nine  OR  "confidence": 0.nine
+_WORD_FRAC_CONF_RE = re.compile(
+    r'(?P<prefix>"(?:conversion_)?confidence"\s*:\s*)'
+    r"(?P<head>\d+)\s*\.\s*(?P<word>zero|one|two|three|four|five|six|seven|eight|nine)\b",
+    re.IGNORECASE,
+)
+
+
+def _repair_jsonish_literals(text: str) -> str:
+    """Fix common LLM JSON glitches before json.loads (e.g. ``0. nine`` → ``0.9``)."""
+    if not text:
+        return text
+
+    def _word_frac(match: re.Match[str]) -> str:
+        digit = _WORD_TO_DIGIT.get(match.group("word").lower(), "5")
+        return f'{match.group("prefix")}{match.group("head")}.{digit}'
+
+    out = _WORD_FRAC_CONF_RE.sub(_word_frac, text)
+    # Trailing commas before } or ]
+    out = re.sub(r",\s*([}\]])", r"\1", out)
+    return out
+
 
 def _unescape_json_string_fragment(raw: str) -> str:
     """Best-effort unescape of a JSON/Python string body (may be truncated)."""
@@ -250,7 +285,7 @@ def _salvage_partial_structured_json(text: str) -> Optional[dict]:
 
 
 def _coerce_jsonish_value(raw: str) -> Any:
-    text = (raw or "").strip()
+    text = _repair_jsonish_literals((raw or "").strip())
     if not text:
         return text
     if text.startswith("{") or text.startswith("["):
@@ -261,7 +296,7 @@ def _coerce_jsonish_value(raw: str) -> Any:
         closed = _close_truncated_json(text)
         if closed:
             try:
-                return json.loads(closed)
+                return json.loads(_repair_jsonish_literals(closed))
             except json.JSONDecodeError:
                 pass
         if text.startswith("["):
@@ -270,7 +305,7 @@ def _coerce_jsonish_value(raw: str) -> Any:
                 out = []
                 for obj_text in objs:
                     try:
-                        out.append(json.loads(obj_text))
+                        out.append(json.loads(_repair_jsonish_literals(obj_text)))
                     except json.JSONDecodeError:
                         continue
                 if out:
@@ -370,10 +405,12 @@ def _coerce_failed_generation_data(failed_raw: object) -> Optional[object]:
         if cut_candidates:
             json_text = json_text[min(cut_candidates) :]
 
+    json_text = _repair_jsonish_literals(json_text)
+
     candidates: List[str] = [json_text]
     closed = _close_truncated_json(json_text)
     if closed and closed not in candidates:
-        candidates.append(closed)
+        candidates.append(_repair_jsonish_literals(closed))
 
     for candidate in candidates:
         try:
@@ -387,8 +424,18 @@ def _coerce_failed_generation_data(failed_raw: object) -> Optional[object]:
 
     # Last resort: treat the whole blob as a questions array fragment.
     if "[" in text:
-        coerced = _coerce_jsonish_value(text[text.find("[") :])
+        coerced = _coerce_jsonish_value(
+            _repair_jsonish_literals(text[text.find("[") :])
+        )
         if isinstance(coerced, list) and coerced:
+            # Heuristic: MCQ batch vs PDF extraction.
+            sample = coerced[0] if isinstance(coerced[0], dict) else {}
+            if "correct_option_label" in sample or "options" in sample:
+                return {
+                    "quiz_title": None,
+                    "questions": coerced,
+                    "failed_conversions": [],
+                }
             return {
                 "questions": coerced,
                 "answers": [],

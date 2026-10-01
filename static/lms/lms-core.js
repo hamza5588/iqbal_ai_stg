@@ -289,10 +289,66 @@
     return s;
   }
 
+  function lmsPromoteLogUnderscore(s) {
+    // log_a 8 → \log_{a} 8. Never rematch already-TeX "\log" (that doubles \).
+    return lmsMapOutsideMath(String(s || ''), function (chunk) {
+      return chunk.replace(
+        /(^|[^\\A-Za-z0-9_])(log|ln)\s*_\{?([A-Za-z0-9]+)\}?/gi,
+        function (_m, pre, fn, base) {
+          var cmd = String(fn).toLowerCase() === 'ln' ? '\\ln' : '\\log';
+          return pre + cmd + '_{' + base + '}';
+        }
+      );
+    });
+  }
+
+  function lmsPromoteSlashFractions(s) {
+    /**
+     * Turn printable slash fractions into \\frac{..}{..} so MathJax draws a
+     * horizontal bar. Skips mixed percents like "16 2/3%".
+     */
+    if (lmsIsMixedPercent(s) || lmsIsPlainPercent(s)) return s;
+    return lmsMapOutsideMath(String(s || ''), function (chunk) {
+      if (!chunk || chunk.indexOf('/') < 0) return chunk;
+      if (/\d+\s+\d+\s*\/\s*\d+\s*%/.test(chunk) || /^\s*\d+\s*\/\s*\d+\s*%/.test(chunk)) {
+        return chunk;
+      }
+      var out = chunk;
+      // (num)/(den)
+      out = out.replace(/\(([^()]{1,80})\)\s*\/\s*\(([^()]{1,80})\)/g, function (m, a, b) {
+        if (/%/.test(m)) return m;
+        return '\\frac{' + String(a).trim() + '}{' + String(b).trim() + '}';
+      });
+      // atom/(den)  e.g. 4y/(y^{2}-1)
+      out = out.replace(
+        /((?:-?\d*[A-Za-z](?:\^\{[^}]+\}|\^[A-Za-z0-9]+|\d+)*|-?\d+(?:\.\d+)?))\s*\/\s*\(([^()]{1,80})\)/g,
+        function (m, a, b) {
+          if (/%/.test(m)) return m;
+          return '\\frac{' + String(a).trim() + '}{' + String(b).trim() + '}';
+        }
+      );
+      // Simple n/m (not percent): 3/2
+      out = out.replace(/(^|[^0-9A-Za-z./])(\d+)\s*\/\s*(\d+)(?!\s*%)(?![0-9A-Za-z])/g, function (_m, pre, n, d) {
+        return pre + '\\frac{' + n + '}{' + d + '}';
+      });
+      return out;
+    });
+  }
+
+  function lmsPromoteInlineMathNotation(s) {
+    var t = lmsPromoteLogUnderscore(s);
+    t = lmsPromoteSlashFractions(t);
+    return t;
+  }
+
   var _MATH_WORD_RE = /^(log|ln|sin|cos|tan|sec|csc|cot|lim|max|min|frac|sqrt|cdot|simplify|left|right|text|over|times)$/i;
   var _FRAC_RE = /\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}/g;
-  var _ALG_TERM = '(?:-?\\d*(?:[A-Za-z](?:\\^\\{[^}]+\\}|\\^\\d+|\\d+)*)+|-?\\d+)';
+  // Allow letter exponents (a^x) as well as digit / braced powers (a^2, a^{3/2}).
+  var _ALG_TERM = '(?:-?\\d*(?:[A-Za-z](?:\\^\\{[^}]+\\}|\\^[A-Za-z0-9]+|\\d+)*)+|-?\\d+)';
   var _ALG_ISLAND_RE = new RegExp(_ALG_TERM + '(?:\\s*[+\\-×÷=]\\s*' + _ALG_TERM + ')+', 'g');
+  var _POWER_ISLAND_RE = /[A-Za-z](?:\d+)?(?:\^\{[^}]+\}|\^[A-Za-z0-9]+)(?:\s*=\s*[A-Za-z0-9]+)?/g;
+  var _LOG_EQ_RE = /\\log(?:_\{[^}]+\}|_[A-Za-z0-9]+)?(?:\s*\([^)]*\)|\s+[0-9A-Za-z]+)(?:\s*=\s*(?:\\frac\{[^{}]+\}\{[^{}]+\}|[A-Za-z0-9\\^{}_+\-/]+))?/g;
+  var _TIMES_PAIR_RE = /(\d+(?:\.\d+)?)\s*(?:\\times|×)\s*(\d+(?:\.\d+)?)/g;
   // A plain English connective ("or", "and", ...) sitting between two math
   // bits - e.g. "x = 3 or x = -3". Must not be wrapped as one math span.
   var _MATH_CONNECTIVE_RE = /[0-9A-Za-z)}\]]\s+(?:or|and|nor|where|when|then)\s+[-(\\0-9A-Za-z]/i;
@@ -615,9 +671,20 @@
   function lmsWrapMathIslands(s, inline) {
     return lmsMapOutsideMath(s, function (chunk) {
       if (!chunk) return chunk;
-      chunk = chunk.replace(_FRAC_RE, function (m) { return lmsWrapMathChunk(m, inline); });
-      return lmsMapOutsideMath(chunk, function (c) {
+      // Equations with log / times before bare \frac so "log_a 8 = 3/2"
+      // stays one math span (horizontal frac + subscript base).
+      chunk = chunk.replace(_LOG_EQ_RE, function (m) { return lmsWrapMathChunk(m, true); });
+      chunk = chunk.replace(_TIMES_PAIR_RE, function (m, a, b) {
+        return lmsWrapMathChunk(a + ' \\times ' + b, true);
+      });
+      chunk = lmsMapOutsideMath(chunk, function (c) {
+        return c.replace(_FRAC_RE, function (m) { return lmsWrapMathChunk(m, inline); });
+      });
+      chunk = lmsMapOutsideMath(chunk, function (c) {
         return c.replace(_ALG_ISLAND_RE, function (m) { return lmsWrapMathChunk(m, true); });
+      });
+      return lmsMapOutsideMath(chunk, function (c) {
+        return c.replace(_POWER_ISLAND_RE, function (m) { return lmsWrapMathChunk(m, true); });
       });
     });
   }
@@ -659,6 +726,14 @@
     t = lmsUnicodeSupersToLatex(t);
     t = lmsImplicitExponents(t);
     t = lmsRecoverStackedFraction(t);
+    // Only promote plain log_a / slash forms outside existing math delims.
+    if (!/\\\(|\\\[|\$\$/.test(t)) {
+      t = lmsPromoteInlineMathNotation(t);
+    } else {
+      t = lmsMapOutsideMath(t, function (chunk) {
+        return lmsPromoteInlineMathNotation(chunk);
+      });
+    }
     t = lmsStripInnerMathDelims(t);
     t = lmsStripEnglishDollarSpans(t);
     t = lmsNormalizeMixedPercents(t);
@@ -737,6 +812,16 @@
     s = lmsNormalizeLatexSpacing(lmsNormalizePlainEllipsis(lmsStripEnglishDollarSpans(s)));
     s = lmsNormalizeTexSetBraces(s);
     s = lmsDedupeRepeatedMath(s);
+    // Undo accidental double-escaping from older promote/wrap passes.
+    s = s.replace(/\\\\+\(/g, '\\(').replace(/\\\\+\)/g, '\\)');
+    s = s.replace(/\\\\+\[/g, '\\[').replace(/\\\\+\]/g, '\\]');
+    s = s.replace(/\\{2,}(log|ln|frac|times|sqrt|mathrm|text)\b/g, '\\$1');
+    // Server question_render is already delimited. Re-promoting \log doubles
+    // backslashes into visible \\\( / \\log artifacts.
+    if (/\\\(|\\\[|\$\$/.test(s) && /\\(?:log|ln|frac|times|sqrt)\b|\^/.test(s)) {
+      return s;
+    }
+    s = lmsPromoteInlineMathNotation(s);
     if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
       var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
