@@ -376,7 +376,11 @@ def run_pdf_quiz_pipeline(
                     wanted=wanted,
                     progress_callback=progress_callback,
                 )
-                creation_mode = "pdf_document_parser"
+                # Use the existing DB-allowed enum value - the canonical
+                # path produces structured Q&A pairs equivalent to the
+                # legacy pdf_qa_auto mode.
+                # (Constraint: creation_mode IN manual|pdf_qa_auto|pdf_ai|mixed)
+                creation_mode = "pdf_qa_auto"
                 source_type = "pdf_qa_converted"
                 warnings.extend(canon_warnings)
 
