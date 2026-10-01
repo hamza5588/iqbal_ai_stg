@@ -125,6 +125,16 @@ def implicit_exponents_to_latex(text: str) -> str:
     return re.sub(r"([A-Za-z\)\]\}])(?!\^)(\d+)", repl, text)
 
 
+# NOTE: The emergency helpers ``recover_spaced_power``,
+# ``recover_scientific_notation`` and ``recover_log_subscripts`` used to live
+# here as a temporary patch for flattened PDF superscripts/subscripts. They
+# have been removed - the new ``document_parser`` layer reconstructs
+# exponents / subscripts / scientific notation from PDF font geometry (span
+# size + baseline origin) or from PP-FormulaNet output, not from text-level
+# regex guesses. See report.txt (Phase 3) and the ``NativePyMuPDFParser``
+# implementation for the replacement.
+
+
 def unsquash_english(text: str) -> str:
     """Restore spaces in smashed exam English: Whichisthecorrect... → Which is the correct..."""
 

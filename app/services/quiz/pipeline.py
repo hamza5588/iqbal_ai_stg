@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Callable, List, Optional
 
@@ -150,6 +151,125 @@ def _generate_mcqs_from_any_pdf(
     return out[:wanted]
 
 
+def _canonical_parser_enabled() -> bool:
+    """True when the canonical document-parser path should run.
+
+    Phase 3 flipped this ON by default: layout-aware extraction is now the
+    primary path, and the legacy RAG-text + regex extractor is only used
+    when explicitly requested via ``QUIZ_DOCUMENT_PARSER=legacy``. This
+    matches spec Step 9 ("LLM extraction must no longer be the primary PDF
+    parser") and Step 25 ("The final production path must not depend on
+    the old regex recovery approach").
+
+    Selectable values (env var ``QUIZ_DOCUMENT_PARSER``):
+        - unset / empty    -> canonical path with the ``native`` parser
+        - ``native``       -> canonical path with PyMuPDF (default engine)
+        - ``paddle``       -> canonical path with PP-StructureV3
+        - ``legacy``       -> old RAG-text + LLM Q&A extractor (opt-out)
+    """
+    value = (os.environ.get("QUIZ_DOCUMENT_PARSER") or "").strip().lower()
+    return value != "legacy"
+
+
+def _run_canonical_extraction(
+    pdf_bytes: bytes,
+    *,
+    assessment_id: int,
+    is_diagnostic: bool,
+    wanted: Optional[int],
+    progress_callback: ProgressCallback,
+) -> tuple[List[MCQQuestion], List[int], List[Optional[str]], List[str], float, str]:
+    """Run PDF -> CanonicalDocument -> MCQCandidates -> MCQQuestion.
+
+    Returns ``(batch_questions, source_question_numbers, raw_answer_letters,
+    warnings, extraction_confidence, parser_name)``.
+
+    Raises :class:`AssessmentDocValidationError` if the validator reports a
+    fatal issue (missing key, wrong option shape, duplicate numbering...).
+    Never returns a partial result silently - that class of "quietly
+    downgrade to LLM" behavior is exactly what the new architecture removes.
+    """
+    from app.services.quiz.document_parser import (
+        DocumentParserError,
+        get_document_parser,
+    )
+    from app.services.quiz.document_parser.mcq_from_canonical import parse_mcqs
+    from app.services.quiz.document_parser.to_mcq_question import (
+        canonical_to_mcq_questions,
+    )
+    from app.services.quiz.document_parser.validator import validate_extraction
+
+    _report_progress(progress_callback, "extract", 65, "Layout-aware PDF parsing...")
+    try:
+        parser = get_document_parser()
+    except DocumentParserError as exc:
+        raise AssessmentDocValidationError(
+            detail=f"Document parser unavailable: {exc}"
+        ) from exc
+
+    try:
+        canonical = parser.parse(pdf_bytes, document_id=str(assessment_id))
+    except DocumentParserError as exc:
+        raise AssessmentDocValidationError(
+            detail=f"Document parser failed: {exc}"
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Canonical parser %s raised unexpectedly", parser.name)
+        raise AssessmentDocValidationError(
+            detail=f"Document parser crashed: {exc}"
+        ) from exc
+
+    _report_progress(progress_callback, "extract", 75, "Extracting MCQs...")
+    extraction = parse_mcqs(canonical)
+
+    # Diagnostics REQUIRE an answer key present in the PDF; quizzes may
+    # tolerate missing keys and top up via the content-MCQ path. That is
+    # the same policy the legacy extractor followed - the new layer just
+    # enforces it deterministically instead of hoping the LLM catches it.
+    report = validate_extraction(
+        extraction,
+        require_answer_key=is_diagnostic,
+        expect_min_questions=1,
+    )
+    if not report.ok:
+        detail = "; ".join(i.message for i in report.errors[:3])
+        raise AssessmentDocValidationError(
+            detail=f"PDF extraction validation failed: {detail}"
+        )
+
+    batch_questions, source_numbers, raw_letters = canonical_to_mcq_questions(
+        extraction
+    )
+    if not batch_questions:
+        raise AssessmentDocValidationError(
+            detail=(
+                "The document parser could not build any MCQs with matching "
+                "answer-key entries. Verify the answer key is present in the PDF."
+            )
+        )
+    if wanted is not None and len(batch_questions) > wanted:
+        batch_questions = batch_questions[:wanted]
+        source_numbers = source_numbers[:wanted]
+        raw_letters = raw_letters[:wanted]
+
+    warnings: List[str] = [
+        f"Parser: {parser.name} ({parser.version})",
+    ]
+    warnings.extend(i.message for i in report.warnings)
+    warnings.extend(canonical.warnings)
+    warnings.extend(extraction.warnings)
+    # Simple confidence proxy: 0.9 base minus 0.05 per warning, floored at 0.7.
+    confidence = max(0.7, 0.9 - 0.05 * len(report.warnings))
+    return (
+        batch_questions,
+        source_numbers,
+        raw_letters,
+        warnings,
+        confidence,
+        parser.name,
+    )
+
+
 def run_pdf_quiz_pipeline(
     assessment_id: int,
     rag_thread_id: str,
@@ -158,6 +278,7 @@ def run_pdf_quiz_pipeline(
     pdf_text: Optional[str] = None,
     question_count: Optional[int] = None,
     progress_callback: ProgressCallback = None,
+    pdf_bytes: Optional[bytes] = None,
 ) -> dict:
     """
     Build MCQs from a PDF.
@@ -194,8 +315,68 @@ def run_pdf_quiz_pipeline(
         failed_conversions: List[str] = []
         warnings: List[str] = []
         pair_answer_texts: List[Optional[str]] = []
+        # Authoritative source_question_number list. When the canonical
+        # parser owns the run it fills this with the PRINTED numbers from
+        # the PDF; otherwise it stays empty and the pipeline falls back to
+        # the legacy 1-based index (kept for behavior parity while the new
+        # path is opt-in).
+        canonical_source_numbers: List[int] = []
+        canonical_parser_name: Optional[str] = None
 
-        if is_diagnostic:
+        # New document-intelligence path (opt-in via QUIZ_DOCUMENT_PARSER).
+        # Runs BEFORE the legacy split so a passing canonical extraction
+        # short-circuits the RAG-text / LLM Q&A logic entirely. Falls
+        # through to the legacy path only when disabled or when no PDF
+        # bytes are available (e.g. the /process-pdf endpoint that only
+        # has a rag_thread_id).
+        if pdf_bytes and _canonical_parser_enabled():
+            try:
+                (
+                    batch_questions,
+                    canonical_source_numbers,
+                    pair_answer_texts,
+                    canon_warnings,
+                    canon_conf,
+                    canonical_parser_name,
+                ) = _run_canonical_extraction(
+                    pdf_bytes,
+                    assessment_id=assessment_id,
+                    is_diagnostic=is_diagnostic,
+                    wanted=wanted,
+                    progress_callback=progress_callback,
+                )
+                creation_mode = "pdf_document_parser"
+                source_type = "pdf_qa_converted"
+                warnings.extend(canon_warnings)
+
+                class _ExtractionShim:
+                    """Minimal duck-type for the downstream confidence math /
+                    optional title lift. The canonical path does not currently
+                    lift a title; None keeps ``assessment.title`` unchanged."""
+
+                    title = None
+                    confidence = canon_conf
+
+                    def model_dump(self):
+                        return {
+                            "parser": canonical_parser_name,
+                            "warnings": canon_warnings,
+                            "confidence": canon_conf,
+                        }
+
+                extraction = _ExtractionShim()
+            except AssessmentDocValidationError:
+                # Validator said the PDF cannot be trusted - do NOT fall
+                # through to a silent legacy fallback. That silent
+                # fallback is the exact behavior the new architecture
+                # replaces.
+                raise
+
+        if batch_questions:
+            # Canonical path already produced questions - skip the legacy
+            # diagnostic/quiz branches below.
+            pass
+        elif is_diagnostic:
             # Strict Q&A path for diagnostics (BUG-06 validation).
             _report_progress(progress_callback, "extract", 68, "Extracting Q&A pairs...")
             extraction = extract_qa_from_text(text)
@@ -359,12 +540,21 @@ def run_pdf_quiz_pipeline(
                 q_source = "pdf_qa_converted" if raw_ans is not None else "pdf_ai"
             else:
                 q_source = "pdf_qa_converted"
+            # Prefer the printed number from the canonical parser when it
+            # owns this run - that's the whole point of the new
+            # architecture (spec Step 5 / Step 19: no ``idx + 1``). Fall
+            # back to 1-based index for the legacy path where authoritative
+            # source numbering is not available.
+            if idx < len(canonical_source_numbers):
+                q_source_number = canonical_source_numbers[idx]
+            else:
+                q_source_number = idx + 1
             q = question_bank_service.create_question(
                 created_by=user_id,
                 topic_id=topic_id,
                 source_type=q_source,
                 source_pdf_thread_id=rag_thread_id,
-                source_question_number=idx + 1,
+                source_question_number=q_source_number,
                 correct_answer_raw=raw_ans,
                 **fields,
             )
