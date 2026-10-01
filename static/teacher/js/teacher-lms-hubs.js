@@ -703,8 +703,11 @@
           (failMsg ? '<p class="lms-status">' + escapeHtml(failMsg) + '</p>' : '');
         return;
       }
+      window._lmsQuizPreviewQuestions = d.questions;
+      var mathKeyboardHtml = _lmsMathKeyboardHtml();
       previewEl.innerHTML = d.questions.map(function (item, idx) {
         const q = item.question || {};
+        const qid = q.id;
         const opts = (q.options || []).map(function (o, oidx) {
           var isCorrect = q.correct_option_index === oidx;
           return '<div class="lms-preview-opt' + (isCorrect ? ' is-correct' : '') + '">' +
@@ -713,15 +716,207 @@
             (isCorrect ? ' <span class="lms-preview-correct-mark">✓</span>' : '') +
             '</span></div>';
         }).join('');
-        return '<div class="lms-diag-preview-card lms-quiz-preview-card">' +
-          '<div class="lms-preview-stem"><strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' +
-          _lmsFmtText(
-            (typeof lmsQuestionText === 'function' ? lmsQuestionText(q) : (q.question_text || q.question_latex || '')),
-            true
-          ) + '</div>' +
-          '<div class="lms-preview-opts">' + opts + '</div></div>';
+        var editOpts = (q.options || []).map(function (o, oidx) {
+          var lab = o.label || String.fromCharCode(65 + oidx);
+          return '<label class="lms-q-edit-opt">' +
+            '<span>' + escapeHtml(lab) + '</span>' +
+            '<textarea class="lms-q-edit-option lms-q-edit-field" data-oidx="' + oidx + '" rows="2">' +
+            escapeHtml(o.text || o.latex || '') + '</textarea></label>';
+        }).join('');
+        var correctSel = [0,1,2,3].map(function (i) {
+          var lab = String.fromCharCode(65 + i);
+          return '<option value="' + i + '"' + (q.correct_option_index === i ? ' selected' : '') + '>' + lab + '</option>';
+        }).join('');
+        return '<div class="lms-diag-preview-card lms-quiz-preview-card" data-qid="' + qid + '" data-qidx="' + idx + '">' +
+          '<div class="lms-preview-head">' +
+            '<div class="lms-preview-stem"><strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' +
+            _lmsFmtText(
+              (typeof lmsQuestionText === 'function' ? lmsQuestionText(q) : (q.question_text || q.question_latex || '')),
+              true
+            ) + '</div>' +
+            '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-toggle" data-qid="' + qid + '">Edit</button>' +
+          '</div>' +
+          '<div class="lms-preview-opts">' + opts + '</div>' +
+          '<div class="lms-q-edit-panel" id="lmsQEdit-' + qid + '" hidden>' +
+            '<div class="lms-math-keyboard" data-qid="' + qid + '">' +
+              '<div class="lms-math-keyboard-title">Math keyboard — click a symbol to insert into the focused box</div>' +
+              mathKeyboardHtml +
+            '</div>' +
+            '<label class="lms-q-edit-stem">Question text' +
+              '<textarea class="lms-q-edit-stem-input lms-q-edit-field" rows="3">' + escapeHtml(q.question_text || '') + '</textarea>' +
+            '</label>' +
+            '<div class="lms-q-edit-options">' + editOpts + '</div>' +
+            '<label class="lms-q-edit-correct">Correct answer <select class="lms-q-edit-correct-sel">' + correctSel + '</select></label>' +
+            '<div class="lms-q-edit-actions">' +
+              '<button type="button" class="lms-btn lms-btn-primary lms-q-edit-save" data-qid="' + qid + '">Save</button>' +
+              '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-cancel" data-qid="' + qid + '">Cancel</button>' +
+              '<span class="lms-q-edit-status" id="lmsQEditStatus-' + qid + '"></span>' +
+            '</div>' +
+          '</div></div>';
       }).join('');
       _lmsTypeset(previewEl);
+      _bindLmsQuizEditHandlers(previewEl);
+    }
+
+    function _lmsMathKeyboardHtml() {
+      // label, insert template (| = cursor after insert)
+      var rows = [
+        {
+          title: 'Basics',
+          keys: [
+            ['+', '+'], ['−', '-'], ['×', '\\times'], ['÷', '\\div'],
+            ['=', '='], ['≠', '\\neq'], ['≈', '\\approx'], ['±', '\\pm'],
+            ['(', '('], [')', ')'], ['[', '['], [']', ']']
+          ]
+        },
+        {
+          title: 'Fractions & roots',
+          keys: [
+            ['a/b', '\\frac{|}{}'], ['1/2', '\\frac{1}{2}'], ['3/2', '\\frac{3}{2}'],
+            ['√', '\\sqrt{|}'], ['∛', '\\sqrt[3]{|}'], ['n√', '\\sqrt[n]{|}']
+          ]
+        },
+        {
+          title: 'Powers & index',
+          keys: [
+            ['x²', '^{2}'], ['x³', '^{3}'], ['xⁿ', '^{|}'], ['x₀', '_{|}'],
+            ['10ⁿ', '10^{|}'], ['aˣ', 'a^{|}'], ['eˣ', 'e^{|}']
+          ]
+        },
+        {
+          title: 'Log / trig',
+          keys: [
+            ['log', '\\log'], ['logₐ', '\\log_{|}'], ['ln', '\\ln'],
+            ['sin', '\\sin'], ['cos', '\\cos'], ['tan', '\\tan']
+          ]
+        },
+        {
+          title: 'Symbols',
+          keys: [
+            ['∞', '\\infty'], ['π', '\\pi'], ['θ', '\\theta'], ['α', '\\alpha'],
+            ['β', '\\beta'], ['°', '^\\circ'], ['·', '\\cdot'], ['…', '\\ldots']
+          ]
+        },
+        {
+          title: 'Wrap',
+          keys: [
+            ['( math )', '\\(|\\)'], ['[ math ]', '\\[|\\]'],
+            ['left( )', '\\left(|\\right)'], ['abs', '\\left||\\right|']
+          ]
+        }
+      ];
+      return rows.map(function (row) {
+        var btns = row.keys.map(function (k) {
+          return '<button type="button" class="lms-math-key" data-insert="' + escapeHtml(k[1]) + '" title="' + escapeHtml(k[1]) + '">' +
+            escapeHtml(k[0]) + '</button>';
+        }).join('');
+        return '<div class="lms-math-row"><span class="lms-math-row-label">' + escapeHtml(row.title) + '</span>' +
+          '<div class="lms-math-keys">' + btns + '</div></div>';
+      }).join('');
+    }
+
+    function _lmsInsertMathToken(textarea, template) {
+      if (!textarea || template == null) return;
+      var start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
+      var end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : start;
+      var selected = textarea.value.slice(start, end);
+      var cursorMark = template.indexOf('|');
+      var insert = template;
+      var caret = start;
+      if (cursorMark >= 0) {
+        insert = template.replace('|', selected || '');
+        caret = start + cursorMark + (selected ? selected.length : 0);
+      } else {
+        insert = selected ? (template + selected) : template;
+        caret = start + insert.length;
+      }
+      textarea.value = textarea.value.slice(0, start) + insert + textarea.value.slice(end);
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = caret;
+    }
+
+    function _bindLmsQuizEditHandlers(root) {
+      if (!root || root._lmsEditBound) return;
+      root._lmsEditBound = true;
+      root.addEventListener('focusin', function (ev) {
+        var field = ev.target && ev.target.classList && ev.target.classList.contains('lms-q-edit-field') ? ev.target : null;
+        if (!field) return;
+        var panel = field.closest('.lms-q-edit-panel');
+        if (panel) panel._lmsActiveField = field;
+      });
+      root.addEventListener('click', async function (ev) {
+        var t = ev.target;
+        if (!t) return;
+        var key = t.closest && t.closest('.lms-math-key');
+        if (key) {
+          ev.preventDefault();
+          var insert = key.getAttribute('data-insert') || '';
+          var panel = key.closest('.lms-q-edit-panel');
+          var active = (panel && panel._lmsActiveField) ||
+            (panel && panel.querySelector('textarea:focus')) ||
+            (panel && panel.querySelector('.lms-q-edit-field'));
+          _lmsInsertMathToken(active, insert);
+          return;
+        }
+        var toggle = t.closest && t.closest('.lms-q-edit-toggle');
+        if (toggle) {
+          var qidT = toggle.getAttribute('data-qid');
+          var panelT = document.getElementById('lmsQEdit-' + qidT);
+          if (panelT) panelT.hidden = !panelT.hidden;
+          return;
+        }
+        var cancel = t.closest && t.closest('.lms-q-edit-cancel');
+        if (cancel) {
+          var panelC = document.getElementById('lmsQEdit-' + cancel.getAttribute('data-qid'));
+          if (panelC) panelC.hidden = true;
+          return;
+        }
+        var save = t.closest && t.closest('.lms-q-edit-save');
+        if (!save) return;
+        var qid = save.getAttribute('data-qid');
+        var card = root.querySelector('.lms-quiz-preview-card[data-qid="' + qid + '"]');
+        var panel = document.getElementById('lmsQEdit-' + qid);
+        var status = document.getElementById('lmsQEditStatus-' + qid);
+        if (!card || !panel) return;
+        var stem = (panel.querySelector('.lms-q-edit-stem-input') || {}).value || '';
+        var correctIdx = parseInt((panel.querySelector('.lms-q-edit-correct-sel') || {}).value, 10);
+        if (isNaN(correctIdx)) correctIdx = 0;
+        var options = [];
+        panel.querySelectorAll('.lms-q-edit-option').forEach(function (ta) {
+          var oidx = parseInt(ta.getAttribute('data-oidx'), 10);
+          options.push({
+            label: String.fromCharCode(65 + oidx),
+            text: ta.value || '',
+            latex: null
+          });
+        });
+        if (options.length !== 4) {
+          if (status) status.textContent = 'Need 4 options.';
+          return;
+        }
+        save.disabled = true;
+        if (status) status.textContent = 'Saving...';
+        try {
+          var res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/questions/' + qid, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question_text: stem,
+              question_latex: null,
+              options: options,
+              correct_option_index: correctIdx
+            })
+          });
+          var body = await res.json();
+          if (!res.ok) throw new Error((body.error && body.error.message) || body.message || 'Save failed');
+          if (status) status.textContent = 'Saved.';
+          await loadLmsQuizPreview();
+        } catch (err) {
+          if (status) status.textContent = 'Error: ' + err.message;
+          save.disabled = false;
+        }
+      });
     }
     async function publishLmsQuiz() {
       if (!_lmsCurrentAssessmentId) return;
