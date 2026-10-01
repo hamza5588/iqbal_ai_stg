@@ -361,7 +361,7 @@ def _answer_key_region(pdf_text: str) -> str:
 
 def _question_batches(pdf_text: str, batch_size: int = _CHUNK_QUESTION_BATCH) -> List[str]:
     """Split a native MCQ paper into question batches (answer key appended to each)."""
-    from app.services.lms.mcq_utils import _QUESTION_START_RE
+    from app.services.lms.mcq_utils import iter_question_starts
 
     lower = (pdf_text or "").lower()
     cut = len(pdf_text)
@@ -371,7 +371,7 @@ def _question_batches(pdf_text: str, batch_size: int = _CHUNK_QUESTION_BATCH) ->
             cut = min(cut, idx)
     body = pdf_text[:cut]
     key_region = pdf_text[cut:] if cut < len(pdf_text) else _answer_key_region(pdf_text)
-    starts = list(_QUESTION_START_RE.finditer(body))
+    starts = iter_question_starts(body)
     if len(starts) < 2:
         return [pdf_text]
     batches: List[str] = []

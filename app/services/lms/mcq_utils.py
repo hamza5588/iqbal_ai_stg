@@ -23,7 +23,19 @@ _ANSWER_LETTER_PAREN_RE = re.compile(
     r"^[\(\[]?([A-Da-d])[\)\]]?\s+\(.*\)$"
 )
 _OPTION_LINE_RE = re.compile(r"^\s*[\(\[]?([A-Da-d])[\)\]\.\:\-](?:\s+(\S.*))?$")
+# Legacy question-start regex - only matches bare-number stems ("1.", "1)").
+# The Q-prefix / "Question N." handling that briefly lived here as an
+# emergency patch has been removed - the canonical ``document_parser`` layer
+# handles all numbering styles from structural blocks. This module remains
+# as the fallback for QUIZ_DOCUMENT_PARSER=legacy deployments only.
 _QUESTION_START_RE = re.compile(r"(?m)^([0-9]{1,3})[.)][ \t]+")
+# Per-question metadata banners ("Domain: ... | Topic: ... | Cognitive Level:
+# ... | Difficulty: ...") printed under a stem. They are not part of the
+# question and must not leak into the harvested stem text.
+_METADATA_LINE_RE = re.compile(
+    r"^\s*(?:domain|topic|cognitive\s+level|difficulty|marks?|coverage)\s*[:\-]",
+    re.I,
+)
 _ANSWER_KEY_LINE_RE = re.compile(
     r"(?im)^[ \t]*(?:(?:q(?:uestion)?|ans(?:wer)?)\s+)?([0-9]{1,3})[ \t]*[.\)\-:]*[ \t]*[\(\[]?([A-Da-d])[\)\]]?(?:[ \t]+\S[^\n]*)?[ \t]*$"
 )
@@ -41,6 +53,11 @@ _PAGE_SEPARATOR_RE = re.compile(r"^[=\-_*~]{4,}(?:\s+[=\-_*~]{4,})*$")
 
 def is_page_separator_line(text: str) -> bool:
     return bool(_PAGE_SEPARATOR_RE.match((text or "").strip()))
+
+
+def is_metadata_line(text: str) -> bool:
+    """True for a per-question metadata banner (Domain/Topic/Cognitive/Difficulty)."""
+    return bool(_METADATA_LINE_RE.match((text or "").strip()))
 
 
 def is_label_only(text: str) -> bool:
@@ -208,6 +225,8 @@ def split_stem_and_options(text: str) -> Tuple[str, List[dict]]:
             continue
         if is_page_separator_line(stripped):
             continue
+        if is_metadata_line(stripped):
+            continue
         if _INLINE_ANSWER_RE.match(stripped):
             continue
         match = _OPTION_LINE_RE.match(stripped)
@@ -306,6 +325,39 @@ def peel_inline_answer(block: str) -> Tuple[str, Optional[str]]:
     return "\n".join(kept), answer
 
 
+def iter_question_starts(body: str) -> List["re.Match[str]"]:
+    """Return only the regex matches that look like *real* question numbers.
+
+    A math stem frequently contains numbered sub-items — "1) ... 2) ... 3) ...",
+    roman/case lists, coordinate or solution steps — and each of those lines
+    matches ``_QUESTION_START_RE``. Treating them as question starts shreds the
+    real question's block: the question loses its A–D options (dropped), a
+    stray fragment steals the next question's options (a duplicate number), and
+    because the final quiz numbers questions by list *position* (idx+1), every
+    later question's displayed number shifts (e.g. Q11 shown as Q14).
+
+    Real question numbers increase down the page, so keep only the strictly
+    increasing subsequence and fold every smaller/internal number back into the
+    current question's stem.
+
+    Limitation: papers that restart numbering per section (Section A 1–10, then
+    Section B 1–10) are folded together — but duplicate numbers already collapse
+    in downstream dedup, so such papers are not newly regressed by this.
+    """
+    kept: List["re.Match[str]"] = []
+    last = 0
+    for match in _QUESTION_START_RE.finditer(body):
+        try:
+            num = int(match.group(1))
+        except (TypeError, ValueError):
+            continue
+        if kept and num <= last:
+            continue
+        kept.append(match)
+        last = num
+    return kept
+
+
 def harvest_native_mcqs(pdf_text: str) -> List[dict]:
     """Pull numbered A–D questions from a native MCQ paper (before the answer key)."""
     if not pdf_text:
@@ -317,7 +369,7 @@ def harvest_native_mcqs(pdf_text: str) -> List[dict]:
         if idx != -1:
             cut = min(cut, idx)
     body = pdf_text[:cut]
-    starts = list(_QUESTION_START_RE.finditer(body))
+    starts = iter_question_starts(body)
     results: List[dict] = []
     for i, match in enumerate(starts):
         end = starts[i + 1].start() if i + 1 < len(starts) else len(body)

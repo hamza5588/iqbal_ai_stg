@@ -122,6 +122,10 @@ def process_pdf_quiz_task(
             except Exception as exc:
                 logger.warning("Failed to update quiz pipeline progress: %s", exc)
 
+        # Pass the raw PDF bytes through to the pipeline so the new
+        # document-intelligence layer can do layout-aware extraction. When
+        # QUIZ_DOCUMENT_PARSER is unset the pipeline ignores this and runs
+        # the legacy RAG-text path unchanged.
         result = run_pdf_quiz_pipeline(
             assessment_id=assessment_id,
             rag_thread_id=thread_id,
@@ -129,6 +133,7 @@ def process_pdf_quiz_task(
             topic_id=topic_id,
             question_count=question_count,
             progress_callback=pipeline_progress,
+            pdf_bytes=file_bytes,
         )
         self.update_state(
             state="SUCCESS",
@@ -223,6 +228,7 @@ def enqueue_or_run_pdf_quiz(
         user_id=user_id,
         topic_id=topic_id,
         question_count=question_count,
+        pdf_bytes=file_bytes,
     )
     _set_upload_progress(progress_job_id, 88, "Saving generated questions...", stage="qa_save")
     try:
