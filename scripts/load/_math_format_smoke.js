@@ -75,6 +75,11 @@ const times = prepare('find log (2 \\times 5)');
 console.log('times:', times);
 assert(times.indexOf('\\times') >= 0 && times.indexOf('\\(') >= 0, 'times wrap: ' + times);
 
+const q18 = prepare('rewrite as a single logarithm: \\(\\log_{5}(b^{2})\\) \\times \\(\\log_{a}(5^{3})\\)');
+console.log('q18:', q18);
+assert(q18.indexOf('\\times') >= 0, 'q18 keeps times: ' + q18);
+assert(!/\\\)\s*\\times\s*\\\(/.test(q18), 'q18 joins times spans: ' + q18);
+
 const broken = prepare('Find the value of a if \\\\\\(\\log_{a} 8 = \\\\frac{3}{2}\\\\\\) where a > 0.');
 console.log('broken:', broken);
 assert(broken.indexOf('\\\\\\(') < 0, 'repairs triple: ' + broken);

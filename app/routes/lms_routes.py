@@ -536,6 +536,52 @@ def finalize_pdf_quiz(source_id: int):
         return json_error(str(e), code="validation_error")
 
 
+@bp.route("/quizzes/<int:quiz_id>/questions/<int:question_id>", methods=["PUT"])
+@login_required
+def update_quiz_question(quiz_id: int, question_id: int):
+    """Teacher edit of a quiz MCQ stem/options before publish."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    denied, _assessment = _require_assessment_owner(quiz_id)
+    if denied:
+        return denied
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from app.models.lms_models import AssessmentQuestion
+        from app.utils.db import get_db
+
+        db = get_db()
+        link = (
+            db.query(AssessmentQuestion)
+            .filter(
+                AssessmentQuestion.assessment_id == quiz_id,
+                AssessmentQuestion.question_id == question_id,
+            )
+            .first()
+        )
+        if not link:
+            return json_error("Question is not on this quiz", code="not_found", status=404)
+
+        allowed = {
+            "question_text",
+            "question_latex",
+            "options",
+            "correct_option_index",
+            "explanation",
+        }
+        fields = {k: body[k] for k in allowed if k in body}
+        if not fields:
+            return json_error("No editable fields provided", code="validation_error")
+        updated = question_bank_service.update_question(question_id, **fields)
+        return json_success(question_bank_service.question_to_dict(updated))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
 @bp.route("/quizzes/<int:quiz_id>/questions/<int:question_id>/regenerate", methods=["POST"])
 @login_required
 def regenerate_quiz_question(quiz_id: int, question_id: int):

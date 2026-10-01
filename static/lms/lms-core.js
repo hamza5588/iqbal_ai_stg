@@ -348,6 +348,7 @@
   var _ALG_ISLAND_RE = new RegExp(_ALG_TERM + '(?:\\s*[+\\-×÷=]\\s*' + _ALG_TERM + ')+', 'g');
   var _POWER_ISLAND_RE = /[A-Za-z](?:\d+)?(?:\^\{[^}]+\}|\^[A-Za-z0-9]+)(?:\s*=\s*[A-Za-z0-9]+)?/g;
   var _LOG_EQ_RE = /\\log(?:_\{[^}]+\}|_[A-Za-z0-9]+)?(?:\s*\([^)]*\)|\s+[0-9A-Za-z]+)(?:\s*=\s*(?:\\frac\{[^{}]+\}\{[^{}]+\}|[A-Za-z0-9\\^{}_+\-/]+))?/g;
+  var _LOG_CALL_RE = /\\log(?:_\{[^}]+\}|_[A-Za-z0-9]+)?\s*\([^)]{0,60}\)/g;
   var _TIMES_PAIR_RE = /(\d+(?:\.\d+)?)\s*(?:\\times|×)\s*(\d+(?:\.\d+)?)/g;
   // A plain English connective ("or", "and", ...) sitting between two math
   // bits - e.g. "x = 3 or x = -3". Must not be wrapped as one math span.
@@ -661,6 +662,23 @@
     return out.join('');
   }
 
+  function lmsJoinTimesBetweenMath(s) {
+    // "\(a\) \times \(b\)" → one span so \times typesets (not raw text).
+    var out = String(s || '');
+    out = out.replace(/\\\)\s*(?:\\times|×)\s*\\\(/g, ' \\times ');
+    out = out.replace(/\\\]\s*(?:\\times|×)\s*\\\[/g, ' \\times ');
+    // Bare \times left between math-ish tokens → wrap locally
+    out = lmsMapOutsideMath(out, function (chunk) {
+      return chunk.replace(
+        /([A-Za-z0-9)}\]])\s*(?:\\times|×)\s*([A-Za-z0-9(\\])/g,
+        function (_m, a, b) {
+          return a + ' \\(\\times\\) ' + b;
+        }
+      );
+    });
+    return out;
+  }
+
   function lmsWrapMathChunk(m, inline) {
     if (/^\\[\(\[]/.test(m) || /^\$/.test(m) || lmsIsMixedPercent(m)) return m;
     var inner = lmsEscapePercentInMathBody(m);
@@ -674,6 +692,7 @@
       // Equations with log / times before bare \frac so "log_a 8 = 3/2"
       // stays one math span (horizontal frac + subscript base).
       chunk = chunk.replace(_LOG_EQ_RE, function (m) { return lmsWrapMathChunk(m, true); });
+      chunk = chunk.replace(_LOG_CALL_RE, function (m) { return lmsWrapMathChunk(m, true); });
       chunk = chunk.replace(_TIMES_PAIR_RE, function (m, a, b) {
         return lmsWrapMathChunk(a + ' \\times ' + b, true);
       });
@@ -817,22 +836,24 @@
     s = s.replace(/\\\\+\[/g, '\\[').replace(/\\\\+\]/g, '\\]');
     s = s.replace(/\\{2,}(log|ln|frac|times|sqrt|mathrm|text)\b/g, '\\$1');
     // Server question_render is already delimited. Re-promoting \log doubles
-    // backslashes into visible \\\( / \\log artifacts.
+    // backslashes into visible \\\( / \\log artifacts. Still join bare \times.
     if (/\\\(|\\\[|\$\$/.test(s) && /\\(?:log|ln|frac|times|sqrt)\b|\^/.test(s)) {
-      return s;
+      return lmsJoinTimesBetweenMath(s);
     }
     s = lmsPromoteInlineMathNotation(s);
     if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
       var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
       if (lmsLooksLikeProse(withoutDelims)) {
-        return lmsWrapMathIslands(s, inline);
+        return lmsJoinTimesBetweenMath(lmsWrapMathIslands(s, inline));
       }
-      return lmsMapOutsideMath(s, function (c) { return c; }).replace(/\\\(([\s\S]*?)\\\)/g, function (m, inner) {
-        return '\\(' + lmsEscapePercentInMathBody(inner) + '\\)';
-      }).replace(/\\\[([\s\S]*?)\\\]/g, function (m, inner) {
-        return '\\[' + lmsEscapePercentInMathBody(inner) + '\\]';
-      });
+      return lmsJoinTimesBetweenMath(
+        lmsMapOutsideMath(s, function (c) { return c; }).replace(/\\\(([\s\S]*?)\\\)/g, function (m, inner) {
+          return '\\(' + lmsEscapePercentInMathBody(inner) + '\\)';
+        }).replace(/\\\[([\s\S]*?)\\\]/g, function (m, inner) {
+          return '\\[' + lmsEscapePercentInMathBody(inner) + '\\]';
+        })
+      );
     }
     var recovered = lmsStripInnerMathDelims(lmsRecoverLatex(s) || s);
     var colon = recovered.match(/^((?:Simplify|Find|Solve|Evaluate|Compute|Expand|Factor)\s*:)\s*(.+)$/i);
@@ -842,13 +863,13 @@
       return colon[1] + ' ' + wrap[0] + lmsEscapePercentInMathBody(body) + wrap[1];
     }
     if (lmsIsPlainPercent(recovered) || lmsIsMixedPercent(recovered)) return recovered.replace(/\\%/g, '%');
-    if (lmsLooksLikeMixedTextAndMath(recovered)) return lmsWrapMathIslands(recovered, inline);
-    if (lmsLooksLikeProse(recovered)) return lmsWrapMathIslands(recovered, inline);
+    if (lmsLooksLikeMixedTextAndMath(recovered)) return lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline));
+    if (lmsLooksLikeProse(recovered)) return lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline));
     // "x = 3 or x = -3", "a < b and b < c": a plain English connective joins
     // two math bits. Wrapping the whole string makes MathJax eat the spaces
     // and render the word as italic letters ("3orx"). Wrap each bit instead.
     if (_MATH_CONNECTIVE_RE.test(recovered)) {
-      return lmsWrapMathIslands(recovered, inline);
+      return lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline));
     }
     if (lmsLooksLikeRawLatex(recovered) || lmsLooksLikeMathExpression(recovered) || /\\frac|\^\{/.test(recovered)) {
       var math = lmsEscapePercentInMathBody(recovered);
