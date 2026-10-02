@@ -209,7 +209,7 @@ def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
         opts, correct_idx, preserve_order=bool(mcq.preserve_option_order)
     )
     q_text, q_latex = finalize_display_text(mcq.question_text, mcq.question_latex)
-    return {
+    fields = {
         "question_text": q_text or mcq.question_text,
         "question_latex": q_latex,
         "options": shuffled,
@@ -217,3 +217,8 @@ def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
         "explanation": mcq.explanation,
         "extraction_confidence": mcq.conversion_confidence,
     }
+    # Optional PDF metadata — only pass through when present.
+    difficulty = getattr(mcq, "difficulty", None)
+    if difficulty in ("easy", "medium", "hard"):
+        fields["difficulty"] = difficulty
+    return fields

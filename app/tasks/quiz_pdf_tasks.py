@@ -169,8 +169,8 @@ def process_pdf_quiz_task(
             except Exception as exc:
                 logger.warning("Failed to update quiz pipeline progress: %s", exc)
 
-        # When LlamaParse succeeded, feed that text to the LLM path and skip
-        # the native byte-parser so quiz/diagnostic use one extract source.
+        # Always pass PDF bytes so hybrid vision (text + page images) can run.
+        # LlamaParse text remains available as a secondary/legacy text source.
         result = run_pdf_quiz_pipeline(
             assessment_id=assessment_id,
             rag_thread_id=thread_id,
@@ -179,7 +179,7 @@ def process_pdf_quiz_task(
             question_count=question_count,
             progress_callback=pipeline_progress,
             pdf_text=llamaparse_text,
-            pdf_bytes=None if llamaparse_text else file_bytes,
+            pdf_bytes=file_bytes,
         )
         self.update_state(
             state="SUCCESS",
@@ -290,6 +290,7 @@ def enqueue_or_run_pdf_quiz(
     _set_upload_progress(
         progress_job_id, 72, "Extracting questions and answers...", stage="qa_extract"
     )
+    # Always pass PDF bytes so hybrid vision (text + page images) can run.
     result = run_pdf_quiz_pipeline(
         assessment_id=assessment_id,
         rag_thread_id=thread_id,
@@ -297,7 +298,7 @@ def enqueue_or_run_pdf_quiz(
         topic_id=topic_id,
         question_count=question_count,
         pdf_text=llamaparse_text,
-        pdf_bytes=None if llamaparse_text else file_bytes,
+        pdf_bytes=file_bytes,
     )
     _set_upload_progress(progress_job_id, 88, "Saving generated questions...", stage="qa_save")
     try:

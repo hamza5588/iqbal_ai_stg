@@ -80,6 +80,10 @@ class MCQQuestion(BaseModel):
         None,
         description="Short student-friendly concept this question tests (3-8 words, not a document title)",
     )
+    difficulty: Optional[Literal["easy", "medium", "hard"]] = Field(
+        None,
+        description="Optional PDF difficulty label when present; omit when absent",
+    )
     conversion_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
     preserve_option_order: bool = Field(
         default=False,
