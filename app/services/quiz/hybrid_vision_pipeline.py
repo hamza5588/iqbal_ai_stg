@@ -86,13 +86,22 @@ VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
 
 
 def _require_groq_api_key() -> str:
-    key = GROQ_API_KEY or os.getenv("GROQ_API_KEY")
-    if not key:
-        raise ValueError(
-            "GROQ_API_KEY not found. "
-            "Please add GROQ_API_KEY to your .env file."
-        )
-    return key
+    """Resolve Groq key at call time: env first, then admin SystemSettings."""
+    key = (os.getenv("GROQ_API_KEY") or GROQ_API_KEY or "").strip()
+    if key:
+        return key
+    try:
+        from app.utils.llm_factory import _resolve_stored_api_key
+
+        key = (_resolve_stored_api_key("groq") or "").strip()
+    except Exception:
+        key = ""
+    if key:
+        return key
+    raise ValueError(
+        "GROQ_API_KEY not found. Set GROQ_API_KEY in the container env "
+        "or save a Groq API key in Admin → Settings."
+    )
 
 
 def resolve_vision_model() -> str:

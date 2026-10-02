@@ -7,6 +7,7 @@ from typing import Callable, List, Optional
 
 from app.models.lms_models import AssessmentQuestion, QuizPdfSource
 from app.services.lms import assessment_service, question_bank_service
+from app.services.lms.exceptions import LMSValidationError
 from app.services.quiz.assessment_doc_validation import (
     AssessmentDocValidationError,
     assert_topic_or_key_area_available,
@@ -200,11 +201,15 @@ def run_pdf_quiz_pipeline(
                 "Hybrid vision extraction failed for assessment %s",
                 assessment_id,
             )
+            msg = str(hybrid_exc) or "Hybrid vision extraction failed"
+            # Config / infra failures must not be masked as "bad PDF format".
+            if "GROQ_API_KEY" in msg or "API key" in msg.lower():
+                raise LMSValidationError(
+                    "Hybrid vision is not configured: missing Groq API key. "
+                    "Set GROQ_API_KEY on the server or save it in Admin → Settings."
+                ) from hybrid_exc
             raise AssessmentDocValidationError(
-                detail=(
-                    "Hybrid vision extraction failed. "
-                    f"{hybrid_exc}"
-                )
+                detail=f"Hybrid vision extraction failed. {msg}"
             ) from hybrid_exc
 
         warnings.extend(hybrid_warnings)
