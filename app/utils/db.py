@@ -317,14 +317,29 @@ def init_db(app):
                 logger.warning(f"Load testing migration warning: {str(e)}")
                 db.rollback()
             
-            # Migration: Add subscription fields to existing users
+            # Migration: Add subscription fields + full_name to existing users.
+            # IMPORTANT: add full_name via raw SQL BEFORE any User ORM queries —
+            # the mapped model SELECTs full_name, so ORM-first order left login
+            # broken on deploy (UndefinedColumn) and skipped this ALTER entirely.
             try:
                 db = get_db()
                 inspector = inspect(engine)
                 if 'users' in inspector.get_table_names():
-                    # Check if subscription_tier column exists
                     columns = [col['name'] for col in inspector.get_columns('users')]
-                    
+
+                    if 'full_name' not in columns:
+                        logger.info("Adding full_name column to users table...")
+                        db.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(255)"))
+                        db.commit()
+                        logger.info("full_name column added successfully")
+                        columns = [col['name'] for col in inspector.get_columns('users')]
+
+                    db.execute(text(
+                        "UPDATE users SET full_name = username "
+                        "WHERE full_name IS NULL OR TRIM(full_name) = ''"
+                    ))
+                    db.commit()
+
                     if 'subscription_tier' not in columns:
                         logger.info("Adding subscription columns to users table...")
                         # For SQLite
@@ -354,20 +369,6 @@ def init_db(app):
                         db.commit()
                         if existing_users:
                             logger.info(f"Updated {len(existing_users)} users with default subscription tier")
-
-                    # Display name for teacher/student registration
-                    columns = [col['name'] for col in inspector.get_columns('users')]
-                    if 'full_name' not in columns:
-                        logger.info("Adding full_name column to users table...")
-                        db.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(255)"))
-                        db.commit()
-                        logger.info("full_name column added successfully")
-                    # Backfill empty full_name from username for existing accounts
-                    db.execute(text(
-                        "UPDATE users SET full_name = username "
-                        "WHERE full_name IS NULL OR TRIM(full_name) = ''"
-                    ))
-                    db.commit()
             except Exception as e:
                 logger.warning(f"Subscription migration warning: {str(e)}")
                 db.rollback()
