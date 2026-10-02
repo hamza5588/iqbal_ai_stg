@@ -112,27 +112,38 @@ body.td-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--td
 .td-form-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.4fr; gap: 16px; margin-top: 14px; }
 .td-form-grid > .td-field { min-width: 0; }
 .td-form-grid .full { grid-column: 1 / -1; }
-/* Create Quiz: never put the wide PDF dropzone in a cramped 4-column row with MCQs/duration. */
+/* Create Quiz — match mock: Title | PDF (center, taller) | MCQs; Duration under Title. */
 .td-quiz-create-grid {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-items: start;
+  column-gap: 16px;
+  row-gap: 14px;
 }
-.td-quiz-create-grid .td-quiz-pdf-field { grid-column: 1 / -1; }
+.td-quiz-create-grid .td-quiz-pdf-col {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 .td-quiz-upload-box {
-  flex-direction: row;
-  gap: 14px;
-  justify-content: flex-start;
-  text-align: left;
-  padding: 14px 18px;
-  min-height: 72px;
+  flex: 1 1 auto;
+  min-height: 150px;
   height: auto;
   max-width: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  padding: 18px 14px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
 }
-.td-quiz-upload-box .td-quiz-upload-copy { min-width: 0; flex: 1; }
-.td-quiz-upload-box .td-quiz-upload-copy b { margin-top: 0; }
-.td-quiz-upload-box .td-quiz-upload-copy small { display: block; }
+.td-quiz-upload-box b { margin-top: 2px; }
+.td-quiz-upload-box small { display: block; line-height: 1.35; max-width: 100%; }
+.td-quiz-pdf-help { margin-top: 8px; }
 .td-field label { display: block; font-size: 13px; font-weight: 700; color: var(--td-ink); margin-bottom: 6px; }
 .td-field label .req { color: var(--td-red); }
 .td-field label .opt { color: var(--td-muted); font-weight: 500; }
@@ -370,8 +381,14 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 }
 @media (max-width: 980px) {
   .td-form-grid { grid-template-columns: 1fr 1fr !important; }
-  .td-quiz-create-grid { grid-template-columns: 1fr 1fr !important; }
-  .td-quiz-create-grid .td-quiz-pdf-field { grid-column: 1 / -1; }
+  .td-quiz-create-grid {
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: auto;
+  }
+  .td-quiz-create-grid .td-quiz-pdf-col {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
   .td-lesson-grid .td-upload-col { grid-row: auto; grid-column: 1 / -1; }
   .td-lesson-grid .td-context-col { grid-column: 1 / -1; }
   .td-detail { grid-template-columns: 1fr; }
