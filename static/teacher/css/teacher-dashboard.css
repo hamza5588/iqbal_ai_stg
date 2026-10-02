@@ -112,38 +112,73 @@ body.td-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--td
 .td-form-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.4fr; gap: 16px; margin-top: 14px; }
 .td-form-grid > .td-field { min-width: 0; }
 .td-form-grid .full { grid-column: 1 / -1; }
-/* Create Quiz — match mock: Title | PDF (center, taller) | MCQs; Duration under Title. */
-.td-quiz-create-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
-  grid-template-rows: auto auto;
+/* Create Quiz — one compact row: Title | PDF | MCQs | Duration (upload height ≈ inputs). */
+.td-form-grid.td-quiz-create-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.35fr) minmax(0, 0.85fr) minmax(0, 0.85fr);
+  grid-template-rows: auto;
   align-items: start;
-  column-gap: 16px;
-  row-gap: 14px;
+  column-gap: 14px;
+  row-gap: 12px;
 }
 .td-quiz-create-grid .td-quiz-pdf-col {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-column: auto;
+  grid-row: auto;
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.td-quiz-upload-box {
-  flex: 1 1 auto;
-  min-height: 150px;
-  height: auto;
-  max-width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 18px 14px;
-  flex-direction: column;
+.td-quiz-create-grid .td-quiz-upload-box {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 4px;
+  justify-content: flex-start;
+  gap: 10px;
+  text-align: left;
+  /* Match .td-field input vertical size (~42px) — was 150px+ and broke the row. */
+  min-height: 0;
+  height: 42px;
+  max-height: 42px;
+  padding: 0 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  max-width: 100%;
 }
-.td-quiz-upload-box b { margin-top: 2px; }
-.td-quiz-upload-box small { display: block; line-height: 1.35; max-width: 100%; }
-.td-quiz-pdf-help { margin-top: 8px; }
+.td-quiz-create-grid .td-quiz-upload-box .td-pdf-ic {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.td-quiz-create-grid .td-quiz-upload-box .td-quiz-upload-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+}
+.td-quiz-create-grid .td-quiz-upload-box b {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.td-quiz-create-grid .td-quiz-upload-box small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.td-quiz-create-grid .td-quiz-upload-box .td-file-chosen {
+  margin-top: 0;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.td-quiz-pdf-help { margin-top: 10px; }
 .td-field label { display: block; font-size: 13px; font-weight: 700; color: var(--td-ink); margin-bottom: 6px; }
 .td-field label .req { color: var(--td-red); }
 .td-field label .opt { color: var(--td-muted); font-weight: 500; }
@@ -362,7 +397,11 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 #lmsTutorModal .lms-chat-input-row { margin-top: 12px; }
 
 /* ── Misc ────────────────────────────────────────────────── */
-.td-visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; opacity: 0; }
+/* !important on the box: `.td-field input { width: 100%; padding … }` outranks this class, which left the hidden
+   file input full-width + absolute and made the page scroll sideways whenever the Create Quiz form was open. */
+.td-visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0 !important; opacity: 0; }
+/* Inline form cards are opened with scrollIntoView({block:'start'}); keep their heading clear of the sticky top bar. */
+#tdCreateLessonCard, #tdCreateClassCard, #tdCreateQuizCard, #tdAssignQuizCard { scroll-margin-top: 112px; }
 /* Legacy validators toggle Tailwind border colours on #lessonTitle / #lessonGrade; keep the design's neutral border. */
 #tdCreateLessonCard input.border-emerald-600, #tdCreateLessonCard select.border-emerald-600 { border-color: var(--td-line); }
 #tdCreateLessonCard .border-red-500 { border-color: var(--td-red) !important; }
@@ -381,13 +420,11 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 }
 @media (max-width: 980px) {
   .td-form-grid { grid-template-columns: 1fr 1fr !important; }
-  .td-quiz-create-grid {
+  .td-form-grid.td-quiz-create-grid {
     grid-template-columns: 1fr 1fr !important;
-    grid-template-rows: auto;
   }
   .td-quiz-create-grid .td-quiz-pdf-col {
     grid-column: 1 / -1;
-    grid-row: auto;
   }
   .td-lesson-grid .td-upload-col { grid-row: auto; grid-column: 1 / -1; }
   .td-lesson-grid .td-context-col { grid-column: 1 / -1; }
@@ -396,6 +433,7 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 }
 @media (max-width: 720px) {
   .td-topbar { flex-wrap: wrap; padding: 8px 12px; }
+  #tdCreateLessonCard, #tdCreateClassCard, #tdCreateQuizCard, #tdAssignQuizCard { scroll-margin-top: 154px; } /* top bar wraps to two rows */
   .td-brand img { height: 36px; }
   .td-mainnav { order: 3; width: 100%; justify-content: space-between; gap: 2px; padding-top: 6px; border-top: 1px solid var(--td-line); }
   .td-navbtn { font-size: 10.5px; padding: 2px 2px 4px; }

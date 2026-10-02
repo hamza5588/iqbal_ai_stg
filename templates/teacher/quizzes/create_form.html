@@ -1,6 +1,5 @@
-{# Screen 05 — Create New Quiz (PDF → MCQ). Layout matches updated_new_ui mock:
-   Title | PDF upload | MCQs, with Duration under Title. Element IDs kept for
-   submitLmsPdfQuiz / pollLmsQuizStatus / publishLmsQuiz. #}
+{# Screen 05 — Create New Quiz (PDF → MCQ). Compact single-row form:
+   Title | PDF upload | MCQs | Duration. Element IDs kept for LMS JS. #}
 <div class="td-card accent" id="tdCreateQuizCard" hidden>
   <div class="td-section-title">
     <div class="td-icon-badge"><img src="{{ url_for('static', filename='teacher/icons/quizzes.png') }}" alt=""></div>
@@ -16,13 +15,14 @@
         <label for="lmsQuizPdfFile">PDF (any content) <span class="req">*</span></label>
         <label class="td-upload-box td-quiz-upload-box" for="lmsQuizPdfFile">
           <span class="td-pdf-ic"><i class="fas fa-file-pdf"></i></span>
-          <b>Upload Your PDF</b>
-          <small>Drag &amp; drop your PDF file here or <span class="td-link">click to browse</span></small>
-          <span class="td-file-chosen" id="tdQuizFileName" hidden></span>
+          <span class="td-quiz-upload-copy">
+            <b>Upload Your PDF</b>
+            <small>Drag &amp; drop or <span class="td-link">browse</span></small>
+            <span class="td-file-chosen" id="tdQuizFileName" hidden></span>
+          </span>
         </label>
         <input id="lmsQuizPdfFile" class="td-visually-hidden" type="file" accept=".pdf,application/pdf" required
                onchange="tdQuizzes.onFileChosen(this)">
-        <p class="td-help td-quiz-pdf-help">Upload any lesson/notes PDF. If it already has Q&amp;A, those are used; otherwise MCQs are generated from the content.</p>
       </div>
       <div class="td-field">
         <label for="lmsQuizMcqCount">Number of MCQs <span class="req">*</span></label>
@@ -35,6 +35,7 @@
         <p class="td-help" id="lmsQuizDurationHint">Whole minutes only (e.g. 1, 10, 60).</p>
       </div>
     </div>
+    <p class="td-help td-quiz-pdf-help">Upload any lesson/notes PDF. If it already has Q&amp;A, those are used; otherwise MCQs are generated from the content.</p>
     <div class="td-form-actions">
       <button type="button" class="td-btn td-btn-outline" onclick="tdQuizzes.closeCreate()">Cancel</button>
       <button type="submit" id="lmsQuizSubmitBtn" class="td-btn td-btn-primary">Upload &amp; Generate MCQs</button>
