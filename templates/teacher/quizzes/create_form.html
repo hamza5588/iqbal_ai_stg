@@ -6,20 +6,12 @@
     <div><h2>Create New Quiz</h2><p>Add quiz details to create a new quiz.</p></div>
   </div>
   <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)" data-wait-message="Generating quiz questions..." data-wait-sticky>
-    <div class="td-form-grid" style="grid-template-columns:1fr 1.2fr 0.8fr 0.8fr;">
+    {# Two-row grid: title/MCQs/duration on row 1; PDF upload full-width on row 2.
+       A single 4-column row let the upload box overflow and cover Number of MCQs. #}
+    <div class="td-form-grid td-quiz-create-grid">
       <div class="td-field">
         <label for="lmsQuizTitle">Quiz title <span class="req">*</span></label>
         <input id="lmsQuizTitle" type="text" required placeholder="e.g. Chapter 5 Post Test">
-      </div>
-      <div class="td-field">
-        <label for="lmsQuizPdfFile">PDF (any content) <span class="req">*</span></label>
-        <label class="td-upload-box" for="lmsQuizPdfFile" style="flex-direction:row;gap:14px;justify-content:flex-start;text-align:left;padding:14px 18px;">
-          <span class="td-pdf-ic"><i class="fas fa-file-pdf"></i></span>
-          <span><b>Upload Your PDF</b><small>Drag &amp; drop your PDF file here or <span class="td-link">click to browse</span></small>
-            <span class="td-file-chosen" id="tdQuizFileName" hidden></span></span>
-        </label>
-        <input id="lmsQuizPdfFile" class="td-visually-hidden" type="file" accept=".pdf,application/pdf" required
-               onchange="tdQuizzes.onFileChosen(this)">
       </div>
       <div class="td-field">
         <label for="lmsQuizMcqCount">Number of MCQs <span class="req">*</span></label>
@@ -30,6 +22,19 @@
         <input id="lmsQuizDuration" type="number" min="1" step="1" inputmode="numeric" required
                placeholder="e.g. 20" title="Whole number of minutes (1 or more)">
         <p class="td-help" id="lmsQuizDurationHint" style="margin:6px 0 0;">Enter a whole number such as 1, 10, or 60. Zero, decimals, and negatives are not allowed.</p>
+      </div>
+      <div class="td-field td-quiz-pdf-field">
+        <label for="lmsQuizPdfFile">PDF (any content) <span class="req">*</span></label>
+        <label class="td-upload-box td-quiz-upload-box" for="lmsQuizPdfFile">
+          <span class="td-pdf-ic"><i class="fas fa-file-pdf"></i></span>
+          <span class="td-quiz-upload-copy">
+            <b>Upload Your PDF</b>
+            <small>Drag &amp; drop your PDF file here or <span class="td-link">click to browse</span></small>
+            <span class="td-file-chosen" id="tdQuizFileName" hidden></span>
+          </span>
+        </label>
+        <input id="lmsQuizPdfFile" class="td-visually-hidden" type="file" accept=".pdf,application/pdf" required
+               onchange="tdQuizzes.onFileChosen(this)">
       </div>
     </div>
     <p class="td-help">Upload any lesson/notes PDF. If it already has Q&amp;A, those are used; otherwise MCQs are generated from the content.</p>
