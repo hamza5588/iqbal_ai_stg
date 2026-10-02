@@ -16,6 +16,7 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(255), nullable=False, unique=True)
+    full_name = Column(String(255), nullable=True)
     useremail = Column(String(255), nullable=False, unique=True)
     password = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default='student',

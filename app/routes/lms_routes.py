@@ -400,6 +400,13 @@ def create_quiz_from_pdf():
     if question_count is None:
         question_count = 10
     question_count = max(1, min(40, int(question_count)))
+    try:
+        time_limit_minutes = assessment_service.parse_positive_whole_minutes(
+            request.form.get("time_limit_minutes"),
+            required=True,
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
     async_mode = request.form.get("async", "true").lower() != "false"
     if not current_app.config.get("USE_CELERY_FOR_INGESTION", False):
         async_mode = False
@@ -421,6 +428,7 @@ def create_quiz_from_pdf():
         title=title.strip(),
         assessment_type="quiz",
         creation_mode="pdf_ai",
+        time_limit_minutes=time_limit_minutes,
     )
 
     try:
@@ -661,6 +669,9 @@ def start_quiz_attempt(quiz_id: int):
         if assessment.assessment_type == "diagnostic":
             if getattr(attempt, "timed_out", False):
                 return json_success(attempt_service.get_attempt_results(attempt.id))
+            timer = attempt_service.get_attempt_timer_info(attempt.id)
+            payload.update(timer)
+        elif assessment.assessment_type == "quiz" and assessment.time_limit_minutes:
             timer = attempt_service.get_attempt_timer_info(attempt.id)
             payload.update(timer)
         return json_success(payload, status=201)
@@ -1173,7 +1184,17 @@ def quizzes():
         qs = assessment_service.list_assessments_by_teacher(
             _current_user_id(), assessment_type="quiz"
         )
-        return json_success([{"id": q.id, "title": q.title, "status": q.status} for q in qs])
+        return json_success(
+            [
+                {
+                    "id": q.id,
+                    "title": q.title,
+                    "status": q.status,
+                    "time_limit_minutes": q.time_limit_minutes,
+                }
+                for q in qs
+            ]
+        )
 
     denied = _require_permission(Permissions.CREATE_QUIZ)
     if denied:
@@ -1184,20 +1205,61 @@ def quizzes():
             "Diagnostics are platform-wide and created by admin. Teachers create quizzes only.",
             code="validation_error",
         )
+    try:
+        time_limit_minutes = assessment_service.parse_positive_whole_minutes(
+            body.get("time_limit_minutes"),
+            required=True,
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
     a = assessment_service.create_assessment(
         created_by=_current_user_id(),
         title=body["title"],
         assessment_type="quiz",
         description=body.get("description"),
         creation_mode=body.get("creation_mode", "manual"),
-        time_limit_minutes=body.get("time_limit_minutes"),
+        time_limit_minutes=time_limit_minutes,
     )
-    return json_success({"id": a.id, "title": a.title, "status": a.status}, status=201)
+    return json_success(
+        {
+            "id": a.id,
+            "title": a.title,
+            "status": a.status,
+            "time_limit_minutes": a.time_limit_minutes,
+        },
+        status=201,
+    )
 
 
-@bp.route("/quizzes/<int:quiz_id>", methods=["GET"])
+@bp.route("/quizzes/<int:quiz_id>", methods=["GET", "PATCH", "PUT"])
 @login_required
-def get_quiz(quiz_id: int):
+def get_or_update_quiz(quiz_id: int):
+    if request.method in ("PATCH", "PUT"):
+        denied = _require_permission(Permissions.CREATE_QUIZ)
+        if denied:
+            return denied
+        body = request.get_json(silent=True) or {}
+        try:
+            a = assessment_service.update_quiz_settings(
+                quiz_id,
+                teacher_id=_current_user_id(),
+                title=body.get("title"),
+                time_limit_minutes=body.get("time_limit_minutes"),
+                update_time_limit="time_limit_minutes" in body,
+            )
+            return json_success(
+                {
+                    "id": a.id,
+                    "title": a.title,
+                    "status": a.status,
+                    "time_limit_minutes": a.time_limit_minutes,
+                }
+            )
+        except LMSNotFoundError as e:
+            return json_error(str(e), code="not_found", status=404)
+        except LMSValidationError as e:
+            return json_error(str(e), code="validation_error")
+
     try:
         assessment = assessment_service.get_assessment(quiz_id)
         role = _current_role()

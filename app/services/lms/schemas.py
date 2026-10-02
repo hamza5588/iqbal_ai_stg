@@ -72,7 +72,19 @@ class AssessmentCreate(BaseModel):
     description: Optional[str] = None
     assessment_type: str = Field(..., pattern="^(diagnostic|quiz)$")
     creation_mode: str = "manual"
-    time_limit_minutes: Optional[int] = None
+    time_limit_minutes: Optional[int] = Field(None, ge=1)
+
+    @field_validator("time_limit_minutes")
+    @classmethod
+    def validate_time_limit(cls, v):
+        if v is None:
+            return v
+        if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+            raise ValueError(
+                "Quiz duration must be a whole number of minutes (1 or more). "
+                "Decimals, zero, and negative values are not allowed."
+            )
+        return v
 
 
 class ClassCreate(BaseModel):

@@ -1,7 +1,7 @@
 /* Quiz taking (class assignments and learning-path quizzes) in #lmsStudentModal.
    Moved from the old student page's inline script — same endpoints and rules:
    POST /api/lms/quizzes/:id/start {assignment_id} → GET /attempts/:id/questions → POST /attempts/:id/answer
-   → POST /attempts/:id/submit (unanswered confirm). */
+   → POST /attempts/:id/submit (unanswered confirm). Supports teacher-configured countdown timer. */
 (function () {
   function fmtText(text, inline) {
     if (typeof lmsFormatRichText === 'function') {
@@ -26,6 +26,7 @@
   }
 
   var attemptId = null, questions = [], currentQ = 0, savedAnswers = {}, assignmentId = null, quizTitle = '';
+  var remainingSeconds = null, timerInterval = null, submitting = false;
 
   function show(which) {
     ['lmsAssignmentList', 'lmsQuizTaking', 'lmsQuizResult'].forEach(function (id) {
@@ -36,6 +37,37 @@
   function setTitle(t) {
     var h = document.getElementById('lmsStudentModalTitle');
     if (h) h.textContent = t || 'Quiz';
+  }
+  function clearQuizTimer() {
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  }
+  function formatCountdown(sec) {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+  function updateQuizTimerDisplay() {
+    var el = document.getElementById('lmsQuizTimer');
+    if (!el || remainingSeconds == null) return;
+    var urgent = remainingSeconds <= 60;
+    el.classList.toggle('urgent', urgent);
+    el.innerHTML = '<i class="far fa-clock"></i> ' + formatCountdown(remainingSeconds);
+    el.style.display = 'inline-flex';
+  }
+  function startQuizTimer() {
+    clearQuizTimer();
+    if (remainingSeconds == null) return;
+    updateQuizTimerDisplay();
+    timerInterval = setInterval(function () {
+      if (remainingSeconds != null && remainingSeconds > 0) {
+        remainingSeconds = Math.max(0, remainingSeconds - 1);
+      }
+      updateQuizTimerDisplay();
+      if (remainingSeconds <= 0) {
+        clearQuizTimer();
+        submitLmsQuiz(true);
+      }
+    }, 1000);
   }
 
   /* "My Quizzes" now lives in My Classes (quizzes per class). */
@@ -48,8 +80,11 @@
     window.sdShowView('classes');
   };
   window.closeLmsStudentHub = function () {
+    clearQuizTimer();
+    if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
     lmsCloseModal('lmsStudentModal');
     attemptId = null; questions = []; currentQ = 0; savedAnswers = {};
+    remainingSeconds = null; submitting = false;
     show('lmsAssignmentList');
     if (typeof window.sdReloadClasses === 'function') window.sdReloadClasses();
   };
@@ -60,6 +95,8 @@
     quizTitle = title || 'Quiz';
     setTitle(quizTitle);
     document.getElementById('lmsQuizResult').classList.add('hidden');
+    clearQuizTimer();
+    remainingSeconds = null;
     if (typeof showWaitOverlay === 'function') showWaitOverlay('Starting quiz...');
     try {
       var res = await fetch('/api/lms/quizzes/' + quizId + '/start', {
@@ -74,9 +111,20 @@
       }
       var d = body.data || body;
       attemptId = d.attempt_id;
+      var rem = d.remaining_seconds;
+      if (rem == null && d.time_limit_minutes != null) {
+        rem = Math.max(0, Math.floor(Number(d.time_limit_minutes) * 60));
+      }
+      remainingSeconds = rem != null ? Math.max(0, Math.floor(Number(rem))) : null;
       if (d.resumed && typeof lmsShowToast === 'function') lmsShowToast('Resuming where you left off', 'success');
+      if (remainingSeconds != null && remainingSeconds <= 0) {
+        await submitLmsQuiz(true);
+        return;
+      }
       await loadQuestions();
+      if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(true);
       lmsOpenModal('lmsStudentModal');
+      startQuizTimer();
     } catch (err) {
       var msg = err.message || 'Could not start quiz';
       if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error'); else alert(msg);
@@ -127,7 +175,10 @@
     var nextBtn = idx < total - 1
       ? '<button type="button" class="sd-btn sd-btn-primary" onclick="nextLmsQuizQuestion()">' + (savedIdx === undefined ? 'Skip' : 'Next') + ' <i class="fas fa-chevron-right"></i></button>' : '';
     var submitBtn = '<button type="button" class="sd-btn ' + (idx === total - 1 ? 'sd-btn-primary' : 'sd-btn-outline blue') + '" onclick="submitLmsQuiz()">Submit Quiz</button>';
+    var timerHtml = remainingSeconds != null
+      ? '<span id="lmsQuizTimer" class="sd-timer" style="margin-left:auto;"></span>' : '';
     el.innerHTML =
+      '<div class="lms-quiz-taking-head"><span class="lms-quiz-taking-title">' + escapeHtml(quizTitle) + '</span>' + timerHtml + '</div>' +
       '<div class="sd-qprogress" style="width:100%;margin-bottom:16px;"><div class="sd-qp-top"><span>Question ' + (idx + 1) + ' of ' + total +
       (answered ? ' · ' + answered + ' answered' : '') + '</span><b>' + pct + '%</b></div>' +
       '<div class="sd-track"><div class="sd-fill" style="width:' + pct + '%;"></div></div></div>' +
@@ -136,6 +187,7 @@
       opts + mapHtml() +
       '<div class="sd-q-nav"><button type="button" class="sd-btn sd-btn-outline" onclick="prevLmsQuizQuestion()"' + (idx > 0 ? '' : ' disabled') + '>Previous</button>' +
       '<div class="sd-q-nav-end">' + submitBtn + nextBtn + '</div></div>';
+    updateQuizTimerDisplay();
     typeset(el);
   }
 
@@ -154,29 +206,44 @@
   window.nextLmsQuizQuestion = function () { if (currentQ < questions.length - 1) { currentQ++; render(); } };
   window.prevLmsQuizQuestion = function () { if (currentQ > 0) { currentQ--; render(); } };
 
-  window.submitLmsQuiz = async function () {
-    var missing = questions.length - Object.keys(savedAnswers).length;
-    if (missing > 0) {
-      var msg = 'You have ' + missing + ' unanswered question' + (missing === 1 ? '' : 's') +
-        '. Are you sure you want to submit?\n\nUnanswered questions score 0. Your answered questions still count.';
-      var ok = typeof showInAppConfirm === 'function'
-        ? await showInAppConfirm(msg, { title: 'Submit quiz?', confirmLabel: 'Submit', cancelLabel: 'Go back', iconClass: 'fas fa-exclamation-circle' })
-        : window.confirm(msg);
-      if (!ok) return;
+  window.submitLmsQuiz = async function (timeExpired) {
+    if (submitting) return;
+    if (!timeExpired) {
+      var missing = questions.length - Object.keys(savedAnswers).length;
+      if (missing > 0) {
+        var msg = 'You have ' + missing + ' unanswered question' + (missing === 1 ? '' : 's') +
+          '. Are you sure you want to submit?\n\nUnanswered questions score 0. Your answered questions still count.';
+        var ok = typeof showInAppConfirm === 'function'
+          ? await showInAppConfirm(msg, { title: 'Submit quiz?', confirmLabel: 'Submit', cancelLabel: 'Go back', iconClass: 'fas fa-exclamation-circle' })
+          : window.confirm(msg);
+        if (!ok) return;
+      }
     }
-    if (typeof showWaitOverlay === 'function') showWaitOverlay('Submitting quiz...');
+    submitting = true;
+    clearQuizTimer();
+    if (typeof showWaitOverlay === 'function') {
+      showWaitOverlay(timeExpired ? 'Time is up — submitting quiz...' : 'Submitting quiz...');
+    }
     try {
-      var d = await lmsApi('/api/lms/attempts/' + attemptId + '/submit', { method: 'POST' });
+      var payload = timeExpired ? { time_expired: true } : {};
+      var d = await lmsApi('/api/lms/attempts/' + attemptId + '/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
       show('lmsQuizResult');
       document.getElementById('lmsQuizResult').innerHTML =
-        '<div style="text-align:center;font-size:2rem;">🎉</div>' +
-        '<h3 style="text-align:center;margin:6px 0 14px;color:var(--sd-blue-900);">Quiz Complete</h3>' +
+        '<div style="text-align:center;font-size:2rem;">' + (timeExpired ? '⏰' : '🎉') + '</div>' +
+        '<h3 style="text-align:center;margin:6px 0 14px;color:var(--sd-blue-900);">' +
+        (timeExpired ? 'Time\'s Up — Quiz Submitted' : 'Quiz Complete') + '</h3>' +
         '<div class="sd-result">' + window.sdRenderResultBody(d) + '</div>' +
         '<p class="sd-desc" style="text-align:center;margin-top:12px;">Your learning path may update based on results.</p>' +
         '<div style="display:flex;justify-content:center;margin-top:14px;"><button type="button" class="sd-btn sd-btn-primary" onclick="exitLmsQuizTaking()">Back to My Classes</button></div>';
       window.loadLmsStudentDashboard();
     } catch (err) {
       if (typeof lmsShowToast === 'function') lmsShowToast(err.message || 'Submit failed', 'error');
+      submitting = false;
     } finally {
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
     }

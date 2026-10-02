@@ -73,12 +73,15 @@ class UserModel:
     
     @staticmethod
     def create_user(username: str, useremail: str, password: str, 
-                   class_standard: str, medium: str, groq_api_key: str = '', role: str = 'student') -> int:
+                   class_standard: str, medium: str, groq_api_key: str = '', role: str = 'student',
+                   full_name: str = None) -> int:
         """Create a new user in the database"""
         try:
             db = get_db()
+            display_name = (full_name or username or '').strip() or username
             user = DBUser(
                 username=username,
+                full_name=display_name,
                 useremail=useremail,
                 password=password,
                 class_standard=class_standard,

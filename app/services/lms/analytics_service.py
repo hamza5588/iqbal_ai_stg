@@ -17,7 +17,13 @@ from app.models.lms_models import (
 )
 from app.services.lms.class_service import list_class_students, teacher_owns_class
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
-from app.services.lms.performance_service import WEAK_THRESHOLD, get_overall_progress, get_student_mastery
+from app.services.lms.performance_service import (
+    MASTERED_THRESHOLD,
+    WEAK_THRESHOLD,
+    get_overall_progress,
+    get_student_mastery,
+    is_weak_mastery,
+)
 from app.utils.db import get_db
 
 
@@ -184,7 +190,8 @@ def get_class_roster_summary(class_id: int, teacher_id: int) -> List[dict]:
     for enr in enrollments:
         user = db.query(DBUser).filter(DBUser.id == enr.student_id).first()
         mastery = get_student_mastery(enr.student_id)
-        weak = [m for m in mastery if m.get("mastery_status") == "weak"]
+        # Prefer live mastery rows that are not fully mastered (any miss = practice).
+        weak = [m for m in mastery if is_weak_mastery(m)]
         weak_topics = [
             {
                 "topic_id": m["topic_id"],
@@ -204,8 +211,10 @@ def get_class_roster_summary(class_id: int, teacher_id: int) -> List[dict]:
                 "weak_topic_count": len(weak_topics),
                 "weak_topics": weak_topics,
                 "has_mastery_data": bool(mastery),
-                # No topic data yet (not attempted) is not "struggling": 0.0 there means "unknown".
-                "is_struggling": bool(mastery) and (len(weak_topics) >= 2 or progress < WEAK_THRESHOLD),
+                # Still learning until 100% mastery — no 60% "on track" rule.
+                "is_struggling": bool(mastery) and (
+                    len(weak_topics) > 0 or (progress is not None and progress < MASTERED_THRESHOLD)
+                ),
                 "enrolled_at": enr.enrolled_at.isoformat() if enr.enrolled_at else None,
             }
         )

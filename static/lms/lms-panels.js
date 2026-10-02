@@ -112,7 +112,7 @@
   window.openLmsTutorPanel = function (role) {
     if (lmsBlockUntilDiagnostic()) return;
     tutorRole = role || 'student';
-    document.getElementById('lmsTutorModalTitle').textContent = role === 'teacher' ? 'Teaching Assistant' : 'AI Tutor';
+    document.getElementById('lmsTutorModalTitle').textContent = 'AI Tutor';
     tutorHistory = [];
     lmsOpenModal('lmsTutorModal');
     loadTutorHistory();

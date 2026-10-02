@@ -17,8 +17,8 @@ from app.utils.llm_factory import get_chat_model
 
 logger = logging.getLogger(__name__)
 
-WEAK_THRESHOLD = 60.0
-_STRONG_THRESHOLD = 80.0
+WEAK_THRESHOLD = 100.0
+_STRONG_THRESHOLD = 100.0
 
 
 class WeakAreaItem(BaseModel):
@@ -46,8 +46,8 @@ Rules for area names:
 - NEVER use ALL CAPS titles or phrases like "IMPLEMENTATION REPORT", "FIXES MERGED", "PRS AWAITING".
 - score_percent = round(100 * correct / total) for questions in that area.
 - all_areas: EVERY area you identify, each question_id in exactly one area, so all_areas together cover 100% of the questions.
-- weak_areas: the subset of all_areas where score_percent < 60
-- strong_areas: the subset of all_areas where score_percent >= 80
+- weak_areas: the subset of all_areas where score_percent < 100 (any incorrect answers in that area)
+- strong_areas: the subset of all_areas where score_percent == 100 (fully correct)
 - The same area object may appear in all_areas and (weak_areas or strong_areas).
 
 Diagnostic title: {title}

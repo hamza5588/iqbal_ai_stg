@@ -3,7 +3,12 @@
    opens the per-topic practice panel (lms-panels.js). Path steps + Quiz History keep the old overview's actions. */
 (function () {
   var state = { open: {}, attempts: null };
-  var STATUS_LABEL = { mastered: 'Mastered', improving: 'Improving', needs_practice: 'Needs practice', weak: 'Weak' };
+  var STATUS_LABEL = {
+    mastered: 'Mastered',
+    improving: 'Still learning',
+    needs_practice: 'Still learning',
+    weak: 'Still learning'
+  };
 
   function topicRows() {
     var d = window.sdDashboard || {};

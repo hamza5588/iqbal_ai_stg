@@ -1,6 +1,6 @@
 {# Screen 12 — AI Tutor.
    "Lesson Chat" = the RAG / PDF lesson workspace (teacher-core.js: sendMessage, chat history, save lesson, TTS/STT).
-   "Teaching Assistant" = LMS teacher tutor (lms-panels.js renders into #lmsTutorModalBody; POST /api/lms/teacher/tutor). #}
+   "AI Tutor" = LMS teacher tutor (lms-panels.js renders into #lmsTutorModalBody; POST /api/lms/teacher/tutor). #}
 <div class="td-tutor-shell">
   <div class="td-tutor-top">
     <div class="td-mode-toggle" role="tablist" aria-label="AI Tutor mode">
@@ -8,7 +8,7 @@
         <img src="{{ url_for('static', filename='teacher/icons/ai-chat-bot.png') }}" alt=""> Lesson Chat
       </button>
       <button type="button" data-tutor-mode="assistant" onclick="tdSetTutorMode('assistant')">
-        <img src="{{ url_for('static', filename='teacher/icons/ai-tutor.png') }}" alt=""> Teaching Assistant
+        <img src="{{ url_for('static', filename='teacher/icons/ai-tutor.png') }}" alt=""> AI Tutor
       </button>
     </div>
     <div class="td-tutor-tools" data-tutor-tools="chat">
@@ -109,9 +109,9 @@
     </div>
   </div>
 
-  {# ── Teaching Assistant (LMS tutor). ids match lms-panels.js ensureModal('lmsTutorModal') so it renders inline here. ── #}
+  {# ── AI Tutor (LMS tutor). ids match lms-panels.js ensureModal('lmsTutorModal') so it renders inline here. ── #}
   <div class="td-tutor-pane" id="lmsTutorModal" hidden>
-    <h2 id="lmsTutorModalTitle" hidden>Teaching Assistant</h2>
+    <h2 id="lmsTutorModalTitle" hidden>AI Tutor</h2>
     <div class="td-assistant-body">
       <div id="lmsTutorModalBody"></div>
     </div>

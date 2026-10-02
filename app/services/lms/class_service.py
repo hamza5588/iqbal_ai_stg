@@ -271,14 +271,19 @@ def list_eligible_students(class_id: int, teacher_id: int) -> List[dict]:
 def list_class_students_detailed(class_id: int, teacher_id: int) -> List[dict]:
     if not teacher_owns_class(teacher_id, class_id):
         raise LMSValidationError("Not authorized")
-    from app.services.lms.performance_service import get_overall_progress, get_student_mastery, WEAK_THRESHOLD
+    from app.services.lms.performance_service import (
+        MASTERED_THRESHOLD,
+        get_overall_progress,
+        get_student_mastery,
+        is_weak_mastery,
+    )
 
     enrollments = list_class_students(class_id)
     roster = []
     for enr in enrollments:
         user = _get_user(enr.student_id)
         mastery = get_student_mastery(enr.student_id)
-        weak = [m for m in mastery if m.get("mastery_status") == "weak"]
+        weak = [m for m in mastery if is_weak_mastery(m)]
         progress = get_overall_progress(enr.student_id)
         roster.append(
             {
@@ -291,8 +296,9 @@ def list_class_students_detailed(class_id: int, teacher_id: int) -> List[dict]:
                 "overall_progress": progress,
                 "weak_topic_count": len(weak),
                 "has_mastery_data": bool(mastery),
-                # No topic data yet (not attempted) is not "struggling": 0.0 there means "unknown".
-                "is_struggling": bool(mastery) and (len(weak) >= 2 or progress < WEAK_THRESHOLD),
+                "is_struggling": bool(mastery) and (
+                    len(weak) > 0 or (progress is not None and progress < MASTERED_THRESHOLD)
+                ),
             }
         )
     return roster

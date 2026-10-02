@@ -562,7 +562,7 @@
           const userNameMobile = document.getElementById('userNameMobile');
           const userAvatarMobile = document.getElementById('userAvatarMobile');
           if (window.teacherUserInfo) {
-            const name = window.teacherUserInfo.username || window.teacherUserInfo.email || 'Teacher';
+            const name = window.teacherUserInfo.full_name || window.teacherUserInfo.name || window.teacherUserInfo.username || window.teacherUserInfo.email || 'Teacher';
             const initial = (name || 'T').charAt(0).toUpperCase();
             if (userNameEl) userNameEl.textContent = name;
             if (userAvatarEl) userAvatarEl.textContent = initial;

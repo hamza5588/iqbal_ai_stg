@@ -539,7 +539,7 @@ def _enrichment_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
 
     rows = performance_service.get_student_mastery(student_id) or []
     strong = sorted(
-        (r for r in rows if (r.get("score_percent") or 0) >= 60 and r.get("topic_id")),
+        (r for r in rows if (r.get("score_percent") or 0) >= 100 and r.get("topic_id")),
         key=lambda r: -(r.get("score_percent") or 0),
     )[:3]
     if strong:

@@ -198,6 +198,7 @@ def register():
             
             # Get all required form fields with validation
             username = request.form.get('username')
+            full_name = (request.form.get('full_name') or request.form.get('name') or '').strip()
             password = request.form.get('password')
             class_standard = request.form.get('class_standard', '')  # Optional field - defaults to empty string
             medium = request.form.get('medium')
@@ -206,6 +207,8 @@ def register():
             
             # Validate required fields (groq_api_key and class_standard are optional, so not included in validation)
             missing_fields = []
+            if not full_name:
+                missing_fields.append('name')
             if not username:
                 missing_fields.append('username')
             if not password:
@@ -226,7 +229,8 @@ def register():
                 class_standard=class_standard,
                 medium=medium,
                 groq_api_key=groq_api_key,  # Will default to empty string if not provided
-                role=role
+                role=role,
+                full_name=full_name,
             )
             
             # Mark verification token as used and clean up all tokens for this email
@@ -239,6 +243,7 @@ def register():
             session.clear()
             session['user_id'] = user_id
             session['username'] = username
+            session['full_name'] = full_name
             session['role'] = role or 'student'
             session['groq_api_key'] = groq_api_key or ''
             session.permanent = True
@@ -272,6 +277,7 @@ def login():
                 session.clear()
                 session['user_id'] = user['id']
                 session['username'] = user['username']
+                session['full_name'] = user.get('full_name') or user['username']
                 session['role'] = user.get('role', 'student')  # Store role in session
                 session['groq_api_key'] = user.get('groq_api_key', '')  # Default to empty string if not present
                 session.permanent = True  # Make session permanent for 24 hours

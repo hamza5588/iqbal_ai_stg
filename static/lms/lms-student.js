@@ -368,6 +368,7 @@
       if (allSynced) clearDiagLocal(diagState.attemptId);
     }
     clearDiagTimer();
+    if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
     try { localStorage.removeItem('lmsDiagWs:' + (diagState.attemptId || 'x')); } catch (e) { /* ignore */ }
     closeDiagSurface();
     diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {}, expiresAt: null, remainingSeconds: null, timerInterval: null };
@@ -519,6 +520,7 @@
         body.innerHTML = '<p class="lms-error">No questions in this diagnostic.</p>';
         return;
       }
+      if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(true);
       renderDiagnosticQuestion();
       startDiagTimer();
     } catch (err) {
@@ -594,7 +596,7 @@
       (diagState.answers[idx] !== undefined
         ? '<button type="button" class="sd-icon-btn" onclick="clearDiagAnswer(' + idx + ')"><i class="fas fa-eraser"></i> Clear answer</button>'
         : '') +
-      '<button type="button" class="sd-icon-btn" title="Copy question text" onclick="lmsCopyDiagQuestion(this)"><i class="far fa-clipboard"></i> Copy</button>' +
+      // Copy intentionally omitted on diagnostic assessments.
       // --lms-font-scale is a live CSS custom property - text resizes
       // immediately, no re-render needed.
       '<button type="button" class="sd-icon-btn lms-font-btn" title="Smaller text" onclick="lmsStepFont(-1)">A-</button>' +
@@ -631,19 +633,9 @@
     if (window._lmsDiagWorkspaceOpen && typeof window.mountDiagWorkspace === 'function') window.mountDiagWorkspace();
   }
 
-  window.lmsCopyDiagQuestion = function (btn) {
-    var item = diagState.questions[diagState.current];
-    if (!item) return;
-    var q = item.question || item;
-    var lines = [(typeof window.lmsQuestionText === 'function' ? window.lmsQuestionText(q) : (q.question_text || '')).trim()];
-    (q.options || []).forEach(function (o, oi) {
-      var label = o.label || String.fromCharCode(65 + oi);
-      var text = (typeof window.lmsOptionText === 'function' ? window.lmsOptionText(o) : (o.text || o.latex || ''));
-      lines.push(label + '. ' + String(text).trim());
-    });
-    if (typeof window.lmsCopyToClipboard === 'function') {
-      window.lmsCopyToClipboard(lines.join('\n'), btn);
-    }
+  window.lmsCopyDiagQuestion = function () {
+    /* Copy is disabled during diagnostic assessments. */
+    return;
   };
 
   window.selectDiagOption = function (qIdx, optIdx) {

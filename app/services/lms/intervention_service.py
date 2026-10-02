@@ -7,12 +7,12 @@ from app.services.lms.analytics_service import aggregate_class_topics, get_strug
 from app.services.lms.assessment_service import list_assessments_by_teacher
 from app.services.lms.class_service import teacher_owns_class
 from app.services.lms.exceptions import LMSValidationError
-from app.services.lms.performance_service import get_student_mastery, WEAK_THRESHOLD
+from app.services.lms.performance_service import get_student_mastery, is_weak_mastery
 
 
 def recommend_for_student(student_id: int, topic_id: Optional[int] = None) -> List[dict]:
     mastery = get_student_mastery(student_id)
-    weak = [m for m in mastery if m.get("mastery_status") == "weak" or m.get("score_percent", 100) < WEAK_THRESHOLD]
+    weak = [m for m in mastery if is_weak_mastery(m)]
     if topic_id:
         weak = [m for m in weak if m["topic_id"] == topic_id]
     recs = []
@@ -21,13 +21,13 @@ def recommend_for_student(student_id: int, topic_id: Optional[int] = None) -> Li
             {
                 "type": "review_topic",
                 "topic_id": w["topic_id"],
-                "priority": "high" if w.get("score_percent", 0) < 40 else "medium",
+                "priority": "high" if w.get("score_percent", 0) < 100 else "medium",
                 "message": f"Review topic #{w['topic_id']} — score {w.get('score_percent', 0):.0f}%",
                 "actions": ["assign_practice_quiz", "schedule_reassessment"],
             }
         )
     if not recs:
-        recs.append({"type": "on_track", "message": "No interventions needed.", "priority": "low"})
+        recs.append({"type": "mastered", "message": "Complete mastery — no interventions needed.", "priority": "low"})
     return recs
 
 

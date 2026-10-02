@@ -18,9 +18,40 @@ from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
 
-MASTERED_THRESHOLD = 85.0
-WEAK_THRESHOLD = 60.0
-PRACTICE_TARGET_THRESHOLD = 99.5
+MASTERED_THRESHOLD = 100.0
+# Anything below full mastery still needs practice / Learning Chat.
+WEAK_THRESHOLD = 100.0
+PRACTICE_TARGET_THRESHOLD = 100.0
+
+
+def compute_mastery_status(score_percent: float, previous: Optional[float] = None) -> str:
+    """100% = mastered; anything below = still learning (needs practice)."""
+    if score_percent >= MASTERED_THRESHOLD:
+        return "mastered"
+    if previous is not None and score_percent > previous:
+        return "improving"
+    return "needs_practice"
+
+
+def score_percent_value(row: dict, default: float = 100.0) -> float:
+    """Read score_percent safely — 0.0 is a real score, not 'missing'."""
+    raw = row.get("score_percent") if isinstance(row, dict) else None
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def is_weak_mastery(row: dict) -> bool:
+    """True when the topic is not fully mastered (score below 100%)."""
+    status = (row.get("mastery_status") or "").strip().lower()
+    if status == "mastered":
+        return False
+    if status in ("weak", "needs_practice", "improving"):
+        return True
+    return score_percent_value(row) < MASTERED_THRESHOLD
 
 
 def _parse_assessment_meta(assessment) -> dict:
@@ -164,35 +195,6 @@ def _topic_display_name(topic_id: int, fallback: str = "Topic") -> str:
         return curriculum_service.get_topic_by_id(topic_id).name
     except Exception:
         return fallback
-
-
-def compute_mastery_status(score_percent: float, previous: Optional[float] = None) -> str:
-    if score_percent >= MASTERED_THRESHOLD:
-        return "mastered"
-    if score_percent < WEAK_THRESHOLD:
-        return "weak"
-    if previous is not None and score_percent > previous:
-        return "improving"
-    return "needs_practice"
-
-
-def score_percent_value(row: dict, default: float = 100.0) -> float:
-    """Read score_percent safely — 0.0 is a real score, not 'missing'."""
-    raw = row.get("score_percent") if isinstance(row, dict) else None
-    if raw is None:
-        return default
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return default
-
-
-def is_weak_mastery(row: dict) -> bool:
-    """Match Topic Mastery Breakdown pie 'Weak' slice (status or < WEAK_THRESHOLD)."""
-    status = (row.get("mastery_status") or "").strip().lower()
-    if status == "weak":
-        return True
-    return score_percent_value(row) < WEAK_THRESHOLD
 
 
 # Keep blended sample_size bounded so later evidence still moves the score.
@@ -530,9 +532,10 @@ def analyze_attempt(attempt_id: int) -> dict:
             "total": row["total"],
         }
         all_topics.append(entry)
-        if row["score_percent"] < WEAK_THRESHOLD:
+        # Any incorrect answers on a topic → Learning Chat practice area.
+        if row["correct"] < row["total"] or row["score_percent"] < MASTERED_THRESHOLD:
             weak.append(entry)
-        elif row["score_percent"] >= 80.0:
+        elif row["score_percent"] >= MASTERED_THRESHOLD:
             strong.append(entry)
 
     return {"weak_topics": weak, "strong_topics": strong, "all_topics": all_topics}

@@ -437,8 +437,8 @@
       ? 'conic-gradient(#60a5fa 0% ' + a + '%, #f87171 ' + a + '% ' + b + '%, #e2e8f0 ' + b + '% 100%)'
       : '#e2e8f0';
     $('tdAnaLegend').innerHTML =
-      '<span><span class="td-legend-dot" style="background:#60a5fa;"></span>On Track</span><span>' + counts.on_track + ' (' + pct(counts.on_track) + '%)</span>' +
-      '<span><span class="td-legend-dot" style="background:#f87171;"></span>Needs Help</span><span>' + counts.needs_help + ' (' + pct(counts.needs_help) + '%)</span>' +
+      '<span><span class="td-legend-dot" style="background:#60a5fa;"></span>Mastered (100%)</span><span>' + counts.on_track + ' (' + pct(counts.on_track) + '%)</span>' +
+      '<span><span class="td-legend-dot" style="background:#f87171;"></span>Still Learning</span><span>' + counts.needs_help + ' (' + pct(counts.needs_help) + '%)</span>' +
       '<span><span class="td-legend-dot" style="background:#e2e8f0;"></span>Not Attempted</span><span>' + counts.not_attempted + ' (' + pct(counts.not_attempted) + '%)</span>';
 
     var body = $('tdAnaRosterRows');
@@ -447,8 +447,8 @@
     var rows = sortStudents(filterStudents(roster)).filter(function (s) { return !statusFilter || studentStatus(s) === statusFilter; });
     setEmpty('tdAnaRosterEmpty', rows.length ? '' : '<p>No students match these filters.</p>');
     var BADGE = {
-      on_track: '<span class="td-status-badge td-status-good">ON TRACK</span>',
-      needs_help: '<span class="td-status-badge td-status-help">NEEDS HELP</span>',
+      on_track: '<span class="td-status-badge td-status-good">MASTERED</span>',
+      needs_help: '<span class="td-status-badge td-status-help">STILL LEARNING</span>',
       not_attempted: '<span class="td-status-badge td-status-muted">NOT ATTEMPTED</span>'
     };
     body.innerHTML = rows.map(function (s, i) {

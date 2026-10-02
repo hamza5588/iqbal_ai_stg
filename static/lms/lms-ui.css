@@ -1608,3 +1608,13 @@ html.dark .lms-expand-item-warn, .dark .lms-expand-item-warn { color: #fde68a; }
 html.dark .lms-expand-item-bad, .dark .lms-expand-item-bad { color: #fca5a5; }
 html.dark .lms-expand-item-info, .dark .lms-expand-item-info { color: #7dd3fc; }
 html.dark .lms-btn-danger, .dark .lms-btn-danger { background: #450a0a; color: #fecaca; border-color: #7f1d1d; }
+
+/* Assessment/quiz copy protection (AI Tutor + Learning Chat exempt) */
+html.lms-no-copy-assess #lmsDiagBody,
+html.lms-no-copy-assess #lmsQuizTaking,
+html.lms-no-copy-assess .lms-quiz-taking,
+html.lms-no-copy-assess .sd-q-box,
+html.lms-no-copy-assess .lms-diag-surface {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}

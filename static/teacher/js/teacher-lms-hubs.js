@@ -601,11 +601,22 @@
       const title = document.getElementById('lmsQuizTitle').value.trim();
       const file = document.getElementById('lmsQuizPdfFile').files[0];
       const countEl = document.getElementById('lmsQuizMcqCount');
+      const durationEl = document.getElementById('lmsQuizDuration');
       const btn = document.getElementById('lmsQuizSubmitBtn');
       const status = document.getElementById('lmsQuizStatus');
       let questionCount = parseInt(countEl && countEl.value, 10);
       if (!Number.isFinite(questionCount) || questionCount < 1) questionCount = 10;
       if (questionCount > 40) questionCount = 40;
+      const durationRaw = durationEl ? String(durationEl.value || '').trim() : '';
+      if (!/^[1-9]\d*$/.test(durationRaw)) {
+        if (status) {
+          status.textContent = 'Error: Duration must be a whole number of minutes (1 or more). Decimals, zero, and negative values are not allowed.';
+        }
+        if (durationEl) durationEl.focus();
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
+      const timeLimitMinutes = parseInt(durationRaw, 10);
       if (!file) {
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
@@ -623,6 +634,7 @@
       fd.append('title', title);
       fd.append('file', file);
       fd.append('question_count', String(questionCount));
+      fd.append('time_limit_minutes', String(timeLimitMinutes));
       try {
         const res = await fetch('/api/lms/quizzes/from-pdf', { method: 'POST', body: fd, credentials: 'include' });
         const data = await res.json();

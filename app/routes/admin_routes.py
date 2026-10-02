@@ -198,6 +198,7 @@ def create_user():
     try:
         data = request.json
         username = data.get('username', '').strip()
+        full_name = (data.get('full_name') or data.get('name') or username).strip()
         useremail = data.get('useremail', '').strip()
         password = data.get('password', '').strip()
         role = data.get('role', 'student').strip()
@@ -228,7 +229,8 @@ def create_user():
             class_standard=class_standard,
             medium=medium,
             groq_api_key='',
-            role=role
+            role=role,
+            full_name=full_name or username,
         )
         
         return jsonify({

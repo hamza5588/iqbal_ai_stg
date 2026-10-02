@@ -354,6 +354,20 @@ def init_db(app):
                         db.commit()
                         if existing_users:
                             logger.info(f"Updated {len(existing_users)} users with default subscription tier")
+
+                    # Display name for teacher/student registration
+                    columns = [col['name'] for col in inspector.get_columns('users')]
+                    if 'full_name' not in columns:
+                        logger.info("Adding full_name column to users table...")
+                        db.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(255)"))
+                        db.commit()
+                        logger.info("full_name column added successfully")
+                    # Backfill empty full_name from username for existing accounts
+                    db.execute(text(
+                        "UPDATE users SET full_name = username "
+                        "WHERE full_name IS NULL OR TRIM(full_name) = ''"
+                    ))
+                    db.commit()
             except Exception as e:
                 logger.warning(f"Subscription migration warning: {str(e)}")
                 db.rollback()

@@ -6,7 +6,7 @@
     <div><h2>Create New Quiz</h2><p>Add quiz details to create a new quiz.</p></div>
   </div>
   <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)" data-wait-message="Generating quiz questions..." data-wait-sticky>
-    <div class="td-form-grid" style="grid-template-columns:1fr 1.3fr 1fr;">
+    <div class="td-form-grid" style="grid-template-columns:1fr 1.2fr 0.8fr 0.8fr;">
       <div class="td-field">
         <label for="lmsQuizTitle">Quiz title <span class="req">*</span></label>
         <input id="lmsQuizTitle" type="text" required placeholder="e.g. Chapter 5 Post Test">
@@ -23,7 +23,13 @@
       </div>
       <div class="td-field">
         <label for="lmsQuizMcqCount">Number of MCQs <span class="req">*</span></label>
-        <input id="lmsQuizMcqCount" type="number" min="1" max="40" value="10" required>
+        <input id="lmsQuizMcqCount" type="number" min="1" max="40" step="1" value="10" required>
+      </div>
+      <div class="td-field">
+        <label for="lmsQuizDuration">Duration (minutes) <span class="req">*</span></label>
+        <input id="lmsQuizDuration" type="number" min="1" step="1" inputmode="numeric" required
+               placeholder="e.g. 20" title="Whole number of minutes (1 or more)">
+        <p class="td-help" id="lmsQuizDurationHint" style="margin:6px 0 0;">Enter a whole number such as 1, 10, or 60. Zero, decimals, and negatives are not allowed.</p>
       </div>
     </div>
     <p class="td-help">Upload any lesson/notes PDF. If it already has Q&amp;A, those are used; otherwise MCQs are generated from the content.</p>

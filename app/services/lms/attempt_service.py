@@ -269,6 +269,14 @@ def start_attempt(
 
         total_seconds = compute_attempt_deadline(assessment_id)
         attempt.expires_at = datetime.utcnow() + timedelta(seconds=total_seconds)
+    elif (
+        assessment.assessment_type == "quiz"
+        and assessment.time_limit_minutes
+        and int(assessment.time_limit_minutes) > 0
+    ):
+        attempt.expires_at = datetime.utcnow() + timedelta(
+            minutes=int(assessment.time_limit_minutes)
+        )
 
     db.add(attempt)
     db.commit()

@@ -1859,6 +1859,8 @@ def get_user_info():
             'user': {
                 'id': user_info['id'],
                 'username': user_info['username'],
+                'full_name': user_info.get('full_name') or user_info['username'],
+                'name': user_info.get('full_name') or user_info['username'],
                 'role': user_info.get('role', 'student'),
                 'class_standard': user_info['class_standard'],
                 'medium': user_info['medium']

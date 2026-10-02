@@ -5,8 +5,8 @@
     <div class="td-legend" id="tdAnaLegend"></div>
     <div class="td-stat-grid">
       <div class="td-stat-box"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatTotal">0</b>Total Students</div>
-      <div class="td-stat-box green"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatOnTrack">0</b>On Track</div>
-      <div class="td-stat-box red"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatHelp">0</b>Needs Help</div>
+      <div class="td-stat-box green"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatOnTrack">0</b>Mastered (100%)</div>
+      <div class="td-stat-box red"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatHelp">0</b>Still Learning</div>
       <div class="td-stat-box grey"><div class="td-stat-ic"><i class="fas fa-users"></i></div><b id="tdAnaStatNone">0</b>Not Attempted</div>
     </div>
   </div>
@@ -16,8 +16,8 @@
     <label class="td-sort" style="padding:0;">Status:
       <select id="tdAnaRosterStatus" class="td-select" style="min-width:150px;font-weight:600;" onchange="tdAnalytics.rerender()">
         <option value="">All</option>
-        <option value="on_track">On Track</option>
-        <option value="needs_help">Needs Help</option>
+        <option value="on_track">Mastered (100%)</option>
+        <option value="needs_help">Still Learning</option>
         <option value="not_attempted">Not Attempted</option>
       </select>
     </label>

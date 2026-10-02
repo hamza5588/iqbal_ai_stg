@@ -62,11 +62,13 @@
       var isPub = z.status === 'published';
       var prev = state.previews[z.id];
       var count = prev && prev.questions ? prev.questions.length : null;
+      var mins = z.time_limit_minutes;
       return '<div class="td-quiz-card" data-quiz-id="' + z.id + '">' +
         '<div class="td-quiz-head">' +
           '<div class="td-avatar-sm"><i class="far fa-clipboard"></i></div>' +
           '<h3 onclick="tdQuizzes.toggle(' + z.id + ')">' + U.esc(z.title || 'Untitled quiz') + '</h3>' +
           (count != null ? '<span class="td-pill">' + count + ' MCQ' + (count === 1 ? '' : 's') + '</span>' : '') +
+          (mins ? '<span class="td-pill"><i class="far fa-clock"></i> ' + mins + ' min</span>' : '') +
           '<div class="td-side-meta">' +
             (isPub ? '<span class="td-pill green"><i class="fas fa-check-circle"></i> Published</span>' : '<span class="td-pill orange">Draft</span>') +
             (isPub ? '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.openAssign(' + z.id + ')"><i class="fas fa-users"></i> Assign</button>' : '') +
@@ -87,12 +89,22 @@
     if (!prev) return '<div class="td-empty" style="padding:20px;"><div class="td-spinner"></div></div>';
     if (prev.error) return '<p class="td-error">' + U.esc(prev.error) + '</p>';
     var qs = prev.questions || [];
+    var mins = z.time_limit_minutes != null ? z.time_limit_minutes : '';
+    var settings =
+      '<div class="td-field" style="max-width:260px;margin:0 0 14px;">' +
+        '<label for="tdQuizDuration-' + z.id + '">Duration (minutes) <span class="req">*</span></label>' +
+        '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<input id="tdQuizDuration-' + z.id + '" type="number" min="1" step="1" inputmode="numeric" value="' + U.esc(String(mins)) + '" placeholder="e.g. 20">' +
+          '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.saveDuration(' + z.id + ')">Save</button>' +
+        '</div>' +
+        '<p class="td-help" style="margin:6px 0 0;">Whole minutes only (1+). Applies to the student countdown timer.</p>' +
+      '</div>';
     var head = '<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;gap:10px;flex-wrap:wrap;">' +
       '<h4 style="margin:0;">MCQs (' + qs.length + ')</h4>' +
       (z.status !== 'published' && qs.length ? '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.publish(' + z.id + ', this)">Publish Quiz</button>' : '') +
       '</div>';
-    if (!qs.length) return head + '<p class="td-desc">No questions generated for this quiz.</p>';
-    return head + '<div class="td-mcq-strip">' + qs.map(function (item, idx) {
+    if (!qs.length) return settings + head + '<p class="td-desc">No questions generated for this quiz.</p>';
+    return settings + head + '<div class="td-mcq-strip">' + qs.map(function (item, idx) {
       var q = item.question || {};
       var stem = typeof window.lmsQuestionText === 'function' ? window.lmsQuestionText(q) : (q.question_text || q.question_latex || '');
       var opts = (q.options || []).map(function (o, oi) {
@@ -104,6 +116,29 @@
       var stemHtml = typeof window._lmsFmtText === 'function' ? window._lmsFmtText(stem, true) : U.esc(stem);
       return '<div class="td-mcq"><div class="td-mcq-q"><b>Q' + (idx + 1) + '.</b> ' + stemHtml + '</div>' + opts + '</div>';
     }).join('') + '</div>';
+  }
+
+  async function saveDuration(id) {
+    var input = $('tdQuizDuration-' + id);
+    var raw = input ? String(input.value || '').trim() : '';
+    if (!/^[1-9]\d*$/.test(raw)) {
+      U.toast('Duration must be a whole number of minutes (1 or more). Decimals, zero, and negatives are not allowed.', 'error');
+      if (input) input.focus();
+      return;
+    }
+    try {
+      var updated = await lmsApi('/api/lms/quizzes/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ time_limit_minutes: parseInt(raw, 10) })
+      });
+      var row = state.quizzes.find(function (z) { return z.id === id; });
+      if (row) row.time_limit_minutes = updated.time_limit_minutes;
+      U.toast('Quiz duration saved (' + raw + ' min)');
+      render();
+    } catch (err) {
+      U.toast(err.message || 'Could not save duration', 'error');
+    }
   }
 
   async function toggle(id) {
@@ -206,6 +241,7 @@
 
   window.tdQuizzes = {
     load: load, render: render, setTab: setTab, toggle: toggle, publish: publish,
+    saveDuration: saveDuration,
     openCreate: openCreate, closeCreate: closeCreate, onFileChosen: onFileChosen, openAssign: openAssign,
     _state: state
   };

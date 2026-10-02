@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import List, Optional
+import re
+from typing import List, Optional, Union
 
 from app.models.lms_models import Assessment, AssessmentQuestion, DiagnosticTargetPdf, PdfQaExtraction, QuizPdfSource
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
@@ -11,6 +12,52 @@ from app.utils.db import get_db
 
 CONFIDENCE_PUBLISH_MIN = 0.60
 logger = logging.getLogger(__name__)
+
+_POSITIVE_WHOLE_MINUTES = re.compile(r"^[1-9]\d*$")
+
+
+def parse_positive_whole_minutes(
+    value: Union[str, int, float, None],
+    *,
+    required: bool = True,
+    field_label: str = "Quiz duration (minutes)",
+) -> Optional[int]:
+    """Validate teacher-configured quiz duration.
+
+    Accepts only positive whole numbers (1, 2, 3, …). Rejects 0, negatives,
+    empty, and non-numeric input.
+    """
+    if value is None or (isinstance(value, str) and not str(value).strip()):
+        if required:
+            raise LMSValidationError(
+                f"{field_label} is required. Enter a whole number of minutes (1 or more)."
+            )
+        return None
+    if isinstance(value, bool):
+        raise LMSValidationError(
+            f"{field_label} must be a whole number of minutes (1 or more)."
+        )
+    if isinstance(value, float):
+        if not value.is_integer() or value <= 0:
+            raise LMSValidationError(
+                f"{field_label} must be a whole number of minutes (1 or more). "
+                "Decimals, zero, and negative values are not allowed."
+            )
+        return int(value)
+    if isinstance(value, int):
+        if value <= 0:
+            raise LMSValidationError(
+                f"{field_label} must be a whole number of minutes (1 or more). "
+                "Decimals, zero, and negative values are not allowed."
+            )
+        return value
+    text = str(value).strip()
+    if not _POSITIVE_WHOLE_MINUTES.fullmatch(text):
+        raise LMSValidationError(
+            f"{field_label} must be a whole number of minutes (1 or more). "
+            "Decimals, zero, and negative values are not allowed."
+        )
+    return int(text)
 
 
 def create_assessment(
@@ -36,6 +83,35 @@ def create_assessment(
         time_limit_minutes=time_limit_minutes,
     )
     db.add(assessment)
+    db.commit()
+    db.refresh(assessment)
+    return assessment
+
+
+def update_quiz_settings(
+    assessment_id: int,
+    *,
+    teacher_id: int,
+    title: Optional[str] = None,
+    time_limit_minutes: Optional[Union[str, int, float]] = None,
+    update_time_limit: bool = False,
+) -> Assessment:
+    """Update teacher quiz metadata (title / duration)."""
+    assessment = get_assessment(assessment_id)
+    if assessment.assessment_type != "quiz":
+        raise LMSValidationError("Only quizzes can be updated with this endpoint")
+    if assessment.created_by != teacher_id:
+        raise LMSValidationError("Not authorized to edit this quiz")
+    if title is not None:
+        cleaned = str(title).strip()
+        if not cleaned:
+            raise LMSValidationError("Quiz title is required")
+        assessment.title = cleaned
+    if update_time_limit:
+        assessment.time_limit_minutes = parse_positive_whole_minutes(
+            time_limit_minutes, required=True
+        )
+    db = get_db()
     db.commit()
     db.refresh(assessment)
     return assessment

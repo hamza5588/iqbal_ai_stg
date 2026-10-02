@@ -139,6 +139,47 @@
     }
   };
 
+  /* Block copy/cut/context-menu on diagnostic + quiz taking surfaces only.
+     AI Tutor and Learning Chat keep copy enabled. */
+  var _assessCopyGuardOn = false;
+  var _assessCopySelectors = '#lmsDiagBody, #lmsQuizTaking, .lms-quiz-taking, .sd-q-box, .lms-diag-surface';
+  function _assessCopyTarget(el) {
+    try {
+      return !!(el && el.closest && el.closest(_assessCopySelectors));
+    } catch (e) {
+      return false;
+    }
+  }
+  function _onAssessCopyBlock(e) {
+    if (!_assessCopyGuardOn) return;
+    var t = e.target;
+    if (_assessCopyTarget(t) || (window.getSelection && _assessCopyTarget(window.getSelection().anchorNode))) {
+      e.preventDefault();
+      return false;
+    }
+  }
+  function _onAssessKeyBlock(e) {
+    if (!_assessCopyGuardOn) return;
+    var key = (e.key || '').toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && (key === 'c' || key === 'x' || key === 'a')) {
+      if (_assessCopyTarget(e.target) || (window.getSelection && _assessCopyTarget(window.getSelection().anchorNode))) {
+        e.preventDefault();
+        return false;
+      }
+    }
+  }
+  global.lmsSetAssessmentCopyGuard = function (enabled) {
+    _assessCopyGuardOn = !!enabled;
+    document.documentElement.classList.toggle('lms-no-copy-assess', _assessCopyGuardOn);
+    if (enabled && !document.documentElement.dataset.lmsCopyGuardBound) {
+      document.addEventListener('copy', _onAssessCopyBlock, true);
+      document.addEventListener('cut', _onAssessCopyBlock, true);
+      document.addEventListener('contextmenu', _onAssessCopyBlock, true);
+      document.addEventListener('keydown', _onAssessKeyBlock, true);
+      document.documentElement.dataset.lmsCopyGuardBound = '1';
+    }
+  };
+
   /* ---- Adjustable text size for question/answer/tutor content (DIL
      feedback: readability). Persisted per browser, applied via a CSS
      custom property so every LMS surface (--lms-font-scale) picks it up

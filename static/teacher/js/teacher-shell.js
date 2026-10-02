@@ -280,7 +280,7 @@
     }
   };
 
-  /* ── AI Tutor: Lesson Chat (RAG) ↔ Teaching Assistant (LMS tutor) ── */
+  /* ── AI Tutor: Lesson Chat (RAG) ↔ AI Tutor (LMS tutor) ── */
   var tutorMode = 'chat';
   window.tdSetTutorMode = function (mode) {
     tutorMode = mode === 'assistant' ? 'assistant' : 'chat';
