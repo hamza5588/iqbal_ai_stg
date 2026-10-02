@@ -21,8 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 def hybrid_vision_enabled() -> bool:
-    """Feature flag — default ON so diagnostic/quiz use image+text extraction."""
-    return os.getenv("QUIZ_HYBRID_VISION", "true").lower() in ("1", "true", "yes")
+    """Hybrid vision is mandatory for PDF → MCQ extraction (no text-only fallback).
+
+    ``QUIZ_HYBRID_VISION=false`` is ignored — PDF quizzes/diagnostics always use
+    dual-evidence (text + page images) via ``hybrid_vision_pipeline``.
+    """
+    raw = (os.getenv("QUIZ_HYBRID_VISION") or "true").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        logger.warning(
+            "QUIZ_HYBRID_VISION=%s is ignored; hybrid vision is always required.",
+            raw,
+        )
+    return True
 
 
 def _normalize_difficulty(raw: Optional[str]) -> Optional[str]:

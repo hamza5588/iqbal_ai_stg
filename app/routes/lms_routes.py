@@ -18,7 +18,7 @@ from app.services.lms import (
     student_profile_service,
     tutor_service,
 )
-from app.services.lms import deficiency_chat_service
+from app.services.lms import deficiency_chat_service, retake_request_service
 from app.services.lms.diagnostic_pdf_service import (
     generate_diagnostic_questions,
     get_diagnostic_status,
@@ -84,6 +84,60 @@ def _require_assessment_owner(assessment_id: int):
     elif assessment.created_by != _current_user_id() and _current_role() != "admin":
         return json_error("Forbidden", code="forbidden", status=403), None
     return None, assessment
+
+
+@bp.errorhandler(LMSValidationError)
+def _handle_lms_validation(e):
+    return json_error(str(e), code="validation_error")
+
+
+@bp.errorhandler(LMSNotFoundError)
+def _handle_lms_not_found(e):
+    return json_error(str(e), code="not_found", status=404)
+
+
+def _body_int(body: dict, key: str) -> int:
+    """Required integer field of a JSON body; a missing/garbage value is a 400, not a 500."""
+    try:
+        return int(body[key])
+    except (KeyError, TypeError, ValueError):
+        raise LMSValidationError(f"{key} is required and must be a number")
+
+
+def _require_diagnostic_done():
+    """Server-side half of the onboarding lock.
+
+    The student UI hides Learning Path / Classes / AI Tutor / Learning Chat until the
+    diagnostic is submitted; without this the same features stayed reachable by calling
+    the API directly. Only applies while a diagnostic exists for the student's grade,
+    so a grade with no diagnostic is never locked out.
+    """
+    if _current_role() != "student":
+        return None
+    uid = _current_user_id()
+    if student_profile_service.get_onboarding_status(uid).get("diagnostic_completed"):
+        return None
+    if not get_student_diagnostic_dict(uid):
+        return None
+    return json_error(
+        "Complete your diagnostic assessment first to unlock this.",
+        code="diagnostic_required",
+        status=403,
+    )
+
+
+def _can_view_attempt(attempt) -> bool:
+    """The student who owns it, an admin, the teacher who wrote the quiz, or a teacher
+    of a class the student is enrolled in - not every account with role=teacher."""
+    uid, role = _current_user_id(), _current_role()
+    if attempt.student_id == uid or role == "admin":
+        return True
+    if role != "teacher":
+        return False
+    assessment = assessment_service.get_assessment(attempt.assessment_id)
+    if assessment.assessment_type == "quiz" and assessment.created_by == uid:
+        return True
+    return class_service.teacher_has_student(uid, attempt.student_id)
 
 
 def _require_question_owner(question_id: int):
@@ -223,7 +277,7 @@ def classes():
     try:
         c = class_service.create_class(
             teacher_id=_current_user_id(),
-            name=body["name"],
+            name=body.get("name"),
             description=body.get("description"),
             grade_level=body.get("grade_level"),
         )
@@ -240,8 +294,11 @@ def classes():
 def join_class():
     if _current_role() != "student":
         return json_error("Only students can join classes", code="forbidden", status=403)
+    locked = _require_diagnostic_done()
+    if locked:
+        return locked
     body = request.get_json(silent=True) or {}
-    join_code = body.get("join_code", "").strip()
+    join_code = str(body.get("join_code") or "").strip()
     if not join_code:
         return json_error("join_code is required")
     try:
@@ -458,7 +515,7 @@ def create_quiz_from_pdf():
 @bp.route("/quizzes/<int:quiz_id>/process-pdf", methods=["POST"])
 @login_required
 def process_quiz_pdf(quiz_id: int):
-    """Re-run pipeline on an existing assessment using an ingested RAG thread."""
+    """Re-run hybrid vision on an existing assessment (requires PDF upload)."""
     denied = _require_permission(Permissions.CREATE_QUIZ)
     if denied:
         return denied
@@ -469,8 +526,44 @@ def process_quiz_pdf(quiz_id: int):
     question_count = body.get("question_count")
     if question_count is None:
         question_count = request.form.get("question_count", type=int)
+    denied, _assessment = _require_assessment_owner(quiz_id)
+    if denied:
+        return denied
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return json_error(
+            "PDF file is required for hybrid vision re-processing "
+            "(text-only / thread-only re-runs are disabled).",
+            code="validation_error",
+        )
+    file_bytes = file.read()
+    try:
+        from app.services.quiz.assessment_doc_validation import assert_supported_assessment_file
+
+        assert_supported_assessment_file(file.filename, file_bytes, label="Assessment PDF")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
     if not thread_id or not _validate_thread_id(thread_id, _current_user_id()):
-        return json_error("Valid thread_id is required", code="validation_error")
+        # New thread for this re-upload when none provided.
+        from app.tasks.quiz_pdf_tasks import enqueue_or_run_pdf_quiz
+
+        try:
+            result = enqueue_or_run_pdf_quiz(
+                assessment_id=quiz_id,
+                file_bytes=file_bytes,
+                filename=file.filename,
+                user_id=_current_user_id(),
+                topic_id=topic_id,
+                async_mode=False,
+                question_count=question_count,
+            )
+            return json_success(result)
+        except LMSValidationError as e:
+            return json_error(str(e), code="validation_error")
+        except Exception as e:
+            return json_error(str(e), code="pipeline_error", status=500)
 
     try:
         result = run_pdf_quiz_pipeline(
@@ -479,6 +572,7 @@ def process_quiz_pdf(quiz_id: int):
             user_id=_current_user_id(),
             topic_id=topic_id,
             question_count=question_count,
+            pdf_bytes=file_bytes,
         )
         return json_success(result)
     except LMSValidationError as e:
@@ -490,6 +584,9 @@ def process_quiz_pdf(quiz_id: int):
 @bp.route("/quizzes/<int:quiz_id>/pdf-status", methods=["GET"])
 @login_required
 def quiz_pdf_status(quiz_id: int):
+    denied, _assessment = _require_assessment_owner(quiz_id)
+    if denied:
+        return denied
     try:
         data = assessment_service.get_pdf_processing_status(quiz_id)
         task_id = (request.args.get("task_id") or "").strip()
@@ -640,6 +737,10 @@ def start_quiz_attempt(quiz_id: int):
     body = request.get_json(silent=True) or {}
     assignment_id = body.get("assignment_id")
     try:
+        if assessment_service.get_assessment(quiz_id).assessment_type != "diagnostic":
+            locked = _require_diagnostic_done()  # class quizzes are part of the locked "Classes" hub
+            if locked:
+                return locked
         attempt, resumed, already_completed = attempt_service.start_attempt(
             student_id=_current_user_id(),
             assessment_id=quiz_id,
@@ -691,12 +792,25 @@ def get_attempt_timer(attempt_id: int):
         return json_error(str(e), code="not_found", status=404)
 
 
+@bp.route("/attempts/<int:attempt_id>/heartbeat", methods=["POST"])
+@login_required
+def attempt_heartbeat(attempt_id: int):
+    """The quiz page pings this while it is open. A gap between pings means the student
+    was offline, and a diagnostic gets that time back (capped) - see attempt_service."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    attempt = attempt_service.get_attempt(attempt_id)
+    if attempt.student_id != _current_user_id():
+        return json_error("Forbidden", code="forbidden", status=403)
+    return json_success(attempt_service.heartbeat(attempt_id))
+
+
 @bp.route("/attempts/<int:attempt_id>/questions", methods=["GET"])
 @login_required
 def get_attempt_questions(attempt_id: int):
     try:
         attempt = attempt_service.get_attempt(attempt_id)
-        if attempt.student_id != _current_user_id() and _current_role() != "teacher":
+        if not _can_view_attempt(attempt):
             return json_error("Forbidden", code="forbidden", status=403)
         if attempt.status == "in_progress":
             state = attempt_service.get_attempt_delivery_state(attempt_id)
@@ -794,7 +908,7 @@ def submit_attempt(attempt_id: int):
 def get_attempt_results(attempt_id: int):
     try:
         attempt = attempt_service.get_attempt(attempt_id)
-        if attempt.student_id != _current_user_id() and _current_role() != "teacher":
+        if not _can_view_attempt(attempt):
             return json_error("Forbidden", code="forbidden", status=403)
         from app.utils.llm_gateway import llm_workflow
 
@@ -858,7 +972,48 @@ def default_diagnostic():
         diag["message"] = attempt_service.TIME_OVER_MESSAGE
     if diag["diagnostic_completed"] and completed_id:
         diag["completed_assessment_id"] = completed_id
+    # Students get the facts they need, not the internal meta blob (RAG thread ids etc.).
+    diag.pop("description", None)
+    # A retake of this diagnostic needs teacher approval; a diagnostic the student has
+    # never submitted (e.g. a newly published one) is a normal first attempt.
+    diag["attempted_this_diagnostic"] = latest is not None
+    diag["retake_request"] = retake_request_service.status_for_student(_current_user_id(), diag["id"])
     return json_success(diag)
+
+
+@bp.route("/diagnostics/<int:assessment_id>/retake-requests", methods=["POST"])
+@login_required
+def request_diagnostic_retake(assessment_id: int):
+    """Student asks to retake a diagnostic they already submitted (teacher/admin approves)."""
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    diag = get_student_diagnostic_dict(_current_user_id())
+    if not diag or diag["id"] != assessment_id:
+        return json_error("This diagnostic is not available", code="validation_error")
+    result = retake_request_service.request_retake(_current_user_id(), assessment_id)
+    return json_success(result, status=201 if result.get("created") else 200)
+
+
+@bp.route("/retake-requests", methods=["GET"])
+@login_required
+def list_retake_requests():
+    """Pending retake requests: a teacher sees their own students', an admin sees all."""
+    if _current_role() not in ("teacher", "admin"):
+        return json_error("Forbidden", code="forbidden", status=403)
+    return json_success(retake_request_service.list_pending(_current_user_id(), _current_role()))
+
+
+@bp.route("/retake-requests/<int:request_id>/<any(approve,deny):decision>", methods=["POST"])
+@login_required
+def decide_retake_request(request_id: int, decision: str):
+    if _current_role() not in ("teacher", "admin"):
+        return json_error("Forbidden", code="forbidden", status=403)
+    try:
+        return json_success(
+            retake_request_service.decide(request_id, _current_user_id(), _current_role(), decision == "approve")
+        )
+    except PermissionError:
+        return json_error("Forbidden", code="forbidden", status=403)
 
 
 @bp.route("/admin/diagnostics", methods=["GET"])
@@ -999,6 +1154,8 @@ def upload_diagnostic_target_pdf(assessment_id: int):
         return json_success({"uploaded": results, "target_pdfs": list_diagnostic_target_pdfs(assessment_id, _current_user_id(), is_admin=True)})
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
     except Exception as e:
         return json_error(str(e), code="upload_error", status=500)
 
@@ -1214,7 +1371,7 @@ def quizzes():
         return json_error(str(e), code="validation_error")
     a = assessment_service.create_assessment(
         created_by=_current_user_id(),
-        title=body["title"],
+        title=body.get("title"),
         assessment_type="quiz",
         description=body.get("description"),
         creation_mode=body.get("creation_mode", "manual"),
@@ -1284,10 +1441,11 @@ def get_or_update_quiz(quiz_id: int):
             else:
                 return json_error("Forbidden", code="forbidden", status=403)
         elif role == "teacher":
-            if assessment.created_by != uid and assessment.assessment_type != "diagnostic":
+            # Own quizzes only. The platform diagnostic (and its answer key) is admin-only.
+            if assessment.created_by != uid or assessment.assessment_type == "diagnostic":
                 return json_error("Forbidden", code="forbidden", status=403)
-        include_answers = role == "teacher" and has_permission(
-            role, Permissions.CREATE_QUIZ
+        include_answers = role == "admin" or (
+            role == "teacher" and has_permission(role, Permissions.CREATE_QUIZ)
         )
         return json_success(
             assessment_service.get_assessment_with_questions(quiz_id, include_answers=include_answers)
@@ -1347,6 +1505,8 @@ def assignments():
         class_id = request.args.get("class_id", type=int)
         if not class_id:
             return json_error("class_id is required for teachers")
+        if _current_role() != "admin" and not class_service.teacher_owns_class(_current_user_id(), class_id):
+            return json_error("Forbidden", code="forbidden", status=403)
         rows = assignment_service.list_assignments_for_class(class_id)
         return json_success([{"id": a.id, "title": a.title, "quiz_id": a.quiz_id} for a in rows])
 
@@ -1357,12 +1517,15 @@ def assignments():
     due_date = body.get("due_date")
     from datetime import datetime
 
-    parsed_due = datetime.fromisoformat(due_date) if due_date else None
+    try:
+        parsed_due = datetime.fromisoformat(str(due_date)) if due_date else None
+    except ValueError:
+        return json_error("due_date must be an ISO date, e.g. 2026-10-31T17:00", code="validation_error")
     a = assignment_service.create_assignment(
         teacher_id=_current_user_id(),
-        class_id=int(body["class_id"]),
-        quiz_id=int(body["quiz_id"]),
-        title=body["title"],
+        class_id=_body_int(body, "class_id"),
+        quiz_id=_body_int(body, "quiz_id"),
+        title=body.get("title"),
         instructions=body.get("instructions"),
         due_date=parsed_due,
     )
@@ -1717,15 +1880,22 @@ def clear_tutor_history():
 def student_tutor_chat():
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
+    locked = _require_diagnostic_done()
+    if locked:
+        return locked
     body = request.get_json(silent=True) or {}
-    message = (body.get("message") or "").strip()
+    message = str(body.get("message") or "").strip()
     if not message:
         return json_error("message is required", code="validation_error")
+    try:
+        attempt_count = int(body.get("attempt_count") or 0)
+    except (TypeError, ValueError):
+        attempt_count = 0
     context = tutor_service.build_student_context(
         _current_user_id(),
         topic_id=body.get("topic_id"),
         question_text=body.get("question_text"),
-        attempt_count=int(body.get("attempt_count") or 0),
+        attempt_count=attempt_count,
         message=message,
     )
     from app.services.lms import tutor_memory_service
@@ -1795,6 +1965,9 @@ def teacher_tutor_save_question():
 def start_practice():
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
+    locked = _require_diagnostic_done()
+    if locked:
+        return locked
     body = request.get_json(silent=True) or {}
     try:
         s, resumed = practice_service.start_session(
@@ -1858,6 +2031,9 @@ def start_deficiency_chat():
     """Start post-diagnostic learning chat (weak-area questions one-by-one)."""
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
+    locked = _require_diagnostic_done()
+    if locked:
+        return locked
     try:
         body = request.get_json(silent=True) or {}
         force_new = bool(body.get("force_new"))
