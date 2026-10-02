@@ -179,6 +179,100 @@ body.td-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--td
   line-height: 1.2;
 }
 .td-quiz-pdf-help { margin-top: 10px; }
+/* Create Quiz wait — one spinner + plain-language steps (no % bar). */
+.td-quiz-wait {
+  margin: 18px 0 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--td-line);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+.td-quiz-wait[hidden] { display: none !important; }
+.td-quiz-wait-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.td-quiz-wait-head .td-spinner { margin: 0; flex-shrink: 0; }
+.td-quiz-wait-head h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--td-blue-900);
+  font-weight: 700;
+}
+.td-quiz-wait-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--td-muted);
+}
+.td-quiz-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.td-quiz-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid transparent;
+  opacity: 0.55;
+}
+.td-quiz-step.is-active {
+  opacity: 1;
+  border-color: #bcd2f5;
+  background: var(--td-blue-50);
+}
+.td-quiz-step.is-done { opacity: 1; }
+.td-quiz-step-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  flex-shrink: 0;
+  margin-top: 1px;
+  box-sizing: border-box;
+}
+.td-quiz-step.is-active .td-quiz-step-mark {
+  border-color: var(--td-blue-600);
+  background: var(--td-blue-600);
+  box-shadow: 0 0 0 4px rgba(26, 86, 219, 0.15);
+}
+.td-quiz-step.is-done .td-quiz-step-mark {
+  border-color: var(--td-green);
+  background: var(--td-green);
+  position: relative;
+  animation: none;
+}
+.td-quiz-step.is-done .td-quiz-step-mark::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.td-quiz-step-body { min-width: 0; }
+.td-quiz-step-body strong {
+  display: block;
+  font-size: 13.5px;
+  color: var(--td-ink);
+}
+.td-quiz-step-body small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--td-muted);
+}
 .td-field label { display: block; font-size: 13px; font-weight: 700; color: var(--td-ink); margin-bottom: 6px; }
 .td-field label .req { color: var(--td-red); }
 .td-field label .opt { color: var(--td-muted); font-weight: 500; }

@@ -5,7 +5,7 @@
     <div class="td-icon-badge"><img src="{{ url_for('static', filename='teacher/icons/quizzes.png') }}" alt=""></div>
     <div><h2>Create New Quiz</h2><p>Add quiz details to create a new quiz.</p></div>
   </div>
-  <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)" data-wait-message="Generating quiz questions..." data-wait-sticky>
+  <form id="lmsPdfQuizForm" onsubmit="submitLmsPdfQuiz(event)">
     <div class="td-form-grid td-quiz-create-grid">
       <div class="td-field">
         <label for="lmsQuizTitle">Quiz title <span class="req">*</span></label>
@@ -41,12 +41,44 @@
       <button type="submit" id="lmsQuizSubmitBtn" class="td-btn td-btn-primary">Upload &amp; Generate MCQs</button>
     </div>
   </form>
-  <div id="lmsQuizProgressWrap" class="lms-progress-wrap">
-    <div class="lms-progress-label">
-      <span id="lmsQuizProgressText">Preparing...</span>
-      <strong id="lmsQuizProgressPct">0%</strong>
+  <div id="lmsQuizProgressWrap" class="td-quiz-wait" hidden>
+    <div class="td-quiz-wait-head">
+      <div class="td-spinner" aria-hidden="true"></div>
+      <div>
+        <h3 id="lmsQuizWaitTitle">Working on your quiz</h3>
+        <p id="lmsQuizWaitSubtitle">This usually takes a short while — hang tight.</p>
+      </div>
     </div>
-    <div class="lms-progress"><div id="lmsQuizProgressBar" class="lms-progress-bar"></div></div>
+    <ol class="td-quiz-steps" id="lmsQuizSteps" aria-live="polite">
+      <li class="td-quiz-step" data-step="1">
+        <span class="td-quiz-step-mark" aria-hidden="true"></span>
+        <span class="td-quiz-step-body">
+          <strong>Getting your file</strong>
+          <small>Uploading your PDF safely</small>
+        </span>
+      </li>
+      <li class="td-quiz-step" data-step="2">
+        <span class="td-quiz-step-mark" aria-hidden="true"></span>
+        <span class="td-quiz-step-body">
+          <strong>Reading your document</strong>
+          <small>Looking through the pages</small>
+        </span>
+      </li>
+      <li class="td-quiz-step" data-step="3">
+        <span class="td-quiz-step-mark" aria-hidden="true"></span>
+        <span class="td-quiz-step-body">
+          <strong>Writing quiz questions</strong>
+          <small>Turning the content into MCQs</small>
+        </span>
+      </li>
+      <li class="td-quiz-step" data-step="4">
+        <span class="td-quiz-step-mark" aria-hidden="true"></span>
+        <span class="td-quiz-step-body">
+          <strong>Finishing up</strong>
+          <small>Checking everything looks good</small>
+        </span>
+      </li>
+    </ol>
   </div>
   <div id="lmsQuizStatus" class="td-status-line"></div>
   <div id="lmsQuizPreview" class="lms-quiz-preview"></div>

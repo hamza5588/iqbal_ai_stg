@@ -194,6 +194,7 @@
     let _lmsQuizTaskId = null;
     let _lmsPollTimer = null;
     let _lmsQuizProgressTick = null;
+    let _lmsQuizFriendlyStep = 0;
     let _lmsDiagAssessmentId = null;
     let _lmsDiagThreadId = null;
     let _lmsDiagTopicsPoll = null;
@@ -201,36 +202,96 @@
 
     const LMS_DIAG_MCQ_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
 
-    function _setLmsQuizProgress(pct, text) {
-      const wrap = document.getElementById('lmsQuizProgressWrap');
-      const bar = document.getElementById('lmsQuizProgressBar');
-      const pctEl = document.getElementById('lmsQuizProgressPct');
-      const textEl = document.getElementById('lmsQuizProgressText');
-      if (wrap) wrap.classList.add('active');
-      if (bar) bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
-      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
-      if (textEl && text) textEl.textContent = text;
+    /** Map backend step/message/status → simple user step 1–4 (or 5 = done). */
+    function _lmsQuizFriendlyStepFrom(meta) {
+      meta = meta || {};
+      var step = String(meta.step || meta.progress_step || '').toLowerCase();
+      var msg = String(meta.message || meta.progress_message || '').toLowerCase();
+      var status = String(meta.status || meta.extraction_status || '').toLowerCase();
+      var pct = Number(meta.progress);
+      if (status === 'completed' || step === 'done' || pct >= 100) return 5;
+      if (status === 'failed') return _lmsQuizFriendlyStep || 1;
+      if (step === 'save' || /sav(e|ing)|review|finish|almost|ready|putt?ing/.test(msg)) return 4;
+      if (step === 'convert' || step === 'generate' || /mcq|question|generat|convert|writ/.test(msg)) return 3;
+      if (step === 'extract' || /read|extract|pars|layout|hybrid|content|document|page/.test(msg)) return 2;
+      if (step === 'upload' || status === 'pending' || status === 'none' || /upload|queue|start|receiv|file/.test(msg)) return 1;
+      if (Number.isFinite(pct)) {
+        if (pct >= 88) return 4;
+        if (pct >= 68) return 3;
+        if (pct >= 30) return 2;
+        return 1;
+      }
+      return Math.max(1, _lmsQuizFriendlyStep || 1);
+    }
+
+    function _setLmsQuizProgress(pct, text, meta) {
+      var wrap = document.getElementById('lmsQuizProgressWrap');
+      if (wrap) {
+        wrap.hidden = false;
+        wrap.classList.add('active');
+      }
+      var step = _lmsQuizFriendlyStepFrom(Object.assign({
+        progress: pct,
+        progress_message: text,
+        message: text,
+      }, meta || {}));
+      _lmsQuizFriendlyStep = Math.max(_lmsQuizFriendlyStep || 0, step === 5 ? 5 : step);
+      if (step < 5) _lmsQuizFriendlyStep = Math.max(_lmsQuizFriendlyStep, step);
+
+      var titles = {
+        1: 'Getting your file',
+        2: 'Reading your document',
+        3: 'Writing quiz questions',
+        4: 'Finishing up',
+        5: 'Your quiz is ready',
+      };
+      var subtitles = {
+        1: 'We received your PDF and are starting.',
+        2: 'Looking through the pages to understand the content.',
+        3: 'Creating clear multiple-choice questions for students.',
+        4: 'Double-checking the quiz before we show it to you.',
+        5: 'You can review the questions below.',
+      };
+      var active = step >= 5 ? 4 : step;
+      var titleEl = document.getElementById('lmsQuizWaitTitle');
+      var subEl = document.getElementById('lmsQuizWaitSubtitle');
+      if (titleEl) titleEl.textContent = titles[step] || titles[active];
+      if (subEl) subEl.textContent = subtitles[step] || subtitles[active];
+
+      document.querySelectorAll('#lmsQuizSteps .td-quiz-step').forEach(function (li) {
+        var n = parseInt(li.getAttribute('data-step'), 10);
+        li.classList.remove('is-active', 'is-done');
+        if (step >= 5 || n < active) li.classList.add('is-done');
+        else if (n === active) li.classList.add('is-active');
+      });
     }
     function _resetLmsQuizProgress() {
       if (_lmsQuizProgressTick) { clearInterval(_lmsQuizProgressTick); _lmsQuizProgressTick = null; }
-      const wrap = document.getElementById('lmsQuizProgressWrap');
-      const bar = document.getElementById('lmsQuizProgressBar');
-      if (wrap) wrap.classList.remove('active');
-      if (bar) bar.style.width = '0%';
-      const pctEl = document.getElementById('lmsQuizProgressPct');
-      if (pctEl) pctEl.textContent = '0%';
+      _lmsQuizFriendlyStep = 0;
+      var wrap = document.getElementById('lmsQuizProgressWrap');
+      if (wrap) {
+        wrap.hidden = true;
+        wrap.classList.remove('active');
+      }
+      document.querySelectorAll('#lmsQuizSteps .td-quiz-step').forEach(function (li) {
+        li.classList.remove('is-active', 'is-done');
+      });
+      var titleEl = document.getElementById('lmsQuizWaitTitle');
+      var subEl = document.getElementById('lmsQuizWaitSubtitle');
+      if (titleEl) titleEl.textContent = 'Working on your quiz';
+      if (subEl) subEl.textContent = 'This usually takes a short while — hang tight.';
     }
     function _startLmsQuizProgressPulse(startPct, label) {
       if (_lmsQuizProgressTick) clearInterval(_lmsQuizProgressTick);
-      let pct = startPct || 8;
-      _setLmsQuizProgress(pct, label || 'Processing PDF...');
+      _setLmsQuizProgress(startPct || 8, label || 'Getting your file', { step: 'upload', message: label });
+      // Soft step crawl while waiting for real backend updates (no %).
+      var soft = startPct || 8;
       _lmsQuizProgressTick = setInterval(function () {
-        // Soft crawl while waiting for real Celery progress (caps below done).
-        if (pct < 88) {
-          pct += (pct < 40 ? 2.2 : pct < 70 ? 1.1 : 0.4);
-          _setLmsQuizProgress(pct);
+        if (soft < 85) {
+          soft += soft < 40 ? 3 : soft < 70 ? 1.5 : 0.6;
+          _setLmsQuizProgress(soft);
         }
-      }, 1200);
+      }, 1400);
     }
 
     function lmsDiagMcqSelectHtml(selected) {
@@ -628,8 +689,8 @@
         return;
       }
       btn.disabled = true;
-      status.textContent = 'Uploading PDF and generating ' + questionCount + ' MCQs...';
-      _startLmsQuizProgressPulse(6, 'Uploading PDF...');
+      status.textContent = '';
+      _startLmsQuizProgressPulse(6, 'Getting your file');
       const fd = new FormData();
       fd.append('title', title);
       fd.append('file', file);
@@ -646,10 +707,11 @@
         const payload = data.data || data;
         _lmsCurrentAssessmentId = payload.assessment_id;
         _lmsQuizTaskId = payload.task_id || null;
-        _setLmsQuizProgress(18, payload.async ? 'Queued — ingesting PDF...' : 'Generating MCQs...');
-        status.textContent = payload.async
-          ? 'Processing in background (ingest → generate MCQs)...'
-          : 'Conversion running...';
+        _setLmsQuizProgress(18, 'Reading your document', {
+          step: payload.async ? 'extract' : 'generate',
+          message: payload.async ? 'Reading your document' : 'Writing quiz questions',
+        });
+        status.textContent = '';
         startLmsPoll();
       } catch (err) {
         status.textContent = 'Error: ' + err.message;
@@ -675,31 +737,34 @@
         const body = await res.json();
         const d = body.data || body;
         const rawStatus = d.extraction_status || 'unknown';
-        const statusLabel = {
-          none: 'starting',
-          pending: 'queued',
-          processing: 'processing',
-          completed: 'completed',
-          failed: 'failed',
-        }[rawStatus] || rawStatus;
-        if (d.progress != null) {
+        if (d.progress != null || d.progress_message || d.progress_step || rawStatus) {
           _setLmsQuizProgress(
-            Number(d.progress),
-            d.progress_message || ('Status: ' + statusLabel)
+            d.progress != null ? Number(d.progress) : undefined,
+            d.progress_message || '',
+            {
+              step: d.progress_step,
+              message: d.progress_message,
+              progress_step: d.progress_step,
+              progress_message: d.progress_message,
+              extraction_status: rawStatus,
+              progress: d.progress,
+            }
           );
         }
-        statusEl.textContent = 'Status: ' + statusLabel +
-          (d.overall_confidence != null ? ' | Confidence: ' + Math.round(d.overall_confidence * 100) + '%' : '') +
-          (d.question_count ? ' | Questions: ' + d.question_count : '') +
-          (d.requested_question_count ? ' / ' + d.requested_question_count + ' requested' : '');
+        // Keep status line quiet during success path — steps UI carries the story.
+        if (rawStatus !== 'failed' && rawStatus !== 'completed') {
+          statusEl.textContent = '';
+        }
         if (rawStatus === 'completed') {
           stopLmsPoll();
-          _setLmsQuizProgress(100, 'Quiz ready');
-          setTimeout(_resetLmsQuizProgress, 700);
+          if (_lmsQuizProgressTick) { clearInterval(_lmsQuizProgressTick); _lmsQuizProgressTick = null; }
+          _setLmsQuizProgress(100, 'Your quiz is ready', { step: 'done', extraction_status: 'completed' });
+          setTimeout(_resetLmsQuizProgress, 900);
           const form = document.getElementById('lmsPdfQuizForm');
           if (form) form.style.display = 'none';
           await loadLmsQuizPreview();
           actionsEl.style.display = 'flex';
+          statusEl.textContent = '';
           if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         } else if (rawStatus === 'failed') {
           stopLmsPoll();
