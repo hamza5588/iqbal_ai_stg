@@ -169,25 +169,35 @@
     }
     function _lmsTypeset(el) {
       if (!el) return Promise.resolve();
+      // Single root typeset via shared helper (MathJax → KaTeX fallback).
+      // Do not pass nested parent+children to MathJax — that left raw $...$ in quiz preview.
+      if (typeof window.lmsTypesetMath === 'function') return window.lmsTypesetMath(el);
       el.classList.add('tex2jax_process');
-      // Typeset the container and each math span. Nested tex2jax_process + a
-      // long prose+\\(...\\) stem can leave the stem as raw TeX while short
-      // option spans render; hitting both is cheap and fixes Q18-style stems.
-      var nodes = el.querySelectorAll ? el.querySelectorAll('.lms-math-content, .tex2jax_process') : [];
-      var list = [el];
-      for (var i = 0; i < nodes.length; i++) {
-        if (nodes[i] !== el) list.push(nodes[i]);
-      }
-      if (window.MathJax && window.MathJax.typesetPromise) {
-        try {
-          if (typeof window.MathJax.typesetClear === 'function') {
-            window.MathJax.typesetClear(list);
-          }
-        } catch (e) { /* ignore */ }
-        return window.MathJax.typesetPromise(list).catch(function () {});
-      }
-      if (typeof lmsTypesetMath === 'function') return lmsTypesetMath(el);
-      return Promise.resolve();
+      var ready = (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise)
+        ? window.MathJax.startup.promise.catch(function () {})
+        : Promise.resolve();
+      return ready.then(function () {
+        if (window.MathJax && window.MathJax.typesetPromise) {
+          try {
+            if (typeof window.MathJax.typesetClear === 'function') window.MathJax.typesetClear([el]);
+          } catch (e) { /* ignore */ }
+          return window.MathJax.typesetPromise([el]).catch(function () {});
+        }
+        if (typeof renderMathInElement === 'function') {
+          try {
+            renderMathInElement(el, {
+              delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '\\(', right: '\\)', display: false }
+              ],
+              throwOnError: false,
+              ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+            });
+          } catch (e2) { /* ignore */ }
+        }
+      });
     }
 
     let _lmsCurrentAssessmentId = null;

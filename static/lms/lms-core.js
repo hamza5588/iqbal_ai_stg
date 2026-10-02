@@ -1001,18 +1001,66 @@
   };
   global.lmsFormatRichText = formatRichText;
 
+  /** True if element text still has untypeset TeX delimiters. */
+  function lmsHasRawMathDelims(el) {
+    if (!el) return false;
+    var t = String(el.textContent || '');
+    return /\$[^$\n]+\$|\\\(|\\\[|\\begin\{/.test(t);
+  }
+
+  function lmsKatexRender(el) {
+    if (!el || typeof global.renderMathInElement !== 'function') return false;
+    try {
+      global.renderMathInElement(el, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '\\(', right: '\\)', display: false }
+        ],
+        throwOnError: false,
+        ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      });
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
+   * Typeset math in a container. Prefer MathJax once ready; if delimiters remain
+   * (or MathJax fails), fall back to KaTeX auto-render. Always typeset the root
+   * only — nesting parent+children in one MathJax call can leave raw $...$.
+   */
   function typesetMath(el) {
     if (!el) return Promise.resolve();
     el.classList.add('tex2jax_process');
-    if (global.TeacherChatFormatter && typeof global.TeacherChatFormatter.processRenderedContent === 'function') {
-      return global.TeacherChatFormatter.processRenderedContent(el);
+
+    function afterMathJax() {
+      if (lmsHasRawMathDelims(el)) lmsKatexRender(el);
+      return el;
     }
-    if (global.MathJax && global.MathJax.typesetPromise) {
-      return global.MathJax.typesetPromise([el]).catch(function () {});
+
+    var ready = Promise.resolve();
+    if (global.MathJax && global.MathJax.startup && global.MathJax.startup.promise) {
+      ready = global.MathJax.startup.promise.catch(function () {});
     }
-    return Promise.resolve();
+
+    return ready.then(function () {
+      if (global.MathJax && typeof global.MathJax.typesetPromise === 'function') {
+        try {
+          if (typeof global.MathJax.typesetClear === 'function') {
+            global.MathJax.typesetClear([el]);
+          }
+        } catch (e) { /* ignore */ }
+        return global.MathJax.typesetPromise([el]).catch(function () {}).then(afterMathJax);
+      }
+      lmsKatexRender(el);
+      return el;
+    });
   };
   global.lmsTypesetMath = typesetMath;
+  global.lmsHasRawMathDelims = lmsHasRawMathDelims;
 
   /* Bridge legacy _showLmsModal */
   global._showLmsModal = global.lmsOpenModal;

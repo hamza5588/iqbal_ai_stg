@@ -470,7 +470,10 @@
         });
       }
 
-      if (!usedMathJax && typeof renderMathInElement === 'function') {
+      function katexFallback() {
+        if (typeof renderMathInElement !== 'function') return;
+        var stillRaw = /\$[^$\n]+\$|\\\(|\\\[/.test(String(containerElement.textContent || ''));
+        if (usedMathJax && !stillRaw) return;
         try {
           renderMathInElement(containerElement, {
             delimiters: [
@@ -479,11 +482,18 @@
               { left: '\\[', right: '\\]', display: true },
               { left: '\\(', right: '\\)', display: false }
             ],
-            throwOnError: false
+            throwOnError: false,
+            ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
           });
         } catch (err) {
           console.warn('KaTeX render failed:', err);
         }
+      }
+
+      if (!usedMathJax) {
+        katexFallback();
+      } else {
+        typesetPromise = typesetPromise.then(function () { katexFallback(); });
       }
 
       if (typeof hljs !== 'undefined' && hljs.highlightAll) {
