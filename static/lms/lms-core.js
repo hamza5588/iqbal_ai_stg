@@ -662,11 +662,54 @@
     return out.join('');
   }
 
+  function lmsEnglishTimesToTex(s) {
+    // PDF/LLM often writes the English word "times" as ×. Inside MathJax that
+    // becomes italic "times"; turn it into \times before we wrap/typeset.
+    var out = String(s || '');
+    if (out.indexOf(' times ') < 0) return out;
+    if (
+      out.indexOf('\\log') < 0 &&
+      out.indexOf('log_') < 0 &&
+      out.indexOf('log ') < 0 &&
+      out.indexOf('\\(') < 0 &&
+      out.indexOf('\\[') < 0 &&
+      out.indexOf('$') < 0
+    ) {
+      return out;
+    }
+    return out.split(' times ').join(' \\times ');
+  }
+
+  function lmsNormalizeLogSubscripts(s) {
+    // \log_5(x) / \log_a(x) → \log_{5}(x) / \log_{a}(x) so MathJax never
+    // misreads the subscript token before a paren.
+    var out = String(s || '');
+    out = out.replace(/\\log_(\d+)/g, '\\log_{$1}');
+    out = out.replace(/\\log_([A-Za-z])(?![A-Za-z{])/g, '\\log_{$1}');
+    return out;
+  }
+
+  function lmsInlineParenToDollar(s) {
+    // Prefer $...$ for single-line inline math. Mixed prose stems with only
+    // \(...\) have been observed left as raw TeX in the quiz preview while
+    // neighboring $ / short option spans typeset fine.
+    return String(s || '').replace(/\\\(([\s\S]*?)\\\)/g, function (_m, inner) {
+      if (!inner || inner.indexOf('\n') >= 0 || inner.indexOf('\\\\') >= 0) return _m;
+      if (inner.indexOf('$') >= 0) return _m;
+      return '$' + inner + '$';
+    });
+  }
+
   function lmsJoinTimesBetweenMath(s) {
     // "\(a\) \times \(b\)" → one span so \times typesets (not raw text).
     var out = String(s || '');
+    // Wrap-islands can leave exponents outside: \(...b\)^2 → \(...b^2\)
+    out = out.replace(/\\\)(\^(?:\{[^}]+\}|[0-9]+))/g, '$1\\)');
+    out = out.replace(/\\\](\^(?:\{[^}]+\}|[0-9]+))/g, '$1\\]');
     out = out.replace(/\\\)\s*(?:\\times|×)\s*\\\(/g, ' \\times ');
     out = out.replace(/\\\]\s*(?:\\times|×)\s*\\\[/g, ' \\times ');
+    // Same join for $...$ \times $...$ (otherwise \times stays raw between spans).
+    out = out.replace(/\$\s*(?:\\times|×)\s*\$/g, ' \\times ');
     // Bare \times left between math-ish tokens → wrap locally
     out = lmsMapOutsideMath(out, function (chunk) {
       return chunk.replace(
@@ -835,25 +878,29 @@
     s = s.replace(/\\\\+\(/g, '\\(').replace(/\\\\+\)/g, '\\)');
     s = s.replace(/\\\\+\[/g, '\\[').replace(/\\\\+\]/g, '\\]');
     s = s.replace(/\\{2,}(log|ln|frac|times|sqrt|mathrm|text)\b/g, '\\$1');
+    s = lmsEnglishTimesToTex(s);
+    s = lmsNormalizeLogSubscripts(s);
     // Server question_render is already delimited. Re-promoting \log doubles
     // backslashes into visible \\\( / \\log artifacts. Still join bare \times.
     if (/\\\(|\\\[|\$\$/.test(s) && /\\(?:log|ln|frac|times|sqrt)\b|\^/.test(s)) {
-      return lmsJoinTimesBetweenMath(s);
+      return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(s));
     }
     s = lmsPromoteInlineMathNotation(s);
+    s = lmsEnglishTimesToTex(s);
+    s = lmsNormalizeLogSubscripts(s);
     if (lmsIsPlainPercent(s) || lmsIsMixedPercent(s)) return s.replace(/\\%/g, '%');
     if (/\$[\s\S]*\$|\\\(|\\\[|\\begin\{/.test(s)) {
       var withoutDelims = lmsUnsquashEnglish(s.replace(/\\\(|\\\)|\\\[|\\\]|\$+/g, ' '));
       if (lmsLooksLikeProse(withoutDelims)) {
-        return lmsJoinTimesBetweenMath(lmsWrapMathIslands(s, inline));
+        return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(lmsWrapMathIslands(s, inline)));
       }
-      return lmsJoinTimesBetweenMath(
+      return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(
         lmsMapOutsideMath(s, function (c) { return c; }).replace(/\\\(([\s\S]*?)\\\)/g, function (m, inner) {
           return '\\(' + lmsEscapePercentInMathBody(inner) + '\\)';
         }).replace(/\\\[([\s\S]*?)\\\]/g, function (m, inner) {
           return '\\[' + lmsEscapePercentInMathBody(inner) + '\\]';
         })
-      );
+      ));
     }
     var recovered = lmsStripInnerMathDelims(lmsRecoverLatex(s) || s);
     var colon = recovered.match(/^((?:Simplify|Find|Solve|Evaluate|Compute|Expand|Factor)\s*:)\s*(.+)$/i);
@@ -863,20 +910,20 @@
       return colon[1] + ' ' + wrap[0] + lmsEscapePercentInMathBody(body) + wrap[1];
     }
     if (lmsIsPlainPercent(recovered) || lmsIsMixedPercent(recovered)) return recovered.replace(/\\%/g, '%');
-    if (lmsLooksLikeMixedTextAndMath(recovered)) return lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline));
-    if (lmsLooksLikeProse(recovered)) return lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline));
+    if (lmsLooksLikeMixedTextAndMath(recovered)) return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline)));
+    if (lmsLooksLikeProse(recovered)) return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline)));
     // "x = 3 or x = -3", "a < b and b < c": a plain English connective joins
     // two math bits. Wrapping the whole string makes MathJax eat the spaces
     // and render the word as italic letters ("3orx"). Wrap each bit instead.
     if (_MATH_CONNECTIVE_RE.test(recovered)) {
-      return lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline));
+      return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline)));
     }
     if (lmsLooksLikeRawLatex(recovered) || lmsLooksLikeMathExpression(recovered) || /\\frac|\^\{/.test(recovered)) {
       var math = lmsEscapePercentInMathBody(recovered);
-      if (!inline && /\\frac/.test(math)) return '\\[' + math + '\\]';
-      return '\\(' + math + '\\)';
+      if (!inline && /\\frac/.test(math)) return lmsJoinTimesBetweenMath('\\[' + math + '\\]');
+      return lmsInlineParenToDollar(lmsJoinTimesBetweenMath('\\(' + math + '\\)'));
     }
-    return recovered;
+    return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(recovered));
   }
   global.lmsPrepareMathText = prepareMathText;
   global.lmsPickDisplayText = lmsPickDisplayText;
@@ -903,7 +950,7 @@
     if (useFormatter && !opts.inline && !opts.quiz) {
       html = global.TeacherChatFormatter.formatChatResponse(text);
     } else {
-      html = escapeHtml(text).replace(/\n/g, '<br>');
+      html = (typeof global.escapeHtml === 'function' ? global.escapeHtml(text) : String(text || '')).replace(/\n/g, '<br>');
     }
     if (opts.inline) {
       html = html.replace(/^<p>([\s\S]*)<\/p>$/i, '$1');

@@ -338,6 +338,10 @@ def upload_diagnostic_bundle(
     }
     assessment.description = json.dumps(meta, ensure_ascii=False)
 
+    # Stay draft until admin reviews generated questions and publishes.
+    assessment.status = "draft"
+    assessment.requires_review = True
+
     db = get_db()
 
     db.commit()
@@ -345,7 +349,7 @@ def upload_diagnostic_bundle(
     _set_upload_progress(
         progress_job_id,
         100,
-        "Diagnostic processing complete.",
+        "Diagnostic generated — review questions, then approve to release to students.",
         stage="complete",
         done=True,
     )
@@ -368,11 +372,18 @@ def upload_diagnostic_bundle(
 
         "status": assessment.status,
 
+        "requires_review": True,
+
         "question_count": pipeline_result.get("question_count"),
 
         "overall_confidence": pipeline_result.get("overall_confidence"),
 
         "async": pipeline_result.get("async", False),
+
+        "message": (
+            "Diagnostic is in draft. Review generated questions, then publish "
+            "to make it available for students."
+        ),
 
     }
 
@@ -857,7 +868,13 @@ def generate_diagnostic_questions(
 
     assessment.overall_confidence = avg_conf
 
-    assessment.requires_review = avg_conf < 0.85
+    # Diagnostics always need admin Approve before students see them.
+    # Confidence only gates quiz-style auto-publish for non-diagnostics.
+    if assessment.assessment_type == "diagnostic":
+        assessment.status = "draft"
+        assessment.requires_review = True
+    else:
+        assessment.requires_review = avg_conf < 0.85
 
     if source_topics_meta:
 

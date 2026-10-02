@@ -170,10 +170,23 @@
     function _lmsTypeset(el) {
       if (!el) return Promise.resolve();
       el.classList.add('tex2jax_process');
-      if (typeof lmsTypesetMath === 'function') return lmsTypesetMath(el);
-      if (window.MathJax && window.MathJax.typesetPromise) {
-        return window.MathJax.typesetPromise([el]).catch(function () {});
+      // Typeset the container and each math span. Nested tex2jax_process + a
+      // long prose+\\(...\\) stem can leave the stem as raw TeX while short
+      // option spans render; hitting both is cheap and fixes Q18-style stems.
+      var nodes = el.querySelectorAll ? el.querySelectorAll('.lms-math-content, .tex2jax_process') : [];
+      var list = [el];
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i] !== el) list.push(nodes[i]);
       }
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        try {
+          if (typeof window.MathJax.typesetClear === 'function') {
+            window.MathJax.typesetClear(list);
+          }
+        } catch (e) { /* ignore */ }
+        return window.MathJax.typesetPromise(list).catch(function () {});
+      }
+      if (typeof lmsTypesetMath === 'function') return lmsTypesetMath(el);
       return Promise.resolve();
     }
 
@@ -376,11 +389,12 @@
           if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
           return;
         }
-        _setLmsDiagProgress(100, 'Diagnostic ready!');
+        _setLmsDiagProgress(100, 'Review generated questions...');
         const d = body.data || body;
         _lmsDiagAssessmentId = d.assessment_id;
         _lmsDiagThreadId = d.thread_id;
-        status.textContent = 'Ready — ' + (d.question_count || '?') + ' questions extracted. Target PDF linked for Learning Chat.';
+        status.textContent = 'Draft ready — ' + (d.question_count || '?') +
+          ' questions generated. Review below, then Approve/Publish for students.';
         document.getElementById('lmsDiagStepTopics').style.display = 'block';
         document.getElementById('lmsDiagActions').style.display = 'flex';
         if (_lmsDiagAssessmentId) loadLmsDiagPreview();
@@ -516,8 +530,8 @@
       const publishBtn = actionsEl ? actionsEl.querySelector('.lms-btn-primary') : null;
       if (publishBtn) publishBtn.disabled = true;
       if (successBanner) successBanner.classList.remove('show');
-      statusEl.textContent = 'Publishing diagnostic...';
-      if (typeof showWaitOverlay === 'function') showWaitOverlay('Publishing diagnostic...');
+      statusEl.textContent = 'Approving diagnostic for students...';
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Approving diagnostic...');
       try {
         const res = await fetch('/api/lms/diagnostics/' + _lmsDiagAssessmentId + '/publish', {
           method: 'POST', credentials: 'include'
@@ -527,11 +541,11 @@
         statusEl.textContent = '';
         const successText = document.getElementById('lmsDiagSuccessText');
         if (successText) {
-          successText.textContent = 'Diagnostic published successfully! Students can now take it from their dashboard.';
+          successText.textContent = 'Approved! Students can now see and start this diagnostic.';
         }
         if (successBanner) successBanner.classList.add('show');
         if (typeof lmsShowToast === 'function') {
-          lmsShowToast('Diagnostic published successfully!');
+          lmsShowToast('Diagnostic approved for students');
         }
         setTimeout(function () {
           closeLmsDiagnosticHub();

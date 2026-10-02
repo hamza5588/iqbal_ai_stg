@@ -57,11 +57,11 @@ assert(slash.indexOf('4y/') < 0, 'slash leftover: ' + slash);
 
 const power = prepare('If a^x = y, where a > 0 and a ≠ 1, which is its logarithmic form?');
 console.log('power:', power);
-assert(/\\\(a\^x\s*=\s*y\\\)/.test(power) || /\\\(a\^x\\\)/.test(power), 'a^x wrap: ' + power);
+assert(/\$a\^x\s*=\s*y\$/.test(power) || /\\\(a\^x\s*=\s*y\\\)/.test(power) || /\$a\^x\$/.test(power), 'a^x wrap: ' + power);
 
 const loga = prepare('Find the value of a if log_a 8 = 3/2 where a > 0 and a ≠ 1.');
 console.log('loga:', loga);
-assert(/\\\(\\log_\{a\}/.test(loga) || loga.indexOf('\\(\\log_{a}') >= 0, 'log wrap: ' + loga);
+assert(/\$\\log_\{a\}/.test(loga) || /\\\(\\log_\{a\}/.test(loga) || loga.indexOf('\\log_{a}') >= 0, 'log wrap: ' + loga);
 assert(loga.indexOf('\\frac{3}{2}') >= 0, '3/2 frac: ' + loga);
 
 // Server-style already-wrapped render must NOT grow extra backslashes.
@@ -69,16 +69,41 @@ const rendered = prepare('Find the value of a if \\(\\log_{a} 8 = \\frac{3}{2}\\
 console.log('rendered:', rendered);
 assert(rendered.indexOf('\\\\\\(') < 0, 'no triple backslash: ' + rendered);
 assert(rendered.indexOf('\\\\log') < 0, 'no doubled log: ' + rendered);
-assert(rendered.indexOf('\\(\\log_{a}') >= 0, 'keeps single wrap: ' + rendered);
+assert(rendered.indexOf('\\log_{a}') >= 0, 'keeps log: ' + rendered);
 
 const times = prepare('find log (2 \\times 5)');
 console.log('times:', times);
-assert(times.indexOf('\\times') >= 0 && times.indexOf('\\(') >= 0, 'times wrap: ' + times);
+assert(times.indexOf('\\times') >= 0 && (times.indexOf('\\(') >= 0 || times.indexOf('$') >= 0), 'times wrap: ' + times);
 
 const q18 = prepare('rewrite as a single logarithm: \\(\\log_{5}(b^{2})\\) \\times \\(\\log_{a}(5^{3})\\)');
 console.log('q18:', q18);
 assert(q18.indexOf('\\times') >= 0, 'q18 keeps times: ' + q18);
 assert(!/\\\)\s*\\times\s*\\\(/.test(q18), 'q18 joins times spans: ' + q18);
+
+const q18word = prepare('write as a single logarithm: log_5 b^2 times log_a 5^3');
+console.log('q18word:', q18word);
+assert(q18word.indexOf('\\times') >= 0, 'q18 English times→\\times: ' + q18word);
+assert(q18word.indexOf(' times ') < 0, 'q18 no English times left: ' + q18word);
+assert(!/\\\)\^/.test(q18word), 'q18word keeps exponents inside math: ' + q18word);
+
+const q18prose = prepare('For a > 0, a ≠ 1 and b > 0, write the following as a single logarithm: log_5 b^2 times log_a 5^3');
+console.log('q18prose:', q18prose);
+assert(q18prose.indexOf('\\times') >= 0, 'q18prose has \\times: ' + q18prose);
+assert(q18prose.indexOf(' times ') < 0, 'q18prose no English times: ' + q18prose);
+assert(!/\\\)\^/.test(q18prose), 'q18prose keeps exponents inside math: ' + q18prose);
+assert(q18prose.indexOf('\\(') < 0, 'q18prose uses dollar delimiters: ' + q18prose);
+assert(/\$\\log_\{5\}/.test(q18prose) || q18prose.indexOf('$\\log_{5}') >= 0, 'q18prose log braces: ' + q18prose);
+
+const q18rawParen = prepare('For a > 0, a ≠ 1 and b > 0, write the following as a single logarithm: \\(\\log_5(b^2) \\times \\log_a(5^3)\\)');
+console.log('q18rawParen:', q18rawParen);
+assert(q18rawParen.indexOf('\\(') < 0, 'q18rawParen dollars not paren: ' + q18rawParen);
+assert(q18rawParen.indexOf('\\times') >= 0, 'q18rawParen keeps times: ' + q18rawParen);
+assert(/\\log_\{5\}/.test(q18rawParen), 'q18rawParen braces log_5: ' + q18rawParen);
+
+const q18dollar = prepare('write as a single logarithm: $\\log_5 b^2$ \\times $\\log_a 5^3$');
+console.log('q18dollar:', q18dollar);
+assert(q18dollar.indexOf('\\times') >= 0, 'q18dollar keeps \\times: ' + q18dollar);
+assert(!/\$\s*\\times\s*\$/.test(q18dollar), 'q18dollar joins $ spans: ' + q18dollar);
 
 const broken = prepare('Find the value of a if \\\\\\(\\log_{a} 8 = \\\\frac{3}{2}\\\\\\) where a > 0.');
 console.log('broken:', broken);

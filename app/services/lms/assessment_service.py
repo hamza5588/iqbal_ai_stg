@@ -345,6 +345,15 @@ def publish_assessment(assessment_id: int) -> Assessment:
             other.status = "archived"
 
     assessment.status = "published"
+    # Clear review gate once admin approves/publishes.
+    assessment.requires_review = False
+    if assessment.assessment_type == "diagnostic" and assessment.description:
+        try:
+            meta = json.loads(assessment.description)
+            if isinstance(meta, dict) and meta.pop("awaiting_admin_approval", None) is not None:
+                assessment.description = json.dumps(meta, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError):
+            pass
     db.commit()
     db.refresh(assessment)
 

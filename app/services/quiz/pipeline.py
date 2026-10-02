@@ -26,6 +26,10 @@ from app.services.quiz.section_topics import (
     question_number_from_label,
     topic_for_question_number,
 )
+from app.services.quiz.hybrid_mcq_extractor import (
+    extract_mcqs_hybrid_vision,
+    hybrid_vision_enabled,
+)
 from app.services.quiz.pdf_extractor import extract_qa_from_text, pair_questions_answers
 from app.services.quiz.thread_text import get_thread_full_text
 from app.utils.db import get_db
@@ -34,6 +38,52 @@ logger = logging.getLogger(__name__)
 
 _MAX_CONTENT_MCQS = 40
 ProgressCallback = Optional[Callable[[str, int, str], None]]
+
+
+def _run_hybrid_vision_extraction(
+    pdf_bytes: bytes,
+    *,
+    is_diagnostic: bool,
+    wanted: Optional[int],
+    progress_callback: ProgressCallback,
+) -> tuple[List[MCQQuestion], List[int], List[Optional[str]], List[str], float, Optional[str]]:
+    """PDF bytes → dual-evidence (text + page images) → structured MCQs."""
+    questions, source_numbers, answer_letters, warnings, confidence, title = (
+        extract_mcqs_hybrid_vision(
+            pdf_bytes,
+            require_answers=is_diagnostic,
+            progress_callback=progress_callback,
+        )
+    )
+    if wanted is not None and len(questions) > wanted:
+        questions = questions[:wanted]
+        source_numbers = source_numbers[:wanted]
+        answer_letters = answer_letters[:wanted]
+        warnings.append(f"Using first {wanted} of hybrid-extracted questions")
+    return questions, source_numbers, answer_letters, warnings, confidence, title
+
+
+class _HybridExtractionShim:
+    """Duck-type for pipeline confidence / title lift after hybrid vision."""
+
+    def __init__(
+        self,
+        *,
+        title: Optional[str],
+        confidence: float,
+        warnings: List[str],
+    ):
+        self.title = title
+        self.confidence = confidence
+        self._warnings = list(warnings)
+
+    def model_dump(self):
+        return {
+            "parser": "hybrid_vision",
+            "warnings": self._warnings,
+            "confidence": self.confidence,
+            "title": self.title,
+        }
 
 
 def _set_pdf_source_status(
@@ -336,7 +386,14 @@ def run_pdf_quiz_pipeline(
 
     try:
         text = pdf_text or get_thread_full_text(rag_thread_id, user_id)
-        assert_nonempty_extracted_text(text)
+        # Hybrid vision can read page images even when the text layer is empty
+        # (scanned PDFs). Only require extractable text when we cannot try vision.
+        if not (text or "").strip():
+            if not (pdf_bytes and hybrid_vision_enabled()):
+                assert_nonempty_extracted_text(text)
+            text = text or ""
+        else:
+            assert_nonempty_extracted_text(text)
 
         creation_mode = "pdf_qa_auto"
         source_type = "pdf_qa_converted"
@@ -354,17 +411,67 @@ def run_pdf_quiz_pipeline(
         canonical_source_numbers: List[int] = []
         canonical_parser_name: Optional[str] = None
 
-        # New document-intelligence path. Runs BEFORE the legacy split so a
-        # passing canonical extraction short-circuits the RAG-text / LLM Q&A
-        # logic. Skipped when disabled or when no PDF bytes are available
-        # (e.g. the /process-pdf endpoint that only has a rag_thread_id).
+        if not (text or "").strip() and pdf_bytes and hybrid_vision_enabled():
+            warnings.append(
+                "No extractable PDF text layer; relying on hybrid vision page images."
+            )
+
+        # Preferred path: dual-evidence hybrid vision (persor.py flow) —
+        # text + page images → Qwen/Groq → structured MCQs. Preserves math
+        # better than text-only loaders. Falls back to canonical/legacy on
+        # failure (diagnostics still fail loud if no later path succeeds).
+        run_hybrid = bool(pdf_bytes) and hybrid_vision_enabled() and (
+            is_diagnostic or _looks_like_qa_document(text) or not (text or "").strip()
+        )
+        if run_hybrid:
+            try:
+                (
+                    batch_questions,
+                    canonical_source_numbers,
+                    pair_answer_texts,
+                    hybrid_warnings,
+                    hybrid_conf,
+                    hybrid_title,
+                ) = _run_hybrid_vision_extraction(
+                    pdf_bytes,
+                    is_diagnostic=is_diagnostic,
+                    wanted=wanted,
+                    progress_callback=progress_callback,
+                )
+                creation_mode = "pdf_qa_auto"
+                source_type = "pdf_qa_converted"
+                warnings.extend(hybrid_warnings)
+                extraction = _HybridExtractionShim(
+                    title=hybrid_title,
+                    confidence=hybrid_conf,
+                    warnings=hybrid_warnings,
+                )
+            except Exception as hybrid_exc:  # noqa: BLE001 - fall through
+                logger.warning(
+                    "Hybrid vision extraction failed for assessment %s: %s",
+                    assessment_id,
+                    hybrid_exc,
+                )
+                warnings.append(
+                    f"Hybrid vision extraction skipped: {hybrid_exc}"
+                )
+                batch_questions = []
+                canonical_source_numbers = []
+                pair_answer_texts = []
+                extraction = None
+
+        # Document-intelligence path (native/paddle). Runs when hybrid did
+        # not produce questions. Skipped when disabled or when no PDF bytes.
         #
         # Diagnostics always try it and fail loud. Quizzes only try it when
         # the PDF looks like a Q&A / answer-key paper - a lesson-notes PDF has
         # no printed questions to preserve, so it goes straight to the
         # content-generation path below.
-        run_canonical = bool(pdf_bytes) and _canonical_parser_enabled() and (
-            is_diagnostic or _looks_like_qa_document(text)
+        run_canonical = (
+            not batch_questions
+            and bool(pdf_bytes)
+            and _canonical_parser_enabled()
+            and (is_diagnostic or _looks_like_qa_document(text))
         )
         if run_canonical:
             try:
@@ -675,6 +782,11 @@ def run_pdf_quiz_pipeline(
 
         assessment = assessment_service.get_assessment(assessment_id)
         assessment.creation_mode = creation_mode
+        # Diagnostics stay draft until admin explicitly publishes/approves.
+        # Students only see published diagnostics via get_active_platform_diagnostic.
+        if assessment.assessment_type == "diagnostic":
+            assessment.status = "draft"
+            assessment.requires_review = True
         if extraction and extraction.title and assessment.title.startswith("Untitled"):
             assessment.title = extraction.title
         if question_pdf_topics or question_concepts:
@@ -690,6 +802,8 @@ def run_pdf_quiz_pipeline(
                 meta["question_pdf_topics"] = question_pdf_topics
             if question_concepts:
                 meta["question_concepts"] = question_concepts
+            if assessment.assessment_type == "diagnostic":
+                meta["awaiting_admin_approval"] = True
             assessment.description = json.dumps(meta, ensure_ascii=False)
         db.commit()
 
@@ -711,7 +825,8 @@ def run_pdf_quiz_pipeline(
             "mode": creation_mode,
             "failed_conversions": failed_conversions,
             "overall_confidence": round(overall, 3),
-            "requires_review": overall < 0.85,
+            "requires_review": True if assessment.assessment_type == "diagnostic" else (overall < 0.85),
+            "status": assessment.status,
             "extraction_status": "completed",
             "warnings": warnings,
         }
