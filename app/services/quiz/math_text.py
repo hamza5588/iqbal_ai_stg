@@ -15,20 +15,28 @@ from typing import Optional, Tuple
 # handful of common math commands this happens to; every other control
 # character is left alone since it's far more likely a real backslash never
 # belonged there.
-_EATEN_BACKSLASH_COMMANDS = {
-    "\x0crac": "\\frac",       # \f + rac  <- \frac
-    "\x09imes": "\\times",     # \t + imes <- \times
-    "\x09heta": "\\theta",     # \t + heta <- \theta
-    "\x09ext": "\\text",       # \t + ext  <- \text
-    "\x08eta": "\\beta",       # \b + eta  <- \beta
-    "\x0bec": "\\vec",         # \v + ec   <- \vec
-}
+# Longest-first: \begin / \biggl must win over shorter \big / \beta prefixes.
+_EATEN_BACKSLASH_COMMANDS = (
+    ("\x08egin", "\\begin"),     # \b + egin <- \begin
+    ("\x08iggl", "\\biggl"),     # \b + iggl <- \biggl
+    ("\x08iggr", "\\biggr"),
+    ("\x08igl", "\\bigl"),
+    ("\x08igr", "\\bigr"),
+    ("\x08igg", "\\bigg"),
+    ("\x08ig", "\\big"),         # \b + ig   <- \big  (MathJax "Math input error" on stems)
+    ("\x08eta", "\\beta"),       # \b + eta  <- \beta
+    ("\x0crac", "\\frac"),       # \f + rac  <- \frac
+    ("\x09imes", "\\times"),     # \t + imes <- \times
+    ("\x09heta", "\\theta"),     # \t + heta <- \theta
+    ("\x09ext", "\\text"),       # \t + ext  <- \text
+    ("\x0bec", "\\vec"),         # \v + ec   <- \vec
+)
 
 
 def recover_eaten_backslash_commands(text: str) -> str:
     if not text or not any(c in text for c in "\x08\x09\x0b\x0c"):
         return text
-    for bad, good in _EATEN_BACKSLASH_COMMANDS.items():
+    for bad, good in _EATEN_BACKSLASH_COMMANDS:
         text = text.replace(bad, good)
     return text
 

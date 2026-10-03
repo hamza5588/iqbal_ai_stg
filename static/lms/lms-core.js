@@ -799,20 +799,28 @@
   // backslash and the f: \frac -> "\x0Crac". Mirrors math_text.py's
   // _recover_eaten_backslash_commands (found live via E2E testing an
   // AI-generated diagnostic variant question).
-  var _EATEN_BACKSLASH_COMMANDS = {
-    '\x0Crac': '\\frac',
-    '\x09imes': '\\times',
-    '\x09heta': '\\theta',
-    '\x09ext': '\\text',
-    '\x08eta': '\\beta',
-    '\x0Bec': '\\vec'
-  };
+  // Longest-first pairs (same as math_text.recover_eaten_backslash_commands).
+  var _EATEN_BACKSLASH_COMMANDS = [
+    ['\x08egin', '\\begin'],
+    ['\x08iggl', '\\biggl'],
+    ['\x08iggr', '\\biggr'],
+    ['\x08igl', '\\bigl'],
+    ['\x08igr', '\\bigr'],
+    ['\x08igg', '\\bigg'],
+    ['\x08ig', '\\big'],
+    ['\x08eta', '\\beta'],
+    ['\x0Crac', '\\frac'],
+    ['\x09imes', '\\times'],
+    ['\x09heta', '\\theta'],
+    ['\x09ext', '\\text'],
+    ['\x0Bec', '\\vec']
+  ];
   function lmsRecoverEatenBackslashCommands(s) {
     if (!s || !/[\x08\x09\x0B\x0C]/.test(s)) return s;
     var out = s;
-    Object.keys(_EATEN_BACKSLASH_COMMANDS).forEach(function (bad) {
-      out = out.split(bad).join(_EATEN_BACKSLASH_COMMANDS[bad]);
-    });
+    for (var i = 0; i < _EATEN_BACKSLASH_COMMANDS.length; i++) {
+      out = out.split(_EATEN_BACKSLASH_COMMANDS[i][0]).join(_EATEN_BACKSLASH_COMMANDS[i][1]);
+    }
     return out;
   }
 

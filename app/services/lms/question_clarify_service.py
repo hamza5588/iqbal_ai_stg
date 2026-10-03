@@ -61,10 +61,10 @@ The same question in very simple words:"""
 _LEAK_RE = re.compile(
     r"\b(the answer is|correct (option|answer|choice)|right (option|answer|choice)"
     r"|option [a-d]\b|choice [a-d]\b|is correct|is incorrect|eliminate|rule out"
-    r"|the solution is|equals?\s|therefore|so the value"
-    # --- method / formula disclosure ---
-    r"|multiply|multiplying|multiplied by|multiplication|divide|dividing|divided by"
-    r"|subtract|subtracting|adding|add up|add together|times the"
+    r"|the solution is|therefore|so the value is"
+    # --- method / formula disclosure (avoid bare "equals"/"add" — too many false rejects) ---
+    r"|multiply(?:ing|ied)? by|multiplication|divid(?:e|ing|ed by)|divided by"
+    r"|subtract(?:ing)?|add(?:ing)? (?:up|together)|times the"
     r"|by the width|by the length|by the height|by the base"
     r"|is found by|is calculated|is computed|is obtained by|is worked out"
     r"|is given by|is the product of|is the sum of|is the difference of"

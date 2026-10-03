@@ -790,6 +790,22 @@
   }
 
   window._lmsDiagExplainCache = {};
+  function localDiagExplainFallback(q) {
+    var stem = '';
+    if (q) {
+      if (typeof window.lmsQuestionText === 'function') stem = window.lmsQuestionText(q) || '';
+      else stem = q.question_text || q.question_latex || '';
+    }
+    stem = String(stem || '').replace(/\s+/g, ' ').trim();
+    if (stem.length > 280) stem = stem.slice(0, 280) + '…';
+    return (
+      'Read it slowly, one part at a time. The question is asking: ' +
+      (stem || 'the question above') +
+      ' It does not want you to do anything except answer that. ' +
+      'Work out your own answer first, then choose the option that matches it.'
+    );
+  }
+
   window.lmsExplainDiagQuestion = async function (qIdx) {
     var panel = document.getElementById('lmsDiagExplain');
     if (!panel) return;
@@ -805,11 +821,14 @@
     panel.innerHTML = '<span class="lms-status">Rephrasing this question…</span>';
     try {
       var res = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/questions/' + qid + '/clarify', { method: 'POST' });
-      var text = (res && res.clarification) || 'Read the question one part at a time and work out your own answer before choosing.';
+      var text = (res && res.clarification) || localDiagExplainFallback(q);
       window._lmsDiagExplainCache[qid] = text;
       renderDiagExplain(panel, text);
     } catch (e) {
-      panel.innerHTML = '<span class="lms-status">Could not rephrase right now. Read the question one part at a time and work out your own answer before choosing.</span>';
+      // Network/API failure — still show a useful local rephrase (with math typeset).
+      var fallback = localDiagExplainFallback(q);
+      window._lmsDiagExplainCache[qid] = fallback;
+      renderDiagExplain(panel, fallback);
     }
   };
 
