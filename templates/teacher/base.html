@@ -34,11 +34,13 @@
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-legacy.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-theme.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-dashboard.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-view-lesson.css') }}">
+  {# Bump when LMS/teacher static JS/CSS changes so browsers skip stale cache #}
+  {% set asset_v = '20261003ml1' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-legacy.css') }}?v={{ asset_v }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}?v={{ asset_v }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-theme.css') }}?v={{ asset_v }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-dashboard.css') }}?v={{ asset_v }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-view-lesson.css') }}?v={{ asset_v }}">
 
   <!-- MathJax v3: TeX delimiters, skip code blocks, no automatic typeset -->
   <script>
@@ -107,14 +109,14 @@
 
   {# Order matches the legacy page: teacher-core, then lms-core, then the LMS hub helpers (overrides depend on it). #}
   <script src="https://cdn.jsdelivr.net/npm/mathlive@0.105.3/mathlive.min.js"></script>
-  <script src="{{ url_for('static', filename='teacher/js/teacher-shell.js') }}"></script>
-  <script src="{{ url_for('static', filename='teacher/js/teacher-core.js') }}"></script>
-  <script src="{{ url_for('static', filename='lms/lms-core.js') }}"></script>
-  <script src="{{ url_for('static', filename='teacher/js/teacher-lms-hubs.js') }}"></script>
-  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}"></script>
-  <script src="{{ url_for('static', filename='teacher/js/teacher-classes.js') }}"></script>
-  <script src="{{ url_for('static', filename='teacher/js/teacher-quizzes.js') }}"></script>
-  <script src="{{ url_for('static', filename='teacher/js/teacher-analytics.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-shell.js') }}?v={{ asset_v }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-core.js') }}?v={{ asset_v }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v={{ asset_v }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-lms-hubs.js') }}?v={{ asset_v }}"></script>
+  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}?v={{ asset_v }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-classes.js') }}?v={{ asset_v }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-quizzes.js') }}?v={{ asset_v }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/teacher-analytics.js') }}?v={{ asset_v }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 
