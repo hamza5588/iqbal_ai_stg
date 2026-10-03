@@ -1233,60 +1233,37 @@ html.dark .lms-diag-clear-note,
   border-radius: 10px;
   background: var(--lms-bg, #f8fafc);
 }
-.lms-math-keyboard {
-  margin-bottom: 12px;
-  padding: 10px;
-  border: 1px solid var(--lms-border);
-  border-radius: 12px;
-  background: #fff;
-}
-.lms-math-keyboard-title {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--lms-text);
-  margin-bottom: 8px;
-}
-.lms-math-row {
-  display: grid;
-  grid-template-columns: 7.5rem 1fr;
-  gap: 8px;
-  align-items: start;
-  margin-bottom: 8px;
-}
-.lms-math-row-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--lms-muted);
-  padding-top: 6px;
-}
-.lms-math-keys {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.lms-math-key {
-  min-width: 2.4rem;
-  border: 1px solid #cbd5e1;
-  background: linear-gradient(#fff, #f8fafc);
-  border-radius: 8px;
-  padding: 6px 8px;
+.lms-math-keyboard-hint {
+  margin: 0 0 10px;
   font-size: 0.85rem;
-  line-height: 1.2;
-  cursor: pointer;
-  color: var(--lms-text);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+  color: var(--lms-muted);
+  line-height: 1.4;
 }
-.lms-math-key:hover {
+math-field.lms-q-edit-field {
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 8px 10px;
+  border: 1px solid var(--lms-border, #cbd5e1);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 1.15rem;
+  box-sizing: border-box;
+}
+math-field.lms-q-edit-stem-input {
+  min-height: 3.5rem;
+}
+math-field.lms-q-edit-field:focus {
+  outline: 2px solid #0f766e;
+  outline-offset: 1px;
   border-color: #0f766e;
-  background: #ecfeff;
 }
-.lms-math-key:active {
-  transform: translateY(1px);
-}
-@media (max-width: 640px) {
-  .lms-math-row {
-    grid-template-columns: 1fr;
-  }
+/* MathLive virtual keyboard above LMS modals */
+.ML__keyboard,
+div.ML__keyboard,
+.ML__virtual-keyboard,
+math-field::part(virtual-keyboard) {
+  z-index: 400000 !important;
 }
 .lms-math-hint-label {
   margin: 0 0 6px;

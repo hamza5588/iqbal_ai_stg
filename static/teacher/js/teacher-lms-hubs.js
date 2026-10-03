@@ -805,7 +805,6 @@
         return;
       }
       window._lmsQuizPreviewQuestions = d.questions;
-      var mathKeyboardHtml = _lmsMathKeyboardHtml();
       previewEl.innerHTML = d.questions.map(function (item, idx) {
         const q = item.question || {};
         const qid = q.id;
@@ -821,8 +820,8 @@
           var lab = o.label || String.fromCharCode(65 + oidx);
           return '<label class="lms-q-edit-opt">' +
             '<span>' + escapeHtml(lab) + '</span>' +
-            '<textarea class="lms-q-edit-option lms-q-edit-field" data-oidx="' + oidx + '" rows="2">' +
-            escapeHtml(o.text || o.latex || '') + '</textarea></label>';
+            '<math-field class="lms-q-edit-option lms-q-edit-field" data-oidx="' + oidx + '"></math-field>' +
+            '</label>';
         }).join('');
         var correctSel = [0,1,2,3].map(function (i) {
           var lab = String.fromCharCode(65 + i);
@@ -839,12 +838,9 @@
           '</div>' +
           '<div class="lms-preview-opts">' + opts + '</div>' +
           '<div class="lms-q-edit-panel" id="lmsQEdit-' + qid + '" hidden>' +
-            '<div class="lms-math-keyboard" data-qid="' + qid + '">' +
-              '<div class="lms-math-keyboard-title">Math keyboard — click a symbol to insert into the focused box</div>' +
-              mathKeyboardHtml +
-            '</div>' +
-            '<label class="lms-q-edit-stem">Question text' +
-              '<textarea class="lms-q-edit-stem-input lms-q-edit-field" rows="3">' + escapeHtml(q.question_text || '') + '</textarea>' +
+            '<p class="lms-math-keyboard-hint">Tap a field to edit as normal math (not LaTeX code). Use the scientific keyboard for symbols, fractions, roots, Greek, and functions.</p>' +
+            '<label class="lms-q-edit-stem">Question' +
+              '<math-field class="lms-q-edit-stem-input lms-q-edit-field"></math-field>' +
             '</label>' +
             '<div class="lms-q-edit-options">' + editOpts + '</div>' +
             '<label class="lms-q-edit-correct">Correct answer <select class="lms-q-edit-correct-sel">' + correctSel + '</select></label>' +
@@ -855,121 +851,202 @@
             '</div>' +
           '</div></div>';
       }).join('');
+      _lmsHydrateQuizMathFields(previewEl, d.questions);
       _lmsTypeset(previewEl);
       _bindLmsQuizEditHandlers(previewEl);
     }
 
-    function _lmsMathKeyboardHtml() {
-      // label, insert template (| = cursor after insert)
-      var rows = [
-        {
-          title: 'Basics',
-          keys: [
-            ['+', '+'], ['−', '-'], ['×', '\\times'], ['÷', '\\div'],
-            ['=', '='], ['≠', '\\neq'], ['≈', '\\approx'], ['±', '\\pm'],
-            ['(', '('], [')', ')'], ['[', '['], [']', ']']
-          ]
-        },
-        {
-          title: 'Fractions & roots',
-          keys: [
-            ['a/b', '\\frac{|}{}'], ['1/2', '\\frac{1}{2}'], ['3/2', '\\frac{3}{2}'],
-            ['√', '\\sqrt{|}'], ['∛', '\\sqrt[3]{|}'], ['n√', '\\sqrt[n]{|}']
-          ]
-        },
-        {
-          title: 'Powers & index',
-          keys: [
-            ['x²', '^{2}'], ['x³', '^{3}'], ['xⁿ', '^{|}'], ['x₀', '_{|}'],
-            ['10ⁿ', '10^{|}'], ['aˣ', 'a^{|}'], ['eˣ', 'e^{|}']
-          ]
-        },
-        {
-          title: 'Log / trig',
-          keys: [
-            ['log', '\\log'], ['logₐ', '\\log_{|}'], ['ln', '\\ln'],
-            ['sin', '\\sin'], ['cos', '\\cos'], ['tan', '\\tan']
-          ]
-        },
-        {
-          title: 'Symbols',
-          keys: [
-            ['∞', '\\infty'], ['π', '\\pi'], ['θ', '\\theta'], ['α', '\\alpha'],
-            ['β', '\\beta'], ['°', '^\\circ'], ['·', '\\cdot'], ['…', '\\ldots']
-          ]
-        },
-        {
-          title: 'Wrap',
-          keys: [
-            ['( math )', '\\(|\\)'], ['[ math ]', '\\[|\\]'],
-            ['left( )', '\\left(|\\right)'], ['abs', '\\left||\\right|']
-          ]
-        }
-      ];
-      return rows.map(function (row) {
-        var btns = row.keys.map(function (k) {
-          return '<button type="button" class="lms-math-key" data-insert="' + escapeHtml(k[1]) + '" title="' + escapeHtml(k[1]) + '">' +
-            escapeHtml(k[0]) + '</button>';
-        }).join('');
-        return '<div class="lms-math-row"><span class="lms-math-row-label">' + escapeHtml(row.title) + '</span>' +
-          '<div class="lms-math-keys">' + btns + '</div></div>';
-      }).join('');
+    function _lmsEscapeTextMode(s) {
+      return String(s || '')
+        .replace(/\\/g, '\\textbackslash{}')
+        .replace(/[{}]/g, function (ch) { return '\\' + ch; })
+        .replace(/#/g, '\\#')
+        .replace(/%/g, '\\%')
+        .replace(/&/g, '\\&')
+        .replace(/\$/g, '\\$')
+        .replace(/_/g, '\\_')
+        .replace(/\^/g, '\\^{}');
     }
 
-    function _lmsInsertMathToken(textarea, template) {
-      if (!textarea || template == null) return;
-      var start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
-      var end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : start;
-      var selected = textarea.value.slice(start, end);
-      var cursorMark = template.indexOf('|');
-      var insert = template;
-      var caret = start;
-      if (cursorMark >= 0) {
-        insert = template.replace('|', selected || '');
-        caret = start + cursorMark + (selected ? selected.length : 0);
-      } else {
-        insert = selected ? (template + selected) : template;
-        caret = start + insert.length;
+    /** Convert stored quiz text (mixed prose + $...$ / bare TeX) into MathLive LaTeX. */
+    function _lmsTextToMathlive(src) {
+      src = String(src == null ? '' : src).trim();
+      if (!src) return '';
+      if (typeof lmsPrepareMathText === 'function') {
+        try { src = lmsPrepareMathText(src) || src; } catch (e) { /* keep raw */ }
       }
-      textarea.value = textarea.value.slice(0, start) + insert + textarea.value.slice(end);
-      textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = caret;
+      var whole = src.match(/^\$\$([\s\S]*)\$\$\s*$/) ||
+        src.match(/^\$([^$]*)\$\s*$/) ||
+        src.match(/^\\\(([\s\S]*)\\\)\s*$/) ||
+        src.match(/^\\\[([\s\S]*)\\\]\s*$/);
+      if (whole) return String(whole[1] || '').trim();
+
+      if (/\$[^$]+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]/.test(src)) {
+        var out = '';
+        var re = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]/g;
+        var last = 0;
+        var match;
+        while ((match = re.exec(src))) {
+          var plain = src.slice(last, match.index);
+          if (plain) out += '\\text{' + _lmsEscapeTextMode(plain) + '}';
+          out += match[1] || match[2] || match[3] || match[4] || '';
+          last = match.index + match[0].length;
+        }
+        var rest = src.slice(last);
+        if (rest) out += '\\text{' + _lmsEscapeTextMode(rest) + '}';
+        return out;
+      }
+
+      if (/\\[a-zA-Z]+/.test(src) && /[A-Za-z]{3,}\s/.test(src)) {
+        // Prose mixed with bare TeX commands (e.g. "Find ... \log_{b} 64 =")
+        var parts = '';
+        var i = 0;
+        while (i < src.length) {
+          if (src.charAt(i) === '\\') {
+            var j = i + 1;
+            while (j < src.length && /[a-zA-Z]/.test(src.charAt(j))) j++;
+            // consume braced groups / subscripts after command
+            while (j < src.length) {
+              var c = src.charAt(j);
+              if (c === '{' || c === '[') {
+                var open = c;
+                var close = c === '{' ? '}' : ']';
+                var depth = 1;
+                j++;
+                while (j < src.length && depth > 0) {
+                  if (src.charAt(j) === open) depth++;
+                  else if (src.charAt(j) === close) depth--;
+                  j++;
+                }
+                continue;
+              }
+              if (c === '_' || c === '^') {
+                j++;
+                if (src.charAt(j) === '{') continue;
+                if (src.charAt(j)) j++;
+                continue;
+              }
+              break;
+            }
+            parts += src.slice(i, j);
+            i = j;
+          } else {
+            var k = src.indexOf('\\', i);
+            if (k < 0) k = src.length;
+            var chunk = src.slice(i, k);
+            if (chunk) parts += '\\text{' + _lmsEscapeTextMode(chunk) + '}';
+            i = k;
+          }
+        }
+        return parts || src;
+      }
+
+      if (/\\[a-zA-Z]+/.test(src)) return src;
+      return '\\text{' + _lmsEscapeTextMode(src) + '}';
+    }
+
+    /** MathLive value → storage string for student/teacher renderers. */
+    function _lmsFromMathlive(mf) {
+      if (!mf) return '';
+      var latex = '';
+      try {
+        latex = (typeof mf.getValue === 'function')
+          ? (mf.getValue('latex-without-placeholders') || mf.getValue('latex') || '')
+          : (mf.value || '');
+      } catch (e) {
+        latex = mf.value || '';
+      }
+      latex = String(latex || '').trim();
+      if (!latex) return '';
+      if (/^\$|\\\(|\\\[/.test(latex)) return latex;
+      // Keep display math delimiters so existing MathJax/KaTeX pipeline typesets consistently
+      return '$' + latex + '$';
+    }
+
+    function _lmsConfigureMathKeyboard() {
+      var vk = window.mathVirtualKeyboard;
+      if (!vk) return;
+      try {
+        vk.layouts = ['numeric', 'symbols', 'alphabetic', 'greek', 'functions'];
+      } catch (e) { /* older builds */ }
+    }
+
+    function _lmsSetupMathField(mf, rawText, isStem) {
+      if (!mf) return;
+      try { mf.mathVirtualKeyboardPolicy = 'manual'; } catch (e) {}
+      try { mf.defaultMode = isStem ? 'text' : 'math'; } catch (e) {}
+      try { mf.smartFence = true; } catch (e) {}
+      var val = _lmsTextToMathlive(rawText);
+      try {
+        if (typeof mf.setValue === 'function') mf.setValue(val, { silenceNotifications: true });
+        else mf.value = val;
+      } catch (e) {
+        try { mf.value = val; } catch (e2) { /* ignore */ }
+      }
+      if (mf._lmsVkBound) return;
+      mf._lmsVkBound = true;
+      mf.addEventListener('focusin', function () {
+        _lmsConfigureMathKeyboard();
+        if (window.mathVirtualKeyboard) {
+          try { window.mathVirtualKeyboard.show(); } catch (e) { /* ignore */ }
+        }
+      });
+    }
+
+    function _lmsHydrateQuizMathFields(root, questions) {
+      _lmsConfigureMathKeyboard();
+      (questions || []).forEach(function (item) {
+        var q = item.question || item || {};
+        var qid = q.id;
+        if (qid == null) return;
+        var card = root.querySelector('.lms-quiz-preview-card[data-qid="' + qid + '"]');
+        if (!card) return;
+        var stemMf = card.querySelector('math-field.lms-q-edit-stem-input');
+        _lmsSetupMathField(
+          stemMf,
+          (typeof lmsQuestionText === 'function' ? lmsQuestionText(q) : null) || q.question_text || q.question_latex || '',
+          true
+        );
+        (q.options || []).forEach(function (o, oidx) {
+          var mf = card.querySelector('math-field.lms-q-edit-option[data-oidx="' + oidx + '"]');
+          var optText = (typeof lmsOptionText === 'function')
+            ? lmsOptionText(o)
+            : (o.text || o.latex || '');
+          _lmsSetupMathField(mf, optText, false);
+        });
+      });
     }
 
     function _bindLmsQuizEditHandlers(root) {
       if (!root || root._lmsEditBound) return;
       root._lmsEditBound = true;
-      root.addEventListener('focusin', function (ev) {
-        var field = ev.target && ev.target.classList && ev.target.classList.contains('lms-q-edit-field') ? ev.target : null;
-        if (!field) return;
-        var panel = field.closest('.lms-q-edit-panel');
-        if (panel) panel._lmsActiveField = field;
-      });
       root.addEventListener('click', async function (ev) {
         var t = ev.target;
         if (!t) return;
-        var key = t.closest && t.closest('.lms-math-key');
-        if (key) {
-          ev.preventDefault();
-          var insert = key.getAttribute('data-insert') || '';
-          var panel = key.closest('.lms-q-edit-panel');
-          var active = (panel && panel._lmsActiveField) ||
-            (panel && panel.querySelector('textarea:focus')) ||
-            (panel && panel.querySelector('.lms-q-edit-field'));
-          _lmsInsertMathToken(active, insert);
-          return;
-        }
         var toggle = t.closest && t.closest('.lms-q-edit-toggle');
         if (toggle) {
           var qidT = toggle.getAttribute('data-qid');
           var panelT = document.getElementById('lmsQEdit-' + qidT);
-          if (panelT) panelT.hidden = !panelT.hidden;
+          if (panelT) {
+            panelT.hidden = !panelT.hidden;
+            if (!panelT.hidden) {
+              var first = panelT.querySelector('math-field.lms-q-edit-field');
+              if (first && typeof first.focus === 'function') {
+                setTimeout(function () { try { first.focus(); } catch (e) {} }, 50);
+              }
+            } else if (window.mathVirtualKeyboard) {
+              try { window.mathVirtualKeyboard.hide(); } catch (e) {}
+            }
+          }
           return;
         }
         var cancel = t.closest && t.closest('.lms-q-edit-cancel');
         if (cancel) {
           var panelC = document.getElementById('lmsQEdit-' + cancel.getAttribute('data-qid'));
           if (panelC) panelC.hidden = true;
+          if (window.mathVirtualKeyboard) {
+            try { window.mathVirtualKeyboard.hide(); } catch (e) {}
+          }
           return;
         }
         var save = t.closest && t.closest('.lms-q-edit-save');
@@ -979,15 +1056,16 @@
         var panel = document.getElementById('lmsQEdit-' + qid);
         var status = document.getElementById('lmsQEditStatus-' + qid);
         if (!card || !panel) return;
-        var stem = (panel.querySelector('.lms-q-edit-stem-input') || {}).value || '';
+        var stemMf = panel.querySelector('math-field.lms-q-edit-stem-input');
+        var stem = _lmsFromMathlive(stemMf);
         var correctIdx = parseInt((panel.querySelector('.lms-q-edit-correct-sel') || {}).value, 10);
         if (isNaN(correctIdx)) correctIdx = 0;
         var options = [];
-        panel.querySelectorAll('.lms-q-edit-option').forEach(function (ta) {
-          var oidx = parseInt(ta.getAttribute('data-oidx'), 10);
+        panel.querySelectorAll('math-field.lms-q-edit-option').forEach(function (mf) {
+          var oidx = parseInt(mf.getAttribute('data-oidx'), 10);
           options.push({
             label: String.fromCharCode(65 + oidx),
-            text: ta.value || '',
+            text: _lmsFromMathlive(mf),
             latex: null
           });
         });
@@ -1012,6 +1090,9 @@
           var body = await res.json();
           if (!res.ok) throw new Error((body.error && body.error.message) || body.message || 'Save failed');
           if (status) status.textContent = 'Saved.';
+          if (window.mathVirtualKeyboard) {
+            try { window.mathVirtualKeyboard.hide(); } catch (e) {}
+          }
           await loadLmsQuizPreview();
         } catch (err) {
           if (status) status.textContent = 'Error: ' + err.message;
