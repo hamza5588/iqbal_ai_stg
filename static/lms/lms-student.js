@@ -36,6 +36,13 @@
     return Promise.resolve();
   }
 
+  /** Diagnostic "In simpler words" panel — same math path as stem/options. */
+  function renderDiagExplain(panel, text) {
+    if (!panel) return;
+    panel.innerHTML = '<strong>In simpler words:</strong> ' + fmtText(text, false);
+    typeset(panel);
+  }
+
   var diagState = {
     assessmentId: null,
     attemptId: null,
@@ -627,7 +634,7 @@
       var ep = document.getElementById('lmsDiagExplain');
       if (ep) {
         ep.hidden = false;
-        ep.innerHTML = '<strong>In simpler words:</strong> ' + escapeHtml(window._lmsDiagExplainCache[qid]);
+        renderDiagExplain(ep, window._lmsDiagExplainCache[qid]);
       }
     }
     if (window._lmsDiagWorkspaceOpen && typeof window.mountDiagWorkspace === 'function') window.mountDiagWorkspace();
@@ -792,7 +799,7 @@
     if (!qid || !diagState.attemptId) return;
     panel.hidden = false;
     if (window._lmsDiagExplainCache[qid]) {
-      panel.innerHTML = '<strong>In simpler words:</strong> ' + escapeHtml(window._lmsDiagExplainCache[qid]);
+      renderDiagExplain(panel, window._lmsDiagExplainCache[qid]);
       return;
     }
     panel.innerHTML = '<span class="lms-status">Rephrasing this question…</span>';
@@ -800,7 +807,7 @@
       var res = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/questions/' + qid + '/clarify', { method: 'POST' });
       var text = (res && res.clarification) || 'Read the question one part at a time and work out your own answer before choosing.';
       window._lmsDiagExplainCache[qid] = text;
-      panel.innerHTML = '<strong>In simpler words:</strong> ' + escapeHtml(text);
+      renderDiagExplain(panel, text);
     } catch (e) {
       panel.innerHTML = '<span class="lms-status">Could not rephrase right now. Read the question one part at a time and work out your own answer before choosing.</span>';
     }
