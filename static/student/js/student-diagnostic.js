@@ -11,8 +11,18 @@
     var rows = [];
     var d = state.diag;
     var inProgress = d && (d.in_progress_attempt_id || d.attempt_status === 'in_progress');
-    var completed = d && (d.diagnostic_completed || d.any_diagnostic_completed);
-    if (d && (!completed || inProgress)) {
+    // "completed" here means this diagnostic: a newly published one the student has not
+    // submitted yet is offered as Available even though an older one unlocked their hubs.
+    var completed = d && (d.diagnostic_completed || d.any_diagnostic_completed) && d.attempted_this_diagnostic !== false;
+    // More than one still to take (the admin replaced a diagnostic this student never took):
+    // one row each, in order; only the first can be started.
+    var waiting = ((d && d.queue) || []).filter(function (q) { return q.status !== 'taken'; });
+    if (waiting.length > 1) {
+      waiting.forEach(function (q, i) {
+        rows.push({ kind: i === 0 ? 'current' : 'locked', status: i === 0 ? (inProgress ? 'in_progress' : 'available') : 'locked',
+          title: 'Diagnostic Assessment ' + (i + 1) + ' of ' + waiting.length, item: q });
+      });
+    } else if (d && (!completed || inProgress)) {
       rows.push({ kind: 'current', status: inProgress ? 'in_progress' : 'available', title: 'Diagnostic Assessment' });
     }
     state.attempts
@@ -49,17 +59,34 @@
     });
   }
 
+  // Retakes need a teacher's approval: the button reflects where the request stands.
+  function retakeButtonHtml() {
+    var rr = state.diag && state.diag.retake_request;
+    var st = rr && rr.status;
+    // only the current diagnostic can be retaken; a newer one shows as a normal "Start Quiz" row
+    if (!state.diag || state.diag.attempted_this_diagnostic === false) return '';
+    if (st === 'pending') {
+      return '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" data-testid="retake-btn" disabled>Retake requested — waiting for your teacher</button>';
+    }
+    var label = st === 'approved' ? 'Start approved retake' : (st === 'denied' ? 'Retake not approved — request again' : 'Request a retake');
+    return '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" data-testid="retake-btn" onclick="sdRetakeDiagnostic()">' + label + '</button>';
+  }
+
   function rowHtml(row, idx) {
     var num = String(idx + 1).padStart(2, '0');
     var meta, pill, actions, barCls = '', avCls = '';
-    if (row.kind === 'current') {
-      var d = state.diag;
+    if (row.kind === 'current' || row.kind === 'locked') {
+      var d = row.item || state.diag;
       meta = '<div><span class="sd-label">Subject</span><b>' + escapeHtml(subjectOf()) + '</b></div>' +
         '<div><span class="sd-label">Grade</span><b>' + escapeHtml(gradeOf()) + '</b></div>' +
         '<div><span class="sd-label">Assigned by</span><b>Admin</b></div>' +
         '<div><span class="sd-label">Questions</span><b>' + escapeHtml(String(d.question_count || '—')) + '</b></div>' +
         (d.time_limit_minutes ? '<div><span class="sd-label">Time limit</span><b><i class="far fa-clock"></i> ' + Math.round(d.time_limit_minutes) + ' min</b></div>' : '');
-      if (row.status === 'in_progress') {
+      if (row.kind === 'locked') {
+        barCls = ' grey'; avCls = ' grey';
+        pill = '<span class="sd-pill grey">Locked</span>';
+        actions = '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" disabled><i class="fas fa-lock"></i> Complete the first one to unlock</button>';
+      } else if (row.status === 'in_progress') {
         pill = '<span class="sd-pill amber">In progress</span>';
         actions = '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openLmsDiagnostic()">Continue Quiz <i class="fas fa-chevron-right"></i></button>';
       } else {
@@ -89,9 +116,9 @@
             : window.sdRenderResultBody(r) +
               (row.latest ? '<div class="sd-result-actions">' +
                 ((r.weak_topics || []).length
-                  ? '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openDeficiencyChat()">Start Learning Chat</button>'
+                  ? '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="sdShowView(\'learning-path\')">Start Learning Chat</button>'
                   : '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openDeficiencyChat(false, \'enrichment\')">Start challenge</button>') +
-                '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="sdRetakeDiagnostic()">Retake with new questions</button></div>' : ''))) +
+                retakeButtonHtml() + '</div>' : ''))) +
         '</div>';
     }
     return '<div class="sd-list-row" data-diag-row="' + row.kind + '"><div class="sd-num-bar' + barCls + '">' + num + '</div><div class="sd-row-body">' +
@@ -130,7 +157,9 @@
       list.innerHTML = '<div class="sd-empty">' + msg + '</div>';
       return;
     }
-    list.innerHTML = shown.map(rowHtml).join('');
+    var notice = (state.diag && state.diag.queue_message && state.tab !== 'taken')
+      ? '<div class="sd-note" data-testid="diag-queue-notice" style="margin:0 0 12px;font-weight:600;"><i class="fas fa-info-circle"></i> ' + escapeHtml(state.diag.queue_message) + '</div>' : '';
+    list.innerHTML = notice + shown.map(rowHtml).join('');
     if (window.lmsTypesetMath) list.querySelectorAll('.sd-result').forEach(function (el) { window.lmsTypesetMath(el); });
     // Any expanded row whose result isn't loaded (first open, or cleared by a refresh) fetches it now.
     shown.forEach(function (r) {

@@ -206,6 +206,7 @@ def get_class_roster_summary(class_id: int, teacher_id: int) -> List[dict]:
             {
                 "student_id": enr.student_id,
                 "username": user.username if user else None,
+                "full_name": (getattr(user, "full_name", None) or user.username) if user else None,
                 "email": user.useremail if user else None,
                 "overall_progress": progress,
                 "weak_topic_count": len(weak_topics),

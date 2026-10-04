@@ -48,6 +48,22 @@ def _ladder_from(start_rank: int) -> List[str]:
     return rungs
 
 
+MAX_QUESTIONS_PER_WEAK_AREA = 10
+
+
+def _question_count_for_score(score_percent: float) -> int:
+    """How many Learning Chat questions a weak topic gets: one per 10% the student
+    was short of full marks in it (50% -> 5 questions, 20% -> 8), at least 1."""
+    missing = max(0.0, 100.0 - float(score_percent or 0))
+    return max(1, min(MAX_QUESTIONS_PER_WEAK_AREA, -int(-missing // 10)))
+
+
+def _difficulty_plan(score_percent: float, count: int) -> List[str]:
+    """``count`` difficulties climbing the ladder for this score, easiest first."""
+    rungs = _ladder_from(_start_rank_for_score(score_percent))
+    return [rungs[min(len(rungs) - 1, i * len(rungs) // count)] for i in range(count)]
+
+
 def _get_target_threads(assessment_id: int) -> List[dict]:
     """Return all target PDF threads for a diagnostic."""
     targets = assessment_service.list_target_pdfs(assessment_id)
@@ -290,6 +306,8 @@ def _build_question_queue(
     """Generate Learning Chat MCQs, difficulty-laddered per weak area and
     pitched to the student's grade. Prefers the teacher target PDF; falls
     back to AI generation for the skill when the PDF has no usable section."""
+    from app.services.quiz.mcq_answer_check import verify_mcq_keys
+
     queue: List[dict] = []
     used_question_texts_by_topic = used_question_texts_by_topic or {}
     seen_texts: set[str] = set()
@@ -298,7 +316,7 @@ def _build_question_queue(
         topic_name = (entry.get("topic_name") or "Practice area").strip()
         topic_id = _resolve_weak_topic_id(entry.get("topic_id") or 0, topic_name)
         score = float(entry.get("score_percent") or 0)
-        ladder = _ladder_from(_start_rank_for_score(score))
+        ladder = _difficulty_plan(score, _question_count_for_score(score))
         exclude_texts = used_question_texts_by_topic.get(topic_id, [])
         exclude_keys = {_question_key(t) for t in exclude_texts if t}
         pdf_section, thread_id, relevance = _match_target_section(topic_name, target_thread_ids)
@@ -339,27 +357,35 @@ def _build_question_queue(
             except Exception as exc:
                 logger.warning("Target PDF MCQ gen failed for %s: %s", pdf_section, exc)
 
-        if len(topic_items) < len(ladder):
-            logger.info("No target PDF questions for %s - using grade-fit AI", topic_name)
-            fallback_ladder = ladder[len(topic_items):] or ladder
-            topic_items = topic_items + _grade_appropriate_fallback(
+        def _fresh(items: List[dict]) -> List[dict]:
+            out = []
+            for item in items:
+                key = _question_key(item.get("question_text") or "")
+                if key and key not in exclude_keys and key not in seen_texts:
+                    seen_texts.add(key)
+                    out.append(item)
+            return out
+
+        # Checked per topic so a dropped question (duplicate / disputed answer key) can
+        # be replaced: the topic must end up with the number its score calls for.
+        kept = verify_mcq_keys(_fresh(topic_items))
+        if len(kept) < len(ladder):
+            logger.info(
+                "%s: %d of %d questions so far - topping up with grade-fit AI",
+                topic_name, len(kept), len(ladder),
+            )
+            extra = _grade_appropriate_fallback(
                 topic_id,
                 topic_name,
                 score,
-                fallback_ladder,
+                ladder[len(kept):],
                 grade_level,
-                exclude_texts + [q.get("question_text") or "" for q in topic_items],
+                exclude_texts + [q.get("question_text") or "" for q in kept],
             )
+            kept = kept + verify_mcq_keys(_fresh(extra))
+        queue.extend(kept[: len(ladder)])
 
-        for item in topic_items:
-            key = _question_key(item.get("question_text") or "")
-            if key and key not in exclude_keys and key not in seen_texts:
-                seen_texts.add(key)
-                queue.append(item)
-
-    from app.services.quiz.mcq_answer_check import verify_mcq_keys
-
-    return verify_mcq_keys(queue)
+    return queue
 
 
 def _load_questions(session: DeficiencyChatSession) -> List[dict]:
@@ -601,11 +627,147 @@ def _build_enrichment_queue(areas: List[dict], grade_level: Optional[str]) -> Li
     return verify_mcq_keys(queue)
 
 
+def _practice_weak_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
+    """Weak areas a practice Learning Chat should cover right now."""
+    weak = get_weak_topics(student_id)
+    if not weak:
+        raise LMSValidationError(
+            "No weak areas found. Complete your diagnostic assessment first."
+        )
+
+    if diag_id:
+        attempt = _latest_diagnostic_attempt(student_id, diag_id)
+        if attempt:
+            analysis = analyze_attempt(attempt.id)
+            ai_weak = analysis.get("weak_topics") or []
+            if ai_weak:
+                # Use the AI weak areas (they carry question_ids + names for PDF
+                # section matching) but keep only the ones that are STILL weak in
+                # live mastery — so a second Learning Chat session targets what
+                # the student has not practised yet, instead of re-serving the
+                # frozen diagnostic list every time.
+                live_weak_ids = {w.get("topic_id") for w in weak if w.get("topic_id")}
+                if live_weak_ids:
+                    still_weak = [w for w in ai_weak if w.get("topic_id") in live_weak_ids]
+                    weak = still_weak or ai_weak
+                else:
+                    weak = ai_weak
+    return weak
+
+
+def _session_topic_ids(session: DeficiencyChatSession) -> set:
+    try:
+        weak = json.loads(session.weak_topics_json or "[]")
+    except json.JSONDecodeError:
+        return set()
+    return {int(w.get("topic_id") or 0) for w in weak if isinstance(w, dict)}
+
+
+def _start_topic_session(
+    student_id: int,
+    topic_id: int,
+    force_new: bool,
+    target_thread_ids: List[str],
+    rag_owner_id: Optional[int],
+    diag_id: Optional[int],
+) -> dict:
+    """Learning Chat for ONE weak area. Each weak topic has its own session, so
+    pausing one topic and opening another keeps both where the student left them."""
+    db = get_db()
+    target_thread_id = target_thread_ids[0] if target_thread_ids else None
+    q = db.query(DeficiencyChatSession).filter(
+        DeficiencyChatSession.student_id == student_id,
+        DeficiencyChatSession.status.in_(("active", "paused")),
+    )
+    if diag_id:
+        q = q.filter(DeficiencyChatSession.diagnostic_assessment_id == diag_id)
+    open_sessions = [
+        s
+        for s in q.order_by(DeficiencyChatSession.updated_at.desc()).all()
+        if s.rag_thread_id == target_thread_id  # practice only; enrichment has no thread
+    ]
+
+    mine = [s for s in open_sessions if _session_topic_ids(s) == {topic_id}]
+    if force_new and mine:
+        for s in mine:
+            s.status = "completed"
+        db.commit()
+        open_sessions = [s for s in open_sessions if s not in mine]
+        mine = []
+    if mine:
+        existing = mine[0]
+        if existing.status == "paused":
+            existing.status = "active"
+            db.commit()
+        return _session_state(existing)
+
+    def _is_topic(entry: dict) -> bool:
+        return int(entry.get("topic_id") or 0) == topic_id
+
+    weak = [w for w in _practice_weak_areas(student_id, diag_id) if _is_topic(w)]
+    if not weak:
+        weak = [w for w in get_weak_topics(student_id) if _is_topic(w)]
+    if not weak:
+        raise LMSValidationError("This topic is not one of your weak areas any more.")
+    weak = weak[:1]
+
+    # Questions already generated for this topic (the session pre-built right after
+    # the diagnostic) are reused, so opening a topic costs no new generation.
+    queue: List[dict] = []
+    for s in open_sessions:
+        topic_qs = [x for x in _load_questions(s) if _is_topic(x)]
+        if topic_qs and not any(x.get("answered") for x in topic_qs):
+            queue = [dict(x) for x in topic_qs]
+            break
+    if not queue:
+        from app.services.lms import class_service
+
+        queue = _build_question_queue(
+            weak,
+            target_thread_ids,
+            rag_owner_id,
+            class_service.get_student_grade(student_id),
+            used_question_texts_by_topic=_prior_question_texts_by_topic(student_id),
+        )
+    if not queue:
+        raise LMSValidationError(
+            "Could not generate questions from the target PDF(s) for this weak area. "
+            "Ask your admin to check the target content PDFs cover this topic."
+        )
+
+    w = weak[0]
+    payload = [
+        {
+            "topic_id": topic_id,
+            "topic_name": w.get("topic_name") or "Practice area",
+            "score_percent": w.get("score_percent", 0),
+            "question_ids": w.get("question_ids") or [],
+        }
+    ]
+    session = DeficiencyChatSession(
+        student_id=student_id,
+        diagnostic_assessment_id=diag_id,
+        rag_thread_id=target_thread_id,
+        rag_owner_id=rag_owner_id,
+        weak_topics_json=json.dumps(payload, ensure_ascii=False),
+        questions_json=json.dumps(queue, ensure_ascii=False),
+        status="active",
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return _session_state(session)
+
+
 def start_session(
-    student_id: int, force_new: bool = False, mode: str = "practice"
+    student_id: int,
+    force_new: bool = False,
+    mode: str = "practice",
+    topic_id: Optional[int] = None,
 ) -> dict:
     """Start Learning Chat.
 
+    topic_id (practice only) -> a chat for that one weak area.
     mode="practice"   -> difficulty-laddered questions on weak areas
     mode="enrichment" -> above-level challenge questions when there are no
                          weak areas (DIL: the practice section must never be
@@ -619,6 +781,11 @@ def start_session(
         raise LMSValidationError(
             "No target content PDF has been uploaded yet. "
             "Learning Chat uses study material PDFs for weak areas — ask your admin."
+        )
+
+    if topic_id and not enrichment:
+        return _start_topic_session(
+            student_id, int(topic_id), force_new, target_thread_ids, rag_owner_id, diag_id
         )
 
     if force_new:
@@ -670,29 +837,7 @@ def start_session(
         db.refresh(session)
         return _session_state(session)
 
-    weak = get_weak_topics(student_id)
-    if not weak:
-        raise LMSValidationError(
-            "No weak areas found. Complete your diagnostic assessment first."
-        )
-
-    if diag_id:
-        attempt = _latest_diagnostic_attempt(student_id, diag_id)
-        if attempt:
-            analysis = analyze_attempt(attempt.id)
-            ai_weak = analysis.get("weak_topics") or []
-            if ai_weak:
-                # Use the AI weak areas (they carry question_ids + names for PDF
-                # section matching) but keep only the ones that are STILL weak in
-                # live mastery — so a second Learning Chat session targets what
-                # the student has not practised yet, instead of re-serving the
-                # frozen diagnostic list every time.
-                live_weak_ids = {w.get("topic_id") for w in weak if w.get("topic_id")}
-                if live_weak_ids:
-                    still_weak = [w for w in ai_weak if w.get("topic_id") in live_weak_ids]
-                    weak = still_weak or ai_weak
-                else:
-                    weak = ai_weak
+    weak = _practice_weak_areas(student_id, diag_id)
 
     prior_questions = _prior_question_texts_by_topic(student_id)
     queue = _build_question_queue(
@@ -793,6 +938,9 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         raise LMSValidationError("No more questions in this session")
 
     q = questions[idx]
+    option_count = len(q.get("options") or [])
+    if selected_option_index < 0 or (option_count and selected_option_index >= option_count):
+        raise LMSValidationError("That option does not exist for this question")
     is_correct = selected_option_index == q.get("correct_option_index")
     already_correct = q.get("correct") is True
 

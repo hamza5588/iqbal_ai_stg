@@ -20,9 +20,34 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def sync_session_user() -> bool:
+    """Keep the cookie session honest against the users table.
+
+    Returns False (and clears the session) when the account was deleted, and refreshes
+    session['role'] when an admin changed it, so a deleted or demoted user cannot keep
+    working on an old session until it expires.
+    """
+    if 'user_id' not in session:
+        return False
+    try:
+        from app.utils.db import get_db
+        from app.models.database_models import User
+        row = get_db().query(User.role).filter(User.id == session['user_id']).first()
+    except Exception as e:  # noqa: BLE001 - never lock everyone out on a transient DB error
+        logger.warning("session user check failed: %s", e)
+        return True
+    if row is None:
+        session.clear()
+        return False
+    if session.get('role') != row[0]:
+        session['role'] = row[0]
+    return True
+
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        sync_session_user()
         if 'user_id' not in session:
             # Check if it's an AJAX/JSON request or API endpoint
             # File uploads use multipart/form-data, so check path and headers

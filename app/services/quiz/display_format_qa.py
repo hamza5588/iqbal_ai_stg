@@ -123,7 +123,21 @@ def finalize_display_text(text: Optional[str], latex: Optional[str] = None) -> t
     return body, recovered
 
 
+# A ruled separator line in the source PDF ("===== UNIT 12: Sides and Angles =====") gets
+# glued onto the last option before it. No real answer option contains such a run, so the
+# run and everything after it is page furniture, not content.
+_LAYOUT_DEBRIS_RE = re.compile(r"\s*(?:={4,}|-{6,}).*$", re.S)
+
+
+def strip_layout_debris(text: Optional[str]) -> Optional[str]:
+    if not text or ("====" not in text and "------" not in text):
+        return text
+    cleaned = _LAYOUT_DEBRIS_RE.sub("", text).strip()
+    return cleaned or text
+
+
 def finalize_option_text(text: Optional[str], latex: Optional[str] = None) -> tuple[str, Optional[str]]:
+    text, latex = strip_layout_debris(text), strip_layout_debris(latex)
     display, recovered = recover_fields(text, latex)
     body = merge_prose_and_math(display, recovered)
     body = strip_english_dollar_spans(body)

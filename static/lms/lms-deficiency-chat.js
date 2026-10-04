@@ -266,7 +266,8 @@
     typeset(body);
   }
 
-  window.openDeficiencyChat = async function (forceNew, mode) {
+  // topicId (practice only): the chat for that one weak area - each weak topic has its own.
+  window.openDeficiencyChat = async function (forceNew, mode, topicId) {
     ensureDeficiencyModal();
     openDefSurface();
     defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
@@ -278,7 +279,8 @@
       var data = await lmsApi('/api/lms/deficiency/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_new: forceNew === true, mode: isChallenge ? 'enrichment' : 'practice' })
+        body: JSON.stringify({ force_new: forceNew === true, mode: isChallenge ? 'enrichment' : 'practice',
+          topic_id: (!isChallenge && topicId) ? Number(topicId) : null })
       });
       defState.sessionId = data.session_id;
       if (data.tutor_messages && data.tutor_messages.length) {

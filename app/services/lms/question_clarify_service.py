@@ -29,7 +29,8 @@ _MAX_CHARS = 600
 # Bump when the prompt or the leak guard changes so old cached
 # clarifications (e.g. ones that leaked the method) are regenerated.
 # v3: drop cached dumps of raw AIMessage when Qwen reasoning emptied content.
-_CLARIFY_VERSION = 3
+# v4: drop cached fallbacks (the question repeated back) from when every call failed.
+_CLARIFY_VERSION = 4
 
 _CLARIFY_PROMPT = """A student on a diagnostic test cannot follow the WORDING of this
 multiple-choice question. Say the SAME question again in the simplest
@@ -110,8 +111,28 @@ def _store(assessment: Assessment, question_id: int, text: str) -> None:
     _save_meta(assessment, meta)
 
 
-def _looks_leaky(text: str, options: list) -> bool:
-    if _LEAK_RE.search(text or ""):
+# Plain operation words. Saying them is a leak for a word problem ("multiply the
+# length by the width"), but not when the question itself is written with that
+# arithmetic ("log 2 + log 5", "3x + 7 = 22") - there, reading it aloud needs them.
+_ARITH_RE = re.compile(
+    r"\b(multiply(?:ing|ied)? by|multiplication|divid(?:e|ing|ed by)|divided by"
+    r"|subtract(?:ing)?|add(?:ing)? (?:up|together)|times the"
+    r"|is the (?:product|sum|difference|quotient) of"
+    r"|you (can |should |just |then |need to |simply )?(multiply|divide|add|subtract))\b",
+    re.I,
+)
+_STEM_HAS_ARITH_RE = re.compile(
+    r"[+×÷^]|\\(?:times|div|frac|cdot)|\b[\da-z]\s*[-−]\s*[\da-z]\b|\b\d+[a-z]\b"
+    r"|\b(divided|multiplied|sum|product|remainder|quotient|difference|plus|minus|times)\b",
+    re.I,
+)
+
+
+def _looks_leaky(text: str, options: list, stem: str = "") -> bool:
+    checked = text or ""
+    if stem and _STEM_HAS_ARITH_RE.search(stem):
+        checked = _ARITH_RE.sub(" ", checked)
+    if _LEAK_RE.search(checked):
         return True
     lowered = (text or "").lower()
     for o in options:
@@ -186,37 +207,54 @@ def clarify_question(assessment_id: int, question_id: int, *, use_cache: bool = 
         from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
         from app.utils.llm_factory import get_chat_model
 
-        # Qwen reasoning can consume a small max_tokens budget entirely
-        # (finish_reason=length, content=''). Leave headroom + prefer no reasoning.
-        llm = get_chat_model(temperature=0.2, max_tokens=1024)
-        try:
-            llm = llm.bind(reasoning_effort="none", reasoning_format="hidden")
-        except Exception:
-            pass
+        # Reasoning can consume a small max_tokens budget entirely
+        # (finish_reason=length, content=''). Leave headroom + prefer little reasoning.
+        base_llm = get_chat_model(temperature=0.2, max_tokens=1024)
         prompt = _CLARIFY_PROMPT.format(
             stem=stem.strip()[:800],
             options="\n".join("- " + (o["text"] or "")[:120] for o in opt_display),
         )
-        resp = invoke_with_groq_rate_limit(
-            lambda: llm.invoke(prompt), description="diagnostic question clarify"
+        # Reasoning knobs differ per model: Qwen takes "none", GPT-OSS only
+        # low/medium/high (a wrong value is a 400 and used to send EVERY click to
+        # the fallback). Last try is the factory's own defaults, which always work.
+        model_name = str(getattr(base_llm, "model_name", "") or getattr(base_llm, "model", "")).lower()
+        first = (
+            {"reasoning_effort": "none", "reasoning_format": "hidden"}
+            if "qwen" in model_name
+            else {"reasoning_effort": "low"}
         )
-        text = re.sub(r"\s+", " ", _message_text(resp))[:_MAX_CHARS]
-        if text and not _looks_leaky(text, opt_display):
-            clarification = text
-        elif text:
-            logger.info("Clarify for q%s rejected as leaky, using fallback", question_id)
-        else:
-            meta = getattr(resp, "response_metadata", None) or {}
-            logger.warning(
-                "Clarify for q%s returned empty content (finish_reason=%s); using fallback",
-                question_id,
-                meta.get("finish_reason"),
-            )
+        for bind_kwargs in (first, {}):
+            try:
+                llm = base_llm.bind(**bind_kwargs) if bind_kwargs else base_llm
+                resp = invoke_with_groq_rate_limit(
+                    lambda: llm.invoke(prompt), description="diagnostic question clarify"
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Clarify LLM call failed for q%s (%s): %s", question_id, bind_kwargs or "defaults", exc
+                )
+                continue
+            text = re.sub(r"\s+", " ", _message_text(resp))[:_MAX_CHARS]
+            if text and not _looks_leaky(text, opt_display, stem):
+                clarification = text
+            elif text:
+                logger.info("Clarify for q%s rejected as leaky, using fallback", question_id)
+            else:
+                meta = getattr(resp, "response_metadata", None) or {}
+                logger.warning(
+                    "Clarify for q%s returned empty content (finish_reason=%s)",
+                    question_id,
+                    meta.get("finish_reason"),
+                )
+                continue
+            break
     except Exception as exc:  # noqa: BLE001
         logger.warning("Clarify LLM call failed for q%s: %s", question_id, exc)
 
     if not clarification:
-        clarification = _fallback(stem)
+        # Never cached: the fallback only repeats the question, so the next click
+        # must get another chance at a real rephrase.
+        return {"clarification": _fallback(stem), "cached": False, "fallback": True}
 
     try:
         _store(assessment, question_id, clarification)

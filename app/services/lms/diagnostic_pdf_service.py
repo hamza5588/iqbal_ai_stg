@@ -184,7 +184,39 @@ def _ingest_target_pdf(
 
 
 
-def upload_diagnostic_bundle(
+_UNREADABLE_PDF_HINTS = ("failed to load pdf", "no extractable text", "does not match the required")
+
+
+def upload_diagnostic_bundle(*args, **kwargs) -> dict:
+    """Upload a diagnostic; a failed upload must not leave a draft behind.
+
+    The draft row is created before the PDFs are ingested, so any later failure used to
+    strand an empty draft that blocked every further upload for that grade.
+    """
+    state: dict = {}
+    try:
+        return _upload_diagnostic_bundle(*args, _state=state, **kwargs)
+    except Exception as exc:
+        assessment_id = state.get("assessment_id")
+        if assessment_id:
+            try:
+                db = get_db()
+                db.rollback()
+                row = assessment_service.get_assessment(assessment_id)
+                db.delete(row)
+                db.commit()
+                logger.info("Discarded draft diagnostic %s after failed upload: %s", assessment_id, exc)
+            except Exception:  # noqa: BLE001
+                logger.warning("Could not discard failed diagnostic draft %s", assessment_id, exc_info=True)
+                get_db().rollback()
+        if not isinstance(exc, LMSValidationError) and any(h in str(exc).lower() for h in _UNREADABLE_PDF_HINTS):
+            raise LMSValidationError(
+                "This PDF could not be read. Upload a text-based PDF (not a scan or a damaged file)."
+            ) from exc
+        raise
+
+
+def _upload_diagnostic_bundle(
 
     teacher_id: int,
 
@@ -202,6 +234,8 @@ def upload_diagnostic_bundle(
     target_files: Optional[List[Dict[str, Any]]] = None,
 
     progress_job_id: Optional[str] = None,
+
+    _state: Optional[dict] = None,
 
 ) -> dict:
 
@@ -241,6 +275,13 @@ def upload_diagnostic_bundle(
     elif target_file_bytes:
         targets.insert(0, {"bytes": target_file_bytes, "filename": target_filename})
 
+    # Validate every study PDF before anything is written.
+    for idx, tgt in enumerate(targets):
+        if tgt.get("bytes"):
+            assert_supported_assessment_file(
+                tgt.get("filename") or f"target_{idx + 1}.pdf", tgt["bytes"], label="Target content PDF"
+            )
+
     _set_upload_progress(progress_job_id, 5, "Creating diagnostic assessment...", stage="create")
 
     assessment = assessment_service.create_assessment(
@@ -256,6 +297,8 @@ def upload_diagnostic_bundle(
         grade_level=grade,
 
     )
+    if _state is not None:
+        _state["assessment_id"] = assessment.id
 
     target_thread_ids = []
     target_filenames = []
@@ -318,6 +361,10 @@ def upload_diagnostic_bundle(
 
 
     assessment = assessment_service.get_assessment(assessment.id)
+    if not assessment.questions:
+        raise LMSValidationError(
+            "No questions could be read from the Q&A PDF. Upload a PDF that contains the questions and an answer key."
+        )
 
     existing_meta: dict = {}
     if assessment.description:
@@ -528,6 +575,16 @@ def upload_target_pdf(
 
     assessment = _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
 
+    from app.services.quiz.assessment_doc_validation import assert_supported_assessment_file
+
+    assert_supported_assessment_file(filename, file_bytes, label="Target content PDF")
+    attached = {
+        (t.get("original_filename") or "").strip().lower()
+        for t in assessment_service.list_target_pdfs(assessment_id)
+    }
+    if filename.strip().lower() in attached:
+        raise LMSValidationError(f'"{filename}" is already attached to this diagnostic.')
+
     target_thread_id = _ingest_target_pdf(user_id, file_bytes, filename)
 
     entry = assessment_service.add_target_pdf(
@@ -587,6 +644,10 @@ def remove_target_pdf_entry(
 ) -> dict:
     """Remove a target content PDF from a diagnostic."""
     assessment = _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
+    if assessment.status == "published" and len(assessment_service.list_target_pdfs(assessment_id)) <= 1:
+        raise LMSValidationError(
+            "A live diagnostic needs at least one study PDF for Learning Chat. Add another PDF before removing this one."
+        )
     assessment_service.remove_target_pdf(assessment_id, target_pdf_id)
     all_targets = assessment_service.list_target_pdfs(assessment_id)
     meta = {}

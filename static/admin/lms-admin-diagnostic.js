@@ -8,6 +8,9 @@
     selectedTargetAssessmentId: null,
     listFilter: 'published',
     uploadTab: 'publish',
+    reviewAssessmentId: null,
+    reviewStatus: null,
+    reviewQuestions: [],
   };
   var selectedTargetFiles = {
     adminDiagTargetFiles: [],
@@ -553,7 +556,21 @@
             '</div>';
 
           var actions = '<div class="d-actions">';
+          if (status === 'draft') {
+            actions +=
+              '<button type="button" class="d-action primary" onclick="adminPreviewDiagnostic(' +
+              d.id +
+              ')"><i class="fas fa-clipboard-check"></i> Review &amp; Edit</button>';
+            actions +=
+              '<button type="button" class="d-action" onclick="adminApproveDiagnostic(' +
+              d.id +
+              ')"><i class="fas fa-check"></i> Approve for Students</button>';
+          }
           if (isPublished) {
+            actions +=
+              '<button type="button" class="d-action" onclick="adminPreviewDiagnostic(' +
+              d.id +
+              ')"><i class="fas fa-eye"></i> View / Edit</button>';
             actions +=
               '<button type="button" class="d-action primary" onclick="focusAdminDiagAddTargets(' +
               d.id +
@@ -604,11 +621,42 @@
       '</div>';
   }
 
+  // Retake requests: teachers approve their own students'; the admin sees every pending one
+  // (and is the only approver for students who are not in any class).
+  async function loadAdminRetakeRequests() {
+    var card = document.getElementById('adminDiagRetakeCard');
+    var list = document.getElementById('adminDiagRetakeList');
+    if (!card || !list) return;
+    var rows = [];
+    try { rows = (await api('/api/lms/retake-requests')) || []; } catch (e) { rows = []; }
+    card.style.display = rows.length ? 'block' : 'none';
+    list.innerHTML = rows.map(function (r) {
+      return '<div class="d-row"><div class="d-row-top"><div>' +
+        '<div class="d-row-title">' + esc(r.student_name || 'Student') + '</div>' +
+        '<div class="d-row-meta"><span>' + esc(r.assessment_title || 'Diagnostic') + '</span>' +
+        (r.student_grade ? '<span>Grade ' + esc(r.student_grade) + '</span>' : '') + '</div></div>' +
+        '<div class="d-actions">' +
+        '<button type="button" class="d-action danger" onclick="adminDecideRetake(' + r.id + ', false)">Deny</button>' +
+        '<button type="button" class="d-action primary" onclick="adminDecideRetake(' + r.id + ', true)">Approve retake</button>' +
+        '</div></div></div>';
+    }).join('');
+  }
+
+  window.adminDecideRetake = async function (id, approve) {
+    try {
+      await api('/api/lms/retake-requests/' + id + '/' + (approve ? 'approve' : 'deny'), { method: 'POST' });
+    } catch (err) {
+      alert('Could not update the request: ' + err.message);
+    }
+    loadAdminRetakeRequests();
+  };
+
   window.loadAdminDiagnostics = async function () {
     var listEl = document.getElementById('adminDiagList');
     if (!listEl) return;
     listEl.innerHTML = '<p class="text-slate-500 text-sm">Loading...</p>';
     bindDropZones();
+    loadAdminRetakeRequests();
     setAdminDiagUploadTab(state.uploadTab || 'publish');
 
     try {
@@ -628,6 +676,478 @@
     }
   };
 
+  window.adminApproveDiagnostic = async function (id) {
+    if (
+      !confirm(
+        'Approve this diagnostic for students? They will see it on their dashboard and can start it.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await api('/api/lms/diagnostics/' + id + '/publish', { method: 'POST' });
+      state.listFilter = 'published';
+      closeAdminDiagReview();
+      loadAdminDiagnostics();
+    } catch (err) {
+      alert('Approve failed: ' + err.message);
+    }
+  };
+
+  window.adminApproveFromReview = function () {
+    if (!state.reviewAssessmentId) return;
+    adminApproveDiagnostic(state.reviewAssessmentId);
+  };
+
+  function _diagFmtText(text) {
+    var raw = String(text || '');
+    if (typeof window.lmsEscapeHtml === 'function') {
+      /* keep raw for math typeset — escape then let MathJax/KaTeX process $...$ */
+    }
+    var d = document.createElement('div');
+    d.textContent = raw;
+    return d.innerHTML;
+  }
+
+  function _diagQuestionText(q) {
+    if (typeof window.lmsQuestionText === 'function') {
+      try {
+        return window.lmsQuestionText(q) || '';
+      } catch (e) {}
+    }
+    return (q && (q.question_text || q.question_latex)) || '';
+  }
+
+  function _diagOptionText(o) {
+    if (typeof window.lmsOptionText === 'function') {
+      try {
+        return window.lmsOptionText(o) || '';
+      } catch (e) {}
+    }
+    return (o && (o.text || o.latex)) || '';
+  }
+
+  function _diagTypeset(el) {
+    if (!el) return Promise.resolve();
+    if (typeof window.lmsTypesetMath === 'function') return window.lmsTypesetMath(el);
+    el.classList.add('tex2jax_process');
+    var ready =
+      window.MathJax && window.MathJax.startup && window.MathJax.startup.promise
+        ? window.MathJax.startup.promise.catch(function () {})
+        : Promise.resolve();
+    return ready.then(function () {
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        try {
+          if (typeof window.MathJax.typesetClear === 'function') window.MathJax.typesetClear([el]);
+        } catch (e) {}
+        return window.MathJax.typesetPromise([el]).catch(function () {});
+      }
+      if (typeof renderMathInElement === 'function') {
+        try {
+          renderMathInElement(el, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\[', right: '\\]', display: true },
+              { left: '\\(', right: '\\)', display: false },
+            ],
+            throwOnError: false,
+            ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+          });
+        } catch (e2) {}
+      }
+    });
+  }
+
+  function _diagEscapeTextMode(s) {
+    return String(s || '')
+      .replace(/\\/g, '\\textbackslash{}')
+      .replace(/[{}]/g, function (ch) {
+        return '\\' + ch;
+      })
+      .replace(/#/g, '\\#')
+      .replace(/%/g, '\\%')
+      .replace(/&/g, '\\&')
+      .replace(/\$/g, '\\$')
+      .replace(/_/g, '\\_')
+      .replace(/\^/g, '\\^{}');
+  }
+
+  function _diagTextToMathlive(src) {
+    src = String(src == null ? '' : src).trim();
+    if (!src) return '';
+    if (typeof window.lmsPrepareMathText === 'function') {
+      try {
+        src = window.lmsPrepareMathText(src) || src;
+      } catch (e) {}
+    }
+    var whole =
+      src.match(/^\$\$([\s\S]*)\$\$\s*$/) ||
+      src.match(/^\$([^$]*)\$\s*$/) ||
+      src.match(/^\\\(([\s\S]*)\\\)\s*$/) ||
+      src.match(/^\\\[([\s\S]*)\\\]\s*$/);
+    if (whole) return String(whole[1] || '').trim();
+    if (/\$[^$]+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]/.test(src)) {
+      var out = '';
+      var re = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]/g;
+      var last = 0;
+      var match;
+      while ((match = re.exec(src))) {
+        var plain = src.slice(last, match.index);
+        if (plain) out += '\\text{' + _diagEscapeTextMode(plain) + '}';
+        out += match[1] || match[2] || match[3] || match[4] || '';
+        last = match.index + match[0].length;
+      }
+      var rest = src.slice(last);
+      if (rest) out += '\\text{' + _diagEscapeTextMode(rest) + '}';
+      return out;
+    }
+    if (/\\[a-zA-Z]+/.test(src)) return src;
+    return '\\text{' + _diagEscapeTextMode(src) + '}';
+  }
+
+  function _diagFromMathlive(mf) {
+    if (!mf) return '';
+    var latex = '';
+    try {
+      latex =
+        typeof mf.getValue === 'function'
+          ? mf.getValue('latex-without-placeholders') || mf.getValue('latex') || ''
+          : mf.value || '';
+    } catch (e) {
+      latex = mf.value || '';
+    }
+    latex = String(latex || '').trim();
+    if (!latex) return '';
+    if (/^\$|\\\(|\\\[/.test(latex)) return latex;
+    return '$' + latex + '$';
+  }
+
+  function _diagConfigureMathKeyboard() {
+    var vk = window.mathVirtualKeyboard;
+    if (!vk) return;
+    try {
+      vk.layouts = ['numeric', 'symbols', 'alphabetic', 'greek', 'functions'];
+    } catch (e) {}
+  }
+
+  function _diagSetupMathField(mf, rawText, isStem) {
+    if (!mf) return;
+    try {
+      mf.mathVirtualKeyboardPolicy = 'manual';
+    } catch (e) {}
+    try {
+      mf.defaultMode = isStem ? 'text' : 'math';
+    } catch (e) {}
+    try {
+      mf.smartFence = true;
+    } catch (e) {}
+    var val = _diagTextToMathlive(rawText);
+    try {
+      if (typeof mf.setValue === 'function') mf.setValue(val, { silenceNotifications: true });
+      else mf.value = val;
+    } catch (e) {
+      try {
+        mf.value = val;
+      } catch (e2) {}
+    }
+    if (mf._diagVkBound) return;
+    mf._diagVkBound = true;
+    mf.addEventListener('focusin', function () {
+      _diagConfigureMathKeyboard();
+      if (window.mathVirtualKeyboard) {
+        try {
+          window.mathVirtualKeyboard.show();
+        } catch (e) {}
+      }
+    });
+  }
+
+  function _diagHydrateMathFields(root, questions) {
+    _diagConfigureMathKeyboard();
+    (questions || []).forEach(function (item) {
+      var q = item.question || item || {};
+      var qid = q.id;
+      if (qid == null) return;
+      var card = root.querySelector('.lms-quiz-preview-card[data-qid="' + qid + '"]');
+      if (!card) return;
+      var stemMf = card.querySelector('math-field.lms-q-edit-stem-input');
+      _diagSetupMathField(stemMf, _diagQuestionText(q), true);
+      (q.options || []).forEach(function (o, oidx) {
+        var mf = card.querySelector('math-field.lms-q-edit-option[data-oidx="' + oidx + '"]');
+        _diagSetupMathField(mf, _diagOptionText(o), false);
+      });
+    });
+  }
+
+  function _bindDiagEditHandlers(root) {
+    if (!root || root._diagEditBound) return;
+    root._diagEditBound = true;
+    root.addEventListener('click', async function (ev) {
+      var t = ev.target;
+      if (!t) return;
+      var toggle = t.closest && t.closest('.lms-q-edit-toggle');
+      if (toggle) {
+        var qidT = toggle.getAttribute('data-qid');
+        var panelT = document.getElementById('diagQEdit-' + qidT);
+        if (panelT) {
+          panelT.hidden = !panelT.hidden;
+          if (!panelT.hidden) {
+            var first = panelT.querySelector('math-field.lms-q-edit-field');
+            if (first && typeof first.focus === 'function') {
+              setTimeout(function () {
+                try {
+                  first.focus();
+                } catch (e) {}
+              }, 50);
+            }
+          } else if (window.mathVirtualKeyboard) {
+            try {
+              window.mathVirtualKeyboard.hide();
+            } catch (e) {}
+          }
+        }
+        return;
+      }
+      var cancel = t.closest && t.closest('.lms-q-edit-cancel');
+      if (cancel) {
+        var panelC = document.getElementById('diagQEdit-' + cancel.getAttribute('data-qid'));
+        if (panelC) panelC.hidden = true;
+        if (window.mathVirtualKeyboard) {
+          try {
+            window.mathVirtualKeyboard.hide();
+          } catch (e) {}
+        }
+        return;
+      }
+      var save = t.closest && t.closest('.lms-q-edit-save');
+      if (!save) return;
+      var qid = save.getAttribute('data-qid');
+      var card = root.querySelector('.lms-quiz-preview-card[data-qid="' + qid + '"]');
+      var panel = document.getElementById('diagQEdit-' + qid);
+      var status = document.getElementById('diagQEditStatus-' + qid);
+      if (!card || !panel || !state.reviewAssessmentId) return;
+      var stemMf = panel.querySelector('math-field.lms-q-edit-stem-input');
+      var stem = _diagFromMathlive(stemMf);
+      var correctIdx = parseInt((panel.querySelector('.lms-q-edit-correct-sel') || {}).value, 10);
+      if (isNaN(correctIdx)) correctIdx = 0;
+      var options = [];
+      panel.querySelectorAll('math-field.lms-q-edit-option').forEach(function (mf) {
+        var oidx = parseInt(mf.getAttribute('data-oidx'), 10);
+        options.push({
+          label: String.fromCharCode(65 + oidx),
+          text: _diagFromMathlive(mf),
+          latex: null,
+        });
+      });
+      if (options.length !== 4) {
+        if (status) status.textContent = 'Need 4 options.';
+        return;
+      }
+      save.disabled = true;
+      if (status) status.textContent = 'Saving...';
+      try {
+        var res = await fetch(
+          '/api/lms/diagnostics/' + state.reviewAssessmentId + '/questions/' + qid,
+          {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question_text: stem,
+              question_latex: null,
+              options: options,
+              correct_option_index: correctIdx,
+            }),
+          }
+        );
+        var body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || body.message || 'Save failed');
+        if (status) status.textContent = 'Saved.';
+        if (window.mathVirtualKeyboard) {
+          try {
+            window.mathVirtualKeyboard.hide();
+          } catch (e) {}
+        }
+        await adminPreviewDiagnostic(state.reviewAssessmentId);
+      } catch (err) {
+        if (status) status.textContent = 'Error: ' + err.message;
+        save.disabled = false;
+      }
+    });
+  }
+
+  function renderDiagReviewQuestions(questions) {
+    var bodyEl = document.getElementById('adminDiagReviewBody');
+    if (!bodyEl) return;
+    if (!questions.length) {
+      bodyEl.innerHTML =
+        '<p class="text-slate-500 text-sm">No questions generated yet. Re-upload the Q&amp;A PDF or wait for generation to finish.</p>';
+      return;
+    }
+    bodyEl.innerHTML = questions
+      .map(function (item, idx) {
+        var q = item.question || item || {};
+        var qid = q.id;
+        var opts = (q.options || [])
+          .map(function (o, oidx) {
+            var isCorrect = q.correct_option_index === oidx;
+            return (
+              '<div class="lms-preview-opt' +
+              (isCorrect ? ' is-correct' : '') +
+              '">' +
+              '<span class="lms-preview-opt-label">' +
+              esc(o.label || String.fromCharCode(65 + oidx)) +
+              '.</span>' +
+              '<span class="lms-preview-opt-body">' +
+              _diagFmtText(_diagOptionText(o)) +
+              (isCorrect ? ' <span class="lms-preview-correct-mark">✓</span>' : '') +
+              '</span></div>'
+            );
+          })
+          .join('');
+        var editOpts = (q.options || [])
+          .map(function (o, oidx) {
+            var lab = o.label || String.fromCharCode(65 + oidx);
+            return (
+              '<label class="lms-q-edit-opt">' +
+              '<span>' +
+              esc(lab) +
+              '</span>' +
+              '<math-field class="lms-q-edit-option lms-q-edit-field" data-oidx="' +
+              oidx +
+              '"></math-field>' +
+              '</label>'
+            );
+          })
+          .join('');
+        var correctSel = [0, 1, 2, 3]
+          .map(function (i) {
+            var lab = String.fromCharCode(65 + i);
+            return (
+              '<option value="' +
+              i +
+              '"' +
+              (q.correct_option_index === i ? ' selected' : '') +
+              '>' +
+              lab +
+              '</option>'
+            );
+          })
+          .join('');
+        return (
+          '<div class="lms-diag-preview-card lms-quiz-preview-card" data-qid="' +
+          qid +
+          '" data-qidx="' +
+          idx +
+          '">' +
+          '<div class="lms-preview-head">' +
+          '<div class="lms-preview-stem"><strong class="lms-preview-qnum">Q' +
+          (idx + 1) +
+          '.</strong> ' +
+          _diagFmtText(_diagQuestionText(q)) +
+          '</div>' +
+          '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-toggle" data-qid="' +
+          qid +
+          '">Edit</button>' +
+          '</div>' +
+          '<div class="lms-preview-opts">' +
+          opts +
+          '</div>' +
+          '<div class="lms-q-edit-panel" id="diagQEdit-' +
+          qid +
+          '" hidden>' +
+          '<p class="lms-math-keyboard-hint">Tap a field to edit. Use the scientific keyboard for symbols, fractions, and roots.</p>' +
+          '<label class="lms-q-edit-stem">Question' +
+          '<math-field class="lms-q-edit-stem-input lms-q-edit-field"></math-field>' +
+          '</label>' +
+          '<div class="lms-q-edit-options">' +
+          editOpts +
+          '</div>' +
+          '<label class="lms-q-edit-correct">Correct answer <select class="lms-q-edit-correct-sel">' +
+          correctSel +
+          '</select></label>' +
+          '<div class="lms-q-edit-actions">' +
+          '<button type="button" class="lms-btn lms-btn-primary lms-q-edit-save" data-qid="' +
+          qid +
+          '">Save</button>' +
+          '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-cancel" data-qid="' +
+          qid +
+          '">Cancel</button>' +
+          '<span class="lms-q-edit-status" id="diagQEditStatus-' +
+          qid +
+          '"></span>' +
+          '</div></div></div>'
+        );
+      })
+      .join('');
+    _diagHydrateMathFields(bodyEl, questions);
+    _diagTypeset(bodyEl);
+    _bindDiagEditHandlers(bodyEl);
+  }
+
+  window.closeAdminDiagReview = function () {
+    var modal = document.getElementById('adminDiagReviewModal');
+    if (modal) modal.classList.remove('is-open');
+    state.reviewAssessmentId = null;
+    state.reviewQuestions = [];
+    if (window.mathVirtualKeyboard) {
+      try {
+        window.mathVirtualKeyboard.hide();
+      } catch (e) {}
+    }
+  };
+
+  window.adminPreviewDiagnostic = async function (id) {
+    var modal = document.getElementById('adminDiagReviewModal');
+    var bodyEl = document.getElementById('adminDiagReviewBody');
+    var statusEl = document.getElementById('adminDiagReviewStatus');
+    var titleEl = document.getElementById('adminDiagReviewTitle');
+    var subEl = document.getElementById('adminDiagReviewSubtitle');
+    var approveBtn = document.getElementById('adminDiagReviewApproveBtn');
+    if (!modal || !bodyEl) return;
+
+    state.reviewAssessmentId = id;
+    modal.classList.add('is-open');
+    bodyEl.innerHTML = '<p class="text-slate-500 text-sm">Loading questions…</p>';
+    if (statusEl) statusEl.textContent = '';
+
+    var match = (state.diagnostics || []).find(function (d) {
+      return d.id === id;
+    });
+    var status = ((match && match.status) || '').toLowerCase();
+    state.reviewStatus = status;
+    if (titleEl) {
+      titleEl.textContent = (match && match.title) || 'Review diagnostic questions';
+    }
+    if (subEl) {
+      subEl.textContent =
+        status === 'published'
+          ? 'Live for students. You can still edit questions if needed.'
+          : 'Draft — verify and edit MCQs. Students only see this after you Approve.';
+    }
+    if (approveBtn) {
+      approveBtn.style.display = status === 'draft' || !status ? 'inline-flex' : 'none';
+    }
+
+    try {
+      var data = await api('/api/lms/diagnostics/' + id + '/preview');
+      var questions = (data && data.questions) || [];
+      state.reviewQuestions = questions;
+      if (statusEl) {
+        statusEl.textContent =
+          questions.length +
+          ' question' +
+          (questions.length === 1 ? '' : 's') +
+          (status === 'draft' ? ' · awaiting approval' : '');
+      }
+      // Reset edit binding so re-render rebinds cleanly
+      bodyEl._diagEditBound = false;
+      renderDiagReviewQuestions(questions);
+    } catch (err) {
+      bodyEl.innerHTML = '<p class="text-red-600 text-sm">Preview failed: ' + esc(err.message) + '</p>';
+    }
+  };
   window.adminRemoveDiagnostic = async function (id) {
     if (
       !confirm(
@@ -805,39 +1325,36 @@
         return;
       }
 
-      setProgress(94, 'Publishing diagnostic for students...');
+      setProgress(100, 'Draft ready — review before students see it');
       var d = body.data || body;
       state.assessmentId = d.assessment_id;
       state.threadId = d.thread_id;
       var targetCount =
         (d.target_filenames || d.target_thread_ids || []).length || targetFiles.length;
 
-      try {
-        await api('/api/lms/diagnostics/' + d.assessment_id + '/publish', {
-          method: 'POST',
-        });
-        setProgress(100, 'Published!');
-        status.textContent =
-          'Diagnostic published with ' +
-          (d.question_count || '?') +
-          ' questions and ' +
-          targetCount +
-          ' target PDF(s).';
-        document.getElementById('adminDiagnosticPdfForm').reset();
-        selectedTargetFiles.adminDiagTargetFiles = [];
-        updateAdminDiagTargetFileList();
-        updateAdminDiagQaFileLabel();
-        state.selectedTargetAssessmentId = d.assessment_id;
-        loadAdminDiagnostics();
-      } catch (pubErr) {
-        status.textContent =
-          'Uploaded (' + targetCount + ' target PDFs) but publish failed: ' + pubErr.message;
-      }
+      status.textContent =
+        'Draft saved with ' +
+        (d.question_count || '?') +
+        ' questions and ' +
+        targetCount +
+        ' target PDF(s). Review the MCQs below, then Approve for Students.';
+      document.getElementById('adminDiagnosticPdfForm').reset();
+      selectedTargetFiles.adminDiagTargetFiles = [];
+      updateAdminDiagTargetFileList();
+      updateAdminDiagQaFileLabel();
+      state.selectedTargetAssessmentId = d.assessment_id;
+      state.listFilter = 'draft';
+      loadAdminDiagnostics();
       btn.disabled = false;
       setTimeout(resetProgress, 800);
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
-    };
-    xhr.onerror = function () {
+      // Show generated MCQs for verify/edit immediately (quiz-parity review gate)
+      if (d.assessment_id) {
+        setTimeout(function () {
+          adminPreviewDiagnostic(d.assessment_id);
+        }, 200);
+      }
+    };    xhr.onerror = function () {
       if (window._adminDiagProgressPoll) {
         clearInterval(window._adminDiagProgressPoll);
         window._adminDiagProgressPoll = null;

@@ -23,7 +23,7 @@ If this chat is QA-only: report findings; do not commit/deploy unless the user a
 
 ## Environment (confirm before testing)
 
-- BASE_URL: https://dil.iqbalai.com  (or local if instructed)
+- BASE_URL: https://iqbalai.com  (or local if instructed)
 - Repo: iqbal_ai_stg
 - Admin entry: /admin/ → Diagnostic Assessment (#diagnostic-section)
 - Student entry: /student-dashboard → #diagnostic / #diagnostic-quiz

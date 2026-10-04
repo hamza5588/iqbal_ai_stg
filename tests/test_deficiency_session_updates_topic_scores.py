@@ -115,9 +115,11 @@ def test_updates_existing_score_not_just_creates_new(db_session):
 
     rows = db_session.query(StudentTopicScore).filter_by(student_id=7, topic_id=1).all()
     assert len(rows) == 1  # updated in place, not duplicated
-    # Blended, not overwritten: (0*1 + 100*5) / (1+5) = 83.33
-    assert rows[0].score_percent == pytest.approx(500.0 / 6, abs=0.01)
-    assert rows[0].sample_size == 6
+    # The one earlier miss is cancelled by correct practice, so the topic reaches 100%
+    # (practice must be able to restore mastery - product decision 2026-10-02).
+    assert rows[0].score_percent == pytest.approx(100.0)
+    assert rows[0].sample_size == 1
+    assert rows[0].mastery_status == "mastered"
 
 
 def test_practice_blends_into_diagnostic_result_not_overwrites(db_session):

@@ -78,12 +78,13 @@ class UserModel:
         """Create a new user in the database"""
         try:
             db = get_db()
+            from app.utils.passwords import hash_password, is_hashed
             display_name = (full_name or username or '').strip() or username
             user = DBUser(
                 username=username,
                 full_name=display_name,
                 useremail=useremail,
-                password=password,
+                password=password if is_hashed(password) else hash_password(password),
                 class_standard=class_standard,
                 medium=medium,
                 groq_api_key=groq_api_key or '',  # Default to empty string if not provided

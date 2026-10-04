@@ -24,6 +24,15 @@
 
 {% include 'teacher/classes/create_form.html' %}
 
+{# Diagnostic retake requests from this teacher's students. Hidden while there are none. #}
+<div class="td-card accent" id="tdRetakeCard" hidden>
+  <div class="td-section-title">
+    <div class="td-icon-badge"><i class="fas fa-redo"></i></div>
+    <div><h2>Diagnostic retake requests</h2><p>Approve to let the student retake the diagnostic with new questions on the same topics.</p></div>
+  </div>
+  <div id="tdRetakeList"></div>
+</div>
+
 <div id="tdClassList"></div>
 
 {% include 'teacher/classes/roster.html' %}

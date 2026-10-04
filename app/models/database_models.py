@@ -330,7 +330,8 @@ class PasswordResetToken(Base):
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     used = Column(Boolean, default=False, server_default='0')
-    
+    attempts = Column(Integer, nullable=False, default=0, server_default='0')  # wrong OTP guesses
+
     __table_args__ = (
         Index('idx_password_reset_email', 'email'),
     )

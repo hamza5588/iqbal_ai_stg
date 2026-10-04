@@ -17,6 +17,9 @@ import os
 logger = logging.getLogger(__name__)
 bp = Blueprint('auth', __name__)
 
+SELF_REGISTER_ROLES = ('student', 'teacher')
+MAX_RESET_OTP_ATTEMPTS = 5
+
 
 def _public_origin() -> str:
     """Host the user should open from an emailed link (proxy-aware)."""
@@ -221,7 +224,16 @@ def register():
             if missing_fields:
                 logger.error(f"Missing required fields: {missing_fields}")
                 return render_template('register/register.html', error=f"Missing required fields: {', '.join(missing_fields)}")
-            
+
+            # Self-registration is for students and teachers only; admins are created by an admin.
+            if role not in SELF_REGISTER_ROLES:
+                logger.warning("Rejected self-registration with role=%r for %s", role, email)
+                return render_template('register/register.html', email=email, error="Please choose Student or Teacher as your role")
+            from app.utils.passwords import password_problem
+            pw_error = password_problem(password)
+            if pw_error:
+                return render_template('register/register.html', email=email, error=pw_error)
+
             user_id = UserModel.create_user(
                 username=username,
                 useremail=email,
@@ -272,8 +284,18 @@ def login():
 
     if request.method == 'POST':
         try:
-            user = UserModel.get_user_by_email(request.form['useremail'])
-            if user and user['password'] == request.form['password']:
+            from app.utils.passwords import hash_password, verify_password
+            email = (request.form.get('useremail') or '').strip()
+            candidate = request.form.get('password') or ''
+            user = UserModel.get_user_by_email(email) if email and candidate else None
+            ok, needs_rehash = verify_password(user['password'], candidate) if user else (False, False)
+            if ok:
+                if needs_rehash:
+                    # legacy plaintext row: store it hashed now that we know it is correct
+                    from app.models.database_models import User as DBUser
+                    db = get_db()
+                    db.query(DBUser).filter(DBUser.id == user['id']).update({DBUser.password: hash_password(candidate)})
+                    db.commit()
                 session.clear()
                 session['user_id'] = user['id']
                 session['username'] = user['username']
@@ -373,7 +395,8 @@ def logout():
 
 @bp.route('/check_session')
 def check_session():
-    if 'user_id' in session:
+    from app.utils.auth import sync_session_user
+    if sync_session_user():
         return {'logged_in': True, 'username': session.get('username')}
     return {'logged_in': False}, 401
 
@@ -530,6 +553,13 @@ def _validate_reset_otp(db, email, otp):
         db.commit()
         return None, 'OTP has expired'
     if reset_token.otp != otp:
+        # A 6-digit code must not be guessable by retrying: burn it after a few misses.
+        reset_token.attempts = (reset_token.attempts or 0) + 1
+        if reset_token.attempts >= MAX_RESET_OTP_ATTEMPTS:
+            reset_token.used = True
+            db.commit()
+            return None, 'Too many incorrect attempts. Please request a new OTP.'
+        db.commit()
         return None, 'Invalid OTP'
     return reset_token, None
 
@@ -540,14 +570,20 @@ def forgot_password():
         return redirect(get_default_route_by_role(session.get('role')))
     if request.method == 'POST':
         try:
-            email = request.form['useremail']
-            
-            # Check if email exists
+            email = (request.form.get('useremail') or '').strip()
+            if not email:
+                if _wants_json():
+                    return jsonify({'success': False, 'error': 'Email is required'}), 400
+                return render_template('forgot_password/forgot_password.html', error="Email is required")
+
+            # Same response whether or not the address is registered, so this form
+            # cannot be used to discover which emails have accounts.
             user = UserModel.get_user_by_email(email)
             if not user:
+                logger.info("Password reset requested for unknown email")
                 if _wants_json():
-                    return jsonify({'success': False, 'error': 'Email not found'}), 400
-                return render_template('forgot_password/forgot_password.html', error="Email not found")
+                    return jsonify({'success': True, 'email': email})
+                return render_template('verify_otp/verify_otp.html', email=email)
             
             # Generate OTP
             otp = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
@@ -639,9 +675,15 @@ def reset_password():
             
             # Update password in database
             from app.models.database_models import User as DBUser
+            from app.utils.passwords import hash_password, password_problem
+            pw_error = password_problem(new_password)
+            if pw_error:
+                if _wants_json():
+                    return jsonify({'success': False, 'error': pw_error}), 400
+                return render_template('reset_password/reset_password.html', email=email, otp=otp, error=pw_error)
             user = db.query(DBUser).filter(DBUser.useremail == email).first()
             if user:
-                user.password = new_password
+                user.password = hash_password(new_password)
                 db.commit()
             
             # Mark reset token as used

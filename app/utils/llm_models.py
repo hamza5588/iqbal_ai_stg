@@ -19,6 +19,7 @@ GROQ_MODELS = {
         {"id": "llama-3-8b-8192", "name": "Llama 3 8B 8192"},
     ],
     "qwen": [
+        {"id": "qwen/qwen3.8-27b", "name": "Qwen3.8 27B (Vision)"},
         {"id": "qwen/qwen3.6-27b", "name": "Qwen3.6 27B"},
     ],
 }
@@ -37,6 +38,7 @@ ALL_GROQ_MODELS = [model for model_list in GROQ_MODELS.values() for model in mod
 
 # Per-model max completion tokens (Groq docs). Requests above these return 400.
 GROQ_MODEL_MAX_COMPLETION_TOKENS = {
+    "qwen/qwen3.8-27b": 16384,
     "qwen/qwen3.6-27b": 16384,
     "qwen/qwen3-32b": 16384,
     "openai/gpt-oss-120b": 65536,

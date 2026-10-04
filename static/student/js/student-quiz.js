@@ -174,7 +174,7 @@
     }).join('');
     var nextBtn = idx < total - 1
       ? '<button type="button" class="sd-btn sd-btn-primary" onclick="nextLmsQuizQuestion()">' + (savedIdx === undefined ? 'Skip' : 'Next') + ' <i class="fas fa-chevron-right"></i></button>' : '';
-    var submitBtn = '<button type="button" class="sd-btn ' + (idx === total - 1 ? 'sd-btn-primary' : 'sd-btn-outline blue') + '" onclick="submitLmsQuiz()">Submit Quiz</button>';
+    var submitBtn = '<button type="button" data-quiz-submit class="sd-btn ' + (idx === total - 1 ? 'sd-btn-primary' : 'sd-btn-outline blue') + '" onclick="submitLmsQuiz()">Submit Quiz</button>';
     var timerHtml = remainingSeconds != null
       ? '<span id="lmsQuizTimer" class="sd-timer" style="margin-left:auto;"></span>' : '';
     el.innerHTML =
@@ -221,8 +221,18 @@
     }
     submitting = true;
     clearQuizTimer();
+    // Make it obvious the click registered: the button itself turns into a spinner, every
+    // control locks, and the full-screen spinner stays up long enough to be seen (a fast
+    // submit used to flash it for a split second and then swap in the score with no cue).
+    var takingEl = document.getElementById('lmsQuizTaking');
+    if (takingEl) {
+      takingEl.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      var sBtn = takingEl.querySelector('[data-quiz-submit]');
+      if (sBtn) sBtn.innerHTML = '<span class="sd-btn-spin" aria-hidden="true"></span> Submitting…';
+    }
+    var startedAt = Date.now();
     if (typeof showWaitOverlay === 'function') {
-      showWaitOverlay(timeExpired ? 'Time is up — submitting quiz...' : 'Submitting quiz...');
+      showWaitOverlay(timeExpired ? 'Time is up — submitting quiz...' : 'Submitting your quiz...', { sticky: true });
     }
     try {
       var payload = timeExpired ? { time_expired: true } : {};
@@ -231,19 +241,30 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      var shownFor = Date.now() - startedAt;
+      if (shownFor < 700) await new Promise(function (r) { setTimeout(r, 700 - shownFor); });
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
       show('lmsQuizResult');
+      setTitle(timeExpired ? 'Time\'s Up — Quiz Submitted' : 'Quiz Submitted');
       document.getElementById('lmsQuizResult').innerHTML =
+        '<div class="sd-submit-ok" role="status" data-testid="quiz-submitted"><i class="fas fa-check-circle"></i> ' +
+        (timeExpired ? 'Time ran out — your quiz was submitted automatically.' : 'Your quiz was submitted successfully.') + '</div>' +
         '<div style="text-align:center;font-size:2rem;">' + (timeExpired ? '⏰' : '🎉') + '</div>' +
         '<h3 style="text-align:center;margin:6px 0 14px;color:var(--sd-blue-900);">' +
         (timeExpired ? 'Time\'s Up — Quiz Submitted' : 'Quiz Complete') + '</h3>' +
         '<div class="sd-result">' + window.sdRenderResultBody(d) + '</div>' +
         '<p class="sd-desc" style="text-align:center;margin-top:12px;">Your learning path may update based on results.</p>' +
         '<div style="display:flex;justify-content:center;margin-top:14px;"><button type="button" class="sd-btn sd-btn-primary" onclick="exitLmsQuizTaking()">Back to My Classes</button></div>';
+      // The result replaces the question in place - bring it into view.
+      var modalBody = document.querySelector('#lmsStudentModal .lms-modal-body');
+      if (modalBody) modalBody.scrollTop = 0;
+      if (typeof lmsShowToast === 'function') lmsShowToast('Quiz submitted', 'success');
       window.loadLmsStudentDashboard();
     } catch (err) {
-      if (typeof lmsShowToast === 'function') lmsShowToast(err.message || 'Submit failed', 'error');
+      if (typeof lmsShowToast === 'function') lmsShowToast((err.message || 'Submit failed') + ' — your quiz was NOT submitted. Please try again.', 'error');
       submitting = false;
+      // unlock the controls again (render() rebuilds them) so Submit can be pressed again
+      if (questions.length) render();
     } finally {
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
     }

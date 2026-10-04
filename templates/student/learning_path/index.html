@@ -1,5 +1,5 @@
-{# 03 — My Learning Path. Topic rows from the dashboard mastery data, path steps from the learning path,
-   quiz history from GET /api/lms/students/me/attempts (student-learning-path.js). #}
+{# 03 — My Learning Path. Topic rows from the dashboard mastery data, path steps from the learning path
+   (student-learning-path.js). Attempt history lives on its own screens: Diagnostic (Taken) and My Classes (quizzes). #}
 {% include 'student/partials/stat_cards.html' %}
 
 <div class="sd-card">
@@ -28,10 +28,4 @@
     <div><h3 style="margin:0;color:var(--sd-blue-900);font-size:18px;">Path steps</h3><p class="sd-desc" id="sdPathStepsSub">Your next learning activities, in order.</p></div>
   </div>
   <div id="sdPathSteps" style="margin-top:12px;"></div>
-</div>
-
-<div class="sd-card">
-  <h3 style="margin:0 0 4px;color:var(--sd-blue-900);font-size:18px;">Quiz History</h3>
-  <p class="sd-desc">Every diagnostic and quiz you have attempted.</p>
-  <div id="sdAttemptHistory" style="margin-top:12px;"></div>
 </div>

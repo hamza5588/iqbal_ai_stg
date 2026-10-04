@@ -1,8 +1,8 @@
 /* 03 My Learning Path. Topic rows = the student's assessed topics (dashboard `mastery`; Weak ones are the
    dashboard `weak_topics`). Start Learning Path opens Learning Chat (lms-deficiency-chat.js); Guided practice
-   opens the per-topic practice panel (lms-panels.js). Path steps + Quiz History keep the old overview's actions. */
+   opens the per-topic practice panel (lms-panels.js). Path steps keep the old overview's actions. */
 (function () {
-  var state = { open: {}, attempts: null };
+  var state = { open: {} };
   var STATUS_LABEL = {
     mastered: 'Mastered',
     improving: 'Still learning',
@@ -38,7 +38,7 @@
     if (t.isWeak) {
       side = '<span class="sd-pill green">Available</span>' +
         (t.topic_id ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')"><i class="fas fa-dumbbell"></i> Guided practice</button>' : '') +
-        '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openDeficiencyChat()">Start Learning Path <i class="fas fa-chevron-right"></i></button>';
+        '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" data-testid="topic-chat-btn" onclick="openDeficiencyChat(false, \'practice\', ' + (Number(t.topic_id) || 0) + ')">Start Learning Chat <i class="fas fa-chevron-right"></i></button>';
     } else {
       side = '<span class="sd-pill grey">Completed</span>' +
         '<button type="button" class="sd-btn sd-btn-outline blue sd-btn-sm" aria-expanded="' + open + '" onclick="sdTogglePathResult(' + Number(t.topic_id) + ')">' +
@@ -108,7 +108,12 @@
     if (!box) return;
     var d = window.sdDashboard || {};
     var path = d.learning_path;
-    if (!path || !path.items || !path.items.length) {
+    // The combined "Learning Chat for all weak areas" step is not listed: each weak
+    // topic above has its own Learning Chat.
+    var items = ((path && path.items) || []).filter(function (item) {
+      return !(item.item_type === 'practice' && item.item_id === 0);
+    });
+    if (!items.length) {
       if (card) card.hidden = true;
       return;
     }
@@ -121,24 +126,17 @@
         ? (weakProg.cleared + ' of ' + weakProg.total + ' topics cleared — ' + pct + '% done')
         : (pct + '% done');
     }
-    box.innerHTML = path.items.map(function (item, i) {
+    box.innerHTML = items.map(function (item, i) {
       var isDone = item.status === 'completed';
       var isCurrent = !isDone && path.current_step && path.current_step.id === item.id;
       var action = '';
-      if (item.item_type === 'practice' && item.item_id === 0 && !isDone) {
-        var remain = weakProg && weakProg.weak_remaining != null ? weakProg.weak_remaining : null;
-        action = (remain != null ? '<span class="sd-note" style="margin:0;">' + remain + ' weak topic' + (remain === 1 ? '' : 's') + ' still need practice</span>' : '') +
-          '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openDeficiencyChat()">Open Learning Chat</button>';
-      } else if (isCurrent) {
+      if (isCurrent) {
         if (item.item_type === 'enrichment') {
           action = '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openDeficiencyChat(false, \'enrichment\')">Start challenge</button>';
         } else {
           action = '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="lmsLaunchPathStep(\'' + escapeHtml(item.item_type) + '\',' + (item.item_id || 'null') + ',' + item.id + ')">Start</button>' +
             '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="markLmsPathItemComplete(' + item.id + ')">Mark done</button>';
         }
-      } else if (isDone && item.item_type === 'practice' && item.item_id === 0) {
-        action = '<span class="sd-note" style="margin:0;">All weak topics cleared</span>' +
-          '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openDeficiencyChat(true)">Practice again</button>';
       }
       var pill = isDone ? '<span class="sd-pill grey">Completed</span>' : (isCurrent ? '<span class="sd-pill green">Current</span>' : '<span class="sd-pill">Up next</span>');
       return '<div class="sd-list-row"><div class="sd-num-bar' + (isDone ? ' grey' : '') + '">' + String(i + 1).padStart(2, '0') + '</div>' +
@@ -162,42 +160,6 @@
     }
   };
 
-  /* Quiz History — same data and click-through as loadLmsAttemptHistory (lms-panels.js). */
-  function renderHistory() {
-    var box = document.getElementById('sdAttemptHistory');
-    if (!box) return;
-    var items = state.attempts;
-    if (items === null) { box.innerHTML = '<div class="sd-spinner"></div>'; return; }
-    if (!items.length) { box.innerHTML = '<div class="sd-empty">No attempts yet.</div>'; return; }
-    box.innerHTML = items.map(function (a, i) {
-      var isDiag = a.assessment_type === 'diagnostic';
-      var label = a.title || (isDiag ? 'Diagnostic Assessment' : 'Quiz #' + a.assessment_id);
-      var statusLabel, action = '';
-      if (a.status === 'submitted' && a.score != null && a.max_score != null) {
-        var pct = a.score_percent != null ? a.score_percent : Math.round(1000 * a.score / a.max_score) / 10;
-        statusLabel = Math.round(a.score) + '/' + Math.round(a.max_score) + ' — ' + pct + '%';
-      } else if (a.score_percent != null) statusLabel = a.score_percent + '%';
-      else if (a.status === 'in_progress') statusLabel = 'In progress';
-      else statusLabel = a.status;
-      if (a.status === 'submitted') action = '<button type="button" class="sd-btn sd-btn-outline blue sd-btn-sm" onclick="viewLmsAttemptResult(' + a.attempt_id + ')"><i class="fas fa-chart-bar"></i> View Result</button>';
-      else if (a.status === 'in_progress' && isDiag) action = '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="resumeLmsDiagnostic(' + a.assessment_id + ')">Continue</button>';
-      return '<div class="sd-list-row"><div class="sd-num-bar' + (a.status === 'submitted' ? ' grey' : '') + '">' + String(i + 1).padStart(2, '0') + '</div>' +
-        '<div class="sd-row-body"><div class="sd-row-top"><div class="sd-title-chip"><div class="sd-avatar-sm' + (isDiag ? '' : ' blue') + '"><i class="far fa-file-alt"></i></div>' +
-        '<div><h3>' + escapeHtml(label) + '</h3><div class="sd-meta-line">' +
-        '<div><span class="sd-label">Type</span><b>' + (isDiag ? 'Diagnostic' : 'Quiz') + '</b></div>' +
-        '<div><span class="sd-label">Result</span><b>' + escapeHtml(String(statusLabel)) + '</b></div>' +
-        (a.submitted_at ? '<div><span class="sd-label">Submitted</span><b>' + escapeHtml(window.sdFmtDateTime(a.submitted_at)) + '</b></div>' : '') +
-        '</div></div></div><div class="sd-side-actions">' + action + '</div></div></div></div>';
-    }).join('');
-  }
-
-  function loadHistory() {
-    lmsApi('/api/lms/students/me/attempts').then(function (items) {
-      state.attempts = Array.isArray(items) ? items : [];
-      renderHistory();
-    }).catch(function () { state.attempts = []; renderHistory(); });
-  }
-
   window.sdOnDashboard(function () {
     window.sdRenderPathTopics();
     renderSteps();
@@ -208,9 +170,7 @@
     onShow: function () {
       window.sdRenderPathTopics();
       renderSteps();
-      renderHistory();
       window.loadLmsStudentDashboard();
-      loadHistory();
     }
   };
 })();

@@ -30,6 +30,7 @@ from app.services.lms.diagnostic_pdf_service import (
     upload_diagnostic_pdf,
     upload_target_pdf,
 )
+from app.services.lms import diagnostic_service
 from app.services.lms.diagnostic_service import get_student_diagnostic_dict, list_admin_diagnostics
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, LMSError
 from app.services.quiz.pipeline import run_pdf_quiz_pipeline
@@ -869,11 +870,22 @@ def default_diagnostic():
     timed_out = bool(latest and getattr(latest, "timed_out", False))
     diag["diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
     diag["any_diagnostic_completed"] = bool(onboarding.get("diagnostic_completed"))
+    # False = a diagnostic this student has not submitted yet (e.g. a newly published one,
+    # or a replaced one they still owe) even though an earlier one is already completed.
+    diag["attempted_this_diagnostic"] = latest is not None
+    queue = diagnostic_service.student_diagnostic_queue_summary(_current_user_id())
+    diag["queue"] = queue["items"]
+    diag["queue_total"] = queue["total_count"]
+    diag["pending_count"] = queue["pending_count"]
+    diag["queue_message"] = queue["message"]
+    diag["queue_position"] = next(
+        (i["position"] for i in queue["items"] if i["id"] == diag["id"]), 1
+    )
     diag["diagnostic_timed_out"] = timed_out
     diag["diagnostic_timeout_message"] = (
         attempt_service.TIME_OVER_MESSAGE if timed_out else None
     )
-    if in_progress and not timed_out and not diag["diagnostic_completed"]:
+    if in_progress and not timed_out and (not diag["diagnostic_completed"] or latest is None):
         diag["in_progress_attempt_id"] = in_progress.id
         diag["attempt_status"] = "in_progress"
         if getattr(in_progress, "expires_at", None):
@@ -1144,6 +1156,56 @@ def diagnostic_preview(assessment_id: int):
         return json_error(str(e), code="not_found", status=404)
 
 
+@bp.route("/diagnostics/<int:assessment_id>/questions/<int:question_id>", methods=["PUT"])
+@login_required
+def update_diagnostic_question(assessment_id: int, question_id: int):
+    """Admin edit of a diagnostic MCQ stem/options before (or after) approve."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    denied, assessment = _require_assessment_owner(assessment_id)
+    if denied:
+        return denied
+    if assessment.assessment_type != "diagnostic":
+        return json_error("Not a diagnostic assessment", code="validation_error", status=400)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from app.models.lms_models import AssessmentQuestion
+        from app.utils.db import get_db
+
+        db = get_db()
+        link = (
+            db.query(AssessmentQuestion)
+            .filter(
+                AssessmentQuestion.assessment_id == assessment_id,
+                AssessmentQuestion.question_id == question_id,
+            )
+            .first()
+        )
+        if not link:
+            return json_error(
+                "Question is not on this diagnostic", code="not_found", status=404
+            )
+
+        allowed = {
+            "question_text",
+            "question_latex",
+            "options",
+            "correct_option_index",
+            "explanation",
+        }
+        fields = {k: body[k] for k in allowed if k in body}
+        if not fields:
+            return json_error("No editable fields provided", code="validation_error")
+        updated = question_bank_service.update_question(question_id, **fields)
+        return json_success(question_bank_service.question_to_dict(updated))
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
 @bp.route("/diagnostics/<int:assessment_id>/publish", methods=["POST"])
 @login_required
 def publish_diagnostic(assessment_id: int):
@@ -1272,6 +1334,9 @@ def get_or_update_quiz(quiz_id: int):
         denied = _require_permission(Permissions.CREATE_QUIZ)
         if denied:
             return denied
+        denied, _assessment = _require_assessment_owner(quiz_id)
+        if denied:
+            return denied
         body = request.get_json(silent=True) or {}
         try:
             a = assessment_service.update_quiz_settings(
@@ -1300,13 +1365,8 @@ def get_or_update_quiz(quiz_id: int):
         uid = _current_user_id()
         if role == "student":
             if assessment.assessment_type == "diagnostic":
-                from app.services.lms import class_service
-
-                student_grade = class_service.get_student_grade(uid)
-                platform = assessment_service.get_active_platform_diagnostic(
-                    grade_level=student_grade
-                )
-                if not platform or platform.id != quiz_id:
+                allowed = [a.id for a in diagnostic_service.get_student_diagnostic_queue(uid)]
+                if quiz_id not in allowed:
                     return json_error("Forbidden", code="forbidden", status=403)
             elif assessment.assessment_type == "quiz":
                 if not assignment_service.student_is_assigned_quiz(uid, quiz_id):
@@ -1896,13 +1956,17 @@ def start_deficiency_chat():
         body = request.get_json(silent=True) or {}
         force_new = bool(body.get("force_new"))
         mode = "enrichment" if body.get("mode") == "enrichment" else "practice"
+        try:
+            topic_id = int(body["topic_id"]) if body.get("topic_id") else None
+        except (TypeError, ValueError):
+            return json_error("topic_id must be a number", code="validation_error")
         from app.utils.llm_gateway import llm_workflow
 
         with llm_workflow(
             "lms_deficiency_chat_mcq_generation", user_id=_current_user_id(), user_role="student"
         ):
             result = deficiency_chat_service.start_session(
-                _current_user_id(), force_new=force_new, mode=mode
+                _current_user_id(), force_new=force_new, mode=mode, topic_id=topic_id
             )
         return json_success(result, status=201)
     except LMSValidationError as e:

@@ -427,6 +427,86 @@
             #diagnostic-section .d-fields { grid-template-columns: 1fr; }
         }
         #diagnostic-section .d-stack { display: flex; flex-direction: column; gap: 0.85rem; }
+
+        /* Review / edit modal (quiz-parity MCQ verify before publish) */
+        #adminDiagReviewModal {
+            position: fixed;
+            inset: 0;
+            z-index: 120000;
+            display: none;
+            align-items: stretch;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.55);
+        }
+        #adminDiagReviewModal.is-open { display: flex; }
+        #adminDiagReviewModal .d-review-sheet {
+            background: #fff;
+            border-radius: 14px;
+            width: min(920px, 100%);
+            max-height: calc(100vh - 2rem);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+        }
+        #adminDiagReviewModal .d-review-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--d-line);
+            background: var(--d-bg);
+        }
+        #adminDiagReviewModal .d-review-head h3 {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--d-ink);
+        }
+        #adminDiagReviewModal .d-review-head p {
+            font-size: 0.82rem;
+            color: var(--d-muted);
+            margin-top: 0.2rem;
+        }
+        #adminDiagReviewModal .d-review-close {
+            border: 1px solid var(--d-line);
+            background: #fff;
+            color: #475569;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.45rem;
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+        #adminDiagReviewModal .d-review-body {
+            padding: 1rem 1.25rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        #adminDiagReviewModal .d-review-foot {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0.85rem 1.25rem;
+            border-top: 1px solid var(--d-line);
+            background: #fff;
+        }
+        #adminDiagReviewModal .d-review-status {
+            margin-right: auto;
+            font-size: 0.82rem;
+            color: var(--d-muted);
+        }
+        #adminDiagReviewModal .lms-quiz-preview-card {
+            border: 1px solid var(--d-line);
+            border-radius: 0.7rem;
+            padding: 0.85rem 0.95rem;
+            margin-bottom: 0.75rem;
+            background: #fff;
+        }
     </style>
 
     {% call page_head('Diagnostic Assessment', 'One diagnostic per grade. Publish a test, then add study PDFs for Learning Chat.', img='diagnostic.png') %}
@@ -464,11 +544,10 @@
                         <label class="d-label" for="adminDiagGrade">Grade</label>
                         <select id="adminDiagGrade" required class="d-select">
                             <option value="">Select grade</option>
-                            <option value="6">6th Grade</option>
-                            <option value="7">7th Grade</option>
-                            <option value="8">8th Grade</option>
-                            <option value="9">9th Grade</option>
-                            <option value="10">10th Grade</option>
+                            {# every grade the API and student registration accept #}
+                            {% for g in range(1, 13) %}
+                            <option value="{{ g }}">{{ g }}{{ 'st' if g == 1 else 'nd' if g == 2 else 'rd' if g == 3 else 'th' }} Grade</option>
+                            {% endfor %}
                         </select>
                     </div>
                 </div>
@@ -489,7 +568,7 @@
                     <p id="adminDiagQaFileLabel" class="text-xs text-slate-500 mt-1.5"></p>
                 </div>
 
-                <div class="ad-step"><span class="ad-step-num">3</span><div><b>Study material <span class="ad-opt">(optional)</span></b></div></div>
+                <div class="ad-step"><span class="ad-step-num">3</span><div><b>Study material</b><span>At least one PDF is required — Learning Chat teaches from it.</span></div></div>
                 <div>
                     <label class="d-label" for="adminDiagTargetFiles">Target content PDF(s)</label>
                     <p class="d-help">Study material for Learning Chat after the diagnostic.</p>
@@ -499,14 +578,14 @@
                             <strong>Choose target PDF(s)</strong>
                             <span>Ctrl/Cmd for multiple</span>
                         </span>
-                        <input id="adminDiagTargetFiles" type="file" accept=".pdf,application/pdf" multiple
+                        <input id="adminDiagTargetFiles" type="file" accept=".pdf,application/pdf" multiple required
                             onchange="updateAdminDiagTargetFileList()">
                     </label>
                     <p id="adminDiagTargetFileCount" class="text-xs font-semibold text-[#1a56db] mt-1.5" style="display:none;"></p>
                     <ul id="adminDiagTargetFileList" class="d-file-list"></ul>
                 </div>
 
-                <div class="ad-step"><span class="ad-step-num">4</span><div><b>Publish</b><span>Uploads both files and makes the diagnostic live for the grade.</span></div></div>
+                <div class="ad-step"><span class="ad-step-num">4</span><div><b>Generate draft</b><span>Uploads both files and generates questions for your review. Students do not see it until you Approve.</span></div></div>
                 <div id="adminDiagProgressWrap" style="display:none;">
                     <div class="ad-progress-head">
                         <span id="adminDiagProgressText">Uploading...</span>
@@ -519,7 +598,7 @@
                 <p id="adminDiagStatus" class="text-sm text-slate-600"></p>
                 <button type="submit" id="adminDiagUploadBtn" class="d-btn d-btn-block">
                     <i class="fas fa-upload"></i>
-                    Upload &amp; Publish Diagnostic
+                    Upload &amp; Generate Draft
                 </button>
             </form>
         </div>
@@ -560,6 +639,16 @@
         </div>
     </div>
 
+    <div class="d-lib" id="adminDiagRetakeCard" style="display:none; margin-bottom:1.25rem;">
+        <div class="d-lib-head">
+            <div>
+                <h3>Retake requests</h3>
+                <p>Students asking to retake a diagnostic they already completed. Teachers can approve their own students.</p>
+            </div>
+        </div>
+        <div class="d-rows" id="adminDiagRetakeList"></div>
+    </div>
+
     <div class="d-lib">
         <div class="d-lib-head">
             <div>
@@ -582,5 +671,28 @@
             </div>
         </div>
         <div id="adminDiagList"></div>
+    </div>
+
+    <!-- Review & edit generated MCQs before Approve (students cannot see drafts) -->
+    <div id="adminDiagReviewModal" role="dialog" aria-modal="true" aria-labelledby="adminDiagReviewTitle" onclick="if(event.target===this)closeAdminDiagReview()">
+        <div class="d-review-sheet">
+            <div class="d-review-head">
+                <div>
+                    <h3 id="adminDiagReviewTitle">Review diagnostic questions</h3>
+                    <p id="adminDiagReviewSubtitle">Verify and edit MCQs. Students only see this after you Approve.</p>
+                </div>
+                <button type="button" class="d-review-close" onclick="closeAdminDiagReview()" aria-label="Close">&times;</button>
+            </div>
+            <div class="d-review-body" id="adminDiagReviewBody">
+                <p class="text-slate-500 text-sm">Loading questions…</p>
+            </div>
+            <div class="d-review-foot">
+                <span class="d-review-status" id="adminDiagReviewStatus"></span>
+                <button type="button" class="d-action" onclick="closeAdminDiagReview()">Close</button>
+                <button type="button" class="d-action primary" id="adminDiagReviewApproveBtn" onclick="adminApproveFromReview()">
+                    <i class="fas fa-check"></i> Approve for Students
+                </button>
+            </div>
+        </div>
     </div>
 </div>

@@ -214,9 +214,13 @@ def _upsert_topic_score(
     """Write one StudentTopicScore.
 
     blend=False  -> replace (a fresh diagnostic/quiz is the new source of truth)
-    blend=True   -> weighted-average into the existing score (Learning Chat
-                    practice must *nudge* mastery, not let 2 easy practice
-                    questions wipe out a 7-question diagnostic result).
+    blend=True   -> Learning Chat practice works off the topic's outstanding misses:
+                    each correct practice answer cancels one earlier wrong answer,
+                    each wrong practice answer adds one. A student who missed 1 of 7
+                    needs one correct practice answer to reach 100%; one who missed
+                    all 7 needs seven. So practice can restore mastery (a plain
+                    running average never returned to exactly 100% after a miss),
+                    while 2 easy questions still cannot erase a 0/7 diagnostic.
     """
     if not topic_id or sample_size <= 0:
         return
@@ -231,9 +235,13 @@ def _upsert_topic_score(
     prev = row.score_percent if row else None
     if row and blend and prev is not None:
         prev_ss = row.sample_size or 1
-        combined_ss = prev_ss + sample_size
-        pct = (prev * prev_ss + pct * sample_size) / combined_ss
-        new_ss = min(combined_ss, _MAX_BLEND_SAMPLE)
+        prev_wrong = round(prev_ss * (100.0 - prev) / 100.0)
+        new_correct = round(sample_size * pct / 100.0)
+        new_wrong = sample_size - new_correct
+        wrong = max(0, prev_wrong - new_correct) + new_wrong
+        total = prev_ss + new_wrong
+        pct = 100.0 * (total - wrong) / total
+        new_ss = min(total, _MAX_BLEND_SAMPLE)
     else:
         new_ss = sample_size
     status = compute_mastery_status(pct, prev)
@@ -351,6 +359,88 @@ def _topic_buckets_from_diagnostic_analysis(attempt, assessment) -> Optional[dic
     return buckets or None
 
 
+def _label_untopiced_quiz_questions(questions: List[Question]) -> dict[int, int]:
+    """Give quiz questions that carry no topic a real one, once, and remember it.
+
+    Quizzes built from a PDF are saved without a topic on any question, so a
+    submitted attempt produced no topic scores at all: no weak areas, and the
+    learning path never moved. The topic the question tests is worked out by the
+    same labeler the diagnostic pipeline uses and stored on ``questions.topic_id``,
+    so only the first submission of a quiz pays for it. Returns {question_id: topic_id}
+    for the ones it could label; on any failure the rest simply stay unlabelled
+    (and are retried on the next submission).
+    """
+    if not questions:
+        return {}
+    from app.services.lms.mcq_utils import options_from_json
+    from app.services.quiz.concept_labeler import (
+        _CONCEPT_PROMPT,
+        ConceptLabelBatch,
+        is_generic_concept,
+    )
+    from app.services.quiz.retry_utils import invoke_structured
+    from app.utils.groq_rate_limit import invoke_with_groq_rate_limit
+    from app.utils.llm_factory import get_chat_model
+
+    out: dict[int, int] = {}
+    db = get_db()
+    try:
+        from app.models.lms_models import Topic
+
+        # Reuse the topics students already have scores on ("Logarithms") instead of
+        # inventing a near-duplicate ("Common Logarithms") that would split their mastery.
+        known = [
+            name
+            for (name,) in db.query(Topic.name)
+            .join(StudentTopicScore, StudentTopicScore.topic_id == Topic.id)
+            .filter(Topic.is_active.is_(True))
+            .distinct()
+            .limit(80)
+            .all()
+            if name and not is_generic_concept(name)
+        ]
+        reuse_hint = (
+            "\nExisting topic names - use one of these EXACTLY when it fits the question; "
+            "only write a new topic name when none fits:\n" + json.dumps(sorted(known), ensure_ascii=False) + "\n"
+            if known
+            else ""
+        )
+        llm = get_chat_model(temperature=0.1, max_tokens=2048)
+        for start in range(0, len(questions), 10):
+            chunk = questions[start : start + 10]
+            payload = [
+                {
+                    "index": i,
+                    "question_text": (q.question_text or "")[:300],
+                    "options": [(o.get("text") or "") for o in options_from_json(q.options_json)][:4],
+                }
+                for i, q in enumerate(chunk)
+            ]
+            prompt = _CONCEPT_PROMPT.format(payload=json.dumps(payload, ensure_ascii=False)) + reuse_hint
+            result = invoke_with_groq_rate_limit(
+                lambda: invoke_structured(llm, ConceptLabelBatch, prompt),
+                description="quiz question topic labeling",
+            )
+            for item in result.labels or []:
+                name = (item.learning_concept or "").strip()[:80]
+                if not name or is_generic_concept(name) or not 0 <= int(item.index) < len(chunk):
+                    continue
+                topic = get_or_create_topic_from_pdf_label(name)
+                if topic:
+                    q = chunk[int(item.index)]
+                    q.topic_id = topic.id
+                    out[q.id] = topic.id
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - scoring must never fail on labeling
+        logger.warning("Quiz question topic labeling failed: %s", exc)
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return {}
+    return out
+
+
 def _topic_buckets_from_question_resolution(
     attempt, assessment, *, exclude_unanswered: bool = False
 ) -> dict[int, dict]:
@@ -373,12 +463,16 @@ def _topic_buckets_from_question_resolution(
     answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
     ans_map = {a.question_id: a for a in answers}
 
+    resolved = {q.id: _resolve_question_topic_id(q, assessment) for q in questions}
+    if assessment.assessment_type == "quiz":
+        resolved.update(_label_untopiced_quiz_questions([q for q in questions if not resolved[q.id]]))
+
     buckets: dict[int, dict] = {}
     for q in questions:
         ans = ans_map.get(q.id)
         if exclude_unanswered and ans is None:
             continue
-        topic_id = _resolve_question_topic_id(q, assessment)
+        topic_id = resolved.get(q.id)
         if not topic_id:
             continue
         bucket = buckets.setdefault(topic_id, {"correct": 0, "total": 0})

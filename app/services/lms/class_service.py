@@ -89,6 +89,12 @@ def create_class(
     if not teacher or teacher.role not in ("teacher", "admin"):
         raise LMSValidationError("Only teachers can create classes")
 
+    name = name.strip() if isinstance(name, str) else ""
+    if not name:
+        raise LMSValidationError("Class name is required")
+    if len(name) > 255:
+        raise LMSValidationError("Class name must be 255 characters or fewer")
+
     normalized_grade = normalize_grade(grade_level)
     if not normalized_grade:
         raise LMSValidationError("Grade level is required (e.g. 8 for 8th grade)")
@@ -260,6 +266,7 @@ def list_eligible_students(class_id: int, teacher_id: int) -> List[dict]:
             {
                 "student_id": s.id,
                 "username": s.username,
+                "full_name": getattr(s, "full_name", None) or s.username,
                 "email": s.useremail,
                 "grade_level": normalize_grade(s.class_standard),
                 "grade_label": format_grade_label(s.class_standard),
@@ -289,6 +296,7 @@ def list_class_students_detailed(class_id: int, teacher_id: int) -> List[dict]:
             {
                 "student_id": enr.student_id,
                 "username": user.username if user else None,
+                "full_name": (getattr(user, "full_name", None) or user.username) if user else None,
                 "email": user.useremail if user else None,
                 "grade_level": normalize_grade(user.class_standard) if user else None,
                 "grade_label": format_grade_label(user.class_standard) if user else None,
@@ -309,6 +317,22 @@ def list_class_students(class_id: int) -> List[ClassEnrollment]:
         db.query(ClassEnrollment)
         .filter(ClassEnrollment.class_id == class_id, ClassEnrollment.status == "active")
         .all()
+    )
+
+
+def teacher_has_student(teacher_id: int, student_id: int) -> bool:
+    """True when the student is actively enrolled in one of this teacher's classes."""
+    db = get_db()
+    return (
+        db.query(ClassEnrollment.id)
+        .join(SchoolClass, SchoolClass.id == ClassEnrollment.class_id)
+        .filter(
+            SchoolClass.teacher_id == teacher_id,
+            ClassEnrollment.student_id == student_id,
+            ClassEnrollment.status == "active",
+        )
+        .first()
+        is not None
     )
 
 

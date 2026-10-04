@@ -164,7 +164,7 @@ function renderUsersTable(users) {
         return `
         <tr>
             <td class="id">${user.id}</td>
-            <td><div class="ad-user-cell"><span class="ad-initial ${tone}">${adEsc((user.username || '?').charAt(0).toUpperCase())}</span><b>${adEsc(user.username)}</b></div></td>
+            <td><div class="ad-user-cell"><span class="ad-initial ${tone}">${adEsc((user.full_name || user.username || '?').charAt(0).toUpperCase())}</span><span><b>${adEsc(user.full_name || user.username)}</b><br><small class="muted">${adEsc(user.username)}</small></span></div></td>
             <td class="muted">${adEsc(user.useremail)}</td>
             <td><span class="ad-pill ${tone}">${adEsc(user.role)}</span></td>
             <td><span class="ad-pill ${tier === 'free' ? 'grey' : ''}">${adEsc(tier)}</span></td>
@@ -481,12 +481,18 @@ async function createUser(event) {
 
     const data = {
         username: document.getElementById('create-username').value.trim(),
+        full_name: document.getElementById('create-full-name').value.trim(),
         useremail: document.getElementById('create-email').value.trim(),
         password: document.getElementById('create-password').value,
         role: document.getElementById('create-role').value,
         class_standard: document.getElementById('create-class-standard').value.trim() || 'N/A',
         medium: document.getElementById('create-medium').value.trim() || 'N/A'
     };
+    if (data.role === 'student' && data.class_standard === 'N/A') {
+        // a student's grade decides which diagnostic they get
+        showNotification('Class Standard (grade 1-12) is required for students', 'error');
+        return;
+    }
 
     try {
         const response = await fetch('/admin/users', {
@@ -521,6 +527,7 @@ async function editUser(userId) {
             const user = data.user;
             document.getElementById('edit-user-id').value = user.id;
             document.getElementById('edit-username').value = user.username;
+            document.getElementById('edit-full-name').value = user.full_name || user.username;
             document.getElementById('edit-email').value = user.useremail;
             document.getElementById('edit-role').value = user.role;
             document.getElementById('edit-class-standard').value = user.class_standard || '';
@@ -543,6 +550,7 @@ async function updateUser(event) {
     const userId = document.getElementById('edit-user-id').value;
     const data = {
         username: document.getElementById('edit-username').value.trim(),
+        full_name: document.getElementById('edit-full-name').value.trim(),
         useremail: document.getElementById('edit-email').value.trim(),
         role: document.getElementById('edit-role').value,
         class_standard: document.getElementById('edit-class-standard').value.trim() || 'N/A',

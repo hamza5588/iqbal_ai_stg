@@ -23,8 +23,28 @@
     {% include 'admin/sections/modals.html' %}
 {% endblock %}
 
+{% block head_extra %}
+    {# Math stack for diagnostic MCQ review/edit (same as teacher quiz preview) #}
+    {% set asset_v = '20261004diag1' %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.105.3/mathlive-static.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}?v={{ asset_v }}">
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+        options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'], ignoreHtmlClass: 'tex2jax_ignore', processHtmlClass: 'tex2jax_process' },
+        startup: { typeset: false }
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+{% endblock %}
+
 {% block scripts %}
+    <script src="https://cdn.jsdelivr.net/npm/mathlive@0.105.3/mathlive.min.js"></script>
+    <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261004diag1"></script>
     <script src="{{ url_for('static', filename='admin/js/admin-dashboard.js') }}"></script>
-    <script src="{{ url_for('static', filename='admin/lms-admin-diagnostic.js') }}"></script>
+    <script src="{{ url_for('static', filename='admin/lms-admin-diagnostic.js') }}?v=20261004diag1"></script>
     <script src="{{ url_for('static', filename='admin/admin-theme.js') }}"></script>
 {% endblock %}

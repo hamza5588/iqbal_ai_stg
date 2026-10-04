@@ -86,3 +86,34 @@ def test_pure_reword_of_the_rectangle_question_passes():
             "flat space inside the shape. The rectangle is 12 cm on the long "
             "side and 5 cm on the short side. Give the area in square centimetres.")
     assert _looks_leaky(good, RECT_OPTIONS) is False
+
+
+def _guard_with_stem():
+    """Full guard incl. the stem-aware relaxation (needs the two extra regexes)."""
+    import re as _re
+
+    src = _p.read_text(encoding="utf-8")
+    ns: dict = {"re": _re}
+    for name in ("_LEAK_RE", "_ARITH_RE", "_STEM_HAS_ARITH_RE"):
+        exec(_re.search(name + r" = re\.compile\(\n(?:.*\n)*?\)\n", src).group(0), ns)
+    exec(_re.search(r"def _looks_leaky\(.*?\n(?:(?: {4}.*)?\n)*", src).group(0), ns)
+    return ns["_looks_leaky"]
+
+
+def test_restating_arithmetic_written_in_the_question_is_allowed():
+    guard = _guard_with_stem()
+    assert guard("What number do you get when you add the common logarithm of 2 to the common logarithm of 5?",
+                 OPTIONS, "log 2 + log 5 (common log) equals:") is False
+    assert guard("What number, when you multiply it by 3 and then add 7, gives 22?", OPTIONS, "3x + 7 = 22") is False
+    assert guard("What number is left over when you divide the expression by x minus one?",
+                 OPTIONS, "Remainder when x^2 - 3x + 2 is divided by x-1 is:") is False
+
+
+def test_method_for_a_word_problem_is_still_blocked():
+    guard = _guard_with_stem()
+    stem = "A rectangle has a length of 3 cm and a width of 4 cm. What is its area?"
+    assert guard("You multiply the length and the width.", OPTIONS, stem)
+    assert guard("Area is found by using the two sides.", OPTIONS, stem)
+    # answer / formula leaks stay blocked even when the question has arithmetic in it
+    assert guard("The answer is 5.", OPTIONS, "3x + 7 = 22")
+    assert guard("Use the formula for the remainder.", OPTIONS, "x^2 - 3x + 2 divided by x-1")

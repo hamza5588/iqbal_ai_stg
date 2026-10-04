@@ -55,7 +55,7 @@ def generate_remediation_mcqs(
     """Generate topic-targeted practice MCQs distinct from diagnostic items."""
     if count < 1:
         return []
-    count = min(count, 8)
+    count = min(count, 10)  # Learning Chat asks for up to 10 on a topic scored 0%
 
     exclude = exclude_question_texts or []
     exclude_block = (

@@ -95,8 +95,9 @@ def test_upsert_topic_score_blend_math(db_session):
     )
     db_session.commit()
     row = db_session.query(StudentTopicScore).filter_by(student_id=1, topic_id=5).first()
-    assert row.score_percent == pytest.approx(200.0 / 8, abs=0.01)
-    assert row.sample_size == 8
+    # 6 misses, 2 correct practice answers cancel 2 of them: 2/6 right, not mastered yet
+    assert row.score_percent == pytest.approx(200.0 / 6, abs=0.01)
+    assert row.sample_size == 6
 
     performance_service._upsert_topic_score(
         db_session, 1, 5, 90.0, 4, datetime.utcnow(), blend=False

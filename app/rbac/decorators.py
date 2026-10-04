@@ -45,6 +45,8 @@ def login_required(f):
     """Decorator to require login for routes."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        from app.utils.auth import sync_session_user
+        sync_session_user()
         if 'user_id' not in session:
             logger.info("Unauthorized access attempt - redirecting to login")
             if _wants_json():

@@ -382,6 +382,16 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 .td-weak-row .td-progress-track { width: 100%; background: #fecaca; }
 .td-weak-row span:last-child { text-align: right; font-size: 16px; }
 .td-chart-box { position: relative; height: 220px; }
+/* Class roster: per-student actions + progress panels (Diagnostic / Quiz / Graph) */
+.td-row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.td-row-actions .td-btn { white-space: nowrap; }
+.td-btn-on { background: var(--td-blue-50); border-color: var(--td-blue-700); }
+.td-roster-panel { padding: 16px 18px 18px; }
+.td-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.td-panel-head h4 { margin: 0; font-size: 16px; }
+.td-graph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.td-graph-overall { border-color: #99f6e4; background: #f0fdfa; }
+.td-mini-chart { position: relative; height: 160px; }
 
 /* ── Classes ─────────────────────────────────────────────── */
 .td-class-card { background: #fff; border: 1px solid var(--td-line); border-left: 6px solid var(--td-blue-600); border-radius: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
@@ -505,6 +515,11 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 .td-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--td-blue-100); border-top-color: var(--td-blue-700); animation: td-spin .8s linear infinite; margin: 0 auto 10px; }
 @keyframes td-spin { to { transform: rotate(360deg); } }
 .td-error { color: var(--td-red); font-weight: 600; }
+
+.td-retake-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--td-line); }
+.td-retake-row:first-child { border-top: 0; }
+.td-retake-row .td-help { display: block; margin: 2px 0 0; }
+.td-retake-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 1100px) {

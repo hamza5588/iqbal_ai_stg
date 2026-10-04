@@ -317,7 +317,9 @@
         renderDiagnosticTimeOver(diag);
         return;
       }
-      if (diag.diagnostic_completed || diag.any_diagnostic_completed) {
+      // attempted_this_diagnostic === false: an earlier diagnostic is done, but this one
+      // (newly published, or a replaced one still owed) is not - offer it normally.
+      if ((diag.diagnostic_completed || diag.any_diagnostic_completed) && diag.attempted_this_diagnostic !== false) {
         body.innerHTML = (isInlineDiag() ? diagHeadHtml(null) : '') + '<div class="lms-card"><p>You have already completed the diagnostic assessment' +
           (diag.title ? ': <strong>' + escapeHtml(diag.title) + '</strong>' : '') +
           '.</p><p class="lms-status" style="margin-top:8px;">Continue with your learning path or Learning Chat.</p></div>';
@@ -424,6 +426,13 @@
     } catch (e) { /* offline / server hiccup - stays queued in localStorage, retried automatically */ }
   }
 
+  /* Weak areas each have their own Learning Chat, listed on My Learning Path. */
+  window.lmsOpenWeakAreaChats = function () {
+    if (typeof window.sdShowView === 'function') { window.sdShowView('learning-path'); return; }
+    closeLmsDiagnostic();
+    if (typeof openDeficiencyChat === 'function') openDeficiencyChat();
+  };
+
   window._lmsDiagOrientation = null;
 
   function showDiagnosticOrientation(diag) {
@@ -443,6 +452,10 @@
         ? 'These are fresh questions on the same topics as before. Your Learning Path will update from this attempt.'
         : 'This is a diagnostic. It is not graded like a test — it just helps us find what you already know and where you need practice, so your Learning Path is built for you.') +
       '</p>' +
+      (!isRetake && diag.pending_count > 1
+        ? '<div class="lms-diag-timeout-note" data-testid="diag-queue-notice">' + escapeHtml(diag.queue_message || '') +
+          ' This is diagnostic 1 of ' + diag.pending_count + '.</div>'
+        : '') +
       '<ul class="lms-diag-orient-list">' +
       (qn ? '<li><strong>' + escapeHtml(String(qn)) + ' questions</strong>, multiple choice.</li>' : '') +
       '<li><strong>About ' + mins + ' minutes.</strong> The timer starts when you press Start and is shown at the top.</li>' +
@@ -822,12 +835,12 @@
     try {
       var res = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/questions/' + qid + '/clarify', { method: 'POST' });
       var text = (res && res.clarification) || localDiagExplainFallback(q);
-      window._lmsDiagExplainCache[qid] = text;
+      // A fallback only repeats the question - don't keep it, so the next click retries.
+      if (res && res.clarification && !res.fallback) window._lmsDiagExplainCache[qid] = text;
       renderDiagExplain(panel, text);
     } catch (e) {
       // Network/API failure — still show a useful local rephrase (with math typeset).
       var fallback = localDiagExplainFallback(q);
-      window._lmsDiagExplainCache[qid] = fallback;
       renderDiagExplain(panel, fallback);
     }
   };
@@ -901,7 +914,13 @@
         renderDiagnosticTimeOver(result);
         return;
       }
-      renderDiagnosticResults(result, { timedOut: !!(result.timed_out || result.time_over || autoSubmit) });
+      // Another diagnostic still waiting (admin replaced one this student had not taken)?
+      var nextPending = false;
+      try {
+        var nextDiag = await lmsApi('/api/lms/diagnostics/default');
+        nextPending = !!nextDiag && nextDiag.attempted_this_diagnostic === false && nextDiag.id !== diagState.assessmentId;
+      } catch (nextErr) { /* no next diagnostic - show the normal result */ }
+      renderDiagnosticResults(result, { timedOut: !!(result.timed_out || result.time_over || autoSubmit), nextPending: nextPending });
       unlockDiagnosticGate();
     } catch (err) {
       var msg = err && err.message ? String(err.message) : '';
@@ -969,6 +988,11 @@
       : (opts.alreadyDone
         ? '<div class="lms-diag-timeout-note">You have already completed the diagnostic. Here is how you did.</div>'
         : '');
+    if (opts.nextPending) {
+      timedOutBanner += '<div class="lms-diag-timeout-note" data-testid="diag-next-notice">' +
+        'You have one more diagnostic assessment to complete. ' +
+        '<button type="button" class="lms-btn lms-btn-primary sd-btn sd-btn-primary sd-btn-sm" onclick="openLmsDiagnostic()">Start next diagnostic</button></div>';
+    }
     var scoreMeta = [countLabel, unansweredLabel].filter(Boolean).join(' &middot; ');
     var nextSteps =
       (weak.length
@@ -978,7 +1002,7 @@
           'above-level challenge questions built from your strongest topics.</div>');
     var actionBtns =
       (weak.length
-        ? '<button type="button" class="sd-btn sd-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>'
+        ? '<button type="button" class="sd-btn sd-btn-primary" onclick="lmsOpenWeakAreaChats()">Start Learning Chat</button>'
         : '<button type="button" class="sd-btn sd-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat(false, \'enrichment\')">Start challenge</button>') +
       '<button type="button" class="sd-btn sd-btn-outline" onclick="lmsRetakeDiagnostic()">Retake with new questions</button>' +
       '<button type="button" class="sd-btn sd-btn-outline" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button>';
@@ -1012,7 +1036,7 @@
           'above-level challenge questions built from your strongest topics.</div>') +
       '<div class="lms-modal-footer" style="border:none;padding-top:20px;display:flex;gap:8px;flex-wrap:wrap;">' +
       (weak.length
-        ? '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat()">Start Learning Chat</button>'
+        ? '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsOpenWeakAreaChats()">Start Learning Chat</button>'
         : '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat(false, \'enrichment\')">Start challenge</button>') +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="lmsRetakeDiagnostic()">Retake with new questions</button>' +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button></div>';

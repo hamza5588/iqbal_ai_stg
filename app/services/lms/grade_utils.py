@@ -27,6 +27,8 @@ def normalize_grade(value: Optional[str]) -> Optional[str]:
     if not value or not str(value).strip():
         return None
     raw = str(value).strip().lower()
+    if raw.startswith(("-", "+")):  # "-1" is not grade 1
+        return None
     raw = raw.replace("grade", "").replace("class", "").replace("standard", "").strip()
     if raw in _WORD_TO_GRADE:
         return _WORD_TO_GRADE[raw]

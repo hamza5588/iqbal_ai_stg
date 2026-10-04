@@ -15,6 +15,10 @@
     roster: [],
     eligible: [],
     selected: {},
+    quizzes: [],
+    panel: null,       // { sid, kind } - the one open per-student progress panel
+    topicCache: {},
+    charts: [],
     loadSeq: 0
   };
 
@@ -39,6 +43,7 @@
       state.loaded = true;
       fillGradeControls();
       render();
+      loadRetakeRequests();
       if (state.expandedId != null) loadDetail(state.expandedId, true);
     } catch (err) {
       list.innerHTML = '<div class="td-empty"><p class="td-error">' + U.esc(err.message || 'Failed to load classes.') + '</p></div>';
@@ -153,6 +158,10 @@
       state.roster = [];
       state.eligible = [];
       state.selected = {};
+      state.quizzes = [];
+      state.panel = null;
+      state.topicCache = {};
+      destroyCharts();
       render();
       loadDetail(classId);
     }
@@ -162,11 +171,15 @@
     try {
       var r = await Promise.all([
         lmsApi('/api/lms/classes/' + classId + '/students'),
-        lmsApi('/api/lms/classes/' + classId + '/eligible-students')
+        lmsApi('/api/lms/classes/' + classId + '/eligible-students'),
+        // only feeds the Status column ("Not attempted" needs to know about submitted quizzes)
+        lmsApi('/api/lms/classes/' + classId + '/analytics/quizzes').catch(function () { return []; })
       ]);
       if (state.expandedId !== classId) return;
       state.roster = r[0] || [];
       state.eligible = r[1] || [];
+      state.quizzes = r[2] || [];
+      state.topicCache = {};
       var c = state.classes.find(function (x) { return x.id === classId; });
       if (c && c.student_count !== state.roster.length) {
         c.student_count = state.roster.length;
@@ -186,7 +199,69 @@
     if (state.tab === 'roster') renderRoster(slot); else renderAddStudents(slot);
   }
 
+  /* ── Roster status + per-student progress panels ──
+     Status is the same rule as Class Analytics → Roster (teacher-analytics.js studentStatus).
+     Panels read GET /classes/:id/students/:sid/progress/by-topic: per topic, every diagnostic
+     and quiz attempt that touched it, oldest first. */
+  function latestQuizScore(studentId) {
+    var best = null;
+    (state.quizzes || []).forEach(function (a) {
+      (a.student_results || []).forEach(function (r) {
+        if (r.student_id === studentId && r.status === 'submitted' && r.score_percent != null) {
+          if (!best || a.assignment_id > best.id) best = { id: a.assignment_id, pct: r.score_percent };
+        }
+      });
+    });
+    return best ? best.pct : null;
+  }
+  function studentStatus(s) {
+    var untouched = !Number(s.overall_progress) && !(s.weak_topic_count || (s.weak_topics || []).length) &&
+      latestQuizScore(s.student_id) == null;
+    if (untouched) return 'not_attempted';
+    return s.is_struggling ? 'needs_help' : 'on_track';
+  }
+  var STATUS_BADGE = {
+    on_track: '<span class="td-status-badge td-status-good">MASTERED</span>',
+    needs_help: '<span class="td-status-badge td-status-help">STILL LEARNING</span>',
+    not_attempted: '<span class="td-status-badge td-status-muted">NOT ATTEMPTED</span>'
+  };
+  var PANELS = {
+    diagnostic: { label: 'Diagnostic Progress', icon: 'fa-clipboard-check' },
+    quiz: { label: 'Quiz Progress', icon: 'fa-list-check' },
+    graph: { label: 'Graph', icon: 'fa-chart-line' }
+  };
+
+  function topicSeries(studentId) {
+    var key = state.expandedId + ':' + studentId;
+    if (!state.topicCache[key]) {
+      state.topicCache[key] = lmsApi('/api/lms/classes/' + state.expandedId + '/students/' + studentId + '/progress/by-topic')
+        .then(function (p) { return (p && p.topics) || []; })
+        .catch(function (err) { delete state.topicCache[key]; throw err; });
+    }
+    return state.topicCache[key];
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function scored(points) { return points.filter(function (p) { return p.score_percent != null; }); }
+  function changeText(first, last) {
+    var d = Math.round(last) - Math.round(first);
+    return d > 0 ? '+' + d + ' pts' : (d < 0 ? d + ' pts' : 'no change');
+  }
+  function changeHtml(first, last) {
+    var d = Math.round(last) - Math.round(first);
+    var color = d > 0 ? 'var(--td-green)' : (d < 0 ? 'var(--td-red)' : 'var(--td-muted)');
+    return '<b style="color:' + color + ';">' + changeText(first, last) + '</b>';
+  }
+  function destroyCharts() {
+    (state.charts || []).forEach(function (c) { try { c.destroy(); } catch (e) { /* ignore */ } });
+    state.charts = [];
+  }
+
   function renderRoster(slot) {
+    destroyCharts();
     var tpl = $('tdTplClassRoster');
     slot.innerHTML = '';
     slot.appendChild(tpl.content.cloneNode(true));
@@ -196,13 +271,181 @@
       slot.querySelector('[data-slot="empty"]').hidden = false;
       return;
     }
+    var open = state.panel;
+    if (open && !state.roster.some(function (s) { return s.student_id === open.sid; })) open = state.panel = null;
     body.innerHTML = state.roster.map(function (s) {
       var name = U.studentName(s);
-      return '<tr><td>' + U.studentCell(name) + '</td>' +
+      var sid = s.student_id;
+      var st = studentStatus(s);
+      var isOpen = open && open.sid === sid;
+      var btns = Object.keys(PANELS).map(function (kind) {
+        var on = isOpen && open.kind === kind;
+        return '<button type="button" class="td-btn td-btn-outline-blue td-btn-sm' + (on ? ' td-btn-on' : '') + '" aria-expanded="' + !!on + '" data-testid="roster-' + kind + '" ' +
+          'onclick="tdClasses.openPanel(' + sid + ', \'' + kind + '\')"><i class="fas ' + PANELS[kind].icon + '"></i> ' + PANELS[kind].label + '</button>';
+      }).join('');
+      return '<tr' + (isOpen ? ' class="td-expanded"' : '') + '><td>' + U.studentCell(name) + '</td>' +
         '<td>' + U.esc(s.grade_label || '—') + '</td>' +
-        '<td>' + U.progress(s.overall_progress) + (s.is_struggling ? ' <span class="td-status-badge td-status-help" title="Struggling" style="margin-left:6px;">!</span>' : '') + '</td>' +
-        '<td style="text-align:right;"><button type="button" class="td-btn td-btn-danger-outline td-btn-sm" onclick="tdClasses.removeStudent(' + s.student_id + ')">Remove</button></td></tr>';
+        '<td>' + U.progress(s.overall_progress, st === 'needs_help' ? 'red' : '') + '</td>' +
+        '<td>' + STATUS_BADGE[st] + '</td>' +
+        '<td><div class="td-row-actions">' + btns +
+        '<button type="button" class="td-btn td-btn-danger-outline td-btn-sm" onclick="tdClasses.removeStudent(' + sid + ')">Remove</button></div></td></tr>' +
+        (isOpen ? '<tr><td colspan="5" class="td-detail-cell"><div class="td-roster-panel" id="tdRosterPanel-' + sid + '"><div class="td-empty" style="padding:20px;"><div class="td-spinner"></div></div></div></td></tr>' : '');
     }).join('');
+    if (open) fillPanel(open.sid, open.kind);
+  }
+
+  function openPanel(sid, kind) {
+    var same = state.panel && state.panel.sid === sid && state.panel.kind === kind;
+    state.panel = same ? null : { sid: sid, kind: kind };
+    renderDetail();
+  }
+
+  async function fillPanel(sid, kind) {
+    var student = state.roster.find(function (s) { return s.student_id === sid; });
+    var name = student ? U.studentName(student) : 'Student';
+    var topics;
+    try { topics = await topicSeries(sid); } catch (err) {
+      var errEl = $('tdRosterPanel-' + sid);
+      if (errEl) errEl.innerHTML = '<p class="td-error">' + U.esc(err.message || 'Could not load progress.') + '</p>';
+      return;
+    }
+    var el = $('tdRosterPanel-' + sid);
+    if (!el || !state.panel || state.panel.sid !== sid || state.panel.kind !== kind) return;
+    var head = '<div class="td-panel-head"><h4><i class="fas ' + PANELS[kind].icon + '" style="color:var(--td-blue-700);"></i> ' +
+      PANELS[kind].label + ' — ' + U.esc(name) + '</h4>' +
+      '<button type="button" class="td-btn td-btn-outline-blue td-btn-sm" onclick="tdClasses.openPanel(' + sid + ', \'' + kind + '\')">Close</button></div>';
+    if (kind === 'graph') { el.innerHTML = head + graphHtml(sid, topics); drawGraphs(sid, topics); }
+    else el.innerHTML = head + typeProgressHtml(topics, kind);
+  }
+
+  /* Diagnostic Progress / Quiz Progress: that assessment type only. */
+  function typeProgressHtml(topics, type) {
+    var word = type === 'diagnostic' ? 'diagnostic' : 'quiz';
+    var attempts = {};
+    var rows = [];
+    topics.forEach(function (t) {
+      var pts = scored(t.series || []).filter(function (p) { return p.assessment_type === type; });
+      if (!pts.length) return;
+      pts.forEach(function (p) {
+        var a = attempts[p.attempt_id] || (attempts[p.attempt_id] = { label: p.label, at: p.submitted_at, correct: 0, total: 0, id: p.attempt_id });
+        a.correct += Number(p.correct) || 0;
+        a.total += Number(p.total) || 0;
+      });
+      rows.push({ name: t.topic_name || ('Topic #' + t.topic_id), n: pts.length, first: pts[0], last: pts[pts.length - 1] });
+    });
+    if (!rows.length) {
+      return '<div class="td-empty" style="padding:18px;"><p>This student has not submitted a ' + word + ' yet.</p></div>';
+    }
+    var list = Object.keys(attempts).map(function (k) { return attempts[k]; })
+      .sort(function (a, b) { return String(a.at || '').localeCompare(String(b.at || '')) || (a.id - b.id); });
+    var attemptRows = list.map(function (a, i) {
+      var pct = a.total ? Math.round(100 * a.correct / a.total) : null;
+      return '<tr><td>' + (i + 1) + '</td><td>' + U.esc(a.label || 'Assessment') + '</td><td>' + U.esc(fmtDate(a.at)) + '</td>' +
+        '<td><b>' + a.correct + ' / ' + a.total + '</b></td><td>' + (pct != null ? '<b>' + pct + '%</b> ' + U.scoreBadge(pct) : '—') + '</td></tr>';
+    }).join('');
+    rows.sort(function (a, b) { return a.last.score_percent - b.last.score_percent; });
+    var topicRows = rows.map(function (r) {
+      var last = U.pct(r.last.score_percent), first = U.pct(r.first.score_percent);
+      return '<tr><td>' + U.esc(r.name) + '</td><td>' + r.n + '</td>' +
+        '<td>' + (r.n > 1 ? first + '%' : '—') + '</td>' +
+        '<td>' + U.progress(r.last.score_percent, last < 40 ? 'red' : '') + '</td>' +
+        '<td>' + (r.n > 1 ? changeHtml(r.first.score_percent, r.last.score_percent) : '<span style="color:var(--td-muted);">first attempt</span>') + '</td></tr>';
+    }).join('');
+    var firstA = list[0], lastA = list[list.length - 1];
+    var fp = firstA.total ? 100 * firstA.correct / firstA.total : 0, lp = lastA.total ? 100 * lastA.correct / lastA.total : 0;
+    var summary = list.length + ' ' + word + ' attempt' + (list.length === 1 ? '' : 's') + ' · ' +
+      (list.length > 1 ? 'First ' + Math.round(fp) + '% → Latest ' + Math.round(lp) + '% (' + changeText(fp, lp) + ')' : 'Score ' + Math.round(lp) + '%');
+    return '<p class="td-desc" style="margin:0 0 12px;">' + U.esc(summary) + '</p><div class="td-detail" style="padding:0;">' +
+      '<div class="td-detail-card"><h4>Attempts</h4><p class="td-desc">Every submitted ' + word + ', oldest first.</p>' +
+      '<div class="td-table-wrap"><table class="td-data"><thead><tr><th>#</th><th>' + (type === 'diagnostic' ? 'Diagnostic' : 'Quiz') + '</th><th>Date</th><th>Correct</th><th>Score</th></tr></thead><tbody>' + attemptRows + '</tbody></table></div></div>' +
+      '<div class="td-detail-card"><h4>By topic</h4><p class="td-desc">Latest ' + word + ' score per topic, weakest first.</p>' +
+      '<div class="td-table-wrap"><table class="td-data"><thead><tr><th>Topic</th><th>Attempts</th><th>First</th><th>Latest</th><th>Change</th></tr></thead><tbody>' + topicRows + '</tbody></table></div></div></div>';
+  }
+
+  /* Graph: diagnostic + quiz together, one small chart per topic, plus an overall chart. */
+  function graphCharts(topics) {
+    var charts = topics.map(function (t) {
+      return { title: t.topic_name || ('Topic #' + t.topic_id), points: scored(t.series || []) };
+    }).filter(function (c) { return c.points.length; });
+    charts.sort(function (a, b) { return a.points[a.points.length - 1].score_percent - b.points[b.points.length - 1].score_percent; });
+    // Overall: after each attempt, the average of every topic's most recent score so far.
+    var events = {};
+    topics.forEach(function (t) {
+      scored(t.series || []).forEach(function (p) {
+        var e = events[p.attempt_id] || (events[p.attempt_id] = { id: p.attempt_id, at: p.submitted_at, label: p.label, assessment_type: p.assessment_type, scores: {} });
+        e.scores[t.topic_id] = Number(p.score_percent);
+      });
+    });
+    var latest = {};
+    var overall = Object.keys(events).map(function (k) { return events[k]; })
+      .sort(function (a, b) { return String(a.at || '').localeCompare(String(b.at || '')) || (a.id - b.id); })
+      .map(function (e) {
+        Object.keys(e.scores).forEach(function (tid) { latest[tid] = e.scores[tid]; });
+        var vals = Object.keys(latest).map(function (tid) { return latest[tid]; });
+        return { label: e.label, assessment_type: e.assessment_type, submitted_at: e.at,
+          score_percent: vals.reduce(function (a, b) { return a + b; }, 0) / vals.length };
+      });
+    if (overall.length) charts.unshift({ title: 'Overall (all topics)', points: overall, overall: true });
+    return charts;
+  }
+
+  function graphHtml(sid, topics) {
+    var charts = graphCharts(topics);
+    if (!charts.length) return '<div class="td-empty" style="padding:18px;"><p>No diagnostic or quiz data for this student yet.</p></div>';
+    return '<p class="td-desc" style="margin:0 0 12px;">Where the student started and where they are now, per topic — diagnostic and quiz results together, weakest topic first. ' +
+      '<span class="td-legend-dot" style="background:#7c3aed;"></span> Diagnostic &nbsp; <span class="td-legend-dot" style="background:#2563eb;"></span> Quiz</p>' +
+      '<div class="td-graph-grid">' + charts.map(function (c, i) {
+        var first = c.points[0].score_percent, last = c.points[c.points.length - 1].score_percent;
+        var stat = c.points.length > 1
+          ? 'Started ' + Math.round(first) + '% → Now ' + Math.round(last) + '% (' + changeHtml(first, last) + ')'
+          : 'Now ' + Math.round(last) + '% <span style="color:var(--td-muted);">(one assessment so far)</span>';
+        return '<div class="td-detail-card' + (c.overall ? ' td-graph-overall' : '') + '"><h4>' + U.esc(c.title) + '</h4>' +
+          '<p class="td-desc">' + stat + '</p><div class="td-mini-chart"><canvas id="tdRosterChart-' + sid + '-' + i + '"></canvas></div></div>';
+      }).join('') + '</div>';
+  }
+
+  function drawGraphs(sid, topics) {
+    if (typeof Chart === 'undefined') return;
+    destroyCharts();
+    graphCharts(topics).forEach(function (c, i) {
+      var canvas = $('tdRosterChart-' + sid + '-' + i);
+      if (!canvas) return;
+      var pts = c.points;
+      state.charts.push(new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: pts.map(function (p) { return p.label || 'Assessment'; }),
+          datasets: [{
+            data: pts.map(function (p) { return Number(p.score_percent); }),
+            borderColor: c.overall ? '#0f766e' : '#2563eb', backgroundColor: c.overall ? 'rgba(15,118,110,.10)' : 'rgba(37,99,235,.10)',
+            fill: true, tension: .3, pointRadius: 5, pointHoverRadius: 6,
+            pointBackgroundColor: pts.map(function (p) { return p.assessment_type === 'diagnostic' ? '#7c3aed' : '#2563eb'; })
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, max: 100, ticks: { stepSize: 50, callback: function (v) { return v + '%'; }, color: '#64748b' }, grid: { color: 'rgba(148,163,184,.25)' } },
+            x: { ticks: { color: '#475569', maxRotation: 0, autoSkip: true, callback: function (v) { var l = this.getLabelForValue(v) || ''; return l.length > 12 ? l.slice(0, 10) + '…' : l; } }, grid: { display: false } }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) { return 'Score: ' + Math.round(ctx.parsed.y) + '%'; },
+                afterLabel: function (ctx) {
+                  var p = pts[ctx.dataIndex];
+                  if (!p) return '';
+                  var lines = [(p.assessment_type === 'diagnostic' ? 'Diagnostic' : 'Quiz') + ' · ' + fmtDate(p.submitted_at)];
+                  if (p.correct != null && p.total != null) lines.push(p.correct + '/' + p.total + ' correct');
+                  return lines;
+                }
+              }
+            }
+          }
+        }
+      }));
+    });
   }
 
   function renderAddStudents(slot) {
@@ -369,9 +612,38 @@
     }
   }
 
+  // Diagnostic retake requests (GET /api/lms/retake-requests, POST /retake-requests/:id/approve|deny).
+  async function loadRetakeRequests() {
+    var card = $('tdRetakeCard'), list = $('tdRetakeList');
+    if (!card || !list) return;
+    var rows = [];
+    try { rows = (await lmsApi('/api/lms/retake-requests')) || []; } catch (err) { rows = []; }
+    card.hidden = !rows.length;
+    list.innerHTML = rows.map(function (r) {
+      return '<div class="td-retake-row" data-retake-id="' + r.id + '">' +
+        '<div><b>' + U.esc(r.student_name || 'Student') + '</b>' +
+        '<span class="td-help">' + U.esc(r.assessment_title || 'Diagnostic') + (r.student_grade ? ' · Grade ' + U.esc(r.student_grade) : '') + '</span></div>' +
+        '<div class="td-retake-actions">' +
+        '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdClasses.decideRetake(' + r.id + ', false)">Deny</button>' +
+        '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdClasses.decideRetake(' + r.id + ', true)">Approve retake</button>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  async function decideRetake(id, approve) {
+    try {
+      await lmsApi('/api/lms/retake-requests/' + id + '/' + (approve ? 'approve' : 'deny'), { method: 'POST' });
+      U.toast(approve ? 'Retake approved' : 'Retake request denied');
+    } catch (err) {
+      U.toast(err.message, 'error');
+    }
+    loadRetakeRequests();
+  }
+
   window.tdClasses = {
+    decideRetake: decideRetake,
     load: load, render: render, toggle: toggle, setTab: setTab,
-    addStudents: addStudents, removeStudent: removeStudent,
+    addStudents: addStudents, removeStudent: removeStudent, openPanel: openPanel,
     openCreate: openCreate, closeCreate: closeCreate, submitCreate: submitCreate,
     saveTeachingGrades: saveTeachingGrades,
     _state: state

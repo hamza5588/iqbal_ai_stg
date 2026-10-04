@@ -109,7 +109,72 @@ def _abandon_stale_in_progress_attempts(
     db.commit()
 
 
+# Offline time credit (diagnostics only). The quiz page pings /heartbeat every
+# HEARTBEAT_INTERVAL_SECONDS; a silence longer than OFFLINE_GAP_SECONDS means the student
+# lost their connection (or the device slept), and that time is added back to the deadline.
+# A closed tab looks the same as a dropped connection, so the total is capped: nobody can
+# pause the clock for more than MAX_OFFLINE_CREDIT_SECONDS per attempt.
+HEARTBEAT_INTERVAL_SECONDS = 15
+OFFLINE_GAP_SECONDS = 90  # background tabs are throttled to ~1 ping/minute; that is not "offline"
+MAX_OFFLINE_CREDIT_SECONDS = 10 * 60
+
+
+def _is_owner_request(attempt: AssessmentAttempt) -> bool:
+    """True only while serving a request made by the student who owns the attempt."""
+    try:
+        from flask import has_request_context, session
+
+        return has_request_context() and session.get("user_id") == attempt.student_id
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _touch_attempt(attempt: AssessmentAttempt) -> int:
+    """Record that the owner is connected now; returns seconds credited for the gap before it."""
+    if attempt.status != "in_progress":
+        return 0
+    now = datetime.utcnow()
+    credit = 0
+    last_seen = getattr(attempt, "last_seen_at", None)
+    if attempt.expires_at and last_seen:
+        gap = (now - last_seen).total_seconds()
+        if gap >= OFFLINE_GAP_SECONDS and get_assessment(attempt.assessment_id).assessment_type == "diagnostic":
+            room = MAX_OFFLINE_CREDIT_SECONDS - int(attempt.offline_credit_seconds or 0)
+            credit = max(0, int(min(gap - HEARTBEAT_INTERVAL_SECONDS, room)))
+            if credit:
+                attempt.expires_at = attempt.expires_at + timedelta(seconds=credit)
+                attempt.offline_credit_seconds = int(attempt.offline_credit_seconds or 0) + credit
+                logger.info("Attempt %s: credited %ss of offline time (gap %.0fs)", attempt.id, credit, gap)
+    attempt.last_seen_at = now
+    get_db().commit()
+    return credit
+
+
+def heartbeat(attempt_id: int) -> dict:
+    """Ping from the open quiz page: keeps last_seen fresh and returns the authoritative timer."""
+    attempt = get_attempt(attempt_id)
+    credited = 0
+    if attempt.status == "in_progress":
+        credited = _touch_attempt(attempt)
+        if _attempt_is_expired(attempt):
+            finalize_expired_attempt(attempt.id)
+            attempt = get_attempt(attempt_id)
+    info = get_attempt_timer_info(attempt_id)
+    info.update({
+        "status": attempt.status,
+        "credited_seconds": credited,
+        "offline_credit_seconds": int(getattr(attempt, "offline_credit_seconds", 0) or 0),
+    })
+    return info
+
+
 def _attempt_is_expired(attempt: AssessmentAttempt) -> bool:
+    if attempt.status == "in_progress" and attempt.expires_at and _is_owner_request(attempt):
+        # give back offline time before deciding the clock has run out
+        if datetime.utcnow() >= attempt.expires_at or (
+            attempt.last_seen_at and (datetime.utcnow() - attempt.last_seen_at).total_seconds() >= OFFLINE_GAP_SECONDS
+        ):
+            _touch_attempt(attempt)
     return bool(
         attempt.expires_at
         and attempt.status == "in_progress"
@@ -191,33 +256,44 @@ def start_attempt(
     attempt, so it needs its own explicit flag).
     """
     assessment = get_assessment(assessment_id)
-    if assessment.status != "published":
+    # A diagnostic the admin removed / replaced stays startable for students of that
+    # grade who still owe it (checked against the student's queue below).
+    replaced_diagnostic = (
+        assessment.assessment_type == "diagnostic"
+        and assessment.status == "archived"
+        and assessment.superseded_at is not None
+    )
+    if assessment.status != "published" and not replaced_diagnostic:
         raise LMSValidationError("Assessment is not published")
 
     is_diagnostic_retake = False
     if assessment.assessment_type == "diagnostic":
-        from app.services.lms.assessment_service import get_active_platform_diagnostic
-        from app.services.lms import class_service
+        from app.services.lms import diagnostic_service
 
-        # Must match GET /diagnostics/default: active diagnostic for THIS
-        # student's grade — not the globally latest published diagnostic.
-        student_grade = class_service.get_student_grade(student_id)
-        platform = get_active_platform_diagnostic(grade_level=student_grade)
-        if not platform or platform.id != assessment_id:
+        # Must match GET /diagnostics/default: the diagnostics for THIS student's
+        # grade — the published one, plus replaced ones they have not taken yet.
+        queue_ids = [a.id for a in diagnostic_service.get_student_diagnostic_queue(student_id)]
+        if assessment_id not in queue_ids:
             raise LMSValidationError("This diagnostic is not available")
         assignment_id = None
         timeout = finalize_expired_diagnostic_if_needed(student_id, assessment_id)
         if timeout and not retake:
             return get_attempt(timeout["attempt_id"]), False, True
-        if _student_completed_diagnostic(student_id, assessment_id):
-            if not retake:
-                latest = get_latest_submitted_attempt(student_id, assessment_id)
-                if latest:
-                    return latest, False, True
-                raise LMSValidationError(
-                    "You have already completed the diagnostic assessment."
-                )
+        # "Completed" is per diagnostic: a student who finished an earlier diagnostic
+        # takes a newly published one as a normal first attempt. Only a second go at a
+        # diagnostic they already submitted is a retake (teacher approval, checked below).
+        latest = get_latest_submitted_attempt(student_id, assessment_id)
+        if latest:
+            if not retake or replaced_diagnostic:
+                return latest, False, True
             is_diagnostic_retake = True
+        elif not _find_in_progress_attempt(student_id, assessment_id):
+            # In order: an earlier diagnostic the student still owes comes first.
+            pending = diagnostic_service.get_student_pending_diagnostics(student_id)
+            if pending and pending[0].id != assessment_id:
+                raise LMSValidationError(
+                    "Please complete your earlier diagnostic assessment first, then start this one."
+                )
     elif assessment.assessment_type == "quiz":
         from app.services.lms.assignment_service import resolve_student_quiz_assignment
 
@@ -240,12 +316,19 @@ def start_attempt(
             "You have already completed this quiz. Retakes are not allowed."
         )
 
+    if is_diagnostic_retake:
+        # Not self-service: needs an approved request (raises with the reason otherwise).
+        from app.services.lms import retake_request_service
+
+        retake_request_service.consume_approval(student_id, assessment_id)
+
     attempt = AssessmentAttempt(
         student_id=student_id,
         assessment_id=assessment_id,
         assignment_id=assignment_id,
         status="in_progress",
         max_score=float(len(assessment.questions)),
+        last_seen_at=datetime.utcnow(),
     )
 
     if is_diagnostic_retake:
@@ -437,6 +520,13 @@ def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -
         return {"saved": False, "reason": "time_over", "question_id": question_id}
 
     db = get_db()
+    if question_id not in attempt_question_ids(attempt):
+        raise LMSValidationError("That question is not part of this attempt")
+    if selected_option_index is not None and selected_option_index >= 0:
+        question = db.query(Question).filter(Question.id == question_id).first()
+        option_count = len(options_from_json(question.options_json)) if question else 0
+        if selected_option_index >= option_count:
+            raise LMSValidationError("That option does not exist for this question")
     if selected_option_index is None or selected_option_index < 0:
         # A cleared answer - remove the row so it reads as unanswered.
         db.query(AttemptAnswer).filter(

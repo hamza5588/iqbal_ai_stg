@@ -9,6 +9,8 @@ from app.rbac.decorators import admin_only
 from app.models import UserModel
 from app.models.models import LessonModel
 from app.utils.db import get_db
+from app.utils.passwords import hash_password, password_problem
+import re
 from app.models.database_models import (
     User as DBUser,
     UserDocument,
@@ -131,6 +133,61 @@ def dashboard():
 
 # ==================== USER MANAGEMENT ====================
 
+SUBSCRIPTION_TIERS = ('free', 'pro', 'pro_plus')
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+_NON_GRADE_STANDARDS = {'', 'n/a', 'college', 'university', 'other'}
+
+
+def _text(value) -> str:
+    return value.strip() if isinstance(value, str) else ''
+
+
+def _int_arg(name: str, default: int, lo: int, hi: int) -> int:
+    """Query-string integer clamped to [lo, hi]; garbage falls back to the default."""
+    try:
+        return max(lo, min(hi, int(request.args.get(name, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _username_problem(username: str) -> str:
+    if not username:
+        return 'Username is required'
+    if len(username) > 80:
+        return 'Username must be 80 characters or fewer'
+    return ''
+
+
+def _email_problem(email: str) -> str:
+    if not email:
+        return 'Email is required'
+    if len(email) > 255 or not _EMAIL_RE.match(email):
+        return 'Enter a valid email address'
+    return ''
+
+
+def _name_problem(name: str, required: bool = False) -> str:
+    if required and not name:
+        return 'Name is required'
+    if len(name) > 255:
+        return 'Name must be 255 characters or fewer'
+    return ''
+
+
+def _class_standard_problem(value: str, role: str) -> str:
+    """Students need a real grade (it selects their diagnostic); teachers may list several."""
+    from app.services.lms.grade_utils import normalize_grade, parse_teaching_grades
+    if len(value) > 100:
+        return 'Class standard is too long'
+    if value.lower() in _NON_GRADE_STANDARDS:
+        return ''
+    ok = bool(parse_teaching_grades(value)) if role == 'teacher' else normalize_grade(value) is not None
+    return '' if ok else 'Class standard must be a grade from 1 to 12 (e.g. 9 or 9th)'
+
+
+def _is_last_admin(db, user) -> bool:
+    return db.query(DBUser).filter(DBUser.role == 'admin', DBUser.id != user.id).count() == 0
+
 @bp.route('/users', methods=['GET'])
 @login_required
 @admin_only
@@ -140,21 +197,23 @@ def list_users():
         db = get_db()
         role_filter = request.args.get('role', 'all')  # all, teacher, student, admin
         search = request.args.get('search', '').strip()
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))
-        
+        page = _int_arg('page', 1, 1, 100000)
+        per_page = _int_arg('per_page', 50, 1, 200)
+
         query = db.query(DBUser)
-        
+
         # Apply role filter
         if role_filter != 'all':
             query = query.filter(DBUser.role == role_filter)
-        
-        # Apply search filter
+
+        # Apply search filter (the term is literal: % and _ are not wildcards)
         if search:
+            like = '%' + search.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
             query = query.filter(
                 or_(
-                    DBUser.username.ilike(f'%{search}%'),
-                    DBUser.useremail.ilike(f'%{search}%')
+                    DBUser.username.ilike(like, escape='\\'),
+                    DBUser.useremail.ilike(like, escape='\\'),
+                    DBUser.full_name.ilike(like, escape='\\'),
                 )
             )
         
@@ -169,6 +228,7 @@ def list_users():
             users_list.append({
                 'id': user.id,
                 'username': user.username,
+                'full_name': user.full_name or user.username,
                 'useremail': user.useremail,
                 'role': user.role,
                 'class_standard': user.class_standard or '',
@@ -196,22 +256,31 @@ def list_users():
 def create_user():
     """Create a new user account"""
     try:
-        data = request.json
-        username = data.get('username', '').strip()
-        full_name = (data.get('full_name') or data.get('name') or username).strip()
-        useremail = data.get('useremail', '').strip()
-        password = data.get('password', '').strip()
-        role = data.get('role', 'student').strip()
-        class_standard = data.get('class_standard', '').strip()
-        medium = data.get('medium', '').strip()
-        
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'A JSON body is required'}), 400
+        username = _text(data.get('username'))
+        full_name = _text(data.get('full_name') or data.get('name')) or username
+        useremail = _text(data.get('useremail'))
+        password = data.get('password') if isinstance(data.get('password'), str) else ''
+        role = _text(data.get('role')) or 'student'
+        class_standard = _text(data.get('class_standard'))
+        medium = _text(data.get('medium'))
+
         # Validation
-        if not username or not useremail or not password:
+        if not username or not useremail or not password.strip():
             return jsonify({'success': False, 'error': 'Username, email, and password are required'}), 400
-        
+
         if role not in ['student', 'teacher', 'admin']:
             return jsonify({'success': False, 'error': 'Invalid role'}), 400
-        
+
+        problem = (
+            _username_problem(username) or _email_problem(useremail) or password_problem(password)
+            or _name_problem(full_name) or _class_standard_problem(class_standard, role)
+        )
+        if problem:
+            return jsonify({'success': False, 'error': problem}), 400
+
         # Check if user already exists
         db = get_db()
         existing = db.query(DBUser).filter(
@@ -262,6 +331,7 @@ def get_user(user_id):
             'user': {
                 'id': user.id,
                 'username': user.username,
+                'full_name': user.full_name or user.username,
                 'useremail': user.useremail,
                 'role': user.role,
                 'class_standard': user.class_standard or '',
@@ -280,31 +350,59 @@ def get_user(user_id):
 @admin_only
 def update_user(user_id):
     """Update user account"""
+    db = get_db()
     try:
-        data = request.json
-        db = get_db()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'A JSON body is required'}), 400
         user = db.query(DBUser).filter(DBUser.id == user_id).first()
-        
+
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
-        
+
+        # Validate everything first so a bad field never half-applies the update.
+        new_role = _text(data['role']) if 'role' in data else user.role
+        if new_role not in ['student', 'teacher', 'admin']:
+            return jsonify({'success': False, 'error': 'Invalid role'}), 400
+        if user.role == 'admin' and new_role != 'admin' and _is_last_admin(db, user):
+            return jsonify({'success': False, 'error': 'Cannot change the role of the last admin account'}), 400
+        problem = ''
+        if 'username' in data:
+            problem = problem or _username_problem(_text(data['username']))
+            clash = db.query(DBUser.id).filter(DBUser.username == _text(data['username']), DBUser.id != user_id).first()
+            problem = problem or ('Username already exists' if clash else '')
+        if 'useremail' in data:
+            problem = problem or _email_problem(_text(data['useremail']))
+            clash = db.query(DBUser.id).filter(DBUser.useremail == _text(data['useremail']), DBUser.id != user_id).first()
+            problem = problem or ('Email already exists' if clash else '')
+        if 'full_name' in data:
+            problem = problem or _name_problem(_text(data['full_name']), required=True)
+        if data.get('password'):
+            problem = problem or password_problem(str(data['password']))
+        if 'class_standard' in data:
+            problem = problem or _class_standard_problem(_text(data['class_standard']), new_role)
+        if 'subscription_tier' in data and data['subscription_tier'] not in SUBSCRIPTION_TIERS:
+            problem = problem or 'Invalid subscription tier'
+        if problem:
+            return jsonify({'success': False, 'error': problem}), 400
+
         # Update fields
         if 'username' in data:
-            user.username = data['username'].strip()
+            user.username = _text(data['username'])
+        if 'full_name' in data:
+            user.full_name = _text(data['full_name'])
         if 'useremail' in data:
-            user.useremail = data['useremail'].strip()
-        if 'password' in data and data['password']:
-            user.password = data['password'].strip()
-        if 'role' in data:
-            if data['role'] in ['student', 'teacher', 'admin']:
-                user.role = data['role']
+            user.useremail = _text(data['useremail'])
+        if data.get('password'):
+            user.password = hash_password(str(data['password']))
+        user.role = new_role
         if 'class_standard' in data:
-            user.class_standard = data['class_standard'].strip()
+            user.class_standard = _text(data['class_standard'])
         if 'medium' in data:
-            user.medium = data['medium'].strip()
+            user.medium = _text(data['medium'])
         if 'subscription_tier' in data:
             user.subscription_tier = data['subscription_tier']
-        
+
         db.commit()
         
         return jsonify({
@@ -322,23 +420,43 @@ def update_user(user_id):
 @admin_only
 def delete_user(user_id):
     """Delete user account"""
+    db = get_db()
     try:
-        db = get_db()
         user = db.query(DBUser).filter(DBUser.id == user_id).first()
-        
+
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
-        
-        # Prevent deleting admin account
-        if user.username == 'admin' and user.role == 'admin':
-            return jsonify({'success': False, 'error': 'Cannot delete default admin account'}), 400
-        
+
+        # An admin can never remove themselves or the last remaining admin.
+        if user.id == session.get('user_id'):
+            return jsonify({'success': False, 'error': 'You cannot delete your own account'}), 400
+        if user.role == 'admin' and _is_last_admin(db, user):
+            return jsonify({'success': False, 'error': 'Cannot delete the last admin account'}), 400
+
+        # Classes and assignments cascade from the teacher row and would take the students'
+        # enrolments and submission records with them. Hand them to the admin doing the
+        # deletion instead, so student data outlives the teacher account.
+        kept = {'classes': 0, 'assignments': 0}
+        if user.role == 'teacher':
+            from app.models.lms_models import Assignment, SchoolClass
+            kept['classes'] = db.query(SchoolClass).filter(SchoolClass.teacher_id == user.id).update(
+                {SchoolClass.teacher_id: session['user_id']}, synchronize_session=False)
+            kept['assignments'] = db.query(Assignment).filter(Assignment.teacher_id == user.id).update(
+                {Assignment.teacher_id: session['user_id']}, synchronize_session=False)
+            db.flush()
+            db.expire(user)
+
         db.delete(user)
         db.commit()
-        
+
+        message = 'User deleted successfully'
+        if kept['classes'] or kept['assignments']:
+            message += (f". {kept['classes']} class(es) and {kept['assignments']} assignment(s) with their "
+                        "student records were kept and transferred to your account")
         return jsonify({
             'success': True,
-            'message': 'User deleted successfully'
+            'message': message,
+            'transferred': kept,
         })
     except Exception as e:
         logger.error(f"Error deleting user: {str(e)}")
@@ -351,20 +469,21 @@ def delete_user(user_id):
 @admin_only
 def change_user_password(user_id):
     """Change user password"""
+    db = get_db()
     try:
-        data = request.json
-        new_password = data.get('password', '').strip()
-        
-        if not new_password:
-            return jsonify({'success': False, 'error': 'Password is required'}), 400
-        
-        db = get_db()
+        data = request.get_json(silent=True) or {}
+        new_password = data.get('password') if isinstance(data.get('password'), str) else ''
+
+        problem = password_problem(new_password)
+        if problem:
+            return jsonify({'success': False, 'error': problem}), 400
+
         user = db.query(DBUser).filter(DBUser.id == user_id).first()
-        
+
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
-        
-        user.password = new_password
+
+        user.password = hash_password(new_password)
         db.commit()
         
         return jsonify({

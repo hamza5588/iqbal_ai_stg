@@ -50,7 +50,15 @@ def get_onboarding_status(student_id: int) -> dict:
 
     needs_onboarding = not profile.diagnostic_completed
     needs_diagnostic = not profile.diagnostic_completed
+    pending_diagnostic_count = None
+    try:
+        from app.services.lms import diagnostic_service
+
+        pending_diagnostic_count = len(diagnostic_service.get_student_pending_diagnostics(student_id))
+    except Exception:  # noqa: BLE001 - a count for the stat card must never break onboarding
+        pass
     return {
+        "pending_diagnostic_count": pending_diagnostic_count,
         "diagnostic_completed": profile.diagnostic_completed,
         "diagnostic_assessment_id": profile.diagnostic_assessment_id,
         "diagnostic_completed_at": profile.diagnostic_completed_at.isoformat()

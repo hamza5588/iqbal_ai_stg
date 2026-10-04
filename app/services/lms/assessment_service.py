@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime
 from typing import List, Optional, Union
 
 from app.models.lms_models import Assessment, AssessmentQuestion, DiagnosticTargetPdf, PdfQaExtraction, QuizPdfSource
@@ -16,7 +17,23 @@ logger = logging.getLogger(__name__)
 _POSITIVE_WHOLE_MINUTES = re.compile(r"^[1-9]\d*$")
 
 
+MAX_QUIZ_MINUTES = 24 * 60
+
+
 def parse_positive_whole_minutes(
+    value: Union[str, int, float, None],
+    *,
+    required: bool = True,
+    field_label: str = "Quiz duration (minutes)",
+) -> Optional[int]:
+    """Validated duration, capped so an absurd value cannot overflow the INTEGER column."""
+    minutes = _parse_whole_minutes(value, required=required, field_label=field_label)
+    if minutes is not None and minutes > MAX_QUIZ_MINUTES:
+        raise LMSValidationError(f"{field_label} cannot be more than {MAX_QUIZ_MINUTES} minutes (24 hours).")
+    return minutes
+
+
+def _parse_whole_minutes(
     value: Union[str, int, float, None],
     *,
     required: bool = True,
@@ -71,6 +88,11 @@ def create_assessment(
 ) -> Assessment:
     if assessment_type not in ("diagnostic", "quiz"):
         raise LMSValidationError("assessment_type must be diagnostic or quiz")
+    title = title.strip() if isinstance(title, str) else ""
+    if not title:
+        raise LMSValidationError("Title is required")
+    if len(title) > 255:
+        raise LMSValidationError("Title must be 255 characters or fewer")
     db = get_db()
     assessment = Assessment(
         title=title,
@@ -419,8 +441,10 @@ def publish_assessment(assessment_id: int) -> Assessment:
         )
         for other in others:
             other.status = "archived"
+            other.superseded_at = datetime.utcnow()
 
     assessment.status = "published"
+    assessment.superseded_at = None
     # Clear review gate once admin approves/publishes.
     assessment.requires_review = False
     if assessment.assessment_type == "diagnostic" and assessment.description:
@@ -451,10 +475,34 @@ def archive_diagnostic(assessment_id: int) -> Assessment:
     assessment = get_assessment(assessment_id)
     if assessment.assessment_type != "diagnostic":
         raise LMSValidationError("Not a diagnostic assessment")
+    # Only a diagnostic students could actually see is kept for them (see
+    # list_superseded_diagnostics); a draft that was never published just goes away.
+    if assessment.status == "published":
+        assessment.superseded_at = datetime.utcnow()
     assessment.status = "archived"
     db.commit()
     db.refresh(assessment)
     return assessment
+
+
+def list_superseded_diagnostics(grade_level: Optional[str]) -> List[Assessment]:
+    """Removed / replaced diagnostics of a grade that were once published, oldest first."""
+    grade = normalize_grade_level(grade_level)
+    if not grade:
+        return []
+    rows = (
+        get_db()
+        .query(Assessment)
+        .filter(
+            Assessment.assessment_type == "diagnostic",
+            Assessment.status == "archived",
+            Assessment.superseded_at.isnot(None),
+            Assessment.grade_level == grade,
+        )
+        .order_by(Assessment.superseded_at.asc(), Assessment.id.asc())
+        .all()
+    )
+    return [a for a in rows if a.questions]
 
 
 def get_active_platform_diagnostic(grade_level: Optional[str] = None) -> Optional[Assessment]:

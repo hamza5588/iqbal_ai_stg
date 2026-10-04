@@ -427,6 +427,41 @@ def init_db(app):
             except Exception as e:
                 logger.warning("diagnostic timer migration warning: %s", e)
                 db.rollback()
+
+            # Migration: reset-OTP attempt counter, attempt heartbeat (offline time credit)
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "password_reset_tokens" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("password_reset_tokens")]
+                    if "attempts" not in columns:
+                        logger.info("Adding attempts to password_reset_tokens...")
+                        db.execute(text("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"))
+                        db.commit()
+                if "assessment_attempts" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("assessment_attempts")]
+                    if "last_seen_at" not in columns:
+                        logger.info("Adding last_seen_at/offline_credit_seconds to assessment_attempts...")
+                        db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN last_seen_at TIMESTAMP"))
+                        db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN offline_credit_seconds INTEGER NOT NULL DEFAULT 0"))
+                        db.commit()
+            except Exception as e:
+                logger.warning("otp attempts / attempt heartbeat migration warning: %s", e)
+                db.rollback()
+
+            # Migration: replaced diagnostics stay available to students who never took them
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "assessments" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("assessments")]
+                    if "superseded_at" not in columns:
+                        logger.info("Adding superseded_at to assessments...")
+                        db.execute(text("ALTER TABLE assessments ADD COLUMN superseded_at TIMESTAMP"))
+                        db.commit()
+            except Exception as e:
+                logger.warning("assessments superseded_at migration warning: %s", e)
+                db.rollback()
             
             # Migration: Add ingest failure-tracking columns to rag_threads
             try:

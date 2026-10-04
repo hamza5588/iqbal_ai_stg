@@ -236,7 +236,7 @@
   }
   window.tdUtil = {
     esc: esc,
-    studentName: function (s) { return s.username || s.email || ('Student #' + s.student_id); },
+    studentName: function (s) { return s.full_name || s.username || s.email || ('Student #' + s.student_id); },
     initialAvatar: function (name) {
       name = String(name || '?');
       var h = 0;

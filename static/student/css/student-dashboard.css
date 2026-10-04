@@ -190,6 +190,11 @@ table.sd-mini th:not(:first-child), table.sd-mini td:not(:first-child) { text-al
 .sd-spinner { width: 34px; height: 34px; border: 3px solid var(--sd-blue-100); border-top-color: var(--sd-blue-700); border-radius: 50%;
   animation: sd-spin .8s linear infinite; margin: 18px auto; }
 @keyframes sd-spin { to { transform: rotate(360deg); } }
+/* inline spinner inside a button while its action is running (e.g. Submit Quiz) */
+.sd-btn-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: sd-spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+.sd-submit-ok { background: #dcfce7; color: #166534; border: 1px solid #86efac; border-radius: 10px; padding: 10px 14px;
+  font-weight: 700; text-align: center; margin-bottom: 12px; }
 .sd-loading-text { text-align: center; color: var(--sd-muted); font-size: 13.5px; }
 
 /* ── Diagnostic quiz page (02) ──────────────────────────────────────────── */
@@ -224,7 +229,8 @@ table.sd-mini th:not(:first-child), table.sd-mini td:not(:first-child) { text-al
 .sd-q-option.selected .sd-radio::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--sd-blue-700); }
 .sd-q-option.lms-opt-wrong { border-color: var(--sd-red); background: #fff5f5; }
 .sd-q-option .sd-opt-label { font-weight: 500; min-width: 18px; }
-.sd-q-option .sd-opt-body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* MathJax output is one unbreakable inline-block: an over-wide formula scrolls inside its option instead of widening the page. */
+.sd-q-option .sd-opt-body { flex: 1; min-width: 0; overflow-wrap: anywhere; overflow-x: auto; overflow-y: hidden; padding-block: 2px; }
 .sd-q-option .sd-opt-body .lms-math-content, .sd-q-option .sd-opt-body .lms-math-content p { display: inline; margin: 0; }
 .sd-q-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
 .sd-icon-btn { border: 1px solid var(--sd-line); background: #fff; border-radius: 8px; padding: 8px 12px; font-weight: 700; font-size: 13px; display: inline-flex;
@@ -459,7 +465,11 @@ table.sd-mini th:not(:first-child), table.sd-mini td:not(:first-child) { text-al
   .sd-q-box { padding: 16px; }
   .sd-qprogress { width: 100%; }
   .sd-quiz-head-right { width: 100%; }
-  .sd-q-nav .sd-btn { min-width: 0; flex: 1; }
+  /* Three no-wrap buttons do not fit one phone row ("Submit Diagnostic" spilled out of its box):
+     Previous | Skip/Next share a row, Submit takes its own full-width row below. */
+  .sd-q-nav-end { display: contents; }
+  .sd-q-nav .sd-btn { min-width: 0; flex: 1 1 calc(50% - 5px); }
+  .sd-q-nav-end .sd-btn:first-child { order: 3; flex-basis: 100%; }
   .sd-toolbar { justify-content: stretch; }
   .sd-search { max-width: none; flex-basis: 100%; }
   .sd-select { flex: 1; }

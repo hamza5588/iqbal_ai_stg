@@ -384,7 +384,10 @@ class LoadTestRunner:
             users = []
             for test_user, live_password in results:
                 # Set password and expunge from session so it's safe to use across threads/tasks
-                test_user.password = live_password
+                # users.password is hashed now; keep the test user's own stored password in that case
+                from app.utils.passwords import is_hashed
+                if live_password and not is_hashed(live_password):
+                    test_user.password = live_password
                 db.expunge(test_user)
                 users.append(test_user)
             

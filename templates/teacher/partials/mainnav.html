@@ -5,9 +5,12 @@
   ('analytics', 'Analytics', 'analytics.png'),
   ('tutor', 'AI Tutor', 'ai-tutor.png'),
 ] %}
+{# Tabs hidden from the menu only: the view, its scripts and its APIs all stay in place,
+   so removing a key from this list brings the tab straight back. #}
+{% set hidden_nav = ['analytics'] %}
 <nav class="td-mainnav" aria-label="Teacher sections">
   {% for key, label, icon in nav_items %}
-  <a href="#{{ key }}" class="td-navbtn" data-view="{{ key }}" onclick="tdShowView('{{ key }}'); return false;">
+  <a href="#{{ key }}" class="td-navbtn" data-view="{{ key }}" onclick="tdShowView('{{ key }}'); return false;"{% if key in hidden_nav %} hidden style="display:none;"{% endif %}>
     <img src="{{ url_for('static', filename='teacher/icons/' ~ icon) }}" alt="" aria-hidden="true">
     <span>{{ label }}</span>
   </a>

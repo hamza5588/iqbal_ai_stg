@@ -190,6 +190,9 @@ class Assessment(Base):
     time_limit_minutes = Column(Integer, nullable=True)
     overall_confidence = Column(Float, nullable=True)
     requires_review = Column(Boolean, default=False, server_default="0")
+    # Diagnostics only: set when a PUBLISHED diagnostic is removed / replaced by the admin.
+    # Students of that grade who never took it still take it first, before the new one.
+    superseded_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(
         DateTime,
@@ -372,6 +375,10 @@ class AssessmentAttempt(Base):
     # own question list (every attempt before diagnostic retakes existed).
     # A retake stores a fresh, order-shuffled / AI-variant set here.
     question_ids_json = Column(Text, nullable=True)
+    # Last time the student's quiz page pinged the server, and how many seconds of
+    # offline time were already added back to expires_at (diagnostics only, capped).
+    last_seen_at = Column(DateTime, nullable=True)
+    offline_credit_seconds = Column(Integer, nullable=False, default=0, server_default="0")
 
     answers = relationship(
         "AttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"
@@ -677,6 +684,33 @@ class StudentProfile(Base):
         onupdate=datetime.utcnow,
         server_default=func.now(),
         server_onupdate=func.now(),
+    )
+
+
+class DiagnosticRetakeRequest(Base):
+    """A student's request to retake a diagnostic they already submitted.
+
+    pending -> approved (by a teacher of the student, or an admin) -> used (when the
+    retake attempt is started), or pending -> denied.
+    """
+
+    __tablename__ = "diagnostic_retake_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    assessment_id = Column(
+        Integer, ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status = Column(String(16), nullable=False, default="pending", server_default="pending")
+    requested_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    decided_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','approved','denied','used')",
+            name="check_retake_request_status",
+        ),
     )
 
 

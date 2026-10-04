@@ -23,11 +23,16 @@ def create_assignment(
     instructions: Optional[str] = None,
     due_date: Optional[datetime] = None,
 ) -> Assignment:
+    title = title.strip() if isinstance(title, str) else ""
+    if not title:
+        raise LMSValidationError("Assignment title is required")
     quiz = get_assessment(quiz_id)
     if quiz.assessment_type != "quiz":
         raise LMSValidationError("Assignment must reference a quiz assessment")
     if quiz.created_by != teacher_id:
         raise LMSValidationError("You can only assign your own quizzes")
+    if quiz.status != "published":
+        raise LMSValidationError("Publish the quiz before assigning it to a class")
     school_class = get_class_by_id(class_id)
     if school_class.teacher_id != teacher_id:
         raise LMSValidationError("Teacher does not own this class")

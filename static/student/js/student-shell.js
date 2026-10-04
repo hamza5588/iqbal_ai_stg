@@ -223,7 +223,11 @@
 
   function renderStatCards(d) {
     var diagDone = !!(d.onboarding && d.onboarding.diagnostic_completed);
-    setAll('pending-diag', function (el) { el.textContent = diagDone ? '0' : '1'; });
+    // Usually 0 or 1; more when the admin replaced a diagnostic the student had not taken yet.
+    var pendingDiag = d.onboarding && d.onboarding.pending_diagnostic_count;
+    var pendingText = diagDone ? '0' : '1';
+    if (pendingDiag != null) pendingText = String(diagDone ? pendingDiag : Math.max(1, pendingDiag));
+    setAll('pending-diag', function (el) { el.textContent = pendingText; });
     var weak = d.weak_topics || [];
     setAll('weak-count', function (el) { el.textContent = String(weak.length); });
     setAll('weak-chips', function (el) {
