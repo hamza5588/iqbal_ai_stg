@@ -313,7 +313,8 @@ def start_attempt(
 
     if assessment.assessment_type == "quiz" and _student_completed_quiz(student_id, assessment_id):
         raise LMSValidationError(
-            "You have already completed this quiz. Retakes are not allowed."
+            "You have already completed this quiz. Retakes are not allowed. "
+            "If your teacher needs another attempt, they must create and assign a different quiz."
         )
 
     if is_diagnostic_retake:

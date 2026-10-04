@@ -112,6 +112,26 @@
     dz.addEventListener('drop', function () { dz.classList.remove('dragover'); });
   }
 
+  function tdLoadLessonAssignClassOptions() {
+    var sel = document.getElementById('lessonAssignClass');
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = '<option value="">Select later when publishing</option>';
+    fetch('/api/lms/classes/mine', { credentials: 'include' })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        var classes = (body && body.data) || [];
+        classes.forEach(function (c) {
+          var opt = document.createElement('option');
+          opt.value = String(c.id);
+          opt.textContent = (c.name || 'Class') + (c.grade_level ? ' (Grade ' + c.grade_level + ')' : '');
+          sel.appendChild(opt);
+        });
+        if (prev) sel.value = prev;
+      })
+      .catch(function () { /* keep default option */ });
+  }
+
   window.tdOpenCreateLesson = function () {
     if (currentView !== 'lessons') {
       if (typeof window.showMyLessonsPage === 'function') window.showMyLessonsPage();
@@ -121,6 +141,7 @@
     if (!card) return;
     card.hidden = false;
     tdWireCreateLessonUpload();
+    tdLoadLessonAssignClassOptions();
     setTimeout(function () {
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       var t = document.getElementById('lessonTitle');
@@ -137,6 +158,8 @@
     if (subj) subj.value = 'General';
     var grade = document.getElementById('lessonGrade');
     if (grade) grade.value = '';
+    var assignClass = document.getElementById('lessonAssignClass');
+    if (assignClass) assignClass.value = '';
     var count = document.getElementById('lessonContextCount');
     if (count) count.textContent = '0';
     var gen = document.querySelector('input[name="lessonOutputMode"][value="generate"]');

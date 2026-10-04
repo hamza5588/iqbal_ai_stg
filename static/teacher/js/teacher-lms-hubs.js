@@ -79,6 +79,51 @@
     function closeLmsAssignModal() {
       _hideLmsModal('lmsAssignModal');
     }
+    var _lmsAssignPublishedQuizzes = [];
+    var _lmsAssignBoundClassChange = false;
+
+    async function refreshLmsAssignQuizOptions() {
+      const classEl = document.getElementById('lmsAssignClass');
+      const quizEl = document.getElementById('lmsAssignQuiz');
+      const hint = document.getElementById('lmsAssignDupHint');
+      if (!quizEl) return;
+      const classId = classEl && classEl.value ? parseInt(classEl.value, 10) : null;
+      var assignedQuizIds = {};
+      if (classId) {
+        try {
+          const aRes = await fetch('/api/lms/assignments?class_id=' + classId, { credentials: 'include' });
+          const aBody = await aRes.json();
+          const rows = (aBody.data || aBody) || [];
+          (Array.isArray(rows) ? rows : []).forEach(function (a) {
+            if (a && a.quiz_id != null) assignedQuizIds[String(a.quiz_id)] = true;
+          });
+        } catch (e) { /* keep empty */ }
+      }
+      const published = _lmsAssignPublishedQuizzes || [];
+      if (!published.length) {
+        quizEl.innerHTML = '<option value="">No published quizzes — publish one first</option>';
+        if (hint) hint.textContent = '';
+        return;
+      }
+      var available = 0;
+      quizEl.innerHTML = published.map(function (q) {
+        var already = !!assignedQuizIds[String(q.id)];
+        if (!already) available += 1;
+        return '<option value="' + q.id + '"' + (already ? ' disabled' : '') + '>' +
+          escapeHtml(q.title) + (already ? ' — already assigned to this class' : '') + '</option>';
+      }).join('');
+      // Prefer first assignable quiz
+      var firstOk = published.find(function (q) { return !assignedQuizIds[String(q.id)]; });
+      if (firstOk) quizEl.value = String(firstOk.id);
+      if (hint) {
+        hint.textContent = classId
+          ? (available
+            ? 'Quizzes already assigned to this class are disabled. Create a different quiz to assign again.'
+            : 'Every published quiz is already assigned to this class. Create a new quiz first.')
+          : '';
+      }
+    }
+
     async function loadLmsAssignOptions() {
       const classEl = document.getElementById('lmsAssignClass');
       const quizEl = document.getElementById('lmsAssignQuiz');
@@ -94,10 +139,12 @@
         classEl.innerHTML = classes.length
           ? classes.map(function (c) { return '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>'; }).join('')
           : '<option value="">No classes — create one first</option>';
-        const published = quizzes.filter(function (q) { return q.status === 'published'; });
-        quizEl.innerHTML = published.length
-          ? published.map(function (q) { return '<option value="' + q.id + '">' + escapeHtml(q.title) + '</option>'; }).join('')
-          : '<option value="">No published quizzes — publish one first</option>';
+        _lmsAssignPublishedQuizzes = quizzes.filter(function (q) { return q.status === 'published'; });
+        if (!_lmsAssignBoundClassChange) {
+          _lmsAssignBoundClassChange = true;
+          classEl.addEventListener('change', function () { refreshLmsAssignQuizOptions(); });
+        }
+        await refreshLmsAssignQuizOptions();
       } catch (err) {
         classEl.innerHTML = '<option value="">Error loading</option>';
         quizEl.innerHTML = '<option value="">Error loading</option>';
@@ -110,6 +157,13 @@
       const classId = document.getElementById('lmsAssignClass').value;
       const quizId = document.getElementById('lmsAssignQuiz').value;
       if (!classId || !quizId) { status.textContent = 'Select class and quiz.'; return; }
+      var quizOpt = document.getElementById('lmsAssignQuiz').selectedOptions[0];
+      if (quizOpt && quizOpt.disabled) {
+        const msg = 'You have already assigned this quiz to this class. Please create a different quiz and assign that.';
+        status.textContent = msg;
+        if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error');
+        return;
+      }
       btn.disabled = true;
       status.textContent = 'Creating assignment...';
       try {
@@ -126,13 +180,27 @@
           body: JSON.stringify(body)
         });
         const createBody = await createRes.json();
-        if (!createRes.ok) throw new Error((createBody.error && createBody.error.message) || 'Create failed');
+        if (!createRes.ok) {
+          throw new Error(
+            (createBody.error && createBody.error.message) ||
+            createBody.error ||
+            createBody.message ||
+            'Create failed'
+          );
+        }
         const assignmentId = (createBody.data || createBody).id;
         const pubRes = await fetch('/api/lms/assignments/' + assignmentId + '/publish', {
           method: 'POST', credentials: 'include'
         });
         const pubBody = await pubRes.json();
-        if (!pubRes.ok) throw new Error((pubBody.error && pubBody.error.message) || 'Publish failed');
+        if (!pubRes.ok) {
+          throw new Error(
+            (pubBody.error && pubBody.error.message) ||
+            pubBody.error ||
+            pubBody.message ||
+            'Publish failed'
+          );
+        }
         status.textContent = 'Assignment published! Students can see it in My Quizzes.';
         document.getElementById('lmsAssignForm').reset();
         if (typeof lmsShowToast === 'function') {
@@ -143,11 +211,113 @@
           status.textContent = '';
         }, 900);
       } catch (err) {
+        status.textContent = err.message || 'Could not assign quiz';
+        if (typeof lmsShowToast === 'function') {
+          lmsShowToast(err.message || 'Could not assign quiz', 'error');
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    /** Lesson assign-to-class (quiz-parity). */
+    function openLmsLessonAssignModal(lessonId, lessonTitle, preferredClassId) {
+      const card = document.getElementById('tdAssignLessonCard');
+      const createCard = document.getElementById('tdCreateLessonCard');
+      if (createCard) createCard.hidden = true;
+      if (!card) {
+        if (typeof lmsShowToast === 'function') lmsShowToast('Assign form not found', 'error');
+        return;
+      }
+      card.hidden = false;
+      document.getElementById('lmsLessonAssignLessonId').value = String(lessonId || '');
+      document.getElementById('lmsLessonAssignTitle').value = lessonTitle || 'Lesson';
+      document.getElementById('lmsLessonAssignLessonLabel').value = lessonTitle || ('Lesson #' + lessonId);
+      document.getElementById('lmsLessonAssignStatus').textContent = '';
+      loadLmsLessonAssignOptions(preferredClassId);
+      setTimeout(function () {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 30);
+    }
+    function closeLmsLessonAssignModal() {
+      const card = document.getElementById('tdAssignLessonCard');
+      if (card) card.hidden = true;
+      const form = document.getElementById('lmsLessonAssignForm');
+      if (form) form.reset();
+    }
+    async function loadLmsLessonAssignOptions(preferredClassId) {
+      const classEl = document.getElementById('lmsLessonAssignClass');
+      if (!classEl) return;
+      classEl.innerHTML = '<option value="">Loading...</option>';
+      try {
+        const cRes = await fetch('/api/lms/classes/mine', { credentials: 'include' });
+        const classes = (await cRes.json()).data || [];
+        if (!classes.length) {
+          classEl.innerHTML = '<option value="">No classes — create one first</option>';
+          return;
+        }
+        classEl.innerHTML = classes.map(function (c) {
+          return '<option value="' + c.id + '">' + escapeHtml(c.name || 'Class') +
+            (c.grade_level ? ' (Grade ' + escapeHtml(String(c.grade_level)) + ')' : '') +
+            '</option>';
+        }).join('');
+        if (preferredClassId) classEl.value = String(preferredClassId);
+      } catch (err) {
+        classEl.innerHTML = '<option value="">Error loading classes</option>';
+      }
+    }
+    async function submitLmsLessonAssignment(e) {
+      e.preventDefault();
+      const btn = document.getElementById('lmsLessonAssignSubmitBtn');
+      const status = document.getElementById('lmsLessonAssignStatus');
+      const classId = document.getElementById('lmsLessonAssignClass').value;
+      const lessonId = document.getElementById('lmsLessonAssignLessonId').value;
+      if (!classId || !lessonId) {
+        status.textContent = 'Select a class.';
+        return;
+      }
+      btn.disabled = true;
+      status.textContent = 'Assigning & publishing...';
+      try {
+        const dueRaw = document.getElementById('lmsLessonAssignDue').value;
+        const body = {
+          title: document.getElementById('lmsLessonAssignTitle').value.trim(),
+          class_id: parseInt(classId, 10),
+          lesson_id: parseInt(lessonId, 10),
+          due_date: dueRaw ? new Date(dueRaw).toISOString() : null
+        };
+        const res = await fetch('/api/lms/lesson-assignments/publish-to-class', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const payload = await res.json();
+        if (!res.ok) {
+          throw new Error(
+            (payload.error && payload.error.message) || payload.error || payload.message || 'Publish failed'
+          );
+        }
+        status.textContent = 'Published! Students in that class can see this lesson.';
+        if (typeof lmsShowToast === 'function') {
+          lmsShowToast('Lesson assigned & published to the class.');
+        } else if (typeof showToast === 'function') {
+          showToast('Lesson assigned & published to the class.', 'success', 3500);
+        }
+        setTimeout(function () {
+          closeLmsLessonAssignModal();
+          status.textContent = '';
+          if (typeof showMyLessonsPage === 'function') showMyLessonsPage();
+        }, 700);
+      } catch (err) {
         status.textContent = 'Error: ' + err.message;
       } finally {
         btn.disabled = false;
       }
     }
+    window.openLmsLessonAssignModal = openLmsLessonAssignModal;
+    window.closeLmsLessonAssignModal = closeLmsLessonAssignModal;
+    window.submitLmsLessonAssignment = submitLmsLessonAssignment;
 
     function _lmsFmtText(text, inline) {
       if (typeof lmsFormatRichText === 'function') {

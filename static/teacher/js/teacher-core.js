@@ -1426,6 +1426,10 @@
         const lessonSubject = lessonSubjectInput ? lessonSubjectInput.value : 'General';
         const lessonGrade = lessonGradeInput ? String(lessonGradeInput.value || '').trim() : '';
         const lessonMode = lessonModeInput ? lessonModeInput.value : 'generate';
+        const assignClassEl = document.getElementById('lessonAssignClass');
+        window._pendingLessonAssignClassId = assignClassEl && assignClassEl.value
+          ? String(assignClassEl.value)
+          : '';
 
         // Validation
         clearLessonTitleFormError();
@@ -2190,8 +2194,14 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             if (!res.ok || !body.success) {
               throw new Error((body && body.error) || 'Could not save uploaded document as lesson');
             }
-            showToast('PDF saved directly as a lesson.', 'success', 4000);
+            const createdId = (body.lesson && body.lesson.id) || body.id;
+            showToast('PDF saved as a draft lesson. Assign a class to publish.', 'success', 4000);
             await showMyLessonsPage();
+            if (createdId && typeof openLessonAssignPublish === 'function') {
+              setTimeout(function () {
+                openLessonAssignPublish(createdId, lessonTitle);
+              }, 300);
+            }
             return;
           } catch (err) {
             console.error('Direct PDF lesson save failed', err);
@@ -2373,7 +2383,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 <div><span class="td-label">SUBJECT</span><b>${subject}</b></div>
                 <div><span class="td-label">GRADE</span><b>${grade}</b></div>
                 <div><span class="td-label">CREATED BY</span><b>${createdBy}</b></div>
-                <div><span class="td-label">VISIBILITY</span><b>${isPublished ? 'Published to linked grade' : 'Not published'}</b></div>
+                <div><span class="td-label">VISIBILITY</span><b>${isPublished ? 'Published to class' : 'Draft — assign a class to publish'}</b></div>
               </div>
               <div class="td-actions-line">
                 <a title="View" onclick="viewLesson('${id}')"><i class="fas fa-eye"></i> View</a>
@@ -2381,7 +2391,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 <a title="Download DOCX" onclick="downloadLessonDocx('${id}')"><i class="fas fa-file-word"></i> Word</a>
                 <a title="Download PPT" onclick="downloadLessonPPT('${id}')"><i class="fas fa-file-powerpoint"></i> PowerPoint</a>
                 <a title="FAQ" onclick="showLessonFAQ('${id}')"><i class="fas fa-circle-question"></i> FAQ</a>
-                <a title="${isPublished ? 'Unpublish lesson' : 'Publish lesson'}" onclick="toggleLessonPublication('${id}', ${isPublished ? 'false' : 'true'})"><i class="fas fa-${isPublished ? 'eye-slash' : 'paper-plane'}"></i> ${isPublished ? 'Unpublish' : 'Publish'}</a>
+                <a title="Assign to class & publish" onclick="openLessonAssignPublish('${id}', ${JSON.stringify(lesson.title || 'Lesson').replace(/</g, '\\u003c')})"><i class="fas fa-users"></i> Assign &amp; Publish</a>
+                ${isPublished
+                  ? `<a title="Unpublish lesson" onclick="toggleLessonPublication('${id}', false)"><i class="fas fa-eye-slash"></i> Unpublish</a>`
+                  : `<a title="Publish lesson to a class" onclick="openLessonAssignPublish('${id}', ${JSON.stringify(lesson.title || 'Lesson').replace(/</g, '\\u003c')})"><i class="fas fa-paper-plane"></i> Publish</a>`}
                 ${lesson.has_child_version !== true ? `<a class="danger" title="Delete" onclick="deleteLesson('${id}')"><i class="fas fa-trash"></i> Delete</a>` : ''}
               </div>
             </div>
@@ -2478,30 +2491,43 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
       }
 
+      function openLessonAssignPublish(lessonId, lessonTitle) {
+        const preferred =
+          (document.getElementById('lessonAssignClass') && document.getElementById('lessonAssignClass').value) ||
+          window._pendingLessonAssignClassId ||
+          '';
+        if (typeof window.openLmsLessonAssignModal === 'function') {
+          window.openLmsLessonAssignModal(lessonId, lessonTitle || 'Lesson', preferred || null);
+          return;
+        }
+        showToast('Assign form is unavailable. Refresh the page and try again.', 'error', 4000);
+      }
+      window.openLessonAssignPublish = openLessonAssignPublish;
+
       async function toggleLessonPublication(lessonId, publish) {
-        const action = publish ? 'publish' : 'unpublish';
+        // Publishing always goes through class assignment (quiz-parity).
+        if (publish) {
+          const lessons = window.availableLessons || [];
+          const match = lessons.find(function (l) { return String(l.id) === String(lessonId); });
+          openLessonAssignPublish(lessonId, (match && match.title) || 'Lesson');
+          return;
+        }
         try {
           const response = await fetch('/api/lessons/lesson/' + encodeURIComponent(lessonId), {
             method: 'PUT',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_public: !!publish })
+            body: JSON.stringify({ is_public: false })
           });
           const data = await response.json().catch(function () { return {}; });
           if (!response.ok || !data.success) {
-            throw new Error(data.error || ('Could not ' + action + ' lesson'));
+            throw new Error(data.error || 'Could not unpublish lesson');
           }
-          showToast(
-            publish
-              ? 'Lesson published to linked students in this grade.'
-              : 'Lesson unpublished. Students can no longer access it.',
-            'success',
-            3500
-          );
+          showToast('Lesson unpublished. Students can no longer access it.', 'success', 3500);
           await showMyLessonsPage();
         } catch (err) {
           console.error('Lesson publication update failed', err);
-          showToast(err.message || ('Could not ' + action + ' lesson'), 'error', 4000);
+          showToast(err.message || 'Could not unpublish lesson', 'error', 4000);
         }
       }
 
@@ -6552,9 +6578,10 @@ To continue your learning journey:
               localStorage.setItem(_teacherScopedStorageKey(LESSON_SAVE_META_KEY), JSON.stringify({ chatId: String(currentChatId || ''), signature: lessonSignature }));
             } catch (e) {}
 
-            showToast(`✅ Lesson "${finalTitle}" saved to My Lessons!`, 'success', 3000);
+            showToast(`✅ Lesson "${finalTitle}" saved as draft. Assign a class to publish.`, 'success', 3000);
 
             // Display full lesson with formatting
+            const newLessonId = data.lesson && data.lesson.id ? data.lesson.id : data.id;
             const lessonHTML = `
         <div style="background: #f9fafb; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb;">
           <h3 style="color: #3b82f6; font-size: 1.2rem; margin: 0 0 1rem 0;"><strong>✅ Lesson Created & Saved!</strong></h3>
@@ -6566,7 +6593,7 @@ To continue your learning journey:
           </div>
           
           <div style="background: var(--green-muted); padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #3b82f6; margin-bottom: 1rem;">
-            <p style="color: var(--primary-color); margin: 0;"><strong>✅ Your lesson "${finalTitle}" has been saved to <strong>My Lessons</strong>!</strong></p>
+            <p style="color: var(--primary-color); margin: 0;"><strong>✅ Your lesson "${finalTitle}" is saved as a draft. Assign it to a class to publish (same as quizzes).</strong></p>
           </div>
           
           <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
@@ -6591,7 +6618,15 @@ To continue your learning journey:
             setSaveLessonButtonsVisible(false);
             window._lessonSaveFlowStep = 1;
             updateLessonSaveFlowStrip(1);
-            showToast('Tip: For the next lesson, create → type “save this lesson” → click Save.', 'info', 4500);
+            // Open assign-to-class publish (quiz-parity) for the new lesson.
+            setTimeout(function () {
+              if (typeof showMyLessonsPage === 'function') showMyLessonsPage();
+              if (newLessonId && typeof openLessonAssignPublish === 'function') {
+                setTimeout(function () {
+                  openLessonAssignPublish(newLessonId, finalTitle);
+                }, 350);
+              }
+            }, 800);
           } else {
             showToast(data.error || 'Failed to save lesson to database.', 'error', 4000);
           }

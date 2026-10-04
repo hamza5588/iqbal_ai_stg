@@ -70,6 +70,9 @@
       }
     };
   </script>
+  {# Light-only design: opt out of OS/browser dark mode (must stay LAST in <head>, after every stylesheet). #}
+  <meta name="color-scheme" content="only light">
+  <script src="{{ url_for('static', filename='js/force-light-theme.js') }}?v=20261004a"></script>
 </head>
 
 <body class="sd-body">

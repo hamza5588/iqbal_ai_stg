@@ -1451,16 +1451,21 @@ def assignments():
     due_date = body.get("due_date")
     from datetime import datetime
 
-    parsed_due = datetime.fromisoformat(due_date) if due_date else None
-    a = assignment_service.create_assignment(
-        teacher_id=_current_user_id(),
-        class_id=int(body["class_id"]),
-        quiz_id=int(body["quiz_id"]),
-        title=body["title"],
-        instructions=body.get("instructions"),
-        due_date=parsed_due,
-    )
-    return json_success({"id": a.id, "status": a.status}, status=201)
+    try:
+        parsed_due = datetime.fromisoformat(due_date) if due_date else None
+        a = assignment_service.create_assignment(
+            teacher_id=_current_user_id(),
+            class_id=int(body["class_id"]),
+            quiz_id=int(body["quiz_id"]),
+            title=body["title"],
+            instructions=body.get("instructions"),
+            due_date=parsed_due,
+        )
+        return json_success({"id": a.id, "status": a.status}, status=201)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except (KeyError, TypeError, ValueError):
+        return json_error("Invalid assignment payload", code="validation_error")
 
 
 @bp.route("/assignments/<int:assignment_id>/publish", methods=["POST"])
@@ -1474,6 +1479,121 @@ def publish_assignment(assignment_id: int):
         return json_success({"id": a.id, "status": a.status})
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
+
+
+@bp.route("/lesson-assignments", methods=["GET", "POST"])
+@login_required
+def lesson_assignments():
+    """Assign a lesson to a class (quiz-assignment parity)."""
+    from app.services.lms import lesson_assignment_service
+
+    denied = _require_permission(Permissions.CREATE_LESSON)
+    if denied:
+        return denied
+
+    if request.method == "GET":
+        lesson_id = request.args.get("lesson_id", type=int)
+        if not lesson_id:
+            return json_error("lesson_id is required", code="validation_error")
+        try:
+            rows = lesson_assignment_service.list_assignments_for_lesson(
+                lesson_id, _current_user_id()
+            )
+            return json_success(rows)
+        except LMSValidationError as e:
+            return json_error(str(e), code="validation_error", status=403)
+        except LMSNotFoundError as e:
+            return json_error(str(e), code="not_found", status=404)
+
+    body = request.get_json(silent=True) or {}
+    due_date = body.get("due_date")
+    from datetime import datetime
+
+    try:
+        parsed_due = datetime.fromisoformat(due_date) if due_date else None
+        a = lesson_assignment_service.create_assignment(
+            teacher_id=_current_user_id(),
+            class_id=int(body["class_id"]),
+            lesson_id=int(body["lesson_id"]),
+            title=body.get("title") or "Lesson",
+            instructions=body.get("instructions"),
+            due_date=parsed_due,
+        )
+        return json_success(
+            {
+                "id": a.id,
+                "status": a.status,
+                "lesson_id": a.lesson_id,
+                "class_id": a.class_id,
+                "title": a.title,
+            },
+            status=201,
+        )
+    except KeyError as e:
+        return json_error(f"Missing field: {e}", code="validation_error")
+    except (TypeError, ValueError):
+        return json_error("Invalid class_id or lesson_id", code="validation_error")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/lesson-assignments/<int:assignment_id>/publish", methods=["POST"])
+@login_required
+def publish_lesson_assignment(assignment_id: int):
+    from app.services.lms import lesson_assignment_service
+
+    denied = _require_permission(Permissions.CREATE_LESSON)
+    if denied:
+        return denied
+    try:
+        a = lesson_assignment_service.publish_assignment(assignment_id, _current_user_id())
+        return json_success(
+            {
+                "id": a.id,
+                "status": a.status,
+                "lesson_id": a.lesson_id,
+                "class_id": a.class_id,
+            }
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/lesson-assignments/publish-to-class", methods=["POST"])
+@login_required
+def publish_lesson_to_class():
+    """One-shot: pick class + publish lesson to that class (Create & Publish)."""
+    from app.services.lms import lesson_assignment_service
+
+    denied = _require_permission(Permissions.CREATE_LESSON)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    due_date = body.get("due_date")
+    from datetime import datetime
+
+    try:
+        parsed_due = datetime.fromisoformat(due_date) if due_date else None
+        data = lesson_assignment_service.publish_lesson_to_class(
+            teacher_id=_current_user_id(),
+            lesson_id=int(body["lesson_id"]),
+            class_id=int(body["class_id"]),
+            title=body.get("title"),
+            due_date=parsed_due,
+        )
+        return json_success(data)
+    except KeyError as e:
+        return json_error(f"Missing field: {e}", code="validation_error")
+    except (TypeError, ValueError):
+        return json_error("Invalid class_id or lesson_id", code="validation_error")
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
 
 
 @bp.route("/classes/mine", methods=["GET"])
@@ -1939,9 +2059,12 @@ def practice_hint(session_id: int):
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
     try:
-        return json_success(
-            practice_service.request_hint(session_id, _current_user_id())
-        )
+        from app.utils.llm_gateway import llm_workflow
+
+        with llm_workflow("lms_practice_hint", user_id=_current_user_id(), user_role="student"):
+            return json_success(
+                practice_service.request_hint(session_id, _current_user_id())
+            )
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 

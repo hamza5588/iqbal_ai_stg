@@ -285,6 +285,37 @@ class Assignment(Base):
     )
 
 
+class LessonAssignment(Base):
+    """Assign a lesson to a specific class (quiz-assignment parity)."""
+    __tablename__ = "lesson_assignments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    teacher_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"), nullable=False, index=True)
+    lesson_id = Column(Integer, ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(512), nullable=False)
+    instructions = Column(Text, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    status = Column(String(32), nullable=False, default="draft", server_default="draft")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','published','closed')",
+            name="check_lesson_assignment_status",
+        ),
+        UniqueConstraint("lesson_id", "class_id", name="uq_lesson_assignment_lesson_class"),
+        Index("idx_lesson_assignments_class_status", "class_id", "status"),
+    )
+
+
 class QuizPdfSource(Base):
     __tablename__ = "quiz_pdf_sources"
 

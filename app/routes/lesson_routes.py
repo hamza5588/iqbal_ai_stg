@@ -236,8 +236,16 @@ def _can_access_lesson(lesson: dict, user_id: int, user_role: str | None = None)
         or lesson.get("has_child_version") is True
     ):
         return False
+    from app.services.lms import lesson_assignment_service
     from app.services.lms.class_service import student_can_access_teacher_grade
 
+    lesson_id = lesson.get("id")
+    # Prefer explicit class assignment when present (quiz-parity).
+    if lesson_id and lesson_assignment_service.lesson_has_any_assignments(int(lesson_id)):
+        return lesson_assignment_service.student_has_lesson_assignment(
+            user_id, int(lesson_id)
+        )
+    # Legacy: published lessons with no class assignments stay grade-linked.
     return student_can_access_teacher_grade(
         user_id, lesson.get("teacher_id"), lesson.get("grade_level")
     )
@@ -592,7 +600,7 @@ def create_lesson():
                 content='',  # Will be filled when lesson is complete
                 grade_level=grade_level,
                 focus_area=focus_area,
-                is_public=_has_publishable_grade(grade_level),
+                is_public=False,  # draft until teacher assigns a class & publishes
             )
             
             if not lesson_id:
@@ -792,7 +800,7 @@ def create_lesson_simple():
             content=content,
             grade_level=grade_level,
             focus_area=focus_area,
-            is_public=_has_publishable_grade(grade_level),
+            is_public=False,  # draft until teacher assigns a class & publishes
             status='finalized',
             rag_thread_id=rag_thread_id,
             conversation_id=lesson_conversation_id,
@@ -884,7 +892,7 @@ def create_lesson_from_uploaded_document():
             grade_level=grade_level,
             focus_area=focus_area,
             file_name=source_name,
-            is_public=_has_publishable_grade(grade_level),
+            is_public=False,  # draft until teacher assigns a class & publishes
             status='finalized',
             rag_thread_id=rag_thread_id,
             conversation_id=lesson_conversation_id,
@@ -1030,6 +1038,8 @@ def browse_lessons():
             if topic:
                 topic_id = topic.id
 
+        from app.services.lms import lesson_assignment_service
+
         result = LessonModel.get_public_latest_lessons_paginated(
             grade_level=grade_level,
             focus_area=focus_area,
@@ -1039,14 +1049,21 @@ def browse_lessons():
             topic_id=topic_id,
             teacher_grade_links=class_service.student_teacher_grade_links(session['user_id'], class_id=class_id),
         )
-        # Defense in depth: never trust only the listing query for access control.
-        # Re-check every returned row against the student's active class enrollment.
-        visible_lessons = [
-            lesson for lesson in result['lessons']
+        assigned_ids = lesson_assignment_service.list_published_lesson_ids_for_student(
+            session['user_id'], class_id=class_id
+        )
+        # Defense in depth: assignment-first when present; else legacy grade link.
+        visible_lessons = []
+        for lesson in result['lessons']:
+            lid = lesson.get('id')
+            if lid and lesson_assignment_service.lesson_has_any_assignments(int(lid)):
+                if int(lid) in assigned_ids:
+                    visible_lessons.append(lesson)
+                continue
             if class_service.student_can_access_teacher_grade(
                 session['user_id'], lesson.get('teacher_id'), lesson.get('grade_level')
-            )
-        ]
+            ):
+                visible_lessons.append(lesson)
         lessons = lesson_topic_service.enrich_lessons_with_topics(visible_lessons)
         if len(visible_lessons) != len(result['lessons']):
             logger.warning(
@@ -1320,6 +1337,46 @@ def update_lesson(lesson_id):
                     db.commit()
                     logger.info(f"Updated original_content for lesson {lesson_id} since it was empty")
         
+        # Publishing to students must go through class assignment (see
+        # POST /api/lms/lesson-assignments/publish-to-class). Direct is_public=true
+        # without class_id is rejected so teachers pick a class first.
+        if data.get('is_public') is True and not data.get('class_id'):
+            return jsonify({
+                'error': 'Select a class to assign this lesson before publishing.',
+                'requires_class_assignment': True,
+            }), 400
+
+        if data.get('is_public') is True and data.get('class_id'):
+            from app.services.lms import lesson_assignment_service
+
+            try:
+                lesson_assignment_service.publish_lesson_to_class(
+                    teacher_id=session['user_id'],
+                    lesson_id=int(lesson_id),
+                    class_id=int(data['class_id']),
+                    title=data.get('title') or lesson.get('title'),
+                )
+            except Exception as e:
+                return jsonify({'error': str(e)}), 400
+            return jsonify({
+                'success': True,
+                'message': 'Lesson published to the selected class.',
+            })
+
+        if data.get('is_public') is False:
+            from app.services.lms import lesson_assignment_service
+
+            try:
+                lesson_assignment_service.close_assignments_for_lesson(
+                    int(lesson_id), session['user_id']
+                )
+            except Exception as e:
+                return jsonify({'error': str(e)}), 400
+            return jsonify({
+                'success': True,
+                'message': 'Lesson unpublished. Students can no longer access it.',
+            })
+
         success = lesson_model.update_lesson(
             title=data.get('title'),
             summary=data.get('summary'),

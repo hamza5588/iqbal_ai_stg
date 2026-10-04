@@ -59,6 +59,16 @@
       <div id="lessonGradeError" class="td-field-error hidden" role="alert"><span id="lessonGradeErrorText"></span></div>
     </div>
 
+    <div class="td-field">
+      <label for="lessonAssignClass">Assign to class <span class="opt">(optional now)</span></label>
+      <select id="lessonAssignClass">
+        <option value="">Select later when publishing</option>
+      </select>
+      <small class="td-help" style="display:block;margin-top:4px;color:var(--td-muted);">
+        Like quizzes: pick a class here, or choose it when you Publish. Students only see the lesson after you assign &amp; publish.
+      </small>
+    </div>
+
     <div class="td-field td-context-col">
       <label for="lessonContext">Lesson Context <span class="opt">(Optional)</span></label>
       <textarea id="lessonContext" rows="2" maxlength="500"

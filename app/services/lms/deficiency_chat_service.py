@@ -58,6 +58,40 @@ def _question_count_for_score(score_percent: float) -> int:
     return max(1, min(MAX_QUESTIONS_PER_WEAK_AREA, -int(-missing // 10)))
 
 
+# Hard ceiling when a topic needs more than the score rule gives (see _note_outstanding_misses).
+MAX_QUESTIONS_TO_CLEAR_TOPIC = 20
+
+
+def _note_outstanding_misses(student_id: int, weak: List[dict]) -> List[dict]:
+    """Tag each weak area with how many missed questions the student still has on it.
+
+    Mastery works off outstanding misses: every correct Learning Chat answer cancels one
+    (performance_service._upsert_topic_score). The score rule above gives enough questions
+    for that as long as the topic was assessed on 10 questions or fewer; on a bigger topic
+    (12 questions, 6 wrong -> 5 questions) a student could answer everything correctly and
+    still be left Weak. ``min_questions`` lets the queue cover every outstanding miss so
+    completing the topic's Learning Chat always completes the topic.
+    """
+    from app.models.lms_models import StudentTopicScore
+
+    weak = [dict(w) for w in weak]  # never write the tag into the cached diagnostic analysis
+    ids = [int(w.get("topic_id") or 0) for w in weak if w.get("topic_id")]
+    if not ids:
+        return weak
+    rows = (
+        get_db()
+        .query(StudentTopicScore)
+        .filter(StudentTopicScore.student_id == student_id, StudentTopicScore.topic_id.in_(ids))
+        .all()
+    )
+    misses = {
+        r.topic_id: round((r.sample_size or 1) * (100.0 - (r.score_percent or 0)) / 100.0) for r in rows
+    }
+    for w in weak:
+        w["min_questions"] = misses.get(int(w.get("topic_id") or 0), 0)
+    return weak
+
+
 def _difficulty_plan(score_percent: float, count: int) -> List[str]:
     """``count`` difficulties climbing the ladder for this score, easiest first."""
     rungs = _ladder_from(_start_rank_for_score(score_percent))
@@ -316,7 +350,11 @@ def _build_question_queue(
         topic_name = (entry.get("topic_name") or "Practice area").strip()
         topic_id = _resolve_weak_topic_id(entry.get("topic_id") or 0, topic_name)
         score = float(entry.get("score_percent") or 0)
-        ladder = _difficulty_plan(score, _question_count_for_score(score))
+        count = max(
+            _question_count_for_score(score),
+            min(int(entry.get("min_questions") or 0), MAX_QUESTIONS_TO_CLEAR_TOPIC),
+        )
+        ladder = _difficulty_plan(score, count)
         exclude_texts = used_question_texts_by_topic.get(topic_id, [])
         exclude_keys = {_question_key(t) for t in exclude_texts if t}
         pdf_section, thread_id, relevance = _match_target_section(topic_name, target_thread_ids)
@@ -709,7 +747,7 @@ def _start_topic_session(
         weak = [w for w in get_weak_topics(student_id) if _is_topic(w)]
     if not weak:
         raise LMSValidationError("This topic is not one of your weak areas any more.")
-    weak = weak[:1]
+    weak = _note_outstanding_misses(student_id, weak[:1])
 
     # Questions already generated for this topic (the session pre-built right after
     # the diagnostic) are reused, so opening a topic costs no new generation.
@@ -837,7 +875,7 @@ def start_session(
         db.refresh(session)
         return _session_state(session)
 
-    weak = _practice_weak_areas(student_id, diag_id)
+    weak = _note_outstanding_misses(student_id, _practice_weak_areas(student_id, diag_id))
 
     prior_questions = _prior_question_texts_by_topic(student_id)
     queue = _build_question_queue(

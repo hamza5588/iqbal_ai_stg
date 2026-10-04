@@ -344,12 +344,15 @@
         '<td><b>' + a.correct + ' / ' + a.total + '</b></td><td>' + (pct != null ? '<b>' + pct + '%</b> ' + U.scoreBadge(pct) : '—') + '</td></tr>';
     }).join('');
     rows.sort(function (a, b) { return a.last.score_percent - b.last.score_percent; });
+    // First / Change only mean something once a topic has been assessed more than once.
+    var repeated = rows.some(function (r) { return r.n > 1; });
     var topicRows = rows.map(function (r) {
       var last = U.pct(r.last.score_percent), first = U.pct(r.first.score_percent);
       return '<tr><td>' + U.esc(r.name) + '</td><td>' + r.n + '</td>' +
-        '<td>' + (r.n > 1 ? first + '%' : '—') + '</td>' +
+        (repeated ? '<td>' + (r.n > 1 ? first + '%' : '—') + '</td>' : '') +
         '<td>' + U.progress(r.last.score_percent, last < 40 ? 'red' : '') + '</td>' +
-        '<td>' + (r.n > 1 ? changeHtml(r.first.score_percent, r.last.score_percent) : '<span style="color:var(--td-muted);">first attempt</span>') + '</td></tr>';
+        (repeated ? '<td style="white-space:nowrap;">' + (r.n > 1 ? changeHtml(r.first.score_percent, r.last.score_percent) : '<span style="color:var(--td-muted);">first attempt</span>') + '</td>' : '') +
+        '</tr>';
     }).join('');
     var firstA = list[0], lastA = list[list.length - 1];
     var fp = firstA.total ? 100 * firstA.correct / firstA.total : 0, lp = lastA.total ? 100 * lastA.correct / lastA.total : 0;
@@ -359,7 +362,7 @@
       '<div class="td-detail-card"><h4>Attempts</h4><p class="td-desc">Every submitted ' + word + ', oldest first.</p>' +
       '<div class="td-table-wrap"><table class="td-data"><thead><tr><th>#</th><th>' + (type === 'diagnostic' ? 'Diagnostic' : 'Quiz') + '</th><th>Date</th><th>Correct</th><th>Score</th></tr></thead><tbody>' + attemptRows + '</tbody></table></div></div>' +
       '<div class="td-detail-card"><h4>By topic</h4><p class="td-desc">Latest ' + word + ' score per topic, weakest first.</p>' +
-      '<div class="td-table-wrap"><table class="td-data"><thead><tr><th>Topic</th><th>Attempts</th><th>First</th><th>Latest</th><th>Change</th></tr></thead><tbody>' + topicRows + '</tbody></table></div></div></div>';
+      '<div class="td-table-wrap"><table class="td-data"><thead><tr><th>Topic</th><th>Attempts</th>' + (repeated ? '<th>First</th>' : '') + '<th>' + (repeated ? 'Latest' : 'Score') + '</th>' + (repeated ? '<th>Change</th>' : '') + '</tr></thead><tbody>' + topicRows + '</tbody></table></div></div></div>';
   }
 
   /* Graph: diagnostic + quiz together, one small chart per topic, plus an overall chart. */

@@ -6,6 +6,17 @@
   --td-green: #16a34a; --td-green-bg: #dcfce7; --td-amber: #d97706; --td-amber-bg: #fef3c7; --td-red: #dc2626; --td-red-bg: #fee2e2;
   --td-bg: #f4f7fc; --td-card: #ffffff;
 }
+/* Light-only design. lms-ui.css redefines these on :root for OS dark mode; pin the light
+   palette on this page (the student dashboard does the same on .sd-body) so shared LMS
+   components never get light text on the white teacher cards, even before
+   force-light-theme.js has run. */
+body.td-body {
+  --lms-border: #e2e8f0; --lms-text: #0f172a; --lms-muted: #64748b; --lms-surface: #ffffff; --lms-surface-2: #f8fafc;
+  --lms-input-bg: #ffffff; --lms-input-border: #cbd5e1; --lms-hover: #f8fafc; --lms-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
+  --lms-green-light: var(--primary-100, #dcfce7); --lms-green-muted: var(--primary-50, #f0fdf4);
+  --lms-green-text: var(--lms-green); --lms-focus-ring: rgba(22, 101, 52, 0.35);
+  color-scheme: only light;
+}
 
 body.td-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--td-bg); color: var(--td-ink); -webkit-font-smoothing: antialiased; }
 .td-app h1, .td-app h2, .td-app h3, .td-app h4 { font-family: 'Poppins', sans-serif; }
@@ -387,6 +398,10 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 .td-row-actions .td-btn { white-space: nowrap; }
 .td-btn-on { background: var(--td-blue-50); border-color: var(--td-blue-700); }
 .td-roster-panel { padding: 16px 18px 18px; }
+/* Attempts and By-topic tables each get the full width, and scroll instead of clipping
+   their last column (two half-width cards cut off "Change"). */
+.td-roster-panel .td-detail { grid-template-columns: 1fr; }
+.td-roster-panel .td-table-wrap { overflow-x: auto; }
 .td-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .td-panel-head h4 { margin: 0; font-size: 16px; }
 .td-graph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
