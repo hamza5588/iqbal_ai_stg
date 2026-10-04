@@ -2391,10 +2391,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 <a title="Download DOCX" onclick="downloadLessonDocx('${id}')"><i class="fas fa-file-word"></i> Word</a>
                 <a title="Download PPT" onclick="downloadLessonPPT('${id}')"><i class="fas fa-file-powerpoint"></i> PowerPoint</a>
                 <a title="FAQ" onclick="showLessonFAQ('${id}')"><i class="fas fa-circle-question"></i> FAQ</a>
-                <a title="Assign to class & publish" onclick="openLessonAssignPublish('${id}', ${JSON.stringify(lesson.title || 'Lesson').replace(/</g, '\\u003c')})"><i class="fas fa-users"></i> Assign &amp; Publish</a>
+                <a title="Assign to class & publish" onclick="toggleLessonPublication('${id}', true)"><i class="fas fa-users"></i> Assign &amp; Publish</a>
                 ${isPublished
                   ? `<a title="Unpublish lesson" onclick="toggleLessonPublication('${id}', false)"><i class="fas fa-eye-slash"></i> Unpublish</a>`
-                  : `<a title="Publish lesson to a class" onclick="openLessonAssignPublish('${id}', ${JSON.stringify(lesson.title || 'Lesson').replace(/</g, '\\u003c')})"><i class="fas fa-paper-plane"></i> Publish</a>`}
+                  : `<a title="Publish lesson to a class" onclick="toggleLessonPublication('${id}', true)"><i class="fas fa-paper-plane"></i> Publish</a>`}
                 ${lesson.has_child_version !== true ? `<a class="danger" title="Delete" onclick="deleteLesson('${id}')"><i class="fas fa-trash"></i> Delete</a>` : ''}
               </div>
             </div>

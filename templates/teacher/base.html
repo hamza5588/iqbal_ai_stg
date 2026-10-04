@@ -35,7 +35,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
   {# Bump when LMS/teacher static JS/CSS changes so browsers skip stale cache #}
-  {% set asset_v = '20261004lightOnly1' %}
+  {% set asset_v = '20261004lessonPub1' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-legacy.css') }}?v={{ asset_v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}?v={{ asset_v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/teacher-theme.css') }}?v={{ asset_v }}">
