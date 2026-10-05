@@ -2217,6 +2217,32 @@ def ingest_pdf(
                 loader_used,
             )
             _send_progress("loading", 28, "Using LlamaParse text for RAG chunks...")
+        else:
+            # Hybrid page reading (same idea as the quiz PDF reader): plain loaders flatten
+            # mathematics ("−4" with a superscript 10 becomes "−410", fractions and nested
+            # powers are scrambled), and the chat then quotes that broken text. Pages that
+            # contain maths get their text rebuilt from the text layer + the page image;
+            # every other page keeps the loader's text untouched. Never fails the ingest.
+            try:
+                from app.utils.pdf_hybrid_text import hybrid_page_texts
+
+                _send_progress("loading", 26, "Reading formulas and equations on the pages...")
+                better_pages = hybrid_page_texts(temp_path)
+                replaced = 0
+                for i, doc in enumerate(docs):
+                    page_idx = doc.metadata.get("page", i) if isinstance(doc.metadata, dict) else i
+                    if not isinstance(page_idx, int):
+                        page_idx = i
+                    better = better_pages.get(page_idx)
+                    if better and better.strip():
+                        doc.page_content = better
+                        replaced += 1
+                if replaced:
+                    valid_pages = [d for d in docs if d.page_content and d.page_content.strip()]
+                    loader_used = f"{loader_used}+hybrid"
+                    logger.info("RAG ingest: hybrid text used for %d of %d page(s)", replaced, len(docs))
+            except Exception as hybrid_exc:  # noqa: BLE001
+                logger.warning("Hybrid PDF page reading skipped: %s", hybrid_exc)
 
         # If the document has both real text and embedded images, the text is
         # still fully processed below, but flag it so the caller can warn the
