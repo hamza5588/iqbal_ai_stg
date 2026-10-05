@@ -578,7 +578,11 @@
                             <strong>Choose target PDF(s)</strong>
                             <span>Ctrl/Cmd for multiple</span>
                         </span>
-                        <input id="adminDiagTargetFiles" type="file" accept=".pdf,application/pdf" multiple required
+                        {# No `required` here: lms-admin-diagnostic.js keeps the chosen PDFs in its own list and
+                           empties this input after each pick (so more can be added), which made the browser
+                           block submit with "Please select one or more files". submitAdminDiagnostic() still
+                           refuses to upload without at least one target PDF. #}
+                        <input id="adminDiagTargetFiles" type="file" accept=".pdf,application/pdf" multiple
                             onchange="updateAdminDiagTargetFileList()">
                     </label>
                     <p id="adminDiagTargetFileCount" class="text-xs font-semibold text-[#1a56db] mt-1.5" style="display:none;"></p>
