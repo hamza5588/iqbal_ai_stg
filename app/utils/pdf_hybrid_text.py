@@ -34,6 +34,21 @@ _MATH_CHAR_RE = re.compile(r"[∀-⋿√²³¹⁰-₟\U0001d400-\U0001d7ff]")
 _WORD_RE = re.compile(r"[A-Za-z]{3,}")
 
 
+def _pymupdf():
+    """PyMuPDF under its current name, or the legacy ``fitz`` name on older installs."""
+    try:
+        import pymupdf
+
+        return pymupdf
+    except Exception:  # noqa: BLE001
+        try:
+            import fitz
+
+            return fitz
+        except Exception:  # noqa: BLE001
+            return None
+
+
 def _env_flag(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None or not raw.strip():
@@ -192,7 +207,7 @@ Rules:
 def _render_page_data_url(page, dpi: int, jpeg_quality: int) -> str:
     import base64
 
-    import pymupdf
+    pymupdf = _pymupdf()
 
     zoom = dpi / 72.0
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
@@ -292,9 +307,9 @@ def hybrid_page_texts(
     out: Dict[int, str] = {}
     if not hybrid_text_enabled():
         return out
-    try:
-        import pymupdf
-    except Exception:  # noqa: BLE001
+    pymupdf = _pymupdf()
+    if pymupdf is None:
+        logger.warning("Hybrid PDF text skipped: PyMuPDF is not installed")
         return out
 
     max_pages = int(os.getenv("RAG_HYBRID_VISION_MAX_PAGES", "25"))
