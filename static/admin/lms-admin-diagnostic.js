@@ -760,6 +760,8 @@
   }
 
   function _diagEscapeTextMode(s) {
+    // Shared single-pass escape; the chained replaces below double-escaped "\textbackslash{}".
+    if (typeof window.lmsEscapeTextMode === 'function') return window.lmsEscapeTextMode(s);
     return String(s || '')
       .replace(/\\/g, '\\textbackslash{}')
       .replace(/[{}]/g, function (ch) {
@@ -776,6 +778,7 @@
   function _diagTextToMathlive(src) {
     src = String(src == null ? '' : src).trim();
     if (!src) return '';
+    if (typeof window.lmsRepairEscapedLatex === 'function') src = window.lmsRepairEscapedLatex(src);
     if (typeof window.lmsPrepareMathText === 'function') {
       try {
         src = window.lmsPrepareMathText(src) || src;
@@ -819,6 +822,8 @@
     }
     latex = String(latex || '').trim();
     if (!latex) return '';
+    // Shared with the teacher quiz editor: words stored as plain prose, math in $...$.
+    if (typeof window.lmsMathliveToStorage === 'function') return window.lmsMathliveToStorage(latex);
     if (/^\$|\\\(|\\\[/.test(latex)) return latex;
     return '$' + latex + '$';
   }
@@ -843,14 +848,20 @@
       mf.smartFence = true;
     } catch (e) {}
     var val = _diagTextToMathlive(rawText);
+    // The value is LaTeX: insert it in math mode. With no explicit mode a text-mode stem showed the
+    // code itself ("\text{...}") and saved it back escaped (same fix as the teacher quiz editor).
+    var setOpts = { silenceNotifications: true };
+    if (val) setOpts.mode = 'math';
     try {
-      if (typeof mf.setValue === 'function') mf.setValue(val, { silenceNotifications: true });
+      if (typeof mf.setValue === 'function') mf.setValue(val, setOpts);
       else mf.value = val;
     } catch (e) {
       try {
         mf.value = val;
       } catch (e2) {}
     }
+    // Words typed into a math box (an option like "5/8 edited ...") stay words: see lms-core.js.
+    if (typeof window.lmsMakeMathFieldWordFriendly === 'function') window.lmsMakeMathFieldWordFriendly(mf);
     if (mf._diagVkBound) return;
     mf._diagVkBound = true;
     mf.addEventListener('focusin', function () {
@@ -898,6 +909,10 @@
               setTimeout(function () {
                 try {
                   first.focus();
+                  // Focused by script, MathLive sits at the end in math mode and typed words lose
+                  // their spaces; continue in text mode when the stem ends in words.
+                  if (first.mode !== 'text' && first.position === first.lastOffset &&
+                      /\\text\{[^{}]*\}\s*\$?\s*$/.test(first.getValue('latex') || '')) first.mode = 'text';
                 } catch (e) {}
               }, 50);
             }
@@ -1141,8 +1156,9 @@
           (questions.length === 1 ? '' : 's') +
           (status === 'draft' ? ' · awaiting approval' : '');
       }
-      // Reset edit binding so re-render rebinds cleanly
-      bodyEl._diagEditBound = false;
+      // The click handler is delegated on bodyEl, which outlives every re-render, so it is bound once
+      // (see _bindDiagEditHandlers). Resetting the flag here added a second handler after each save:
+      // the next Edit click then opened the panel and closed it again at once.
       renderDiagReviewQuestions(questions);
     } catch (err) {
       bodyEl.innerHTML = '<p class="text-red-600 text-sm">Preview failed: ' + esc(err.message) + '</p>';

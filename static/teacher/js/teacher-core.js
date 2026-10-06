@@ -334,6 +334,62 @@
         }
       }
 
+      // Title / subject / grade the teacher entered for a lesson, keyed by its chat thread.
+      // currentPDFData is one global slot: it is overwritten by the next upload and cleared
+      // after a save, so a lesson saved from a reopened chat used to pick up another
+      // lesson's title and grade (or none at all).
+      const LESSON_META_BY_THREAD_KEY = 'teacher_lesson_meta_by_thread';
+
+      function rememberLessonMetaForThread(threadId, meta) {
+        if (!threadId || !meta) return;
+        try {
+          const key = _teacherScopedStorageKey(LESSON_META_BY_THREAD_KEY);
+          const all = JSON.parse(localStorage.getItem(key) || '{}') || {};
+          all[String(threadId)] = {
+            title: meta.title || '',
+            subject: meta.subject || '',
+            grade: meta.grade || '',
+            context: meta.context || ''
+          };
+          const ids = Object.keys(all);
+          if (ids.length > 200) delete all[ids[0]];
+          localStorage.setItem(key, JSON.stringify(all));
+        } catch (e) {
+          console.error('Failed to remember lesson details', e);
+        }
+      }
+
+      function getLessonMetaForThread(threadId) {
+        if (!threadId) return null;
+        try {
+          const all = JSON.parse(localStorage.getItem(_teacherScopedStorageKey(LESSON_META_BY_THREAD_KEY)) || '{}') || {};
+          return all[String(threadId)] || null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // Lesson details for the chat that is open now, or null when currentPDFData belongs to
+      // a different chat.
+      function getLessonMetaForCurrentChat() {
+        const threadId = window.currentRAGThreadId || null;
+        const stored = getLessonMetaForThread(threadId);
+        if (stored) return stored;
+        if (!currentPDFData) return null;
+        if (currentPDFData.threadId) {
+          return String(currentPDFData.threadId) === String(threadId || '') ? currentPDFData : null;
+        }
+        // Details stored before threads were recorded: trust them only when their title
+        // matches this chat's title (chat titles are cut short, so compare by prefix).
+        const chat = Array.isArray(chatHistory)
+          ? chatHistory.find(function (c) { return String(c.id) === String(currentChatId || ''); })
+          : null;
+        const chatTitle = String((chat && chat.title) || '').replace(/^chat\s*:/i, '').trim().toLowerCase();
+        const dataTitle = String(currentPDFData.title || '').trim().toLowerCase();
+        if (!chatTitle || !dataTitle) return currentPDFData;
+        return (chatTitle.indexOf(dataTitle) === 0 || dataTitle.indexOf(chatTitle) === 0) ? currentPDFData : null;
+      }
+
       function setSaveLessonButtonsVisible(isVisible) {
         const saveBtn = document.getElementById('saveLessonBtn');
         const helpBtn = document.getElementById('saveLessonHelpBtn');
@@ -416,8 +472,8 @@
           '<p id="lessonSaveGuideLead">Follow these steps so the lesson reaches My Lessons.</p>' +
           '<ol class="lesson-save-guide-list">' +
           '<li data-step="1"><div class="n">1</div><div class="c"><strong>Create the lesson</strong>Upload a PDF / ask IQBAL AI to create the lesson in this chat.</div></li>' +
-          '<li data-step="2"><div class="n">2</div><div class="c"><strong>Ask to save in chat</strong>Type “save this lesson” so the draft is finalized. Chat confirmation is not My Lessons yet.</div></li>' +
-          '<li data-step="3"><div class="n">3</div><div class="c"><strong>Click Save</strong>Press the Save button to store it in My Lessons. You can repeat this for another lesson in the same chat.</div></li>' +
+          '<li data-step="2"><div class="n">2</div><div class="c"><strong>Ask to save in chat</strong>Type “save this lesson”. The draft is finalized and added to My Lessons for you.</div></li>' +
+          '<li data-step="3"><div class="n">3</div><div class="c"><strong>Check My Lessons</strong>If the lesson is not there yet, press the Save button. You can repeat this for another lesson in the same chat.</div></li>' +
           '</ol>' +
           '</div>' +
           '<div class="lesson-save-guide-footer">' +
@@ -2176,6 +2232,9 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
         var metaThreadId = (window._createLessonMeta && window._createLessonMeta.threadId) || window.currentRAGThreadId || null;
         var metaConvId = (window._createLessonMeta && window._createLessonMeta.conversationId) || null;
+        currentPDFData.threadId = metaThreadId;
+        savePDFDataToStorage();
+        if (lessonMode !== 'as_is') rememberLessonMetaForThread(metaThreadId, currentPDFData);
 
         if (lessonMode === 'as_is') {
           try {
@@ -5719,9 +5778,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
               grade: '',
               numPages: pages,
               createdAt: new Date().toISOString(),
-              source: 'pdf_upload'
+              source: 'pdf_upload',
+              threadId: threadId
             };
             try { savePDFDataToStorage(); } catch (e) {}
+            rememberLessonMetaForThread(threadId, currentPDFData);
 
             try {
               await loadChatHistoryFromBackend();
@@ -5803,10 +5864,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
       }
 
       // Save Lesson from Chat (prefer RAG finalized/in-progress lesson over local template so we save actual AI lesson)
-      async function saveLessonFromChat() {
+      // opts.auto: called right after the chat finalized the lesson ("save this lesson"),
+      // not from the Save button - stay quiet instead of opening guidance or repeat warnings.
+      async function saveLessonFromChat(opts) {
+        const auto = !!(opts && opts.auto);
         if (window.currentLessonChatAlreadySaved) {
           setSaveLessonButtonsVisible(false);
-          showToast('This lesson is already saved in My Lessons.', 'info', 2500);
+          if (!auto) showToast('This lesson is already saved in My Lessons.', 'info', 2500);
           return;
         }
 
@@ -5815,16 +5879,16 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         updateLessonSaveFlowStrip(readiness.step);
 
         if (!readiness.hasDraft) {
-          showLessonSaveFlowGuidance('no_content');
+          if (!auto) showLessonSaveFlowGuidance('no_content');
           return;
         }
 
         if (!readiness.lessonFinalized) {
-          showLessonSaveFlowGuidance('need_chat_save');
+          if (!auto) showLessonSaveFlowGuidance('need_chat_save');
           return;
         }
 
-        let pdfData = currentPDFData;
+        let pdfData = getLessonMetaForCurrentChat();
         let lessonContent = readiness.lastLessonText;
 
         if (window.currentRAGThreadId) {
@@ -5833,7 +5897,13 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             const data = await res.json().catch(function() { return {}; });
             if (res.ok && data && data.success && (data.last_lesson_text || '').trim()) {
               lessonContent = (data.last_lesson_text || '').trim();
-              pdfData = pdfData || { title: (data.lesson_title || '').trim() || 'Lesson from RAG', subject: 'General', grade: 'General' };
+              if (!pdfData) {
+                // No details remembered for this chat (other device, cleared browser data):
+                // the chat is named after the title the teacher entered, so prefer that.
+                let chatTitle = getCurrentChatThreadTitleForLesson({ noFallback: true });
+                if (/^(new conversation|conversation)$/i.test(chatTitle)) chatTitle = '';
+                pdfData = { title: chatTitle || (data.lesson_title || '').trim() || 'Lesson from RAG', subject: 'General', grade: 'General' };
+              }
               if ((data.lesson_title || '').trim() && pdfData && !pdfData.title) {
                 pdfData.title = (data.lesson_title || '').trim();
               }
@@ -5844,11 +5914,11 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         if (!lessonContent) {
-          showLessonSaveFlowGuidance('no_content');
+          if (!auto) showLessonSaveFlowGuidance('no_content');
           return;
         }
 
-        saveLessonToMyLessons(pdfData, lessonContent);
+        return saveLessonToMyLessons(pdfData, lessonContent, { auto: auto });
       }
 
       // RAG chat: store thread_id and conversation_id from API for PDF context
@@ -5976,7 +6046,12 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             ? TeacherChatFormatter.formatChatResponse(aiResponse) : escapeHtml(aiResponse);
           addAssistantMessage(formatted);
           await refreshSaveLessonAvailability();
-          if (window._lessonSaveFlowStep === 3) {
+          if (data.lesson_finalized) {
+            // "save this lesson" only finalizes the draft on the server. Put it in
+            // My Lessons now, so the teacher is not left with a chat that says it is saved
+            // while My Lessons has nothing. The Save button stays available if this fails.
+            await saveLessonFromChat({ auto: true });
+          } else if (window._lessonSaveFlowStep === 3) {
             showToast('Ready for My Lessons — click Save (step 3). Chat finalize alone does not finish this.', 'info', 4500);
           } else if (window._lessonSaveFlowStep === 2) {
             updateLessonSaveFlowStrip(2);
@@ -6499,8 +6574,8 @@ To continue your learning journey:
       }
 
       // Save lesson to My Lessons (saves to database via API)
-      function getCurrentChatThreadTitleForLesson() {
-        const fallback = 'Lesson ' + new Date().toLocaleDateString();
+      function getCurrentChatThreadTitleForLesson(opts) {
+        const fallback = (opts && opts.noFallback) ? '' : 'Lesson ' + new Date().toLocaleDateString();
         const currentId = String(currentChatId || '').trim();
         if (!currentId || !Array.isArray(chatHistory)) return fallback;
         const chat = chatHistory.find(function (c) { return String(c.id) === currentId; });
@@ -6536,12 +6611,13 @@ To continue your learning journey:
         return candidate;
       }
 
-      async function saveLessonToMyLessons(pdfDataOverride, lessonContentOverride) {
+      async function saveLessonToMyLessons(pdfDataOverride, lessonContentOverride, opts) {
+        const auto = !!(opts && opts.auto);
         const pdfData = pdfDataOverride || currentPDFData;
         const lessonContent = lessonContentOverride || currentLessonMarkdown;
 
         if (!lessonContent) {
-          showToast('No lesson content to save. Please create a lesson first.', 'warning', 3000);
+          if (!auto) showToast('No lesson content to save. Please create a lesson first.', 'warning', 3000);
           return;
         }
 
@@ -6555,48 +6631,63 @@ To continue your learning journey:
         const lessonSignature = buildLessonSaveSignature(baseTitle, lessonContent);
         const savedSignatures = getSavedLessonSignatures();
         if (savedSignatures.includes(lessonSignature)) {
-          showToast("This lesson has already been saved. If you'd like to save a new lesson, please create a new lesson and save it.", 'warning', 4500);
+          if (!auto) showToast("This lesson has already been saved. If you'd like to save a new lesson, please create a new lesson and save it.", 'warning', 4500);
           return;
         }
 
-        const finalTitle = getUniqueLessonTitle(baseTitle);
+        let finalTitle = getUniqueLessonTitle(baseTitle);
         const focusArea = (pdfData && pdfData.subject) ? String(pdfData.subject) : (pdfData && pdfData.focus_area) || 'General';
+        // A PDF attached straight in the chat has no grade field to fill in, so an empty
+        // grade must not block the save (it used to stop here with "Grade is required.").
         const gradeLevel = (
           (pdfData && pdfData.grade) ? String(pdfData.grade).trim()
             : (pdfData && pdfData.gradeLevel) ? String(pdfData.gradeLevel).trim()
               : ''
-        );
-        if (!gradeLevel) {
-          showToast('Grade is required.', 'error', 3500);
-          return;
-        }
+        ) || 'General';
         const summary = (pdfData && pdfData.summary) ? String(pdfData.summary) : 'Saved from chat.';
 
         showToast('Saving lesson to My Lessons...', 'info', 2000);
 
         try {
-          const response = await fetch('/api/lessons/create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              title: finalTitle,
-              content: lessonContent,
-              focus_area: focusArea,
-              grade_level: gradeLevel,
-              summary: summary,
-              // Preserve PDF retrieval linkage for student Ask Question flow.
-              // lesson_routes.create_lesson_simple accepts either rag_thread_id or thread_id.
-              rag_thread_id: window.currentRAGThreadId || null,
-              thread_id: window.currentRAGThreadId || null,
-              // Store the active conversation so the lesson view can load the conversation summary.
-              conversation_id: window.currentRAGConversationId || null
-            })
-          });
+          const postLesson = function (title) {
+            return fetch('/api/lessons/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                title: title,
+                content: lessonContent,
+                focus_area: focusArea,
+                grade_level: gradeLevel,
+                summary: summary,
+                // Preserve PDF retrieval linkage for student Ask Question flow.
+                // lesson_routes.create_lesson_simple accepts either rag_thread_id or thread_id.
+                rag_thread_id: window.currentRAGThreadId || null,
+                thread_id: window.currentRAGThreadId || null,
+                // Store the active conversation so the lesson view can load the conversation summary.
+                conversation_id: window.currentRAGConversationId || null
+              })
+            });
+          };
+          let response = await postLesson(finalTitle);
+          let data = await response.json().catch(function() { return {}; });
 
-          const data = await response.json().catch(function() { return {}; });
+          // The list of used titles lives in this browser only; on another device the server
+          // can still reject a title. Record it and retry once with the next free name.
+          if (response.status === 400 && /title is already used/i.test((data && data.error) || '')) {
+            const knownTitles = getUsedLessonTitles();
+            knownTitles.push(finalTitle);
+            persistUsedLessonTitles(knownTitles);
+            finalTitle = getUniqueLessonTitle(baseTitle);
+            response = await postLesson(finalTitle);
+            data = await response.json().catch(function() { return {}; });
+          }
 
           if (response.ok && data && data.success) {
+            // An edited lesson is updated in place and keeps its original title.
+            if (data.updated_existing && data.lesson && data.lesson.title) {
+              finalTitle = String(data.lesson.title);
+            }
             savedSignatures.push(lessonSignature);
             persistSavedLessonSignatures(savedSignatures);
             const usedTitles = getUsedLessonTitles();

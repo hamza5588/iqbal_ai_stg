@@ -360,6 +360,14 @@ def run_pdf_quiz_pipeline(
                 meta["question_pdf_topics"] = question_pdf_topics
             if question_concepts:
                 meta["question_concepts"] = question_concepts
+            # The labels are the paper's own domains: results, learning path and graphs
+            # group by them as they are (see weakness_analyzer._group_by_stored_concept).
+            if any(
+                (getattr(m, "domain", None) or "").strip()
+                and (m.domain or "").strip() == (getattr(m, "learning_concept", None) or "").strip()
+                for m in batch_questions
+            ):
+                meta["concept_source"] = "pdf_domain"
             if assessment.assessment_type == "diagnostic":
                 meta["awaiting_admin_approval"] = True
             assessment.description = json.dumps(meta, ensure_ascii=False)

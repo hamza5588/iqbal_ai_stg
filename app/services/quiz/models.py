@@ -80,6 +80,10 @@ class MCQQuestion(BaseModel):
         None,
         description="Short student-friendly concept this question tests (3-8 words, not a document title)",
     )
+    domain: Optional[str] = Field(
+        None,
+        description="Domain printed on the paper for this question (e.g. 'Algebra'); omit when absent",
+    )
     difficulty: Optional[Literal["easy", "medium", "hard"]] = Field(
         None,
         description="Optional PDF difficulty label when present; omit when absent",

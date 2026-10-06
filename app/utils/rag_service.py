@@ -764,6 +764,19 @@ def _is_own_answer_followup_request(text: str) -> bool:
 
 _MIN_SUBSTANTIVE_ANSWER_CHARS = 200
 
+# Reply forced after finalize_lesson_tool succeeds. Finalizing only marks the thread's draft
+# as ready; the row in My Lessons is created by the dashboard (POST /api/lessons/create),
+# which the chat route triggers by returning lesson_finalized=True for exactly this reply.
+# The old wording ("Lesson finalized and saved. You can download it now.") claimed a save
+# that had not happened, so teachers never pressed Save and the lesson never reached My Lessons.
+LESSON_FINALIZED_REPLY = "Lesson finalized. It is being added to My Lessons now."
+
+# What finalize_lesson_tool tells the lesson validator the teacher asked for (see there).
+_SAVED_DRAFT_VALIDATION_QUERY = (
+    "Create a lesson. (The teacher asked for this lesson earlier in this conversation and is "
+    "now saving the stored draft.)"
+)
+
 
 def _find_last_substantive_ai_answer(messages: List[BaseMessage]) -> str:
     """
@@ -4397,7 +4410,13 @@ def finalize_lesson_tool(thread_id: str) -> str:
             )
             return json.dumps(result)
 
-        is_lesson = _check_if_content_is_lesson(content, user_query="", user_id=user_id)
+        # last_lesson_text is only ever written as a lesson draft the teacher asked for. The
+        # validator also judges the request that produced the content; given no request it
+        # rejected complete lessons ("doesn't look like a complete lesson yet"), so the save
+        # was refused. Tell it what the request was.
+        is_lesson = _check_if_content_is_lesson(
+            content, user_query=_SAVED_DRAFT_VALIDATION_QUERY, user_id=user_id
+        )
         if not is_lesson:
             result["reason"] = (
                 "The current conversation content doesn't look like a complete lesson yet, "
@@ -4710,6 +4729,8 @@ _FILLER_PATTERNS: List[re.Pattern] = [
     # have actually just saved anything).
     re.compile(r"\blesson (?:has been |is |was )?finalized and saved\b", re.I),
     re.compile(r"\byou can download it now\b", re.I),
+    re.compile(r"\blesson finalized\b", re.I),
+    re.compile(r"\badded to my lessons\b", re.I),
 ]
 
 # Legitimate fallback wording (see DEFAULT_RAG_CHAT_SYSTEM_BODY_WITH_PDF) — must NOT be
@@ -6180,7 +6201,7 @@ def _chat_handle_lesson_state_and_persistence(
         # (or refused) the real DB write, so the visible reply is forced to match that
         # outcome exactly - the model's own wording is never trusted for a save/fail claim.
         if finalize_tool_result.get("success"):
-            response.content = "Lesson finalized and saved. You can download it now."
+            response.content = LESSON_FINALIZED_REPLY
             _mark_step("finalize_lesson_tool_success")
         else:
             response.content = (
@@ -6971,11 +6992,13 @@ def _check_if_content_is_lesson(
             content_sample = content_sample[:8000] + "\n\n[...content truncated for validation...]"
         user_query_sample = (user_query or "").strip() or "(no user query provided)"
         prompt = LESSON_VALIDATION_PROMPT.format(user_query=user_query_sample, content=content_sample)
-        print("[Lesson Validation] INPUT user_query:", repr(user_query_sample[:500]))
-        print("[Lesson Validation] INPUT content (first 500 chars):", repr(content_sample[:500]))
+        # Logged, not printed: printing raises on a console that cannot encode the lesson's
+        # characters, and the except below then reports a complete lesson as "not a lesson".
+        logger.info("[Lesson Validation] INPUT user_query: %r", user_query_sample[:500])
+        logger.info("[Lesson Validation] INPUT content (first 500 chars): %r", content_sample[:500])
         result = llm_structured.invoke(prompt)
         is_lesson = result.is_lesson if hasattr(result, "is_lesson") else False
-        print("[Lesson Validation] OUTPUT is_lesson:", is_lesson)
+        logger.info("[Lesson Validation] OUTPUT is_lesson: %s", is_lesson)
         return is_lesson
     except Exception as e:
         logger.warning("Lesson validation check failed: %s", e)

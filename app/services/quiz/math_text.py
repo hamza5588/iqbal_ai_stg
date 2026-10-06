@@ -124,8 +124,16 @@ def implicit_exponents_to_latex(text: str) -> str:
 
     def repl(match: re.Match[str]) -> str:
         base, digits = match.group(1), match.group(2)
-        if base.isalpha() and _is_function_name(match.string, match.start(1)):
-            return match.group(0)
+        if base.isalpha():
+            # The letters may be a TeX command (the math editor writes "\neq1", "\pm5", "\times10"
+            # with no space): that digit is an operand, never a power - "a \neq^{1}" was saved.
+            start = match.start(1)
+            while start > 0 and match.string[start - 1].isalpha():
+                start -= 1
+            if start > 0 and match.string[start - 1] == "\\":
+                return f"{base} {digits}"
+            if _is_function_name(match.string, match.start(1)):
+                return match.group(0)
         return f"{base}^{{{digits}}}"
 
     # letter/paren/brace/bracket followed directly by digits and NOT already
@@ -748,11 +756,28 @@ _TEX_COMMAND_RE = re.compile(r"\\(?:[a-zA-Z]+|.)", re.S)
 _ESCAPED_LATEX_RE = re.compile(r"\\textbrace(?:left|right)")
 
 
+_TEXT_MODE_NAMED = {
+    "textbackslash": "\\", "textasciicircum": "^", "textasciitilde": "~",
+    "lbrack": "[", "rbrack": "]", "lbrace": "{", "rbrace": "}",
+}
+# The editor puts one space after a command word whether it is a separator ("\lbrack note") or real
+# text ("\rbrack One"). After an opening bracket it is a separator; after a closing one it is kept.
+_TEXT_MODE_UNESCAPE_RE = re.compile(
+    r"\\(textbackslash|textasciicircum|textasciitilde|lbrack|lbrace)(?![A-Za-z])(?:\{\}|\s)?"
+    r"|\\(rbrack|rbrace)(?![A-Za-z])(?:\{\})?"
+    r"|\\\^\{\}|\\([{}#%&_])"
+)
+
+
 def _unescape_text_mode(s: str) -> str:
-    s = re.sub(r"\\textbackslash(?:\{\}|\s)?", lambda _m: "\\", s or "")
-    s = re.sub(r"\\textasciicircum(?:\{\}|\s)?|\\\^\{\}", "^", s)
-    s = re.sub(r"\\textasciitilde(?:\{\}|\s)?", "~", s)
-    return re.sub(r"\\([{}#%&_])", r"\1", s)
+    """One pass (mirrors lmsUnescapeTextMode); the math editor writes "[" as \\lbrack."""
+
+    def repl(m: re.Match[str]) -> str:
+        if m.group(1) or m.group(2):
+            return _TEXT_MODE_NAMED[m.group(1) or m.group(2)]
+        return m.group(3) or "^"
+
+    return _TEXT_MODE_UNESCAPE_RE.sub(repl, s or "")
 
 
 def _skip_brace_group(s: str, start: int) -> int:

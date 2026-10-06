@@ -72,11 +72,30 @@ def _save_assessment_meta(assessment, meta: dict) -> None:
     get_db().commit()
 
 
+def _domain_of_stored_label(label: str) -> str:
+    """Papers imported before domains became the concept stored "Topic / Domain"."""
+    parts = str(label).rsplit(" / ", 1)
+    if len(parts) == 2 and parts[1].strip():
+        return parts[1].strip()
+    return str(label).strip()
+
+
+def _concepts_are_pdf_domains(meta: dict) -> bool:
+    """True when the stored concept labels are the domains printed on the paper."""
+    if meta.get("concept_source") == "pdf_domain":
+        return True
+    labels = [str(v) for v in (meta.get("question_concepts") or {}).values() if v]
+    return bool(labels) and sum(1 for v in labels if " / " in v) * 2 > len(labels)
+
+
 def _question_concept_label(question: Question, meta: dict) -> Optional[str]:
     from app.services.quiz.concept_labeler import is_generic_concept
 
     concepts = meta.get("question_concepts") or {}
     label = concepts.get(str(question.id))
+    if label and str(label).strip() and _concepts_are_pdf_domains(meta):
+        # Group by Domain only, never by the finer Topic.
+        label = _domain_of_stored_label(label)
     if label and str(label).strip() and not is_generic_concept(str(label)):
         return str(label).strip()
 
@@ -115,10 +134,15 @@ def _group_by_stored_concept(
 
     # Need multiple real topics covering most of the paper — otherwise let AI group.
     min_coverage = max(3, int(0.6 * len(questions))) if questions else 0
-    if len(groups) < 2 or labeled < min_coverage:
+    if labeled < min_coverage:
         return None
-    if len(groups) >= max(3, len(questions) // 2):
-        return None
+    # The paper's own domains are used as they are - even a single domain, or many -
+    # instead of handing the questions to the AI to regroup by topic.
+    if not _concepts_are_pdf_domains(meta):
+        if len(groups) < 2:
+            return None
+        if len(groups) >= max(3, len(questions) // 2):
+            return None
 
     weak, strong = [], []
     for name, stats in groups.items():

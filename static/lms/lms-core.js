@@ -294,6 +294,9 @@
     return String(s || '').replace(/([A-Za-z])(?!\^)(\d+)/g, function (m, letter, digits, offset, full) {
       var start = offset;
       while (start > 0 && /[A-Za-z]/.test(full.charAt(start - 1))) start--;
+      // A TeX command ("\neq1", "\pm5", "\times10" as the math editor writes them): the digit is
+      // an operand, never a power.
+      if (start > 0 && full.charAt(start - 1) === '\\') return letter + ' ' + digits;
       var word = full.slice(start, offset + 1).toLowerCase();
       if (_FUNC_NAMES[word]) return m;
       return letter + '^{' + digits + '}';
@@ -896,12 +899,32 @@
     return t || l;
   }
 
+  var _TEXT_MODE_ESCAPES = {
+    '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', '#': '\\#', '%': '\\%',
+    '&': '\\&', '$': '\\$', '_': '\\_', '^': '\\^{}'
+  };
+  /** Plain words → safe inside \text{...}. One pass: escaping "\" first and braces second
+   *  re-escaped the braces of "\textbackslash{}" and corrupted the text a little more on every save. */
+  function lmsEscapeTextMode(s) {
+    return String(s || '').replace(/[\\{}#%&$_^]/g, function (ch) { return _TEXT_MODE_ESCAPES[ch]; });
+  }
+  global.lmsEscapeTextMode = lmsEscapeTextMode;
+
+  var _TEXT_MODE_NAMED = {
+    textbackslash: '\\', textasciicircum: '^', textasciitilde: '~',
+    lbrack: '[', rbrack: ']', lbrace: '{', rbrace: '}'
+  };
+  /** The reverse, also in one pass. The math editor writes "[" as \lbrack and "{" as \lbrace. */
   function lmsUnescapeTextMode(s) {
-    return String(s || '')
-      .replace(/\\textbackslash(?:\{\}|\s)?/g, '\\')
-      .replace(/\\textasciicircum(?:\{\}|\s)?|\\\^\{\}/g, '^')
-      .replace(/\\textasciitilde(?:\{\}|\s)?/g, '~')
-      .replace(/\\([{}#%&_])/g, '$1');
+    // The editor puts one space after a command word whether it is a separator ("\lbrack note") or real
+    // text ("\rbrack One"). After an opening bracket it is a separator; after a closing one it is kept.
+    return String(s || '').replace(
+      /\\(textbackslash|textasciicircum|textasciitilde|lbrack|lbrace)(?![A-Za-z])(?:\{\}|\s)?|\\(rbrack|rbrace)(?![A-Za-z])(?:\{\})?|\\\^\{\}|\\([{}#%&_])/g,
+      function (m, named, bracket, single) {
+        if (named || bracket) return _TEXT_MODE_NAMED[named || bracket];
+        return single || '^';
+      }
+    );
   }
 
   /** Math-editor (MathLive) LaTeX → stored quiz text: words as plain prose, math in $...$.
@@ -920,7 +943,10 @@
     var i = 0;
     var m;
     function flushMath() {
-      if (math.trim()) parts.push({ text: false, value: math.trim() });
+      // The editor writes "\neq1", "\times10", "\frac58": give the command its space back so
+      // nothing downstream reads the digit as part of the command.
+      var m2 = math.trim().replace(/(\\[A-Za-z]+)(?=\d)/g, '$1 ');
+      if (m2) parts.push({ text: false, value: m2 });
       math = '';
     }
     function skipGroup(from) {
@@ -963,7 +989,20 @@
       i++;
     }
     flushMath();
-    if (!parts.some(function (p) { return p.text && p.value.trim(); })) return '$' + latex + '$';
+    // A word typed in math mode just before the box switched to text ("None" + " of these",
+    // "5/8edited" + " and ...") belongs with the words, not in the math.
+    for (var pi = 0; pi < parts.length - 1; pi++) {
+      if (parts[pi].text || !parts[pi + 1].text || !/^\s/.test(parts[pi + 1].value)) continue;
+      var tail = parts[pi].value.match(/^([\s\S]*?)([A-Za-z]{2,})$/);
+      if (!tail || /[A-Za-z\\]$/.test(tail[1]) || _MATH_FUNCTION_WORDS.test(tail[2])) continue;
+      parts[pi].value = tail[1].trim();
+      parts[pi + 1].value = (parts[pi].value ? ' ' : '') + tail[2] + parts[pi + 1].value;
+    }
+    parts = parts.filter(function (p) { return p.text || p.value; });
+    if (!parts.some(function (p) { return p.text && p.value.trim(); })) {
+      var onlyMath = parts.filter(function (p) { return !p.text; }).map(function (p) { return p.value; }).join(' ');
+      return '$' + (onlyMath || latex) + '$';
+    }
     var out = '';
     var lastWasMath = false;
     parts.forEach(function (p) {
@@ -986,6 +1025,72 @@
     return out.replace(/[ \t]{2,}/g, ' ').trim();
   }
   global.lmsMathliveToStorage = lmsMathliveToStorage;
+
+  /* ---- Typing words into a math box (quiz / diagnostic question editors) ----
+     A math box drops spaces and turns letter pairs into symbols ("and" → ∧, "sh" → sinh), so a
+     teacher typing "5/8 edited and ..." got "5/8edited∧...". lmsMakeMathFieldWordFriendly()
+     switches the box to text mode when words are being typed, and keeps math mode for math. */
+  var _MATH_FUNCTION_WORDS = /^(?:sin|cos|tan|sec|csc|cot|sinh|cosh|tanh|arcsin|arccos|arctan|log|ln|lg|lim|exp|max|min|gcd|lcm|det|mod|sqrt|pi|theta|alpha|beta|gamma|delta|lambda|mu|sigma|omega|phi|rho|tau|infty|inf)$/i;
+
+  /** What sits just before the caret: 'start' | 'word' | 'function' | 'operator' | 'operand'. */
+  function lmsMathContextBeforeCaret(latexBefore) {
+    var b = String(latexBefore || '').replace(/\s+$/, '');
+    if (!b) return 'start';
+    // Any command with nothing after it (\sin, \pi, \times ...) is waiting for math: "pi r", "sin x".
+    if (/\\[A-Za-z]+$/.test(b) || /\\operatorname\{[A-Za-z]+\}$/.test(b)) return 'function';
+    if (/[+\-*\/=<>(\[,^_|]$/.test(b)) return 'operator';
+    var word = b.match(/(?:^|[^A-Za-z\\])([A-Za-z]{2,})$/);
+    if (word) return _MATH_FUNCTION_WORDS.test(word[1]) ? 'function' : 'word';
+    return 'operand';
+  }
+  global.lmsMathContextBeforeCaret = lmsMathContextBeforeCaret;
+
+  function lmsMakeMathFieldWordFriendly(mf) {
+    if (!mf || mf._lmsWordFriendly) return;
+    mf._lmsWordFriendly = true;
+    // English letter pairs must not become symbols; math names (sin, log, pi ...) and symbol
+    // shortcuts ("<=", "->") keep working.
+    try {
+      var shortcuts = mf.inlineShortcuts || {};
+      var kept = {};
+      Object.keys(shortcuts).forEach(function (k) {
+        if (!/^[A-Za-z]+$/.test(k) || _MATH_FUNCTION_WORDS.test(k)) kept[k] = shortcuts[k];
+      });
+      mf.inlineShortcuts = kept;
+    } catch (e) { /* older MathLive builds */ }
+
+    function before() {
+      try { return mf.getValue(0, mf.position, 'latex') || ''; } catch (e) {
+        try { return mf.getValue('latex') || ''; } catch (e2) { return ''; }
+      }
+    }
+    var pendingSpace = null;   // context in which a space was pressed while still in math mode
+    mf.addEventListener('keydown', function (ev) {
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      var mode;
+      try { mode = mf.mode; } catch (e) { return; }
+      if (mode !== 'math') { pendingSpace = null; return; }
+      if (ev.key === ' ') {
+        var ctx = lmsMathContextBeforeCaret(before());
+        // A space after a word means a sentence is being typed: carry on as text (the space is kept).
+        if (ctx === 'word') { pendingSpace = null; try { mf.mode = 'text'; } catch (e) {} }
+        else pendingSpace = ctx;
+        return;
+      }
+      if (pendingSpace && /^[A-Za-z]$/.test(ev.key)) {
+        // number / fraction / bracket, a space, then a letter: words follow ("5/8 edited", "0.75 or").
+        // After an operator or a function the letter is a variable ("2 + x", "sin x") and stays math.
+        if (pendingSpace === 'operand') {
+          try {
+            mf.mode = 'text';
+            mf.executeCommand(['insert', ' ', { mode: 'text' }]);
+          } catch (e) { /* stays math */ }
+        }
+      }
+      if (ev.key.length === 1 || ev.key === 'Backspace') pendingSpace = null;
+    }, true);
+  }
+  global.lmsMakeMathFieldWordFriendly = lmsMakeMathFieldWordFriendly;
 
   /** Undo a stem saved by the old quiz editor bug, which stored the LaTeX code as text:
    *  "\textbackslash text\textbraceleft What is ...\textbraceright\textbackslash log 5289". */

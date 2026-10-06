@@ -35,7 +35,7 @@ BUGGY_HEURISTIC_BACKEND = (
 
 def _save_lesson_to_my_lessons_body():
     m = re.search(
-        r"async function saveLessonToMyLessons\(pdfDataOverride, lessonContentOverride\)(.*?)\n      \}\n",
+        r"async function saveLessonToMyLessons\(pdfDataOverride, lessonContentOverride, opts\)(.*?)\n      \}\n",
         TEMPLATE_SRC,
         re.S,
     )
@@ -146,3 +146,16 @@ if __name__ == "__main__":
         sys.exit(1)
     print(f"All {len(tests)} Group B tests passed - bugs #7, #8, and #25 fixes are in place.")
     sys.exit(0)
+
+
+# --- lesson made in chat never reached My Lessons (teacher feedback, 6 Oct 2026) ---
+
+def test_chat_finalize_saves_the_lesson_to_my_lessons():
+    assert "if (data.lesson_finalized)" in TEMPLATE_SRC
+    assert "await saveLessonFromChat({ auto: true });" in TEMPLATE_SRC
+
+
+def test_missing_grade_no_longer_blocks_saving_a_chat_lesson():
+    body = _save_lesson_to_my_lessons_body()
+    assert "showToast('Grade is required.'" not in body
+    assert ") || 'General';" in body

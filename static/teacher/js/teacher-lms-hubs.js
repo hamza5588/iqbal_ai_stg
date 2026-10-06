@@ -1052,6 +1052,8 @@
     window.lmsRenderQuizEditor = lmsRenderQuizEditor;
 
     function _lmsEscapeTextMode(s) {
+      // Shared single-pass escape; the chained replaces below double-escaped "\textbackslash{}".
+      if (typeof window.lmsEscapeTextMode === 'function') return window.lmsEscapeTextMode(s);
       return String(s || '')
         .replace(/\\/g, '\\textbackslash{}')
         .replace(/[{}]/g, function (ch) { return '\\' + ch; })
@@ -1182,6 +1184,8 @@
       } catch (e) {
         try { mf.value = val; } catch (e2) { /* ignore */ }
       }
+      // Words typed into a math box (an option like "5/8 edited ...") stay words: see lms-core.js.
+      if (typeof window.lmsMakeMathFieldWordFriendly === 'function') window.lmsMakeMathFieldWordFriendly(mf);
       if (mf._lmsVkBound) return;
       mf._lmsVkBound = true;
       mf.addEventListener('focusin', function () {

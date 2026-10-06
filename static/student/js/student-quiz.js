@@ -31,7 +31,11 @@
   function show(which) {
     ['lmsAssignmentList', 'lmsQuizTaking', 'lmsQuizResult'].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.classList.toggle('hidden', id !== which);
+      if (!el) return;
+      el.classList.toggle('hidden', id !== which);
+      // The student page has no CSS rule for ".hidden", so the class alone hid nothing: after
+      // submit the questions stayed on screen with the score underneath them.
+      el.style.display = id === which ? '' : 'none';
     });
   }
   function setTitle(t) {
@@ -275,6 +279,8 @@
       var shownFor = Date.now() - startedAt;
       if (shownFor < 700) await new Promise(function (r) { setTimeout(r, 700 - shownFor); });
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
+      // Close the question screen for good (as the diagnostic does); the score gets its own screen.
+      if (takingEl) takingEl.innerHTML = '';
       show('lmsQuizResult');
       setTitle(timeExpired ? 'Time\'s Up — Quiz Submitted' : 'Quiz Submitted');
       document.getElementById('lmsQuizResult').innerHTML =

@@ -65,7 +65,7 @@ def test_backend_forces_response_to_match_tool_outcome():
     body = m.group(1)
     assert "finalize_tool_result" in body
     assert 'isinstance(m, ToolMessage) and getattr(m, "name", None) == "finalize_lesson_tool"' in body
-    assert 'response.content = "Lesson finalized and saved. You can download it now."' in body
+    assert 'response.content = LESSON_FINALIZED_REPLY' in body
     assert 'finalize_tool_result.get("reason")' in body, (
         "on failure, the user-visible message must come from the tool's own reason, "
         "not from the model's free-text reply"

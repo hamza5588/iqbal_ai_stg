@@ -101,14 +101,15 @@ def vision_mcq_to_question(mcq) -> Optional[MCQQuestion]:
     topic = (getattr(mcq, "topic", None) or "").strip() or None
     domain = (getattr(mcq, "domain", None) or "").strip() or None
     cognitive = (getattr(mcq, "cognitive_level", None) or "").strip() or None
-    concept_parts = [p for p in (topic, domain) if p]
-    learning_concept = " / ".join(concept_parts) if concept_parts else None
+    # Learning paths and graphs are built per Domain ("Algebra"), not per Topic
+    # ("Algebraic Identities"): the domain is the concept whenever the paper prints one.
+    learning_concept = domain or topic
 
     explanation_bits = []
     if cognitive:
         explanation_bits.append(f"Cognitive level: {cognitive}")
-    if domain and domain not in (learning_concept or ""):
-        explanation_bits.append(f"Domain: {domain}")
+    if domain and topic:
+        explanation_bits.append(f"Topic: {topic}")
     explanation = "; ".join(explanation_bits) if explanation_bits else None
 
     return MCQQuestion(
@@ -118,6 +119,7 @@ def vision_mcq_to_question(mcq) -> Optional[MCQQuestion]:
         correct_option_label=correct,  # type: ignore[arg-type]
         explanation=explanation,
         learning_concept=learning_concept,
+        domain=domain,
         difficulty=_normalize_difficulty(getattr(mcq, "difficulty", None)),
         conversion_confidence=0.92,
         preserve_option_order=True,

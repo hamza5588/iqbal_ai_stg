@@ -138,6 +138,18 @@ def _resolve_question_topic_id(question: Question, assessment) -> Optional[int]:
         if topic:
             return topic.id
 
+    # The paper printed a Domain for each question: score the question under that domain
+    # (quizzes, and diagnostics that ran out of time, are scored question by question here).
+    from app.services.lms.weakness_analyzer import _concepts_are_pdf_domains, _domain_of_stored_label
+
+    meta = _parse_assessment_meta(assessment)
+    if _concepts_are_pdf_domains(meta):
+        stored = (meta.get("question_concepts") or {}).get(str(question.id))
+        if stored and str(stored).strip():
+            topic = get_or_create_topic_from_pdf_label(_domain_of_stored_label(stored))
+            if topic:
+                return topic.id
+
     if question.topic_id:
         try:
             from app.services.lms import curriculum_service

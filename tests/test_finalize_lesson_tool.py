@@ -156,6 +156,41 @@ def test_finalize_lesson_tool_success_persists_and_returns_success(monkeypatch):
     assert persist_calls == [("user_1_abc", "# Photosynthesis\n\nFull lesson body...")]
 
 
+def test_finalize_lesson_tool_tells_the_validator_a_lesson_was_requested(monkeypatch):
+    """Given no user query the validator rejected complete lessons, so "save this lesson"
+    answered "doesn't look like a complete lesson yet" and nothing was saved."""
+    monkeypatch.setattr(rag_service, "_get_user_id_for_thread", lambda tid: 1)
+    monkeypatch.setattr(
+        rag_service, "get_db", lambda: _FakeDB(_FakeThreadRow(last_lesson_text="# Logarithms\n\nBody")),
+    )
+    seen = []
+
+    def _fake_check(content, user_query="", user_id=None):
+        seen.append(user_query)
+        return True
+
+    monkeypatch.setattr(rag_service, "_check_if_content_is_lesson", _fake_check)
+    monkeypatch.setattr(rag_service, "_persist_finalized_lesson_static", lambda tid, content: True)
+
+    result = json.loads(rag_service.finalize_lesson_tool.invoke({"thread_id": "user_1_abc"}))
+    assert result["success"] is True
+    assert len(seen) == 1 and "create a lesson" in seen[0].lower()
+
+
+def test_lesson_validation_does_not_print_the_lesson():
+    """print() of lesson text raised on consoles that cannot encode it (e.g. a non-breaking
+    hyphen on cp1252); the surrounding except then reported the lesson as not a lesson."""
+    import inspect
+
+    assert "print(" not in inspect.getsource(rag_service._check_if_content_is_lesson)
+
+
+def test_finalize_reply_does_not_claim_the_lesson_is_already_saved():
+    reply = rag_service.LESSON_FINALIZED_REPLY
+    assert "finalized and saved" not in reply and "download" not in reply
+    assert rag_service._looks_like_filler_non_answer(reply)
+
+
 def test_finalize_lesson_tool_never_crashes_on_internal_error(monkeypatch):
     """A tool that raises breaks the whole chat turn; it must always return a JSON result."""
     def boom():
@@ -204,7 +239,7 @@ def test_response_forced_to_success_message_when_tool_succeeded(monkeypatch):
         _mark_step=lambda *a, **k: None,
     )
 
-    assert result.content == "Lesson finalized and saved. You can download it now."
+    assert result.content == rag_service.LESSON_FINALIZED_REPLY
 
 
 def test_response_forced_to_failure_reason_when_tool_failed(monkeypatch):
@@ -697,7 +732,7 @@ def test_edit_still_persists_when_model_also_calls_finalize_same_turn(monkeypatc
         router_intent="lesson_modification",
     )
     # The backend-authoritative finalize message still wins for what the user sees...
-    assert result.content == "Lesson finalized and saved. You can download it now."
+    assert result.content == rag_service.LESSON_FINALIZED_REPLY
     # ...but the actual persisted content must be the NEW edited lesson, not the stale
     # pre-edit text finalize_lesson_tool would have re-saved on its own.
     assert fake_db._row.last_lesson_text == full_edited_lesson

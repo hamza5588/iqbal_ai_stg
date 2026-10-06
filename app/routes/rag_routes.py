@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session, render_template, Respons
 from app.utils.auth import login_required
 from app.utils.routes import get_default_route_by_role
 from app.utils.rag_service import (
+    LESSON_FINALIZED_REPLY,
     ingest_pdf,
     chatbot,
     thread_has_document,
@@ -1656,7 +1657,10 @@ def chat():
                 'message': response_content,
                 'thread_id': thread_id,
                 'conversation_id': db_conversation_id if db_conversation_id else conversation_id,
-                'has_document': thread_has_document(thread_id)
+                'has_document': thread_has_document(thread_id),
+                # True only on the turn that finalized the lesson draft: the dashboard then
+                # saves it to My Lessons itself instead of waiting for a second Save click.
+                'lesson_finalized': response_content.strip() == LESSON_FINALIZED_REPLY,
             })
         finally:
             release_chat_lock(chat_lock_handle)
