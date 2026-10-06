@@ -139,6 +139,31 @@ def update_quiz_settings(
     return assessment
 
 
+def delete_draft_quiz(assessment_id: int) -> None:
+    """Permanently delete a quiz that was never published.
+
+    Published quizzes are kept: students may have attempts and scores on them.
+    Question links and the PDF source go with the quiz (ORM cascade); the
+    question-bank rows stay, since other quizzes may reuse them.
+    """
+    from app.models.lms_models import AssessmentAttempt, Assignment
+
+    db = get_db()
+    assessment = get_assessment(assessment_id)
+    if assessment.assessment_type != "quiz":
+        raise LMSValidationError("Only quizzes can be deleted here")
+    if assessment.status != "draft":
+        raise LMSValidationError("Only draft quizzes can be deleted. This quiz has already been published.")
+    in_use = (
+        db.query(Assignment.id).filter(Assignment.quiz_id == assessment_id).first()
+        or db.query(AssessmentAttempt.id).filter(AssessmentAttempt.assessment_id == assessment_id).first()
+    )
+    if in_use:
+        raise LMSValidationError("This quiz is already assigned to a class or has student attempts, so it cannot be deleted.")
+    db.delete(assessment)
+    db.commit()
+
+
 def normalize_grade_level(grade_level: Optional[str]) -> str:
     """Normalize to canonical grade id ('8', '9', …) for storage/lookup."""
     from app.services.lms.grade_utils import normalize_grade

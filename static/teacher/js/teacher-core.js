@@ -1500,12 +1500,15 @@
       }
 
       // Step 2 with responsive design
-      function showCreateLessonStep2(file, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode) {
+      // labels: optional { step, subtitle } — the chat paperclip reuses this screen without the "Step 2 of 2 / Creating Lesson" wording.
+      function showCreateLessonStep2(file, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode, labels) {
         if (typeof window.tdEnsureCreateLessonProcessingModal === 'function') window.tdEnsureCreateLessonProcessingModal();
         const modalContent = document.getElementById('createLessonModalContent');
         if (!modalContent) return;
 
         const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+        const stepLabel = escapeHtml((labels && labels.step) || 'Step 2 of 2');
+        const stepSubtitle = escapeHtml((labels && labels.subtitle) || 'Creating Lesson');
 
         modalContent.innerHTML = `
         <!-- Header: matches new_ui/processing_upload_pdfui/17-processing-pdf.html -->
@@ -1519,9 +1522,9 @@
         <div class="ppm-body">
           <div class="ppm-top-row">
             <div class="ppm-top-left">
-              <div class="ppm-step-label">Step 2 of 2</div>
+              <div class="ppm-step-label">${stepLabel}</div>
               <h1>Processing PDF</h1>
-              <div class="ppm-subtitle">Creating Lesson</div>
+              <div class="ppm-subtitle">${stepSubtitle}</div>
             </div>
           </div>
 
@@ -1534,7 +1537,7 @@
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
               </div>
-              <div class="ppm-file-name">${file.name}</div>
+              <div class="ppm-file-name">${escapeHtml(file.name)}</div>
               <div class="ppm-file-size">${fileSizeMB} MB</div>
               <div class="ppm-secure-box">
                 <div class="ppm-shield">
@@ -2391,10 +2394,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
                 <a title="Download DOCX" onclick="downloadLessonDocx('${id}')"><i class="fas fa-file-word"></i> Word</a>
                 <a title="Download PPT" onclick="downloadLessonPPT('${id}')"><i class="fas fa-file-powerpoint"></i> PowerPoint</a>
                 <a title="FAQ" onclick="showLessonFAQ('${id}')"><i class="fas fa-circle-question"></i> FAQ</a>
-                <a title="Assign to class & publish" onclick="toggleLessonPublication('${id}', true)"><i class="fas fa-users"></i> Assign &amp; Publish</a>
                 ${isPublished
-                  ? `<a title="Unpublish lesson" onclick="toggleLessonPublication('${id}', false)"><i class="fas fa-eye-slash"></i> Unpublish</a>`
-                  : `<a title="Publish lesson to a class" onclick="toggleLessonPublication('${id}', true)"><i class="fas fa-paper-plane"></i> Publish</a>`}
+                  ? `<a title="Publish this lesson to another class" onclick="toggleLessonPublication('${id}', true)"><i class="fas fa-users"></i> Assign to another class</a>
+                <a title="Hide this lesson from students" onclick="toggleLessonPublication('${id}', false)"><i class="fas fa-eye-slash"></i> Unpublish</a>`
+                  : `<a title="Choose a class, then publish the lesson to its students" onclick="toggleLessonPublication('${id}', true)"><i class="fas fa-users"></i> Assign &amp; Publish</a>`}
                 ${lesson.has_child_version !== true ? `<a class="danger" title="Delete" onclick="deleteLesson('${id}')"><i class="fas fa-trash"></i> Delete</a>` : ''}
               </div>
             </div>
@@ -5752,6 +5755,31 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           addAssistantMessage('Error: Failed to upload PDF. Please try again.');
         }
       }
+
+      // Lesson Chat paperclip: pick a PDF and open it straight in this chat. It used to open the
+      // "Create New Lesson" form on the My Lessons tab, which took the teacher out of the chat.
+      function attachPdfToLessonChat() {
+        if (document.getElementById('createLessonModal')) return; // an upload is already being processed
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.pdf,application/pdf';
+        input.onchange = function () {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          if (!/\.pdf$/i.test(file.name || '') && !String(file.type || '').includes('pdf')) {
+            showToast('Only PDF files can be attached to Lesson Chat.', 'error', 4000);
+            return;
+          }
+          if (file.size > 100 * 1024 * 1024) {
+            showToast('This PDF is larger than 100MB. Please attach a smaller file.', 'error', 4000);
+            return;
+          }
+          const title = (file.name || '').replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() || 'Uploaded PDF';
+          showCreateLessonStep2(file, title, '', 'General', '', 'generate', { step: 'Lesson Chat', subtitle: 'Attaching your PDF to the chat' });
+        };
+        input.click();
+      }
+      window.attachPdfToLessonChat = attachPdfToLessonChat;
 
       // Attach file
       function attachFile() {

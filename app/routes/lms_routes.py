@@ -32,7 +32,7 @@ from app.services.lms.diagnostic_pdf_service import (
 )
 from app.services.lms import diagnostic_service
 from app.services.lms.diagnostic_service import get_student_diagnostic_dict, list_admin_diagnostics
-from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, LMSError
+from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, LMSError, UnansweredQuestionsError
 from app.services.quiz.pipeline import run_pdf_quiz_pipeline
 from app.tasks.quiz_pdf_tasks import enqueue_or_run_pdf_quiz
 from app.utils.auth import login_required
@@ -385,6 +385,18 @@ def _validate_thread_id(thread_id: str, user_id: int) -> bool:
     return bool(thread_id) and thread_id.startswith(f"user_{user_id}_")
 
 
+def _discard_empty_draft_quiz(assessment_id: int) -> None:
+    """A failed upload must not leave an empty draft behind in the teacher's quiz list."""
+    try:
+        from app.utils.db import get_db
+
+        get_db().rollback()
+        if not assessment_service.get_assessment(assessment_id).questions:
+            assessment_service.delete_draft_quiz(assessment_id)
+    except Exception as exc:  # noqa: BLE001 - cleanup is best-effort
+        current_app.logger.warning("Could not discard empty draft quiz %s: %s", assessment_id, exc)
+
+
 @bp.route("/quizzes/from-pdf", methods=["POST"])
 @login_required
 def create_quiz_from_pdf():
@@ -395,12 +407,17 @@ def create_quiz_from_pdf():
 
     title = (request.form.get("title") or "Untitled Quiz").strip()
     topic_id = request.form.get("topic_id", type=int)
+    # import_all: take every question found in the uploaded file (no "first N" cut-off).
+    import_all = (request.form.get("import_all") or "").strip().lower() in ("1", "true", "yes", "on")
     question_count = request.form.get("question_count", type=int)
     if question_count is None:
         question_count = request.form.get("mcq_count", type=int)
-    if question_count is None:
-        question_count = 10
-    question_count = max(1, min(40, int(question_count)))
+    if import_all:
+        question_count = None
+    else:
+        if question_count is None:
+            question_count = 10
+        question_count = max(1, min(40, int(question_count)))
     try:
         time_limit_minutes = assessment_service.parse_positive_whole_minutes(
             request.form.get("time_limit_minutes"),
@@ -443,10 +460,13 @@ def create_quiz_from_pdf():
             question_count=question_count,
         )
     except LMSValidationError as e:
+        _discard_empty_draft_quiz(a.id)
         return json_error(str(e), code="validation_error")
     except ValueError as e:
+        _discard_empty_draft_quiz(a.id)
         return json_error(str(e), code="llm_config_error", status=503)
     except Exception as e:
+        _discard_empty_draft_quiz(a.id)
         return json_error(str(e), code="pipeline_error", status=500)
 
     status = 202 if result.get("async") else 200
@@ -617,6 +637,11 @@ def update_quiz_question(quiz_id: int, question_id: int):
         fields = {k: body[k] for k in allowed if k in body}
         if not fields:
             return json_error("No editable fields provided", code="validation_error")
+        # A browser still running the old editor script can send the stem as escaped LaTeX code.
+        if isinstance(fields.get("question_text"), str):
+            from app.services.quiz.math_text import repair_escaped_latex
+
+            fields["question_text"] = repair_escaped_latex(fields["question_text"])
         updated = question_bank_service.update_question(question_id, **fields)
         return json_success(question_bank_service.question_to_dict(updated))
     except LMSValidationError as e:
@@ -818,8 +843,14 @@ def submit_attempt(attempt_id: int):
         with llm_workflow(
             "diagnostic_weakness_analysis", user_id=_current_user_id(), user_role=_current_role()
         ):
-            result = attempt_service.submit_attempt(attempt_id, time_expired=time_expired)
+            result = attempt_service.submit_attempt(
+                attempt_id, time_expired=time_expired, require_all_answered=True
+            )
         return json_success(result)
+    except UnansweredQuestionsError as e:
+        return json_error(
+            str(e), code="unanswered_questions", details={"unanswered_questions": e.question_numbers}
+        )
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 
@@ -1287,6 +1318,7 @@ def quizzes():
                     "title": q.title,
                     "status": q.status,
                     "time_limit_minutes": q.time_limit_minutes,
+                    "question_count": len(q.questions),
                 }
                 for q in qs
             ]
@@ -1327,9 +1359,24 @@ def quizzes():
     )
 
 
-@bp.route("/quizzes/<int:quiz_id>", methods=["GET", "PATCH", "PUT"])
+@bp.route("/quizzes/<int:quiz_id>", methods=["GET", "PATCH", "PUT", "DELETE"])
 @login_required
 def get_or_update_quiz(quiz_id: int):
+    if request.method == "DELETE":
+        denied = _require_permission(Permissions.CREATE_QUIZ)
+        if denied:
+            return denied
+        denied, _assessment = _require_assessment_owner(quiz_id)
+        if denied:
+            return denied
+        try:
+            assessment_service.delete_draft_quiz(quiz_id)
+            return json_success({"id": quiz_id, "deleted": True})
+        except LMSNotFoundError as e:
+            return json_error(str(e), code="not_found", status=404)
+        except LMSValidationError as e:
+            return json_error(str(e), code="validation_error")
+
     if request.method in ("PATCH", "PUT"):
         denied = _require_permission(Permissions.CREATE_QUIZ)
         if denied:

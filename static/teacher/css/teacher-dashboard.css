@@ -190,6 +190,9 @@ body.td-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--td
   line-height: 1.2;
 }
 .td-quiz-pdf-help { margin-top: 10px; }
+.td-check-inline { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--td-ink, #0f172a); cursor: pointer; }
+.td-check-inline input { width: 16px; height: 16px; flex-shrink: 0; margin: 0; }
+.td-quiz-create-grid input[type="number"]:disabled { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
 /* Create Quiz wait — one spinner + plain-language steps (no % bar). */
 .td-quiz-wait {
   margin: 18px 0 8px;
@@ -405,7 +408,15 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 .td-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .td-panel-head h4 { margin: 0; font-size: 16px; }
 .td-graph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-.td-graph-overall { border-color: #99f6e4; background: #f0fdfa; }
+/* Cards are columns with the chart pinned to the bottom, so every chart in a row lines up
+   even when one topic name or summary wraps onto a second line. */
+.td-graph-grid .td-detail-card { display: flex; flex-direction: column; }
+.td-graph-grid .td-detail-card h4 { overflow-wrap: anywhere; }
+.td-graph-grid .td-mini-chart { margin-top: auto; }
+/* Overall gets its own full-width row: it is a summary of the topic charts below it. */
+.td-graph-overall { grid-column: 1 / -1; border-color: #99f6e4; background: #f0fdfa; }
+.td-graph-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--td-muted); }
+.td-graph-note i { color: #0f766e; margin-right: 4px; }
 .td-mini-chart { position: relative; height: 160px; }
 
 /* ── Classes ─────────────────────────────────────────────── */
@@ -436,6 +447,11 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
 .td-mcq .td-mcq-opt i { margin-top: 3px; font-size: 12px; color: #94a3b8; }
 .td-mcq .td-mcq-opt.correct i { color: var(--td-green); }
 #lmsQuizPreview:not(:empty) { margin-top: 16px; max-height: 460px; overflow-y: auto; }
+/* Draft quiz opened from the list: same per-question editor as the create preview, full height. */
+.td-quiz-editor:not(:empty) { margin-top: 4px; }
+.td-quiz-toolbar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 10px; gap: 10px; flex-wrap: wrap; }
+.td-quiz-toolbar h4 { margin: 0; }
+.td-quiz-toolbar .td-quiz-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ── Analytics ───────────────────────────────────────────── */
 .td-ana-shell { background: #fff; border: 1px solid var(--td-line); border-radius: 14px; margin-bottom: 16px; overflow: hidden; }

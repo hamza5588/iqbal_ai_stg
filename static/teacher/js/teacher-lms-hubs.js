@@ -842,6 +842,8 @@
       const title = document.getElementById('lmsQuizTitle').value.trim();
       const file = document.getElementById('lmsQuizPdfFile').files[0];
       const countEl = document.getElementById('lmsQuizMcqCount');
+      const importAllEl = document.getElementById('lmsQuizImportAll');
+      const importAll = !!(importAllEl && importAllEl.checked);
       const durationEl = document.getElementById('lmsQuizDuration');
       const btn = document.getElementById('lmsQuizSubmitBtn');
       const status = document.getElementById('lmsQuizStatus');
@@ -874,7 +876,9 @@
       const fd = new FormData();
       fd.append('title', title);
       fd.append('file', file);
-      fd.append('question_count', String(questionCount));
+      // Import all: the server keeps every question found in the file instead of the first N.
+      if (importAll) fd.append('import_all', 'true');
+      else fd.append('question_count', String(questionCount));
       fd.append('time_limit_minutes', String(timeLimitMinutes));
       try {
         const res = await fetch('/api/lms/quizzes/from-pdf', { method: 'POST', body: fd, credentials: 'include' });
@@ -955,16 +959,36 @@
           if (submitBtn) submitBtn.disabled = false;
           statusEl.textContent = 'Failed: ' + (d.error_message || 'Unknown error');
           if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+          // Nothing was imported: remove the empty draft so it does not linger in the quiz list.
+          var failedId = _lmsCurrentAssessmentId;
+          _lmsCurrentAssessmentId = null;
+          if (failedId && !(Number(d.question_count) > 0)) {
+            fetch('/api/lms/quizzes/' + failedId, { method: 'DELETE', credentials: 'include' }).catch(function () {});
+          }
         }
       } catch (err) {
         statusEl.textContent = 'Poll error: ' + err.message;
       }
     }
     async function loadLmsQuizPreview() {
-      const previewEl = document.getElementById('lmsQuizPreview');
-      const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/preview', { credentials: 'include' });
-      const body = await res.json();
-      const d = body.data || body;
+      return lmsRenderQuizEditor(document.getElementById('lmsQuizPreview'), _lmsCurrentAssessmentId);
+    }
+
+    /** Render a quiz's MCQs with per-question Edit into `previewEl`. Used by the create-quiz
+     *  preview and by draft quizzes opened from the list. Pass `data` to skip the fetch;
+     *  `previewEl._lmsOnChange(data)` is called after every reload (e.g. a saved edit). */
+    async function lmsRenderQuizEditor(previewEl, assessmentId, data) {
+      if (!previewEl || !assessmentId) return;
+      previewEl._lmsAssessmentId = assessmentId;
+      let d = data;
+      if (!d) {
+        const res = await fetch('/api/lms/quizzes/' + assessmentId + '/preview', { credentials: 'include' });
+        const body = await res.json();
+        d = body.data || body;
+        if (typeof previewEl._lmsOnChange === 'function') previewEl._lmsOnChange(d);
+      }
+      // The teacher may have opened another quiz while this one was loading.
+      if (previewEl._lmsAssessmentId !== assessmentId) return;
       if (!d.questions || !d.questions.length) {
         var failMsg = (d.pdf_source && d.pdf_source.error_message) ? d.pdf_source.error_message : '';
         if (!failMsg && d.warnings && d.warnings.length) {
@@ -1007,7 +1031,7 @@
             '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-toggle" data-qid="' + qid + '">Edit</button>' +
           '</div>' +
           '<div class="lms-preview-opts">' + opts + '</div>' +
-          '<div class="lms-q-edit-panel" id="lmsQEdit-' + qid + '" hidden>' +
+          '<div class="lms-q-edit-panel" data-qid="' + qid + '" hidden>' +
             '<p class="lms-math-keyboard-hint">Tap a field to edit as normal math (not LaTeX code). Use the scientific keyboard for symbols, fractions, roots, Greek, and functions.</p>' +
             '<label class="lms-q-edit-stem">Question' +
               '<math-field class="lms-q-edit-stem-input lms-q-edit-field"></math-field>' +
@@ -1017,7 +1041,7 @@
             '<div class="lms-q-edit-actions">' +
               '<button type="button" class="lms-btn lms-btn-primary lms-q-edit-save" data-qid="' + qid + '">Save</button>' +
               '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-cancel" data-qid="' + qid + '">Cancel</button>' +
-              '<span class="lms-q-edit-status" id="lmsQEditStatus-' + qid + '"></span>' +
+              '<span class="lms-q-edit-status"></span>' +
             '</div>' +
           '</div></div>';
       }).join('');
@@ -1025,6 +1049,7 @@
       _lmsTypeset(previewEl);
       _bindLmsQuizEditHandlers(previewEl);
     }
+    window.lmsRenderQuizEditor = lmsRenderQuizEditor;
 
     function _lmsEscapeTextMode(s) {
       return String(s || '')
@@ -1042,6 +1067,7 @@
     function _lmsTextToMathlive(src) {
       src = String(src == null ? '' : src).trim();
       if (!src) return '';
+      if (typeof lmsRepairEscapedLatex === 'function') src = lmsRepairEscapedLatex(src);
       if (typeof lmsPrepareMathText === 'function') {
         try { src = lmsPrepareMathText(src) || src; } catch (e) { /* keep raw */ }
       }
@@ -1126,11 +1152,8 @@
       } catch (e) {
         latex = mf.value || '';
       }
-      latex = String(latex || '').trim();
-      if (!latex) return '';
-      if (/^\$|\\\(|\\\[/.test(latex)) return latex;
-      // Keep display math delimiters so existing MathJax/KaTeX pipeline typesets consistently
-      return '$' + latex + '$';
+      // Words are stored as plain prose and math in $...$ (shared with the student renderer).
+      return window.lmsMathliveToStorage(latex);
     }
 
     function _lmsConfigureMathKeyboard() {
@@ -1144,11 +1167,17 @@
     function _lmsSetupMathField(mf, rawText, isStem) {
       if (!mf) return;
       try { mf.mathVirtualKeyboardPolicy = 'manual'; } catch (e) {}
-      try { mf.defaultMode = isStem ? 'text' : 'math'; } catch (e) {}
       try { mf.smartFence = true; } catch (e) {}
       var val = _lmsTextToMathlive(rawText);
+      // The value is LaTeX, so it must be inserted in math mode. Without an explicit mode MathLive
+      // uses the field's default: a text-mode stem then showed the code itself
+      // ("\text{What is ...}\log 5287") and saved it back as \textbackslash text\textbraceleft...
+      // A stem is mostly words: its default mode is text, so typing (and retyping after clearing) keeps spaces.
+      try { mf.defaultMode = isStem ? 'text' : 'math'; } catch (e) {}
+      var setOpts = { silenceNotifications: true };
+      if (val) setOpts.mode = 'math';   // an empty field keeps its default mode
       try {
-        if (typeof mf.setValue === 'function') mf.setValue(val, { silenceNotifications: true });
+        if (typeof mf.setValue === 'function') mf.setValue(val, setOpts);
         else mf.value = val;
       } catch (e) {
         try { mf.value = val; } catch (e2) { /* ignore */ }
@@ -1161,6 +1190,17 @@
           try { window.mathVirtualKeyboard.show(); } catch (e) { /* ignore */ }
         }
       });
+    }
+
+    /** Edit focuses the stem by script, which leaves MathLive's caret at the end in math mode (a click
+     *  or the End key picks text mode by itself). Words typed straight away then lost their spaces,
+     *  so start in text mode when the stem ends in words. */
+    function _lmsStemTextModeAtEnd(mf) {
+      try {
+        if (!mf || !mf.classList.contains('lms-q-edit-stem-input')) return;
+        if (mf.mode === 'text' || mf.position !== mf.lastOffset) return;
+        if (/\\text\{[^{}]*\}\s*\$?\s*$/.test(mf.getValue('latex') || '')) mf.mode = 'text';
+      } catch (e) { /* older MathLive builds */ }
     }
 
     function _lmsHydrateQuizMathFields(root, questions) {
@@ -1193,16 +1233,24 @@
       root.addEventListener('click', async function (ev) {
         var t = ev.target;
         if (!t) return;
+        // Panels are looked up inside this root: the same quiz can be on screen twice
+        // (create preview + the list), so ids would collide.
+        function panelFor(qidAttr) {
+          return root.querySelector('.lms-q-edit-panel[data-qid="' + qidAttr + '"]');
+        }
         var toggle = t.closest && t.closest('.lms-q-edit-toggle');
         if (toggle) {
           var qidT = toggle.getAttribute('data-qid');
-          var panelT = document.getElementById('lmsQEdit-' + qidT);
+          var panelT = panelFor(qidT);
           if (panelT) {
             panelT.hidden = !panelT.hidden;
             if (!panelT.hidden) {
               var first = panelT.querySelector('math-field.lms-q-edit-field');
               if (first && typeof first.focus === 'function') {
-                setTimeout(function () { try { first.focus(); } catch (e) {} }, 50);
+                setTimeout(function () {
+                  try { first.focus(); } catch (e) {}
+                  _lmsStemTextModeAtEnd(first);
+                }, 50);
               }
             } else if (window.mathVirtualKeyboard) {
               try { window.mathVirtualKeyboard.hide(); } catch (e) {}
@@ -1212,7 +1260,7 @@
         }
         var cancel = t.closest && t.closest('.lms-q-edit-cancel');
         if (cancel) {
-          var panelC = document.getElementById('lmsQEdit-' + cancel.getAttribute('data-qid'));
+          var panelC = panelFor(cancel.getAttribute('data-qid'));
           if (panelC) panelC.hidden = true;
           if (window.mathVirtualKeyboard) {
             try { window.mathVirtualKeyboard.hide(); } catch (e) {}
@@ -1223,11 +1271,16 @@
         if (!save) return;
         var qid = save.getAttribute('data-qid');
         var card = root.querySelector('.lms-quiz-preview-card[data-qid="' + qid + '"]');
-        var panel = document.getElementById('lmsQEdit-' + qid);
-        var status = document.getElementById('lmsQEditStatus-' + qid);
-        if (!card || !panel) return;
+        var panel = panelFor(qid);
+        var status = panel ? panel.querySelector('.lms-q-edit-status') : null;
+        var assessmentId = root._lmsAssessmentId || _lmsCurrentAssessmentId;
+        if (!card || !panel || !assessmentId) return;
         var stemMf = panel.querySelector('math-field.lms-q-edit-stem-input');
         var stem = _lmsFromMathlive(stemMf);
+        if (!stem) {
+          if (status) status.textContent = 'The question cannot be empty.';
+          return;
+        }
         var correctIdx = parseInt((panel.querySelector('.lms-q-edit-correct-sel') || {}).value, 10);
         if (isNaN(correctIdx)) correctIdx = 0;
         var options = [];
@@ -1243,10 +1296,14 @@
           if (status) status.textContent = 'Need 4 options.';
           return;
         }
+        if (options.some(function (o) { return !o.text; })) {
+          if (status) status.textContent = 'Every option needs an answer.';
+          return;
+        }
         save.disabled = true;
         if (status) status.textContent = 'Saving...';
         try {
-          var res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/questions/' + qid, {
+          var res = await fetch('/api/lms/quizzes/' + assessmentId + '/questions/' + qid, {
             method: 'PUT',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -1263,7 +1320,8 @@
           if (window.mathVirtualKeyboard) {
             try { window.mathVirtualKeyboard.hide(); } catch (e) {}
           }
-          await loadLmsQuizPreview();
+          if (typeof lmsShowToast === 'function') lmsShowToast('Question saved');
+          await lmsRenderQuizEditor(root, assessmentId);
         } catch (err) {
           if (status) status.textContent = 'Error: ' + err.message;
           save.disabled = false;

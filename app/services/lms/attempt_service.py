@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 from app.models.lms_models import AssessmentAttempt, AttemptAnswer, Question, StudentProfile
 from app.services.lms.assessment_service import get_assessment
-from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
+from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError, UnansweredQuestionsError
 from app.services.lms.mcq_utils import options_from_json
 from app.utils.db import get_db
 
@@ -731,12 +731,37 @@ def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bo
     return result
 
 
-def submit_attempt(attempt_id: int, time_expired: bool = False) -> dict:
+def unanswered_question_numbers(attempt: AssessmentAttempt) -> List[int]:
+    """1-based positions (as the student sees them) of the questions with no answer yet."""
+    db = get_db()
+    answered = {
+        a.question_id
+        for a in db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
+        if a.selected_option_index is not None and a.selected_option_index >= 0
+    }
+    return [pos for pos, qid in enumerate(attempt_question_ids(attempt), start=1) if qid not in answered]
+
+
+def submit_attempt(attempt_id: int, time_expired: bool = False, require_all_answered: bool = False) -> dict:
+    """Score and close an attempt.
+
+    ``require_all_answered`` (the student submit route) refuses a submit while any
+    question is unanswered. Running out of time is the one exception: a timed
+    attempt whose clock has ended is scored on whatever was answered.
+    """
     attempt = get_attempt(attempt_id)
     if attempt.status == "submitted":
         return get_attempt_results(attempt_id)
     if attempt.status != "in_progress":
         raise LMSValidationError("Attempt is not in progress")
+
+    if require_all_answered:
+        # The browser's "time is up" only counts on an attempt that really has a deadline.
+        out_of_time = _attempt_is_expired(attempt) or bool(time_expired and attempt.expires_at)
+        if not out_of_time:
+            missing = unanswered_question_numbers(attempt)
+            if missing:
+                raise UnansweredQuestionsError(missing)
 
     assessment = get_assessment(attempt.assessment_id)
     timed_out = bool(

@@ -174,7 +174,11 @@
     }).join('');
     var nextBtn = idx < total - 1
       ? '<button type="button" class="sd-btn sd-btn-primary" onclick="nextLmsQuizQuestion()">' + (savedIdx === undefined ? 'Skip' : 'Next') + ' <i class="fas fa-chevron-right"></i></button>' : '';
-    var submitBtn = '<button type="button" data-quiz-submit class="sd-btn ' + (idx === total - 1 ? 'sd-btn-primary' : 'sd-btn-outline blue') + '" onclick="submitLmsQuiz()">Submit Quiz</button>';
+    // Submit only goes through once every question is answered; until then the button says how many are left.
+    var left = total - answered;
+    var submitBtn = '<button type="button" data-quiz-submit class="sd-btn ' + (left === 0 ? 'sd-btn-primary' : 'sd-btn-outline blue') + '"' +
+      (left ? ' title="Answer all questions to submit" style="opacity:.6;"' : '') +
+      ' onclick="submitLmsQuiz()">Submit Quiz' + (left ? ' (' + left + ' left)' : '') + '</button>';
     var timerHtml = remainingSeconds != null
       ? '<span id="lmsQuizTimer" class="sd-timer" style="margin-left:auto;"></span>' : '';
     el.innerHTML =
@@ -206,19 +210,45 @@
   window.nextLmsQuizQuestion = function () { if (currentQ < questions.length - 1) { currentQ++; render(); } };
   window.prevLmsQuizQuestion = function () { if (currentQ > 0) { currentQ--; render(); } };
 
+  function unansweredIndexes() {
+    var out = [];
+    for (var i = 0; i < questions.length; i++) if (savedAnswers[i] === undefined) out.push(i);
+    return out;
+  }
+
+  // Tell the student which questions are left and take them to the first one. Returns true when blocked.
+  function blockIfUnanswered(missing) {
+    if (!missing.length) return false;
+    var list = missing.slice(0, 12).map(function (i) { return i + 1; }).join(', ') + (missing.length > 12 ? '…' : '');
+    var msg = 'Please answer every question before you submit. ' + missing.length + ' question' +
+      (missing.length === 1 ? ' is' : 's are') + ' still unanswered: ' + list + '.';
+    currentQ = missing[0];
+    render();
+    if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error'); else alert(msg);
+    return true;
+  }
+
+  // Selections are saved as they are made, but a save can fail silently on a weak connection.
+  // Send them all again so the server's "everything answered" check sees what the student sees.
+  async function flushAnswers() {
+    for (var i = 0; i < questions.length; i++) {
+      var q = questions[i];
+      if (savedAnswers[i] === undefined || !q) continue;
+      try {
+        await lmsApi('/api/lms/attempts/' + attemptId + '/answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question_id: q.question_id || q.id, selected_option_index: savedAnswers[i] })
+        });
+      } catch (e) { /* the submit below reports anything still missing */ }
+    }
+  }
+
   window.submitLmsQuiz = async function (timeExpired) {
     if (submitting) return;
-    if (!timeExpired) {
-      var missing = questions.length - Object.keys(savedAnswers).length;
-      if (missing > 0) {
-        var msg = 'You have ' + missing + ' unanswered question' + (missing === 1 ? '' : 's') +
-          '. Are you sure you want to submit?\n\nUnanswered questions score 0. Your answered questions still count.';
-        var ok = typeof showInAppConfirm === 'function'
-          ? await showInAppConfirm(msg, { title: 'Submit quiz?', confirmLabel: 'Submit', cancelLabel: 'Go back', iconClass: 'fas fa-exclamation-circle' })
-          : window.confirm(msg);
-        if (!ok) return;
-      }
-    }
+    // Every question must be answered before a quiz can be submitted. Only the timer
+    // running out submits an unfinished quiz (the server applies the same rule).
+    if (!timeExpired && blockIfUnanswered(unansweredIndexes())) return;
     submitting = true;
     clearQuizTimer();
     // Make it obvious the click registered: the button itself turns into a spinner, every
@@ -235,6 +265,7 @@
       showWaitOverlay(timeExpired ? 'Time is up — submitting quiz...' : 'Submitting your quiz...', { sticky: true });
     }
     try {
+      if (!timeExpired) await flushAnswers();
       var payload = timeExpired ? { time_expired: true } : {};
       var d = await lmsApi('/api/lms/attempts/' + attemptId + '/submit', {
         method: 'POST',
@@ -261,10 +292,19 @@
       if (typeof lmsShowToast === 'function') lmsShowToast('Quiz submitted', 'success');
       window.loadLmsStudentDashboard();
     } catch (err) {
-      if (typeof lmsShowToast === 'function') lmsShowToast((err.message || 'Submit failed') + ' — your quiz was NOT submitted. Please try again.', 'error');
       submitting = false;
-      // unlock the controls again (render() rebuilds them) so Submit can be pressed again
-      if (questions.length) render();
+      var serverMissing = err && err.code === 'unanswered_questions' && err.details && err.details.unanswered_questions;
+      if (serverMissing && serverMissing.length) {
+        // The server has no answer for these (a save did not reach it): let the student pick them again.
+        serverMissing.forEach(function (n) { delete savedAnswers[n - 1]; });
+        if (!timeExpired) startQuizTimer();
+        blockIfUnanswered(unansweredIndexes());
+      } else {
+        if (typeof lmsShowToast === 'function') lmsShowToast((err.message || 'Submit failed') + ' — your quiz was NOT submitted. Please try again.', 'error');
+        if (!timeExpired) startQuizTimer();
+        // unlock the controls again (render() rebuilds them) so Submit can be pressed again
+        if (questions.length) render();
+      }
     } finally {
       if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
     }

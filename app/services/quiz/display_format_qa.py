@@ -23,6 +23,7 @@ from app.services.quiz.math_text import (
     normalize_plain_ellipsis,
     normalize_tex_set_braces,
     recover_fields,
+    repair_escaped_latex,
     strip_english_dollar_spans,
     wrap_for_mathjax,
     _compact_math_key,
@@ -156,6 +157,7 @@ def finalize_option_text(text: Optional[str], latex: Optional[str] = None) -> tu
 
 def student_render(text: Optional[str], latex: Optional[str] = None, *, inline: bool = True) -> str:
     """Final string MathJax should see — cleaned then delimited."""
+    text, latex = repair_escaped_latex(text), repair_escaped_latex(latex)
     body, recovered = finalize_display_text(text, latex)
     return wrap_for_mathjax(merge_prose_and_math(body, recovered), inline=inline)
 

@@ -741,7 +741,150 @@ def option_needs_math(text: str) -> bool:
     return bool(recovered) and ("^{" in recovered or "\\frac" in recovered or looks_like_math_line(recovered))
 
 
+# --- Text saved by the teacher's math editor (mirrors lms-core.js) ---
+
+_TEXT_BLOCK_RE = re.compile(r"\\(?:text|textrm|textnormal|mbox)\s*\{")
+_TEX_COMMAND_RE = re.compile(r"\\(?:[a-zA-Z]+|.)", re.S)
+_ESCAPED_LATEX_RE = re.compile(r"\\textbrace(?:left|right)")
+
+
+def _unescape_text_mode(s: str) -> str:
+    s = re.sub(r"\\textbackslash(?:\{\}|\s)?", lambda _m: "\\", s or "")
+    s = re.sub(r"\\textasciicircum(?:\{\}|\s)?|\\\^\{\}", "^", s)
+    s = re.sub(r"\\textasciitilde(?:\{\}|\s)?", "~", s)
+    return re.sub(r"\\([{}#%&_])", r"\1", s)
+
+
+def _skip_brace_group(s: str, start: int) -> int:
+    """Index just past the brace group opening at ``start``."""
+    depth, k = 0, start
+    while k < len(s):
+        c = s[k]
+        if c == "\\":
+            k += 2
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return k + 1
+        k += 1
+    return len(s)
+
+
+def mathlive_to_storage(latex: Optional[str]) -> str:
+    """Math-editor LaTeX -> stored quiz text: words as plain prose, math in $...$.
+
+    ``\\text{Simplify }563.71\\times10^{-3}`` -> ``Simplify $563.71\\times10^{-3}$``.
+    """
+    latex = (latex or "").strip()
+    # A field whose default mode is text hands its whole value back as "$ ... $": unwrap that one pair.
+    outer = re.fullmatch(r"\$\s*([^$]*?)\s*\$", latex)
+    if outer:
+        latex = outer.group(1)
+    if not latex:
+        return ""
+    # Anything else that already carries delimiters is in stored form; leave it alone.
+    if latex.startswith(("\\(", "\\[")) or re.search(r"(?:^|[^\\])\$", latex):
+        return latex
+    parts: list[tuple[bool, str]] = []  # (is_text, value)
+    math = ""
+    i = 0
+    while i < len(latex):
+        ch = latex[i]
+        if ch == "\\":
+            m = _TEXT_BLOCK_RE.match(latex, i)
+            if m:
+                close = _skip_brace_group(latex, m.end() - 1)
+                if math.strip():
+                    parts.append((False, math.strip()))
+                math = ""
+                parts.append((True, _unescape_text_mode(latex[m.end():close - 1])))
+                i = close
+                continue
+            m = _TEX_COMMAND_RE.match(latex, i)
+            math += m.group(0)
+            i = m.end()
+            continue
+        if ch == "{":
+            past = _skip_brace_group(latex, i)
+            math += latex[i:past]
+            i = past
+            continue
+        math += ch
+        i += 1
+    if math.strip():
+        parts.append((False, math.strip()))
+    if not any(is_text and value.strip() for is_text, value in parts):
+        return f"${latex}$"
+    out = ""
+    last_was_math = False
+    for is_text, value in parts:
+        if is_text:
+            if last_was_math and value and not re.match(r"[\s?.!,;:)\]]", value):
+                out += " "
+            out += value
+            last_was_math = False
+            continue
+        if re.fullmatch(r"[?.!,;:]+", value):
+            out = out.rstrip() + value
+            last_was_math = False
+            continue
+        if out and not re.search(r"[\s(\[]$", out):
+            out += " "
+        out += f"${value}$"
+        last_was_math = True
+    return re.sub(r"[ \t]{2,}", " ", out).strip()
+
+
+def repair_escaped_latex(text: Optional[str]) -> Optional[str]:
+    """Undo a stem saved by the old quiz-editor bug, which stored the LaTeX code as text:
+    ``\\textbackslash text\\textbraceleft What is ...\\textbraceright\\textbackslash log 5289``."""
+    if not text or "\\textbackslash" not in text or not _ESCAPED_LATEX_RE.search(text):
+        return text
+    body = re.sub(r"^\$+|\$+$", "", text.strip())
+    body = re.sub(r"\\textbackslash(?:\{\})?\s?", lambda _m: "\\", body)
+    body = re.sub(r"\\textbraceleft(?:\{\})?\s?", "{", body)
+    body = re.sub(r"\\textbraceright(?:\{\})?\s?", "}", body).strip()
+    # The editor stored the escaped code inside one outer \text{...}; drop that wrapper.
+    wrapped = re.match(r"\\text\s*\{", body)
+    if wrapped and _skip_brace_group(body, wrapped.end() - 1) == len(body):
+        body = body[wrapped.end():-1]
+    return mathlive_to_storage(body)
+
+
 # --- Delimiter wrapping so MathJax actually typesets the recovered math ---
+
+_INSTRUCTION_WORDS = r"Simplify|Find|Solve|Evaluate|Compute|Calculate|Expand|Factorize|Factorise|Factor"
+_INSTRUCTION_BARE_RE = re.compile(rf"^({_INSTRUCTION_WORDS})\s+(.+)$", re.I | re.S)
+_INSTRUCTION_IN_MATH_RE = re.compile(
+    rf"^(\$|\\\()\s*({_INSTRUCTION_WORDS})(?![A-Za-z])\s*:?\s*(.+?)\s*(\$|\\\))$", re.I | re.S
+)
+_FUNC_WORD_RE = re.compile(r"\b(?:" + "|".join(_FUNC_NAMES) + r")\b", re.I)
+
+
+def _is_pure_math_body(body: str) -> bool:
+    """Math with no English words in it (TeX commands and function names aside)."""
+    words = _FUNC_WORD_RE.sub(" ", re.sub(r"\\[A-Za-z]+", " ", body or ""))
+    if re.search(r"[A-Za-z]{3,}", words):
+        return False
+    return bool(_BARE_MATH_RE.search(body) or re.search(r"\d\s*[=+\-*/]\s*\d|[A-Za-z]\s*=", body))
+
+
+def lift_instruction_out_of_math(text: str) -> str:
+    """``$Simplify 563.71 \\times 10^{-3}$`` -> ``Simplify $563.71 \\times 10^{-3}$``.
+
+    Inside math the instruction word renders italic and glued to the number ("Simplify563.71").
+    """
+    m = _INSTRUCTION_IN_MATH_RE.match((text or "").strip())
+    if not m or (m.group(1) == "$") != (m.group(4) == "$"):
+        return text
+    body = m.group(3)
+    if "$" in body or "\\(" in body or "\\)" in body or not _is_pure_math_body(body):
+        return text
+    return f"{m.group(2)} ${body}$"
+
 
 _HAS_DELIM_RE = re.compile(r"\\\(|\\\)|\\\[|\\\]|\$")
 # A plain English connective ("or", "and", ...) between two math bits, e.g.
@@ -817,8 +960,13 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
         )
     )
     s = promote_inline_math_notation(s)
+    s = lift_instruction_out_of_math(s)
     if _HAS_DELIM_RE.search(s):
         return s
+    # "Simplify 563.71 \times 10^{-3}" (no colon): keep the word as prose, wrap only the math.
+    bare = _INSTRUCTION_BARE_RE.match(s)
+    if bare and _is_pure_math_body(bare.group(2)):
+        return f"{bare.group(1)} \\({bare.group(2).strip()}\\)"
     prefixed = _INSTRUCTION_PREFIX_RE.match(s)
     if prefixed and (prefixed.group(2) or "").strip():
         body = prefixed.group(2).strip()

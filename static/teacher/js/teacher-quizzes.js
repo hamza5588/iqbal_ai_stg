@@ -61,18 +61,23 @@
       var open = state.expandedId === z.id;
       var isPub = z.status === 'published';
       var prev = state.previews[z.id];
-      var count = prev && prev.questions ? prev.questions.length : null;
+      var count = questionCount(z);
       var mins = z.time_limit_minutes;
+      // Drafts are edited, published and deleted from here; published quizzes are view-only.
+      var draftActions = isPub ? '' :
+        '<button type="button" class="td-btn td-btn-outline-blue td-btn-sm" onclick="tdQuizzes.toggle(' + z.id + ')" aria-expanded="' + open + '"><i class="fas fa-pen"></i> ' + (open ? 'Close' : 'Review &amp; Edit') + '</button>' +
+        (count ? '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.publish(' + z.id + ', this)"><i class="fas fa-paper-plane"></i> Publish</button>' : '') +
+        '<button type="button" class="td-btn td-btn-danger-outline td-btn-sm" onclick="tdQuizzes.remove(' + z.id + ', this)" title="Delete this draft quiz"><i class="fas fa-trash"></i> Delete</button>';
       return '<div class="td-quiz-card" data-quiz-id="' + z.id + '">' +
         '<div class="td-quiz-head">' +
           '<div class="td-avatar-sm"><i class="far fa-clipboard"></i></div>' +
           '<h3 onclick="tdQuizzes.toggle(' + z.id + ')">' + U.esc(z.title || 'Untitled quiz') + '</h3>' +
-          (count != null ? '<span class="td-pill">' + count + ' MCQ' + (count === 1 ? '' : 's') + '</span>' : '') +
+          (count != null ? '<span class="td-pill">' + (count ? count + ' MCQ' + (count === 1 ? '' : 's') : 'No questions') + '</span>' : '') +
           (mins ? '<span class="td-pill"><i class="far fa-clock"></i> ' + mins + ' min</span>' : '') +
           '<div class="td-side-meta">' +
             (isPub ? '<span class="td-pill green"><i class="fas fa-check-circle"></i> Published</span>' : '<span class="td-pill orange">Draft</span>') +
-            (isPub ? '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.openAssign(' + z.id + ')"><i class="fas fa-users"></i> Assign</button>' : '') +
-            '<button type="button" class="td-btn td-btn-outline-blue td-btn-sm" onclick="tdQuizzes.toggle(' + z.id + ')" aria-expanded="' + open + '"><i class="fas fa-eye"></i> View</button>' +
+            (isPub ? '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.openAssign(' + z.id + ')"><i class="fas fa-users"></i> Assign</button>' +
+              '<button type="button" class="td-btn td-btn-outline-blue td-btn-sm" onclick="tdQuizzes.toggle(' + z.id + ')" aria-expanded="' + open + '"><i class="fas fa-eye"></i> View</button>' : draftActions) +
             '<span class="td-chev" style="cursor:pointer;transform:rotate(' + (open ? 180 : 0) + 'deg);" onclick="tdQuizzes.toggle(' + z.id + ')"><i class="fas fa-chevron-down"></i></span>' +
           '</div>' +
         '</div>' +
@@ -82,7 +87,28 @@
     if (state.expandedId != null) {
       var body = $('tdQuizBody-' + state.expandedId);
       if (body && typeof window._lmsTypeset === 'function') window._lmsTypeset(body);
+      mountDraftEditor(state.expandedId);
     }
+  }
+
+  function questionCount(z) {
+    var prev = state.previews[z.id];
+    if (prev && prev.questions) return prev.questions.length;
+    return z.question_count != null ? z.question_count : null;
+  }
+
+  // A draft opened from the list gets the same per-question editor as the create-quiz preview.
+  function mountDraftEditor(id) {
+    var host = $('tdQuizEditor-' + id);
+    var prev = state.previews[id];
+    if (!host || !prev || prev.error || typeof window.lmsRenderQuizEditor !== 'function') return;
+    host._lmsOnChange = function (data) {
+      // A saved edit reloads the quiz inside the editor; keep the cached copy and the header pill in step.
+      state.previews[id] = data;
+      var row = state.quizzes.find(function (z) { return z.id === id; });
+      if (row) row.question_count = (data.questions || []).length;
+    };
+    window.lmsRenderQuizEditor(host, id, prev);
   }
 
   function previewHtml(z, prev) {
@@ -99,11 +125,24 @@
         '</div>' +
         '<p class="td-help" style="margin:6px 0 0;">Whole minutes only (1+). Applies to the student countdown timer.</p>' +
       '</div>';
-    var head = '<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;gap:10px;flex-wrap:wrap;">' +
-      '<h4 style="margin:0;">MCQs (' + qs.length + ')</h4>' +
-      (z.status !== 'published' && qs.length ? '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.publish(' + z.id + ', this)">Publish Quiz</button>' : '') +
+    var isDraft = z.status !== 'published';
+    var head = '<div class="td-quiz-toolbar">' +
+      '<h4>MCQs (' + qs.length + ')</h4>' +
+      (isDraft ? '<div class="td-quiz-toolbar-actions">' +
+        (qs.length ? '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.publish(' + z.id + ', this)">Publish Quiz</button>' : '') +
+        '<button type="button" class="td-btn td-btn-danger-outline td-btn-sm" onclick="tdQuizzes.remove(' + z.id + ', this)"><i class="fas fa-trash"></i> Delete draft</button>' +
+        '</div>' : '') +
       '</div>';
-    if (!qs.length) return settings + head + '<p class="td-desc">No questions generated for this quiz.</p>';
+    if (!qs.length) {
+      return settings + head + '<p class="td-desc">This draft has no questions, so it cannot be published. ' +
+        'Delete it and create the quiz again from a PDF that contains the questions.</p>';
+    }
+    if (isDraft) {
+      // Filled by mountDraftEditor(): each question has an Edit button until the quiz is published.
+      return settings + head +
+        '<p class="td-desc" style="margin:0 0 10px;">Check each question, use <b>Edit</b> to correct the wording, options or answer, then <b>Publish Quiz</b>. Students only see a quiz after it is published and assigned to a class.</p>' +
+        '<div class="lms-quiz-preview td-quiz-editor" id="tdQuizEditor-' + z.id + '"></div>';
+    }
     return settings + head + '<div class="td-mcq-strip">' + qs.map(function (item, idx) {
       var q = item.question || {};
       var stem = typeof window.lmsQuestionText === 'function' ? window.lmsQuestionText(q) : (q.question_text || q.question_latex || '');
@@ -159,12 +198,41 @@
     if (btn) btn.disabled = true;
     try {
       await lmsApi('/api/lms/quizzes/' + id + '/publish', { method: 'POST' });
-      U.toast('Quiz published successfully!');
+      U.toast('Quiz published. Use Assign to give it to a class.');
+      delete state.previews[id];
+      if (state.expandedId === id) state.expandedId = null;
       await load();
     } catch (err) {
       U.toast(err.message, 'error');
       if (btn) btn.disabled = false;
     }
+  }
+
+  // Drafts only: the server refuses to delete a quiz that has been published.
+  async function remove(id, btn) {
+    var quiz = state.quizzes.find(function (z) { return z.id === id; });
+    var name = quiz && quiz.title ? '"' + quiz.title + '"' : 'this draft quiz';
+    if (!window.confirm('Delete ' + name + '? This cannot be undone.')) return;
+    if (btn) btn.disabled = true;
+    try {
+      await lmsApi('/api/lms/quizzes/' + id, { method: 'DELETE' });
+      U.toast('Draft quiz deleted.');
+      delete state.previews[id];
+      if (state.expandedId === id) state.expandedId = null;
+      await load();
+    } catch (err) {
+      U.toast(err.message || 'Could not delete the quiz', 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // "Import all questions" ticked → the count box is not used, so grey it out.
+  function syncImportAll() {
+    var all = $('lmsQuizImportAll');
+    var count = $('lmsQuizMcqCount');
+    if (!all || !count) return;
+    count.disabled = all.checked;
+    if (!all.checked) count.focus();
   }
 
   function openCreate() {
@@ -173,6 +241,10 @@
     if (typeof window._resetLmsQuizModal === 'function') window._resetLmsQuizModal();
     var fn = $('tdQuizFileName');
     if (fn) { fn.hidden = true; fn.textContent = ''; }
+    // form.reset() re-ticks "Import all"; put the count box back in its matching disabled state.
+    var all = $('lmsQuizImportAll');
+    var count = $('lmsQuizMcqCount');
+    if (all && count) count.disabled = all.checked;
     card.hidden = false;
     setTimeout(function () {
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -240,8 +312,8 @@
   document.addEventListener('DOMContentLoaded', wrapLegacyHooks);
 
   window.tdQuizzes = {
-    load: load, render: render, setTab: setTab, toggle: toggle, publish: publish,
-    saveDuration: saveDuration,
+    load: load, render: render, setTab: setTab, toggle: toggle, publish: publish, remove: remove,
+    saveDuration: saveDuration, syncImportAll: syncImportAll,
     openCreate: openCreate, closeCreate: closeCreate, onFileChosen: onFileChosen, openAssign: openAssign,
     _state: state
   };

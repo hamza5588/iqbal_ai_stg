@@ -601,8 +601,11 @@
       ? '<button type="button" class="sd-btn sd-btn-primary" onclick="nextDiagQuestion()">' +
         (diagState.answers[idx] === undefined ? 'Skip' : 'Next') + ' <i class="fas fa-chevron-right"></i></button>'
       : '';
-    var submitBtn = '<button type="button" class="sd-btn ' + (idx === total - 1 ? 'sd-btn-primary' : 'sd-btn-outline blue') +
-      '" onclick="confirmSubmitDiagnostic()">Submit Diagnostic</button>';
+    // Submit only goes through once every question is answered; until then the button says how many are left.
+    var left = total - diagAnsweredCount();
+    var submitBtn = '<button type="button" data-diag-submit class="sd-btn ' + (left === 0 ? 'sd-btn-primary' : 'sd-btn-outline blue') + '"' +
+      (left ? ' title="Answer all questions to submit" style="opacity:.6;"' : '') +
+      ' onclick="confirmSubmitDiagnostic()">Submit Diagnostic' + (left ? ' (' + left + ' left)' : '') + '</button>';
     var nav =
       '<div class="sd-q-nav">' + backBtn +
       '<div class="sd-q-nav-end">' + submitBtn + nextBtn + '</div></div>';
@@ -845,28 +848,28 @@
     }
   };
 
+  function diagUnansweredIndexes() {
+    var out = [];
+    for (var i = 0; i < diagState.questions.length; i++) if (diagState.answers[i] === undefined) out.push(i);
+    return out;
+  }
+
+  // Tell the student which questions are left and take them to the first one. Returns true when blocked.
+  function blockDiagIfUnanswered(missing) {
+    if (!missing.length) return false;
+    var list = missing.slice(0, 12).map(function (i) { return i + 1; }).join(', ') + (missing.length > 12 ? '…' : '');
+    var msg = 'Please answer every question before you submit. ' + missing.length + ' question' +
+      (missing.length === 1 ? ' is' : 's are') + ' still unanswered: ' + list + '.';
+    diagState.current = missing[0];
+    renderDiagnosticQuestion();
+    if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error'); else alert(msg);
+    return true;
+  }
+
+  // Every question must be answered before a diagnostic can be submitted. Only the timer
+  // running out submits an unfinished one (the server applies the same rule).
   window.confirmSubmitDiagnostic = async function () {
-    var total = diagState.questions.length;
-    var answered = diagAnsweredCount();
-    var missing = total - answered;
-    if (missing > 0) {
-      var message =
-        'You have ' + missing + ' unanswered question' + (missing === 1 ? '' : 's') +
-        '. Are you sure you want to submit?\n\n' +
-        'Unanswered questions score 0. Your answered questions still count.';
-      var ok;
-      if (typeof showInAppConfirm === 'function') {
-        ok = await showInAppConfirm(message, {
-          title: 'Submit diagnostic?',
-          confirmLabel: 'Submit',
-          cancelLabel: 'Go back',
-          iconClass: 'fas fa-exclamation-circle'
-        });
-      } else {
-        ok = window.confirm(message);
-      }
-      if (!ok) return;
-    }
+    if (blockDiagIfUnanswered(diagUnansweredIndexes())) return;
     submitLmsDiagnostic();
   };
 
@@ -926,6 +929,14 @@
       var msg = err && err.message ? String(err.message) : '';
       if (autoSubmit || /time over/i.test(msg) || /expired/i.test(msg)) {
         renderDiagnosticTimeOver({ message: msg || undefined });
+        return;
+      }
+      var serverMissing = err && err.code === 'unanswered_questions' && err.details && err.details.unanswered_questions;
+      if (serverMissing && serverMissing.length) {
+        // The server has no answer for these (a save did not reach it): back to the questions, clock running.
+        serverMissing.forEach(function (n) { delete diagState.answers[n - 1]; });
+        startDiagTimer();
+        blockDiagIfUnanswered(diagUnansweredIndexes());
         return;
       }
       body.innerHTML = '<p class="lms-error">' + escapeHtml(msg) + '</p>';

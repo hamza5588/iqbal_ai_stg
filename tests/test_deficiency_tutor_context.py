@@ -24,7 +24,15 @@ def _load():
             sys.modules[name] = types.ModuleType(name)
         sys.modules["app.services.lms.performance_service"].get_student_mastery = lambda *_a, **_k: []
         sys.modules["app.utils.groq_rate_limit"].invoke_with_groq_rate_limit = lambda f, **_k: f()
+        sys.modules["app.utils.groq_rate_limit"].GroqBusyError = type("GroqBusyError", (Exception,), {})
+        sys.modules["app.utils.groq_rate_limit"].GroqRateLimitError = type("GroqRateLimitError", (Exception,), {})
         sys.modules["app.utils.llm_factory"].create_llm = lambda **_k: None
+        # tutor_calculator is pure stdlib: load the real one into the stubbed package.
+        calc_spec = importlib.util.spec_from_file_location("app.services.lms.tutor_calculator", _p.with_name("tutor_calculator.py"))
+        calc = importlib.util.module_from_spec(calc_spec)
+        sys.modules["app.services.lms.tutor_calculator"] = calc
+        calc_spec.loader.exec_module(calc)
+        sys.modules["app.services.lms"].tutor_calculator = calc
         spec = importlib.util.spec_from_file_location("_tutor_under_test", _p)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

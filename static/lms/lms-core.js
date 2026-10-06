@@ -240,7 +240,11 @@
     var body = await res.json();
     if (!res.ok) {
       var errMsg = (body.error && body.error.message) || body.message || body.error || 'Request failed';
-      throw new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+      var apiError = new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+      // Callers that react to a specific refusal (e.g. "unanswered_questions") read these.
+      apiError.code = (body.error && body.error.code) || null;
+      apiError.details = (body.error && body.error.details) || null;
+      throw apiError;
     }
     return body.data !== undefined ? body.data : body;
   };
@@ -892,7 +896,126 @@
     return t || l;
   }
 
+  function lmsUnescapeTextMode(s) {
+    return String(s || '')
+      .replace(/\\textbackslash(?:\{\}|\s)?/g, '\\')
+      .replace(/\\textasciicircum(?:\{\}|\s)?|\\\^\{\}/g, '^')
+      .replace(/\\textasciitilde(?:\{\}|\s)?/g, '~')
+      .replace(/\\([{}#%&_])/g, '$1');
+  }
+
+  /** Math-editor (MathLive) LaTeX → stored quiz text: words as plain prose, math in $...$.
+   *  "\text{Simplify }563.71\times10^{-3}" → "Simplify $563.71\times10^{-3}$".
+   *  Keeping the words outside math lets long questions wrap and keeps their spaces. */
+  function lmsMathliveToStorage(latex) {
+    latex = String(latex || '').trim();
+    // A field whose default mode is text hands its whole value back as "$ ... $": unwrap that one pair.
+    var outer = latex.match(/^\$\s*([^$]*?)\s*\$$/);
+    if (outer) latex = outer[1];
+    if (!latex) return '';
+    // Anything else that already carries delimiters is in stored form; leave it alone.
+    if (/^\\\(|^\\\[/.test(latex) || /(^|[^\\])\$/.test(latex)) return latex;
+    var parts = [];   // { text: bool, value: string }
+    var math = '';
+    var i = 0;
+    var m;
+    function flushMath() {
+      if (math.trim()) parts.push({ text: false, value: math.trim() });
+      math = '';
+    }
+    function skipGroup(from) {
+      // index just past the brace group opening at `from`
+      var k = from;
+      var depth = 0;
+      while (k < latex.length) {
+        var c = latex.charAt(k);
+        if (c === '\\') { k += 2; continue; }
+        if (c === '{') depth++;
+        else if (c === '}') { depth--; if (depth === 0) return k + 1; }
+        k++;
+      }
+      return latex.length;
+    }
+    while (i < latex.length) {
+      var ch = latex.charAt(i);
+      if (ch === '\\') {
+        m = /^\\(?:text|textrm|textnormal|mbox)\s*\{/.exec(latex.slice(i));
+        if (m) {
+          var close = skipGroup(i + m[0].length - 1);
+          flushMath();
+          parts.push({ text: true, value: lmsUnescapeTextMode(latex.slice(i + m[0].length, close - 1)) });
+          i = close;
+          continue;
+        }
+        // any other command is copied whole so its braces are not mistaken for a text block
+        m = /^\\(?:[a-zA-Z]+|[\s\S])/.exec(latex.slice(i));
+        math += m[0];
+        i += m[0].length;
+        continue;
+      }
+      if (ch === '{') {
+        var past = skipGroup(i);
+        math += latex.slice(i, past);
+        i = past;
+        continue;
+      }
+      math += ch;
+      i++;
+    }
+    flushMath();
+    if (!parts.some(function (p) { return p.text && p.value.trim(); })) return '$' + latex + '$';
+    var out = '';
+    var lastWasMath = false;
+    parts.forEach(function (p) {
+      if (p.text) {
+        if (lastWasMath && p.value && !/^[\s?.!,;:)\]]/.test(p.value)) out += ' ';
+        out += p.value;
+        lastWasMath = false;
+        return;
+      }
+      // punctuation typed in math mode after words stays prose: "... of $\log 5$?" not "$?$"
+      if (/^[?.!,;:]+$/.test(p.value)) {
+        out = out.replace(/\s+$/, '') + p.value;
+        lastWasMath = false;
+        return;
+      }
+      if (out && !/[\s(\[]$/.test(out)) out += ' ';
+      out += '$' + p.value + '$';
+      lastWasMath = true;
+    });
+    return out.replace(/[ \t]{2,}/g, ' ').trim();
+  }
+  global.lmsMathliveToStorage = lmsMathliveToStorage;
+
+  /** Undo a stem saved by the old quiz editor bug, which stored the LaTeX code as text:
+   *  "\textbackslash text\textbraceleft What is ...\textbraceright\textbackslash log 5289". */
+  function lmsRepairEscapedLatex(s) {
+    s = String(s == null ? '' : s);
+    if (s.indexOf('\\textbackslash') < 0 || !/\\textbrace(?:left|right)/.test(s)) return s;
+    var body = s.trim().replace(/^\$+|\$+$/g, '')
+      .replace(/\\textbackslash(?:\{\})?\s?/g, '\\')
+      .replace(/\\textbraceleft(?:\{\})?\s?/g, '{')
+      .replace(/\\textbraceright(?:\{\})?\s?/g, '}').trim();
+    // The editor stored the escaped code inside one outer \text{...}; drop that wrapper.
+    var wrapped = /^\\text\s*\{/.exec(body);
+    if (wrapped) {
+      var depth = 0;
+      var end = -1;
+      for (var k = wrapped[0].length - 1; k < body.length; k++) {
+        var c = body.charAt(k);
+        if (c === '\\') { k++; continue; }
+        if (c === '{') depth++;
+        else if (c === '}' && --depth === 0) { end = k; break; }
+      }
+      if (end === body.length - 1) body = body.slice(wrapped[0].length, end);
+    }
+    return lmsMathliveToStorage(body);
+  }
+  global.lmsRepairEscapedLatex = lmsRepairEscapedLatex;
+
   function lmsPickDisplayText(text, latex) {
+    text = lmsRepairEscapedLatex(text);
+    latex = lmsRepairEscapedLatex(latex);
     var t = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(lmsRecoverEatenBackslashCommands(text || ''))));
     var l = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(lmsStripOptionLabelPrefix(lmsRecoverEatenBackslashCommands(latex || ''))));
     if (lmsIsBrokenMathBlob(l)) l = '';
@@ -903,6 +1026,11 @@
       return lmsMergeProseAndMath(recoveredT, recoveredL);
     }
     if (lmsLooksLikeProse(t)) return lmsRecoverLatex(t) || t;
+    // The stem already holds the latex plus more ("Simplify 563.71 \times ..." vs latex "563.71 \times ..."):
+    // showing the latex alone dropped the instruction word.
+    if (t && l && lmsMathAlreadyInStem(t, l) && !lmsMathAlreadyInStem(l, t) && /^[A-Za-z]{3,}/.test(t)) {
+      return lmsRecoverLatex(t) || t;
+    }
     var recovered = lmsRecoverLatex(l || t);
     if (recovered && (/\^\{/.test(recovered) || /\\frac/.test(recovered) || /\\times/.test(recovered)) && !lmsLooksLikeProse(recovered) && !lmsLooksLikeMixedTextAndMath(recovered)) {
       return recovered;
@@ -912,6 +1040,26 @@
     return recovered || l || t;
   }
 
+  var _INSTRUCTION_WORDS = 'Simplify|Find|Solve|Evaluate|Compute|Calculate|Expand|Factorize|Factorise|Factor';
+  var _INSTRUCTION_BARE_RE = new RegExp('^(' + _INSTRUCTION_WORDS + ')\\s+(.+)$', 'i');
+  var _INSTRUCTION_IN_MATH_RE = new RegExp('^(\\$|\\\\\\()\\s*(' + _INSTRUCTION_WORDS + ')(?![A-Za-z])\\s*:?\\s*([\\s\\S]+?)\\s*(\\$|\\\\\\))$', 'i');
+
+  /** True when the text has math in it and no English words (TeX commands and function names aside). */
+  function lmsIsPureMathBody(body) {
+    body = String(body || '');
+    var words = body.replace(/\\[A-Za-z]+/g, ' ').replace(/\b(?:log|ln|sin|cos|tan|sec|csc|cot|lim|max|min)\b/gi, ' ');
+    if (/[A-Za-z]{3,}/.test(words)) return false;
+    return lmsLooksLikeMathExpression(body) || /\\frac|\^\{|\\times|\\sqrt/.test(body);
+  }
+
+  /** "$Simplify 563.71 \times 10^{-3}$" → "Simplify $563.71 \times 10^{-3}$": the instruction word is prose. */
+  function lmsLiftInstructionOutOfMath(s) {
+    var m = String(s || '').match(_INSTRUCTION_IN_MATH_RE);
+    if (!m || (m[1] === '$') !== (m[4] === '$')) return s;
+    if (m[3].indexOf('$') >= 0 || /\\\(|\\\)/.test(m[3]) || !lmsIsPureMathBody(m[3])) return s;
+    return m[2] + ' $' + m[3] + '$';
+  }
+
   /** Wrap recovered LaTeX so MathJax/KaTeX render exponents and fractions. */
   function prepareMathText(text, inline) {
     if (text == null) return '';
@@ -919,6 +1067,7 @@
     var s = lmsRecoverEatenBackslashCommands(String(text)).trim();
     if (!s) return '';
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
+    s = lmsLiftInstructionOutOfMath(s);
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
     s = lmsNormalizeLatexSpacing(lmsNormalizePlainEllipsis(lmsStripEnglishDollarSpans(s)));
     s = lmsNormalizeTexSetBraces(s);
@@ -957,6 +1106,13 @@
       var body = colon[2].trim();
       var wrap = (!inline && /\\frac/.test(body)) ? ['\\[', '\\]'] : ['\\(', '\\)'];
       return colon[1] + ' ' + wrap[0] + lmsEscapePercentInMathBody(body) + wrap[1];
+    }
+    // Same without the colon ("Simplify 563.71 \times 10^{-3}"). Wrapping the whole line as math
+    // glued the word to the number in italics ("Simplify563.71"). Only when what follows is pure
+    // math, so "Find the value of x^2" is left to the prose rules below.
+    var bare = !colon && recovered.match(_INSTRUCTION_BARE_RE);
+    if (bare && lmsIsPureMathBody(bare[2])) {
+      return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(bare[1] + ' \\(' + lmsEscapePercentInMathBody(bare[2].trim()) + '\\)'));
     }
     if (lmsIsPlainPercent(recovered) || lmsIsMixedPercent(recovered)) return recovered.replace(/\\%/g, '%');
     if (lmsLooksLikeMixedTextAndMath(recovered)) return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline)));

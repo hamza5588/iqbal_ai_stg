@@ -225,6 +225,13 @@ def _source_pdf_path_for_lesson(lesson: dict | None):
     return None
 
 
+def _export_filename(title: str | None, extension: str) -> str:
+    """Download name that every OS accepts (titles may hold / : ? and similar)."""
+    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', ' ', str(title or '')).strip()
+    stem = re.sub(r'\s+', '_', stem).strip('._')[:120]
+    return (stem or 'lesson') + extension
+
+
 def _can_access_lesson(lesson: dict, user_id: int, user_role: str | None = None) -> bool:
     if not lesson or not user_id:
         return False
@@ -1466,7 +1473,7 @@ def download_lesson(lesson_id):
         docx_bytes = lesson_service._create_docx(lesson_data)
         
         # Create filename
-        filename = lesson['title'].replace(' ', '_') + '.docx'
+        filename = _export_filename(lesson['title'], '.docx')
         
         # Create BytesIO object
         docx_buffer = BytesIO(docx_bytes)
@@ -1513,9 +1520,12 @@ def download_lesson_ppt(lesson_id):
         # Generate PPT (no API key required for download)
         lesson_service = LessonService()
         ppt_bytes = lesson_service.create_ppt(lesson_data)
+        if not ppt_bytes:
+            # create_ppt returns b"" on failure; sending that produced a file PowerPoint could not open.
+            return jsonify({'error': 'Could not build the PowerPoint for this lesson. Please try again.'}), 500
         
         # Create filename
-        filename = lesson['title'].replace(' ', '_') + '.pptx'
+        filename = _export_filename(lesson['title'], '.pptx')
         
         # Create response
         from io import BytesIO

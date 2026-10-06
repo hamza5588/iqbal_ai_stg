@@ -371,12 +371,14 @@
       return { title: t.topic_name || ('Topic #' + t.topic_id), points: scored(t.series || []) };
     }).filter(function (c) { return c.points.length; });
     charts.sort(function (a, b) { return a.points[a.points.length - 1].score_percent - b.points[b.points.length - 1].score_percent; });
-    // Overall: after each attempt, the average of every topic's most recent score so far.
+    // Overall: after each attempt, every topic's most recent result so far, pooled by question
+    // (total correct ÷ total questions). Weighting by questions matches the roster's Progress
+    // column; a plain average of topic percentages let a 1-question topic count as much as a 10-question one.
     var events = {};
     topics.forEach(function (t) {
       scored(t.series || []).forEach(function (p) {
         var e = events[p.attempt_id] || (events[p.attempt_id] = { id: p.attempt_id, at: p.submitted_at, label: p.label, assessment_type: p.assessment_type, scores: {} });
-        e.scores[t.topic_id] = Number(p.score_percent);
+        e.scores[t.topic_id] = p;
       });
     });
     var latest = {};
@@ -384,12 +386,39 @@
       .sort(function (a, b) { return String(a.at || '').localeCompare(String(b.at || '')) || (a.id - b.id); })
       .map(function (e) {
         Object.keys(e.scores).forEach(function (tid) { latest[tid] = e.scores[tid]; });
-        var vals = Object.keys(latest).map(function (tid) { return latest[tid]; });
+        var sum = poolLatest(Object.keys(latest).map(function (tid) { return latest[tid]; }));
         return { label: e.label, assessment_type: e.assessment_type, submitted_at: e.at,
-          score_percent: vals.reduce(function (a, b) { return a + b; }, 0) / vals.length };
+          score_percent: sum.percent, correct: sum.weighted ? sum.correct : null, total: sum.weighted ? sum.total : null };
       });
     if (overall.length) charts.unshift({ title: 'Overall (all topics)', points: overall, overall: true });
     return charts;
+  }
+
+  // Pool one result per topic into a single score. Falls back to a plain average only when
+  // a result carries no question counts.
+  function poolLatest(points) {
+    var correct = 0, total = 0, weighted = points.length > 0;
+    points.forEach(function (p) {
+      var c = Number(p.correct), t = Number(p.total);
+      if (p.correct == null || p.total == null || !(t > 0) || isNaN(c)) { weighted = false; return; }
+      correct += c; total += t;
+    });
+    if (weighted) return { weighted: true, correct: correct, total: total, percent: 100 * correct / total };
+    var avg = points.reduce(function (a, p) { return a + Number(p.score_percent); }, 0) / (points.length || 1);
+    return { weighted: false, percent: avg, count: points.length };
+  }
+
+  // The current "Now" figure of the Overall chart spelled out, e.g. "Now: 5 correct out of 10 questions across 5 topics = 50%."
+  function overallExample(topics) {
+    var latest = topics.map(function (t) { return scored(t.series || []); })
+      .filter(function (pts) { return pts.length; })
+      .map(function (pts) { return pts[pts.length - 1]; });
+    if (!latest.length) return '';
+    var sum = poolLatest(latest);
+    var across = ' across ' + latest.length + ' topic' + (latest.length === 1 ? '' : 's');
+    return sum.weighted
+      ? 'Now: ' + sum.correct + ' correct out of ' + sum.total + ' questions' + across + ' = ' + Math.round(sum.percent) + '%.'
+      : 'Now: average of the latest score' + across + ' = ' + Math.round(sum.percent) + '%.';
   }
 
   function graphHtml(sid, topics) {
@@ -402,8 +431,12 @@
         var stat = c.points.length > 1
           ? 'Started ' + Math.round(first) + '% → Now ' + Math.round(last) + '% (' + changeHtml(first, last) + ')'
           : 'Now ' + Math.round(last) + '% <span style="color:var(--td-muted);">(one assessment so far)</span>';
+        var note = c.overall
+          ? '<p class="td-graph-note"><i class="fas fa-circle-info"></i> How this is calculated: after each diagnostic or quiz, we take the student’s most recent result in every topic assessed so far, then divide the total correct answers by the total questions. A later quiz replaces the earlier result only for the topics it covers. ' +
+            U.esc(overallExample(topics)) + '</p>'
+          : '';
         return '<div class="td-detail-card' + (c.overall ? ' td-graph-overall' : '') + '"><h4>' + U.esc(c.title) + '</h4>' +
-          '<p class="td-desc">' + stat + '</p><div class="td-mini-chart"><canvas id="tdRosterChart-' + sid + '-' + i + '"></canvas></div></div>';
+          '<p class="td-desc">' + stat + '</p><div class="td-mini-chart"><canvas id="tdRosterChart-' + sid + '-' + i + '"></canvas></div>' + note + '</div>';
       }).join('') + '</div>';
   }
 
@@ -422,14 +455,18 @@
             data: pts.map(function (p) { return Number(p.score_percent); }),
             borderColor: c.overall ? '#0f766e' : '#2563eb', backgroundColor: c.overall ? 'rgba(15,118,110,.10)' : 'rgba(37,99,235,.10)',
             fill: true, tension: .3, pointRadius: 5, pointHoverRadius: 6,
+            // Dots at 0% and 100% sit on the chart edge; draw them whole instead of half-clipped.
+            clip: false,
             pointBackgroundColor: pts.map(function (p) { return p.assessment_type === 'diagnostic' ? '#7c3aed' : '#2563eb'; })
           }]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 8, right: 8 } },
           scales: {
             y: { beginAtZero: true, max: 100, ticks: { stepSize: 50, callback: function (v) { return v + '%'; }, color: '#64748b' }, grid: { color: 'rgba(148,163,184,.25)' } },
-            x: { ticks: { color: '#475569', maxRotation: 0, autoSkip: true, callback: function (v) { var l = this.getLabelForValue(v) || ''; return l.length > 12 ? l.slice(0, 10) + '…' : l; } }, grid: { display: false } }
+            // offset centres each point in its own band, so a single assessment sits mid-chart instead of on the y-axis.
+            x: { offset: true, ticks: { color: '#475569', maxRotation: 0, autoSkip: true, callback: function (v) { var l = this.getLabelForValue(v) || ''; return l.length > 12 ? l.slice(0, 10) + '…' : l; } }, grid: { display: false } }
           },
           plugins: {
             legend: { display: false },

@@ -12,7 +12,7 @@
         <input id="lmsQuizTitle" type="text" required placeholder="e.g. Chapter 5 Post Test">
       </div>
       <div class="td-field td-quiz-pdf-col">
-        <label for="lmsQuizPdfFile">PDF (any content) <span class="req">*</span></label>
+        <label for="lmsQuizPdfFile">Quiz PDF <span class="req">*</span></label>
         <label class="td-upload-box td-quiz-upload-box" for="lmsQuizPdfFile">
           <span class="td-pdf-ic"><i class="fas fa-file-pdf"></i></span>
           <span class="td-quiz-upload-copy">
@@ -25,8 +25,15 @@
                onchange="tdQuizzes.onFileChosen(this)">
       </div>
       <div class="td-field">
-        <label for="lmsQuizMcqCount">Number of MCQs <span class="req">*</span></label>
-        <input id="lmsQuizMcqCount" type="number" min="1" max="40" step="1" value="10" required>
+        <label for="lmsQuizMcqCount">Number of MCQs</label>
+        {# Disabled while "Import all" is ticked (the default): every question in the file is imported. #}
+        <input id="lmsQuizMcqCount" type="number" min="1" max="40" step="1" value="10" required disabled
+               aria-describedby="lmsQuizImportAllHint">
+        <label class="td-check-inline" for="lmsQuizImportAll">
+          <input id="lmsQuizImportAll" type="checkbox" checked onchange="tdQuizzes.syncImportAll()">
+          <span>Import all questions in the file</span>
+        </label>
+        <p class="td-help" id="lmsQuizImportAllHint">Untick to import only the first few questions.</p>
       </div>
       <div class="td-field">
         <label for="lmsQuizDuration">Duration (minutes) <span class="req">*</span></label>
@@ -35,10 +42,10 @@
         <p class="td-help" id="lmsQuizDurationHint">Whole minutes only (e.g. 1, 10, 60).</p>
       </div>
     </div>
-    <p class="td-help td-quiz-pdf-help">Upload any lesson/notes PDF. If it already has Q&amp;A, those are used; otherwise MCQs are generated from the content.</p>
+    <p class="td-help td-quiz-pdf-help">Upload a PDF that already contains your quiz questions. The questions and options are read from the file and imported as MCQs, which you can review and edit before publishing.</p>
     <div class="td-form-actions">
       <button type="button" class="td-btn td-btn-outline" onclick="tdQuizzes.closeCreate()">Cancel</button>
-      <button type="submit" id="lmsQuizSubmitBtn" class="td-btn td-btn-primary">Upload &amp; Generate MCQs</button>
+      <button type="submit" id="lmsQuizSubmitBtn" class="td-btn td-btn-primary">Upload &amp; Import MCQs</button>
     </div>
   </form>
   <div id="lmsQuizProgressWrap" class="td-quiz-wait" hidden>
