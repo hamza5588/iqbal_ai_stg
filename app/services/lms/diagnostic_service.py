@@ -21,9 +21,29 @@ def get_teacher_diagnostic_for_student(student_id: int) -> Optional[Assessment]:
     return None
 
 
+def _published_diagnostic_for_grade(grade: Optional[str]) -> Optional[Assessment]:
+    """The published diagnostic of ``grade``.
+
+    Diagnostics are per grade. With no grade to go on, one is offered only while a single
+    diagnostic is published platform-wide: once several grades have their own, picking
+    "the newest" would give the student another grade's paper.
+    """
+    if grade:
+        return get_default_diagnostic(grade)
+    published = (
+        get_db()
+        .query(Assessment)
+        .filter(Assessment.assessment_type == "diagnostic", Assessment.status == "published")
+        .order_by(Assessment.updated_at.desc(), Assessment.id.desc())
+        .limit(2)
+        .all()
+    )
+    return published[0] if len(published) == 1 else None
+
+
 def get_student_diagnostic(student_id: int) -> Optional[Assessment]:
     """Diagnostic shown to a student: the published diagnostic for their grade."""
-    return get_default_diagnostic(class_service.get_student_grade(student_id))
+    return _published_diagnostic_for_grade(class_service.get_student_diagnostic_grade(student_id))
 
 
 def get_student_diagnostic_queue(student_id: int) -> List[Assessment]:
@@ -34,8 +54,8 @@ def get_student_diagnostic_queue(student_id: int) -> List[Assessment]:
     first; a student who did submit it keeps it in the list as "taken". Nothing is
     offered while the grade has no published diagnostic.
     """
-    grade = class_service.get_student_grade(student_id)
-    current = get_default_diagnostic(grade)
+    grade = class_service.get_student_diagnostic_grade(student_id)
+    current = _published_diagnostic_for_grade(grade)
     if not current:
         return []
     older = [a for a in assessment_service.list_superseded_diagnostics(grade) if a.id != current.id]

@@ -15,7 +15,7 @@ from app.services.lms.mcq_utils import (
     pick_display_fields,
     resolve_correct_option_index,
 )
-from app.services.lms.diagnostic_service import get_default_diagnostic
+from app.services.lms.diagnostic_service import get_default_diagnostic, get_student_diagnostic
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
 from app.services.lms.path_generator import get_weak_topics
 from app.services.lms.performance_service import analyze_attempt
@@ -123,7 +123,7 @@ def _resolve_target_pdf_context(student_id: int) -> Tuple[Optional[str], Optiona
         except LMSNotFoundError:
             pass
 
-    platform_diag = get_default_diagnostic()
+    platform_diag = get_student_diagnostic(student_id)  # this grade's study PDFs, not the newest paper of any grade
     if platform_diag:
         targets = _get_target_threads(platform_diag.id)
         if targets:
@@ -143,7 +143,7 @@ def _resolve_all_target_threads(student_id: int) -> Tuple[List[str], Optional[in
                 return [t["rag_thread_id"] for t in targets], assessment.created_by, assessment.id
         except LMSNotFoundError:
             pass
-    platform_diag = get_default_diagnostic()
+    platform_diag = get_student_diagnostic(student_id)
     if platform_diag:
         targets = _get_target_threads(platform_diag.id)
         if targets:

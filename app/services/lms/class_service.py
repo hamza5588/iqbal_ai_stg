@@ -35,6 +35,35 @@ def get_student_grade(student_id: int) -> Optional[str]:
     return normalize_grade(user.class_standard)
 
 
+def get_student_diagnostic_grade(student_id: int) -> Optional[str]:
+    """Grade used to pick the student's diagnostic: the profile grade, else their class's.
+
+    A student whose profile grade is blank but who sits in a Grade 6 class is a Grade 6
+    student. Without this fallback the diagnostic lookup had no grade to filter on and
+    handed them the newest diagnostic of any grade.
+    """
+    grade = get_student_grade(student_id)
+    if grade:
+        return grade
+    rows = (
+        get_db()
+        .query(SchoolClass.grade_level)
+        .join(ClassEnrollment, ClassEnrollment.class_id == SchoolClass.id)
+        .filter(
+            ClassEnrollment.student_id == student_id,
+            ClassEnrollment.status == "active",
+            SchoolClass.is_active.is_(True),
+        )
+        .order_by(ClassEnrollment.enrolled_at.desc(), ClassEnrollment.id.desc())
+        .all()
+    )
+    for (class_grade,) in rows:
+        grade = normalize_grade(class_grade)
+        if grade:
+            return grade
+    return None
+
+
 def get_teacher_grades(teacher_id: int) -> List[str]:
     user = _get_user(teacher_id)
     if not user:
