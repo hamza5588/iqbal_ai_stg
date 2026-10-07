@@ -142,9 +142,11 @@ def test_prose_stem_with_frac_keeps_english_outside_math():
     raw = r"Why is \frac{x+1}{x^2+4} a rational expression?"
     out = wrap_for_mathjax(raw, inline=False)
     assert out.startswith("Why is")
-    assert "rational expression" in out
+    assert " a rational expression" in out
     assert r"\(" in out and r"\frac{x+1}{x^2+4}" in out
     assert not out.startswith(r"\[Why")
+    # Article "a" must stay outside the math span.
+    assert r"\frac{x+1}{x^2+4} a" not in out
 
 
 def test_log_commands_in_prose_get_delimited():

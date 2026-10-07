@@ -951,16 +951,27 @@ _MATH_TOKEN = (
     r"|_\{[^{}]+\}|_\d+"
     r"|" + _BRACE_1 + r")"
 )
+# After a closed \\frac{..}{..} / \\sqrt{..}, only continue with operators /
+# numbers / more TeX — not a lone English letter ("a rational…").
+_MATH_TAIL_NO_LETTER = (
+    r"(?:\s*(?:\d+(?:\.\d+)?"
+    r"|[()\[\]+\-=*/·×÷]"
+    r"|\\[A-Za-z]+(?:\s*" + _BRACE_1 + r"){0,2}"
+    r"|\^\{[^{}]+\}|\^-?\d+|\^[A-Za-z]"
+    r"|_\{[^{}]+\}|_\d+"
+    r"|" + _BRACE_1 + r"))*"
+)
 _MATH_RUN_RE = re.compile(
     "(?:"
-    r"\\frac\s*" + _BRACE_1 + r"\s*" + _BRACE_1
-    + r"|\\sqrt\s*" + _BRACE_1
+    r"\\frac\s*" + _BRACE_1 + r"\s*" + _BRACE_1 + _MATH_TAIL_NO_LETTER
+    + r"|\\sqrt\s*" + _BRACE_1 + _MATH_TAIL_NO_LETTER
     # log / ln with optional base and argument: \log_a 8, \log_{a}8, \log(2\times5)
     + r"|\\(?:log|ln)(?:\s*(?:_" + _BRACE_1 + r"|_[A-Za-z0-9]+))?"
     + r"(?:\s*(?:\([^()]{0,60}\)|[A-Za-z0-9]+))?"
-    + r"|(?:\([^()]{0,40}\)|[A-Za-z0-9\]]{1,20})\s*\^\s*(?:\{[^{}]+\}|-?\d+|[A-Za-z])"
-    + ")"
     + r"(?:\s*" + _MATH_TOKEN + r")*"
+    + r"|(?:\([^()]{0,40}\)|[A-Za-z0-9\]]{1,20})\s*\^\s*(?:\{[^{}]+\}|-?\d+|[A-Za-z])"
+    + r"(?:\s*" + _MATH_TOKEN + r")*"
+    + ")"
 )
 
 
