@@ -17,7 +17,7 @@ from app.utils.db import close_db
 def _create_worker_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
     app.teardown_appcontext(close_db)
     if app.config.get("USE_CELERY_FOR_INGESTION", False):
         init_celery(app)

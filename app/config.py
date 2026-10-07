@@ -100,7 +100,7 @@ class Config:
     SERVER_URL = os.getenv('SERVER_URL', "https://iqbalai.com")
     
     # File upload configuration
-    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB max file size 
+    MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 200MB max file size (multi-PDF diagnostic uploads)
     
     # Stripe configuration
     STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')                                                                                                                                                    

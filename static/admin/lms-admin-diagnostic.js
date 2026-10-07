@@ -1322,11 +1322,20 @@
         clearInterval(window._adminDiagProgressPoll);
         window._adminDiagProgressPoll = null;
       }
+      if (xhr.status === 413) {
+        status.textContent =
+          'Error: Upload too large (max 200MB total for diagnostic + target PDFs). Compress or split the PDFs and try again.';
+        btn.disabled = false;
+        resetProgress();
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        return;
+      }
       var body;
       try {
         body = JSON.parse(xhr.responseText);
       } catch (err) {
-        status.textContent = 'Invalid server response';
+        status.textContent =
+          'Invalid server response (HTTP ' + xhr.status + '). Try again or check server logs.';
         btn.disabled = false;
         resetProgress();
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();

@@ -220,8 +220,8 @@ def create_app():
     # Load configuration
     app.config.from_object(Config)
     
-    # Set max content length for file uploads (100MB)
-    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+    # Set max content length for file uploads (200MB; matches nginx client_max_body_size)
+    app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
     
     # Configure session - UPDATED for CORS
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
