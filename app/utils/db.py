@@ -445,6 +445,12 @@ def init_db(app):
                         db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN last_seen_at TIMESTAMP"))
                         db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN offline_credit_seconds INTEGER NOT NULL DEFAULT 0"))
                         db.commit()
+                    # Retake / shuffled diagnostic question set — ORM column added later
+                    if "question_ids_json" not in columns:
+                        logger.info("Adding question_ids_json to assessment_attempts...")
+                        db.execute(text("ALTER TABLE assessment_attempts ADD COLUMN question_ids_json TEXT"))
+                        db.commit()
+                        logger.info("assessment_attempts.question_ids_json column added successfully")
             except Exception as e:
                 logger.warning("otp attempts / attempt heartbeat migration warning: %s", e)
                 db.rollback()
