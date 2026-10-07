@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _redis_client = None
 _memory_progress: Dict[str, Dict[str, Any]] = {}
-_TTL_SECONDS = 600
+_TTL_SECONDS = 3600  # large multi-PDF diagnostics can take >10 minutes
 
 
 def _get_redis_client():
@@ -60,16 +60,24 @@ def set_progress(
     *,
     stage: str = "",
     done: bool = False,
+    result: Optional[dict] = None,
+    error: Optional[str] = None,
 ) -> None:
     if not job_id or not message:
         return
-    payload = {
+    payload: Dict[str, Any] = {
         "percent": max(0, min(100, int(percent))),
         "message": message,
         "stage": stage,
         "done": bool(done),
         "ts": time.time(),
     }
+    if result is not None:
+        payload["result"] = result
+        if isinstance(result, dict) and result.get("assessment_id") is not None:
+            payload["assessment_id"] = result.get("assessment_id")
+    if error:
+        payload["error"] = error
     client = _get_redis_client()
     if client is not None:
         try:
@@ -89,12 +97,19 @@ def get_progress(job_id: Optional[str]) -> dict:
             raw = client.get(_key(job_id))
             if raw:
                 data = json.loads(raw)
-                return {
+                out = {
                     "percent": data.get("percent", 0),
                     "message": data.get("message", ""),
                     "stage": data.get("stage", ""),
                     "done": bool(data.get("done", False)),
                 }
+                if data.get("assessment_id") is not None:
+                    out["assessment_id"] = data.get("assessment_id")
+                if data.get("result") is not None:
+                    out["result"] = data.get("result")
+                if data.get("error"):
+                    out["error"] = data.get("error")
+                return out
         except Exception as exc:
             logger.debug("Diagnostic upload progress get failed: %s", exc)
     return dict(_memory_progress.get(job_id) or {})

@@ -964,7 +964,20 @@ def admin_remove_diagnostic(assessment_id: int):
 @bp.route("/diagnostics/from-pdf", methods=["POST"])
 @login_required
 def create_diagnostic_from_pdf():
-    """Upload diagnostic Q&A PDF + target content PDF(s) (Learning Chat source). Admin only."""
+    """Upload diagnostic Q&A PDF + target content PDF(s) (Learning Chat source). Admin only.
+
+    Returns immediately after accepting the files (202) and processes in a background
+    thread. The client must poll ``/diagnostics/upload-progress/<job_id>`` until
+    ``done`` is true. This avoids browser/nginx closing the long HTTP request
+    (HTTP 499 / "Network error during upload") on large multi-PDF diagnostics.
+    """
+    import threading
+    import uuid
+
+    from flask import current_app
+
+    from app.utils.diagnostic_upload_progress import set_progress
+
     denied = _require_diagnostic_admin()
     if denied:
         return denied
@@ -1006,18 +1019,81 @@ def create_diagnostic_from_pdf():
 
         first = extra_targets[0]
         rest = extra_targets[1:] if len(extra_targets) > 1 else None
-        result = upload_diagnostic_bundle(
-            teacher_id=_current_user_id(),
-            title=title.strip(),
-            grade_level=grade_level,
-            diagnostic_file_bytes=diagnostic_file.read(),
-            diagnostic_filename=diagnostic_file.filename or "diagnostic.pdf",
-            target_file_bytes=first["bytes"],
-            target_filename=first["filename"],
-            target_files=rest,
-            progress_job_id=(request.form.get("progress_job_id") or "").strip() or None,
+        progress_job_id = (request.form.get("progress_job_id") or "").strip() or (
+            f"diag-{uuid.uuid4().hex[:16]}"
         )
-        return json_success(result, status=201)
+        teacher_id = _current_user_id()
+        diagnostic_bytes = diagnostic_file.read()
+        diagnostic_filename = diagnostic_file.filename or "diagnostic.pdf"
+        title_clean = title.strip()
+        app_obj = current_app._get_current_object()
+
+        set_progress(
+            progress_job_id,
+            2,
+            "Upload received — starting processing...",
+            stage="queued",
+        )
+
+        def _run_diagnostic_upload():
+            with app_obj.app_context():
+                try:
+                    result = upload_diagnostic_bundle(
+                        teacher_id=teacher_id,
+                        title=title_clean,
+                        grade_level=grade_level,
+                        diagnostic_file_bytes=diagnostic_bytes,
+                        diagnostic_filename=diagnostic_filename,
+                        target_file_bytes=first["bytes"],
+                        target_filename=first["filename"],
+                        target_files=rest,
+                        progress_job_id=progress_job_id,
+                    )
+                    set_progress(
+                        progress_job_id,
+                        100,
+                        "Diagnostic generated — review questions, then approve to release to students.",
+                        stage="complete",
+                        done=True,
+                        result=result,
+                    )
+                except LMSValidationError as exc:
+                    set_progress(
+                        progress_job_id,
+                        100,
+                        str(exc),
+                        stage="error",
+                        done=True,
+                        error=str(exc),
+                    )
+                except Exception as exc:
+                    app_obj.logger.exception(
+                        "Background diagnostic upload failed job=%s", progress_job_id
+                    )
+                    set_progress(
+                        progress_job_id,
+                        100,
+                        str(exc) or "Upload processing failed",
+                        stage="error",
+                        done=True,
+                        error=str(exc) or "Upload processing failed",
+                    )
+
+        threading.Thread(
+            target=_run_diagnostic_upload,
+            name=f"diag-upload-{progress_job_id}",
+            daemon=True,
+        ).start()
+
+        return json_success(
+            {
+                "async": True,
+                "progress_job_id": progress_job_id,
+                "status": "processing",
+                "message": "Upload accepted. Poll progress until processing completes.",
+            },
+            status=202,
+        )
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
     except Exception as e:

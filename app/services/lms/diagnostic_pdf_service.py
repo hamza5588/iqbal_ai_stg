@@ -393,46 +393,33 @@ def _upload_diagnostic_bundle(
 
     db.commit()
 
+    result = {
+        "assessment_id": assessment.id,
+        "thread_id": pipeline_result.get("thread_id"),
+        "target_thread_id": target_thread_ids[0],
+        "target_thread_ids": target_thread_ids,
+        "target_filenames": target_filenames,
+        "title": assessment.title,
+        "grade_level": assessment.grade_level,
+        "status": assessment.status,
+        "requires_review": True,
+        "question_count": pipeline_result.get("question_count"),
+        "overall_confidence": pipeline_result.get("overall_confidence"),
+        "async": pipeline_result.get("async", False),
+        "message": (
+            "Diagnostic is in draft. Review generated questions, then publish "
+            "to make it available for students."
+        ),
+    }
     _set_upload_progress(
         progress_job_id,
         100,
         "Diagnostic generated — review questions, then approve to release to students.",
         stage="complete",
         done=True,
+        result=result,
     )
-
-    return {
-
-        "assessment_id": assessment.id,
-
-        "thread_id": pipeline_result.get("thread_id"),
-
-        "target_thread_id": target_thread_ids[0],
-
-        "target_thread_ids": target_thread_ids,
-
-        "target_filenames": target_filenames,
-
-        "title": assessment.title,
-
-        "grade_level": assessment.grade_level,
-
-        "status": assessment.status,
-
-        "requires_review": True,
-
-        "question_count": pipeline_result.get("question_count"),
-
-        "overall_confidence": pipeline_result.get("overall_confidence"),
-
-        "async": pipeline_result.get("async", False),
-
-        "message": (
-            "Diagnostic is in draft. Review generated questions, then publish "
-            "to make it available for students."
-        ),
-
-    }
+    return result
 
 
 

@@ -355,10 +355,65 @@
     }
   }
 
-  function startServerProgressPoll(jobId) {
+  function finishAdminDiagUploadSuccess(d, targetFiles) {
+    setProgress(100, 'Draft ready — review before students see it');
+    state.assessmentId = d.assessment_id;
+    state.threadId = d.thread_id;
+    var targetCount =
+      (d.target_filenames || d.target_thread_ids || []).length ||
+      (targetFiles && targetFiles.length) ||
+      0;
+    var status = document.getElementById('adminDiagStatus');
+    var btn = document.getElementById('adminDiagUploadBtn');
+    if (status) {
+      status.textContent =
+        'Draft saved with ' +
+        (d.question_count || '?') +
+        ' questions and ' +
+        targetCount +
+        ' target PDF(s). Review the MCQs below, then Approve for Students.';
+    }
+    var form = document.getElementById('adminDiagnosticPdfForm');
+    if (form) form.reset();
+    selectedTargetFiles.adminDiagTargetFiles = [];
+    updateAdminDiagTargetFileList();
+    updateAdminDiagQaFileLabel();
+    state.selectedTargetAssessmentId = d.assessment_id;
+    state.listFilter = 'draft';
+    loadAdminDiagnostics();
+    if (btn) btn.disabled = false;
+    setTimeout(resetProgress, 800);
+    if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+    if (d.assessment_id) {
+      setTimeout(function () {
+        adminPreviewDiagnostic(d.assessment_id);
+      }, 200);
+    }
+  }
+
+  function failAdminDiagUpload(message) {
+    var status = document.getElementById('adminDiagStatus');
+    var btn = document.getElementById('adminDiagUploadBtn');
+    if (status) status.textContent = message || 'Upload failed';
+    if (btn) btn.disabled = false;
+    resetProgress();
+    if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+  }
+
+  function startServerProgressPoll(jobId, targetFiles, opts) {
     if (!jobId) return;
+    opts = opts || {};
+    var waitForDone = !!opts.waitForDone;
+    var startedAt = Date.now();
+    var maxWaitMs = 55 * 60 * 1000; // large multi-PDF jobs
     if (window._adminDiagProgressPoll) clearInterval(window._adminDiagProgressPoll);
     window._adminDiagProgressPoll = setInterval(function () {
+      if (waitForDone && Date.now() - startedAt > maxWaitMs) {
+        failAdminDiagUpload(
+          'Error: Processing timed out. Check Diagnostics list — a draft may still appear shortly.'
+        );
+        return;
+      }
       fetch('/api/lms/diagnostics/upload-progress/' + encodeURIComponent(jobId), {
         credentials: 'include',
       })
@@ -370,8 +425,36 @@
           if (!d || d.percent == null) return;
           var serverPct = Math.max(0, Math.min(100, Number(d.percent) || 0));
           var uiPct = 20 + Math.round(serverPct * 0.73);
-          if (uiPct > 93) uiPct = 93;
+          if (d.done) uiPct = d.error ? uiPct : 100;
+          else if (uiPct > 93) uiPct = 93;
           setProgress(uiPct, d.message || 'Processing on server...');
+          if (!waitForDone || !d.done) return;
+          if (window._adminDiagProgressPoll) {
+            clearInterval(window._adminDiagProgressPoll);
+            window._adminDiagProgressPoll = null;
+          }
+          if (d.error) {
+            failAdminDiagUpload('Error: ' + d.error);
+            return;
+          }
+          var result = d.result || {};
+          if (!result.assessment_id && d.assessment_id) {
+            result.assessment_id = d.assessment_id;
+          }
+          if (!result.assessment_id) {
+            loadAdminDiagnostics();
+            var statusEl = document.getElementById('adminDiagStatus');
+            var btnEl = document.getElementById('adminDiagUploadBtn');
+            if (statusEl) {
+              statusEl.textContent =
+                'Processing finished. Open the new draft in the Diagnostics list below.';
+            }
+            if (btnEl) btnEl.disabled = false;
+            setTimeout(resetProgress, 800);
+            if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+            return;
+          }
+          finishAdminDiagUploadSuccess(result, targetFiles);
         })
         .catch(function () {});
     }, 700);
@@ -1304,6 +1387,7 @@
     fd.append('progress_job_id', progressJobId);
     appendTargetFiles(fd, targetFiles);
 
+    var uploadBytesDone = false;
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/lms/diagnostics/from-pdf');
     xhr.withCredentials = true;
@@ -1314,80 +1398,64 @@
       }
     };
     xhr.upload.onload = function () {
+      uploadBytesDone = true;
       setProgress(20, 'Upload complete — processing on server...');
-      startServerProgressPoll(progressJobId);
+      startServerProgressPoll(progressJobId, targetFiles, { waitForDone: true });
     };
     xhr.onload = async function () {
-      if (window._adminDiagProgressPoll) {
-        clearInterval(window._adminDiagProgressPoll);
-        window._adminDiagProgressPoll = null;
-      }
       if (xhr.status === 413) {
-        status.textContent =
-          'Error: Upload too large (max 200MB total for diagnostic + target PDFs). Compress or split the PDFs and try again.';
-        btn.disabled = false;
-        resetProgress();
-        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        failAdminDiagUpload(
+          'Error: Upload too large (max 200MB total for diagnostic + target PDFs). Compress or split the PDFs and try again.'
+        );
         return;
       }
       var body;
       try {
         body = JSON.parse(xhr.responseText);
       } catch (err) {
-        status.textContent =
-          'Invalid server response (HTTP ' + xhr.status + '). Try again or check server logs.';
-        btn.disabled = false;
-        resetProgress();
-        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        // Connection may drop while server still processes; keep polling.
+        if (uploadBytesDone) {
+          setProgress(22, 'Connection interrupted — still tracking server progress...');
+          startServerProgressPoll(progressJobId, targetFiles, { waitForDone: true });
+          return;
+        }
+        failAdminDiagUpload(
+          'Invalid server response (HTTP ' + xhr.status + '). Try again or check server logs.'
+        );
         return;
       }
       if (xhr.status < 200 || xhr.status >= 300) {
-        status.textContent =
-          'Error: ' + ((body.error && body.error.message) || 'Upload failed');
-        btn.disabled = false;
-        resetProgress();
-        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+        failAdminDiagUpload(
+          'Error: ' + ((body.error && body.error.message) || 'Upload failed')
+        );
         return;
       }
 
-      setProgress(100, 'Draft ready — review before students see it');
       var d = body.data || body;
-      state.assessmentId = d.assessment_id;
-      state.threadId = d.thread_id;
-      var targetCount =
-        (d.target_filenames || d.target_thread_ids || []).length || targetFiles.length;
-
-      status.textContent =
-        'Draft saved with ' +
-        (d.question_count || '?') +
-        ' questions and ' +
-        targetCount +
-        ' target PDF(s). Review the MCQs below, then Approve for Students.';
-      document.getElementById('adminDiagnosticPdfForm').reset();
-      selectedTargetFiles.adminDiagTargetFiles = [];
-      updateAdminDiagTargetFileList();
-      updateAdminDiagQaFileLabel();
-      state.selectedTargetAssessmentId = d.assessment_id;
-      state.listFilter = 'draft';
-      loadAdminDiagnostics();
-      btn.disabled = false;
-      setTimeout(resetProgress, 800);
-      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
-      // Show generated MCQs for verify/edit immediately (quiz-parity review gate)
-      if (d.assessment_id) {
-        setTimeout(function () {
-          adminPreviewDiagnostic(d.assessment_id);
-        }, 200);
+      // Async accept (202): keep polling until Redis progress reports done.
+      if (d.async || xhr.status === 202 || !d.assessment_id) {
+        setProgress(22, d.message || 'Processing on server...');
+        startServerProgressPoll(
+          d.progress_job_id || progressJobId,
+          targetFiles,
+          { waitForDone: true }
+        );
+        return;
       }
-    };    xhr.onerror = function () {
       if (window._adminDiagProgressPoll) {
         clearInterval(window._adminDiagProgressPoll);
         window._adminDiagProgressPoll = null;
       }
-      status.textContent = 'Network error during upload';
-      btn.disabled = false;
-      resetProgress();
-      if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      finishAdminDiagUploadSuccess(d, targetFiles);
+    };
+    xhr.onerror = function () {
+      // After bytes are up, the server usually keeps processing; do not abort the job.
+      if (uploadBytesDone) {
+        setProgress(22, 'Connection interrupted — still tracking server progress...');
+        startServerProgressPoll(progressJobId, targetFiles, { waitForDone: true });
+        return;
+      }
+      failAdminDiagUpload('Network error during upload. Check your connection and try again.');
     };
     xhr.send(fd);
   };
