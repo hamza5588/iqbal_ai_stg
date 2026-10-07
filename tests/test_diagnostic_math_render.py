@@ -134,3 +134,22 @@ def test_eaten_backslash_repair_via_recover_fields_option_path():
     text, latex = recover_fields("\x0crac{2}{5} \x09imes \x0crac{3}{4}", None)
     assert "\\frac{2}{5}" in text
     assert "\\times" in text
+
+
+def test_prose_stem_with_frac_keeps_english_outside_math():
+    # Live DIL Grade-9 diagnostic: wrapping the whole sentence in \[ \] made
+    # MathJax glue words ("Whyis … arationalexpression").
+    raw = r"Why is \frac{x+1}{x^2+4} a rational expression?"
+    out = wrap_for_mathjax(raw, inline=False)
+    assert out.startswith("Why is")
+    assert "rational expression" in out
+    assert r"\(" in out and r"\frac{x+1}{x^2+4}" in out
+    assert not out.startswith(r"\[Why")
+
+
+def test_log_commands_in_prose_get_delimited():
+    raw = r"\log 2 = 0.3010 and \log 5 = 0.6990, find \log (2 \times 5)"
+    out = wrap_for_mathjax(raw, inline=False)
+    assert r"\(" in out
+    assert "and" in out
+    assert "find" in out

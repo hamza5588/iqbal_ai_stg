@@ -525,11 +525,26 @@ _MATH_VOCAB = {
 
 
 def looks_like_prose(text: str) -> bool:
-    """True when a string is an English sentence, not a pure math expression."""
+    """True when a string is an English sentence, not a pure math expression.
+
+    TeX command names (``\\frac``, ``\\log``, …) are stripped before the word
+    count so a stem like ``Why is \\frac{x+1}{x^2+4} a rational expression?``
+    is not mistaken for pure math (which would wrap the *whole* sentence in
+    ``\\[...\\]`` and glue words together in MathJax).
+    """
     expanded = unsquash_english(text or "")
-    words = _ENGLISH_WORD_RE.findall(expanded)
+    # Drop TeX control words so "\frac" does not contribute the token "frac".
+    stripped = re.sub(r"\\[A-Za-z]+\*?", " ", expanded)
+    words = _ENGLISH_WORD_RE.findall(stripped)
+    # Also accept 3-letter English words ("Why", "the", …) — the 4+ regex alone
+    # under-counts short but clearly prosaic stems.
+    short_words = re.findall(r"\b[A-Za-z]{3}\b", stripped)
     real = [w for w in words if w.lower() not in _MATH_VOCAB]
-    return len(real) >= 3
+    real_short = [
+        w for w in short_words
+        if w.lower() not in _MATH_VOCAB and w.lower() not in {"and", "or", "for", "not"}
+    ]
+    return len(real) >= 2 or (len(real) >= 1 and len(real_short) >= 1) or len(real_short) >= 3
 
 
 def _compact_math_key(s: str) -> str:
@@ -940,6 +955,9 @@ _MATH_RUN_RE = re.compile(
     "(?:"
     r"\\frac\s*" + _BRACE_1 + r"\s*" + _BRACE_1
     + r"|\\sqrt\s*" + _BRACE_1
+    # log / ln with optional base and argument: \log_a 8, \log_{a}8, \log(2\times5)
+    + r"|\\(?:log|ln)(?:\s*(?:_" + _BRACE_1 + r"|_[A-Za-z0-9]+))?"
+    + r"(?:\s*(?:\([^()]{0,60}\)|[A-Za-z0-9]+))?"
     + r"|(?:\([^()]{0,40}\)|[A-Za-z0-9\]]{1,20})\s*\^\s*(?:\{[^{}]+\}|-?\d+|[A-Za-z])"
     + ")"
     + r"(?:\s*" + _MATH_TOKEN + r")*"
@@ -947,11 +965,17 @@ _MATH_RUN_RE = re.compile(
 
 
 def _wrap_math_islands(text: str, inline: bool) -> str:
-    """Wrap \\frac{..}{..}, \\sqrt{..} and exponent runs in \\( \\), leaving
-    the surrounding English words untouched."""
+    """Wrap \\frac{..}{..}, \\sqrt{..}, \\log… and exponent runs in \\( \\), leaving
+    the surrounding English words untouched.
+
+    Islands inside prose always use inline ``\\( \\)`` even for ``\\frac``. Display
+    ``\\[ \\]`` on a mid-sentence fraction makes MathJax eat neighboring spaces
+    ("Whyis … arationalexpression").
+    """
     def repl(m: re.Match[str]) -> str:
         body = m.group(0).strip()
-        block = (not inline) and "\\frac" in body
+        # Only use display math when the *entire* text is this one math island.
+        block = (not inline) and "\\frac" in body and m.start() == 0 and m.end() == len(text or "")
         return (f" \\[{body}\\] " if block else f" \\({body}\\) ")
 
     wrapped = _MATH_RUN_RE.sub(repl, text or "")
@@ -1002,7 +1026,8 @@ def wrap_for_mathjax(text: Optional[str], inline: bool = True) -> str:
         return f"{prefix} " + (f"\\[{body}\\]" if block else f"\\({body}\\)")
     if not _BARE_MATH_RE.search(s):
         return s
-    if looks_like_prose(s) or _MATH_CONNECTIVE_RE.search(s):
+    # Any English around TeX must keep words outside math mode (island wrap).
+    if looks_like_prose(s) or _MATH_CONNECTIVE_RE.search(s) or re.search(r"[A-Za-z]{3,}", re.sub(r"\\[A-Za-z]+\*?", " ", s)):
         return _wrap_math_islands(s, inline)
     block = (not inline) and "\\frac" in s
     return f"\\[{s}\\]" if block else f"\\({s}\\)"
