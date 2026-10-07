@@ -242,10 +242,14 @@ def transcription_is_faithful(vision_text: str, evidence_text: str) -> bool:
 
     The words of the page are reliable in the text layer, so a faithful transcription must
     contain nearly all of them and must not be wildly longer or shorter.
+
+    When there is no text layer (scanned page), accept any non-trivial transcription.
     """
     if not vision_text or not vision_text.strip():
         return False
     evidence_text = evidence_text or ""
+    if not evidence_text.strip():
+        return len(vision_text.strip()) >= 8
     want = [w.lower() for w in _WORD_RE.findall(evidence_text)]
     if want:
         have = set(w.lower() for w in _WORD_RE.findall(vision_text))
@@ -319,36 +323,51 @@ def hybrid_page_texts(
     quality = int(os.getenv("PDF_RENDER_JPEG_QUALITY", "85"))
 
     started = time.time()
+    doc = None
+    jobs = []
+    math_pages: List[int] = []
     try:
         doc = pymupdf.open(str(pdf_path))
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Hybrid PDF text: cannot open %s: %s", pdf_path, exc)
-        return out
-
-    try:
-        math_pages: List[int] = []
         for idx, page in enumerate(doc):
             text, has_math = page_text_with_scripts(page)
             if has_math and text:
                 out[idx] = text  # step 1: text evidence with exponents kept
                 math_pages.append(idx)
         if not math_pages:
-            return out
-
-        vision_pages = math_pages[:max_pages]
-        llm = llm or _vision_llm()
-        if llm is None or not vision_pages:
-            logger.info("Hybrid PDF text: %d maths page(s), text evidence only", len(math_pages))
-            return out
-
-        jobs = []
-        for idx in vision_pages:
-            try:
-                jobs.append((idx, _render_page_data_url(doc[idx], dpi, quality), out[idx]))
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Hybrid PDF text: render failed for page %s: %s", idx + 1, exc)
+            pass  # closed in finally; scan OCR below
+        else:
+            vision_pages = math_pages[:max_pages]
+            llm = llm or _vision_llm()
+            if llm is None or not vision_pages:
+                logger.info("Hybrid PDF text: %d maths page(s), text evidence only", len(math_pages))
+                return out
+            for idx in vision_pages:
+                try:
+                    jobs.append((idx, _render_page_data_url(doc[idx], dpi, quality), out[idx]))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Hybrid PDF text: render failed for page %s: %s", idx + 1, exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Hybrid PDF text: cannot open %s: %s", pdf_path, exc)
+        return out
     finally:
-        doc.close()
+        if doc is not None:
+            try:
+                doc.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    if not math_pages:
+        try:
+            from app.utils.pdf_scan_ocr import detect_scanned_pdf, ocr_scanned_pages
+
+            if detect_scanned_pdf(pdf_path).is_scanned:
+                return ocr_scanned_pages(pdf_path, progress=progress, llm=llm)
+        except Exception as scan_exc:  # noqa: BLE001
+            logger.info("Hybrid PDF text: scan OCR fallback skipped: %s", scan_exc)
+        return out
+
+    if not jobs:
+        return out
 
     done = 0
     improved = 0

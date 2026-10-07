@@ -2175,25 +2175,60 @@ def ingest_pdf(
                 )
 
         if len(valid_pages) == 0:
-            # Check if PDF might be scanned (image-based)
-            scanned_hint = ""
+            # Scanned / image-only PDF: no text layer — vision-OCR every page.
+            scan_ocr_attempted = False
             try:
-                import fitz  # PyMuPDF
-                pdf_doc = fitz.open(temp_path)
-                has_images = any(len(page.get_images()) > 0 for page in pdf_doc)
-                pdf_doc.close()
-                
-                if has_images:
+                from app.utils.pdf_scan_ocr import detect_scanned_pdf, ocr_scanned_pages, scan_ocr_enabled
+
+                scan_info = detect_scanned_pdf(temp_path)
+                if scan_info.is_scanned and scan_ocr_enabled():
+                    scan_ocr_attempted = True
+                    _send_progress(
+                        "loading",
+                        26,
+                        f"Scanned PDF detected ({scan_info.page_count} page(s)) — running OCR...",
+                    )
+
+                    def _ocr_prog(done, total):
+                        pct = 26 + int(10 * (done / max(total, 1)))
+                        _send_progress("loading", min(pct, 35), f"OCR page {done}/{total}...")
+
+                    ocr_pages = ocr_scanned_pages(temp_path, progress=_ocr_prog)
+                    filled = 0
+                    for i, doc in enumerate(docs):
+                        page_idx = doc.metadata.get("page", i) if isinstance(doc.metadata, dict) else i
+                        if not isinstance(page_idx, int):
+                            page_idx = i
+                        text = ocr_pages.get(page_idx) or ocr_pages.get(i)
+                        if text and str(text).strip():
+                            doc.page_content = str(text).strip()
+                            filled += 1
+                    if filled:
+                        valid_pages = [d for d in docs if d.page_content and d.page_content.strip()]
+                        loader_used = f"{loader_used}+scan_ocr"
+                        logger.info(
+                            "RAG ingest: scan OCR filled %d of %d page(s) (%s)",
+                            filled,
+                            len(docs),
+                            scan_info.reason,
+                        )
+            except Exception as ocr_exc:  # noqa: BLE001
+                logger.warning("Scan OCR skipped: %s", ocr_exc)
+
+            if len(valid_pages) == 0:
+                if scan_ocr_attempted:
+                    scanned_hint = (
+                        " This PDF looks scanned (image-only). OCR ran but returned no text — "
+                        "check GROQ_API_KEY / RAG_SCAN_OCR, or upload a text-based PDF."
+                    )
+                else:
                     scanned_hint = (
                         " This PDF appears to contain images and might be scanned. "
                         "OCR support is required for scanned documents."
                     )
-            except (ImportError, Exception):
-                pass  # PyMuPDF not available or error checking images
-            
-            raise ValueError(
-                f"PDF loaded with {loader_used} but contains no extractable text content.{scanned_hint}"
-            )
+                raise ValueError(
+                    f"PDF loaded with {loader_used} but contains no extractable text content.{scanned_hint}"
+                )
 
         # Prefer LlamaParse (or other upstream) full-document text when provided.
         if preextracted_text and str(preextracted_text).strip():
