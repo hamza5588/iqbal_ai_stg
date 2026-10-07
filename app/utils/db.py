@@ -459,8 +459,19 @@ def init_db(app):
                         logger.info("Adding superseded_at to assessments...")
                         db.execute(text("ALTER TABLE assessments ADD COLUMN superseded_at TIMESTAMP"))
                         db.commit()
+                    # grade_level was added to the ORM later; create_all does not ALTER existing tables
+                    if "grade_level" not in columns:
+                        logger.info("Adding grade_level to assessments...")
+                        db.execute(text("ALTER TABLE assessments ADD COLUMN grade_level VARCHAR(100)"))
+                        db.execute(text("CREATE INDEX IF NOT EXISTS ix_assessments_grade_level ON assessments (grade_level)"))
+                        db.commit()
+                        logger.info("assessments.grade_level column added successfully")
+                    if "requires_review" not in columns:
+                        logger.info("Adding requires_review to assessments...")
+                        db.execute(text("ALTER TABLE assessments ADD COLUMN requires_review BOOLEAN NOT NULL DEFAULT FALSE"))
+                        db.commit()
             except Exception as e:
-                logger.warning("assessments superseded_at migration warning: %s", e)
+                logger.warning("assessments superseded_at/grade_level migration warning: %s", e)
                 db.rollback()
             
             # Migration: Add ingest failure-tracking columns to rag_threads
