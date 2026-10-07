@@ -634,12 +634,74 @@ def _first_half_matching_compact(chunk: str, target_compact: str) -> Optional[st
     return None
 
 
+_SPOKEN_MATH_CUES = re.compile(
+    r"\b(?:of x equals|x squared|squared plus|squared minus|log base|"
+    r"a squared|b squared|find P of|plus 2x|minus 3)\b",
+    re.I,
+)
+_SYMBOLIC_MATH_CUES = re.compile(
+    r"P\s*\(|p\s*\(|\\log|[A-Za-z]\^\d|[A-Za-z]\^\{|\\frac|[A-Za-z]\^\d"
+)
+
+
+def collapse_spoken_symbolic_duplicate(text: str) -> str:
+    """Drop spoken-English restatements when the stem already has the symbolic form.
+
+    Hybrid vision sometimes emits both, e.g.
+    ``If P of x equals x squared plus 2x minus 3, find P of 2.
+    P(x) = x^2 + 2x - 3, find P(2)``
+    while the PDF only has the symbolic sentence. Prefer the symbolic form.
+    """
+    s = re.sub(r"[ \t]+", " ", (text or "").strip())
+    if not s or not _SPOKEN_MATH_CUES.search(s):
+        return s
+
+    if ". " in s:
+        head, _, tail = s.rpartition(". ")
+        tail = tail.strip().rstrip(".")
+        head_spoken = bool(_SPOKEN_MATH_CUES.search(head))
+        tail_symbolic = bool(_SYMBOLIC_MATH_CUES.search(tail)) and not _SPOKEN_MATH_CUES.search(tail)
+        if head_spoken and tail_symbolic:
+            # Full symbolic question restatement (P(x)=..., find P(2))
+            if re.search(r"P\s*\([^)]*\)\s*=", tail, re.I) and re.search(r"find\s*P\s*\(", tail, re.I):
+                out = tail if re.match(r"if\b", tail, re.I) else f"If {tail}"
+                return out.rstrip(".") + "."
+            # Trailing expression only: "… a squared plus b squared. a^2 + b^2"
+            if len(tail) <= 48:
+                head2 = re.sub(
+                    r"\bDetermine\s+a squared plus b squared\b",
+                    f"Determine {tail}",
+                    head,
+                    flags=re.I,
+                )
+                head2 = re.sub(
+                    r"\ba squared plus b squared\b",
+                    tail,
+                    head2,
+                    flags=re.I,
+                )
+                if head2 != head:
+                    return head2.rstrip(".") + "."
+            # log base … equals … . \log_a 8 = ...
+            if "log base" in head.lower() and "\\log" in tail:
+                head2 = re.sub(
+                    r"log base\s+[A-Za-z0-9' ]+?\s+of\s+[A-Za-z0-9]+\s+equals\s*"
+                    r"(?:\\frac\{[^{}]+\}\{[^{}]+\}|[^\s,]+)",
+                    tail.split(",")[0].strip(),
+                    head,
+                    flags=re.I,
+                )
+                if head2 != head:
+                    return head2.rstrip(".") + "."
+    return s
+
+
 def dedupe_repeated_math(text: str) -> str:
     """Collapse back-to-back duplicate equation blocks already stuck in stored stems.
 
     e.g. ``...equations? x+y=9, x-y=3 x+y=9, x-y=3`` → one copy.
     """
-    s = (text or "").strip()
+    s = collapse_spoken_symbolic_duplicate((text or "").strip())
     if s.count("=") < 2:
         return s
 

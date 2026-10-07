@@ -991,6 +991,12 @@ Do not simplify expressions.
 
 Do not solve questions in order to rewrite them.
 
+Do NOT expand symbolic math into spoken English.
+If the PDF shows ``P(x) = x^2 + 2x - 3, find P(2)``, return that
+symbolic wording — never also write
+``P of x equals x squared plus 2x minus 3, find P of 2``.
+One stem only; never spoken form + symbolic form together.
+
 Faithful transcription is more important than mathematical
 beautification.
 

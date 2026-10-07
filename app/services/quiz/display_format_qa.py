@@ -110,8 +110,11 @@ def strip_trailing_content_already_in_stem(text: str) -> str:
 
 def finalize_display_text(text: Optional[str], latex: Optional[str] = None) -> tuple[str, Optional[str]]:
     """Deterministic student-facing cleanup (always safe to run at delivery)."""
+    from app.services.quiz.math_text import collapse_spoken_symbolic_duplicate
+
     display, recovered = recover_fields(text, latex)
     body = merge_prose_and_math(display, recovered)
+    body = collapse_spoken_symbolic_duplicate(body)
     body = strip_english_dollar_spans(body)
     body = normalize_mixed_percents(body)
     body = normalize_plain_ellipsis(body)

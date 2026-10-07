@@ -155,3 +155,14 @@ def test_log_commands_in_prose_get_delimited():
     assert r"\(" in out
     assert "and" in out
     assert "find" in out
+
+
+def test_spoken_then_symbolic_p_of_x_keeps_pdf_wording():
+    # Live DIL Q13: hybrid vision spoke the formula then repeated it symbolically.
+    raw = (
+        "If P of x equals x squared plus 2x minus 3, find P of 2. "
+        "P(x) = x^2 + 2x - 3, find P(2)"
+    )
+    out = _mt.collapse_spoken_symbolic_duplicate(raw)
+    assert out == "If P(x) = x^2 + 2x - 3, find P(2)."
+    assert "of x equals" not in out
