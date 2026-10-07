@@ -602,14 +602,19 @@
     submitBtnText.textContent = 'Signing in…';
 
     try {
-      var formData = new FormData();
-      formData.append('useremail', email);
-      formData.append('password', password);
+      // Prefer urlencoded (same as working server checks). FormData/multipart
+      // has been flaky with some browsers + our HTTPS/proxy stack.
+      var body = new URLSearchParams();
+      body.set('useremail', email);
+      body.set('password', password);
 
       var response = await fetch("{{ url_for('auth.login') }}", {
         method: 'POST',
-        body: formData,
+        body: body.toString(),
+        credentials: 'same-origin',
+        redirect: 'follow',
         headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
           'X-Requested-With': 'XMLHttpRequest',
           'Accept': 'application/json'
         }
@@ -618,20 +623,27 @@
       var contentType = response.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
         var data = await response.json().catch(function () { return {}; });
-        if (response.ok && data.success && data.redirect_url) {
-          window.location.replace(data.redirect_url);
+        if (response.ok && data.success) {
+          window.location.replace(data.redirect_url || '/admin/');
           return;
         }
-        showLoginError(data.error || (response.status === 401 ? 'Invalid credentials' : 'Login failed. Please try again.'));
-      } else if (response.status === 302) {
+        showLoginError(data.error || ('Login failed (HTTP ' + response.status + ')'));
+      } else if (response.redirected && response.url) {
+        window.location.replace(response.url);
+        return;
+      } else if (response.status === 302 || response.status === 301 || response.status === 308) {
         var location = response.headers.get('Location');
         if (location) {
           window.location.replace(location);
           return;
         }
         showLoginError('Login failed. Please try again.');
+      } else if (response.ok) {
+        // HTML success page — just go to admin landing
+        window.location.replace('/admin/');
+        return;
       } else {
-        showLoginError(response.status === 401 ? 'Invalid credentials' : 'Login failed. Please try again.');
+        showLoginError(response.status === 401 ? 'Invalid credentials' : ('Login failed (HTTP ' + response.status + ')'));
       }
     } catch (err) {
       showLoginError(err.message || 'Login failed. Please try again.');

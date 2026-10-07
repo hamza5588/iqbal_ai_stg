@@ -289,6 +289,13 @@ def login():
             candidate = request.form.get('password') or ''
             user = UserModel.get_user_by_email(email) if email and candidate else None
             ok, needs_rehash = verify_password(user['password'], candidate) if user else (False, False)
+            if not ok:
+                logger.warning(
+                    "Login failed for %s (user_found=%s, pw_len=%s)",
+                    email,
+                    bool(user),
+                    len(candidate),
+                )
             if ok:
                 if needs_rehash:
                     # legacy plaintext row: store it hashed now that we know it is correct
