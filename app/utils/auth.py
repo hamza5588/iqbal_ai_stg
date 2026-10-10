@@ -15,7 +15,7 @@
 
 
 from functools import wraps
-from flask import session, redirect, url_for, request, jsonify
+from flask import g, session, redirect, url_for, request, jsonify
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,24 +23,32 @@ logger = logging.getLogger(__name__)
 def sync_session_user() -> bool:
     """Keep the cookie session honest against the users table.
 
-    Returns False (and clears the session) when the account was deleted, and refreshes
-    session['role'] when an admin changed it, so a deleted or demoted user cannot keep
-    working on an old session until it expires.
+    Returns False (and clears the session) when the account was deleted or deactivated,
+    and refreshes session['role'] when an admin changed it, so a deleted, deactivated or
+    demoted user cannot keep working on an old session until it expires.
+
+    The result is cached on ``g`` so the app-wide before_request check and the
+    login_required decorators share one query per request.
     """
     if 'user_id' not in session:
         return False
+    cached = g.get('_session_user_ok')
+    if cached is not None:
+        return cached
     try:
         from app.utils.db import get_db
         from app.models.database_models import User
-        row = get_db().query(User.role).filter(User.id == session['user_id']).first()
+        row = get_db().query(User.role, User.is_active).filter(User.id == session['user_id']).first()
     except Exception as e:  # noqa: BLE001 - never lock everyone out on a transient DB error
         logger.warning("session user check failed: %s", e)
         return True
-    if row is None:
+    if row is None or not row[1]:
         session.clear()
+        g._session_user_ok = False
         return False
     if session.get('role') != row[0]:
         session['role'] = row[0]
+    g._session_user_ok = True
     return True
 
 

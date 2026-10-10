@@ -296,6 +296,12 @@ def login():
                     bool(user),
                     len(candidate),
                 )
+            if ok and not user.get('is_active', True):
+                logger.warning("Login blocked for deactivated account %s", email)
+                err_msg = "Your account has been deactivated. Please contact your teacher or administrator."
+                if _wants_json():
+                    return jsonify({'success': False, 'error': err_msg}), 403
+                return render_template('login/login.html', error=err_msg)
             if ok:
                 if needs_rehash:
                     # legacy plaintext row: store it hashed now that we know it is correct

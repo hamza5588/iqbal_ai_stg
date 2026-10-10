@@ -48,6 +48,11 @@ if not DIAG_PDF.is_file():
     DIAG_PDF = ROOT / "diagnostic_qa_math_ix_sindh.pdf"
 if not TARGET_PDF.is_file():
     TARGET_PDF = ROOT / "target_content_math_ix_sindh.pdf"
+# Optional override, e.g. a paper the local LLM setup extracts reliably.
+if os.environ.get("QA_DIAG_PDF"):
+    DIAG_PDF = ROOT / os.environ["QA_DIAG_PDF"]
+if os.environ.get("QA_TARGET_PDF"):
+    TARGET_PDF = ROOT / os.environ["QA_TARGET_PDF"]
 
 # Math quality heuristics (API text — UI MathJax checked separately when possible)
 SMASHED_RE = re.compile(r"(?:Which|What|Find|Solve|The|If|Given)[a-z]{4,}", re.I)
@@ -1415,7 +1420,8 @@ def phase9_10(admin: Api, student: Api, aid: int):
     print("\n=== PHASE 9–10 — Extra + regression ===")
     notes = []
     # Long title
-    archive_grade(admin, "11")
+    if GRADE != "11":  # grade 11 may itself be the dedicated QA grade under test
+        archive_grade(admin, "11")
     long_title = ("QA Long Title " + ("数学✨<>&\"'" * 20))[:300]
     # Use tiny wrong then skip heavy — instead special chars on a quick validation only
     notes.append(f"long_title_len={len(long_title)} (full upload skipped for grade 11 to save time)")

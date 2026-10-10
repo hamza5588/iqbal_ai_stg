@@ -1038,6 +1038,14 @@ def create_diagnostic_from_pdf():
         def _run_diagnostic_upload():
             with app_obj.app_context():
                 try:
+                    # Ensure this worker thread does not inherit a closed
+                    # scoped Session from a prior context on the same thread id.
+                    from app.utils.db import get_session_factory
+
+                    try:
+                        get_session_factory().remove()
+                    except Exception:
+                        pass
                     result = upload_diagnostic_bundle(
                         teacher_id=teacher_id,
                         title=title_clean,

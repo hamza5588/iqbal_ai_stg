@@ -461,9 +461,10 @@
   }
 
   function appendTargetFiles(fd, files) {
+    // Append once only. Duplicating as target_files + target_files[] doubles
+    // the multipart body (~57MB → ~114MB) and trips nginx 100M/200M limits.
     for (var i = 0; i < files.length; i++) {
       fd.append('target_files', files[i]);
-      fd.append('target_files[]', files[i]);
     }
   }
 

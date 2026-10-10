@@ -2,7 +2,7 @@ import logging
 from flask import current_app, g
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, scoped_session
-from sqlalchemy.pool import StaticPool, QueuePool
+from sqlalchemy.pool import StaticPool, QueuePool, NullPool
 from typing import Dict, Any, Optional, List
 import os
 
@@ -65,20 +65,23 @@ def get_engine():
         
         # SQLite-specific optimizations
         if db_url.startswith('sqlite'):
-            # QueuePool-only options (pool_size, max_overflow) are invalid for
-            # StaticPool, which SQLite always uses here.
+            # QueuePool-only options are invalid for StaticPool / NullPool.
             engine_options.pop('pool_size', None)
             engine_options.pop('max_overflow', None)
 
-            # Use StaticPool for in-memory, QueuePool otherwise
+            # In-memory: single shared connection (StaticPool).
+            # File DB: NullPool so each thread/request gets its own connection.
+            # StaticPool + background ingest + HTTP progress polling was closing
+            # the one shared sqlite3 connection mid-query ("Cannot operate on a
+            # closed database") during diagnostic Upload & Generate Draft.
             if 'sqlite:///:memory:' in db_url:
                 engine_options['poolclass'] = StaticPool
                 engine_options['connect_args'] = {'check_same_thread': False}
             else:
-                engine_options['poolclass'] = StaticPool
+                engine_options['poolclass'] = NullPool
                 engine_options['connect_args'] = {
                     'check_same_thread': False,
-                    'timeout': 20.0
+                    'timeout': 20.0,
                 }
         else:
             # MySQL/PostgreSQL - use QueuePool and enable pool_pre_ping
@@ -121,6 +124,9 @@ def get_db():
 def close_db(e=None):
     """Close database session. On commit failure, rolls back and invalidates
     the connection so the pool discards it (avoids reusing broken connections).
+
+    Always remove() the scoped_session registry for this thread so the next
+    get_db() does not reuse a closed Session (critical for background jobs).
     """
     db = g.pop('db', None)
     if db is not None:
@@ -139,7 +145,17 @@ def close_db(e=None):
             except Exception:
                 pass
         finally:
-            db.close()
+            try:
+                db.close()
+            except Exception:
+                pass
+    # Drop thread-local scoped session even if g.db was never set
+    try:
+        factory = _session_factory
+        if factory is not None:
+            factory.remove()
+    except Exception as ex:
+        logger.warning(f"Error removing scoped session: {ex}")
 
 
 def update_token_usage(user_id: int, tokens_used: int) -> None:
@@ -333,6 +349,14 @@ def init_db(app):
                         db.commit()
                         logger.info("full_name column added successfully")
                         columns = [col['name'] for col in inspector.get_columns('users')]
+
+                    # Same rule as full_name: the mapped model SELECTs is_active, so add it
+                    # via raw SQL before any User ORM query.
+                    if 'is_active' not in columns:
+                        logger.info("Adding is_active column to users table...")
+                        db.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"))
+                        db.commit()
+                        logger.info("is_active column added successfully")
 
                     db.execute(text(
                         "UPDATE users SET full_name = username "

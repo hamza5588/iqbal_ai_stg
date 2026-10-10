@@ -1,6 +1,6 @@
 {
-  "base_url": "http://127.0.0.1:5055",
-  "run": "150007",
+  "base_url": "https://iqbalai.com",
+  "run": "113311",
   "passed": 27,
   "total": 27,
   "results": [
@@ -8,15 +8,15 @@
       "section": "Auth/shell",
       "item": "Teacher login lands on new teacher dashboard",
       "status": "PASS",
-      "evidence": "http://127.0.0.1:5055/teacher-dashboard#lessons",
-      "secs": 10.6
+      "evidence": "https://iqbalai.com/teacher-dashboard#lessons",
+      "secs": 19.1
     },
     {
       "section": "Auth/shell",
       "item": "Top nav shows Lessons, Classes, Quizzes, Analytics, AI Tutor with correct icons",
       "status": "PASS",
       "evidence": "My Lessons, Classes, Quizzes, Analytics, AI Tutor",
-      "secs": 1.0
+      "secs": 0.5
     },
     {
       "section": "Auth/shell",
@@ -30,140 +30,140 @@
       "item": "Non-teacher cannot access teacher routes",
       "status": "PASS",
       "evidence": "legacy route removed (404); student /teacher-dashboard -> 302 /; anonymous -> 401 ; student /api/lms/classes/mine -> 200",
-      "secs": 0.1
+      "secs": 1.5
     },
     {
       "section": "Auth/shell",
       "item": "Deep link #analytics opens that view",
       "status": "PASS",
-      "evidence": "http://127.0.0.1:5055/teacher-dashboard#analytics",
+      "evidence": "https://iqbalai.com/teacher-dashboard#analytics",
       "secs": 0.0
     },
     {
       "section": "Classes",
       "item": "Create class form works and persists",
       "status": "PASS",
-      "evidence": "class #14 code D6MGNQT7 (persists after reload)",
-      "secs": 3.8
+      "evidence": "class #16 code 18HRSUGS (persists after reload)",
+      "secs": 3.5
     },
     {
       "section": "Classes",
       "item": "Add students (eligible list, multi-select + single add)",
       "status": "PASS",
       "evidence": "added a+b (multi-select) and c (row Add); API roster = e2e_student_a, e2e_student_b, e2e_student_c",
-      "secs": 1.5
+      "secs": 3.2
     },
     {
       "section": "Classes",
       "item": "Roster displays enrolled students; remove + join-code flow",
       "status": "PASS",
       "evidence": "3 rows \u2192 removed C \u2192 2 rows \u2192 C joined via code \u2192 3 rows",
-      "secs": 1.3
+      "secs": 2.9
     },
     {
       "section": "Quizzes",
       "item": "Quiz upload/create path (PDF \u2192 MCQ generate \u2192 preview \u2192 publish)",
       "status": "PASS",
-      "evidence": "5 MCQs generated; Status: completed | Confidence: 95% | Questions: 5 / 5 requested",
-      "secs": 103.5
+      "evidence": "5 MCQs generated; Status: completed | Confidence: 93% | Questions: 5 / 5 requested",
+      "secs": 15.5
     },
     {
       "section": "Quizzes",
       "item": "Quizzes list loads (tabs, expand shows MCQs)",
       "status": "PASS",
-      "evidence": "19 quizzes; 'E2E PDF Quiz 150007' expanded with 5 MCQs",
-      "secs": 1.8
+      "evidence": "2 quizzes; 'E2E PDF Quiz 113311' expanded with 5 MCQs",
+      "secs": 1.1
     },
     {
       "section": "Quizzes",
       "item": "Assign quiz to class works end-to-end",
       "status": "PASS",
-      "evidence": "assignment #19 visible to student A",
-      "secs": 1.9
+      "evidence": "assignment #23 visible to student A",
+      "secs": 2.6
     },
     {
       "section": "Quizzes",
       "item": "Students submit the assigned quiz (data for analytics)",
       "status": "PASS",
-      "evidence": "e2e.student.a: 0/5.0; e2e.student.b: 5/5.0; tagged quiz e2e.student.b: 4/4.0; student C not submitted",
-      "secs": 1.9
+      "evidence": "qa.student.a.ui.1790965865: 0/5.0; qa.student.b.ui.1790965865: 5/5.0; tagged quiz e2e.student.b: 4/4.0; student C not submitted",
+      "secs": 11.1
     },
     {
       "section": "Analytics",
       "item": "Topic progress renders real data",
       "status": "PASS",
       "evidence": "3 students; A overall 0% (API 0.0), latest 0%, 0 topic rows; B 100% with 2 topic rows + chart",
-      "secs": 1.9
+      "secs": 3.5
     },
     {
       "section": "Analytics",
       "item": "Quiz results collapsed \u2194 expanded states work",
       "status": "PASS",
       "evidence": "collapsed (2 / 3 submitted) \u2192 expanded (3 student rows) \u2192 collapsed",
-      "secs": 1.2
+      "secs": 0.4
     },
     {
       "section": "Analytics",
       "item": "Struggling students view loads",
       "status": "PASS",
-      "evidence": "2 struggling (matches API)",
+      "evidence": "0 struggling (matches API)",
       "secs": 0.5
     },
     {
       "section": "Analytics",
       "item": "Analytics roster progress matches API (no all-zeros when data exists)",
       "status": "PASS",
-      "evidence": "UI progress == API for all 3; on-track/help/not-attempted = 1/1/1",
-      "secs": 0.7
+      "evidence": "UI progress == API for all 3; on-track/help/not-attempted = 2/0/1",
+      "secs": 1.0
     },
     {
       "section": "Lessons",
       "item": "Create lesson (Use PDF as lesson) \u2192 appears in list",
       "status": "PASS",
-      "evidence": "lesson #12",
-      "secs": 7.1
+      "evidence": "lesson #54",
+      "secs": 33.7
     },
     {
       "section": "Lessons",
       "item": "List lessons loads from API (search, tabs, filters, pagination)",
       "status": "PASS",
-      "evidence": "8 lessons; search + subject filter OK",
-      "secs": 1.9
+      "evidence": "1 lessons; search + subject filter OK",
+      "secs": 2.5
     },
     {
       "section": "Lessons",
       "item": "View / edit / publish / Word / PowerPoint / FAQ / delete flows",
       "status": "PASS",
-      "evidence": "view, edit+save, Unpublish\u2192Publish, word:E2E_Lesson_AsIs_150007_edited.docx, ppt:E2E_Lesson_AsIs_150007_edited.pptx, faq, delete",
-      "secs": 8.6
+      "evidence": "view, edit+save, Unpublish\u2192Publish, word:E2E_Lesson_AsIs_113311_edited.docx, ppt:E2E_Lesson_AsIs_113311_edited.pptx, faq, delete",
+      "secs": 9.1
     },
     {
       "section": "Lessons",
       "item": "Create lesson (Generate from PDF) \u2192 opens lesson chat in AI Tutor",
       "status": "PASS",
       "evidence": "switched to AI Tutor with the new PDF conversation",
-      "secs": 3.7
+      "secs": 14.3
     },
     {
       "section": "AI Tutor",
       "item": "Lesson chat: send message \u2192 response or graceful error",
       "status": "PASS",
-      "evidence": "assistant: 'The document is a Mathematics Diagnostic Baseline Assessment for Grade IX students, covering various domains including Number & Operations, Algebra, Measurement & Geometry, and Statistics & Probabilit'",
-      "secs": 13.3
+      "evidence": "assistant: 'The document contains a Mathematics Diagnostic Baseline Assessment designed for Grade IX students, focusing on various mathematical concepts such as probability, geometry, and statistics. It includes '",
+      "secs": 4.4
     },
     {
       "section": "AI Tutor",
       "item": "Chat history dropdown lists and re-opens conversations",
       "status": "PASS",
-      "evidence": "25 conversations listed; 'E2E Lesson Gen 150007' re-opened with 3 messages",
-      "secs": 0.6
+      "evidence": "2 conversations listed; 'E2E Lesson Gen 113311' re-opened with 3 messages",
+      "secs": 0.5
     },
     {
       "section": "AI Tutor",
       "item": "Teaching Assistant: history load + send \u2192 reply or graceful error",
       "status": "PASS",
-      "evidence": "reply: 'AI  One effective tip for teaching fractions is to in corporate collaborative learning activities. Have students work in pairs or small groups to solve fraction'; persisted history messages: 22",
-      "secs": 5.2
+      "evidence": "reply: 'AI  One effective tip for teaching fractions is to use visual aids, such as fraction circles or bars. These tools help students see the relationship between dif'; persisted history messages: 2",
+      "secs": 3.6
     },
     {
       "section": "AI Tutor",
@@ -177,7 +177,7 @@
       "item": "Mobile width: no horizontal overflow, nav usable",
       "status": "PASS",
       "evidence": "lessons:0px classes:0px quizzes:0px analytics:0px tutor:0px",
-      "secs": 15.1
+      "secs": 17.5
     },
     {
       "section": "Cross-cutting",
@@ -196,5 +196,5 @@
   ],
   "console_errors": [],
   "bad_responses": [],
-  "pdf_quiz_status": "Status: completed | Confidence: 95% | Questions: 5 / 5 requested"
+  "pdf_quiz_status": "Status: completed | Confidence: 93% | Questions: 5 / 5 requested"
 }

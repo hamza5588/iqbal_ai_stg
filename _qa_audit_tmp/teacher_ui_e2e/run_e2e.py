@@ -20,10 +20,24 @@ from pathlib import Path
 
 from playwright.sync_api import Page, expect, sync_playwright
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 BASE = os.environ.get("BASE_URL", "http://127.0.0.1:5055").rstrip("/")
 PASSWORD = os.environ.get("E2E_PASSWORD", "E2eTeacher!2026")
 TEACHER = os.environ.get("E2E_TEACHER_EMAIL", "e2e.teacher@iqbalai.local")
-STUDENTS = ["e2e.student.a@iqbalai.local", "e2e.student.b@iqbalai.local", "e2e.student.c@iqbalai.local"]
+STUDENTS = [
+    e.strip()
+    for e in os.environ.get(
+        "E2E_STUDENTS",
+        "e2e.student.a@iqbalai.local,e2e.student.b@iqbalai.local,e2e.student.c@iqbalai.local",
+    ).split(",")
+    if e.strip()
+]
 CHROME = os.environ.get("CHROME_PATH", r"C:\Program Files\Google\Chrome\Application\chrome.exe")
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent

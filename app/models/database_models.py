@@ -21,6 +21,8 @@ class User(Base):
     password = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default='student',
                   server_default='student')
+    # False = deactivated: cannot log in, and any open session is dropped on its next request.
+    is_active = Column(Boolean, nullable=False, default=True, server_default='true')
     class_standard = Column(String(100), nullable=False)
     medium = Column(String(100), nullable=False)
     groq_api_key = Column(Text, nullable=False)

@@ -162,7 +162,7 @@
 
 
 # app/__init__.py
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, session
 from flask_cors import CORS
 from datetime import timedelta
 import logging
@@ -386,6 +386,18 @@ def create_app():
             teardown_flask_request_llm_telemetry(exc)
         except Exception:
             pass
+
+    @app.before_request
+    def _drop_deactivated_sessions():
+        """Log out a deleted or deactivated account on its next request.
+
+        Many routes check ``'user_id' in session`` inline instead of using a
+        login_required decorator, so the check has to run app-wide.
+        """
+        if 'user_id' in session and not (request.path or '').startswith('/static/'):
+            from app.utils.auth import sync_session_user
+
+            sync_session_user()
 
     @app.before_request
     def _enforce_https_in_proxy_setups():
