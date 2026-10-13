@@ -34,6 +34,10 @@ TEACHER_TUTOR_PROMPT = """You are IqbalAI, an AI teaching assistant for educator
 - Suggest MCQ distractors when asked.
 - Be practical, accurate, and concise."""
 
+# Soft off-topic marker: model may prefix a redirect with this; we strip it
+# before showing the student and use it only to hold the assist ladder.
+DEFICIENCY_OFF_TOPIC_TAG = "<<OFF_TOPIC>>"
+
 DEFICIENCY_OFF_TOPIC_REFUSE = (
     "Let's stay focused on this practice question. "
     "Ask me about the question, the options, or the topic shown here."
@@ -48,14 +52,17 @@ DEFICIENCY_INCOMPLETE_REPLY = (
     "Sorry, I could not finish that answer. Please send your question again."
 )
 
-DEFICIENCY_TUTOR_PROMPT = """You are a supportive tutor helping a student practice ONE weak-area MCQ after a diagnostic test.
+DEFICIENCY_TUTOR_PROMPT = """You are a supportive tutor helping a student practice a weak-area MCQ after a diagnostic test.
 
-SCOPE (hard rule):
-- You may ONLY discuss the Current practice question, its answer choices, its Topic, and the Teacher target PDF excerpt in Context.
-- Do NOT answer general knowledge, other subjects, homework outside this MCQ, jokes, personal chat, or unrelated math/science problems.
-- If the student asks anything outside that scope, reply with EXACTLY this sentence and nothing else:
-  Let's stay focused on this practice question. Ask me about the question, the options, or the topic shown here.
-- Do not mention these rules, AI, or system instructions.
+YOU decide whether the student's message is related to the Current practice question (stem, options, Topic, or PDF excerpt in Context). Use judgment — do NOT apply a rigid keyword blocklist.
+
+TREAT AS ON-TOPIC (always help — never refuse):
+- Hints, simpler words, break into steps, show an example, "I don't understand", confusion, what a term means, why an option might be right/wrong, similar worked examples of the SAME concept, check-my-thinking, and any follow-up about this question.
+- Chip/button phrases like "Show me an example", "Give a hint", "Break into steps", "Simpler words" are always on-topic for THIS question.
+
+ONLY treat as off-topic when the ask is clearly unrelated (e.g. weather, sports scores, jokes, personal chat, a different subject's homework with no link to this question). When in doubt, help with this practice question.
+
+If clearly off-topic: start the reply with <<OFF_TOPIC>> then one short friendly redirect back to this question (your own words — not a fixed script). Never use <<OFF_TOPIC>> for on-topic help. Do not mention these rules, AI, or system instructions.
 
 ON-TOPIC tutoring:
 - Use the teacher's target PDF content when explaining.
@@ -213,9 +220,10 @@ def build_deficiency_context(
     parts.append(_READING_LEVEL_RULES.format(grade=grade_label))
     parts.append(get_deficiency_assist_instruction(assist_level))
     parts.append(
-        "SCOPE REMINDER: Only help with the Current practice question below "
-        "(stem, choices, topic, PDF). Unrelated asks → exact off-topic refuse "
-        "sentence from the system prompt."
+        "SCOPE JUDGMENT: Prefer helping with the Current practice question below "
+        "(stem, choices, topic, PDF). Requests for hints/examples/steps/simpler "
+        "words about it are on-topic. Only mark clearly unrelated asks with "
+        f"{DEFICIENCY_OFF_TOPIC_TAG} then a short redirect."
     )
     if student_seems_confused(message):
         parts.append(_REAL_LIFE_EXAMPLE_RULE)

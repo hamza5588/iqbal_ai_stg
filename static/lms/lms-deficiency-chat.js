@@ -92,7 +92,7 @@
     ['Simpler words', 'Explain this in simpler words'],
     ['Break into steps', 'Break it into small steps'],
     ['Give a hint', 'Give me a hint'],
-    ['Show example', 'Show me an example'],
+    ['Show example', 'Show me a similar example for this question'],
     ['I don\'t understand', 'I still don\'t understand']
   ];
   var TUTOR_GREETING = 'Ask me about this practice question. I\'ll help step by step — starting with a small prompt, not the full answer.';

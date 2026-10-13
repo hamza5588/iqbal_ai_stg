@@ -1162,17 +1162,24 @@ def explain_with_tutor(
         assist_level=assist_level,
     )
 
+    off_tag = tutor_service.DEFICIENCY_OFF_TOPIC_TAG
     refuse = tutor_service.DEFICIENCY_OFF_TOPIC_REFUSE
     truncated = tutor_service.DEFICIENCY_TRUNCATED_RETRY
     incomplete = tutor_service.DEFICIENCY_INCOMPLETE_REPLY
     cleaned = (reply or "").strip()
-    # Normalize near-miss refuses (extra whitespace/quotes) to the canonical sentence.
-    if refuse in cleaned:
-        reply = refuse
-        cleaned = refuse
+    # Model-judged off-topic: optional <<OFF_TOPIC>> prefix (stripped before UI).
+    off_topic = cleaned.startswith(off_tag) or cleaned == refuse or refuse in cleaned
+    if cleaned.startswith(off_tag):
+        cleaned = cleaned[len(off_tag) :].strip() or refuse
+        reply = cleaned
+    elif refuse in cleaned and cleaned != refuse:
+        # Legacy exact-sentence refuse — keep text, still hold assist level.
+        pass
     # Do not advance the assist ladder on off-topic or failed/truncated generations.
-    hold_level = cleaned in (refuse, truncated, incomplete) or cleaned.startswith(
-        "Sorry, I could not finish"
+    hold_level = (
+        off_topic
+        or cleaned in (truncated, incomplete)
+        or cleaned.startswith("Sorry, I could not finish")
     )
 
     history.append({"role": "user", "content": message})
