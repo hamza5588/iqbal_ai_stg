@@ -1,7 +1,8 @@
 """Diagnostic assessment helpers — platform admin diagnostic only."""
 from __future__ import annotations
 
-from typing import List, Optional
+from datetime import datetime
+from typing import List, Optional, Set
 
 from app.models.lms_models import Assessment
 from app.services.lms import assessment_service
@@ -9,6 +10,57 @@ from app.utils.db import get_db
 from app.services.lms import class_service
 
 DEFAULT_DIAGNOSTIC_TITLE = "Platform Math Diagnostic"
+
+
+def _student_queue_anchor_at(student_id: int) -> Optional[datetime]:
+    """When this student "joined" for diagnostic queue purposes.
+
+    New accounts should not inherit a long backlog of diagnostics that were already
+    replaced before they existed. Prefer account created_at; fall back to earliest
+    class enrollment.
+    """
+    try:
+        from app.models.database_models import User
+
+        user = get_db().query(User).filter(User.id == student_id).first()
+        if user is not None and getattr(user, "created_at", None) is not None:
+            return user.created_at
+    except Exception:
+        pass
+    try:
+        from app.models.lms_models import ClassEnrollment
+
+        row = (
+            get_db()
+            .query(ClassEnrollment.enrolled_at)
+            .filter(ClassEnrollment.student_id == student_id)
+            .order_by(ClassEnrollment.enrolled_at.asc(), ClassEnrollment.id.asc())
+            .first()
+        )
+        if row and row[0] is not None:
+            return row[0]
+    except Exception:
+        pass
+    return None
+
+
+def _touched_assessment_ids(student_id: int, assessment_ids: List[int]) -> Set[int]:
+    """Assessments this student already started or submitted (always keep in queue)."""
+    from app.models.lms_models import AssessmentAttempt
+
+    if not assessment_ids:
+        return set()
+    rows = (
+        get_db()
+        .query(AssessmentAttempt.assessment_id)
+        .filter(
+            AssessmentAttempt.student_id == student_id,
+            AssessmentAttempt.assessment_id.in_(assessment_ids),
+        )
+        .distinct()
+        .all()
+    )
+    return {r[0] for r in rows}
 
 
 def get_default_diagnostic(grade_level: Optional[str] = None) -> Optional[Assessment]:
@@ -49,16 +101,42 @@ def get_student_diagnostic(student_id: int) -> Optional[Assessment]:
 def get_student_diagnostic_queue(student_id: int) -> List[Assessment]:
     """Diagnostics this student is expected to take, in order.
 
-    Normally just the published diagnostic for their grade. When the admin removed /
-    replaced an earlier published one, a student who never submitted it still takes it
-    first; a student who did submit it keeps it in the list as "taken". Nothing is
+    Always includes the current published diagnostic for their grade. Superseded
+    (replaced) diagnostics are included only when the student already existed at
+    the time they were replaced — so:
+
+    - Students who were already in the system when older diagnostics were published
+      / replaced still see that full backlog (old first, then current).
+    - A brand-new account only sees the latest published diagnostic, not history
+      that was already replaced before they joined.
+    - If the teacher publishes another diagnostic after that student joined, the
+      previous one (now superseded) stays in their queue if it was still current
+      while they were enrolled; the next brand-new student again sees only latest.
+
+    Diagnostics the student already started/submitted are always kept. Nothing is
     offered while the grade has no published diagnostic.
     """
     grade = class_service.get_student_diagnostic_grade(student_id)
     current = _published_diagnostic_for_grade(grade)
     if not current:
         return []
-    older = [a for a in assessment_service.list_superseded_diagnostics(grade) if a.id != current.id]
+    superseded = [
+        a for a in assessment_service.list_superseded_diagnostics(grade) if a.id != current.id
+    ]
+    join_at = _student_queue_anchor_at(student_id)
+    touched = _touched_assessment_ids(student_id, [a.id for a in superseded])
+    older: List[Assessment] = []
+    for a in superseded:
+        if a.id in touched:
+            older.append(a)
+            continue
+        if join_at is None:
+            # Unknown join time (tests / legacy rows): keep prior full-queue behaviour.
+            older.append(a)
+            continue
+        replaced_at = a.superseded_at or a.updated_at or a.created_at
+        if replaced_at is None or replaced_at >= join_at:
+            older.append(a)
     return older + [current]
 
 

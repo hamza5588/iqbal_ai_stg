@@ -191,7 +191,8 @@ class Assessment(Base):
     overall_confidence = Column(Float, nullable=True)
     requires_review = Column(Boolean, default=False, server_default="0")
     # Diagnostics only: set when a PUBLISHED diagnostic is removed / replaced by the admin.
-    # Students of that grade who never took it still take it first, before the new one.
+    # Students who already existed at superseded_at still take it first (if not submitted);
+    # brand-new accounts only see the current published diagnostic.
     superseded_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(
