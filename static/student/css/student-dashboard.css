@@ -267,8 +267,11 @@ table.sd-mini th:not(:first-child), table.sd-mini td:not(:first-child) { text-al
   font-weight: 800; color: var(--sd-blue-700); flex-shrink: 0; font-size: 15px; overflow: hidden; }
 .sd-ai-bubble .sd-bot-ic img { width: 100%; height: 100%; object-fit: contain; }
 .sd-ai-bubble .sd-msg { background: var(--sd-blue-50); border: 1px solid #dbe7fb; border-radius: 14px; padding: 12px 16px; font-size: calc(14.5px * var(--lms-font-scale, 1));
-  line-height: 1.55; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  line-height: 1.55; min-width: 0; max-width: 100%; overflow-wrap: anywhere; overflow-x: hidden; word-break: break-word; }
 .sd-ai-bubble .sd-msg p:first-child { margin-top: 0; } .sd-ai-bubble .sd-msg p:last-child { margin-bottom: 0; }
+.sd-ai-bubble .sd-msg .lms-math-content,
+.sd-ai-bubble .sd-msg .katex-display,
+.sd-ai-bubble .sd-msg .katex { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .sd-ai-bubble .sd-level { font-size: 11px; color: var(--sd-muted); margin-bottom: 4px; font-weight: 600; }
 .sd-ai-bubble.user { flex-direction: row-reverse; }
 .sd-ai-bubble.user .sd-bot-ic { background: var(--sd-blue-700); color: #fff; font-size: 13px; }

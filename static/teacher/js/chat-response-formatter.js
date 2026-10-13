@@ -82,10 +82,29 @@
    */
   function restoreMathSegments(str, stash) {
     if (!stash || !stash.length) return str;
-    return str.replace(_MATH_PLACEHOLDER_RE, function (match, idxStr) {
-      var idx = parseInt(idxStr, 10);
-      return idx >= 0 && idx < stash.length ? stash[idx] : match;
-    });
+    // Prefer split/join over String.replace with a replacement string: stash
+    // entries are often "$...$" / "$$...$$", and "$", "$$", "$&", "$1" are
+    // special in replace() and can leave zzMATHSTASHzz… tokens visible or
+    // corrupt the equation. Function-replace is also safe; split/join is
+    // bulletproof and does not re-scan inserted text.
+    var out = str;
+    for (var i = 0; i < stash.length; i++) {
+      var ph = _mathPlaceholder(i);
+      if (out.indexOf(ph) === -1) continue;
+      out = out.split(ph).join(stash[i]);
+    }
+    // marked.js has occasionally wrapped the index digit (e.g.
+    // zzMATHSTASHzz<strong>2</strong>zzENDMATHzz), which breaks the exact
+    // placeholder match above. Recover by reading digits between the markers.
+    if (/zzMATHSTASHzz/.test(out)) {
+      out = out.replace(/zzMATHSTASHzz([\s\S]*?)zzENDMATHzz/g, function (_full, mid) {
+        var digits = String(mid || '').replace(/\D/g, '');
+        if (!digits) return '';
+        var idx = parseInt(digits, 10);
+        return idx >= 0 && idx < stash.length ? stash[idx] : '';
+      });
+    }
+    return out;
   }
 
   /**
@@ -400,6 +419,18 @@
 
     // Restore math AFTER marked.parse(), not before - see restoreMathSegments' docstring.
     html = restoreMathSegments(html, mathProtected.stash);
+
+    // If placeholders still leaked (marked mangled markers, or stash miss),
+    // fall back to plain escaped text with original math delimiters so MathJax
+    // can still typeset — never show zzMATHSTASHzz to the student.
+    if (/zzMATHSTASHzz\d+zzENDMATHzz/.test(html)) {
+      console.warn('TeacherChatFormatter: math placeholders leaked; using plain fallback');
+      html = escapeAndBreaks(
+        convertBareBracketMathToLatex(
+          stripLessonFinalizationFields(decodeHtmlEntities(rawText.trim()))
+        )
+      );
+    }
 
     if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
       try {

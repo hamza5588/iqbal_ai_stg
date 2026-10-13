@@ -1162,10 +1162,26 @@ def explain_with_tutor(
         assist_level=assist_level,
     )
 
+    refuse = tutor_service.DEFICIENCY_OFF_TOPIC_REFUSE
+    truncated = tutor_service.DEFICIENCY_TRUNCATED_RETRY
+    incomplete = tutor_service.DEFICIENCY_INCOMPLETE_REPLY
+    cleaned = (reply or "").strip()
+    # Normalize near-miss refuses (extra whitespace/quotes) to the canonical sentence.
+    if refuse in cleaned:
+        reply = refuse
+        cleaned = refuse
+    # Do not advance the assist ladder on off-topic or failed/truncated generations.
+    hold_level = cleaned in (refuse, truncated, incomplete) or cleaned.startswith(
+        "Sorry, I could not finish"
+    )
+
     history.append({"role": "user", "content": message})
     history.append({"role": "assistant", "content": reply})
     tutor_state["messages"] = history
-    tutor_state["assist_level"] = min(assist_level + 1, 5)
+    if not hold_level:
+        tutor_state["assist_level"] = min(assist_level + 1, 5)
+    else:
+        tutor_state["assist_level"] = assist_level
     tutor_state["question_index"] = session.current_index
     _save_tutor_state(session, tutor_state)
     db.commit()

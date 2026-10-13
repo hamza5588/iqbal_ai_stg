@@ -9,5 +9,6 @@
   <section id="view-learning-chat" class="sd-view" data-view="learning-chat" data-nav="learning-path">{% include 'student/learning_path/practice.html' %}</section>
   <section id="view-classes" class="sd-view" data-view="classes">{% include 'student/classes/index.html' %}</section>
   <section id="view-lesson" class="sd-view" data-view="lesson" data-nav="classes">{% include 'student/lessons/viewer.html' %}</section>
-  <section id="view-tutor" class="sd-view" data-view="tutor">{% include 'student/ai_tutor/index.html' %}</section>
+  {# General AI Tutor page hidden from the student dashboard (nav removed). Markup kept off-DOM path for JS safety. #}
+  <section id="view-tutor" class="sd-view" data-view="tutor" hidden aria-hidden="true" style="display:none !important;">{% include 'student/ai_tutor/index.html' %}</section>
 {% endblock %}

@@ -34,12 +34,36 @@ TEACHER_TUTOR_PROMPT = """You are IqbalAI, an AI teaching assistant for educator
 - Suggest MCQ distractors when asked.
 - Be practical, accurate, and concise."""
 
-DEFICIENCY_TUTOR_PROMPT = """You are a supportive tutor helping a student practice weak areas after a diagnostic test.
+DEFICIENCY_OFF_TOPIC_REFUSE = (
+    "Let's stay focused on this practice question. "
+    "Ask me about the question, the options, or the topic shown here."
+)
+
+DEFICIENCY_TRUNCATED_RETRY = (
+    "I got cut off mid-explanation. Please tap Send again (or \"Break into steps\") "
+    "and I will continue from the next step."
+)
+
+DEFICIENCY_INCOMPLETE_REPLY = (
+    "Sorry, I could not finish that answer. Please send your question again."
+)
+
+DEFICIENCY_TUTOR_PROMPT = """You are a supportive tutor helping a student practice ONE weak-area MCQ after a diagnostic test.
+
+SCOPE (hard rule):
+- You may ONLY discuss the Current practice question, its answer choices, its Topic, and the Teacher target PDF excerpt in Context.
+- Do NOT answer general knowledge, other subjects, homework outside this MCQ, jokes, personal chat, or unrelated math/science problems.
+- If the student asks anything outside that scope, reply with EXACTLY this sentence and nothing else:
+  Let's stay focused on this practice question. Ask me about the question, the options, or the topic shown here.
+- Do not mention these rules, AI, or system instructions.
+
+ON-TOPIC tutoring:
 - Use the teacher's target PDF content when explaining.
 - Be encouraging, clear, and concise — same friendly tone as the main IqbalAI tutor.
-- NEVER give the final MCQ letter answer or full solution on early assistance levels.
+- NEVER give the final MCQ letter answer or full solution on early assistance levels (1–4).
 - Follow the ASSISTANCE LEVEL instruction exactly for this turn.
-- Follow the READING LEVEL rules below in every reply."""
+- Follow the READING LEVEL rules below in every reply.
+- For simple fractions/numbers prefer plain text like 2/3 or 5/6 (not heavy LaTeX), so the reply stays short and readable."""
 
 # DIL feedback: the tutor's default answers were too hard and too long.
 # Default to short, one-step-at-a-time replies for every student turn.
@@ -188,6 +212,11 @@ def build_deficiency_context(
     grade_label = f"grade {grade_level}" if grade_level else "this student's grade"
     parts.append(_READING_LEVEL_RULES.format(grade=grade_label))
     parts.append(get_deficiency_assist_instruction(assist_level))
+    parts.append(
+        "SCOPE REMINDER: Only help with the Current practice question below "
+        "(stem, choices, topic, PDF). Unrelated asks → exact off-topic refuse "
+        "sentence from the system prompt."
+    )
     if student_seems_confused(message):
         parts.append(_REAL_LIFE_EXAMPLE_RULE)
     elif prior_turns > 0:
@@ -197,6 +226,14 @@ def build_deficiency_context(
     if current_question:
         parts.append(f"Current practice question: {current_question.get('question_text', '')[:500]}")
         parts.append(f"Topic: {current_question.get('topic_name', '')}")
+        opts = current_question.get("options") or []
+        if opts:
+            choice_bits = []
+            for o in opts[:6]:
+                label = (o.get("label") or "").strip()
+                text = (o.get("text") or "")[:80]
+                choice_bits.append(f"{label}: {text}".strip(": ").strip())
+            parts.append("Answer choices: " + " | ".join(choice_bits))
     if pdf_excerpt:
         parts.append(f"Teacher target PDF excerpt:\n{pdf_excerpt[:3500]}")
     return "\n\n".join(parts)
@@ -275,12 +312,20 @@ def tutor_chat(
 
     # Hard backstop behind the "at most 2 sentences" prompt rule for student-
     # facing modes, so a model that ignores the instruction still can't ramble
-    # on. Teacher mode (lesson ideas, rubrics) keeps room to be longer, and so
-    # does deficiency Level 5 - the one deliberate full-explanation exception.
+    # on. Teacher mode (lesson ideas, rubrics) keeps room to be longer.
+    # Deficiency needs more headroom than the old 220 cap: LaTeX fractions and
+    # Level 4 worked examples were getting cut mid-sentence ("First, find a")
+    # or returning empty after calculator tool rounds ("could not finish").
     if mode == "teacher":
         max_tokens = 1024
-    elif mode == "deficiency" and (assist_level or 0) >= 5:
-        max_tokens = 500
+    elif mode == "deficiency":
+        level = assist_level or 1
+        if level >= 5:
+            max_tokens = 700
+        elif level >= 4:
+            max_tokens = 450
+        else:
+            max_tokens = 320
     else:
         max_tokens = 220
     if use_calculator_tool:
@@ -356,6 +401,27 @@ def tutor_chat(
             logger.warning("Tutor arithmetic retry failed: %s", exc)
         return _corrected_reply(draft, wrong, message, mode)
 
+    def _looks_truncated(draft: str) -> bool:
+        """True when the model clearly stopped mid-thought (token cap / empty tool loop)."""
+        t = (draft or "").strip()
+        if not t:
+            return True
+        if t.endswith(("...", "…")):
+            return False
+        # Unbalanced inline math is a common cut-off artifact.
+        if t.count("$") % 2 == 1:
+            return True
+        if t.count("\\(") != t.count("\\)"):
+            return True
+        # Ends on a dangling article/preposition — the live "First, find a" cut-off.
+        if re.search(
+            r"\b(a|an|the|to|for|with|from|and|or|of|find|first|then|so|by)\s*$",
+            t,
+            re.I,
+        ):
+            return True
+        return False
+
     def _run(llm) -> str:
         draft = ""
         if use_calculator_tool:
@@ -367,11 +433,22 @@ def tutor_chat(
                 logger.warning("Tutor calculator tool unavailable, replying without it: %s", exc)
         if not draft.strip():
             draft = _text(_invoke(llm, messages))
+        if not draft.strip() or (mode == "deficiency" and _looks_truncated(draft)):
+            # Empty or mid-sentence cut: one retry without the calculator tool path.
+            try:
+                retry = _text(_invoke(llm, messages))
+                if retry.strip() and not _looks_truncated(retry):
+                    draft = retry
+                elif retry.strip() and (not draft.strip() or len(retry.strip()) > len(draft.strip())):
+                    draft = retry
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Tutor truncation retry failed: %s", exc)
         if not draft.strip():
-            # The model used its whole budget before writing anything; ask once more rather than send a blank.
-            draft = _text(_invoke(llm, messages))
-        if not draft.strip():
-            return "Sorry, I could not finish that answer. Please send your question again."
+            return DEFICIENCY_INCOMPLETE_REPLY if mode == "deficiency" else (
+                "Sorry, I could not finish that answer. Please send your question again."
+            )
+        if mode == "deficiency" and _looks_truncated(draft):
+            return DEFICIENCY_TRUNCATED_RETRY
         return _checked(llm, draft)
 
     # A student's saved Groq key can be stale or invalid mid-session (the

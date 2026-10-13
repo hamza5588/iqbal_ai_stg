@@ -1259,6 +1259,10 @@
     var useFormatter = global.TeacherChatFormatter && typeof global.TeacherChatFormatter.formatChatResponse === 'function';
     if (useFormatter && !opts.inline && !opts.quiz) {
       html = global.TeacherChatFormatter.formatChatResponse(text);
+      // Never surface internal math-stash markers in LMS tutor bubbles.
+      if (/zzMATHSTASHzz\d+zzENDMATHzz/.test(html)) {
+        html = (typeof global.escapeHtml === 'function' ? global.escapeHtml(text) : String(text || '')).replace(/\n/g, '<br>');
+      }
     } else {
       html = (typeof global.escapeHtml === 'function' ? global.escapeHtml(text) : String(text || '')).replace(/\n/g, '<br>');
     }

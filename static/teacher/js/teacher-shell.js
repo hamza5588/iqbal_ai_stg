@@ -306,31 +306,23 @@
   /* ── AI Tutor: Lesson Chat (RAG) ↔ AI Tutor (LMS tutor) ── */
   var tutorMode = 'chat';
   window.tdSetTutorMode = function (mode) {
-    tutorMode = mode === 'assistant' ? 'assistant' : 'chat';
+    // General LMS AI Tutor mode is hidden; always keep Lesson Chat visible.
+    tutorMode = 'chat';
     document.querySelectorAll('[data-tutor-mode]').forEach(function (b) {
-      var on = b.getAttribute('data-tutor-mode') === tutorMode;
+      var on = b.getAttribute('data-tutor-mode') === 'chat';
       b.classList.toggle('active', on);
       b.setAttribute('aria-selected', String(on));
     });
     var chatPane = document.getElementById('tdTutorChatPane');
     var assistantPane = document.getElementById('lmsTutorModal');
     var tools = document.querySelector('[data-tutor-tools="chat"]');
-    if (chatPane) chatPane.hidden = tutorMode !== 'chat';
-    if (tools) tools.style.visibility = tutorMode === 'chat' ? '' : 'hidden';
-    if (tutorMode === 'assistant') {
-      if (typeof window.stopTextToSpeechSession === 'function') { try { window.stopTextToSpeechSession(); } catch (e) { /* ignore */ } }
-      if (typeof window.openLmsTutorPanel === 'function') window.openLmsTutorPanel('teacher');
-      if (assistantPane) {
-        // lmsOpenModal() treats this element as a modal (centres it and locks body scroll); undo that for the inline pane.
-        assistantPane.hidden = false;
-        assistantPane.style.display = '';
-        assistantPane.style.alignItems = '';
-        assistantPane.style.justifyContent = '';
-        document.body.style.overflow = '';
-      }
-    } else if (assistantPane) {
+    if (chatPane) chatPane.hidden = false;
+    if (tools) tools.style.visibility = '';
+    if (assistantPane) {
       assistantPane.hidden = true;
       assistantPane.style.display = 'none';
+    }
+    if (mode !== 'assistant') {
       setTimeout(function () {
         if (typeof window.scrollToBottom === 'function') window.scrollToBottom();
       }, 0);

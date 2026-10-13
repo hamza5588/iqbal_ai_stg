@@ -96,12 +96,13 @@
   };
 
   /* ── Views ─────────────────────────────────────────────────────────────
-     Top-level: diagnostic, learning-path, classes, tutor.
+     Top-level: diagnostic, learning-path, classes.
+     General AI Tutor (#tutor) is hidden — deep links redirect to learning-path.
      Flows opened from them (need live state, never a landing target):
      diagnostic-quiz (lms-student.js), learning-chat (lms-deficiency-chat.js), lesson (student-lessons.js). */
-  var TOP_VIEWS = ['diagnostic', 'learning-path', 'classes', 'tutor'];
+  var TOP_VIEWS = ['diagnostic', 'learning-path', 'classes'];
   var FLOW_PARENT = { 'diagnostic-quiz': 'diagnostic', 'learning-chat': 'learning-path', 'lesson': 'classes' };
-  var GATED = { 'learning-path': 1, 'classes': 1, 'tutor': 1, 'learning-chat': 1, 'lesson': 1 };
+  var GATED = { 'learning-path': 1, 'classes': 1, 'learning-chat': 1, 'lesson': 1 };
   var flows = { 'diagnostic-quiz': false, 'learning-chat': false, 'lesson': false };
   var pendingSurfaceClose = {};
   var current = null;
@@ -156,6 +157,8 @@
 
   window.sdShowView = function (view, opts) {
     opts = opts || {};
+    // General student AI Tutor is retired from the UI; send deep links elsewhere.
+    if (view === 'tutor') view = 'learning-path';
     if (!document.getElementById('view-' + view)) view = 'diagnostic';
     if (FLOW_PARENT[view] && !flows[view] && !opts.flow) view = FLOW_PARENT[view];
     if (GATED[view] && needsDiagnostic()) {

@@ -50,7 +50,10 @@
   }
 
   /* Overrides of the lms-panels.js modal versions (same endpoints). */
-  window.openLmsTutorPanel = function () { window.sdShowView('tutor'); };
+  // General AI Tutor UI is hidden; keep the hook so callers do not break.
+  window.openLmsTutorPanel = function () {
+    if (typeof window.sdShowView === 'function') window.sdShowView('learning-path');
+  };
   window.sendLmsTutorMessage = async function () {
     if (state.loading) return;
     var input = document.getElementById('lmsTutorInput');

@@ -3,11 +3,12 @@
    "AI Tutor" = LMS teacher tutor (lms-panels.js renders into #lmsTutorModalBody; POST /api/lms/teacher/tutor). #}
 <div class="td-tutor-shell">
   <div class="td-tutor-top">
-    <div class="td-mode-toggle" role="tablist" aria-label="AI Tutor mode">
+    {# General LMS "AI Tutor" mode hidden — Lesson Chat (RAG) only. #lmsTutorModal kept for JS compatibility. #}
+    <div class="td-mode-toggle" role="tablist" aria-label="AI Tutor mode" hidden>
       <button type="button" class="active" data-tutor-mode="chat" onclick="tdSetTutorMode('chat')">
         <img src="{{ url_for('static', filename='teacher/icons/ai-chat-bot.png') }}" alt=""> Lesson Chat
       </button>
-      <button type="button" data-tutor-mode="assistant" onclick="tdSetTutorMode('assistant')">
+      <button type="button" data-tutor-mode="assistant" hidden aria-hidden="true" tabindex="-1" onclick="tdSetTutorMode('assistant')">
         <img src="{{ url_for('static', filename='teacher/icons/ai-tutor.png') }}" alt=""> AI Tutor
       </button>
     </div>

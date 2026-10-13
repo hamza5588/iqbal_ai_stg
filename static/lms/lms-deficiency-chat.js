@@ -95,7 +95,7 @@
     ['Show example', 'Show me an example'],
     ['I don\'t understand', 'I still don\'t understand']
   ];
-  var TUTOR_GREETING = 'Ask me anything about this question. I\'ll help step by step — starting with a small prompt, not the full answer.';
+  var TUTOR_GREETING = 'Ask me about this practice question. I\'ll help step by step — starting with a small prompt, not the full answer.';
 
   function renderTutorMessages() {
     var html = defState.tutorHistory.map(function (m, i) {
@@ -389,7 +389,7 @@
     if (defState.tutorOpen && !defState.tutorHistory.length) {
       defState.tutorHistory.push({
         role: 'bot',
-        text: 'Ask me anything about this question. I\'ll help step by step — starting with a small prompt, not the full answer.',
+        text: 'Ask me about this practice question. I\'ll help step by step — starting with a small prompt, not the full answer.',
         levelLabel: ''
       });
     }
