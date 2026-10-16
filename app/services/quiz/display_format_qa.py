@@ -108,11 +108,26 @@ def strip_trailing_content_already_in_stem(text: str) -> str:
     return f"{prefix} {rest}".strip()
 
 
+# Words that math_text.unsquash_english used to split after a leading exam word
+# ("in equality", "Rational ize"); stored queues and questions still carry them.
+_SPLIT_WORD_RE = re.compile(
+    r"\b(?:(in) (equality|equalities|finitely|tegration|tegral)|(rational) (ize|ized|izes|izing|ization)"
+    r"|(fraction) (al|ally)|(irrational) (ity))\b",
+    re.I,
+)
+
+
+def rejoin_split_words(text: Optional[str]) -> Optional[str]:
+    if not text:
+        return text
+    return _SPLIT_WORD_RE.sub(lambda m: "".join(g for g in m.groups() if g), text)
+
+
 def finalize_display_text(text: Optional[str], latex: Optional[str] = None) -> tuple[str, Optional[str]]:
     """Deterministic student-facing cleanup (always safe to run at delivery)."""
     from app.services.quiz.math_text import collapse_spoken_symbolic_duplicate
 
-    display, recovered = recover_fields(text, latex)
+    display, recovered = recover_fields(rejoin_split_words(text), latex)
     body = merge_prose_and_math(display, recovered)
     body = collapse_spoken_symbolic_duplicate(body)
     body = strip_english_dollar_spans(body)
@@ -141,7 +156,7 @@ def strip_layout_debris(text: Optional[str]) -> Optional[str]:
 
 
 def finalize_option_text(text: Optional[str], latex: Optional[str] = None) -> tuple[str, Optional[str]]:
-    text, latex = strip_layout_debris(text), strip_layout_debris(latex)
+    text, latex = strip_layout_debris(rejoin_split_words(text)), strip_layout_debris(latex)
     display, recovered = recover_fields(text, latex)
     body = merge_prose_and_math(display, recovered)
     body = strip_english_dollar_spans(body)

@@ -209,6 +209,8 @@ def test_learning_chat_queue_avoids_prior_question_texts(monkeypatch):
 
     monkeypatch.setattr(dcs, "_match_target_section", lambda name, threads: ("Algebra", "t1", 1))
     monkeypatch.setattr(dcs, "get_section_text", lambda *args, **kwargs: "x + 1 = 2")
+    # This test is about de-duplication; the (fail-closed) answer-key gate has its own tests.
+    monkeypatch.setattr("app.services.quiz.mcq_answer_check.verify_mcq_keys", lambda items: items)
     monkeypatch.setattr(
         dcs,
         "generate_mcqs_from_content",

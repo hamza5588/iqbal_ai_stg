@@ -13,6 +13,30 @@ from app.utils.db import get_db
 logger = logging.getLogger(__name__)
 
 
+def _question_is_usable(q: Question) -> bool:
+    """False for a question whose answer key the maths check disproves (e.g. a leftover
+    QA row "3+2=?" with options 1-4 keyed "4")."""
+    from app.services.quiz.mcq_math_verify import check_answer_key
+
+    item = {
+        "question_text": q.question_text,
+        "question_latex": q.question_latex,
+        "options": options_from_json(q.options_json),
+        "correct_option_index": q.correct_option_index,
+    }
+    if check_answer_key(item).disproved:
+        logger.warning("Practice skips question %s: answer key disproved", q.id)
+        return False
+    return True
+
+
+def _first_usable(query) -> Optional[Question]:
+    for q in query.limit(50):
+        if _question_is_usable(q):
+            return q
+    return None
+
+
 def get_active_session(student_id: int, topic_id: Optional[int] = None) -> Optional[PracticeSession]:
     db = get_db()
     q = db.query(PracticeSession).filter(
@@ -68,7 +92,7 @@ def _diagnostic_question_for_topic(student_id: int, topic_id: int) -> Optional[i
             }
             for qid in [q for q in qids if q in wrong] + [q for q in qids if q not in wrong]:
                 q = db.query(Question).filter(Question.id == qid, Question.is_active.is_(True)).first()
-                if q:
+                if q and _question_is_usable(q):
                     return q.id
     return None
 
@@ -96,27 +120,25 @@ def start_session(
             if item.get("topic_id") is not None
         ]
         for weak_topic_id in weak_topic_ids:
-            q = (
+            q = _first_usable(
                 db.query(Question)
                 .filter(Question.topic_id == weak_topic_id, Question.is_active.is_(True))
                 .order_by(Question.id.desc())
-                .first()
             )
             if q:
                 topic_id = weak_topic_id
                 question_id = q.id
                 break
         if not question_id:
-            q = db.query(Question).filter(Question.is_active.is_(True)).order_by(Question.id.desc()).first()
+            q = _first_usable(db.query(Question).filter(Question.is_active.is_(True)).order_by(Question.id.desc()))
             if q:
                 topic_id = q.topic_id
                 question_id = q.id
     if not question_id and topic_id:
-        q = (
+        q = _first_usable(
             db.query(Question)
             .filter(Question.topic_id == topic_id, Question.is_active.is_(True))
             .order_by(Question.id.desc())
-            .first()
         )
         question_id = q.id if q else None
         if not question_id:

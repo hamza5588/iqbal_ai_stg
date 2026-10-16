@@ -61,6 +61,9 @@ def _question_count_for_score(score_percent: float) -> int:
 # Hard ceiling when a topic needs more than the score rule gives (see _note_outstanding_misses).
 MAX_QUESTIONS_TO_CLEAR_TOPIC = 20
 
+# Extra grade-fit generations when the answer-key check drops questions from a topic.
+_TOP_UP_ROUNDS = 2
+
 
 def _note_outstanding_misses(student_id: int, weak: List[dict]) -> List[dict]:
     """Tag each weak area with how many missed questions the student still has on it.
@@ -404,10 +407,13 @@ def _build_question_queue(
                     out.append(item)
             return out
 
-        # Checked per topic so a dropped question (duplicate / disputed answer key) can
-        # be replaced: the topic must end up with the number its score calls for.
+        # Checked per topic so a dropped question (duplicate / unconfirmed answer key) can
+        # be replaced: the topic must end up with the number its score calls for. The
+        # check is fail-closed, so allow a second top-up before settling for fewer.
         kept = verify_mcq_keys(_fresh(topic_items))
-        if len(kept) < len(ladder):
+        for _round in range(_TOP_UP_ROUNDS):
+            if len(kept) >= len(ladder):
+                break
             logger.info(
                 "%s: %d of %d questions so far - topping up with grade-fit AI",
                 topic_name, len(kept), len(ladder),
@@ -421,6 +427,8 @@ def _build_question_queue(
                 exclude_texts + [q.get("question_text") or "" for q in kept],
             )
             kept = kept + verify_mcq_keys(_fresh(extra))
+        if len(kept) < len(ladder):
+            logger.warning("%s: only %d of %d verified questions", topic_name, len(kept), len(ladder))
         queue.extend(kept[: len(ladder)])
 
     return queue
@@ -503,7 +511,52 @@ def _reorder_pending(session: DeficiencyChatSession, questions: List[dict]) -> N
     questions[idx:] = tail
 
 
+def _drop_disproved_pending(session: DeficiencyChatSession) -> None:
+    """Remove still-to-come questions whose answer key the maths check disproves.
+
+    Queues built before the fail-closed key check (Oct 2026) still hold questions with
+    a wrong key or no correct option; a student must never be shown one. Answered
+    history (before ``current_index``) and questions already answered correctly are
+    left alone. Items that passed the check when queued carry ``key_verified``.
+    """
+    from app.services.quiz.mcq_math_verify import check_answer_key
+
+    if session.status not in ("active", "paused"):
+        return
+    questions = _load_questions(session)
+    idx = session.current_index or 0
+    keep_tail, removed = [], []
+    for q in questions[idx:]:
+        if q.get("key_verified") or q.get("correct") is True:
+            keep_tail.append(q)
+            continue
+        verdict = check_answer_key(q)
+        if verdict.disproved:
+            removed.append(f"{(q.get('question_text') or '')[:60]} [{verdict.status}]")
+        else:
+            keep_tail.append(q)
+    if not removed:
+        return
+    logger.warning(
+        "Learning Chat session %s: removed %d queued question(s) with a disproved key: %s",
+        session.id, len(removed), removed,
+    )
+    _save_questions(session, questions[:idx] + keep_tail)
+    _reset_tutor_state(session)
+    db = get_db()
+    if not keep_tail:  # nothing valid left to do
+        session.status = "completed"
+        db.commit()
+        from app.services.lms import performance_service
+
+        performance_service.update_topic_scores_from_deficiency_session(session.id)
+        _mark_learning_path_chat_complete(session.student_id)
+    else:
+        db.commit()
+
+
 def _session_state(session: DeficiencyChatSession) -> dict:
+    _drop_disproved_pending(session)
     questions = _load_questions(session)
     total = len(questions)
     current = None
@@ -751,11 +804,14 @@ def _start_topic_session(
 
     # Questions already generated for this topic (the session pre-built right after
     # the diagnostic) are reused, so opening a topic costs no new generation.
+    from app.services.quiz.mcq_math_verify import check_answer_key
+
     queue: List[dict] = []
     for s in open_sessions:
         topic_qs = [x for x in _load_questions(s) if _is_topic(x)]
         if topic_qs and not any(x.get("answered") for x in topic_qs):
-            queue = [dict(x) for x in topic_qs]
+            # a pre-built queue may predate the fail-closed key check
+            queue = [dict(x) for x in topic_qs if x.get("key_verified") or not check_answer_key(x).disproved]
             break
     if not queue:
         from app.services.lms import class_service

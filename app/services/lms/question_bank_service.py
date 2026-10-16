@@ -1,12 +1,21 @@
 """Question bank service."""
 from __future__ import annotations
 
+import logging
 from typing import Any, List, Optional
 
 from app.models.lms_models import Question
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
-from app.services.lms.mcq_utils import pick_display_fields, options_from_json, options_to_json, validate_mcq
+from app.services.lms.mcq_utils import (
+    normalize_options,
+    options_from_json,
+    options_to_json,
+    pick_display_fields,
+    validate_mcq,
+)
 from app.utils.db import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def _serialize_question(q: Question) -> dict:
@@ -37,6 +46,45 @@ def _serialize_question(q: Question) -> dict:
     }
 
 
+def _check_answer_key(
+    question_text: str,
+    question_latex: Optional[str],
+    options: List[Any],
+    correct_option_index: int,
+    source_type: str,
+) -> None:
+    """Refuse a hand-typed question whose key the maths check disproves ("3+2=?" keyed "4").
+
+    Keys read from a teacher's own PDF answer sheet are the teacher's call: those are only
+    logged, never refused.
+    """
+    from app.services.quiz.mcq_math_verify import check_answer_key
+
+    item = {
+        "question_text": question_text,
+        "question_latex": question_latex,
+        "options": normalize_options(options),
+        "correct_option_index": correct_option_index,
+    }
+    verdict = check_answer_key(item)
+    if not verdict.disproved:
+        return
+    if source_type != "manual":
+        logger.warning("Saving %s question with a disputed key (%s): %s", source_type, verdict.status, question_text[:80])
+        return
+    hint = ""
+    if verdict.correct_indexes:
+        hint = " The worked answer matches option " + ", ".join("ABCD"[i] for i in verdict.correct_indexes if i < 4) + "."
+    raise LMSValidationError(
+        {
+            "wrong_key": "The marked correct option does not match the worked answer.",
+            "no_correct_option": "None of the options is the correct answer.",
+            "multiple_correct": "More than one option is correct.",
+        }[verdict.status]
+        + hint
+    )
+
+
 def create_question(
     created_by: int,
     question_text: str,
@@ -53,6 +101,7 @@ def create_question(
     extraction_confidence: Optional[float] = None,
 ) -> Question:
     validate_mcq(options, correct_option_index)
+    _check_answer_key(question_text, question_latex, options, correct_option_index, source_type)
     db = get_db()
     question = Question(
         topic_id=topic_id,
@@ -112,6 +161,13 @@ def update_question(question_id: int, **fields) -> Question:
     q = get_question(question_id)
     if "options" in fields and "correct_option_index" in fields:
         validate_mcq(fields["options"], fields["correct_option_index"])
+        _check_answer_key(
+            fields.get("question_text") or q.question_text,
+            fields.get("question_latex") or q.question_latex,
+            fields["options"],
+            fields["correct_option_index"],
+            q.source_type,
+        )
         q.options_json = options_to_json(fields["options"], fields["correct_option_index"])
         q.correct_option_index = fields["correct_option_index"]
         fields.pop("options", None)

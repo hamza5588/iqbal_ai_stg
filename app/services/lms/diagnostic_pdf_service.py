@@ -835,6 +835,17 @@ def generate_diagnostic_questions(
                 mcqs = review_mcqs_for_display(list(mcqs))
             except Exception:
                 pass
+            # AI-written diagnostic items get the same answer-key gate as Learning Chat;
+            # the admin sees how many were dropped instead of publishing a wrong key.
+            from app.services.quiz.mcq_answer_check import verify_mcq_models
+
+            generated = len(mcqs)
+            mcqs = verify_mcq_models(list(mcqs))
+            if len(mcqs) < generated:
+                failed.append(
+                    f"{topic_name}: {generated - len(mcqs)} generated question(s) dropped - "
+                    "answer key could not be verified"
+                )
 
             for mcq in mcqs:
 

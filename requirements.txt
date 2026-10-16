@@ -206,3 +206,5 @@ langgraph-checkpoint-sqlite
 langgraph-checkpoint-postgres
 langgraph-prebuilt
 langgraph-sdk
+# Answer-key verification for maths MCQs (app/services/quiz/mcq_math_verify.py)
+sympy==1.14.0

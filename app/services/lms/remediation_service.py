@@ -125,7 +125,12 @@ def get_or_create_remediation_quiz(
         logger.warning("remediation MCQ generation failed for topic %s: %s", topic_id, exc)
         return None
 
+    # Same answer-key gate as Learning Chat: an AI key nobody confirmed is never saved.
+    from app.services.quiz.mcq_answer_check import verify_mcq_models
+
+    mcqs = verify_mcq_models(mcqs)
     if not mcqs:
+        logger.warning("remediation: no MCQ for topic %s passed the answer-key check", topic_id)
         return None
 
     purpose_label = "Reassessment" if purpose == "reassessment" else "Practice"

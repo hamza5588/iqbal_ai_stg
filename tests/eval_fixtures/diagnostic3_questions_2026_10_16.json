@@ -1,0 +1,565 @@
+{
+ "_note": "Published Diagnostic #3 (grade 9) questions as stored on 2026-10-16; every key was hand-verified correct.",
+ "items": [
+  {
+   "id": 557,
+   "question_text": "Which of the following is an irrational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{5}{8}",
+     "latex": "\\frac{5}{8}"
+    },
+    {
+     "label": "B",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\sqrt{7}",
+     "latex": "\\sqrt{7}"
+    },
+    {
+     "label": "D",
+     "text": "-4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2
+  },
+  {
+   "id": 558,
+   "question_text": "If a^x = y, where a > 0 and a ≠ 1, which is its logarithmic form?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\log_{x} a = y",
+     "latex": "\\log_{x} a = y"
+    },
+    {
+     "label": "B",
+     "text": "\\log_{a} y = x",
+     "latex": "\\log_{a} y = x"
+    },
+    {
+     "label": "C",
+     "text": "\\log_{y} a = x",
+     "latex": "\\log_{y} a = x"
+    },
+    {
+     "label": "D",
+     "text": "\\log_{a} x = y",
+     "latex": "\\log_{a} x = y"
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 559,
+   "question_text": "Which statement about a rational number is correct?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Its decimal expansion is always terminating.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Its decimal expansion is either terminating or non-terminating recurring.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Its decimal expansion is always non-terminating and non-recurring.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "It cannot be represented as a fraction.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 560,
+   "question_text": "The statement 5(2 + 3) = 5(2) + 5(3) illustrates which property?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Commutative Property",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Associative Property",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Distributive Property",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Additive Inverse Property",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2
+  },
+  {
+   "id": 561,
+   "question_text": "Which is the correct scientific notation for 0.00056?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "5.6 \\times 10^{-4}",
+     "latex": "5.6 \\times 10^{-4}"
+    },
+    {
+     "label": "B",
+     "text": "5.6 \\times 10^{4}",
+     "latex": "5.6 \\times 10^{4}"
+    },
+    {
+     "label": "C",
+     "text": "56 \\times 10^{-4}",
+     "latex": "56 \\times 10^{-4}"
+    },
+    {
+     "label": "D",
+     "text": "0.56 \\times 10^{-4}",
+     "latex": "0.56 \\times 10^{-4}"
+    }
+   ],
+   "correct_option_index": 0
+  },
+  {
+   "id": 562,
+   "question_text": "For a positive number x, where x ≠ 1, the logarithm of x to base x is always ________.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "10",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "e",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 563,
+   "question_text": "Why is \\frac{x+1}{x^2+4} a rational expression?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "It contains a fraction.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Both its numerator and denominator are polynomials.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Its denominator has a higher degree.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "It contains only positive terms.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 564,
+   "question_text": "Which is the correct factorization of x^2 + 5x - 6?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x+3)(x+2)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x-6)(x+1)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x-3)(x+2)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x+6)(x-1)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3
+  },
+  {
+   "id": 565,
+   "question_text": "$Simplify:\\left\\lbrace(-4)2\\right\\rbrace 5$",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "$-4^{10}$",
+     "latex": "$-4^{10}$"
+    },
+    {
+     "label": "B",
+     "text": "$4^{10}$",
+     "latex": "$4^{10}$"
+    },
+    {
+     "label": "C",
+     "text": "$-4^7$",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "$4^7$",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 566,
+   "question_text": "If z = 2i - 1, then find the conjugate of z.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1 + 2i",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "1 - 2i",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-1 - 2i",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-1 + 2i",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2
+  },
+  {
+   "id": 567,
+   "question_text": "Find the value of a if \\log_a 8 = \\frac{3}{2}, where a > 0 and a \\neq 1.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 568,
+   "question_text": "\\log 2 = 0.3010 and \\log 5 = 0.6990, find \\log (2 \\times 5)",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.3980",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "1.0000",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "0.2104",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "0.6990",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 569,
+   "question_text": "If P(x) = x^2 + 2x - 3, find P(2).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2
+  },
+  {
+   "id": 570,
+   "question_text": "Two positive numbers a and b have a sum of 6 and a difference of 4. Determine a^2 + b^2.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "20",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "24",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "26",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "52",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2
+  },
+  {
+   "id": 571,
+   "question_text": "Factorize: x^2 - 9z^4 + 2xy + y^2",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - y - 3z^2)(x - y + 3z^2)",
+     "latex": "(x - y - 3z^2)(x - y + 3z^2)"
+    },
+    {
+     "label": "B",
+     "text": "(x + y - 3z^2)(x + y + 3z^2)",
+     "latex": "(x + y - 3z^2)(x + y + 3z^2)"
+    },
+    {
+     "label": "C",
+     "text": "(x + y - 9z^2)(x + y + z^2)",
+     "latex": "(x + y - 9z^2)(x + y + z^2)"
+    },
+    {
+     "label": "D",
+     "text": "(x + y - 3z)(x + y + 3z)",
+     "latex": "(x + y - 3z)(x + y + 3z)"
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 572,
+   "question_text": "For p(x) = x^2 - 7x + 12, which of the following is a factor?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x - 1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x - 2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x - 3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x + 3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2
+  },
+  {
+   "id": 573,
+   "question_text": "Calculate: \\frac{2+3i}{4-2i}",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{7}{10} + \\frac{2}{5} i",
+     "latex": "\\frac{7}{10} + \\frac{2}{5} i"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{1}{10} + \\frac{4}{5} i",
+     "latex": "\\frac{1}{10} + \\frac{4}{5} i"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{1}{10} - \\frac{4}{5} i",
+     "latex": "\\frac{1}{10} - \\frac{4}{5} i"
+    },
+    {
+     "label": "D",
+     "text": "-\\frac{1}{10} + \\frac{4}{5} i",
+     "latex": "-\\frac{1}{10} + \\frac{4}{5} i"
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 574,
+   "question_text": "For a > 0, a ≠ 1 and b > 0, write the following as a single logarithm: \\log_{5} b^2 \\times \\log_{a} 5^3",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\log_{a}(b^5)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\log_{a}(b^6)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5 \\log_{a} b",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\log_{5}(b^6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1
+  },
+  {
+   "id": 575,
+   "question_text": "Simplify and reduce \\frac{4y}{y^2-1} - \\frac{y+1}{y-1} to its lowest form.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{y-1}{y+1}",
+     "latex": "\\frac{y-1}{y+1}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{y+1}{1-y}",
+     "latex": "\\frac{y+1}{1-y}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{1-y}{y+1}",
+     "latex": "\\frac{1-y}{y+1}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{1-y}{y-1}",
+     "latex": "\\frac{1-y}{y-1}"
+    }
+   ],
+   "correct_option_index": 2
+  },
+  {
+   "id": 576,
+   "question_text": "For p(x) = x^2 - 5x + 6, Ali claims that x - 2 is a factor because P(2) = 0. Sara claims that x + 2 must also be a factor. Which statement is correct?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Both are correct because changing the sign of a root always gives another root.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Only Sara is correct because x + 2 corresponds to the input 2.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Only Ali is correct because P(2) = 0 but P(-2) = 20.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Neither is correct because evaluating a polynomial cannot establish whether it has a factor.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2
+  }
+ ]
+}

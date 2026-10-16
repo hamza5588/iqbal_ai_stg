@@ -1,0 +1,7508 @@
+{
+ "_note": "Learning Chat questions served Oct 7-16 2026, keys checked by hand. expected=ok|wrong_key|no_correct_option|multiple_correct.",
+ "items": [
+  {
+   "n": 1,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\( -3 + 5 \\times (2 - 7) \\)",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-28",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-22",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-18",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-12",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 2,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the product and give the answer in lowest terms: \\( \\frac{3}{4} \\times \\frac{8}{9} \\)",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\(\\dfrac{2}{3}\\)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\(\\dfrac{1}{2}\\)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\(\\dfrac{24}{36}\\)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\(\\dfrac{3}{8}\\)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 3,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\( \\frac{2}{x} = \\frac{5}{12} \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\(\\dfrac{24}{5}\\)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\(\\dfrac{12}{5}\\)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\(\\dfrac{5}{24}\\)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\(\\dfrac{5}{12}\\)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 4,
+   "source": "grade_fit_ai",
+   "question_text": "On a number line, which point represents the value of \\( -\\frac{3}{4} \\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "A point three‐quarters to the right of zero",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "A point three‐quarters to the left of zero",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "A point at zero",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "A point one and three‐quarters to the left of zero",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 5,
+   "source": "grade_fit_ai",
+   "question_text": "Write \\(0.00047\\) in scientific notation.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4.7 \\times 10^{-4}",
+     "latex": "4.7 \\times 10^{-4}"
+    },
+    {
+     "label": "B",
+     "text": "4.7 \\times 10^{-5}",
+     "latex": "4.7 \\times 10^{-5}"
+    },
+    {
+     "label": "C",
+     "text": "47 \\times 10^{-5}",
+     "latex": "47 \\times 10^{-5}"
+    },
+    {
+     "label": "D",
+     "text": "0.47 \\times 10^{-3}",
+     "latex": "0.47 \\times 10^{-3}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 6,
+   "source": "grade_fit_ai",
+   "question_text": "What is the value of \\(|-12| - |5 - 9|\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "8",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "16",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "20",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 7,
+   "source": "grade_fit_ai",
+   "question_text": "Find the least common multiple (LCM) of 6 and 15.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "30",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "45",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "60",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "90",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 8,
+   "source": "grade_fit_ai",
+   "question_text": "Express the repeating decimal \\(0.\\overline{36}\\) as a fraction in simplest form.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\(\\dfrac{9}{25}\\)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\(\\dfrac{4}{11}\\)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\(\\dfrac{12}{33}\\)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\(\\dfrac{2}{5}\\)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 9,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following numbers is irrational?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\(\\sqrt{81}\\)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "0.125",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\(\\pi\\)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\(\\dfrac{22}{7}\\)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 10,
+   "source": "grade_fit_ai",
+   "question_text": "Find the greatest common divisor (GCD) of 48 and 180.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "24",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "36",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 11,
+   "source": "target_pdf",
+   "question_text": "Which of the following correctly defines a quadratic equation?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "An equation of the form ax^2 + bx + c = 0 where a ≠ 0",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "An equation of the form ax + b = 0",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "An equation of the form ax^3 + bx^2 + c = 0",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "An equation of the form a^2 + b^2 = c^2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 12,
+   "source": "target_pdf",
+   "question_text": "Which method can be used to solve a quadratic equation?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Graphical method",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Long division",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Synthetic division",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "In tegration",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 13,
+   "source": "target_pdf",
+   "question_text": "For the quadratic equation x^2 - 5x + 6 = 0, what are the sum and product of its roots?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Sum = 5, Product = 6",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Sum = -5, Product = 6",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Sum = 5, Product = -6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Sum = -5, Product = -6",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 14,
+   "source": "target_pdf",
+   "question_text": "If the roots of a quadratic equation are 2 and -3, which of the following is the equation in standard form?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x^2 - x - 6 = 0",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x^2 + x - 6 = 0",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x^2 - x + 6 = 0",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x^2 + x + 6 = 0",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 15,
+   "source": "grade_fit_ai",
+   "question_text": "Evaluate the expression: \\( -2^3 + 4 \\times ( -3 + 5) \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "0",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 1
+  },
+  {
+   "n": 16,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following numbers is the greatest?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-\\frac{7}{8}",
+     "latex": "-\\frac{7}{8}"
+    },
+    {
+     "label": "B",
+     "text": "-0.85",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-0.9",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-\\frac{9}{10}",
+     "latex": "-\\frac{9}{10}"
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 17,
+   "source": "grade_fit_ai",
+   "question_text": "Express the repeating decimal \\(0.\\overline{27}\\) as a fraction in simplest form.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{11}",
+     "latex": "\\frac{3}{11}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{27}{99}",
+     "latex": "\\frac{27}{99}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{9}{33}",
+     "latex": "\\frac{9}{33}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{6}{22}",
+     "latex": "\\frac{6}{22}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 18,
+   "source": "grade_fit_ai",
+   "question_text": "Calculate \\(|-5| + |3-8|\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "10",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "8",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 19,
+   "source": "grade_fit_ai",
+   "question_text": "Find the greatest common divisor (GCD) of 84 and 126 using the Euclidean algorithm.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "14",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "42",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 3
+  },
+  {
+   "n": 20,
+   "source": "grade_fit_ai",
+   "question_text": "What is the least common multiple (LCM) of 4, 6, and 15?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "60",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "120",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "180",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "240",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 21,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the division of fractions: \\( \\frac{7}{12} \\div \\frac{5}{9} \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{35}{20}",
+     "latex": "\\frac{35}{20}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{21}{20}",
+     "latex": "\\frac{21}{20}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{63}{20}",
+     "latex": "\\frac{63}{20}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{15}{28}",
+     "latex": "\\frac{15}{28}"
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 1
+  },
+  {
+   "n": 22,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\( \\frac{3}{4}x - 2 = \\frac{1}{2} \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{10}{3}",
+     "latex": "\\frac{10}{3}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{7}{3}",
+     "latex": "\\frac{7}{3}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{5}{2}",
+     "latex": "\\frac{5}{2}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{8}{3}",
+     "latex": "\\frac{8}{3}"
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 23,
+   "source": "grade_fit_ai",
+   "question_text": "Write the number 0.0000923 in proper scientific notation.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "9.23 \\times 10^{-5}",
+     "latex": "9.23 \\times 10^{-5}"
+    },
+    {
+     "label": "B",
+     "text": "9.23 \\times 10^{-4}",
+     "latex": "9.23 \\times 10^{-4}"
+    },
+    {
+     "label": "C",
+     "text": "9.23 \\times 10^{-6}",
+     "latex": "9.23 \\times 10^{-6}"
+    },
+    {
+     "label": "D",
+     "text": "9.23 \\times 10^{-7}",
+     "latex": "9.23 \\times 10^{-7}"
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 24,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a quadratic equation?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x^2 + 5x + 6 = 0",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x^3 - 2x + 1 = 0",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "2x + 7 = 0",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x^2 - 4 = 5x",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 25,
+   "source": "target_pdf",
+   "question_text": "Given that the roots of a quadratic equation are 3 and -2, which of the following is the correct quadratic equation in standard form?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x^2 - x - 6 = 0",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x^2 + x - 6 = 0",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x^2 - x + 6 = 0",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x^2 + x + 6 = 0",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 26,
+   "source": "target_pdf",
+   "question_text": "If the discriminant of ax^2 + bx + c = 0 is negative, which statement about its roots is correct?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "The equation has two distinct real roots",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "The equation has one repeated real root",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "The equation has two complex conjugate roots",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "The equation has no roots",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 27,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression \\( \\dfrac{(27)^{\\frac{2}{3}} (16)^{\\frac{3}{4}}}{(9)^{\\frac 12} (8)^{\\frac{5}{3}}} \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{4}{3}",
+     "latex": "\\frac{4}{3}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{1}{2}",
+     "latex": "\\frac{1}{2}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{5}{6}",
+     "latex": "\\frac{5}{6}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 28,
+   "source": "grade_fit_ai",
+   "question_text": "How many real solutions does the equation \\( |2x-5| + |x+1| = 9 \\) have?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 29,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(2x - 5) = 4x + 7\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = 5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 30,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(5(2x - 3) - 4 = 3x + 11\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 31,
+   "source": "grade_fit_ai",
+   "question_text": "A rectangle has length \\(3x + 2\\) cm and width \\(x - 1\\) cm. If the area is \\(54\\) cm^{2}, what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "6",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 32,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(y\\): \\(\\frac{y}{4} - \\frac{2}{3} = \\frac{1}{6}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 33,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(\\frac{2}{x} = 5\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\(\\frac{2}{5}\\)",
+     "latex": "\\(\\frac{2}{5}\\)"
+    },
+    {
+     "label": "B",
+     "text": "\\(\\frac{5}{2}\\)",
+     "latex": "\\(\\frac{5}{2}\\)"
+    },
+    {
+     "label": "C",
+     "text": "10",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "0.4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 34,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(3a^2b - 5ab + 2ab^2 - a^2b\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2a^2b - 3ab + 2ab^2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2a^2b - 3ab - 2ab^2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4a^2b - 3ab + 2ab^2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "2a^2b + 3ab + 2ab^2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 35,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "e",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 36,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "11",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "15",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "21",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 37,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 38,
+   "source": "target_pdf",
+   "question_text": "Which fraction represents a rational number that is not an integer?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{5}{1}",
+     "latex": "\\frac{5}{1}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{7}{7}",
+     "latex": "\\frac{7}{7}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{9}{4}",
+     "latex": "\\frac{9}{4}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{12}{3}",
+     "latex": "\\frac{12}{3}"
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 39,
+   "source": "target_pdf",
+   "question_text": "Which set lists only rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "{√2, \\frac{3}{5}, π}",
+     "latex": "{√2, \\frac{3}{5}, π}"
+    },
+    {
+     "label": "B",
+     "text": "{√3, 2, \\frac{5}{6}}",
+     "latex": "{√3, 2, \\frac{5}{6}}"
+    },
+    {
+     "label": "C",
+     "text": "{π, e, √5}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{7, 8, 9}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 40,
+   "source": "target_pdf",
+   "question_text": "What is true about the decimal 0.142857142857 ... (repeating block 142857)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "It is an irrational number",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "It can be expressed as a fraction",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "It is a prime number",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "It is a composite number",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 41,
+   "source": "target_pdf",
+   "question_text": "Which number is both a rational number and a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{2}{3}",
+     "latex": "\\frac{2}{3}"
+    },
+    {
+     "label": "B",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√7",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{13}{4}",
+     "latex": "\\frac{13}{4}"
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 42,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is irrational?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.101001000100001 ...",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√16",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\frac{22}{7}",
+     "latex": "\\frac{22}{7}"
+    },
+    {
+     "label": "D",
+     "text": "0.333 ...",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 43,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes the relationship between the sets P (prime numbers) and C (composite numbers)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "P ∩ C = ∅",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "P ⊂ C",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "C ⊂ P",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "P ∪ C = N (natural numbers greater than 1)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 44,
+   "source": "enrichment_ai",
+   "question_text": "Evaluate the expression \\(\\displaystyle \\frac{2^{4}\\cdot 5^{-2}}{\\left(\\frac{3}{4}\\right)^{-3}}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{27}{100}",
+     "latex": "\\frac{27}{100}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{27}{50}",
+     "latex": "\\frac{27}{50}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{13}{50}",
+     "latex": "\\frac{13}{50}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 45,
+   "source": "enrichment_ai",
+   "question_text": "A positive integer n leaves a remainder of 3 when divided by 7 and a remainder of 5 when divided by 9. What is the smallest such n?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "59",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "68",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "83",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "95",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 46,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "√3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 47,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "They can be written as a fraction of two integers.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "They have non‐repeating, non‐terminating decimal expansions.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "They cannot be expressed as fractions.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "They are only whole numbers.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 48,
+   "source": "target_pdf",
+   "question_text": "The decimal 0.142857 ... (repeating) is:",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "a rational number",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "an irrational number",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "a prime number",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "a composite number",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 49,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both a rational number and a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{7}{2}",
+     "latex": "\\frac{7}{2}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 50,
+   "source": "target_pdf",
+   "question_text": "Which set lists all composite numbers less than 15?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "{2, 3, 5, 7, 11, 13}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "{4, 6, 8, 9, 10, 12, 14}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "{1, 2, 3, 5, 7, 11, 13}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{15, 16, 17, 18}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 51,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "11",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "15",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 52,
+   "source": "target_pdf",
+   "question_text": "Which fraction is equivalent to the rational number 0.6?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{5}",
+     "latex": "\\frac{3}{5}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{2}{3}",
+     "latex": "\\frac{2}{3}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{5}{9}",
+     "latex": "\\frac{5}{9}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{7}{12}",
+     "latex": "\\frac{7}{12}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 53,
+   "source": "target_pdf",
+   "question_text": "Which fraction yields a repeating decimal with a period of two digits?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{1}{3}",
+     "latex": "\\frac{1}{3}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{1}{6}",
+     "latex": "\\frac{1}{6}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{1}{7}",
+     "latex": "\\frac{1}{7}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{1}{11}",
+     "latex": "\\frac{1}{11}"
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 54,
+   "source": "target_pdf",
+   "question_text": "Which statement is true about the relationship between prime numbers and rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "All prime numbers are rational numbers",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "No prime numbers are rational numbers",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "All rational numbers are prime",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Only composite numbers can be rational",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 55,
+   "source": "target_pdf",
+   "question_text": "Consider the number (√2 + 3) \\div (√2 – 3). Which classification best describes this number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Rational number",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Irrational number",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Prime number",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Composite number",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 56,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes the set of rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "All numbers that can be written as a terminating decimal",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "All numbers that can be expressed as a ratio of two integers",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "All numbers that cannot be expressed as a ratio of two integers",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "All numbers that are prime",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 57,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both rational and a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "√7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 58,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is NOT a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{5}{8}",
+     "latex": "\\frac{5}{8}"
+    },
+    {
+     "label": "C",
+     "text": "√3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 59,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(x - 2) = 2x + 5\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "11",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "13",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 60,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations:\n\\[\\begin{cases}^{2}y - x = 3\\\\ y + 2x = 7\\end{cases}\\]",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x, y) = (2, 5)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x, y) = (1, 4)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x, y) = (3, 2)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x, y) = (4, 1)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 61,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(\\frac{4}{5}x - 2 = 6\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "10",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "8",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "15",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 62,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(5^{2x} = 125\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{3}{2}",
+     "latex": "\\frac{3}{2}"
+    },
+    {
+     "label": "C",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{5}{2}",
+     "latex": "\\frac{5}{2}"
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 63,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression \\(\\dfrac{2x^{2} - 8x}{2x}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x - 4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2x - 8",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x^{2} - 4x",
+     "latex": "x^{2} - 4x"
+    },
+    {
+     "label": "D",
+     "text": "x + 4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 64,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(x^{2} - 5x + 6\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 2)(x - 3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 2)(x + 3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 1)(x - 6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x + 1)(x - 6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 65,
+   "source": "grade_fit_ai",
+   "question_text": "The perimeter of a rectangle is 54 cm. The length is 3 cm more than twice the width. What is the width?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "6 cm",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7 cm",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "9 cm",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "12 cm",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 66,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify \\(\\sqrt{50} + \\sqrt{18}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "5\\sqrt{2} + 3\\sqrt{2}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7\\sqrt{2}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5\\sqrt{2} + 3\\sqrt{3}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\sqrt{68}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 67,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "e",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 68,
+   "source": "target_pdf",
+   "question_text": "Which of these numbers is a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 69,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "11",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "13",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 70,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "They can be written as a fraction of two integers",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "They cannot be expressed as a fraction",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "They are only whole numbers",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "They always have non‐repeating decimals",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 71,
+   "source": "target_pdf",
+   "question_text": "Select the set that correctly lists all prime numbers less than 10.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "{2, 3, 5, 7}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "{1, 2, 3, 5, 7}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "{2, 4, 6, 8}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{3, 5, 7, 9}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 72,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is irrational?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{5}{8}",
+     "latex": "\\frac{5}{8}"
+    },
+    {
+     "label": "C",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "0.75",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 73,
+   "source": "target_pdf",
+   "question_text": "If a number can be expressed as a terminating decimal, which of the following must be true about its denominator when the fraction is in lowest terms?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Denominator has only 2s and 5s as prime factors",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Denominator is a prime number",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Denominator is a composite number",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Denominator is odd",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 74,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both a rational number and a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\frac{7}{1}",
+     "latex": "\\frac{7}{1}"
+    },
+    {
+     "label": "D",
+     "text": "√16",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 75,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the quadratic equation: $2x^{2} - 7x + 3 = 0$.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "$x = 3 or x = \\frac{1}{2}$",
+     "latex": "$x = 3 or x = \\frac{1}{2}$"
+    },
+    {
+     "label": "B",
+     "text": "$x = -3 or x = -\\frac{1}{2}$",
+     "latex": "$x = -3 or x = -\\frac{1}{2}$"
+    },
+    {
+     "label": "C",
+     "text": "$x = 3 or x = -\\frac{1}{2}$",
+     "latex": "$x = 3 or x = -\\frac{1}{2}$"
+    },
+    {
+     "label": "D",
+     "text": "$x = -3 or x = \\frac{1}{2}$",
+     "latex": "$x = -3 or x = \\frac{1}{2}$"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 76,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the rational expression: $\\dfrac{x^{2} - 9}{x^{2} - 6x + 9}$, assuming $x \\neq 3$. \\frac{x^{2} - 9}{x^{2} - 6x + 9}",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "$\\dfrac{x+3}{x-3}$",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "$\\dfrac{x-3}{x+3}$",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "$\\dfrac{(x+3)^{2}}{x-3}$",
+     "latex": "$\\dfrac{(x+3)^{2}}{x-3}$"
+    },
+    {
+     "label": "D",
+     "text": "$\\dfrac{(x-3)^{2}}{x+3}$",
+     "latex": "$\\dfrac{(x-3)^{2}}{x+3}$"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 77,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for $x$ in the radical equation $\\sqrt{2x + 5} = x - 1$.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "$x = 2 + 2\\sqrt{2}$",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "$x = 2 - 2\\sqrt{2}$",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "$x = 1$",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "No real solution",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 78,
+   "source": "grade_fit_ai",
+   "question_text": "For what value of $k$ does the system have in finitely many solutions? \\[\\begin{cases}^{3}x - 2y = 7\\\\6x - 4y = k\\end{cases}\\]",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "$k = 14$",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "$k = 7$",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "$k = 0$",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "No value of $k$ gives in finitely many solutions",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 79,
+   "source": "grade_fit_ai",
+   "question_text": "3(2x - 5) = 4x + 1",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 80,
+   "source": "grade_fit_ai",
+   "question_text": "Factor the quadratic: \\(x^2 - 7x + 12\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x-3)(x-4)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x+3)(x+4)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x-2)(x-6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x+2)(x+6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 81,
+   "source": "grade_fit_ai",
+   "question_text": "5^{x+1}=125",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 82,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(f(x)=3x-4\\), find \\(x\\) such that \\(f(f(x)) = 5\\). f(x)=3x-4, f(f(x))=5",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{7}{3}",
+     "latex": "\\frac{7}{3}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{5}{3}",
+     "latex": "\\frac{5}{3}"
+    },
+    {
+     "label": "C",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 83,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations: \\(2x + y = 7\\) and \\(x - 2y = -1\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x=\\frac{13}{5}, y=\\frac{9}{5})",
+     "latex": "(x=\\frac{13}{5}, y=\\frac{9}{5})"
+    },
+    {
+     "label": "B",
+     "text": "(x=2, y=3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x=3, y=1)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x=5, y=-3)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 84,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the radical expression: \\(\\sqrt{50} - \\sqrt{18}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\sqrt{2}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "5\\sqrt{2} - 3\\sqrt{2}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "2\\sqrt{2}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7\\sqrt{2}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "multiple_correct",
+   "true_index": null,
+   "note": "\"5\\sqrt{2} - 3\\sqrt{2}\" has the same value as the key \"2\\sqrt{2}\""
+  },
+  {
+   "n": 85,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(5x^2 - 3x + 4 - (2x^2 + 7x - 5)\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3x^2 - 10x + 9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7x^2 - 4x + 9",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "3x^2 - 10x - 9",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7x^2 - 10x + 9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 86,
+   "source": "grade_fit_ai",
+   "question_text": "\\frac{x}{3} + 1 = 5 - \\frac{x}{6}",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "8",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "16",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 87,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "3.14159 ...",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 88,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "They can be expressed as a ratio of two integers.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "They cannot be written as fractions.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "They always have non‐repeating, non‐terminating decimals.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "They are always whole numbers.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 89,
+   "source": "target_pdf",
+   "question_text": "If a number can be written as a terminating decimal, which must be true about its denominator (in lowest terms)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "The denominator has only 2’s and 5’s as prime factors.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "The denominator is a prime number.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "The denominator is odd.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "The denominator is a multiple of 10.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 90,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both a rational number and a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{2}{3}",
+     "latex": "\\frac{2}{3}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 91,
+   "source": "target_pdf",
+   "question_text": "The decimal 0.142857142857 ... (repeating block 142857) is best classified as:",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "A rational non‐integer",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "An irrational number",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "A prime number",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "A composite number",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 92,
+   "source": "grade_fit_ai",
+   "question_text": "Rational ize the denominator of the expression \\( \\frac{5}{2 - \\sqrt{3}} \\). Which of the following is equivalent to the original expression?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "10 + 5\\sqrt{3}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "10 - 5\\sqrt{3}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5\\sqrt{3} - 10",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{5}{2 + \\sqrt{3}}",
+     "latex": "\\frac{5}{2 + \\sqrt{3}}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 93,
+   "source": "target_pdf",
+   "question_text": "Which of the following is an example of an irrational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "0.333 ...",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{5}{8}",
+     "latex": "\\frac{5}{8}"
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 94,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a non‐integer rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{5}{2}",
+     "latex": "\\frac{5}{2}"
+    },
+    {
+     "label": "B",
+     "text": "-3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 95,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations:\n\\[\\begin{cases} 2x + y = 7 \\\\ 3x - 2y = 4 \\end{cases}\\]",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x, y) = (2, 3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x, y) = (1, 5)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x, y) = (3, 1)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x, y) = (4, -1)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 96,
+   "source": "grade_fit_ai",
+   "question_text": "What is the solution set for the in equality \\(5 - 2x > 9\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x < -2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x > -2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x < 2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x > 2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 97,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(2^{x+1} = 32\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "6",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 98,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(\\frac{4x^2 - 9}{2x + 3}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2x - 3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2x + 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4x - 3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Cannot be simplified",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 99,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(x^2 - 9x + 20\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 4)(x - 5)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 4)(x + 5)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 2)(x - 10)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x + 2)(x + 10)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 100,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(f(x) = 2x - 3\\), what is the value of \\(f(5)\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "10",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "13",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "17",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 101,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is NOT a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{7}{1}",
+     "latex": "\\frac{7}{1}"
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 102,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "√5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 103,
+   "source": "target_pdf",
+   "question_text": "Which of the following can be expressed as a fraction of two integers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "√9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 104,
+   "source": "target_pdf",
+   "question_text": "If a number can be written as a fraction a/b where a and b are integers with no common factors other than 1, which of the following must be true?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "The number is irrational",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "The fraction is in simplest form",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "The denominator must be prime",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "The numerator must be composite",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 105,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both a rational number and a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "π",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 106,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly distinguishes between rational and irrational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "A rational number can be written as a terminating decimal, while an irrational number cannot be expressed as any fraction",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "A rational number has a non‐repeating decimal expansion, while an irrational number has a repeating decimal expansion",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "All irrational numbers are larger than 1, while rational numbers are less than 1",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Rational numbers are only whole numbers, irrational numbers are fractions",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 107,
+   "source": "target_pdf",
+   "question_text": "Which statement is true about rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "All rational numbers terminate or repeat when expressed as decimals",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "All rational numbers are integers",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "All rational numbers are irrational",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "All rational numbers are prime",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 108,
+   "source": "target_pdf",
+   "question_text": "Identify the set that correctly lists only prime numbers.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "{2, 4, 5, 7}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "{3, 5, 7, 11}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "{1, 2, 3, 5}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{6, 8, 9, 10}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 109,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "11",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "15",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 110,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 111,
+   "source": "target_pdf",
+   "question_text": "Which set includes all non‐integer rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Integers",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Fractions",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Irrational numbers",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Prime numbers",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 112,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(x - 4) + 5 = 2x + 9\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "1",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 113,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations: \\(2x + y = 11\\) and \\(3x - y = 4\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x = 3, y = 5)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x = 5, y = 3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x = 2, y = 7)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x = 4, y = 3)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 114,
+   "source": "grade_fit_ai",
+   "question_text": "A rectangle’s length is 3 m longer than its width. If the perimeter is 54 m, what is the area of the rectangle?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "180 m^{2}",
+     "latex": "180 m^{2}"
+    },
+    {
+     "label": "B",
+     "text": "144 m^{2}",
+     "latex": "144 m^{2}"
+    },
+    {
+     "label": "C",
+     "text": "156 m^{2}",
+     "latex": "156 m^{2}"
+    },
+    {
+     "label": "D",
+     "text": "168 m^{2}",
+     "latex": "168 m^{2}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 115,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(\\frac{4x - 5}{3} = 2x + 1\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 116,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\((2x^2 - 3x + 4) - (x^2 + 5x - 7)\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x^2 - 8x + 11",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x^2 - 2x + 11",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x^2 - 8x - 11",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x^2 + 2x + 11",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 117,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "e",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 118,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "15",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "21",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 119,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "12",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 120,
+   "source": "target_pdf",
+   "question_text": "Which of the following is NOT a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-\\frac{2}{5}",
+     "latex": "-\\frac{2}{5}"
+    },
+    {
+     "label": "C",
+     "text": "√3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 121,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly defines a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "It can be written as a fraction a/b where a and b are integers and b ≠ 0.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "It cannot be expressed as a fraction of integers.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "It is a number that has a non‐repeating, non‐terminating decimal expansion.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "It must be a whole number.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 122,
+   "source": "target_pdf",
+   "question_text": "Which of the following decimals represents a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.333 ...",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "0.101001000100001 ...",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "π",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 123,
+   "source": "target_pdf",
+   "question_text": "If a number is both rational and not an integer, which could it be?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-\\frac{3}{2}",
+     "latex": "-\\frac{3}{2}"
+    },
+    {
+     "label": "C",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 124,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is irrational?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.142857 (repeating)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√16",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{5}{9}",
+     "latex": "\\frac{5}{9}"
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 125,
+   "source": "target_pdf",
+   "question_text": "Identify the set that correctly lists all prime numbers less than 10.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "{2, 3, 4, 5}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "{2, 3, 5, 7}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "{1, 2, 3, 5, 7}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{2, 4, 6, 8}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 126,
+   "source": "target_pdf",
+   "question_text": "Which statement is true about the relationship between rational numbers and integers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "All integers are rational numbers, but not all rational numbers are integers.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "All rational numbers are integers.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Integers and rational numbers are disjoint sets.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Only positive integers are rational numbers.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 127,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(\\frac{3}{4}x - 5 = 7\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "16",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "8",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 128,
+   "source": "grade_fit_ai",
+   "question_text": "Factor the quadratic expression \\(x^2 - 7x + 12\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 3)(x - 4)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 3)(x + 4)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 4)(x + 3)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x + 4)(x - 3)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 129,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(2(x - 4) - 3(2x + 1)\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-4x - 11",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-4x + 5",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-8x - 5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-8x + 5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 130,
+   "source": "grade_fit_ai",
+   "question_text": "For the system of equations \\(\\begin{cases}^{2}y + x = 10\\\\ 3x - y = 5\\end{cases}\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{20}{7}",
+     "latex": "\\frac{20}{7}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{5}{2}",
+     "latex": "\\frac{5}{2}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{7}{2}",
+     "latex": "\\frac{7}{2}"
+    },
+    {
+     "label": "D",
+     "text": "3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 131,
+   "source": "grade_fit_ai",
+   "question_text": "The function \\(f(t) = 4t^{2} - 8t + 3\\). What is the \\(y\\)-intercept of its graph?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "0",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 132,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(n\\): \\(\\sqrt{2n + 9} = 5\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "8",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "6",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 133,
+   "source": "grade_fit_ai",
+   "question_text": "Which expression is equivalent to \\((x^{3} y^{2})^{2}\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x^{6} y^{4}",
+     "latex": "x^{6} y^{4}"
+    },
+    {
+     "label": "B",
+     "text": "x^{5} y^{3}",
+     "latex": "x^{5} y^{3}"
+    },
+    {
+     "label": "C",
+     "text": "x^{6} y^{2}",
+     "latex": "x^{6} y^{2}"
+    },
+    {
+     "label": "D",
+     "text": "x^{3} y^{4}",
+     "latex": "x^{3} y^{4}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 134,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(5x - 3 = 2(x + 4)\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{11}{3}",
+     "latex": "\\frac{11}{3}"
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\frac{5}{3}",
+     "latex": "\\frac{5}{3}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 135,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(2x - 5) = 4x + 1\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 6",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 7",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 8",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = 9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 136,
+   "source": "grade_fit_ai",
+   "question_text": "Factor the quadratic equation \\(x^{2} - 5x + 6 = 0\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x-2)(x-3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x+2)(x+3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x-1)(x-6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x+1)(x+6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 137,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(f(x) = 3x - 4\\), find \\(x\\) such that \\(f(x) = 11\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 138,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the rational expression \\(\\dfrac{4x^{2}-9}{2x-3}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2x+3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2x-3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4x+3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4x-3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 139,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system:\n\\[\\begin{cases} y = 2x + 3 \\\\ 3x - y = 4 \\end{cases}\\]",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(7, 17)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(5, 13)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(4, 11)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(6, 15)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 140,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 141,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "13",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 142,
+   "source": "target_pdf",
+   "question_text": "If a number can be expressed as a terminating decimal, which of the following must be true about its fraction al form a/b (in lowest terms)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "b has only the prime factors 2 and/or 5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "b is a prime number",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "b is odd",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "b is a multiple of 10",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 143,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both a rational number and a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\frac{7}{1}",
+     "latex": "\\frac{7}{1}"
+    },
+    {
+     "label": "D",
+     "text": "2.5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 144,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes a non‐integer rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "It can be written as a fraction a/b where b≠0 and the value is not a whole number",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "It cannot be expressed as a fraction of integers",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "It has a non‐repeating, non‐terminating decimal expansion",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "It is a whole number",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 145,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "e",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 146,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is irrational?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.333 ...",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{5}{6}",
+     "latex": "\\frac{5}{6}"
+    },
+    {
+     "label": "C",
+     "text": "√16",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "√5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 147,
+   "source": "target_pdf",
+   "question_text": "If a rational number is written in lowest terms as a/b, which statement must be true about a and b?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Both a and b are prime numbers",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "a and b have no common factors other than 1",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "b is always an even integer",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "a is always an odd integer",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 148,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes the relationship between integers and rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "All integers are rational numbers",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "No integer can be expressed as a fraction",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Some integers are irrational",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Every rational number is an integer",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 149,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 150,
+   "source": "target_pdf",
+   "question_text": "Which of the following is an example of a non‐integer rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{7}{1}",
+     "latex": "\\frac{7}{1}"
+    },
+    {
+     "label": "C",
+     "text": "2.5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "√9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 151,
+   "source": "target_pdf",
+   "question_text": "Which set listed below contains only prime numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "P = {2, 3, 5, 7, ...}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "C = {4, 6, 8, 9, 10, 12, ...}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "{1, 2, 3, 4, ...}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{0, 1, 2, 3, ...}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 152,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3x - 7 = 2x + 5\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 153,
+   "source": "grade_fit_ai",
+   "question_text": "What is the slope of the line that passes through the points (2, -1) and (5, 8)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\frac{9}{3}",
+     "latex": "\\frac{9}{3}"
+    },
+    {
+     "label": "D",
+     "text": "9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 154,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following is equivalent to \\(\\frac{4x^2 - 9}{2x - 3}\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2x + 3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2x - 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x + 3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x - 3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 155,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(f(x) = 3x - 4\\), what is \\(f^{-1}(x)\\), the inverse function?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x + 4)/3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x - 4)/3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(3x + 4)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(3x - 4)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 156,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\( (2x^2y)(3xy^2) \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "6x^3y^3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "5x^3y^3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "6x^2y^2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5x^2y^2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 157,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations:\n\\[ \\begin{cases} 2x + y = 7 \\\\ 3x - 2y = 4 \\end{cases} \\]",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x, y) = (2, 3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x, y) = (3, 1)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x, y) = (1, 5)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x, y) = (4, -1)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 158,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(x^2 - 5x + 6\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x-2)(x-3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x+2)(x+3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x-1)(x-6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x+1)(x+6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 159,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(\\frac{2}{x} + \\frac{3}{x+1} = 1\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 160,
+   "source": "grade_fit_ai",
+   "question_text": "3(2x - 5) = 4x - 7",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = -2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = -4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "wrong_key",
+   "true_index": 1
+  },
+  {
+   "n": 161,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(x^2 - 9x + 20\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 4)(x - 5)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 4)(x + 5)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 5)(x + 4)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x - 2)(x - 10)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 162,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following is the slope‐intercept form of the line that passes through the points (2, 3) and (5, 11)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "y = 2x - 1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "y = 3x - 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "y = 2x + 1",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "y = 3x + 1",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 163,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(\\frac{4x^2 - 9}{2x - 3}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2x + 3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2x - 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4x + 3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4x - 3",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 164,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(f(x) = 3x - 4\\), what is the value of \\(x\\) when \\(f(x) = 5\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "0",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 165,
+   "source": "grade_fit_ai",
+   "question_text": "The expression \\(2y - 7\\) is equal to \\(k\\) when \\(y = 5\\). What is the value of \\(k\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "17",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-17",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 166,
+   "source": "grade_fit_ai",
+   "question_text": "\\frac{m}{4} - \\frac{1}{2} = \\frac{m-3}{6}",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "6",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "12",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 167,
+   "source": "grade_fit_ai",
+   "question_text": "Which expression is equivalent to \\(5a - 2(3a - 4)\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "11a + 8",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-a + 8",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-a - 8",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "11a - 8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 168,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(\\frac{2}{x} + \\frac{3}{x+2} = 1\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 169,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{5}",
+     "latex": "\\frac{3}{5}"
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "e",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 170,
+   "source": "target_pdf",
+   "question_text": "Identify the set that contains only rational numbers.",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "{2, 3, 5, 7}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "{√2, √3, √5}",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "{4, 6, 8, 9}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{π, e, √2}",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 171,
+   "source": "target_pdf",
+   "question_text": "If a number can be expressed as a terminating decimal, which of the following must be true?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "It is irrational",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "It is rational",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "It is prime",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "It is composite",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 172,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both rational and composite?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "13",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "14",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√16",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "√17",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 173,
+   "source": "target_pdf",
+   "question_text": "Which set correctly lists numbers that are all rational and includes at least one non‐integer?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "{2, 4, 6}",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "{\\frac{3}{2}, \\frac{5}{4}, \\frac{7}{8}}",
+     "latex": "{\\frac{3}{2}, \\frac{5}{4}, \\frac{7}{8}}"
+    },
+    {
+     "label": "C",
+     "text": "{π, 0.5, 2}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "{√2, \\frac{1}{3}, 5}",
+     "latex": "{√2, \\frac{1}{3}, 5}"
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 174,
+   "source": "target_pdf",
+   "question_text": "Which fraction represents a rational number that is also a non‐integer?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{7}{1}",
+     "latex": "\\frac{7}{1}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{8}{4}",
+     "latex": "\\frac{8}{4}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{5}{2}",
+     "latex": "\\frac{5}{2}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{9}{3}",
+     "latex": "\\frac{9}{3}"
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 175,
+   "source": "target_pdf",
+   "question_text": "Which statement about composite numbers is true?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "All composite numbers are irrational",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Every composite number can be written as a product of primes",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Composite numbers are always prime",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Composite numbers are not rational",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 176,
+   "source": "target_pdf",
+   "question_text": "Which number is NOT a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2.5",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "√3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 177,
+   "source": "target_pdf",
+   "question_text": "Which of these numbers is a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "11",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "15",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 178,
+   "source": "grade_fit_ai",
+   "question_text": "3(2x - 5) = 4x + 7",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 8",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = -1",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 179,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(2y + 3 = 7\\), what is the value of \\(y\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "y = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "y = 5",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "y = -2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "y = 1",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 180,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(x^2 - 9\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 9)(x + 1)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x - 3)(x + 3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 3)^{2}",
+     "latex": "(x - 3)^{2}"
+    },
+    {
+     "label": "D",
+     "text": "(x + 9)(x - 1)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 181,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations:\n\\(\\begin{cases} x + 2y = 5 \\\\ 3x - y = 4 \\end{cases}\\)",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x, y) = (2, 1.5)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x, y) = (2, 1)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x, y) = (1, 2)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x, y) = (3, 1)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 182,
+   "source": "grade_fit_ai",
+   "question_text": "Which expression is equivalent to \\(5x - 2(3x - 4)\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-x + 8",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-x - 8",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "11x - 8",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "11x + 8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 183,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is NOT a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "C",
+     "text": "0.125",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 184,
+   "source": "target_pdf",
+   "question_text": "The number 9 is classified as which of the following?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "prime number",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "composite number",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "rational number",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "irrational number",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "multiple_correct",
+   "true_index": null
+  },
+  {
+   "n": 185,
+   "source": "target_pdf",
+   "question_text": "If a number can be written as a terminating decimal, which must be true about the denominator (in lowest terms) of its fraction al form?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "The denominator contains only the prime factors 2 and 5.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "The denominator is a prime number.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "The denominator is odd.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "The denominator is a composite number.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 186,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both a rational number and a composite number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\frac{5}{2}",
+     "latex": "\\frac{5}{2}"
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 187,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is an example of an irrational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{2}{5}",
+     "latex": "\\frac{2}{5}"
+    },
+    {
+     "label": "C",
+     "text": "√3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 188,
+   "source": "target_pdf",
+   "question_text": "Which statement correctly describes rational numbers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "They can be expressed as a ratio of two integers.",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "They cannot be written as fractions.",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "They always have non‐repeating, non‐terminating decimals.",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "They are only whole numbers.",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 189,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a non‐integer fraction?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{5}{1}",
+     "latex": "\\frac{5}{1}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "C",
+     "text": "-2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 190,
+   "source": "target_pdf",
+   "question_text": "Which of the following is a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "0.333 ... (repeating)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 191,
+   "source": "target_pdf",
+   "question_text": "Which description best matches the set of rational numbers that are not integers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Fractions a/b where a and b are integers and a is not a multiple of b",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "All fractions a/b where a and b are integers",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Numbers that cannot be written as a fraction",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Prime numbers",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 192,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is an example of a rational number that is also an irrational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "π",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "\\frac{5}{7}",
+     "latex": "\\frac{5}{7}"
+    },
+    {
+     "label": "D",
+     "text": "None of the above",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 193,
+   "source": "target_pdf",
+   "question_text": "If a number can be expressed as a terminating decimal, which of the following must be true about its fraction in lowest terms?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Its denominator has only 2 and 5 as prime factors",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Its denominator is a prime number",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Its numerator is even",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "It is an irrational number",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 194,
+   "source": "target_pdf",
+   "question_text": "Consider the set S = { x ∈ Q | x = a/b where a and b are integers, b ≠ 0, and a and b share no common factors other than 1 }. Which statement about S is false?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Every element of S is in lowest terms",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "S includes all integers",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "S includes numbers like \\frac{2}{4}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "S includes negative fractions",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 195,
+   "source": "target_pdf",
+   "question_text": "Which statement about the relationship between rational and irrational numbers is true?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "Every rational number can be written as a terminating decimal",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "Every irrational number can be expressed as a fraction",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "Rational numbers are a subset of irrational numbers",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Irrational numbers include all prime numbers",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 196,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is both rational and a prime number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 197,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a non‐integer rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "C",
+     "text": "√9",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "2.0",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 198,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is prime?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "11",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "15",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "21",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 199,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is composite?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "13",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "14",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "17",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 200,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for x: \\(3(x - 4) + 2 = 5x - 6\\). What is the value of x?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 201,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(f(x) = 2x^2 - 5x + 3\\), what is the value of \\(f(2)\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 202,
+   "source": "grade_fit_ai",
+   "question_text": "The sum of two consecutive even integers is 54. What are the integers?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "26 and 28",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "24 and 26",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "28 and 30",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "30 and 32",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 203,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(2x - 5) = 4x + 7\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = 8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 204,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(5y - 2 = 3(y + 4)\\), what is the value of \\(y\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "-2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 205,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following is equivalent to \\(\\frac{2x}{x^2 - 9}\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\(\\frac{2}{x-3}\\)",
+     "latex": "\\(\\frac{2}{x-3}\\)"
+    },
+    {
+     "label": "B",
+     "text": "\\(\\frac{2}{x+3}\\)",
+     "latex": "\\(\\frac{2}{x+3}\\)"
+    },
+    {
+     "label": "C",
+     "text": "\\(\\frac{2}{(x-3)(x+3)}\\)",
+     "latex": "\\(\\frac{2}{(x-3)(x+3)}\\)"
+    },
+    {
+     "label": "D",
+     "text": "\\(\\frac{2}{x^2-9}\\)",
+     "latex": "\\(\\frac{2}{x^2-9}\\)"
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 206,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations:\n\\(\\begin{cases} 2p + q = 7 \\\\ 3p - 2q = 4 \\end{cases}\\). What is the value of \\(p\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 207,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(x^2 - 5x + 6\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 2)(x - 3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 2)(x + 3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 1)(x - 6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x + 1)(x - 6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 208,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a rational number that is not an integer?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "π",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 209,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(\\frac{2x-3}{4} = \\frac{x+5}{2} - 1\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = 4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 210,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(3x^2 - 12x + 9\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(3x-3)(x-3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3(x-1)(x-3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "3(x-3)^{2}",
+     "latex": "3(x-3)^{2}"
+    },
+    {
+     "label": "D",
+     "text": "(3x+3)(x-3)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "wrong_key",
+   "true_index": 1
+  },
+  {
+   "n": 211,
+   "source": "grade_fit_ai",
+   "question_text": "If the line \\(y = mx + b\\) passes through the points (2, 5) and (6, 13), what is the value of \\(b\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 212,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations:\n\\[ \\begin{cases} 2x + 3y = 7 \\\\ 4x - y = 5 \\end{cases} \\]",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x, y) = (2, 1)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x, y) = (1, 2)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x, y) = (3, -1)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x, y) = (0, \\frac{7}{3})",
+     "latex": "(x, y) = (0, \\frac{7}{3})"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 213,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(\\frac{5x^2 - 20x}{5x}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x - 4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x + 4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5x - 20",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "5x + 20",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 214,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a rational number that is not an integer?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{3}{4}",
+     "latex": "\\frac{3}{4}"
+    },
+    {
+     "label": "B",
+     "text": "√2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "7",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 215,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(2x - 5) = 4x + 1\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "8",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "-1",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 216,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the rational expression: \\(\\dfrac{4x^{2} - 9}{2x - 3}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2x+3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2x-3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4x+9",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4x-9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 217,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations: \\(2y - x = 3\\) and \\(y + 3x = 11\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(\\frac{19}{7}, \\frac{20}{7})",
+     "latex": "(\\frac{19}{7}, \\frac{20}{7})"
+    },
+    {
+     "label": "B",
+     "text": "(\\frac{20}{7}, \\frac{19}{7})",
+     "latex": "(\\frac{20}{7}, \\frac{19}{7})"
+    },
+    {
+     "label": "C",
+     "text": "(3, 2)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(2, 3)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 218,
+   "source": "grade_fit_ai",
+   "question_text": "The sum of three consecutive even integers is 48. What is the smallest integer?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "12",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "14",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "16",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "18",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 219,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(\\dfrac{2^{3} \\cdot 2^{-1}}{2^{2}}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 220,
+   "source": "target_pdf",
+   "question_text": "Which of the following numbers is a composite rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "5",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "9",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 221,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(2x - 5) + 4 = 2x + 11\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = 5",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 2,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 222,
+   "source": "grade_fit_ai",
+   "question_text": "Factor completely: \\(x^2 - 7x + 12\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 3)(x - 4)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 3)(x + 4)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 2)(x - 6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x + 2)(x - 6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 223,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(\\frac{2}{x} + \\frac{3}{x+1} = 1\\), what is the value of \\(x\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 224,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following is the solution set for the in equality \\(2x - 5 > 3x + 1\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x < -6",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x > -6",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x < 6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x > 6",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 225,
+   "source": "grade_fit_ai",
+   "question_text": "A rectangle has a length that is 3 meters more than its width. If the perimeter is 54 meters, what is the area of the rectangle?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "180 m^{2}",
+     "latex": "180 m^{2}"
+    },
+    {
+     "label": "B",
+     "text": "192 m^{2}",
+     "latex": "192 m^{2}"
+    },
+    {
+     "label": "C",
+     "text": "204 m^{2}",
+     "latex": "204 m^{2}"
+    },
+    {
+     "label": "D",
+     "text": "216 m^{2}",
+     "latex": "216 m^{2}"
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "wrong_key",
+   "true_index": 0
+  },
+  {
+   "n": 226,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following numbers is NOT a rational number?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "√9",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "0.75",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "0.\\overline{3}",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\sqrt{2}",
+     "latex": "\\sqrt{2}"
+    }
+   ],
+   "correct_option_index": 3,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 227,
+   "source": "grade_fit_ai",
+   "question_text": "3(2x - 5) = 4x + 7",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 4",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 6",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = 8",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 228,
+   "source": "grade_fit_ai",
+   "question_text": "What is the factored form of the quadratic expression x^2 - 7x + 12?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 3)(x - 4)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 3)(x + 4)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 2)(x - 6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x + 2)(x - 6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 229,
+   "source": "grade_fit_ai",
+   "question_text": "If f(x) = 2x^2 - 3x + 5, what is f( -2 )?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "27",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "19",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "15",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "9",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 230,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the system of equations: \\( \\begin{cases} 2y - x = 4 \\\\ 3x + y = 7 \\end{cases} \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x = 1, y = 2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x = 2, y = 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x = 3, y = 1",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "x = 4, y = 0",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "no_correct_option",
+   "true_index": null
+  },
+  {
+   "n": 231,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\( \\frac{4x^2 - 9}{2x - 3} \\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2x + 3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2x - 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "4x + 3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "Cannot be simplified",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 232,
+   "source": "grade_fit_ai",
+   "question_text": "Which of the following is equivalent to \\( (3a^2b)(4ab^3) \\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "12a^3b^4",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "12a^3b^2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "7a^3b^4",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "12a^2b^4",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 233,
+   "source": "grade_fit_ai",
+   "question_text": "A rectangle has a length that is 3 meters more than its width. If the area is 70 square meters, what is the width?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "5 m",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7 m",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "8 m",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "10 m",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 1,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 234,
+   "source": "grade_fit_ai",
+   "question_text": "What is the solution set for the in equality \\( -2 < 3x - 5 \\le 7 \\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\( \\frac{1}{3} < x \\le 4 \\)",
+     "latex": "\\( \\frac{1}{3} < x \\le 4 \\)"
+    },
+    {
+     "label": "B",
+     "text": "\\( \\frac{1}{3} < x < 4 \\)",
+     "latex": "\\( \\frac{1}{3} < x < 4 \\)"
+    },
+    {
+     "label": "C",
+     "text": "\\( 1 < x \\le 4 \\)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "\\( 1 < x < 4 \\)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "wrong_key",
+   "true_index": 2
+  },
+  {
+   "n": 235,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(3(x - 4) = 2x + 5\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "17",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "7",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-17",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "12",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 236,
+   "source": "grade_fit_ai",
+   "question_text": "Solve for \\(x\\): \\(\\dfrac{2x}{5} - 3 = \\dfrac{1}{2}\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "\\frac{35}{4}",
+     "latex": "\\frac{35}{4}"
+    },
+    {
+     "label": "B",
+     "text": "\\frac{7}{2}",
+     "latex": "\\frac{7}{2}"
+    },
+    {
+     "label": "C",
+     "text": "\\frac{5}{2}",
+     "latex": "\\frac{5}{2}"
+    },
+    {
+     "label": "D",
+     "text": "\\frac{9}{2}",
+     "latex": "\\frac{9}{2}"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 237,
+   "source": "grade_fit_ai",
+   "question_text": "If \\(f(x) = 3x - 4\\), what value of \\(x\\) makes \\(f(x) = 2\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "1",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "3",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "0",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 238,
+   "source": "grade_fit_ai",
+   "question_text": "Solve the in equality: \\(5 - 2t < 9\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "t > -2",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "t < -2",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "t > 2",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "t < 2",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 239,
+   "source": "grade_fit_ai",
+   "question_text": "Find the solution to the system: \\(y = 2x + 1\\) and \\(3x - y = 4\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(5, 11)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(4, 9)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(5, 9)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(6, 13)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 240,
+   "source": "grade_fit_ai",
+   "question_text": "Which expression is equivalent to \\(\\dfrac{x^{2} - 9}{x - 3}\\) for \\(x \\neq 3\\)?",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "x + 3",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "x - 3",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "x^{2} + 9",
+     "latex": "x^{2} + 9"
+    },
+    {
+     "label": "D",
+     "text": "x^{2} - 9",
+     "latex": "x^{2} - 9"
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 241,
+   "source": "grade_fit_ai",
+   "question_text": "Simplify the expression: \\(4y - 2(3y - 5) + 7\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "-2y + 17",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "2y + 17",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "-2y - 17",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "2y - 17",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  },
+  {
+   "n": 242,
+   "source": "grade_fit_ai",
+   "question_text": "Factor the quadratic: \\(x^{2} - 5x + 6\\).",
+   "question_latex": null,
+   "options": [
+    {
+     "label": "A",
+     "text": "(x - 2)(x - 3)",
+     "latex": null
+    },
+    {
+     "label": "B",
+     "text": "(x + 2)(x + 3)",
+     "latex": null
+    },
+    {
+     "label": "C",
+     "text": "(x - 1)(x - 6)",
+     "latex": null
+    },
+    {
+     "label": "D",
+     "text": "(x + 1)(x - 6)",
+     "latex": null
+    }
+   ],
+   "correct_option_index": 0,
+   "expected": "ok",
+   "true_index": null
+  }
+ ]
+}

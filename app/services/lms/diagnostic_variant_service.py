@@ -297,6 +297,16 @@ def _generate_one_variant(orig: Question) -> Optional[dict]:
                 orig.id, variant.correct_index, solved.chosen_index, solved.confidence,
             )
             return None
+        from app.services.quiz.mcq_math_verify import check_answer_key, structural_problems
+
+        as_item = {
+            "question_text": variant.question_text,
+            "options": [{"label": l, "text": t} for l, t in zip("ABCD", v_opts)],
+            "correct_option_index": variant.correct_index,
+        }
+        if structural_problems(as_item) or check_answer_key(as_item).disproved:
+            logger.info("Variant of q%s rejected by the maths answer-key check", orig.id)
+            return None
 
         try:
             from app.services.quiz.display_format_qa import finalize_display_text, finalize_option_text

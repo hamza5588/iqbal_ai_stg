@@ -167,7 +167,10 @@ def unsquash_english(text: str) -> str:
                     break
             if matched is None:
                 rest = blob[i:]
-                if not parts:
+                # One leading exam word is not evidence of smashing: "inequality",
+                # "Rationalize", "fractional", "infinitely", "Integration" are real words
+                # that only start with "in" / "rational" / "fraction".
+                if len(parts) < 2:
                     return blob
                 return " ".join(parts) + " " + rest
             parts.append(blob[i : i + len(matched)])
