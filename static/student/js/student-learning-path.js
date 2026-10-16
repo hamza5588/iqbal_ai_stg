@@ -2,6 +2,9 @@
    dashboard `weak_topics`). Start Learning Path opens Learning Chat (lms-deficiency-chat.js); Guided practice
    opens the per-topic practice panel (lms-panels.js). Path steps keep the old overview's actions. */
 (function () {
+  // Guided practice is hidden for now: its topic picker served a leftover QA question
+  // ("3+2=?" with no correct option) to every Algebra student.
+  var GUIDED_PRACTICE_ENABLED = false;
   var state = { open: {} };
   var STATUS_LABEL = {
     mastered: 'Mastered',
@@ -37,7 +40,7 @@
     var side;
     if (t.isWeak) {
       side = '<span class="sd-pill green">Available</span>' +
-        (t.topic_id ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')"><i class="fas fa-dumbbell"></i> Guided practice</button>' : '') +
+        (GUIDED_PRACTICE_ENABLED && t.topic_id ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')"><i class="fas fa-dumbbell"></i> Guided practice</button>' : '') +
         '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" data-testid="topic-chat-btn" onclick="openDeficiencyChat(false, \'practice\', ' + (Number(t.topic_id) || 0) + ')">Start Learning Chat <i class="fas fa-chevron-right"></i></button>';
     } else {
       side = '<span class="sd-pill grey">Completed</span>' +
@@ -61,7 +64,7 @@
         '<div><div class="sd-block-title" style="color:var(--sd-green);">Status</div>' +
         '<div class="sd-improve-grid"><div class="sd-improve-box strong"><b>' + (pct != null ? pct + '%' : '—') + '</b><small>' +
         escapeHtml(STATUS_LABEL[t.mastery_status] || 'Cleared') + '</small><div class="sd-frac">Not a weak area any more</div></div></div>' +
-        (t.topic_id ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" style="margin-top:12px;" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')">Practice again</button>' : '') +
+        (GUIDED_PRACTICE_ENABLED && t.topic_id ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" style="margin-top:12px;" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')">Practice again</button>' : '') +
         '</div></div></div>';
     }
     var bar = t.isWeak ? 'purple' : 'grey';

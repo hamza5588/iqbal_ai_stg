@@ -1077,8 +1077,9 @@
         openDeficiencyChat();
         return;
       }
-      if (typeof openLmsPracticePanel === 'function') {
-        openLmsPracticePanel(itemId);
+      // Guided practice is hidden; send per-topic practice steps to that topic's Learning Chat.
+      if (typeof openDeficiencyChat === 'function') {
+        openDeficiencyChat(false, 'practice', Number(itemId) || 0);
       }
       return;
     }
