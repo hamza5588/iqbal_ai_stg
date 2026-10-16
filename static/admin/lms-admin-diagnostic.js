@@ -341,9 +341,11 @@
     var textEl = document.getElementById('adminDiagProgressText');
     if (!wrap) return;
     wrap.style.display = 'block';
-    if (bar) bar.style.width = pct + '%';
-    if (pctEl) pctEl.textContent = pct + '%';
-    if (textEl) textEl.textContent = text || '';
+    if (pct != null && !isNaN(pct)) {
+      if (bar) bar.style.width = pct + '%';
+      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+    }
+    if (textEl && text != null) textEl.textContent = text || '';
   }
 
   function resetProgress() {
@@ -1392,16 +1394,33 @@
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/lms/diagnostics/from-pdf');
     xhr.withCredentials = true;
-    xhr.upload.onprogress = function (ev) {
-      if (ev.lengthComputable) {
-        var uploadPct = 5 + Math.round((ev.loaded / ev.total) * 15);
-        setProgress(uploadPct, 'Uploading PDFs to server...');
-      }
-    };
+    // Large PDFs can take many minutes; do not abort on a short browser timeout.
+    xhr.timeout = 0;
+    if (typeof window.bindUploadEtaGuard === 'function') {
+      window.bindUploadEtaGuard(xhr, function (msg, info) {
+        var uploadPct =
+          info && info.pct != null ? 5 + Math.round((info.pct / 100) * 15) : null;
+        setProgress(uploadPct, msg);
+        status.textContent = msg;
+      });
+    } else {
+      xhr.upload.onprogress = function (ev) {
+        if (ev.lengthComputable) {
+          var uploadPct = 5 + Math.round((ev.loaded / ev.total) * 15);
+          setProgress(uploadPct, 'Uploading PDFs to server...');
+        }
+      };
+    }
     xhr.upload.onload = function () {
       uploadBytesDone = true;
       setProgress(20, 'Upload complete — processing on server...');
+      if (typeof window.updateWaitOverlay === 'function') {
+        window.updateWaitOverlay('Upload complete — processing on server...');
+      }
       startServerProgressPoll(progressJobId, targetFiles, { waitForDone: true });
+    };
+    xhr.onabort = function () {
+      failAdminDiagUpload('Upload cancelled.');
     };
     xhr.onload = async function () {
       if (xhr.status === 413) {

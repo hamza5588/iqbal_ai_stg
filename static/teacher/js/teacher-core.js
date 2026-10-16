@@ -1710,6 +1710,10 @@
         if (window._ingestAbortController) {
           window._ingestAbortController.abort();
         }
+        if (window._ingestXhr) {
+          try { window._ingestXhr.abort(); } catch (e) { /* ignore */ }
+          window._ingestXhr = null;
+        }
         // Preserve the user's currently opened chat/thread after cancellation.
         if (Object.prototype.hasOwnProperty.call(window, '_ingestPrevThreadId')) {
           window.currentRAGThreadId = window._ingestPrevThreadId || null;
@@ -1787,44 +1791,85 @@
         window._ingestCancelRequested = false;
         window._ingestCompletedSuccessfully = false;
         window._ingestPendingThreadId = null;
+        window._ingestXhr = null;
         let pendingThreadId = null;
         let pendingConversationId = null;
         const formData = new FormData();
         formData.append('file', file);
         formData.append('create_new_thread', 'true');
         // Do NOT send conversation_id: each upload gets a new conversation and thread (isolated instance)
-        let progress = 0;
         updatePpmSteps(0);
-        const progressInterval = setInterval(() => {
-          progress += Math.random() * 8 + 2;
-          if (progress > 90) progress = 90;
-          if (progressBar) progressBar.style.width = progress + '%';
-          if (progressPercent) progressPercent.textContent = Math.round(progress) + '%';
-          if (progressStatus) {
-            if (progress < 40) progressStatus.textContent = 'Uploading PDF...';
-            else if (progress < 80) progressStatus.textContent = 'Extracting text and indexing for chat...';
-            else progressStatus.textContent = 'Finalizing...';
-          }
-          updatePpmSteps(progress);
-        }, 400);
+        if (progressStatus) progressStatus.textContent = 'Uploading PDF...';
+
+        function setUploadUi(pct, msg) {
+          if (progressBar) progressBar.style.width = pct + '%';
+          if (progressPercent) progressPercent.textContent = Math.round(pct) + '%';
+          if (progressStatus && msg) progressStatus.textContent = msg;
+          updatePpmSteps(pct);
+        }
+
+        // Real XHR upload progress (fetch has no upload progress) + ETA / proceed prompt.
+        let data;
         try {
-          const response = await fetch('/api/rag/ingest', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-            signal: window._ingestAbortController.signal
+          data = await new Promise(function (resolve, reject) {
+            const xhr = new XMLHttpRequest();
+            window._ingestXhr = xhr;
+            xhr.open('POST', '/api/rag/ingest');
+            xhr.withCredentials = true;
+            xhr.timeout = 0;
+            if (typeof window.bindUploadEtaGuard === 'function') {
+              window.bindUploadEtaGuard(xhr, function (msg, info) {
+                const pct = info && info.pct != null ? Math.min(40, Math.round(info.pct * 0.4)) : 0;
+                setUploadUi(pct, msg);
+              });
+            } else {
+              xhr.upload.onprogress = function (ev) {
+                if (!ev.lengthComputable) return;
+                const pct = Math.min(40, Math.round((ev.loaded / ev.total) * 40));
+                setUploadUi(pct, 'Uploading PDF...');
+              };
+            }
+            xhr.onload = function () {
+              window._ingestXhr = null;
+              let body = {};
+              try {
+                body = JSON.parse(xhr.responseText || '{}');
+              } catch (parseErr) {
+                body = {};
+              }
+              if (xhr.status < 200 || xhr.status >= 300) {
+                reject(new Error((body && body.error) || 'PDF ingest failed'));
+                return;
+              }
+              resolve(body);
+            };
+            xhr.onerror = function () {
+              window._ingestXhr = null;
+              reject(new Error('Network error. Please try again.'));
+            };
+            xhr.onabort = function () {
+              window._ingestXhr = null;
+              const err = new Error('The user aborted a request.');
+              err.name = 'AbortError';
+              reject(err);
+            };
+            // Mirror AbortController.abort() used by cancelCreateLessonUpload().
+            window._ingestAbortController.signal.addEventListener('abort', function () {
+              try { xhr.abort(); } catch (e) { /* ignore */ }
+            });
+            xhr.send(formData);
           });
-          clearInterval(progressInterval);
-          if (progressBar) progressBar.style.width = '100%';
-          if (progressPercent) progressPercent.textContent = '100%';
-          if (progressStatus) progressStatus.textContent = 'Finalizing...';
-          if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            showToast(err.error || 'PDF ingest failed', 'error');
-            closeCreateLessonModal();
-            return;
-          }
-          const data = await response.json().catch(() => ({}));
+        } catch (e) {
+          const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
+          if (!isAbort) showToast(e.message || 'Network error. Please try again.', 'error');
+          else showToast('Upload cancelled.', 'warning');
+          window._ingestPendingThreadId = null;
+          closeCreateLessonModal();
+          return;
+        }
+
+        try {
+          setUploadUi(45, 'Processing on server...');
           let threadId = data.thread_id || null;
           let conversationId = data.conversation_id != null ? data.conversation_id : null;
           pendingThreadId = threadId;
@@ -1882,6 +1927,9 @@
                 return;
               }
             }
+          } else if (threadId) {
+            // Sync ingest completed in the upload response.
+            window._ingestCompletedSuccessfully = true;
           }
           const ingestSuccess = !window._ingestCancelRequested && (window._ingestCompletedSuccessfully || (!data.task_id && threadId)) && threadId;
           if (ingestSuccess) updatePpmSteps(100);
@@ -1917,7 +1965,6 @@
           }
           window._ingestPendingThreadId = null;
         } catch (e) {
-          clearInterval(progressInterval);
           const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
           if (!isAbort) showToast('Network error. Please try again.', 'error');
           window._ingestPendingThreadId = null;

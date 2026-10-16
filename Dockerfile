@@ -35,4 +35,4 @@ EXPOSE 5000
 
 # --timeout must exceed a full RAG lecture turn (multiple tool rounds x 120s LLM calls);
 # with gthread a timeout kills the whole worker process and every other in-flight thread on it.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "9", "--threads", "8", "--worker-class", "gthread", "--timeout", "300", "--graceful-timeout", "30", "--keep-alive", "5", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "9", "--threads", "8", "--worker-class", "gthread", "--timeout", "1800", "--graceful-timeout", "30", "--keep-alive", "5", "run:app"]

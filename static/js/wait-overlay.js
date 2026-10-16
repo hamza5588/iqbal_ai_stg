@@ -36,7 +36,9 @@
     el.setAttribute('aria-busy', 'true');
     if (document.body) document.body.classList.add('iqbal-wait-lock');
     clearTimeout(maxTimer);
-    maxTimer = setTimeout(hideNow, 180000);
+    // Sticky long uploads (diagnostic / large PDFs) must not auto-hide at 3 minutes.
+    var maxMs = typeof opts.maxMs === 'number' ? opts.maxMs : sticky ? 55 * 60 * 1000 : 180000;
+    if (maxMs > 0) maxTimer = setTimeout(hideNow, maxMs);
     if (!sticky) {
       clearTimeout(hideTimer);
       hideTimer = setTimeout(function () {
@@ -61,7 +63,81 @@
   global.showWaitOverlay = function (message, opts) {
     showNow(message || 'Please wait...', opts || {});
   };
+  global.updateWaitOverlay = function (message) {
+    ensure();
+    if (msgEl && message) msgEl.textContent = message;
+  };
   global.hideWaitOverlay = hideNow;
+
+  /** Human-readable remaining time for large uploads. */
+  global.formatUploadEta = function (sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    if (sec < 60) return sec + ' seconds';
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    if (m < 60) return s ? m + ' min ' + s + ' sec' : m + ' min';
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    return m ? h + ' hr ' + m + ' min' : h + ' hr';
+  };
+
+  /**
+   * After ~12s of measurable upload speed, surface ETA.
+   * If remaining time is still long (>=90s), ask once: Should I proceed?
+   * onUpdate(msg, { pct, remainingSec, loaded, total }) is optional.
+   */
+  global.bindUploadEtaGuard = function (xhr, onUpdate) {
+    var startedAt = Date.now();
+    var askedProceed = false;
+    var lastLoaded = 0;
+    var lastAt = startedAt;
+    xhr.upload.addEventListener('progress', function (ev) {
+      if (!ev.lengthComputable || !ev.total) return;
+      var now = Date.now();
+      var elapsedSec = (now - startedAt) / 1000;
+      var pct = Math.round((ev.loaded / ev.total) * 100);
+      var instantGap = Math.max(0.2, (now - lastAt) / 1000);
+      var bytesPerSec =
+        elapsedSec > 1
+          ? ev.loaded / elapsedSec
+          : (ev.loaded - lastLoaded) / instantGap;
+      lastLoaded = ev.loaded;
+      lastAt = now;
+      var remaining = null;
+      var msg = 'Uploading… ' + pct + '%';
+      if (elapsedSec >= 12 && bytesPerSec >= 1024) {
+        remaining = (ev.total - ev.loaded) / bytesPerSec;
+        msg =
+          'Uploading… ' +
+          pct +
+          '% — about ' +
+          global.formatUploadEta(remaining) +
+          ' remaining';
+      }
+      if (typeof onUpdate === 'function') {
+        onUpdate(msg, {
+          pct: pct,
+          remainingSec: remaining,
+          loaded: ev.loaded,
+          total: ev.total,
+        });
+      }
+      if (visible) global.updateWaitOverlay(msg);
+      if (!askedProceed && remaining != null && remaining >= 90) {
+        askedProceed = true;
+        var ok = window.confirm(
+          'This upload still needs about ' +
+            global.formatUploadEta(remaining) +
+            '. Should I proceed?'
+        );
+        if (!ok) {
+          try {
+            xhr.abort();
+          } catch (e) { /* ignore */ }
+        }
+      }
+    });
+  };
 
   global.withWaitOverlay = function (message, fn, opts) {
     showNow(message || 'Please wait...', opts || {});
@@ -153,7 +229,9 @@
     if (!(form instanceof HTMLFormElement)) return;
     if (form.hasAttribute('data-no-wait')) return;
     var msg = form.getAttribute('data-wait-message') || 'Please wait...';
-    var opts = form.hasAttribute('data-wait-sticky') ? { sticky: true } : {};
+    var opts = form.hasAttribute('data-wait-sticky')
+      ? { sticky: true, maxMs: 55 * 60 * 1000 }
+      : {};
     showNow(msg, opts);
   }, true);
 

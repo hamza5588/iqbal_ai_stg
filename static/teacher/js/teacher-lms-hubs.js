@@ -607,11 +607,27 @@
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/lms/diagnostics/from-pdf');
       xhr.withCredentials = true;
-      xhr.upload.onprogress = function (ev) {
-        if (ev.lengthComputable) {
-          const uploadPct = 10 + Math.round((ev.loaded / ev.total) * 55);
-          _setLmsDiagProgress(uploadPct, 'Uploading PDFs...');
-        }
+      xhr.timeout = 0;
+      if (typeof window.bindUploadEtaGuard === 'function') {
+        window.bindUploadEtaGuard(xhr, function (msg, info) {
+          const uploadPct =
+            info && info.pct != null ? 10 + Math.round((info.pct / 100) * 55) : null;
+          if (uploadPct != null) _setLmsDiagProgress(uploadPct, msg);
+          else status.textContent = msg;
+        });
+      } else {
+        xhr.upload.onprogress = function (ev) {
+          if (ev.lengthComputable) {
+            const uploadPct = 10 + Math.round((ev.loaded / ev.total) * 55);
+            _setLmsDiagProgress(uploadPct, 'Uploading PDFs...');
+          }
+        };
+      }
+      xhr.onabort = function () {
+        status.textContent = 'Upload cancelled.';
+        _resetLmsDiagProgress();
+        btn.disabled = false;
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
       };
       xhr.onload = function () {
         _setLmsDiagProgress(75, 'Extracting questions...');
