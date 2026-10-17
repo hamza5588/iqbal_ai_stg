@@ -3166,6 +3166,9 @@ Please provide an improved version of the lesson content that addresses the user
             os.path.join(project_root, "app", "static", "logo.png"),
             os.path.join(project_root, "app", "static", "images", "logo.png"),
             os.path.join(project_root, "static", "logo.png"),
+            os.path.join(project_root, "static", "images", "logo.png"),
+            os.path.join(project_root, "static", "images", "iqbal-ai-logo.png"),
+            os.path.join(project_root, "static", "images", "iqbal-ai-logo-light.png"),
         ])
 
         for path in candidate_paths:
