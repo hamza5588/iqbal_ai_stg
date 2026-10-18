@@ -324,9 +324,18 @@ def promote_slash_fractions(text: str) -> str:
     return s
 
 
+_UNBRACED_MULTI_DIGIT_POWER_RE = re.compile(r"\^\s*(\d{2,})(?![\d.])")
+
+
+def brace_multi_digit_exponents(text: str) -> str:
+    """``4^10`` -> ``4^{10}``: TeX raises only the next character, so an unbraced power
+    showed students "4¹0" for an option printed as 4 to the power 10."""
+    return _UNBRACED_MULTI_DIGIT_POWER_RE.sub(r"^{\1}", text or "")
+
+
 def promote_inline_math_notation(text: str) -> str:
     """Promote slash fractions + log_base so students see stacked frac / subscripts."""
-    return promote_slash_fractions(promote_log_underscore(text or ""))
+    return promote_slash_fractions(promote_log_underscore(brace_multi_digit_exponents(text or "")))
 
 
 def recover_latex(text: Optional[str]) -> str:

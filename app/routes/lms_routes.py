@@ -1507,6 +1507,12 @@ def get_or_update_quiz(quiz_id: int):
                     return json_error("Forbidden", code="forbidden", status=403)
             elif assessment.assessment_type == "quiz":
                 if not assignment_service.student_is_assigned_quiz(uid, quiz_id):
+                    if assignment_service.student_has_scheduled_quiz(uid, quiz_id):
+                        return json_error(
+                            assignment_service.QUIZ_NOT_RELEASED_MESSAGE,
+                            code="not_released",
+                            status=403,
+                        )
                     return json_error(
                         "Join your teacher's class with a class code to take this quiz.",
                         code="forbidden",
@@ -1579,7 +1585,7 @@ def assignments():
         if not class_id:
             return json_error("class_id is required for teachers")
         rows = assignment_service.list_assignments_for_class(class_id)
-        return json_success([{"id": a.id, "title": a.title, "quiz_id": a.quiz_id} for a in rows])
+        return json_success([assignment_service.assignment_to_dict(a) for a in rows])
 
     denied = _require_permission(Permissions.ASSIGN_QUIZ)
     if denied:
@@ -1588,6 +1594,10 @@ def assignments():
     due_date = body.get("due_date")
     from datetime import datetime
 
+    # Same scheduled-release parsing/validation as lessons (ISO from Date.toISOString()).
+    parsed_publish_at, schedule_error = _parse_lesson_publish_at(body)
+    if schedule_error:
+        return schedule_error
     try:
         parsed_due = datetime.fromisoformat(due_date) if due_date else None
         a = assignment_service.create_assignment(
@@ -1597,8 +1607,9 @@ def assignments():
             title=body["title"],
             instructions=body.get("instructions"),
             due_date=parsed_due,
+            publish_at=parsed_publish_at,
         )
-        return json_success({"id": a.id, "status": a.status}, status=201)
+        return json_success(assignment_service.assignment_to_dict(a), status=201)
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
     except (KeyError, TypeError, ValueError):
@@ -1613,7 +1624,7 @@ def publish_assignment(assignment_id: int):
         return denied
     try:
         a = assignment_service.publish_assignment(assignment_id, _current_user_id())
-        return json_success({"id": a.id, "status": a.status})
+        return json_success(assignment_service.assignment_to_dict(a))
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 

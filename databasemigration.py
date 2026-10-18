@@ -381,6 +381,19 @@ def ensure_lesson_assignments_publish_at_column(conn, inspector):
         logger.info("Column lesson_assignments.publish_at already exists, skipping.")
 
 
+def ensure_assignments_publish_at_column(conn, inspector):
+    """Add publish_at (scheduled quiz release time, naive UTC) to assignments."""
+    if not inspector.has_table("assignments"):
+        logger.info("Table assignments does not exist, skipping publish_at column.")
+        return
+    columns = {col["name"] for col in inspector.get_columns("assignments")}
+    if "publish_at" not in columns:
+        logger.info("Adding column assignments.publish_at ...")
+        conn.execute(text("ALTER TABLE assignments ADD COLUMN publish_at TIMESTAMP NULL"))
+    else:
+        logger.info("Column assignments.publish_at already exists, skipping.")
+
+
 def ensure_learning_path_item_type_enrichment(conn, inspector):
     """Widen learning_path_items.item_type's CHECK constraint to allow
     'enrichment' (the no-weak-areas challenge-activity item, DIL feedback:
@@ -439,6 +452,8 @@ def main():
         ensure_learning_path_item_type_enrichment(conn, inspector)
         inspector = inspect(engine)
         ensure_lesson_assignments_publish_at_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_assignments_publish_at_column(conn, inspector)
 
     logger.info("Migration completed successfully.")
 

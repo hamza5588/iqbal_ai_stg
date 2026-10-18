@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy import or_
+
 from app.models.lms_models import Assignment, AssignmentSubmission
 from app.services.lms.assessment_service import get_assessment
 from app.services.lms.class_service import (
@@ -12,7 +14,29 @@ from app.services.lms.class_service import (
     list_student_classes,
 )
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
+from app.services.lms.lesson_assignment_service import to_naive_utc
 from app.utils.db import get_db
+
+QUIZ_NOT_RELEASED_MESSAGE = "This quiz is not available yet."
+
+
+def _iso_utc(value: Optional[datetime]) -> Optional[str]:
+    return (value.isoformat() + "Z") if value else None
+
+
+def _visible_now_conditions():
+    """SQL conditions for a quiz assignment students can see right now: published and its
+    scheduled release time (publish_at) reached. Every student quiz gate builds on this
+    (same rule as lesson_assignment_service, minus the lesson-only due-date hiding)."""
+    now = datetime.utcnow()
+    return (
+        Assignment.status == "published",
+        or_(Assignment.publish_at.is_(None), Assignment.publish_at <= now),
+    )
+
+
+def is_released(assignment: Assignment) -> bool:
+    return assignment.publish_at is None or assignment.publish_at <= datetime.utcnow()
 
 
 def find_active_assignment_for_class_quiz(
@@ -37,10 +61,18 @@ def create_assignment(
     title: str,
     instructions: Optional[str] = None,
     due_date: Optional[datetime] = None,
+    publish_at: Optional[datetime] = None,
 ) -> Assignment:
     title = title.strip() if isinstance(title, str) else ""
     if not title:
         raise LMSValidationError("Assignment title is required")
+    publish_at = to_naive_utc(publish_at)
+    due_date = to_naive_utc(due_date)
+    # A release time that has already passed means "publish now".
+    if publish_at is not None and publish_at <= datetime.utcnow():
+        publish_at = None
+    if publish_at is not None and due_date is not None and due_date < publish_at:
+        raise LMSValidationError("Due date cannot be earlier than the scheduled publish time")
     quiz = get_assessment(quiz_id)
     if quiz.assessment_type != "quiz":
         raise LMSValidationError("Assignment must reference a quiz assessment")
@@ -69,6 +101,7 @@ def create_assignment(
         title=title,
         instructions=instructions,
         due_date=due_date,
+        publish_at=publish_at,
         status="draft",
     )
     db.add(assignment)
@@ -181,7 +214,7 @@ def list_assignments_for_student(student_id: int) -> List[dict]:
         return []
     assignments = (
         db.query(Assignment)
-        .filter(Assignment.class_id.in_(class_ids), Assignment.status == "published")
+        .filter(Assignment.class_id.in_(class_ids), *_visible_now_conditions())
         .order_by(Assignment.id.asc())
         .all()
     )
@@ -330,7 +363,7 @@ def student_is_assigned_quiz(student_id: int, quiz_id: int) -> bool:
         .filter(
             Assignment.quiz_id == quiz_id,
             Assignment.class_id.in_(class_ids),
-            Assignment.status == "published",
+            *_visible_now_conditions(),
         )
         .first()
     )
@@ -358,6 +391,8 @@ def resolve_student_quiz_assignment(
             raise LMSValidationError(
                 "Join your teacher's class with a class code to take this quiz."
             )
+        if not is_released(assignment):
+            raise LMSValidationError(QUIZ_NOT_RELEASED_MESSAGE)
         return assignment.id
     db = get_db()
     rows = (
@@ -365,12 +400,48 @@ def resolve_student_quiz_assignment(
         .filter(
             Assignment.quiz_id == quiz_id,
             Assignment.class_id.in_(class_ids),
-            Assignment.status == "published",
+            *_visible_now_conditions(),
         )
         .all()
     )
     if not rows:
+        if student_has_scheduled_quiz(student_id, quiz_id):
+            raise LMSValidationError(QUIZ_NOT_RELEASED_MESSAGE)
         raise LMSValidationError(
             "Join your teacher's class with a class code to take this quiz."
         )
     return rows[0].id
+
+
+def student_has_scheduled_quiz(student_id: int, quiz_id: int) -> bool:
+    """True if the quiz is published to one of the student's classes but not released yet
+    (lets the API say "not available yet" instead of "join the class")."""
+    class_ids = [c.id for c in list_student_classes(student_id)]
+    if not class_ids:
+        return False
+    db = get_db()
+    return (
+        db.query(Assignment.id)
+        .filter(
+            Assignment.quiz_id == quiz_id,
+            Assignment.class_id.in_(class_ids),
+            Assignment.status == "published",
+            Assignment.publish_at > datetime.utcnow(),
+        )
+        .first()
+        is not None
+    )
+
+
+def assignment_to_dict(assignment: Assignment) -> dict:
+    """Teacher-facing summary, including the schedule."""
+    return {
+        "id": assignment.id,
+        "title": assignment.title,
+        "quiz_id": assignment.quiz_id,
+        "class_id": assignment.class_id,
+        "status": assignment.status,
+        "due_date": _iso_utc(assignment.due_date),
+        "publish_at": _iso_utc(assignment.publish_at),
+        "scheduled": assignment.publish_at is not None and not is_released(assignment),
+    }

@@ -145,10 +145,22 @@ def _markdownize_uploaded_doc_page(page_num: int, lines: list[str]) -> str:
     return "\n".join(out)
 
 
-def _format_uploaded_document_pages(title: str, source_name: str, page_texts: dict[int, list[str]]) -> str:
+def _format_uploaded_document_pages(
+    title: str, source_name: str, page_texts: dict[int, list[str]], *, overlap_merged: bool = False
+) -> str:
+    """``overlap_merged``: page texts already had the chunk overlap removed, so every line is
+    kept. Line de-duplication (legacy repair path) would drop real content: repeated option
+    lines such as "(A) 1" and every answer-key letter after its first use."""
     parts = [f"# {title}", "", f"**Source document:** {source_name}", ""]
     for page_num in sorted(page_texts):
-        lines = _merge_uploaded_doc_lines(page_texts[page_num])
+        if overlap_merged:
+            lines = [
+                ln
+                for ln in (_clean_uploaded_doc_line(raw) for t in page_texts[page_num] for raw in str(t or "").splitlines())
+                if ln
+            ]
+        else:
+            lines = _merge_uploaded_doc_lines(page_texts[page_num])
         if lines:
             parts.append(_markdownize_uploaded_doc_page(page_num, lines))
             parts.append("")
@@ -885,19 +897,19 @@ def create_lesson_from_uploaded_document():
             .order_by(RAGChunk.page.asc(), RAGChunk.chunk_index.asc(), RAGChunk.id.asc())
             .all()
         )
-        page_texts = {}
-        for chunk in chunks:
-            text = (chunk.text or '').strip()
-            if not text:
-                continue
-            page_label = (chunk.page or 0) + 1
-            page_texts.setdefault(page_label, []).append(text)
+        from app.services.lesson.document_questions import pages_from_chunk_rows
+
+        merged_pages = pages_from_chunk_rows(
+            [{"text": c.text, "page": c.page, "chunk_index": c.chunk_index} for c in chunks],
+            strip_running=False,
+        )
+        page_texts = {page: [text] for page, text in merged_pages}
 
         if not page_texts:
             return jsonify({'error': 'No readable text was found in the uploaded document'}), 400
 
         source_name = filename or thread.filename or 'uploaded document'
-        content = _format_uploaded_document_pages(title, source_name, page_texts)
+        content = _format_uploaded_document_pages(title, source_name, page_texts, overlap_merged=True)
         lesson_id = LessonModel.create_lesson(
             teacher_id=session['user_id'],
             title=title,

@@ -517,6 +517,20 @@ def init_db(app):
             except Exception as e:
                 logger.warning("lesson_assignments publish_at migration warning: %s", e)
                 db.rollback()
+
+            # Migration: scheduled quiz release time (quiz parity with lesson scheduling)
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "assignments" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("assignments")]
+                    if "publish_at" not in columns:
+                        logger.info("Adding publish_at to assignments...")
+                        db.execute(text("ALTER TABLE assignments ADD COLUMN publish_at TIMESTAMP"))
+                        db.commit()
+            except Exception as e:
+                logger.warning("assignments publish_at migration warning: %s", e)
+                db.rollback()
             
             # Migration: Add ingest failure-tracking columns to rag_threads
             try:

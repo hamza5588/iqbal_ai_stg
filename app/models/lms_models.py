@@ -264,6 +264,9 @@ class Assignment(Base):
     title = Column(String(512), nullable=False)
     instructions = Column(Text, nullable=True)
     due_date = Column(DateTime, nullable=True)
+    # Scheduled release (naive UTC). NULL = visible as soon as the assignment is published.
+    # Same convention as LessonAssignment.publish_at.
+    publish_at = Column(DateTime, nullable=True)
     status = Column(String(32), nullable=False, default="draft", server_default="draft")
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(

@@ -125,6 +125,8 @@
     }
 
     async function loadLmsAssignOptions() {
+      // Runs on every open (legacy modal and the inline Assign card in teacher-quizzes.js).
+      _initLmsPublishAtField('lmsAssignPublishAt', 'lmsAssignPublishHelp', 'quiz');
       const classEl = document.getElementById('lmsAssignClass');
       const quizEl = document.getElementById('lmsAssignQuiz');
       classEl.innerHTML = '<option value="">Loading...</option>';
@@ -164,6 +166,18 @@
         if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error');
         return;
       }
+      const quizPublishEl = document.getElementById('lmsAssignPublishAt');
+      const quizPublishRaw = quizPublishEl ? quizPublishEl.value : '';
+      const quizPublishAt = quizPublishRaw ? new Date(quizPublishRaw) : null;
+      if (quizPublishAt && isNaN(quizPublishAt.getTime())) {
+        status.textContent = 'Enter a valid publish date and time.';
+        return;
+      }
+      const quizDueCheck = document.getElementById('lmsAssignDue').value;
+      if (quizPublishAt && quizDueCheck && new Date(quizDueCheck) < quizPublishAt) {
+        status.textContent = 'Due date cannot be earlier than the publish time.';
+        return;
+      }
       btn.disabled = true;
       status.textContent = 'Creating assignment...';
       try {
@@ -172,7 +186,8 @@
           title: document.getElementById('lmsAssignTitle').value.trim(),
           class_id: parseInt(classId, 10),
           quiz_id: parseInt(quizId, 10),
-          due_date: dueRaw ? new Date(dueRaw).toISOString() : null
+          due_date: dueRaw ? new Date(dueRaw).toISOString() : null,
+          publish_at: quizPublishAt ? quizPublishAt.toISOString() : null
         };
         const createRes = await fetch('/api/lms/assignments', {
           method: 'POST', credentials: 'include',
@@ -201,10 +216,16 @@
             'Publish failed'
           );
         }
-        status.textContent = 'Assignment published! Students can see it in My Quizzes.';
+        const published = pubBody.data || pubBody;
+        let quizDoneMsg = 'Assignment published! Students can see it in My Quizzes.';
+        if (published && published.scheduled && published.publish_at) {
+          const when = new Date(published.publish_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+          quizDoneMsg = 'Scheduled! Students in that class will see this quiz from ' + when + '.';
+        }
+        status.textContent = quizDoneMsg;
         document.getElementById('lmsAssignForm').reset();
         if (typeof lmsShowToast === 'function') {
-          lmsShowToast('Assignment published! Students can see it in My Quizzes.');
+          lmsShowToast(quizDoneMsg);
         }
         setTimeout(function () {
           closeLmsAssignModal();
@@ -245,17 +266,20 @@
     }
     /** "Publish at" uses the teacher's device time zone; show which one and block past times. */
     function _initLmsLessonPublishAtField() {
-      const el = document.getElementById('lmsLessonAssignPublishAt');
+      _initLmsPublishAtField('lmsLessonAssignPublishAt', 'lmsLessonAssignPublishHelp', 'lesson');
+    }
+    function _initLmsPublishAtField(inputId, helpId, noun) {
+      const el = document.getElementById(inputId);
       if (!el) return;
       const now = new Date();
       const pad = function (n) { return String(n).padStart(2, '0'); };
       el.min = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
         'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
-      const help = document.getElementById('lmsLessonAssignPublishHelp');
+      const help = document.getElementById(helpId);
       let tz = '';
       try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
       if (help) {
-        help.textContent = 'Leave empty to publish now. Students see the lesson only from this time' +
+        help.textContent = 'Leave empty to publish now. Students see the ' + noun + ' only from this time' +
           (tz ? ' (your time zone: ' + tz + ').' : '.');
       }
     }

@@ -1183,6 +1183,9 @@
     s = s.replace(/\\{2,}(log|ln|frac|times|sqrt|mathrm|text)\b/g, '\\$1');
     s = lmsEnglishTimesToTex(s);
     s = lmsNormalizeLogSubscripts(s);
+    // 4^10 -> 4^{10}: TeX raises only the next character, so students saw "4¹0".
+    // Same rule as brace_multi_digit_exponents in app/services/quiz/math_text.py.
+    s = s.replace(/\^\s*(\d{2,})(?![\d.])/g, '^{$1}');
     // Server question_render is already delimited. Re-promoting \log doubles
     // backslashes into visible \\\( / \\log artifacts. Still join bare \times.
     if (/\\\(|\\\[|\$\$/.test(s) && /\\(?:log|ln|frac|times|sqrt)\b|\^/.test(s)) {
