@@ -175,17 +175,61 @@ def test_publish_at_equal_now_means_publish_now(world):
     assert data["scheduled"] is False
 
 
-def test_due_date_preserved_and_independent_of_visibility(world):
+def test_due_date_preserved_alongside_schedule(world):
     due = NOW + timedelta(days=7)
     _publish(world, publish_at=NOW + timedelta(days=1), due=due)
     row = world["s"].query(LessonAssignment).one()
     assert row.due_date == due and row.publish_at == NOW + timedelta(days=1)
     assert _visible(world) == (False, False)
-    # A due date in the past never hides an immediately published lesson either.
-    _publish(world, publish_at=None, due=NOW - timedelta(days=3))
-    row = world["s"].query(LessonAssignment).one()
-    assert row.due_date == NOW - timedelta(days=3) and row.publish_at is None
+    _Clock.now = NOW + timedelta(days=1)
     assert _visible(world) == (True, True)
+
+
+def test_lesson_hidden_from_students_after_due_date(world):
+    # The reported case: published 17:45 PKT, due 17:46 PKT, checked 17:47 PKT.
+    _publish(world, publish_at=None, due=NOW + timedelta(minutes=1))
+    assert _visible(world) == (True, True)
+    _Clock.now = NOW + timedelta(seconds=59)
+    assert _visible(world) == (True, True)
+    _Clock.now = NOW + timedelta(minutes=1)          # exactly at the due date -> hidden
+    assert _visible(world) == (False, False)
+    _Clock.now = NOW + timedelta(minutes=2)
+    assert _visible(world) == (False, False)
+    # Still assigned, so the legacy grade-link fallback cannot re-expose it.
+    assert las.lesson_has_any_assignments(world["lesson"].id) is True
+    # The general-question lesson lookup hides it too.
+    assert world["lesson"].id in las.unreleased_scheduled_lesson_ids([world["lesson"].id])
+
+
+def test_republish_with_new_due_date_makes_lesson_visible_again(world):
+    _publish(world, due=NOW + timedelta(minutes=1))
+    _Clock.now = NOW + timedelta(minutes=5)
+    assert _visible(world) == (False, False)
+    _publish(world, due=NOW + timedelta(days=2))
+    assert _visible(world) == (True, True)
+
+
+def test_past_due_date_is_rejected(world):
+    from app.services.lms.exceptions import LMSValidationError
+
+    with pytest.raises(LMSValidationError, match="Due date must be in the future"):
+        _publish(world, due=NOW - timedelta(minutes=1))
+    with pytest.raises(LMSValidationError):
+        _publish(world, due=NOW)
+    assert world["s"].query(LessonAssignment).count() == 0
+
+
+def test_due_date_timezone_aware_value_stored_as_utc(world):
+    from datetime import timezone as _tz
+
+    pkt = _tz(timedelta(hours=5))
+    _publish(world, due=datetime(2026, 10, 18, 12, 49, tzinfo=pkt))   # 12:49 PKT == 07:49 UTC
+    row = world["s"].query(LessonAssignment).one()
+    assert row.due_date == datetime(2026, 10, 18, 7, 49) and row.due_date.tzinfo is None
+    _Clock.now = datetime(2026, 10, 18, 7, 48, 59)
+    assert _visible(world) == (True, True)
+    _Clock.now = datetime(2026, 10, 18, 7, 49)
+    assert _visible(world) == (False, False)
 
 
 def test_student_not_in_class_never_sees_it(world):

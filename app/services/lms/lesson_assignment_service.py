@@ -40,6 +40,18 @@ def _iso_utc(value: Optional[datetime]) -> Optional[str]:
     return (value.isoformat() + "Z") if value else None
 
 
+def _visible_now_conditions():
+    """SQL conditions for a lesson assignment students can see right now: published,
+    its scheduled release time (publish_at) reached, and its due date not yet passed.
+    After the due date the lesson is hidden from students (the teacher still sees it)."""
+    now = datetime.utcnow()
+    return (
+        LessonAssignment.status == "published",
+        or_(LessonAssignment.publish_at.is_(None), LessonAssignment.publish_at <= now),
+        or_(LessonAssignment.due_date.is_(None), LessonAssignment.due_date > now),
+    )
+
+
 def _get_lesson_row(lesson_id: int) -> Lesson:
     db = get_db()
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
@@ -67,9 +79,16 @@ def create_assignment(
 ) -> LessonAssignment:
     title = (title or "").strip()
     publish_at = to_naive_utc(publish_at)
+    due_date = to_naive_utc(due_date)
     # A release time that has already passed means "publish now".
     if publish_at is not None and publish_at <= datetime.utcnow():
         publish_at = None
+    # Students lose access once the due date passes, so a past due date would hide the
+    # lesson the moment it is published.
+    if due_date is not None and due_date <= datetime.utcnow():
+        raise LMSValidationError(
+            "Due date must be in the future. Students can no longer see the lesson after its due date."
+        )
     if not title:
         raise LMSValidationError("Assignment title is required")
 
@@ -236,11 +255,7 @@ def list_published_lesson_ids_for_student(
         db.query(LessonAssignment.lesson_id)
         .filter(
             LessonAssignment.class_id.in_(class_ids),
-            LessonAssignment.status == "published",
-            or_(
-                LessonAssignment.publish_at.is_(None),
-                LessonAssignment.publish_at <= datetime.utcnow(),
-            ),
+            *_visible_now_conditions(),
         )
         .all()
     )
@@ -254,9 +269,9 @@ def student_has_lesson_assignment(
 
 
 def unreleased_scheduled_lesson_ids(lesson_ids) -> set[int]:
-    """Of `lesson_ids`, those that have class assignments but none released yet (every
-    assignment is a draft/closed or scheduled for a future publish_at). Used to keep
-    scheduled lessons out of non-class-scoped lesson lookups until their release time."""
+    """Of `lesson_ids`, those that have class assignments but none visible right now (every
+    assignment is a draft/closed, scheduled for a future publish_at, or past its due date).
+    Keeps such lessons out of non-class-scoped lesson lookups."""
     ids = {int(i) for i in (lesson_ids or []) if i}
     if not ids:
         return set()
@@ -274,11 +289,7 @@ def unreleased_scheduled_lesson_ids(lesson_ids) -> set[int]:
         for r in db.query(LessonAssignment.lesson_id)
         .filter(
             LessonAssignment.lesson_id.in_(assigned),
-            LessonAssignment.status == "published",
-            or_(
-                LessonAssignment.publish_at.is_(None),
-                LessonAssignment.publish_at <= datetime.utcnow(),
-            ),
+            *_visible_now_conditions(),
         )
         .all()
     }

@@ -235,6 +235,9 @@
       document.getElementById('lmsLessonAssignLessonLabel').value = lessonTitle || ('Lesson #' + lessonId);
       document.getElementById('lmsLessonAssignStatus').textContent = '';
       _initLmsLessonPublishAtField();
+      const dueEl = document.getElementById('lmsLessonAssignDue');
+      const publishMinEl = document.getElementById('lmsLessonAssignPublishAt');
+      if (dueEl && publishMinEl) dueEl.min = publishMinEl.min;
       loadLmsLessonAssignOptions(preferredClassId);
       setTimeout(function () {
         card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -305,6 +308,11 @@
         status.textContent = 'Due date cannot be earlier than the publish time.';
         return;
       }
+      // Students lose access after the due date, so it must still be ahead.
+      if (dueRawCheck && new Date(dueRawCheck) <= new Date()) {
+        status.textContent = 'Due date must be in the future. Students cannot see the lesson after its due date.';
+        return;
+      }
       btn.disabled = true;
       status.textContent = publishAt && publishAt > new Date() ? 'Scheduling...' : 'Assigning & publishing...';
       try {
@@ -331,12 +339,16 @@
         const result = payload.data || payload;
         let doneMsg = 'Published! Students in that class can see this lesson.';
         let toastMsg = 'Lesson assigned & published to the class.';
+        const fmtWhen = function (iso) {
+          return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+        };
         if (result && result.scheduled && result.publish_at) {
-          const when = new Date(result.publish_at).toLocaleString([], {
-            dateStyle: 'medium', timeStyle: 'short'
-          });
+          const when = fmtWhen(result.publish_at);
           doneMsg = 'Scheduled! Students in that class will see this lesson from ' + when + '.';
           toastMsg = 'Lesson scheduled for ' + when + '.';
+        }
+        if (body.due_date) {
+          doneMsg += ' It will be hidden from students after ' + fmtWhen(body.due_date) + '.';
         }
         status.textContent = doneMsg;
         if (typeof lmsShowToast === 'function') {
