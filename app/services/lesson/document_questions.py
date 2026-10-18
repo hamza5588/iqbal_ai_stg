@@ -105,18 +105,23 @@ def _strip_running_lines(pages: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
 
 
 def pages_from_chunk_rows(rows: Sequence[dict], *, strip_running: bool = True) -> List[Tuple[int, str]]:
-    """[(1-indexed page, text)] from chunk rows {text, page (0-indexed), chunk_index}.
+    """[(1-indexed page, text)] from chunk rows {text, page, chunk_index}.
+
+    Ingest stores ``page`` 1-indexed on the normal per-page path and 0-indexed on the
+    concatenated-split path (large page-count documents), whose first chunk is page 0.
+    A page 0 therefore means the rows are 0-indexed.
 
     ``strip_running`` drops page headers/footers (wanted for question lookup, not for the
     lesson text a teacher reads)."""
     ordered = sorted(rows, key=lambda r: (int(r.get("chunk_index") or 0), int(r.get("page") or 0)))
+    page_offset = 1 if any(int(r.get("page") or 0) == 0 for r in ordered) else 0
     by_page: Dict[int, List[str]] = {}
     prev_tail: Optional[str] = None
     for row in ordered:
         text = str(row.get("text") or "")
         if not text.strip():
             continue
-        page = int(row.get("page") or 0) + 1
+        page = int(row.get("page") or 0) + page_offset
         bucket = by_page.setdefault(page, [])
         if prev_tail is not None and not bucket:
             # First chunk of a page: also strip overlap carried over from the previous page
