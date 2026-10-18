@@ -126,14 +126,42 @@
 .td-vl-finalize { background: var(--td-blue-900); color: #fff; }
 .td-vl-finalize:hover:not(:disabled) { background: #082c69; }
 
+/* Tabs are real views (data-vl-view on #viewLessonModal, set by tdVlTab):
+   Lesson / Summaries show the saved lesson; Improve with AI shows the draft in the main column. */
+#viewLessonModal #tdVlDraftCard { display: none; }
+#viewLessonModal[data-vl-view="improve"] #tdVlDraftCard { display: block; }
+#viewLessonModal[data-vl-view="improve"] #tdVlLessonCard,
+#viewLessonModal[data-vl-view="improve"] #viewLessonSummaryTimeline { display: none; }
+#viewLessonModal .td-vl-draft-note { font-size: 12px; color: var(--td-muted); font-weight: 600; text-align: right; }
+#viewLessonModal .td-vl-draft-body { padding-top: 14px; }
+#viewLessonModal #tdVlDraftCard .td-vl-draft {
+  min-height: 420px; max-height: none; overflow: visible; border: 1px dashed transparent; background: #fff;
+  font-size: 15.5px; line-height: 1.75; color: #1f2937; padding: 8px 4px;
+}
+#viewLessonModal #tdVlDraftCard .td-vl-draft:hover { border-color: var(--td-line); }
+#viewLessonModal #tdVlDraftCard .td-vl-draft :where(h1, h2, h3) { color: var(--td-blue-900); }
+#viewLessonModal .td-vl-draft-loading {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 12px 14px; border-radius: 10px;
+  background: var(--td-blue-50); color: var(--td-blue-800); font-weight: 600; font-size: 14px;
+}
+#viewLessonModal .td-vl-draft-loading[hidden], #viewLessonModal #tdVlDraftError[hidden] { display: none; }
+#viewLessonModal #tdVlDraftError { margin: 0 0 12px; }
+#viewLessonModal #tdVlDraftCard.is-loading .td-vl-draft { opacity: .45; pointer-events: none; }
+.td-vl-side-hint { font-size: 12.5px; color: var(--td-muted); margin: 0 0 4px; display: flex; gap: 6px; align-items: baseline; }
+
 /* "Use PDF as lesson" lessons have no draft editing: hide the AI panel + its tab, content takes the full width. */
 #viewLessonModal.vl-source-pdf-mode .td-vl-side,
 #viewLessonModal.vl-source-pdf-mode [data-vl-tab="improve"] { display: none; }
 #viewLessonModal.vl-source-pdf-mode .td-vl-grid { grid-template-columns: minmax(0, 1fr); }
+#viewLessonModal.vl-source-pdf-mode #tdVlDraftCard { display: none; }
+#viewLessonModal.vl-source-pdf-mode #tdVlLessonCard { display: block; }
 
 @media (max-width: 1024px) {
   .td-vl-grid { grid-template-columns: minmax(0, 1fr); }
   .td-vl-side { position: static; }
+  /* Stacked layout: on the Improve tab put the instructions + Apply panel above the long draft. */
+  #viewLessonModal[data-vl-view="improve"] .td-vl-side { order: -1; }
+  #viewLessonModal #tdVlDraftCard .td-vl-draft { min-height: 260px; }
 }
 @media (max-width: 640px) {
   .td-vl-head { padding: 14px 16px 10px; }

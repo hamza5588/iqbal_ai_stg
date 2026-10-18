@@ -234,10 +234,27 @@
       document.getElementById('lmsLessonAssignTitle').value = lessonTitle || 'Lesson';
       document.getElementById('lmsLessonAssignLessonLabel').value = lessonTitle || ('Lesson #' + lessonId);
       document.getElementById('lmsLessonAssignStatus').textContent = '';
+      _initLmsLessonPublishAtField();
       loadLmsLessonAssignOptions(preferredClassId);
       setTimeout(function () {
         card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 30);
+    }
+    /** "Publish at" uses the teacher's device time zone; show which one and block past times. */
+    function _initLmsLessonPublishAtField() {
+      const el = document.getElementById('lmsLessonAssignPublishAt');
+      if (!el) return;
+      const now = new Date();
+      const pad = function (n) { return String(n).padStart(2, '0'); };
+      el.min = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+        'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+      const help = document.getElementById('lmsLessonAssignPublishHelp');
+      let tz = '';
+      try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
+      if (help) {
+        help.textContent = 'Leave empty to publish now. Students see the lesson only from this time' +
+          (tz ? ' (your time zone: ' + tz + ').' : '.');
+      }
     }
     function closeLmsLessonAssignModal() {
       const card = document.getElementById('tdAssignLessonCard');
@@ -276,15 +293,28 @@
         status.textContent = 'Select a class.';
         return;
       }
+      const publishEl = document.getElementById('lmsLessonAssignPublishAt');
+      const publishRaw = publishEl ? publishEl.value : '';
+      const publishAt = publishRaw ? new Date(publishRaw) : null;
+      if (publishAt && isNaN(publishAt.getTime())) {
+        status.textContent = 'Enter a valid publish date and time.';
+        return;
+      }
+      const dueRawCheck = document.getElementById('lmsLessonAssignDue').value;
+      if (publishAt && dueRawCheck && new Date(dueRawCheck) < publishAt) {
+        status.textContent = 'Due date cannot be earlier than the publish time.';
+        return;
+      }
       btn.disabled = true;
-      status.textContent = 'Assigning & publishing...';
+      status.textContent = publishAt && publishAt > new Date() ? 'Scheduling...' : 'Assigning & publishing...';
       try {
         const dueRaw = document.getElementById('lmsLessonAssignDue').value;
         const body = {
           title: document.getElementById('lmsLessonAssignTitle').value.trim(),
           class_id: parseInt(classId, 10),
           lesson_id: parseInt(lessonId, 10),
-          due_date: dueRaw ? new Date(dueRaw).toISOString() : null
+          due_date: dueRaw ? new Date(dueRaw).toISOString() : null,
+          publish_at: publishAt ? publishAt.toISOString() : null
         };
         const res = await fetch('/api/lms/lesson-assignments/publish-to-class', {
           method: 'POST',
@@ -298,11 +328,21 @@
             (payload.error && payload.error.message) || payload.error || payload.message || 'Publish failed'
           );
         }
-        status.textContent = 'Published! Students in that class can see this lesson.';
+        const result = payload.data || payload;
+        let doneMsg = 'Published! Students in that class can see this lesson.';
+        let toastMsg = 'Lesson assigned & published to the class.';
+        if (result && result.scheduled && result.publish_at) {
+          const when = new Date(result.publish_at).toLocaleString([], {
+            dateStyle: 'medium', timeStyle: 'short'
+          });
+          doneMsg = 'Scheduled! Students in that class will see this lesson from ' + when + '.';
+          toastMsg = 'Lesson scheduled for ' + when + '.';
+        }
+        status.textContent = doneMsg;
         if (typeof lmsShowToast === 'function') {
-          lmsShowToast('Lesson assigned & published to the class.');
+          lmsShowToast(toastMsg);
         } else if (typeof showToast === 'function') {
-          showToast('Lesson assigned & published to the class.', 'success', 3500);
+          showToast(toastMsg, 'success', 3500);
         }
         setTimeout(function () {
           closeLmsLessonAssignModal();
@@ -826,8 +866,7 @@
         form.reset();
         form.style.display = '';
       }
-      const status = document.getElementById('lmsQuizStatus');
-      if (status) status.textContent = '';
+      _setLmsQuizStatus('');
       const preview = document.getElementById('lmsQuizPreview');
       if (preview) preview.innerHTML = '';
       const actions = document.getElementById('lmsQuizActions');
@@ -853,6 +892,33 @@
     function stopLmsPoll() {
       if (_lmsPollTimer) { clearInterval(_lmsPollTimer); _lmsPollTimer = null; }
     }
+    /** Create-quiz status line. Errors render as a red alert (icon + dismiss) and stay until the
+     *  teacher dismisses them, picks a new file, or submits again — they never auto-hide. */
+    function _setLmsQuizStatus(msg, isError) {
+      const el = document.getElementById('lmsQuizStatus');
+      if (!el) return;
+      const showError = !!(isError && msg);
+      el.classList.toggle('is-error', showError);
+      el.setAttribute('role', showError ? 'alert' : 'status');
+      el.textContent = '';
+      if (!msg) return;
+      if (!showError) { el.textContent = msg; return; }
+      const icon = document.createElement('span');
+      icon.className = 'td-status-ic';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = '!';
+      const text = document.createElement('span');
+      text.className = 'td-status-text';
+      text.textContent = msg;
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'td-status-dismiss';
+      close.setAttribute('aria-label', 'Dismiss error');
+      close.textContent = '×';
+      close.onclick = function () { _setLmsQuizStatus(''); };
+      el.append(icon, text, close);
+    }
+    window._setLmsQuizStatus = _setLmsQuizStatus;
     async function submitLmsPdfQuiz(e) {
       e.preventDefault();
       const title = document.getElementById('lmsQuizTitle').value.trim();
@@ -862,15 +928,12 @@
       const importAll = !!(importAllEl && importAllEl.checked);
       const durationEl = document.getElementById('lmsQuizDuration');
       const btn = document.getElementById('lmsQuizSubmitBtn');
-      const status = document.getElementById('lmsQuizStatus');
       let questionCount = parseInt(countEl && countEl.value, 10);
       if (!Number.isFinite(questionCount) || questionCount < 1) questionCount = 10;
       if (questionCount > 40) questionCount = 40;
       const durationRaw = durationEl ? String(durationEl.value || '').trim() : '';
       if (!/^[1-9]\d*$/.test(durationRaw)) {
-        if (status) {
-          status.textContent = 'Error: Duration must be a whole number of minutes (1 or more). Decimals, zero, and negative values are not allowed.';
-        }
+        _setLmsQuizStatus('Duration must be a whole number of minutes (1 or more). Decimals, zero, and negative values are not allowed.', true);
         if (durationEl) durationEl.focus();
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
@@ -882,12 +945,12 @@
       }
       var name = (file.name || '').toLowerCase();
       if (!name.endsWith('.pdf')) {
-        if (status) status.textContent = 'Error: This document does not match the required assessment format. Please upload a valid document.';
+        _setLmsQuizStatus('This document does not match the required assessment format. Please upload a valid document.', true);
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         return;
       }
       btn.disabled = true;
-      status.textContent = '';
+      _setLmsQuizStatus('');
       _startLmsQuizProgressPulse(6, 'Getting your file');
       const fd = new FormData();
       fd.append('title', title);
@@ -911,10 +974,10 @@
           step: payload.async ? 'extract' : 'generate',
           message: payload.async ? 'Reading your document' : 'Writing quiz questions',
         });
-        status.textContent = '';
+        _setLmsQuizStatus('');
         startLmsPoll();
       } catch (err) {
-        status.textContent = 'Error: ' + err.message;
+        _setLmsQuizStatus(err.message || 'Upload failed', true);
         btn.disabled = false;
         _resetLmsQuizProgress();
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
@@ -928,7 +991,6 @@
     }
     async function pollLmsQuizStatus() {
       if (!_lmsCurrentAssessmentId) return;
-      const statusEl = document.getElementById('lmsQuizStatus');
       const actionsEl = document.getElementById('lmsQuizActions');
       try {
         var url = '/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/pdf-status';
@@ -953,7 +1015,7 @@
         }
         // Keep status line quiet during success path — steps UI carries the story.
         if (rawStatus !== 'failed' && rawStatus !== 'completed') {
-          statusEl.textContent = '';
+          _setLmsQuizStatus('');
         }
         if (rawStatus === 'completed') {
           stopLmsPoll();
@@ -964,7 +1026,7 @@
           if (form) form.style.display = 'none';
           await loadLmsQuizPreview();
           actionsEl.style.display = 'flex';
-          statusEl.textContent = '';
+          _setLmsQuizStatus('');
           if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
         } else if (rawStatus === 'failed') {
           stopLmsPoll();
@@ -973,7 +1035,7 @@
           if (form) form.style.display = '';
           const submitBtn = document.getElementById('lmsQuizSubmitBtn');
           if (submitBtn) submitBtn.disabled = false;
-          statusEl.textContent = 'Failed: ' + (d.error_message || 'Unknown error');
+          _setLmsQuizStatus(d.error_message || 'Quiz import failed. Please try again.', true);
           if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
           // Nothing was imported: remove the empty draft so it does not linger in the quiz list.
           var failedId = _lmsCurrentAssessmentId;
@@ -983,7 +1045,8 @@
           }
         }
       } catch (err) {
-        statusEl.textContent = 'Poll error: ' + err.message;
+        // Transient network blip: polling continues on the next tick, so do not show a hard error.
+        _setLmsQuizStatus('Still processing - reconnecting to check progress...');
       }
     }
     async function loadLmsQuizPreview() {
@@ -1350,26 +1413,25 @@
     }
     async function publishLmsQuiz() {
       if (!_lmsCurrentAssessmentId) return;
-      const statusEl = document.getElementById('lmsQuizStatus');
       const actionsEl = document.getElementById('lmsQuizActions');
       const publishBtn = actionsEl ? actionsEl.querySelector('button') : null;
       if (publishBtn) publishBtn.disabled = true;
-      statusEl.textContent = 'Publishing quiz...';
+      _setLmsQuizStatus('Publishing quiz...');
       if (typeof showWaitOverlay === 'function') showWaitOverlay('Publishing quiz...');
       try {
         const res = await fetch('/api/lms/quizzes/' + _lmsCurrentAssessmentId + '/publish', {
           method: 'POST', credentials: 'include'
         });
         const body = await res.json();
-        if (!res.ok) throw new Error(body.error || body.message || 'Publish failed');
-        statusEl.textContent = '';
+        if (!res.ok) throw new Error((body.error && body.error.message) || body.error || body.message || 'Publish failed');
+        _setLmsQuizStatus('');
         if (typeof lmsShowToast === 'function') {
           lmsShowToast('Quiz published successfully!');
         }
         closeLmsQuizHub();
         _resetLmsQuizModal();
       } catch (err) {
-        statusEl.textContent = 'Publish error: ' + err.message;
+        _setLmsQuizStatus('Publish error: ' + err.message, true);
         if (publishBtn) publishBtn.disabled = false;
       } finally {
         if (typeof hideWaitOverlay === 'function') hideWaitOverlay();

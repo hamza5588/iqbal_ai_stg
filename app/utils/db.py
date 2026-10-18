@@ -503,6 +503,20 @@ def init_db(app):
             except Exception as e:
                 logger.warning("assessments superseded_at/grade_level migration warning: %s", e)
                 db.rollback()
+
+            # Migration: scheduled lesson release time (separate from due_date)
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                if "lesson_assignments" in inspector.get_table_names():
+                    columns = [col["name"] for col in inspector.get_columns("lesson_assignments")]
+                    if "publish_at" not in columns:
+                        logger.info("Adding publish_at to lesson_assignments...")
+                        db.execute(text("ALTER TABLE lesson_assignments ADD COLUMN publish_at TIMESTAMP"))
+                        db.commit()
+            except Exception as e:
+                logger.warning("lesson_assignments publish_at migration warning: %s", e)
+                db.rollback()
             
             # Migration: Add ingest failure-tracking columns to rag_threads
             try:

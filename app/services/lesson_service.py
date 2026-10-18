@@ -46,9 +46,13 @@ class LessonService:
         """Use a FAISS vector database for semantic chunk retrieval and editing."""
         return self.teacher_service.edit_lesson_with_prompt(lesson_text, user_prompt, filename)
 
-    def improve_lesson_content(self, lesson_id: int, current_content: str, improvement_prompt: str = "") -> str:
+    def improve_lesson_content(
+        self, lesson_id: int, current_content: str, improvement_prompt: str = "", raise_on_error: bool = False
+    ) -> str:
         """Improve lesson content using AI based on user prompt"""
-        return self.teacher_service.improve_lesson_content(lesson_id, current_content, improvement_prompt)
+        return self.teacher_service.improve_lesson_content(
+            lesson_id, current_content, improvement_prompt, raise_on_error=raise_on_error
+        )
 
     def interactive_chat(
         self, 
@@ -238,6 +242,14 @@ class LessonService:
             # All users (teachers and students) can access public lessons
             public_lessons = LessonModel.get_public_lessons()
             public_lesson_ids = [lesson.get('id') for lesson in public_lessons if lesson.get('id')]
+            # A lesson scheduled for later (LessonAssignment.publish_at in the future) stays
+            # hidden from everyone but its own teacher until its release time.
+            try:
+                from app.services.lms.lesson_assignment_service import unreleased_scheduled_lesson_ids
+                hidden = unreleased_scheduled_lesson_ids(public_lesson_ids) - set(lesson_ids)
+                public_lesson_ids = [lid for lid in public_lesson_ids if lid not in hidden]
+            except Exception as sched_err:
+                logger.warning("Scheduled-lesson filter failed: %s", sched_err)
             lesson_ids.extend(public_lesson_ids)
             logger.info(f"Found {len(public_lessons)} public lessons")
             

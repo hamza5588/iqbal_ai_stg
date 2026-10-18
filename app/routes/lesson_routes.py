@@ -585,7 +585,15 @@ def create_lesson():
             file.seek(0)
             file_bytes_for_rag = file.read()
             file.seek(0)
-            
+
+            # Reject scanned / corrupted / password-protected PDFs before any
+            # extraction, table parsing or embedding work starts.
+            if file_ext == '.pdf':
+                from app.utils.pdf_preflight import preflight_check_pdf
+                preflight = preflight_check_pdf(file_bytes_for_rag)
+                if not preflight.get('ok'):
+                    return jsonify({'error': preflight['message'], 'code': preflight['code']}), 400
+
             # Process the file first to create vector store
             process_result = lesson_service.process_file(file, lesson_details)
             
@@ -1077,8 +1085,11 @@ def browse_lessons():
                 "Removed %s unauthorized lesson(s) from browse response for student %s",
                 len(result['lessons']) - len(visible_lessons), session['user_id'],
             )
-            result['total'] = len(visible_lessons)
-            result['total_pages'] = 1
+            # Keep total_pages from the query: collapsing it to 1 hid every later page
+            # whenever one lesson (e.g. a not-yet-released scheduled lesson) was filtered out.
+            result['total'] = max(
+                0, int(result.get('total') or 0) - (len(result['lessons']) - len(visible_lessons))
+            )
         return jsonify({
             'success': True,
             'lessons': lessons,
@@ -1113,12 +1124,23 @@ def search_lessons():
                 search_term=search_term,
                 teacher_grade_links=class_service.student_teacher_grade_links(session['user_id']),
             )
-            lessons = [
-                lesson for lesson in result['lessons']
+            from app.services.lms import lesson_assignment_service
+            assigned_ids = lesson_assignment_service.list_published_lesson_ids_for_student(
+                session['user_id']
+            )
+            lessons = []
+            for lesson in result['lessons']:
+                lid = lesson.get('id')
+                # Same rule as browse_lessons/_can_access_lesson: class assignment (incl. its
+                # scheduled publish time) wins; legacy grade link only for unassigned lessons.
+                if lid and lesson_assignment_service.lesson_has_any_assignments(int(lid)):
+                    if int(lid) in assigned_ids:
+                        lessons.append(lesson)
+                    continue
                 if class_service.student_can_access_teacher_grade(
                     session['user_id'], lesson.get('teacher_id'), lesson.get('grade_level')
-                )
-            ]
+                ):
+                    lessons.append(lesson)
         else:
             lessons = LessonModel.search_lessons(search_term, grade_level=grade_level)
         return jsonify({
@@ -2458,16 +2480,28 @@ def apply_prompt_to_lesson(lesson_id):
         
         # Get current content (use draft if available, otherwise original)
         current_draft = LessonModel.get_draft_content(lesson_id)
-        content_to_edit = current_draft if current_draft else lesson.get('original_content', lesson['content'])
+        # `or`, not a .get default: original_content is often present but NULL.
+        content_to_edit = current_draft if current_draft else (lesson.get('original_content') or lesson['content'])
         
         # Use LessonService with API key from session (user profile) or env - same source as RAG
         api_key = session.get('groq_api_key') or os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY')
         lesson_service = LessonService(api_key=api_key)
-        improved_content = lesson_service.improve_lesson_content(
-            lesson_id=lesson_id,
-            current_content=content_to_edit,
-            improvement_prompt=prompt
-        )
+        from app.services.lesson.teacher_service import LessonEnhancementError
+        try:
+            improved_content = lesson_service.improve_lesson_content(
+                lesson_id=lesson_id,
+                current_content=content_to_edit,
+                improvement_prompt=prompt,
+                raise_on_error=True,
+            )
+        except LessonEnhancementError as e:
+            # Nothing is saved: the existing draft and the published lesson stay as they were.
+            logger.warning("Improve with AI failed for lesson %s: %s", lesson_id, e)
+            return jsonify({
+                'success': False,
+                'error': 'The AI could not generate an enhanced draft right now. Please try again in a moment.',
+                'code': 'ai_enhancement_failed',
+            }), 503
         
         # Check if the improved content is a JSON string and extract the actual content
         import json
@@ -2510,7 +2544,7 @@ def apply_prompt_to_lesson(lesson_id):
             
     except Exception as e:
         logger.error(f"Error applying prompt: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Failed to apply prompt: {str(e)}'}), 500
+        return jsonify({'error': 'Failed to apply the AI enhancement. Please try again.'}), 500
 
 @bp.route('/lesson/<int:lesson_id>/finalize_version', methods=['POST'])
 @teacher_required

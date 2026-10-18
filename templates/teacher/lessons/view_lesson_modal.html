@@ -72,6 +72,24 @@
             </div>
           </section>
 
+          {# Improve with AI — the AI-enhanced draft, shown in the main area on the "Improve with AI" tab only.
+             Draft state stays separate from the saved lesson until the teacher Finalizes a new version. #}
+          <section class="td-vl-card" id="tdVlDraftCard" aria-labelledby="tdVlDraftTitle">
+            <div class="td-vl-card-head">
+              <div class="td-vl-card-title" id="tdVlDraftTitle"><i class="fas fa-wand-magic-sparkles"></i> AI Enhancement Draft</div>
+              <span class="td-vl-draft-note">Not published &middot; the current lesson stays unchanged until you finalize</span>
+            </div>
+            <div class="td-vl-card-body td-vl-draft-body">
+              <div id="tdVlDraftLoading" class="td-vl-draft-loading" hidden role="status" aria-live="polite">
+                <i class="fas fa-spinner fa-spin"></i> Generating your enhanced draft&hellip; this can take a minute.
+              </div>
+              <div id="tdVlDraftError" class="td-status-line is-error" hidden role="alert"></div>
+              <div id="viewLessonDraft" contenteditable="true" class="td-vl-draft" style="white-space: pre-wrap;"
+                aria-label="AI enhancement draft"
+                placeholder="No AI draft yet. Type instructions in the panel on the right and click Apply AI Enhancement — the enhanced lesson appears here. You can also type or paste edits directly."></div>
+            </div>
+          </section>
+
           {# Summaries (conversation + lesson) — each detail opens under its own row #}
           <section class="td-vl-card td-vl-summaries" id="viewLessonSummaryTimeline">
             <div class="td-vl-card-head">
@@ -134,9 +152,7 @@
               <button type="button" onclick="tdVlAddInstruction('Make the structure clearer with short sections and bullet points.')">Clearer structure</button>
             </div>
 
-            <label>Draft <span class="opt">(AI-enhanced or manual edits)</span></label>
-            <div id="viewLessonDraft" contenteditable="true" class="td-vl-draft" style="white-space: pre-wrap;"
-              placeholder="Your draft appears here after applying AI — you can also type or paste edits directly."></div>
+            <p class="td-vl-side-hint"><i class="far fa-eye"></i> The draft opens in the main area of the <b>Improve with AI</b> tab.</p>
 
             <div class="td-vl-side-actions">
               <button type="button" onclick="applyPromptToLessonDraft()" class="td-btn td-btn-primary">

@@ -1015,7 +1015,7 @@
       (weak.length
         ? '<button type="button" class="sd-btn sd-btn-primary" onclick="lmsOpenWeakAreaChats()">Start Learning Chat</button>'
         : '<button type="button" class="sd-btn sd-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat(false, \'enrichment\')">Start challenge</button>') +
-      '<button type="button" class="sd-btn sd-btn-outline" onclick="lmsRetakeDiagnostic()">Retake with new questions</button>' +
+      // "Retake with new questions" is intentionally not offered on the student result screen.
       '<button type="button" class="sd-btn sd-btn-outline" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button>';
     if (isInlineDiag() && typeof window.sdRenderResultBody === 'function') {
       body.innerHTML = diagHeadHtml(null) + timedOutBanner +
@@ -1049,7 +1049,6 @@
       (weak.length
         ? '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsOpenWeakAreaChats()">Start Learning Chat</button>'
         : '<button type="button" class="lms-btn lms-btn-primary" onclick="closeLmsDiagnostic();openDeficiencyChat(false, \'enrichment\')">Start challenge</button>') +
-      '<button type="button" class="lms-btn lms-btn-secondary" onclick="lmsRetakeDiagnostic()">Retake with new questions</button>' +
       '<button type="button" class="lms-btn lms-btn-secondary" onclick="closeLmsDiagnostic();lmsShowToast(\'Learning path updated!\')">Continue</button></div>';
   }
 

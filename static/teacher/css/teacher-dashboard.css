@@ -321,6 +321,22 @@ body.td-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--td
 .td-radio-opt span { font-size: 12.5px; color: var(--td-muted); }
 .td-form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .td-status-line { font-size: 13.5px; color: var(--td-muted); margin-top: 10px; min-height: 1em; }
+/* Upload / validation errors: high-contrast red alert that stays until dismissed or corrected. */
+.td-status-line.is-error {
+  display: flex; align-items: flex-start; gap: 10px; color: #991b1b; background: var(--td-red-bg);
+  border: 1px solid #fecaca; border-left: 4px solid var(--td-red); border-radius: 10px; padding: 10px 12px;
+  font-weight: 600; line-height: 1.45; overflow-wrap: anywhere;
+}
+.td-status-line.is-error .td-status-ic {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--td-red); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; margin-top: 1px;
+}
+.td-status-line.is-error .td-status-text { flex: 1; min-width: 0; }
+.td-status-line.is-error .td-status-dismiss {
+  flex-shrink: 0; border: 0; background: transparent; color: #991b1b; font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 0 2px; border-radius: 6px;
+}
+.td-status-line.is-error .td-status-dismiss:hover, .td-status-line.is-error .td-status-dismiss:focus-visible { background: #fecaca; outline: none; }
 
 /* ── Lesson rows ─────────────────────────────────────────── */
 .td-lesson-row { display: flex; background: #fff; border: 1px solid var(--td-line); border-radius: 14px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }

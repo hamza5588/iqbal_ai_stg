@@ -194,17 +194,26 @@
 
   /* ── View Lesson modal: section tabs + quick AI instructions ── */
   window.tdVlTab = function (name) {
+    var modal = document.getElementById('viewLessonModal');
+    // "Use PDF as lesson" lessons have no Improve tab — never leave them on the draft view.
+    if (name === 'improve' && modal && modal.classList.contains('vl-source-pdf-mode')) name = 'lesson';
     document.querySelectorAll('#viewLessonModal .td-vl-tab').forEach(function (b) {
-      b.classList.toggle('active', b.getAttribute('data-vl-tab') === name);
+      var on = b.getAttribute('data-vl-tab') === name;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    // Real views: CSS shows the saved lesson or the AI draft based on this attribute.
+    // Both stay in the DOM, so switching tabs never discards an unsaved draft.
+    if (modal) modal.setAttribute('data-vl-view', name);
     var body = document.querySelector('#viewLessonModal .td-vl-body');
     if (name === 'lesson') {
       if (body) body.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (name === 'improve') {
-      var side = document.getElementById('tdVlImprove');
-      if (side) side.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (body) body.scrollTo({ top: 0, behavior: 'smooth' });
       var prompt = document.getElementById('viewLessonPrompt');
-      if (prompt) setTimeout(function () { prompt.focus({ preventScroll: true }); }, 250);
+      var draft = document.getElementById('viewLessonDraft');
+      var hasDraft = draft && String(window._viewLessonDraftMarkdown || '').trim();
+      if (prompt && !hasDraft) setTimeout(function () { prompt.focus({ preventScroll: true }); }, 250);
     } else if (name === 'summaries') {
       var sum = document.getElementById('viewLessonSummaryTimeline');
       if (sum) sum.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -240,6 +249,8 @@
       document.querySelectorAll('#viewLessonModal .td-vl-tab').forEach(function (b) {
         b.classList.toggle('active', b.getAttribute('data-vl-tab') === 'lesson');
       });
+      var modal = document.getElementById('viewLessonModal');
+      if (modal) modal.setAttribute('data-vl-view', 'lesson');
       var body = document.querySelector('#viewLessonModal .td-vl-body');
       if (body) body.scrollTop = 0;
       return r;

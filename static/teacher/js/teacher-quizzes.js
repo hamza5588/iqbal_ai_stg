@@ -263,6 +263,19 @@
     var f = input.files && input.files[0];
     fn.hidden = !f;
     fn.textContent = f ? f.name : '';
+    // A newly chosen file replaces the one that failed, so the old error no longer applies.
+    if (f && typeof window._setLmsQuizStatus === 'function') window._setLmsQuizStatus('');
+    // Fast client preflight: a real PDF starts with "%PDF". The server still checks for
+    // scanned, password-protected and corrupted files before any AI processing starts.
+    if (f && f.slice && typeof window._setLmsQuizStatus === 'function') {
+      f.slice(0, 1024).text().then(function (head) {
+        if (input.files[0] !== f || head.indexOf('%PDF') !== -1) return;
+        window._setLmsQuizStatus('This file is not a valid PDF. It may be corrupted or renamed from another format. Please upload a valid PDF.', true);
+        input.value = '';
+        fn.hidden = true;
+        fn.textContent = '';
+      }).catch(function () { /* unreadable locally: let the server decide */ });
+    }
   }
 
   async function openAssign(quizId) {

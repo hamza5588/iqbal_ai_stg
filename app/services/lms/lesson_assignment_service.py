@@ -1,14 +1,43 @@
 """Lesson → class assignment (mirrors quiz Assignment flow)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
+
+from sqlalchemy import or_
 
 from app.models.database_models import Lesson
 from app.models.lms_models import LessonAssignment
 from app.services.lms.class_service import get_class_by_id, list_student_classes
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
 from app.utils.db import get_db
+
+
+def to_naive_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """Normalise to the naive-UTC convention used by every DateTime column here.
+    Aware values are converted; naive values are assumed to already be UTC."""
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def parse_iso_datetime_utc(raw) -> Optional[datetime]:
+    """Parse an ISO-8601 string from the client (e.g. Date.toISOString()) to naive UTC.
+    Returns None for empty input; raises ValueError for malformed input."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if not isinstance(raw, str):
+        raise ValueError("Expected an ISO date/time string")
+    text = raw.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    return to_naive_utc(datetime.fromisoformat(text))
+
+
+def _iso_utc(value: Optional[datetime]) -> Optional[str]:
+    return (value.isoformat() + "Z") if value else None
 
 
 def _get_lesson_row(lesson_id: int) -> Lesson:
@@ -34,8 +63,13 @@ def create_assignment(
     title: str,
     instructions: Optional[str] = None,
     due_date: Optional[datetime] = None,
+    publish_at: Optional[datetime] = None,
 ) -> LessonAssignment:
     title = (title or "").strip()
+    publish_at = to_naive_utc(publish_at)
+    # A release time that has already passed means "publish now".
+    if publish_at is not None and publish_at <= datetime.utcnow():
+        publish_at = None
     if not title:
         raise LMSValidationError("Assignment title is required")
 
@@ -62,6 +96,7 @@ def create_assignment(
         existing.title = title
         existing.instructions = instructions
         existing.due_date = due_date
+        existing.publish_at = publish_at
         if existing.status == "closed":
             existing.status = "draft"
         db.commit()
@@ -75,6 +110,7 @@ def create_assignment(
         title=title,
         instructions=instructions,
         due_date=due_date,
+        publish_at=publish_at,
         status="draft",
     )
     db.add(row)
@@ -107,8 +143,12 @@ def publish_lesson_to_class(
     class_id: int,
     title: Optional[str] = None,
     due_date: Optional[datetime] = None,
+    publish_at: Optional[datetime] = None,
 ) -> dict:
-    """One-shot: create (or reuse) assignment and publish — quiz 'Create & Publish' parity."""
+    """One-shot: create (or reuse) assignment and publish — quiz 'Create & Publish' parity.
+
+    With a future `publish_at` the assignment is published but students only see the
+    lesson from that moment on (enforced in list_published_lesson_ids_for_student)."""
     lesson = _get_lesson_row(lesson_id)
     assign_title = (title or "").strip() or (lesson.title or "Lesson")
     assignment = create_assignment(
@@ -117,6 +157,7 @@ def publish_lesson_to_class(
         lesson_id=lesson_id,
         title=assign_title,
         due_date=due_date,
+        publish_at=publish_at,
     )
     published = publish_assignment(assignment.id, teacher_id)
     return {
@@ -126,6 +167,8 @@ def publish_lesson_to_class(
         "title": published.title,
         "status": published.status,
         "is_public": True,
+        "publish_at": _iso_utc(published.publish_at),
+        "scheduled": published.publish_at is not None,
     }
 
 
@@ -169,6 +212,7 @@ def list_assignments_for_lesson(lesson_id: int, teacher_id: int) -> List[dict]:
             "title": r.title,
             "status": r.status,
             "due_date": r.due_date.isoformat() if r.due_date else None,
+            "publish_at": _iso_utc(r.publish_at),
         }
         for r in rows
     ]
@@ -177,7 +221,8 @@ def list_assignments_for_lesson(lesson_id: int, teacher_id: int) -> List[dict]:
 def list_published_lesson_ids_for_student(
     student_id: int, class_id: Optional[int] = None
 ) -> set[int]:
-    """Lesson IDs assigned (published) to any of the student's classes."""
+    """Lesson IDs assigned (published) to any of the student's classes whose scheduled
+    release time (publish_at) has been reached. Every student lesson gate builds on this."""
     classes = list_student_classes(student_id)
     class_ids = [c.id for c in classes]
     if class_id is not None:
@@ -192,6 +237,10 @@ def list_published_lesson_ids_for_student(
         .filter(
             LessonAssignment.class_id.in_(class_ids),
             LessonAssignment.status == "published",
+            or_(
+                LessonAssignment.publish_at.is_(None),
+                LessonAssignment.publish_at <= datetime.utcnow(),
+            ),
         )
         .all()
     )
@@ -202,6 +251,38 @@ def student_has_lesson_assignment(
     student_id: int, lesson_id: int, class_id: Optional[int] = None
 ) -> bool:
     return lesson_id in list_published_lesson_ids_for_student(student_id, class_id=class_id)
+
+
+def unreleased_scheduled_lesson_ids(lesson_ids) -> set[int]:
+    """Of `lesson_ids`, those that have class assignments but none released yet (every
+    assignment is a draft/closed or scheduled for a future publish_at). Used to keep
+    scheduled lessons out of non-class-scoped lesson lookups until their release time."""
+    ids = {int(i) for i in (lesson_ids or []) if i}
+    if not ids:
+        return set()
+    db = get_db()
+    assigned = {
+        r[0]
+        for r in db.query(LessonAssignment.lesson_id)
+        .filter(LessonAssignment.lesson_id.in_(ids))
+        .all()
+    }
+    if not assigned:
+        return set()
+    released = {
+        r[0]
+        for r in db.query(LessonAssignment.lesson_id)
+        .filter(
+            LessonAssignment.lesson_id.in_(assigned),
+            LessonAssignment.status == "published",
+            or_(
+                LessonAssignment.publish_at.is_(None),
+                LessonAssignment.publish_at <= datetime.utcnow(),
+            ),
+        )
+        .all()
+    }
+    return assigned - released
 
 
 def lesson_has_any_assignments(lesson_id: int) -> bool:

@@ -1274,6 +1274,10 @@
 
       // Helper function to close the modal
       function closeCreateLessonModal() {
+        if (window._ingestXhr) {
+          try { window._ingestXhr.abort(); } catch (e) { /* ignore */ }
+          window._ingestXhr = null;
+        }
         window._ingestTaskId = null;
         window._ingestAbortController = null;
         window._ingestCancelRequested = false;
@@ -1348,6 +1352,17 @@
               selectedFileDisplay?.classList.add('hidden');
               return;
             }
+
+            // Fast client preflight: a real PDF starts with "%PDF". The server still runs
+            // the full check (scanned / encrypted / corrupted) before any processing.
+            const input = this;
+            file.slice(0, 1024).text().then(function (head) {
+              if (input.files[0] !== file || head.indexOf('%PDF') !== -1) return;
+              fileErrorText.textContent = 'This file is not a valid PDF. It may be corrupted or renamed from another format.';
+              fileError.classList.remove('hidden');
+              selectedFileDisplay?.classList.add('hidden');
+              input.value = '';
+            }).catch(function () { /* unreadable locally: let the server decide */ });
 
             // Valid file
             fileError.classList.add('hidden');
@@ -1771,7 +1786,58 @@
       }
 
       // Step 2 processing - API: POST /api/rag/ingest (RAG document ingest for chat), NOT create_lesson
-      async function processCreateLessonStep2(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode) {
+      // One processing run at a time: a double click / re-submit must not start a second
+      // upload + ingest (which would create a duplicate lesson thread).
+      async function processCreateLessonStep2() {
+        if (window._ingestInFlight) {
+          showToast('A previous PDF is still being processed. Please wait for it to finish.', 'info', 4000);
+          return;
+        }
+        window._ingestInFlight = true;
+        try {
+          await _processCreateLessonStep2Impl.apply(this, arguments);
+        } finally {
+          window._ingestInFlight = false;
+          if (window._ingestElapsedTimer) { clearInterval(window._ingestElapsedTimer); window._ingestElapsedTimer = null; }
+        }
+      }
+
+      function _formatElapsed(ms) {
+        const total = Math.max(0, Math.floor(ms / 1000));
+        const m = Math.floor(total / 60);
+        const s = total % 60;
+        return m + ':' + (s < 10 ? '0' : '') + s;
+      }
+
+      // Keep the processing modal open with a clear, persistent error instead of silently
+      // returning the teacher to the previous page. The Cancel button becomes Close.
+      function showCreateLessonProcessingError(message) {
+        if (window._ingestElapsedTimer) { clearInterval(window._ingestElapsedTimer); window._ingestElapsedTimer = null; }
+        const modal = document.getElementById('createLessonModal');
+        const status = modal && modal.querySelector('#progressStatus');
+        if (!modal || !status) {
+          showToast(message, 'error', 8000);
+          closeCreateLessonModal();
+          return;
+        }
+        status.textContent = message;
+        status.setAttribute('role', 'alert');
+        status.style.color = '#b91c1c';
+        status.style.fontWeight = '600';
+        status.style.background = '#fee2e2';
+        status.style.border = '1px solid #fecaca';
+        status.style.borderRadius = '8px';
+        status.style.padding = '8px 10px';
+        const btn = modal.querySelector('.ppm-cancel-btn');
+        if (btn) {
+          btn.removeAttribute('onclick');
+          btn.textContent = 'Close';
+          btn.onclick = function () { closeCreateLessonModal(); };
+        }
+        showToast(message, 'error', 6000);
+      }
+
+      async function _processCreateLessonStep2Impl(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode) {
         const modal = document.getElementById('createLessonModal');
         if (!modal) return;
         const progressBar = modal.querySelector('#progressBar');
@@ -1829,8 +1895,22 @@
                 setUploadUi(pct, 'Uploading PDF...');
               };
             }
+            // Upload finished: the server now validates and processes the PDF (in sync mode
+            // the response arrives only when that is done). Show real elapsed time, not a promise.
+            xhr.upload.addEventListener('load', function () {
+              const startedAt = Date.now();
+              setUploadUi(42, 'Upload complete. Processing on the server...');
+              if (window._ingestElapsedTimer) clearInterval(window._ingestElapsedTimer);
+              window._ingestElapsedTimer = setInterval(function () {
+                if (progressStatus) {
+                  progressStatus.textContent = 'Still processing on the server... ' + _formatElapsed(Date.now() - startedAt) +
+                    ' elapsed. Large PDFs can take several minutes; you can switch tabs.';
+                }
+              }, 1000);
+            });
             xhr.onload = function () {
               window._ingestXhr = null;
+              if (window._ingestElapsedTimer) { clearInterval(window._ingestElapsedTimer); window._ingestElapsedTimer = null; }
               let body = {};
               try {
                 body = JSON.parse(xhr.responseText || '{}');
@@ -1838,13 +1918,19 @@
                 body = {};
               }
               if (xhr.status < 200 || xhr.status >= 300) {
-                reject(new Error((body && body.error) || 'PDF ingest failed'));
+                let msg = (body && body.error) || '';
+                if (!msg && (xhr.status === 502 || xhr.status === 504)) {
+                  // Gateway gave up but the worker may still be finishing: avoid a duplicate re-upload.
+                  msg = 'The server took too long to respond. Your PDF may still be processing - check Lesson Chat in a few minutes before uploading it again.';
+                }
+                reject(new Error(msg || ('PDF processing failed (HTTP ' + xhr.status + '). Please try again.')));
                 return;
               }
               resolve(body);
             };
             xhr.onerror = function () {
               window._ingestXhr = null;
+              if (window._ingestElapsedTimer) { clearInterval(window._ingestElapsedTimer); window._ingestElapsedTimer = null; }
               reject(new Error('Network error. Please try again.'));
             };
             xhr.onabort = function () {
@@ -1861,10 +1947,13 @@
           });
         } catch (e) {
           const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
-          if (!isAbort) showToast(e.message || 'Network error. Please try again.', 'error');
-          else showToast('Upload cancelled.', 'warning');
           window._ingestPendingThreadId = null;
-          closeCreateLessonModal();
+          if (isAbort) {
+            showToast('Upload cancelled.', 'warning');
+            closeCreateLessonModal();
+          } else {
+            showCreateLessonProcessingError(e.message || 'Network error. Please try again.');
+          }
           return;
         }
 
@@ -1885,26 +1974,82 @@
             pendingConversationId = conversationId;
             window._ingestPendingThreadId = pendingThreadId;
             const taskId = data.task_id;
-            const pollMax = 120;
-            for (let i = 0; i < pollMax; i++) {
+            // Poll until the server reports a terminal state. The old 120 x 2 s cap closed the
+            // modal silently after 4 minutes while the job kept running on the server.
+            // The ceiling below only exceeds the server's own task time limits.
+            const pollStartedAt = Date.now();
+            const pollCeilingMs = 105 * 60 * 1000;
+            const maxConsecutiveErrors = 30;
+            let consecutiveErrors = 0;
+            let lastProgress = 45;
+            let pollOutcome = null;
+            // Background tabs throttle timers; poll right away when the teacher comes back.
+            const waitForNextPoll = function (ms) {
+              return new Promise(function (resolve) {
+                let t = null;
+                const onVisible = function () {
+                  if (document.visibilityState === 'visible') done();
+                };
+                function done() {
+                  clearTimeout(t);
+                  document.removeEventListener('visibilitychange', onVisible);
+                  resolve();
+                }
+                t = setTimeout(done, ms);
+                document.addEventListener('visibilitychange', onVisible);
+              });
+            };
+            while (true) {
+              // Teacher closed/cancelled the modal (it is removed from the DOM): stop quietly,
+              // never auto-open the chat later from a background poll.
+              if (!modal.isConnected) { pollOutcome = 'closed'; break; }
               if (window._ingestCancelRequested) {
                 showToast('Upload cancelled.', 'warning');
                 break;
               }
-              await new Promise(r => setTimeout(r, 2000));
+              if (Date.now() - pollStartedAt > pollCeilingMs) {
+                pollOutcome = 'timeout';
+                break;
+              }
+              await waitForNextPoll(2000);
+              if (!modal.isConnected) { pollOutcome = 'closed'; break; }
               if (window._ingestCancelRequested) {
                 showToast('Upload cancelled.', 'warning');
                 break;
               }
-              const statusRes = await fetch('/api/rag/ingest/status/' + taskId, { method: 'GET', credentials: 'include' });
-              if (!statusRes.ok) continue;
+              let statusRes = null;
+              try {
+                statusRes = await fetch('/api/rag/ingest/status/' + taskId, { method: 'GET', credentials: 'include' });
+              } catch (netErr) {
+                statusRes = null;
+              }
+              if (!statusRes || !statusRes.ok) {
+                consecutiveErrors += 1;
+                if (statusRes && statusRes.status === 403) { pollOutcome = 'forbidden'; break; }
+                if (consecutiveErrors >= maxConsecutiveErrors) { pollOutcome = 'unreachable'; break; }
+                if (progressStatus) {
+                  progressStatus.textContent = 'Still processing... reconnecting to check progress (' +
+                    _formatElapsed(Date.now() - pollStartedAt) + ' elapsed).';
+                }
+                continue;
+              }
+              consecutiveErrors = 0;
               const statusData = await statusRes.json().catch(() => ({}));
-              if (progressBar) progressBar.style.width = (statusData.progress || 0) + '%';
-              if (progressPercent) progressPercent.textContent = Math.round(statusData.progress || 0) + '%';
-              if (progressStatus && statusData.message) progressStatus.textContent = statusData.message;
-              updatePpmSteps(statusData.progress || 0);
+              const prog = statusData.progress != null ? Number(statusData.progress) : lastProgress;
+              lastProgress = Math.max(lastProgress, prog || 0);
+              if (progressBar) progressBar.style.width = lastProgress + '%';
+              if (progressPercent) progressPercent.textContent = Math.round(lastProgress) + '%';
+              if (progressStatus) {
+                const stage = statusData.status === 'pending'
+                  ? 'Waiting for a processing slot'
+                  : (statusData.message || 'Processing PDF');
+                progressStatus.textContent = stage + ' - ' + _formatElapsed(Date.now() - pollStartedAt) + ' elapsed';
+              }
+              updatePpmSteps(lastProgress);
               if (statusData.status === 'revoked') {
                 showToast('Upload cancelled.', 'warning');
+                closeCreateLessonModal();
+                pollOutcome = 'closed';
                 break;
               }
               if (statusData.status === 'success') {
@@ -1922,10 +2067,19 @@
                 break;
               }
               if (statusData.status === 'failed' || statusData.status === 'failure' || statusData.state === 'FAILURE') {
-                showToast(statusData.error || statusData.message || 'PDF processing failed', 'error');
-                closeCreateLessonModal();
+                showCreateLessonProcessingError(statusData.error || statusData.message || 'PDF processing failed. Please try again.');
                 return;
               }
+            }
+            if (pollOutcome === 'closed') return;
+            if (pollOutcome) {
+              const msgs = {
+                timeout: 'This PDF is taking much longer than expected. Processing may still finish on the server - check Lesson Chat later before uploading it again.',
+                unreachable: 'We lost contact with the server while checking progress. Your PDF may still be processing - check Lesson Chat in a few minutes before uploading it again.',
+                forbidden: 'This processing job does not belong to your account.',
+              };
+              showCreateLessonProcessingError(msgs[pollOutcome]);
+              return;
             }
           } else if (threadId) {
             // Sync ingest completed in the upload response.
@@ -1953,22 +2107,25 @@
             }
             // Auto-redirect into chat after successful processing (no manual Continue click).
             finalizeCreateLesson(fileName, fileSize, lessonTitle, lessonContext, lessonSubject, lessonGrade, lessonMode);
-          } else {
+          } else if (window._ingestCancelRequested) {
             // Best-effort cleanup for cancelled thread so it cannot be used accidentally.
-            if (window._ingestCancelRequested && pendingThreadId) {
+            if (pendingThreadId) {
               fetch('/api/rag/thread/' + encodeURIComponent(pendingThreadId), {
                 method: 'DELETE',
                 credentials: 'include'
               }).catch(function() {});
             }
             closeCreateLessonModal();
+          } else if (modal.isConnected) {
+            // Neither success nor cancel: never return silently.
+            showCreateLessonProcessingError('PDF processing did not complete. Please try again.');
           }
           window._ingestPendingThreadId = null;
         } catch (e) {
           const isAbort = e && (e.name === 'AbortError' || e.message === 'The user aborted a request.');
-          if (!isAbort) showToast('Network error. Please try again.', 'error');
           window._ingestPendingThreadId = null;
-          closeCreateLessonModal();
+          if (isAbort || !modal.isConnected) closeCreateLessonModal();
+          else showCreateLessonProcessingError('Network error while processing your PDF. Please try again.');
         }
       }
 
@@ -2980,6 +3137,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const raw = markdown == null ? '' : String(markdown);
         window._viewLessonDraftMarkdown = raw;
         window._viewLessonDraftDirty = false;
+        const draftErrorEl = document.getElementById('tdVlDraftError');
+        if (draftErrorEl) { draftErrorEl.hidden = true; draftErrorEl.textContent = ''; }
         const draftEl = document.getElementById('viewLessonDraft');
         if (!draftEl) return;
         draftEl.setAttribute('data-raw-markdown', raw);
@@ -3608,15 +3767,46 @@ Last Updated: ${new Date().toLocaleDateString()}`;
           return;
         }
 
+        // One enhancement at a time: a second click while the first is running would
+        // otherwise start a duplicate (and overwrite each other's draft).
+        if (window._vlApplyInFlight) return;
+        window._vlApplyInFlight = true;
+
         const btn = document.querySelector('#viewLessonModal button[onclick="applyPromptToLessonDraft()"]');
+        const draftCard = document.getElementById('tdVlDraftCard');
+        const loadingEl = document.getElementById('tdVlDraftLoading');
+        const errorEl = document.getElementById('tdVlDraftError');
+        const chipBtns = document.querySelectorAll('#viewLessonModal .td-vl-chips button');
         let originalHtml = null;
         if (btn) {
           originalHtml = btn.innerHTML;
           btn.disabled = true;
           btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Applying...';
         }
+        if (promptEl) promptEl.disabled = true;
+        chipBtns.forEach(function (b) { b.disabled = true; });
+        if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+        // The result belongs in the main "Improve with AI" area, so show progress there.
+        if (typeof window.tdVlTab === 'function') window.tdVlTab('improve');
+        if (draftCard) draftCard.classList.add('is-loading');
+        if (loadingEl) loadingEl.hidden = false;
 
         try {
+          // Unsaved manual edits must not be lost: persist them first so the AI
+          // enhances what the teacher actually sees (apply_prompt builds on the saved draft).
+          if (window._viewLessonDraftDirty) {
+            const manual = getViewLessonDraftMarkdown();
+            if (manual) {
+              const saveRes = await fetch(`/api/lessons/lesson/${lessonId}/save_draft`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ draft_content: manual })
+              });
+              if (!saveRes.ok) throw new Error('Could not save your draft edits before applying AI. Please try again.');
+            }
+          }
+
           const response = await fetch(`/api/lessons/lesson/${lessonId}/apply_prompt`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3629,6 +3819,10 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             throw new Error(data.error || 'Failed to apply AI enhancement');
           }
 
+          // The teacher may have opened a different lesson while this ran; the draft is
+          // saved server-side, but never render it into another lesson's editor.
+          if (String(window.currentViewLessonId) !== String(lessonId)) return;
+
           const improved = data.draft_content || '';
           const draftEl = document.getElementById('viewLessonDraft');
           if (draftEl) {
@@ -3638,14 +3832,25 @@ Last Updated: ${new Date().toLocaleDateString()}`;
             setFinalizeButtonVisible(true);
           }
 
-          showToast('AI enhancement applied to draft!', 'success', 2500);
+          showToast('AI draft ready — review it below, then Save Draft or Finalize.', 'success', 3500);
           if (promptEl) {
             promptEl.value = '';
           }
         } catch (e) {
           console.error('applyPromptToLessonDraft error:', e);
-          showToast(e.message || 'Failed to apply AI enhancement', 'error', 3000);
+          const msg = (e && e.message) || 'Failed to apply AI enhancement';
+          // Instructions stay in the box so the teacher can retry; the saved lesson is untouched.
+          if (errorEl && String(window.currentViewLessonId) === String(lessonId)) {
+            errorEl.textContent = msg + ' Your instructions were kept and the current lesson was not changed.';
+            errorEl.hidden = false;
+          }
+          showToast(msg, 'error', 4000);
         } finally {
+          window._vlApplyInFlight = false;
+          if (draftCard) draftCard.classList.remove('is-loading');
+          if (loadingEl) loadingEl.hidden = true;
+          if (promptEl) promptEl.disabled = false;
+          chipBtns.forEach(function (b) { b.disabled = false; });
           if (btn && originalHtml !== null) {
             btn.disabled = false;
             btn.innerHTML = originalHtml;
@@ -3877,6 +4082,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         }
 
         if (versionContent) {
+          // The draft editor is shown on the "Improve with AI" tab.
+          if (typeof window.tdVlTab === 'function') window.tdVlTab('improve');
           const draftTextarea = document.getElementById('viewLessonDraft');
           if (draftTextarea) {
             renderLessonMarkdown(draftTextarea, versionContent);
@@ -3892,7 +4099,8 @@ Last Updated: ${new Date().toLocaleDateString()}`;
 
       // Edit with human feedback
       function editWithHumanLessonModal() {
-        // Focus on the draft textarea for manual editing
+        // Focus on the draft textarea for manual editing (shown on the "Improve with AI" tab)
+        if (typeof window.tdVlTab === 'function') window.tdVlTab('improve');
         document.getElementById('viewLessonDraft').focus();
         showToast('Ready for human editing. Make changes and click "Save Draft" or "Finalize New Version".', 'info', 3000);
       }
@@ -3942,6 +4150,7 @@ Last Updated: ${new Date().toLocaleDateString()}`;
         const template = templates.find(t => t.id === templateId);
 
         if (template) {
+          if (typeof window.tdVlTab === 'function') window.tdVlTab('improve');
           document.getElementById('viewLessonDraft').value = template.prompt;
           saveLessonDraftVisible();
           showToast(`Loaded template: ${template.name}`, 'success', 2000);
@@ -7148,7 +7357,7 @@ Align everything with the lesson objectives and do not invent missing informatio
 
         toast.innerHTML = `
     <i class="${icons[type] || icons.success}"></i>
-    <span>${message}</span>
+    <span>${escapeHtml(String(message == null ? '' : message))}</span>
     <button onclick="this.parentElement.remove()" class="ml-auto opacity-75 hover:opacity-100">
       <i class="fas fa-times"></i>
     </button>

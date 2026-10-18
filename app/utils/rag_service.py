@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import os
 import sqlite3
 import tempfile
@@ -1861,9 +1862,50 @@ def _maybe_record_gk_consent_offer(thread_id_str: str, last_human_text: str, rep
         logger.debug("gk_consent offer-detection skipped: %s", e)
 
 
+# The verified RAG thread of the current chat request (set by /api/rag/chat after its
+# ownership check). Tools receive thread_id as an LLM-supplied argument, so while a chat
+# turn is active, owner lookups for any *other* thread are refused (fail closed): a
+# prompt-injected or hallucinated thread_id can never read another user's document.
+_ACTIVE_RAG_THREAD: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar(
+    "active_rag_thread", default=None
+)
+
+
+def set_active_rag_thread(thread_id: Optional[str]):
+    """Pin document access for this request to `thread_id`. Returns a reset token."""
+    return _ACTIVE_RAG_THREAD.set(str(thread_id) if thread_id else None)
+
+
+def reset_active_rag_thread(token) -> None:
+    try:
+        _ACTIVE_RAG_THREAD.reset(token)
+    except (ValueError, LookupError):
+        _ACTIVE_RAG_THREAD.set(None)
+
+
+
+def _thread_access_denied(thread_id) -> Optional[str]:
+    """Tool-level guard: thread_id is an LLM-supplied tool argument. During a chat request
+    (active thread pinned by /api/rag/chat) any other thread is refused, so neither read nor
+    write tools can touch another user's document or lesson draft. Returns a reason or None."""
+    active = _ACTIVE_RAG_THREAD.get()
+    if active and thread_id and str(thread_id) != active:
+        logger.warning(
+            "Blocked tool access to thread_id=%s (active thread_id=%s)", thread_id, active
+        )
+        return "Access to that document is not allowed in this conversation."
+    return None
+
 def _get_user_id_for_thread(thread_id: str) -> Optional[int]:
     """Get user_id from DB (RAGThread). Never infer from thread_id string."""
     if not thread_id:
+        return None
+    active = _ACTIVE_RAG_THREAD.get()
+    if active and str(thread_id) != active:
+        logger.warning(
+            "Blocked cross-thread document access: requested thread_id=%s, active thread_id=%s",
+            thread_id, active,
+        )
         return None
     try:
         db = get_db()
@@ -2692,6 +2734,9 @@ def get_page_tool(page: int, thread_id: str) -> dict:
     Page numbers: 0 or 1 both refer to the first page.
     Always include the thread_id when calling this tool.
     """
+    _denied = _thread_access_denied(thread_id)
+    if _denied:
+        return {'error': _denied}
     logger.info(f"get_page_tool called: page={page}, thread_id={thread_id}")
     _set_chat_progress(thread_id, f"📄 Looking up page {page}...")
 
@@ -3416,6 +3461,9 @@ def list_topics_whole_doc_tool(thread_id: str) -> dict:
         - "method": extraction method used ("ai_toc_extraction" or "ai_heading_extraction")
         - "chunks_scanned": number of document pages analyzed
     """
+    _denied = _thread_access_denied(thread_id)
+    if _denied:
+        return {'error': _denied}
     _set_chat_progress(thread_id, "📋 Reviewing the document outline...")
     return _get_thread_topics(thread_id)
 
@@ -3460,6 +3508,9 @@ def count_pdf_words_tool(
     include_per_page: bool = False
 ) -> dict:
     """Count words in uploaded PDF for this thread. Supports whole doc, single page, or page range."""
+    _denied = _thread_access_denied(thread_id)
+    if _denied:
+        return {'error': _denied}
     user_id = _get_user_id_for_thread(thread_id)
     if user_id is None:
         return {"error": f"Could not extract user_id from thread_id: {thread_id}"}
@@ -3612,6 +3663,9 @@ def teach_topic_tool(topic: str, thread_id: str) -> dict:
     - "truncated": bool — true if either safety cap was hit (soft-capped, not silent).
     - "source_file", "num_pages"
     """
+    _denied = _thread_access_denied(thread_id)
+    if _denied:
+        return {'error': _denied}
     topic_q = (topic or "").strip()
     if not topic_q:
         return {"error": "Error: topic cannot be empty."}
@@ -3797,6 +3851,9 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
     Always include the thread_id when calling this tool.
     Returns content-only text for the LLM (no internal metadata).
     """
+    _denied = _thread_access_denied(thread_id)
+    if _denied:
+        return _denied
     rag_steps = []
     rag_started = time.perf_counter()
 
@@ -4264,6 +4321,9 @@ def update_lesson_tool(full_lesson_text: str, thread_id: str) -> str:
 
     Always include the current conversation's thread_id when calling this tool.
     """
+    _denied = _thread_access_denied(thread_id)
+    if _denied:
+        return json.dumps({'success': False, 'reason': _denied})
     result = {"success": False, "reason": "Unknown error."}
     if not thread_id:
         result["reason"] = "No active document thread to update a lesson for."
@@ -4357,6 +4417,9 @@ def finalize_lesson_tool(thread_id: str) -> str:
 
     Always include the current conversation's thread_id when calling this tool.
     """
+    _denied = _thread_access_denied(thread_id)
+    if _denied:
+        return json.dumps({'success': False, 'reason': _denied})
     result = {"success": False, "reason": "Unknown error.", "already_finalized": False}
     if not thread_id:
         result["reason"] = "No active document thread to save a lesson for."

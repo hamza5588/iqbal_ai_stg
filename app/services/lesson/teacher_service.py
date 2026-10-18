@@ -100,6 +100,10 @@ from app.utils.groq_rate_limit import (
 # Shared LLM invoke wrapper with Groq rate-limit retry (teacher path)
 # ---------------------------------------------------------------------------
 
+class LessonEnhancementError(RuntimeError):
+    """Improve-with-AI could not produce a draft (LLM error, rate limit, empty output)."""
+
+
 def _invoke_llm_with_retry(llm, payload, *, max_retries: int = None):
     """
     Invoke llm.invoke(payload) with Groq rate-limit retry logic.
@@ -2293,8 +2297,19 @@ Answer:"""
             return "no relevant info found"
             # return self.improve_lesson_content(0, lesson_content, user_prompt)
 
-    def improve_lesson_content(self, lesson_id: int, current_content: str, improvement_prompt: str = "") -> str:
-        """Improve lesson content using AI based on user prompt"""
+    def improve_lesson_content(
+        self,
+        lesson_id: int,
+        current_content: str,
+        improvement_prompt: str = "",
+        raise_on_error: bool = False,
+    ) -> str:
+        """Improve lesson content using AI based on user prompt.
+
+        By default a failure returns `current_content` unchanged (legacy callers rely on
+        that). With raise_on_error=True (Improve with AI drafts) failures raise
+        LessonEnhancementError instead, so an unchanged copy is never saved as an "AI draft".
+        """
         try:
             # Create improvement prompt
             #fetch the original content from lesson id
@@ -2388,11 +2403,18 @@ Answer:"""
                 # Not a JSON response, use as-is
                 pass
             
+            if raise_on_error and not (improved_content or "").strip():
+                raise LessonEnhancementError("The AI returned an empty draft")
+
             logger.info(f"Successfully improved lesson {lesson_id} content")
             return improved_content
             
         except Exception as e:
             logger.error(f"Error improving lesson content: {str(e)}")
+            if raise_on_error:
+                if isinstance(e, LessonEnhancementError):
+                    raise
+                raise LessonEnhancementError(str(e)) from e
             # Return original content if improvement fails
             return current_content
 

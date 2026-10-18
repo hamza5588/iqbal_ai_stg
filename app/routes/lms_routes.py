@@ -439,7 +439,10 @@ def create_quiz_from_pdf():
 
         assert_supported_assessment_file(file.filename, file_bytes, label="Assessment PDF")
     except LMSValidationError as e:
-        return json_error(str(e), code="validation_error")
+        reason = getattr(e, "reason", None)
+        return json_error(
+            str(e), code="validation_error", details={"reason": reason} if reason else None
+        )
 
     a = assessment_service.create_assessment(
         created_by=_current_user_id(),
@@ -507,7 +510,10 @@ def process_quiz_pdf(quiz_id: int):
 
         assert_supported_assessment_file(file.filename, file_bytes, label="Assessment PDF")
     except LMSValidationError as e:
-        return json_error(str(e), code="validation_error")
+        reason = getattr(e, "reason", None)
+        return json_error(
+            str(e), code="validation_error", details={"reason": reason} if reason else None
+        )
 
     if not thread_id or not _validate_thread_id(thread_id, _current_user_id()):
         try:
@@ -1640,6 +1646,9 @@ def lesson_assignments():
     due_date = body.get("due_date")
     from datetime import datetime
 
+    parsed_publish_at, schedule_error = _parse_lesson_publish_at(body)
+    if schedule_error:
+        return schedule_error
     try:
         parsed_due = datetime.fromisoformat(due_date) if due_date else None
         a = lesson_assignment_service.create_assignment(
@@ -1649,6 +1658,7 @@ def lesson_assignments():
             title=body.get("title") or "Lesson",
             instructions=body.get("instructions"),
             due_date=parsed_due,
+            publish_at=parsed_publish_at,
         )
         return json_success(
             {
@@ -1694,10 +1704,33 @@ def publish_lesson_assignment(assignment_id: int):
         return json_error(str(e), code="not_found", status=404)
 
 
+def _parse_lesson_publish_at(body: dict):
+    """Parse the optional scheduled release time. Returns (naive_utc_or_None, error_response).
+    The client sends Date.toISOString() of the teacher's local datetime-local value."""
+    from app.services.lms import lesson_assignment_service
+
+    try:
+        publish_at = lesson_assignment_service.parse_iso_datetime_utc(body.get("publish_at"))
+    except ValueError:
+        return None, json_error("Invalid publish date/time", code="validation_error")
+    if publish_at is not None and body.get("due_date"):
+        try:
+            due = lesson_assignment_service.parse_iso_datetime_utc(body.get("due_date"))
+        except ValueError:
+            due = None  # due_date keeps its own existing validation below
+        if due is not None and due < publish_at:
+            return None, json_error(
+                "Due date cannot be earlier than the scheduled publish time",
+                code="validation_error",
+            )
+    return publish_at, None
+
+
 @bp.route("/lesson-assignments/publish-to-class", methods=["POST"])
 @login_required
 def publish_lesson_to_class():
-    """One-shot: pick class + publish lesson to that class (Create & Publish)."""
+    """One-shot: pick class + publish lesson to that class (Create & Publish).
+    Optional `publish_at` (ISO, UTC) schedules when students can first see the lesson."""
     from app.services.lms import lesson_assignment_service
 
     denied = _require_permission(Permissions.CREATE_LESSON)
@@ -1707,6 +1740,9 @@ def publish_lesson_to_class():
     due_date = body.get("due_date")
     from datetime import datetime
 
+    parsed_publish_at, schedule_error = _parse_lesson_publish_at(body)
+    if schedule_error:
+        return schedule_error
     try:
         parsed_due = datetime.fromisoformat(due_date) if due_date else None
         data = lesson_assignment_service.publish_lesson_to_class(
@@ -1715,6 +1751,7 @@ def publish_lesson_to_class():
             class_id=int(body["class_id"]),
             title=body.get("title"),
             due_date=parsed_due,
+            publish_at=parsed_publish_at,
         )
         return json_success(data)
     except KeyError as e:
@@ -1784,14 +1821,18 @@ def lesson_topics(lesson_id: int):
     uid = _current_user_id()
     role = _current_role()
     if lesson.get("teacher_id") != uid and role != "admin":
+        from app.services.lms import lesson_assignment_service
         from app.services.lms.class_service import student_can_access_teacher_grade
-        if (
-            role != "student"
-            or not lesson.get("is_public")
-            or not student_can_access_teacher_grade(
+        if role != "student" or not lesson.get("is_public"):
+            return json_error("Forbidden", code="forbidden", status=403)
+        # Class assignment (incl. scheduled publish time) wins; grade link only when unassigned.
+        if lesson_assignment_service.lesson_has_any_assignments(lesson_id):
+            allowed = lesson_assignment_service.student_has_lesson_assignment(uid, lesson_id)
+        else:
+            allowed = student_can_access_teacher_grade(
                 uid, lesson.get("teacher_id"), lesson.get("grade_level")
             )
-        ):
+        if not allowed:
             return json_error("Forbidden", code="forbidden", status=403)
 
     if request.method == "GET":

@@ -83,8 +83,9 @@
 
   /**
    * After ~12s of measurable upload speed, surface ETA.
-   * If remaining time is still long (>=90s), ask once: Should I proceed?
-   * onUpdate(msg, { pct, remainingSec, loaded, total }) is optional.
+   * If remaining time is still long (>=90s), add a persistent "keeps uploading" notice
+   * (never a blocking dialog). The ETA covers the upload only, not server processing.
+   * onUpdate(msg, { pct, remainingSec, loaded, total, longUpload }) is optional.
    */
   global.bindUploadEtaGuard = function (xhr, onUpdate) {
     var startedAt = Date.now();
@@ -114,28 +115,24 @@
           global.formatUploadEta(remaining) +
           ' remaining';
       }
+      // Long upload: show a persistent, non-blocking notice instead of window.confirm().
+      // A native confirm is dismissed (and returns false → aborted the upload) when the
+      // teacher switches browser tabs; in-page text survives tab switches and the
+      // existing Cancel controls still let the teacher stop the upload.
+      if (!askedProceed && remaining != null && remaining >= 90) askedProceed = true;
+      if (askedProceed && pct < 100) {
+        msg += ' — large file: it keeps uploading if you switch tabs.';
+      }
       if (typeof onUpdate === 'function') {
         onUpdate(msg, {
           pct: pct,
           remainingSec: remaining,
           loaded: ev.loaded,
           total: ev.total,
+          longUpload: askedProceed,
         });
       }
       if (visible) global.updateWaitOverlay(msg);
-      if (!askedProceed && remaining != null && remaining >= 90) {
-        askedProceed = true;
-        var ok = window.confirm(
-          'This upload still needs about ' +
-            global.formatUploadEta(remaining) +
-            '. Should I proceed?'
-        );
-        if (!ok) {
-          try {
-            xhr.abort();
-          } catch (e) { /* ignore */ }
-        }
-      }
     });
   };
 

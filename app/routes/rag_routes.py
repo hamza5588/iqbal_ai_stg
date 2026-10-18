@@ -40,6 +40,15 @@ import tempfile
 import zlib
 logger = logging.getLogger(__name__)
 bp = Blueprint('rag', __name__)
+
+
+@bp.teardown_request
+def _reset_active_rag_thread(_exc=None):
+    """Clear the per-request document pin so a reused worker thread never inherits it."""
+    token = g.pop('_rag_active_thread_token', None)
+    if token is not None:
+        from app.utils.rag_service import reset_active_rag_thread
+        reset_active_rag_thread(token)
 _CANCELLED_UPLOAD_FILENAME = "__CANCELLED_UPLOAD__"
 
 # Max word count for user-supplied RAG custom prompt (teacher / user UI)
@@ -117,184 +126,13 @@ def _get_ingest_tier(file_size_mb: float) -> dict:
     }
 
 
-def _preflight_check_pdf(file_bytes: bytes, max_scan_pages: int = 25, timeout_seconds: int = 15) -> dict:
-    """
-    Runs `_preflight_check_pdf_inner` with a hard wall-clock timeout.
-
-    PyMuPDF is a C extension: a malformed PDF can make it hang inside
-    `fz_open_document` with no Python-level exception to catch, which would
-    otherwise block the request thread forever. Running it in a daemon
-    thread with a bounded `.join()` means a hang costs one leaked thread
-    instead of an unresponsive request/worker.
-    """
-    import threading
-
-    box = {}
-
-    def _run():
-        box['result'] = _preflight_check_pdf_inner(file_bytes, max_scan_pages)
-
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    t.join(timeout_seconds)
-
-    if t.is_alive():
-        return {
-            'ok': False,
-            'code': 'PDF_VALIDATION_TIMEOUT',
-            'message': (
-                'This PDF took too long to validate and may be malformed or '
-                'unusually complex. Please try a different file.'
-            ),
-        }
-    return box.get('result') or {
-        'ok': False,
-        'code': 'PDF_UNREADABLE',
-        'message': 'This file could not be validated. Please check the file and upload it again.',
-    }
-
-
-_STREAM_START_RE = re.compile(rb'stream\r?\n')
-_MAX_BOMB_SCAN_STREAMS = 200
-
-
-def _check_decompression_bomb(file_bytes: bytes, max_output_mb: int = 60) -> str:
-    """
-    Cheap pre-scan for PDF decompression bombs: a FlateDecode stream that
-    expands far beyond anything a legitimate single PDF stream (a page's
-    content, one embedded font, one image) should ever need. Runs on the
-    raw bytes before fitz/pypdf ever open the file, so a bomb is rejected
-    before paying the cost of fully decompressing it.
-
-    Scoped to FlateDecode, the overwhelmingly common PDF compression
-    filter — other filters still fall back on the existing 100 MB total
-    upload-size cap. Returns an error message string, or '' if clean.
-    """
-    max_output_bytes = max_output_mb * 1024 * 1024
-    scanned = 0
-    for match in _STREAM_START_RE.finditer(file_bytes):
-        if scanned >= _MAX_BOMB_SCAN_STREAMS:
-            break
-        start = match.end()
-        end = file_bytes.find(b'endstream', start)
-        if end == -1:
-            continue
-        raw = file_bytes[start:end]
-        scanned += 1
-        if len(raw) < 256:
-            continue  # too small to be a bomb
-        try:
-            decompressor = zlib.decompressobj()
-            out_len = 0
-            out = decompressor.decompress(raw, max_output_bytes + 1)
-            out_len += len(out)
-            while decompressor.unconsumed_tail and out_len <= max_output_bytes:
-                out = decompressor.decompress(decompressor.unconsumed_tail, max_output_bytes + 1 - out_len)
-                if not out:
-                    break
-                out_len += len(out)
-            if out_len > max_output_bytes:
-                return (
-                    f"This PDF contains a compressed stream that expands to over {max_output_mb} MB "
-                    "when decompressed, which is far larger than any normal document needs. It was "
-                    "rejected to protect server memory — please upload a different file."
-                )
-        except zlib.error:
-            continue  # not a zlib stream at this offset — not what we're checking for
-    return ''
-
-
-def _preflight_check_pdf_inner(file_bytes: bytes, max_scan_pages: int) -> dict:
-    """
-    Fast, synchronous check run at upload time, before the (potentially slow)
-    background ingestion is ever queued. Catches PDFs that can never be
-    ingested — corrupted files, password-protected files, and scanned/
-    image-only files with no selectable text — so the user is told
-    immediately, instead of the file being queued for background processing
-    and only failing later (which previously surfaced as a misleading
-    "PDF may still be processing" message when the user tried to chat).
-
-    Only scans the first `max_scan_pages` pages so this stays fast even for
-    large documents; the real ingestion step still processes every page.
-    """
-    import fitz  # PyMuPDF
-
-    bomb_message = _check_decompression_bomb(file_bytes)
-    if bomb_message:
-        return {'ok': False, 'code': 'PDF_TOO_COMPLEX', 'message': bomb_message}
-
-    try:
-        doc = fitz.open(stream=file_bytes, filetype="pdf")
-    except Exception:
-        return {
-            'ok': False,
-            'code': 'PDF_UNREADABLE',
-            'message': (
-                'This file could not be opened as a PDF. It may be corrupted '
-                'or not actually a PDF file. Please check the file and upload it again.'
-            ),
-        }
-
-    try:
-        if doc.is_encrypted and not doc.authenticate(""):
-            return {
-                'ok': False,
-                'code': 'PDF_PASSWORD_PROTECTED',
-                'message': (
-                    'This PDF is password-protected. Please remove the password '
-                    'and upload it again.'
-                ),
-            }
-
-        if doc.page_count == 0:
-            return {
-                'ok': False,
-                'code': 'PDF_EMPTY',
-                'message': 'This PDF has no pages.',
-            }
-
-        has_text = False
-        has_images = False
-        for i, page in enumerate(doc):
-            if i >= max_scan_pages:
-                break
-            if not has_text and (page.get_text("text") or "").strip():
-                has_text = True
-            if not has_images and page.get_images():
-                has_images = True
-            if has_text and has_images:
-                break
-
-        if not has_text:
-            scanned_hint = (
-                " It looks like a scanned document (it contains images but no selectable text)."
-                if has_images else ""
-            )
-            return {
-                'ok': False,
-                'code': 'PDF_NO_TEXT',
-                'message': (
-                    f'This PDF has no readable text content.{scanned_hint} '
-                    'OCR support is required for scanned documents — please upload '
-                    'a PDF with real, selectable text instead.'
-                ),
-            }
-
-        return {'ok': True, 'has_images': has_images}
-    except Exception:
-        return {
-            'ok': False,
-            'code': 'PDF_UNREADABLE',
-            'message': (
-                'This file could not be read as a PDF. It may be corrupted. '
-                'Please check the file and upload it again.'
-            ),
-        }
-    finally:
-        try:
-            doc.close()
-        except Exception:
-            pass
+# Upload preflight lives in app/utils/pdf_preflight.py so lesson, quiz and diagnostic
+# uploads share one implementation; these aliases keep the existing names working.
+from app.utils.pdf_preflight import (  # noqa: E402
+    check_decompression_bomb as _check_decompression_bomb,
+    preflight_check_pdf as _preflight_check_pdf,
+    preflight_check_pdf_inner as _preflight_check_pdf_inner,
+)
 
 
 def _strip_lesson_finalization_from_response(text):
@@ -1326,6 +1164,11 @@ def chat():
                 'thread_id': thread_id
             }), 400
 
+        # Ownership verified: pin this turn's document access to this thread so tool
+        # calls cannot reach another user's document (reset in _reset_active_rag_thread).
+        from app.utils.rag_service import set_active_rag_thread
+        g._rag_active_thread_token = set_active_rag_thread(thread_id)
+
         if (getattr(thread_row, 'filename', None) or "") == _CANCELLED_UPLOAD_FILENAME:
             logger.info("RAG chat blocked: thread_id=%s was marked as cancelled upload", thread_id)
             return jsonify({
@@ -1815,7 +1658,9 @@ def get_ingest_status(task_id):
         
         # Security: Validate task belongs to this user
         # Check if task exists
-        if task.state not in ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILURE', 'REVOKED', 'RETRY'):
+        # STARTED: task_track_started=True reports a running task as STARTED before its first
+        # PROCESSING update; treating it as unknown made polls 404 and the UI look stuck.
+        if task.state not in ('PENDING', 'STARTED', 'PROCESSING', 'SUCCESS', 'FAILURE', 'REVOKED', 'RETRY'):
             # Task doesn't exist or is in unknown state
             return jsonify({'error': 'Task not found'}), 404
         
@@ -1854,9 +1699,9 @@ def get_ingest_status(task_id):
                 'state': task.state,
                 'message': 'Task is waiting to be processed'
             }
-        elif task.state == 'PROCESSING':
+        elif task.state in ('PROCESSING', 'STARTED'):
             # Task is being processed
-            meta = task.info or {}
+            meta = task.info if isinstance(task.info, dict) else {}
             response = {
                 'task_id': task_id,
                 'status': 'processing',
@@ -1867,8 +1712,18 @@ def get_ingest_status(task_id):
             }
         elif task.state == 'SUCCESS':
             # Task completed successfully - warm up embedding model in this process so first query is fast
+            result = task.result if isinstance(task.result, dict) else {}
+            # ingest_pdf_task catches its own errors and *returns* {'success': False, ...};
+            # Celery stores a returned value as SUCCESS, so report it as the failure it is.
+            if result.get('success') is False:
+                return jsonify({
+                    'task_id': task_id,
+                    'status': 'failure',
+                    'state': 'FAILURE',
+                    'error': result.get('error') or result.get('message') or 'PDF processing failed',
+                    'message': result.get('message') or result.get('error') or 'PDF processing failed',
+                })
             warmup_rag_embeddings()
-            result = task.result
             thread_id = result.get('thread_id')
             if thread_id:
                 try:

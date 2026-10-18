@@ -21,11 +21,24 @@ _PDF_MAGIC = b"%PDF"
 
 
 class AssessmentDocValidationError(LMSValidationError):
-    """Format / structure failure for an uploaded assessment document."""
+    """Format / structure failure for an uploaded assessment document.
 
-    def __init__(self, detail: Optional[str] = None):
+    Structure failures keep the canonical ASSESSMENT_FORMAT_ERROR text. File-level
+    preflight failures (scanned, corrupted, password-protected, no pages) carry a
+    specific `public_message` and `reason` so the teacher knows what to fix.
+    """
+
+    def __init__(
+        self,
+        detail: Optional[str] = None,
+        *,
+        public_message: Optional[str] = None,
+        reason: Optional[str] = None,
+    ):
         self.detail = (detail or "").strip() or None
-        super().__init__(ASSESSMENT_FORMAT_ERROR)
+        self.public_message = (public_message or "").strip() or ASSESSMENT_FORMAT_ERROR
+        self.reason = reason or "INVALID_FORMAT"
+        super().__init__(self.public_message)
 
 
 def _raise(detail: str) -> None:
@@ -55,6 +68,24 @@ def assert_supported_assessment_file(
         head = data[:1024].lstrip()
         if not head.startswith(_PDF_MAGIC):
             _raise(f"{label} is not a valid PDF")
+
+    # Open the file before any LLM / vision / ingest work so scanned, corrupted,
+    # password-protected and empty PDFs are rejected in seconds, not minutes.
+    from app.utils.pdf_preflight import preflight_check_pdf
+
+    # Assessment pipelines (LlamaParse / page-image vision) can read mostly-scanned pages,
+    # so only PDFs with no text layer at all are rejected as scanned here.
+    preflight = preflight_check_pdf(data, reject_mostly_scanned=False)
+    if not preflight.get("ok"):
+        message = preflight.get("message") or ASSESSMENT_FORMAT_ERROR
+        # Diagnostics upload several PDFs at once: say which one failed.
+        if label and label != "Assessment PDF":
+            message = f"{label}: {message}"
+        raise AssessmentDocValidationError(
+            detail=f"{label}: {preflight.get('code')}",
+            public_message=message,
+            reason=preflight.get("code"),
+        )
 
 
 def assert_nonempty_extracted_text(text: Optional[str]) -> None:
@@ -138,5 +169,5 @@ def assert_topic_or_key_area_available(
 def public_error_message(exc: BaseException) -> str:
     """Always surface the canonical format message for format failures."""
     if isinstance(exc, AssessmentDocValidationError):
-        return ASSESSMENT_FORMAT_ERROR
+        return exc.public_message
     return str(exc) or ASSESSMENT_FORMAT_ERROR

@@ -23,8 +23,14 @@
         <input id="lmsLessonAssignLessonLabel" type="text" readonly>
       </div>
       <div class="td-field">
+        <label for="lmsLessonAssignPublishAt">Publish at <span class="opt">(optional)</span></label>
+        <input id="lmsLessonAssignPublishAt" type="datetime-local" aria-describedby="lmsLessonAssignPublishHelp">
+        <p class="td-help" id="lmsLessonAssignPublishHelp">Leave empty to publish now. Students see the lesson only from this time.</p>
+      </div>
+      <div class="td-field">
         <label for="lmsLessonAssignDue">Due date <span class="opt">(optional)</span></label>
         <input id="lmsLessonAssignDue" type="datetime-local">
+        <p class="td-help">Deadline shown to students. It does not control when the lesson appears.</p>
       </div>
     </div>
     <div class="td-form-actions">
