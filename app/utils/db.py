@@ -452,6 +452,10 @@ def init_db(app):
                 logger.warning("diagnostic timer migration warning: %s", e)
                 db.rollback()
 
+            # Migration 012: question metadata shared by diagnostic and target banks.
+            from app.services.lms.question_metadata_migration import migrate_question_metadata
+            migrate_question_metadata(engine)
+
             # Migration: reset-OTP attempt counter, attempt heartbeat (offline time credit)
             try:
                 db = get_db()

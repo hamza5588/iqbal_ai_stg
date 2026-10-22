@@ -357,6 +357,13 @@ def _build_question_queue(
             _question_count_for_score(score),
             min(int(entry.get("min_questions") or 0), MAX_QUESTIONS_TO_CLEAR_TOPIC),
         )
+        if entry.get("wrong_metadata"):
+            from app.services.lms.adaptive_practice_service import build_queue
+            items = build_queue(entry, target_thread_ids, rag_owner_id, count, grade_level,
+                                used_question_texts_by_topic.get(topic_id, []) +
+                                [q["question_text"] for q in queue])
+            queue.extend(items)
+            continue
         ladder = _difficulty_plan(score, count)
         exclude_texts = used_question_texts_by_topic.get(topic_id, [])
         exclude_keys = {_question_key(t) for t in exclude_texts if t}
@@ -726,6 +733,11 @@ def _practice_weak_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
             "No weak areas found. Complete your diagnostic assessment first."
         )
 
+    from app.services.lms.adaptive_practice_service import weak_groups_for_student
+    metadata_weak = weak_groups_for_student(student_id, weak)
+    if any(w.get("wrong_metadata") for w in metadata_weak):
+        return metadata_weak
+
     if diag_id:
         attempt = _latest_diagnostic_attempt(student_id, diag_id)
         if attempt:
@@ -800,7 +812,7 @@ def _start_topic_session(
         weak = [w for w in get_weak_topics(student_id) if _is_topic(w)]
     if not weak:
         raise LMSValidationError("This topic is not one of your weak areas any more.")
-    weak = _note_outstanding_misses(student_id, weak[:1])
+    weak = _note_outstanding_misses(student_id, weak)
 
     # Questions already generated for this topic (the session pre-built right after
     # the diagnostic) are reused, so opening a topic costs no new generation.
@@ -836,6 +848,9 @@ def _start_topic_session(
             "topic_name": w.get("topic_name") or "Practice area",
             "score_percent": w.get("score_percent", 0),
             "question_ids": w.get("question_ids") or [],
+            "attempt_id": w.get("attempt_id"),
+            "wrong_metadata": w.get("wrong_metadata") or [],
+            "domain": w.get("domain"),
         }
     ]
     session = DeficiencyChatSession(
@@ -953,6 +968,9 @@ def start_session(
             "topic_name": w.get("topic_name") or "Practice area",
             "score_percent": w.get("score_percent", 0),
             "question_ids": w.get("question_ids") or [],
+            "attempt_id": w.get("attempt_id"),
+            "wrong_metadata": w.get("wrong_metadata") or [],
+            "domain": w.get("domain"),
         }
         for w in weak
     ]

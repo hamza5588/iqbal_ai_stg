@@ -37,6 +37,9 @@ def _serialize_question(q: Question) -> dict:
         "correct_answer_raw": q.correct_answer_raw,
         "explanation": q.explanation,
         "difficulty": q.difficulty,
+        "domain": q.domain,
+        "topic_label": q.topic_label,
+        "cognitive_level": q.cognitive_level,
         "source_type": q.source_type,
         "source_pdf_thread_id": q.source_pdf_thread_id,
         "source_question_number": q.source_question_number,
@@ -99,6 +102,9 @@ def create_question(
     source_pdf_thread_id: Optional[str] = None,
     source_question_number: Optional[int] = None,
     extraction_confidence: Optional[float] = None,
+    domain: Optional[str] = None,
+    topic_label: Optional[str] = None,
+    cognitive_level: Optional[str] = None,
 ) -> Question:
     validate_mcq(options, correct_option_index)
     _check_answer_key(question_text, question_latex, options, correct_option_index, source_type)
@@ -117,6 +123,9 @@ def create_question(
         source_pdf_thread_id=source_pdf_thread_id,
         source_question_number=source_question_number,
         extraction_confidence=extraction_confidence,
+        domain=domain.strip() if domain else None,
+        topic_label=topic_label.strip() if topic_label else None,
+        cognitive_level=cognitive_level.strip() if cognitive_level else None,
     )
     db.add(question)
     db.commit()

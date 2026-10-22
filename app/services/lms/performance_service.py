@@ -132,6 +132,13 @@ def repair_diagnostic_topic_meta(assessment) -> bool:
 
 
 def _resolve_question_topic_id(question: Question, assessment) -> Optional[int]:
+    if getattr(question, "domain", None) and getattr(question, "topic_label", None):
+        # Include domain in the curriculum identity so equal topic names in
+        # different domains cannot overwrite each other's mastery.
+        from app.services.quiz.question_metadata import normalized
+        topic = get_or_create_topic_from_pdf_label(question.topic_label, subject=f"Adaptive: {normalized(question.domain)}")
+        if topic:
+            return topic.id
     pdf_label = _question_pdf_label(question, assessment)
     if pdf_label:
         topic = get_or_create_topic_from_pdf_label(pdf_label)
@@ -500,6 +507,15 @@ def update_topic_scores_from_attempt(attempt_id: int) -> None:
     if not attempt or attempt.status != "submitted":
         return
 
+    from app.services.lms.adaptive_practice_service import analyze_metadata_attempt
+    metadata_analysis = analyze_metadata_attempt(attempt_id)
+    if metadata_analysis is not None:
+        for group in metadata_analysis["all_topics"]:
+            _upsert_topic_score(db, attempt.student_id, group["topic_id"], group["score_percent"],
+                                group["total"], datetime.utcnow(), blend=False)
+        db.commit()
+        return
+
     assessment = get_assessment(attempt.assessment_id)
     is_diagnostic = assessment.assessment_type == "diagnostic"
     if is_diagnostic:
@@ -575,6 +591,10 @@ def topic_breakdown_for_attempt(attempt_id: int) -> List[dict]:
     Uses the same resolution path as ``update_topic_scores_from_attempt`` so
     results UI, mastery writes, and progress charts stay aligned.
     """
+    from app.services.lms.adaptive_practice_service import analyze_metadata_attempt
+    metadata_analysis = analyze_metadata_attempt(attempt_id)
+    if metadata_analysis is not None:
+        return metadata_analysis["all_topics"]
     db = get_db()
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt or attempt.status != "submitted":
@@ -616,6 +636,10 @@ def topic_breakdown_for_attempt(attempt_id: int) -> List[dict]:
 
 
 def analyze_attempt(attempt_id: int) -> dict:
+    from app.services.lms.adaptive_practice_service import analyze_metadata_attempt
+    metadata_analysis = analyze_metadata_attempt(attempt_id)
+    if metadata_analysis is not None:
+        return metadata_analysis
     db = get_db()
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
