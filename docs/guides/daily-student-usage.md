@@ -10,6 +10,10 @@ No message text, prompts, answers, or chat history are sent to these endpoints o
 
 ## Storage and deployment
 
+School Name is required for every new account created through admin User Management or public registration. Both forms suggest the six schools from the controlled and non-controlled workbooks and accept a typed name for another school. Admins can edit school names; existing accounts without a school can still be edited, but a recorded school cannot be cleared. Bootstrap admin creation remains compatible.
+
+Use `scripts/import_student_schools.py` for existing students: validate unique email and matching student name first, and cross-check workbook DB User IDs when available. Dry-run before applying; provide a private backup path. The import changes only matched students and verifies all other accounts remain unchanged. Student workbooks and import backups must remain outside Git.
+
 - `tutor_usage_sessions`: per-page cumulative heartbeat cursor, tied to a student.
 - `tutor_daily_usage`: per-user/date active milliseconds and an overlap watermark.
 - `system_settings.tutor_usage_started_at`: original UTC rollout timestamp; preserved across restarts.
@@ -21,7 +25,7 @@ The heartbeat endpoint is `/api/tutor-usage/heartbeat`. Admin-only endpoints are
 ## Verification
 
 ```text
-python -m pytest scripts/test_tutor_usage.py scripts/test_student_school_import.py -q
+python -m pytest scripts/test_tutor_usage.py scripts/test_student_school_import.py scripts/test_school_registration.py -q
 node --test scripts/test_tutor_usage_client.cjs
 ```
 
