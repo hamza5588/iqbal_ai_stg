@@ -14,6 +14,7 @@ from app.services.lms.mcq_utils import (
     normalize_options,
     pick_display_fields,
     resolve_correct_option_index,
+    shuffle_options,
 )
 from app.services.lms.diagnostic_service import get_default_diagnostic, get_student_diagnostic
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
@@ -199,6 +200,23 @@ def _match_target_section(
     return (best or name), best_thread, best_score
 
 
+# "All of the above", "Both A and B", "A and C" only make sense in their printed position.
+_POSITIONAL_OPTION_WORDS = re.compile(
+    r"\b(?:all|none|both|neither)\b(?:\s+of)?(?:\s+(?:the|these))?\s+(?:above|options|choices)\b"
+    r"|\b(?:all|none)\s+of\s+these\b|\bboth\s+[A-D]\b",
+    re.IGNORECASE,
+)
+_POSITIONAL_OPTION_LETTERS = re.compile(r"\b[A-D]\s*(?:,|&|and|or)\s*[A-D]\b")
+
+
+def _has_positional_option(options: List[dict]) -> bool:
+    for opt in options:
+        text = f"{opt.get('text') or ''} {opt.get('latex') or ''}"
+        if _POSITIONAL_OPTION_WORDS.search(text) or _POSITIONAL_OPTION_LETTERS.search(text):
+            return True
+    return False
+
+
 def _mcq_to_queue_item(
     mcq, topic_id: int, topic_name: str, pdf_section: str, rag_thread_id: str,
     difficulty: str = "medium",
@@ -218,6 +236,11 @@ def _mcq_to_queue_item(
     if correct_idx is None:
         logger.warning("Skipping MCQ with unresolved correct label %s", mcq.correct_option_label)
         return None
+    # LLMs put the right answer in A/B far more often than chance; shuffle like the question bank.
+    options, correct_idx = shuffle_options(
+        options, correct_idx,
+        preserve_order=bool(getattr(mcq, "preserve_option_order", False)) or _has_positional_option(options),
+    )
     q_text, q_latex = finalize_display_text(mcq.question_text, mcq.question_latex)
     safe_opts = []
     for o in options:
