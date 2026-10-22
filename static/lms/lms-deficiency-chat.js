@@ -257,7 +257,7 @@
       '<button type="button" class="sd-icon-btn lms-sound-toggle" title="Sound cues" onclick="lmsToggleDeficiencySound(this)">' +
       (lmsFeedback.soundEnabled() ? '🔊' : '🔇') + '</button></div>' +
       '</div>' +
-      '<div class="sd-split-right">' + tutorSection + '</div>' +
+      '<div class="sd-split-right" data-tutor-usage="learning-path">' + tutorSection + '</div>' +
       '</div>';
 
     bindDeficiencyTutorInput();

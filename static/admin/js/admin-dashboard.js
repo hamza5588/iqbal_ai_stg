@@ -86,6 +86,8 @@ function showSection(sectionName) {
         loadDashboardStats();
     } else if (sectionName === 'users') {
         loadUsers();
+    } else if (sectionName === 'daily-usage') {
+        loadDailyUsage();
     } else if (sectionName === 'prompts') {
         loadRagSystemPrompt();
     } else if (sectionName === 'coupons') {
@@ -154,7 +156,7 @@ function adEmptyRow(cols, title, sub = '', opts = {}) {
 function renderUsersTable(users) {
     const tbody = document.getElementById('users-tbody');
     if (users.length === 0) {
-        tbody.innerHTML = adEmptyRow(6, 'No users found', 'Try another search or role.', { icon: 'fa-user-slash' });
+        tbody.innerHTML = adEmptyRow(7, 'No users found', 'Try another search or role.', { icon: 'fa-user-slash' });
         return;
     }
 
@@ -165,6 +167,7 @@ function renderUsersTable(users) {
         <tr>
             <td class="id">${user.id}</td>
             <td><div class="ad-user-cell"><span class="ad-initial ${tone}">${adEsc((user.full_name || user.username || '?').charAt(0).toUpperCase())}</span><span><b>${adEsc(user.full_name || user.username)}</b><br><small class="muted">${adEsc(user.username)}</small></span></div></td>
+            <td>${adEsc(user.school_name || 'Not provided')}</td>
             <td class="muted">${adEsc(user.useremail)}</td>
             <td><span class="ad-pill ${tone}">${adEsc(user.role)}</span></td>
             <td><span class="ad-pill ${tier === 'free' ? 'grey' : ''}">${adEsc(tier)}</span></td>

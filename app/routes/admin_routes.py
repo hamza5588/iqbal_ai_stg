@@ -214,6 +214,7 @@ def list_users():
                     DBUser.username.ilike(like, escape='\\'),
                     DBUser.useremail.ilike(like, escape='\\'),
                     DBUser.full_name.ilike(like, escape='\\'),
+                    DBUser.school_name.ilike(like, escape='\\'),
                 )
             )
         
@@ -229,6 +230,7 @@ def list_users():
                 'id': user.id,
                 'username': user.username,
                 'full_name': user.full_name or user.username,
+                'school_name': user.school_name or '',
                 'useremail': user.useremail,
                 'role': user.role,
                 'class_standard': user.class_standard or '',
@@ -332,6 +334,7 @@ def get_user(user_id):
                 'id': user.id,
                 'username': user.username,
                 'full_name': user.full_name or user.username,
+                'school_name': user.school_name or '',
                 'useremail': user.useremail,
                 'role': user.role,
                 'class_standard': user.class_standard or '',

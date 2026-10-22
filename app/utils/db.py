@@ -283,6 +283,8 @@ def init_db(app):
             # Create all tables
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables created/verified successfully")
+            from app.services.tutor_usage_service import initialize_tracking
+            initialize_tracking(engine)
             
             # Migration: Update existing lessons to have lesson_id if missing
             try:
@@ -342,6 +344,12 @@ def init_db(app):
                 inspector = inspect(engine)
                 if 'users' in inspector.get_table_names():
                     columns = [col['name'] for col in inspector.get_columns('users')]
+
+                    # Add mapped columns before any User ORM query (including login).
+                    if 'school_name' not in columns:
+                        db.execute(text("ALTER TABLE users ADD COLUMN school_name VARCHAR(255)"))
+                        db.commit()
+                        logger.info("school_name column added successfully")
 
                     if 'full_name' not in columns:
                         logger.info("Adding full_name column to users table...")

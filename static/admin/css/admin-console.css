@@ -120,7 +120,7 @@ body.ad-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--ad
 
 /* ── Form fields (scoped to the admin content area so Tailwind utility borders lose) ── */
 .ad-main input[type="text"], .ad-main input[type="email"], .ad-main input[type="password"], .ad-main input[type="number"],
-.ad-main input[type="datetime-local"], .ad-main input[type="url"], .ad-main input:not([type]), .ad-main select, .ad-main textarea,
+.ad-main input[type="date"], .ad-main input[type="datetime-local"], .ad-main input[type="url"], .ad-main input:not([type]), .ad-main select, .ad-main textarea,
 .ad-modal input[type="text"], .ad-modal input[type="email"], .ad-modal input[type="password"], .ad-modal input[type="number"],
 .ad-modal input[type="datetime-local"], .ad-modal select, .ad-modal textarea {
   border: 1px solid var(--ad-line); border-radius: 10px; background-color: var(--ad-bg); color: var(--ad-ink); font-family: inherit; font-size: 14px;
@@ -159,6 +159,9 @@ body.ad-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--ad
 
 /* ── Tables ──────────────────────────────────────────────── */
 .ad-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.usage-filters { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; padding: 18px; }
+.usage-filters .ad-field { flex: 1 1 160px; margin: 0; font-weight: 600; font-size: 13px; }
+.usage-filters input, .usage-filters select { display: block; margin-top: 6px; min-width: 0; }
 table.ad-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.ad-table th { text-align: left; color: var(--ad-ink); font-size: 13px; font-weight: 700; padding: 13px 18px; background: #f1f6fd; border-bottom: 1px solid var(--ad-line); text-transform: none; letter-spacing: 0; white-space: nowrap; }
 table.ad-table th.num, table.ad-table td.num { text-align: right; }

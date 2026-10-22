@@ -1,0 +1,26 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="daily-usage-section" class="section hidden">
+    {% call page_head('Daily Usage', 'Monitor students’ daily AI Tutor engagement.', icon='fa-clock') %}
+        <button type="button" id="usage-download" onclick="downloadDailyUsage()" class="ad-btn ad-btn-primary"><i class="fas fa-file-excel"></i>Download Excel</button>
+    {% endcall %}
+    <form id="usage-filters" class="ad-card usage-filters" onsubmit="event.preventDefault(); loadDailyUsage(1)">
+        <label class="ad-field">From<input type="date" id="usage-start" required></label>
+        <label class="ad-field">To<input type="date" id="usage-end" required></label>
+        <label class="ad-field">School<select id="usage-school"><option value="">All schools</option></select></label>
+        <label class="ad-field">Student<input type="text" id="usage-search" maxlength="255" placeholder="Search student name"></label>
+        <button type="submit" class="ad-btn ad-btn-outline">Apply filters</button>
+    </form>
+    <p class="ad-help">Pakistan time · Select up to 31 days. Counts time using a visible tutor panel and pauses after 2 minutes without activity.</p>
+    <p id="usage-coverage" class="ad-help"></p>
+    <p id="usage-error" class="ad-status-line" role="alert"></p>
+    <div class="ad-note" id="usage-summary" aria-live="polite">Loading usage…</div>
+    <div class="ad-card ad-card-flush" style="margin-top:16px">
+        <div class="ad-table-scroll">
+            <table class="ad-table">
+                <thead><tr><th>Date</th><th>Student Name</th><th>School Name</th><th>AI Tutor Time</th><th>Coverage</th></tr></thead>
+                <tbody id="usage-tbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+            </table>
+        </div>
+        <div id="usage-pagination" class="ad-card-foot"></div>
+    </div>
+</div>
