@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  let sequence = 0, schoolsLoaded = false;
+  let sequence = 0;
   function today() {
     const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
     const value = type => parts.find(p => p.type === type).value;
@@ -28,12 +28,16 @@
     document.getElementById('usage-school-menu').hidden = !open;
     document.getElementById('usage-school-toggle').setAttribute('aria-expanded', String(open));
   }
-  function addSchoolOptions(schools) {
-    const list = document.getElementById('usage-school-options');
-    schools.forEach(school => {
+  // Re-synced on every load so schools added after the page opened appear; ticks are kept.
+  function syncSchoolOptions(schools) {
+    const list = document.getElementById('usage-school-options'), chosen = new Set(selectedSchools());
+    const names = Array.from(new Set(schools.concat(Array.from(chosen)))).sort((a, b) => a.localeCompare(b));
+    if (names.join('|') === schoolBoxes().map(box => box.value).join('|')) return;
+    list.replaceChildren();
+    names.forEach(school => {
       const label = document.createElement('label'), box = document.createElement('input');
       label.className = 'usage-multi-opt';
-      box.type = 'checkbox'; box.value = school;
+      box.type = 'checkbox'; box.value = school; box.checked = chosen.has(school);
       label.append(box, document.createTextNode(school));
       list.appendChild(label);
     });
@@ -68,10 +72,8 @@
       const data = await response.json();
       if (requestSequence !== sequence) return;
       if (!response.ok || !data.success) throw new Error(data.error || 'Unable to load daily usage.');
-      if (!schoolsLoaded) {
-        addSchoolOptions(data.schools);
-        schoolsLoaded = true;
-      }
+      syncSchoolOptions(data.schools);
+      updateSchoolLabel();
       document.getElementById('usage-summary').textContent = data.active_students + ' active students · ' + duration(data.total_active_seconds) + ' total tutor time · ' + data.student_count + ' students';
       document.getElementById('usage-coverage').textContent = data.tracking_started_at
         ? 'Tracking started ' + new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Karachi', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(data.tracking_started_at)) + ' PKT. Earlier dates are not tracked; the first day is partial.'
