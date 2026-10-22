@@ -259,6 +259,8 @@ def run_pdf_quiz_pipeline(
             logger.warning("Display format review before save skipped: %s", exc)
 
         _report_progress(progress_callback, "save", 90, "Saving questions...")
+        from app.services.quiz.question_metadata import complete_metadata
+        complete_metadata(batch_questions, canonical_source_numbers or None, text)
         db = get_db()
         db.query(AssessmentQuestion).filter(
             AssessmentQuestion.assessment_id == assessment_id

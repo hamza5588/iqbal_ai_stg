@@ -616,11 +616,14 @@ def _run_post_submit_steps(attempt: AssessmentAttempt, assessment) -> None:
     step(lambda: learning_path_service.refresh_learning_path(student_id))
     step(lambda: performance_service.create_snapshot(student_id))
 
+    # Both assessment types invalidate practice generated from earlier evidence.
+    from app.services.lms import deficiency_chat_service
+    step(lambda: deficiency_chat_service._close_old_sessions(student_id))
+
     if assessment_type == "diagnostic":
         from app.services.lms import deficiency_chat_service, student_profile_service
         from app.tasks.lms_tasks import enqueue_deficiency_chat_prewarm
 
-        step(lambda: deficiency_chat_service._close_old_sessions(student_id))
         step(
             lambda: student_profile_service.mark_diagnostic_complete(
                 student_id, assessment_id=assessment_id

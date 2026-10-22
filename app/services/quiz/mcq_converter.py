@@ -216,6 +216,9 @@ def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
         "correct_option_index": new_correct,
         "explanation": mcq.explanation,
         "extraction_confidence": mcq.conversion_confidence,
+        "domain": mcq.domain,
+        "topic_label": mcq.topic,
+        "cognitive_level": mcq.cognitive_level,
     }
     # Optional PDF metadata — only pass through when present.
     difficulty = getattr(mcq, "difficulty", None)
