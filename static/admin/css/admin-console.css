@@ -162,6 +162,16 @@ body.ad-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--ad
 .usage-filters { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; padding: 18px; }
 .usage-filters .ad-field { flex: 1 1 160px; margin: 0; font-weight: 600; font-size: 13px; }
 .usage-filters input, .usage-filters select { display: block; margin-top: 6px; min-width: 0; }
+.usage-schools { position: relative; }
+.usage-multi { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-top: 6px; border: 1px solid var(--ad-line); border-radius: 10px; background: var(--ad-bg); color: var(--ad-ink); font: inherit; font-size: 14px; font-weight: 400; padding: 10px 13px; cursor: pointer; text-align: left; }
+.usage-multi span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-multi i { font-size: 11px; color: var(--ad-muted); }
+.usage-multi:focus-visible, .usage-multi[aria-expanded="true"] { outline: none; border-color: var(--ad-blue-500); box-shadow: 0 0 0 3px rgba(59, 130, 246, .15); background: #fff; }
+.usage-multi-menu { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 100%; max-height: 300px; overflow-y: auto; background: #fff; border: 1px solid var(--ad-line); border-radius: 10px; box-shadow: 0 10px 24px rgba(15, 23, 42, .12); padding: 6px; }
+.usage-schools .usage-multi-opt { display: flex; margin: 0; color: var(--ad-ink); align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; font-weight: 400; cursor: pointer; white-space: nowrap; }
+.usage-multi-opt:hover { background: var(--ad-blue-50); }
+.usage-multi-opt input { margin: 0 !important; flex: none; }
+.usage-schools .usage-multi-all { border-bottom: 1px solid var(--ad-line); border-radius: 8px 8px 0 0; margin-bottom: 4px; font-weight: 600; }
 table.ad-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.ad-table th { text-align: left; color: var(--ad-ink); font-size: 13px; font-weight: 700; padding: 13px 18px; background: #f1f6fd; border-bottom: 1px solid var(--ad-line); text-transform: none; letter-spacing: 0; white-space: nowrap; }
 table.ad-table th.num, table.ad-table td.num { text-align: right; }

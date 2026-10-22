@@ -1,6 +1,6 @@
 # Daily student usage
 
-Admins open **Monitoring → Daily Usage** to filter by date range (up to 31 days), school, or student name and download an Excel workbook. Dates use **Asia/Karachi**. The report includes students with zero recorded usage; dates before tracking began have blank time and **Not tracked** coverage. The first tracking date is marked **Partial day**.
+Admins open **Monitoring → Daily Usage** to filter by date range (up to 31 days), one or more schools, or student name and download an Excel workbook. Dates use **Asia/Karachi**. The report includes students with zero recorded usage; dates before tracking began have blank time and **Not tracked** coverage. The first tracking date is marked **Partial day**.
 
 Only student accounts accrue time. Tracking covers the tutor panel in Learning Path, the lesson chat panel, and the general tutor panel if enabled. Interaction with a visible, focused tutor panel starts counting; reading time continues for up to two minutes after the last activity. Clicking elsewhere, leaving the panel's screen, hiding the tab, or losing focus pauses counting. Browser sleep and offline gaps are excluded. Students with already-open dashboards need to refresh to load the tracker.
 
@@ -20,7 +20,7 @@ Use `scripts/import_student_schools.py` for existing students: validate unique e
 
 Normal `init_db` creates the tables and initializes the start timestamp. If startup initialization is disabled, explicitly create the two tables from `Base.metadata` and call `initialize_tracking(engine)` before reloading web workers. Install the `openpyxl` version in `requirements.txt`. No existing chat data needs to be migrated. Back up source files and the database schema/settings before deployment.
 
-The heartbeat endpoint is `/api/tutor-usage/heartbeat`. Admin-only endpoints are `/admin/daily-usage` and `/admin/daily-usage/export.xlsx`, with `start`, `end`, `school`, and `search` filters. The JSON list is paginated; the workbook exports all matching rows. Responses are not cached.
+The heartbeat endpoint is `/api/tutor-usage/heartbeat`. Admin-only endpoints are `/admin/daily-usage` and `/admin/daily-usage/export.xlsx`, with `start`, `end`, `school`, and `search` filters. Repeat `school` to include several schools (for example `?school=A&school=B`); omit it for all schools. The JSON list is paginated; the workbook exports all matching rows. Responses are not cached.
 
 ## Verification
 

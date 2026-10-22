@@ -11,9 +11,47 @@
     if (!start.value) start.value = today();
     if (!end.value) end.value = start.value;
     start.max = end.max = today();
-    return new URLSearchParams({ start: start.value, end: end.value,
-      school: document.getElementById('usage-school').value, search: document.getElementById('usage-search').value.trim() });
+    const query = new URLSearchParams({ start: start.value, end: end.value, search: document.getElementById('usage-search').value.trim() });
+    selectedSchools().forEach(school => query.append('school', school));
+    return query;
   }
+  function schoolBoxes() { return Array.from(document.querySelectorAll('#usage-school-options input')); }
+  function selectedSchools() { return schoolBoxes().filter(box => box.checked).map(box => box.value); }
+  function updateSchoolLabel() {
+    const chosen = selectedSchools();
+    document.getElementById('usage-school-all').checked = !chosen.length;
+    document.getElementById('usage-school-label').textContent = !chosen.length ? 'All schools'
+      : chosen.length === 1 ? chosen[0] : chosen.length + ' schools selected';
+    document.getElementById('usage-school-toggle').title = chosen.join(', ');
+  }
+  function setSchoolMenu(open) {
+    document.getElementById('usage-school-menu').hidden = !open;
+    document.getElementById('usage-school-toggle').setAttribute('aria-expanded', String(open));
+  }
+  function addSchoolOptions(schools) {
+    const list = document.getElementById('usage-school-options');
+    schools.forEach(school => {
+      const label = document.createElement('label'), box = document.createElement('input');
+      label.className = 'usage-multi-opt';
+      box.type = 'checkbox'; box.value = school;
+      label.append(box, document.createTextNode(school));
+      list.appendChild(label);
+    });
+  }
+  document.getElementById('usage-school-toggle').addEventListener('click', () =>
+    setSchoolMenu(document.getElementById('usage-school-menu').hidden));
+  document.getElementById('usage-school-menu').addEventListener('change', event => {
+    if (event.target.id === 'usage-school-all') schoolBoxes().forEach(box => { box.checked = false; });
+    updateSchoolLabel();
+  });
+  document.addEventListener('click', event => {
+    if (!document.getElementById('usage-school').contains(event.target)) setSchoolMenu(false);
+  });
+  document.getElementById('usage-school').addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !document.getElementById('usage-school-menu').hidden) {
+      setSchoolMenu(false); document.getElementById('usage-school-toggle').focus();
+    }
+  });
   function duration(seconds) {
     if (seconds === null) return 'Not tracked';
     return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map(n => String(n).padStart(2, '0')).join(':');
@@ -31,8 +69,7 @@
       if (requestSequence !== sequence) return;
       if (!response.ok || !data.success) throw new Error(data.error || 'Unable to load daily usage.');
       if (!schoolsLoaded) {
-        const select = document.getElementById('usage-school');
-        data.schools.forEach(school => { const option = document.createElement('option'); option.value = option.textContent = school; select.appendChild(option); });
+        addSchoolOptions(data.schools);
         schoolsLoaded = true;
       }
       document.getElementById('usage-summary').textContent = data.active_students + ' active students · ' + duration(data.total_active_seconds) + ' total tutor time · ' + data.student_count + ' students';
@@ -41,7 +78,7 @@
         : 'Tracking has not started yet.';
       document.getElementById('usage-tbody').innerHTML = data.rows.length ? data.rows.map(row =>
         '<tr><td>' + adEsc(row.date) + '</td><td>' + adEsc(row.student_name) + '</td><td>' + adEsc(row.school_name) + '</td><td>' + duration(row.active_seconds) + '</td><td>' + adEsc(row.coverage) + '</td></tr>'
-      ).join('') : adEmptyRow(5, 'No students found', 'Try another school or date range.');
+      ).join('') : adEmptyRow(5, 'No students found', 'Try other schools or another date range.');
       renderPagination('usage-pagination', data, window.loadDailyUsage);
     } catch (error) {
       if (requestSequence !== sequence) return;

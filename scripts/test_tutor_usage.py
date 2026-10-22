@@ -132,6 +132,23 @@ def test_report_has_zero_users_coverage_filters_and_no_chat_fields(db):
     assert service['daily_report'](db, {'search':'%'}, NOW)['total'] == 0
 
 
+def test_report_filters_multiple_schools(db):
+    from werkzeug.datastructures import MultiDict
+    db.add(models.User(id=4, username='user4', full_name='Student 4', useremail='user4@example.test', role='student',
+                       password='unused', class_standard='9', medium='English', groq_api_key='',
+                       school_name='School C', created_at=NOW-timedelta(days=90)))
+    db.commit()
+    names = lambda report: sorted(r['school_name'] for r in report['rows'])
+    both = service['daily_report'](db, MultiDict([('school', 'School A'), ('school', ' School B '), ('school', '')]), NOW)
+    assert names(both) == ['School A', 'School B'] and both['selected_schools'] == ['School A', 'School B']
+    assert names(service['daily_report'](db, {'school': ['School A', 'School C']}, NOW)) == ['School A', 'School C']
+    assert names(service['daily_report'](db, MultiDict([('school', '')]), NOW)) == ['School A', 'School B', 'School C']
+    info = load_workbook(service['build_workbook'](both))['Report Info']
+    assert ['School A, School B'] == [r[1] for r in info.iter_rows(values_only=True) if r[0] == 'Schools']
+    with pytest.raises(ValueError):
+        service['daily_report'](db, {'school': [f'S{i}' for i in range(101)]}, NOW)
+
+
 @pytest.mark.parametrize('params', [dict(start='bad'), dict(start='2026-10-23'), dict(start='2026-09-01',end='2026-10-22'), dict(start='2026-10-22',end='2026-10-21')])
 def test_date_validation(db, params):
     with pytest.raises(ValueError):

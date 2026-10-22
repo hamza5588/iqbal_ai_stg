@@ -92,15 +92,26 @@ def parse_window(params, now=None):
     return start, end
 
 
+def selected_schools(params):
+    """Repeated `school` params (request.args) or a single value/list (plain dict)."""
+    values = params.getlist('school') if hasattr(params, 'getlist') else params.get('school')
+    if values is None or isinstance(values, str):
+        values = [values]
+    names = sorted({(v or '').strip() for v in values} - {''})
+    if len(names) > 100:
+        raise ValueError('Select 100 schools or fewer.')
+    return names
+
+
 def daily_report(db, params, now=None):
     start, end = parse_window(params, now)
     setting = db.query(SystemSettings).filter(SystemSettings.key == START_KEY).first()
     started = datetime.fromisoformat(setting.value) if setting else None
     start_day = started.replace(tzinfo=timezone.utc).astimezone(REPORT_ZONE).date() if started else None
     query = db.query(User).filter(User.role == 'student')
-    school = (params.get('school') or '').strip()
-    if school:
-        query = query.filter(User.school_name == school)
+    schools_selected = selected_schools(params)
+    if schools_selected:
+        query = query.filter(User.school_name.in_(schools_selected))
     search = (params.get('search') or '').strip()
     if len(search) > 255:
         raise ValueError('Search must be 255 characters or fewer.')
@@ -134,7 +145,7 @@ def daily_report(db, params, now=None):
     schools = [name for (name,) in db.query(User.school_name).filter(User.role == 'student', User.school_name.isnot(None), User.school_name != '').distinct().order_by(User.school_name)]
     return {'rows': rows, 'start': start.isoformat(), 'end': end.isoformat(), 'timezone': 'Asia/Karachi',
             'tracking_started_at': started.isoformat() + 'Z' if started else None,
-            'schools': schools, 'total': len(rows), 'student_count': len(ids),
+            'schools': schools, 'selected_schools': schools_selected, 'total': len(rows), 'student_count': len(ids),
             'active_students': len(active_ids), 'total_active_seconds': total_ms // 1000}
 
 
@@ -163,6 +174,7 @@ def build_workbook(report):
         cell.fill = PatternFill('solid', fgColor='1D4ED8')
     info = workbook.create_sheet('Report Info')
     for key, value in [('Timezone', report['timezone']), ('Start date', report['start']), ('End date', report['end']),
+                       ('Schools', ', '.join(report.get('selected_schools') or []) or 'All schools'),
                        ('Tracking started (UTC)', report['tracking_started_at'] or 'Not started'),
                        ('Measurement', 'Visible, focused tutor panel after interaction; pauses after 2 minutes idle.'),
                        ('Coverage', 'The first tracking day is partial. Earlier dates are not tracked.'),

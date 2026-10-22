@@ -6,7 +6,13 @@
     <form id="usage-filters" class="ad-card usage-filters" onsubmit="event.preventDefault(); loadDailyUsage(1)">
         <label class="ad-field">From<input type="date" id="usage-start" required></label>
         <label class="ad-field">To<input type="date" id="usage-end" required></label>
-        <label class="ad-field">School<select id="usage-school"><option value="">All schools</option></select></label>
+        <div class="ad-field usage-schools" id="usage-school"><span id="usage-school-heading">School</span>
+            <button type="button" id="usage-school-toggle" class="usage-multi" aria-haspopup="true" aria-expanded="false" aria-controls="usage-school-menu" aria-labelledby="usage-school-heading usage-school-label"><span id="usage-school-label">All schools</span><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+            <div id="usage-school-menu" class="usage-multi-menu" role="group" aria-labelledby="usage-school-heading" hidden>
+                <label class="usage-multi-opt usage-multi-all"><input type="checkbox" id="usage-school-all" checked>All schools</label>
+                <div id="usage-school-options"></div>
+            </div>
+        </div>
         <label class="ad-field">Student<input type="text" id="usage-search" maxlength="255" placeholder="Search student name"></label>
         <button type="submit" class="ad-btn ad-btn-outline">Apply filters</button>
     </form>
