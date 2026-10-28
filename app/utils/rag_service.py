@@ -5355,14 +5355,16 @@ RAG_REPLY_FORMATTING_INSTRUCTIONS = (
 # These are source-authority rules, not presentation preferences, so a stale admin
 # template must not be able to remove them accidentally.
 RAG_DOCUMENT_GROUNDING_INSTRUCTIONS = (
-    "Document evidence and applicability rules: For a question that names a year, version, edition, "
-    "effective date, jurisdiction, section, or schedule, use evidence explicitly applicable to that requested "
-    "scope. Treat amended, substituted, omitted, repealed, current, and historical provisions as separate "
-    "versions; never merge their rates or conditions. For every calculation, identify document evidence for "
-    "each material rate, threshold, base amount, exception, surcharge, and other requested component before "
-    "calculating. If retrieved passages conflict, belong to a different scope, or omit a required component, "
-    "state exactly what is missing or ambiguous and do not provide a guessed definitive calculation. Cite only "
-    "the evidence actually used."
+    "<document_grounding_policy>\n"
+    "- Evidence authority: For claims about the document, use only retrieved evidence; do not fill gaps from memory.\n"
+    "- Claim fit: Use evidence that directly entails each material claim and matches its named subject or entity, "
+    "event, scope, date, version or status, units, conditions, exceptions, definitions, negation, and source "
+    "certainty/modality. Never turn a general rule or example into an entity-specific fact, or may/can into must/is.\n"
+    "- Synthesis: Do not merge incompatible passages. If evidence conflicts, distinguish the sources and scopes.\n"
+    "- Completeness and citations: Cite each material claim using only its supporting evidence's provided citation. "
+    "Claim completeness only when evidence establishes it. If required evidence is missing, ambiguous, conflicting, "
+    "or inapplicable, state what cannot be established and limit the answer; never guess.\n"
+    "</document_grounding_policy>"
 )
 
 # Always appended after the admin body. Production admin prompts can omit tools that exist in
@@ -5763,19 +5765,19 @@ def _chat_build_system_message(
                 page_info=page_info,
                 thread_id=thread_id_str or "",
             )
-            # Admin template first; then formatting hint; then code tool catalog (not overridable
-            # by an incomplete admin prompt); then teacher customizations.
+            # Teacher preferences are intentionally followed by the immutable product tool and
+            # grounding contracts so customization cannot weaken source authority.
             base_content = (
                 f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
-                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}\n\n"
+                f"---\n\nTeacher additional instructions:\n{custom_resolved}\n\n"
                 f"---\n\n{RAG_CODE_TOOL_CATALOG}\n\n"
-                f"---\n\nTeacher additional instructions:\n{custom_resolved}"
+                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}"
             )
         else:
             base_content = (
                 f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
-                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}\n\n"
-                f"---\n\n{RAG_CODE_TOOL_CATALOG}"
+                f"---\n\n{RAG_CODE_TOOL_CATALOG}\n\n"
+                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}"
             )
 
         system_message = SystemMessage(content=base_content)
