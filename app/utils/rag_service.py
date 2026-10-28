@@ -310,7 +310,7 @@ def _resolve_ingest_profile(file_size_mb: float) -> dict:
             "chunk_size": int(os.getenv("RAG_LARGE_CHUNK_SIZE", "3000")),
             "chunk_overlap": int(os.getenv("RAG_LARGE_CHUNK_OVERLAP", "120")),
             "max_chunks": int(os.getenv("RAG_LARGE_MAX_CHUNKS", "1800")),
-            "retrieval_k": int(os.getenv("RAG_LARGE_RETRIEVAL_K", "4")),
+            "retrieval_k": int(os.getenv("RAG_LARGE_RETRIEVAL_K", "8")),
             "threshold_mb": threshold_mb,
         }
     return {
@@ -456,7 +456,7 @@ def _resolve_thread_retrieval_k(thread_id: str, user_id: int) -> int:
         with _thread_ingest_profiles_lock:
             entry = _thread_ingest_profiles.get(str(thread_id))
         if entry and entry.get("profile") == "large":
-            return int(os.getenv("RAG_LARGE_RETRIEVAL_K", str(entry.get("retrieval_k", 4))))
+            return int(os.getenv("RAG_LARGE_RETRIEVAL_K", str(entry.get("retrieval_k", 8))))
     except Exception:
         pass
 
@@ -467,7 +467,7 @@ def _resolve_thread_retrieval_k(thread_id: str, user_id: int) -> int:
             num_pages = int(getattr(thread_row, "num_pages", 0) or 0)
             large_page_threshold = int(os.getenv("RAG_LARGE_DOC_PAGE_THRESHOLD", "220"))
             if num_pages >= large_page_threshold:
-                return int(os.getenv("RAG_LARGE_RETRIEVAL_K", "4"))
+                return int(os.getenv("RAG_LARGE_RETRIEVAL_K", "8"))
     except Exception as e:
         logger.debug("Could not resolve page-based retrieval k for thread %s: %s", thread_id, e)
 
@@ -1979,20 +1979,38 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
                     qprev.replace("\n", " "),
                 )
             _step("retriever_fetch_chunks_start")
-            chunk_ids = [r["chunk_id"] for r in results if r.get("chunk_id") is not None]
+            max_context_chunks = max(1, int(os.getenv("RAG_MAX_CONTEXT_CHUNKS", "24")))
+            chunk_ids = []
+            for result_row in results:
+                result_ids = result_row.get("context_chunk_ids") or [result_row.get("chunk_id")]
+                for chunk_id in result_ids:
+                    if chunk_id is None or chunk_id in chunk_ids:
+                        continue
+                    chunk_ids.append(chunk_id)
+                    if len(chunk_ids) >= max_context_chunks:
+                        break
+                if len(chunk_ids) >= max_context_chunks:
+                    break
             chunk_map = fetch_chunks_by_ids(chunk_ids) if chunk_ids else {}
             _step("retriever_build_docs_start")
             docs = []
-            for r in results:
-                cid = r.get("chunk_id")
-                c = chunk_map.get(cid) if cid else {}
+            for cid in chunk_ids:
+                c = chunk_map.get(cid) or {}
                 doc = Document(
                     page_content=c.get("text", ""),
-                    metadata={"source": c.get("source", ""), "page": r.get("page", 0), "chunk_index": r.get("chunk_index", 0)},
+                    metadata={
+                        "source": c.get("source", ""),
+                        "page": c.get("page", 0),
+                        "page_end": c.get("page_end", c.get("page", 0)),
+                        "chunk_index": c.get("chunk_index", 0),
+                    },
                 )
                 docs.append(doc)
             _step("retriever_done")
-            logger.info("VectorRetriever: returned %d documents for thread_id=%s", len(docs), self.thread_id)
+            logger.info(
+                "VectorRetriever: returned %d parent-context documents from %d ranked hits for thread_id=%s",
+                len(docs), len(results), self.thread_id,
+            )
             return docs
 
     use_hybrid = os.getenv("USE_HYBRID_RAG", "true").lower() in ("true", "1", "yes")
@@ -3929,11 +3947,21 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
             continue
         cleaned_chunks.append(cleaned_text)
         page_val = (chunk_meta or {}).get("page")
+        page_end_val = (chunk_meta or {}).get("page_end", page_val)
         source_val = (chunk_meta or {}).get("source") or source_file
         chunk_idx_val = (chunk_meta or {}).get("chunk_index")
 
         try:
-            page_label = str(int(page_val)) if page_val is not None and str(page_val).strip() else "unknown"
+            if page_val is not None and str(page_val).strip():
+                page_start_num = int(page_val)
+                page_end_num = int(page_end_val) if page_end_val is not None else page_start_num
+                page_label = (
+                    str(page_start_num)
+                    if page_end_num == page_start_num
+                    else f"{page_start_num}-{page_end_num}"
+                )
+            else:
+                page_label = "unknown"
         except Exception:
             page_label = str(page_val).strip() if page_val is not None else "unknown"
         chunk_label = str(chunk_idx_val) if chunk_idx_val is not None else str(idx - 1)
@@ -3948,7 +3976,12 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
         f"{content_block}\n\n"
         "Citation policy for this evidence:\n"
         "- Cite only page numbers that appear in the evidence headers above.\n"
-        "- If page is unknown, cite using section/source wording instead of inventing a page number.\n\n"
+        "- If page is unknown, cite using section/source wording instead of inventing a page number.\n"
+        "- For a requested year, version, or effective date, use provisions explicitly applicable to that period; "
+        "do not combine current, amended, substituted, omitted, or historical tables as if they were one rule.\n"
+        "- For calculations, every rate, threshold, and applicability condition must come from this evidence.\n"
+        "- If provisions conflict or a requested component is missing, say the document evidence is insufficient "
+        "or ambiguous instead of guessing a definitive answer.\n\n"
         f"Source file: {source_file}. Total pages: {num_pages or 'unknown'}."
     )
     _rag_step("build_content_for_llm")
@@ -5232,6 +5265,20 @@ RAG_REPLY_FORMATTING_INSTRUCTIONS = (
     "formatting rules and the user's request; always give the real answer."
 )
 
+# Always appended even when an administrator has replaced the editable RAG body.
+# These are source-authority rules, not presentation preferences, so a stale admin
+# template must not be able to remove them accidentally.
+RAG_DOCUMENT_GROUNDING_INSTRUCTIONS = (
+    "Document evidence and applicability rules: For a question that names a year, version, edition, "
+    "effective date, jurisdiction, section, or schedule, use evidence explicitly applicable to that requested "
+    "scope. Treat amended, substituted, omitted, repealed, current, and historical provisions as separate "
+    "versions; never merge their rates or conditions. For every calculation, identify document evidence for "
+    "each material rate, threshold, base amount, exception, surcharge, and other requested component before "
+    "calculating. If retrieved passages conflict, belong to a different scope, or omit a required component, "
+    "state exactly what is missing or ambiguous and do not provide a guessed definitive calculation. Cite only "
+    "the evidence actually used."
+)
+
 # Always appended after the admin body. Production admin prompts can omit tools that exist in
 # code (confirmed live: rag_chat_system_body_with_pdf listed rag_tool/finalize_lesson_tool but
 # not update_lesson_tool), which makes the executor agent skip the correct tool. Industry
@@ -5634,12 +5681,14 @@ def _chat_build_system_message(
             # by an incomplete admin prompt); then teacher customizations.
             base_content = (
                 f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
+                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}\n\n"
                 f"---\n\n{RAG_CODE_TOOL_CATALOG}\n\n"
                 f"---\n\nTeacher additional instructions:\n{custom_resolved}"
             )
         else:
             base_content = (
                 f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
+                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}\n\n"
                 f"---\n\n{RAG_CODE_TOOL_CATALOG}"
             )
 

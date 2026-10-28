@@ -306,6 +306,24 @@ def ensure_rag_chunks_page_end_column(conn, inspector):
         logger.info("Column rag_chunks.page_end already exists, skipping.")
 
 
+def ensure_rag_chunks_full_text_index(conn, inspector):
+    """Create the expression GIN index used by hybrid RAG sparse retrieval."""
+    if not inspector.has_table("rag_chunks"):
+        logger.info("Table rag_chunks does not exist, skipping full-text index.")
+        return
+    if conn.engine.dialect.name != "postgresql":
+        logger.info("Skipping rag_chunks full-text GIN index on non-Postgres dialect.")
+        return
+    conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS idx_rag_chunks_text_fts "
+            "ON rag_chunks USING GIN "
+            "(to_tsvector('simple', coalesce(text, '')))"
+        )
+    )
+    logger.info("Ensured idx_rag_chunks_text_fts for indexed sparse retrieval.")
+
+
 def ensure_student_topic_scores_sample_size_column(conn, inspector):
     """Add sample_size column to student_topic_scores if it doesn't exist.
 
@@ -416,6 +434,8 @@ def main():
         ensure_rag_threads_ingest_warning_columns(conn, inspector)
         inspector = inspect(engine)
         ensure_rag_chunks_page_end_column(conn, inspector)
+        inspector = inspect(engine)
+        ensure_rag_chunks_full_text_index(conn, inspector)
         inspector = inspect(engine)
         ensure_student_topic_scores_sample_size_column(conn, inspector)
         inspector = inspect(engine)
