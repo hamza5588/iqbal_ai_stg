@@ -18,6 +18,7 @@ def test_query_decomposition_is_generic_and_keeps_independent_requirements():
     assert variants[0].startswith("Calculate the result")
     assert any("surcharge if any" in item for item in variants)
     assert any("exact section" in item for item in variants)
+    assert "2026" in variants
     assert len(variants) <= 8
 
     focused = rag_vectorstore._decompose_retrieval_queries(
@@ -42,14 +43,16 @@ def test_hybrid_search_uses_independent_sparse_lists_and_neighbor_expansion(monk
         return [{"chunk_id": 10, "page": 530, "chunk_index": 614, "score": 0.8}]
 
     def fake_neighbors(candidates, thread_id, user_id, radius, limit):
-        assert (thread_id, user_id, radius) == ("thread-legal", 7, 8)
+        assert thread_id == "thread-legal"
+        assert user_id == 7
+        assert radius in (8, 12)
         if not any(row["chunk_id"] == 10 for row in candidates):
             return []
         return [
             {"chunk_id": 90, "page": 527, "chunk_index": 611, "score": 0.0}
         ]
 
-    def fake_rerank(query, candidates, limit):
+    def fake_rerank(query, candidates, limit, **kwargs):
         by_id = {row["chunk_id"]: row for row in candidates}
         assert 90 in by_id
         assert 53 in by_id
@@ -156,6 +159,68 @@ def test_reranker_attaches_parent_context_ids(monkeypatch):
 
     assert result[0]["chunk_id"] == 10
     assert result[0]["context_chunk_ids"] == [10, 11, 12]
+
+
+def test_reranker_scores_query_focused_parent_context(monkeypatch):
+    candidates = [
+        {
+            "chunk_id": 20,
+            "document_id": 4,
+            "page": 20,
+            "chunk_index": 108,
+            "score": 0.5,
+        }
+    ]
+    observed_pairs = []
+
+    class FakeModel:
+        def predict(self, pairs, batch_size, show_progress_bar):
+            observed_pairs.extend(pairs)
+            return [1.0 for _ in pairs]
+
+    chunks = {
+        12: {
+            "text": "authoritative version table and requested threshold",
+            "document_id": 4,
+            "page": 12,
+            "chunk_index": 100,
+        },
+        20: {
+            "text": "continuation heading",
+            "document_id": 4,
+            "page": 20,
+            "chunk_index": 108,
+        },
+    }
+    monkeypatch.setattr(
+        rag_vectorstore,
+        "fetch_chunks_by_ids",
+        lambda ids: {chunk_id: chunks[chunk_id] for chunk_id in ids if chunk_id in chunks},
+    )
+    monkeypatch.setattr(
+        rag_vectorstore,
+        "expand_neighbor_chunks",
+        lambda *args, **kwargs: [
+            {
+                "chunk_id": 12,
+                "document_id": 4,
+                "page": 12,
+                "chunk_index": 100,
+                "score": 0.0,
+            }
+        ],
+    )
+    monkeypatch.setattr(rag_vectorstore, "_get_cross_encoder", lambda: FakeModel())
+
+    rag_vectorstore.rerank_candidates(
+        "requested version threshold",
+        candidates,
+        1,
+        thread_id="thread-parent",
+        user_id=7,
+    )
+
+    assert any("authoritative version table" in passage for _, passage in observed_pairs)
 
 
 def test_rag_prompt_requires_version_scoped_evidence_and_fail_closed_calculations():
