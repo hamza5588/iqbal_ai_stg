@@ -32,7 +32,7 @@ Design source: `updated_new_ui/Student Dashboard files/` (7 static HTML mockups,
 
 **Diagnostic** (`lms-student.js`, modal `#lmsDiagnosticModal`) — `GET /api/lms/diagnostics/default` → resume in-progress / show previous results / time-over / orientation → `POST /api/lms/quizzes/:id/start {retake}` → `GET /attempts/:id/questions` → answers `POST /attempts/:id/answer` (localStorage backup + retry queue) → timer (auto-submit at 0) → `POST /attempts/:id/submit {time_expired}` → results (score, N of M, topic table, weak/strong tiles) → Start Learning Chat / Start challenge / Retake with new questions / Continue. Tools: Explain this question (`POST /attempts/:id/questions/:qid/clarify`), Workspace (notes + canvas), Clear answer, Copy, A-/A+, question map.
 
-**Learning Chat** (`lms-deficiency-chat.js`) — `POST /api/lms/deficiency/sessions {force_new, mode:practice|enrichment}` → answer `…/answer`, advance `…/advance`, pause `…/pause`, tutor `…/explain {message}` (auto-retry, reconnect resend), suggested prompts, Need more help, Copy, A-/A+, sound toggle, streak celebration.
+**Learning Chat** (`lms-deficiency-chat.js`) — `POST /api/lms/deficiency/sessions {force_new, mode:practice|enrichment}` → answer `…/answer`, advance `…/advance`, pause `…/pause`, tutor `…/explain {message}` (auto-retry, reconnect resend), suggested prompts, Need more help, Copy, A-/A+, sound toggle, streak celebration. Practice questions are generated only from matching teacher target-PDF text; if that text cannot support a verified question, the API reports a PDF coverage error. Enrichment remains a separate AI challenge flow.
 
 **Guided practice** (`lms-panels.js`) — `POST /practice/sessions {topic_id}`, `GET …/:id`, `POST …/answer`, `POST …/hint`.
 

@@ -2290,6 +2290,8 @@ def get_deficiency_chat(session_id: int):
         return json_success(deficiency_chat_service.get_session(session_id, _current_user_id()))
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
 
 
 @bp.route("/deficiency/sessions/<int:session_id>/answer", methods=["POST"])

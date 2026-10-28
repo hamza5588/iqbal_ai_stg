@@ -2,9 +2,8 @@
    dashboard `weak_topics`). Start Learning Path opens Learning Chat (lms-deficiency-chat.js); Guided practice
    opens the per-topic practice panel (lms-panels.js). Path steps keep the old overview's actions. */
 (function () {
-  // Guided practice is hidden for now: its topic picker served a leftover QA question
-  // ("3+2=?" with no correct option) to every Algebra student.
-  var GUIDED_PRACTICE_ENABLED = false;
+  // The practice service now skips questions with disproved answer keys.
+  var GUIDED_PRACTICE_ENABLED = true;
   var state = { open: {} };
   var STATUS_LABEL = {
     mastered: 'Mastered',

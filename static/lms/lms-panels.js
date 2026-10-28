@@ -623,9 +623,11 @@
   /* ── Guided practice ── */
   ensureModal('lmsPracticeModal', 'Guided Practice', 'lms-modal-md');
   var practiceSession = null;
+  var practiceTopicId = null;
 
   window.openLmsPracticePanel = async function (topicId) {
     if (lmsBlockUntilDiagnostic()) return;
+    practiceTopicId = topicId || null;
     lmsOpenModal('lmsPracticeModal');
     var body = document.getElementById('lmsPracticeModalBody');
     body.innerHTML = '<div class="lms-spinner"></div>';
@@ -638,13 +640,15 @@
       if (practiceSession.resumed) {
         lmsShowToast('Resuming your practice session', 'success');
       }
-      renderPracticeQuestion();
+      await renderPracticeQuestion();
     } catch (err) {
-      body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
+      body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>' +
+        '<button type="button" class="lms-btn lms-btn-primary" onclick="nextLmsPracticeQuestion()">Try again</button>';
     }
   };
 
   window.startLmsPractice = function (topicId) { openLmsPracticePanel(topicId); };
+  window.nextLmsPracticeQuestion = function () { openLmsPracticePanel(practiceTopicId); };
 
   async function renderPracticeQuestion() {
     var body = document.getElementById('lmsPracticeModalBody');
@@ -665,12 +669,14 @@
       '<h3 class="lms-quiz-stem">' + fmtQuestion(q) + '</h3>' +
       opts +
       '<div id="lmsPracticeFeedback" style="margin-top:12px;"></div>' +
-      '<button type="button" class="lms-btn lms-btn-ghost" style="margin-top:10px;" onclick="requestLmsPracticeHint()">Need a hint?</button>';
+      '<button type="button" id="lmsPracticeHintBtn" class="lms-btn lms-btn-ghost" style="margin-top:10px;" onclick="requestLmsPracticeHint()">Need a hint?</button>';
     typeset(body);
   }
 
   window.submitLmsPracticeAnswer = async function (optIdx) {
     var fb = document.getElementById('lmsPracticeFeedback');
+    var optionButtons = document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option');
+    optionButtons.forEach(function (btn) { btn.disabled = true; });
     if (fb) fb.innerHTML = '<div class="lms-spinner" style="width:20px;height:20px"></div>';
     try {
       var result = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id + '/answer', {
@@ -680,14 +686,18 @@
       });
       var optBtn = document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option')[optIdx];
       if (result.correct) {
+        document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option, #lmsPracticeHintBtn').forEach(function (btn) { btn.disabled = true; });
         if (optBtn && typeof lmsFeedback !== 'undefined') lmsFeedback.markOption(optBtn, 'correct');
         var cheer = typeof lmsFeedback !== 'undefined' ? lmsFeedback.praise() : 'Correct!';
         if (typeof lmsFeedback !== 'undefined') lmsFeedback.celebrate(cheer);
         if (fb) {
-          fb.innerHTML = '<div class="lms-card lms-card-ok"><strong>' + escapeHtml(cheer) + '</strong> ' + fmtText(result.feedback || '') + '</div>';
+          fb.innerHTML = '<div class="lms-card lms-card-ok"><strong>' + escapeHtml(cheer) + '</strong> ' + fmtText(result.explanation || '') + '</div>' +
+            '<button type="button" class="lms-btn lms-btn-primary" style="margin-top:12px;" onclick="nextLmsPracticeQuestion()">' +
+            (result.next_question ? 'Next question' : 'Practice more with new questions') + '</button>';
           typeset(fb);
         }
       } else {
+        optionButtons.forEach(function (btn) { btn.disabled = false; });
         if (typeof lmsFeedback !== 'undefined') {
           lmsFeedback.cue('error');
           if (optBtn) lmsFeedback.markOption(optBtn, 'wrong');
@@ -697,12 +707,8 @@
           typeset(fb);
         }
       }
-      if (result.correct && result.next_question) {
-        setTimeout(renderPracticeQuestion, 1200);
-      } else if (result.correct && result.completed) {
-        setTimeout(renderPracticeQuestion, 1200);
-      }
     } catch (err) {
+      optionButtons.forEach(function (btn) { btn.disabled = false; });
       if (fb) fb.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }
   };

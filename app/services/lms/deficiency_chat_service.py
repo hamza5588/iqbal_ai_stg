@@ -62,8 +62,13 @@ def _question_count_for_score(score_percent: float) -> int:
 # Hard ceiling when a topic needs more than the score rule gives (see _note_outstanding_misses).
 MAX_QUESTIONS_TO_CLEAR_TOPIC = 20
 
-# Extra grade-fit generations when the answer-key check drops questions from a topic.
+# Extra attempts using the same PDF text when answer-key checks drop questions.
 _TOP_UP_ROUNDS = 2
+_PDF_ONLY_POLICY = "pdf_only_v1"
+_PDF_COVERAGE_ERROR = (
+    "No verified questions are available from the target PDF for this topic. "
+    "Ask your admin to check that the target PDF covers this topic."
+)
 
 
 def _note_outstanding_misses(student_id: int, weak: List[dict]) -> List[dict]:
@@ -322,40 +327,6 @@ def _prior_question_texts_by_topic(student_id: int) -> Dict[int, List[str]]:
     return by_topic
 
 
-def _grade_appropriate_fallback(
-    topic_id: int, topic_name: str, score_percent: float, ladder: List[str],
-    grade_level: Optional[str], exclude_question_texts: Optional[List[str]] = None,
-) -> List[dict]:
-    """When the target PDF has no usable section for a weak area, generate
-    grade-appropriate practice questions for the skill instead (DIL: practice
-    must still match the student's grade and the actual skill)."""
-    try:
-        from app.services.quiz.remediation_generator import generate_remediation_mcqs
-
-        mcqs = generate_remediation_mcqs(
-            topic_name=topic_name,
-            topic_description=topic_name,
-            count=len(ladder),
-            score_percent=score_percent,
-            difficulty=ladder[len(ladder) // 2],
-            purpose="practice",
-            grade_level=grade_level,
-            exclude_question_texts=exclude_question_texts or [],
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Grade-fit fallback gen failed for %s: %s", topic_name, exc)
-        return []
-
-    items: List[dict] = []
-    for i, mcq in enumerate(mcqs):
-        diff = ladder[i] if i < len(ladder) else ladder[-1]
-        item = _mcq_to_queue_item(mcq, topic_id, topic_name, topic_name, "", diff)
-        if item:
-            item["source"] = "grade_fit_ai"
-            items.append(item)
-    return items
-
-
 def _build_question_queue(
     weak_topics: List[dict],
     target_thread_ids: List[str],
@@ -363,9 +334,7 @@ def _build_question_queue(
     grade_level: Optional[str] = None,
     used_question_texts_by_topic: Optional[Dict[int, List[str]]] = None,
 ) -> List[dict]:
-    """Generate Learning Chat MCQs, difficulty-laddered per weak area and
-    pitched to the student's grade. Prefers the teacher target PDF; falls
-    back to AI generation for the skill when the PDF has no usable section."""
+    """Generate verified Learning Chat MCQs only from relevant target-PDF text."""
     from app.services.quiz.mcq_answer_check import verify_mcq_keys
 
     queue: List[dict] = []
@@ -386,40 +355,28 @@ def _build_question_queue(
         pdf_section, thread_id, relevance = _match_target_section(topic_name, target_thread_ids)
 
         section_text = ""
+        lookups = []
         if relevance > 0:
-            section_text = get_section_text(thread_id, rag_owner_id, pdf_section)
-            if not section_text.strip():
-                for alt_thread in target_thread_ids:
-                    if alt_thread == thread_id:
-                        continue
-                    section_text = get_section_text(alt_thread, rag_owner_id, pdf_section)
-                    if section_text.strip():
-                        thread_id = alt_thread
-                        break
-        else:
-            logger.info(
-                "Weak area %s has no relevant target-PDF section - generating "
-                "grade-appropriate questions for the skill", topic_name,
-            )
-
-        topic_items: List[dict] = []
-        if section_text.strip():
+            lookups.extend((tid, pdf_section) for tid in [thread_id] + target_thread_ids if tid)
+        # Heading extraction may be incomplete, so also look for the weak-topic
+        # label in the assigned PDFs. Never substitute unrelated first chunks.
+        lookups.extend((tid, topic_name) for tid in target_thread_ids if tid)
+        for candidate_thread, heading in dict.fromkeys(lookups):
             try:
-                mcqs = generate_mcqs_from_content(
-                    section_text, pdf_section, len(ladder),
-                    grade_level=grade_level, difficulty_ladder=ladder,
-                    exclude_question_texts=exclude_texts,
+                section_text = get_section_text(
+                    candidate_thread, rag_owner_id, heading, require_topic_match=True
                 )
-                for i, mcq in enumerate(mcqs):
-                    diff = ladder[i] if i < len(ladder) else ladder[-1]
-                    item = _mcq_to_queue_item(
-                        mcq, topic_id, topic_name, pdf_section, thread_id, diff
-                    )
-                    key = _question_key((item or {}).get("question_text") or "")
-                    if item and key and key not in exclude_keys:
-                        topic_items.append(item)
-            except Exception as exc:
-                logger.warning("Target PDF MCQ gen failed for %s: %s", pdf_section, exc)
+            except Exception as exc:  # noqa: BLE001 - no ungrounded fallback on RAG failure
+                logger.warning("Could not read target-PDF text for %s: %s", heading, exc)
+                continue
+            if section_text.strip():
+                thread_id = candidate_thread
+                pdf_section = heading
+                break
+
+        if not section_text.strip():
+            logger.warning("No matching target-PDF text for weak area %s", topic_name)
+            continue
 
         def _fresh(items: List[dict]) -> List[dict]:
             out = []
@@ -430,26 +387,36 @@ def _build_question_queue(
                     out.append(item)
             return out
 
-        # Checked per topic so a dropped question (duplicate / unconfirmed answer key) can
-        # be replaced: the topic must end up with the number its score calls for. The
-        # check is fail-closed, so allow a second top-up before settling for fewer.
-        kept = verify_mcq_keys(_fresh(topic_items))
-        for _round in range(_TOP_UP_ROUNDS):
+        # Fill short batches from this same PDF section only. A short verified
+        # queue is safer than inventing questions to meet the score target.
+        kept: List[dict] = []
+        attempted_texts: List[str] = []
+        max_rounds = (len(ladder) + 9) // 10 + _TOP_UP_ROUNDS
+        for _round in range(max_rounds):
             if len(kept) >= len(ladder):
                 break
-            logger.info(
-                "%s: %d of %d questions so far - topping up with grade-fit AI",
-                topic_name, len(kept), len(ladder),
-            )
-            extra = _grade_appropriate_fallback(
-                topic_id,
-                topic_name,
-                score,
-                ladder[len(kept):],
-                grade_level,
-                exclude_texts + [q.get("question_text") or "" for q in kept],
-            )
-            kept = kept + verify_mcq_keys(_fresh(extra))
+            requested = ladder[len(kept): len(kept) + 10]
+            try:
+                mcqs = generate_mcqs_from_content(
+                    section_text, pdf_section, len(requested),
+                    grade_level=grade_level, difficulty_ladder=requested,
+                    exclude_question_texts=exclude_texts + attempted_texts,
+                    strict_grounding=True,
+                )
+            except Exception as exc:  # noqa: BLE001 - no topic-only fallback
+                logger.warning("Target PDF MCQ gen failed for %s: %s", pdf_section, exc)
+                break
+            if not mcqs:
+                break
+            topic_items = []
+            for i, mcq in enumerate(mcqs):
+                diff = requested[i] if i < len(requested) else requested[-1]
+                item = _mcq_to_queue_item(mcq, topic_id, topic_name, pdf_section, thread_id, diff)
+                if item:
+                    item["generation_policy"] = _PDF_ONLY_POLICY
+                    attempted_texts.append(item.get("question_text") or "")
+                    topic_items.append(item)
+            kept.extend(verify_mcq_keys(_fresh(topic_items)))
         if len(kept) < len(ladder):
             logger.warning("%s: only %d of %d verified questions", topic_name, len(kept), len(ladder))
         queue.extend(kept[: len(ladder)])
@@ -534,6 +501,45 @@ def _reorder_pending(session: DeficiencyChatSession, questions: List[dict]) -> N
     questions[idx:] = tail
 
 
+def _drop_non_pdf_pending(
+    session: DeficiencyChatSession, target_thread_ids: Optional[List[str]] = None
+) -> bool:
+    """Remove old questions that lack the current PDF-only generation policy."""
+    if not session.rag_thread_id or session.status not in ("active", "paused"):
+        return False  # enrichment has no target PDF and keeps its own AI queue
+    if target_thread_ids is None:
+        try:
+            target_thread_ids, _, _ = _resolve_all_target_threads(session.student_id)
+        except Exception as exc:  # noqa: BLE001 - do not serve an unverified old queue
+            logger.warning("Could not verify target PDFs for session %s: %s", session.id, exc)
+            raise LMSValidationError("Could not verify the target PDF. Please try again.") from None
+    allowed = set(target_thread_ids)
+    questions = _load_questions(session)
+    idx = session.current_index or 0
+    pending = questions[idx:]
+    keep = [
+        q for q in pending
+        if q.get("source") == "target_pdf"
+        and q.get("generation_policy") == _PDF_ONLY_POLICY
+        and q.get("rag_thread_id") in allowed
+    ]
+    if len(keep) == len(pending):
+        return False
+    logger.warning(
+        "Learning Chat session %s: removed %d pending question(s) without current PDF provenance",
+        session.id, len(pending) - len(keep),
+    )
+    _save_questions(session, questions[:idx] + keep)
+    current_removed = bool(pending) and (not keep or pending[0] is not keep[0])
+    if current_removed:
+        _reset_tutor_state(session)
+    if not keep:
+        # Do not award mastery or mark the path done for discarded questions.
+        session.status = "completed"
+    get_db().commit()
+    return True
+
+
 def _drop_disproved_pending(session: DeficiencyChatSession) -> None:
     """Remove still-to-come questions whose answer key the maths check disproves.
 
@@ -570,6 +576,8 @@ def _drop_disproved_pending(session: DeficiencyChatSession) -> None:
     if not keep_tail:  # nothing valid left to do
         session.status = "completed"
         db.commit()
+        if session.rag_thread_id:
+            raise LMSValidationError(_PDF_COVERAGE_ERROR)
         from app.services.lms import performance_service
 
         performance_service.update_topic_scores_from_deficiency_session(session.id)
@@ -579,11 +587,14 @@ def _drop_disproved_pending(session: DeficiencyChatSession) -> None:
 
 
 def _session_state(session: DeficiencyChatSession) -> dict:
+    removed = _drop_non_pdf_pending(session)
+    if removed and session.status == "completed":
+        raise LMSValidationError(_PDF_COVERAGE_ERROR)
     _drop_disproved_pending(session)
     questions = _load_questions(session)
     total = len(questions)
     current = None
-    if session.current_index < total:
+    if session.status in ("active", "paused") and session.current_index < total:
         q = _refresh_question_display(dict(questions[session.current_index]))
         q.pop("correct_option_index", None)
         q["difficulty"] = q.get("difficulty") or "medium"
@@ -617,7 +628,11 @@ def _session_state(session: DeficiencyChatSession) -> dict:
         "weak_topics": weak,
         "current_question": current,
         "mode": session_mode,
-        "has_pdf": bool(session.rag_thread_id),
+        "has_pdf": bool(
+            current and current.get("source") == "target_pdf"
+            and current.get("generation_policy") == _PDF_ONLY_POLICY
+            and current.get("rag_thread_id")
+        ),
         "pdf_label": "Teacher target content PDF",
         "tutor_assist_level": assist_level,
         "tutor_assist_label": tutor_service.get_deficiency_assist_level_label(assist_level),
@@ -809,6 +824,10 @@ def _start_topic_session(
         open_sessions = [s for s in open_sessions if s not in mine]
         mine = []
     if mine:
+        for s in mine:
+            _drop_non_pdf_pending(s, target_thread_ids)
+        mine = [s for s in mine if s.status in ("active", "paused")]
+    if mine:
         existing = mine[0]
         if existing.status == "paused":
             existing.status = "active"
@@ -831,6 +850,9 @@ def _start_topic_session(
 
     queue: List[dict] = []
     for s in open_sessions:
+        _drop_non_pdf_pending(s, target_thread_ids)
+        if s.status not in ("active", "paused"):
+            continue
         topic_qs = [x for x in _load_questions(s) if _is_topic(x)]
         if topic_qs and not any(x.get("answered") for x in topic_qs):
             # a pre-built queue may predate the fail-closed key check
@@ -910,10 +932,13 @@ def start_session(
 
     existing = None if force_new else get_active_session(student_id, diag_id)
     if existing and (enrichment or existing.rag_thread_id == target_thread_id):
-        if existing.status == "paused":
-            existing.status = "active"
-            get_db().commit()
-        return _session_state(existing)
+        if not enrichment:
+            _drop_non_pdf_pending(existing, target_thread_ids)
+        if existing.status in ("active", "paused"):
+            if existing.status == "paused":
+                existing.status = "active"
+                get_db().commit()
+            return _session_state(existing)
 
     from app.services.lms import class_service
 
@@ -1048,6 +1073,8 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         raise LMSValidationError("Not authorized")
     if session.status not in ("active", "paused"):
         raise LMSValidationError("Session is not active")
+    if _drop_non_pdf_pending(session) and session.status == "completed":
+        raise LMSValidationError(_PDF_COVERAGE_ERROR)
 
     questions = _load_questions(session)
     idx = session.current_index
@@ -1107,6 +1134,8 @@ def advance_session(session_id: int, student_id: int) -> dict:
         raise LMSValidationError("Not authorized")
     if session.status not in ("active", "paused"):
         raise LMSValidationError("Session is not active")
+    if _drop_non_pdf_pending(session) and session.status == "completed":
+        raise LMSValidationError(_PDF_COVERAGE_ERROR)
 
     questions = _load_questions(session)
     idx = session.current_index
@@ -1192,6 +1221,10 @@ def explain_with_tutor(
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
     if not session or session.student_id != student_id:
         raise LMSValidationError("Not authorized")
+    if session.status not in ("active", "paused"):
+        raise LMSValidationError("Session is not active")
+    if _drop_non_pdf_pending(session) and session.status == "completed":
+        raise LMSValidationError(_PDF_COVERAGE_ERROR)
 
     questions = _load_questions(session)
     current_q = questions[session.current_index] if session.current_index < len(questions) else None

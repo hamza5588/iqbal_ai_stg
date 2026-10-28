@@ -261,22 +261,31 @@ def test_verify_mcq_models_keeps_only_confirmed(monkeypatch):
 
 
 # ── Learning Chat: queue top-up and serve-time guard ─────────────────────────
-def test_queue_tops_up_twice_when_the_check_drops_questions(monkeypatch):
+def test_queue_tops_up_twice_from_pdf_when_the_check_drops_questions(monkeypatch):
     from app.services.lms import deficiency_chat_service as svc
 
-    counter = {"n": 0, "fallback": 0}
+    counter = {"n": 0, "pdf": 0}
 
     def item(diff):
         counter["n"] += 1
         return {"topic_id": 1, "question_text": f"question {counter['n']}", "difficulty": diff,
                 "options": _opts("a", "b", "c", "d"), "correct_option_index": 0}
 
-    def fallback(tid, name, score, ladder, grade, exclude):
-        counter["fallback"] += 1
-        return [item(d) for d in ladder]
+    monkeypatch.setattr(svc, "_match_target_section", lambda name, threads: ("S", "t1", 1.0))
+    monkeypatch.setattr(svc, "get_section_text", lambda *args, **kwargs: "Relevant PDF text")
 
-    monkeypatch.setattr(svc, "_match_target_section", lambda name, threads: ("S", "t1", 0.0))
-    monkeypatch.setattr(svc, "_grade_appropriate_fallback", fallback)
+    def from_pdf(text, section, count, **kwargs):
+        assert kwargs["strict_grounding"] is True
+        counter["pdf"] += 1
+        return list(range(count))
+
+    monkeypatch.setattr(svc, "generate_mcqs_from_content", from_pdf)
+    monkeypatch.setattr(
+        svc, "_mcq_to_queue_item",
+        lambda mcq, tid, name, section, thread, diff: {
+            **item(diff), "source": "target_pdf", "rag_thread_id": thread,
+        },
+    )
     # first call keeps nothing, later calls keep everything
     seen = {"calls": 0}
 
@@ -287,7 +296,8 @@ def test_queue_tops_up_twice_when_the_check_drops_questions(monkeypatch):
     monkeypatch.setattr("app.services.quiz.mcq_answer_check.verify_mcq_keys", verify)
     queue = svc._build_question_queue([{"topic_id": 1, "topic_name": "Algebra", "score_percent": 50}], ["t1"], 9, "9")
     assert len(queue) == 5
-    assert counter["fallback"] == 2
+    assert counter["pdf"] == 3
+    assert {q["source"] for q in queue} == {"target_pdf"}
 
 
 @pytest.fixture()

@@ -3,14 +3,16 @@ from __future__ import annotations
 
 import logging
 import re
+from difflib import SequenceMatcher
 from typing import Optional
 
-from app.models.lms_models import PracticeAttempt, PracticeSession, Question
+from app.models.lms_models import PracticeAttempt, PracticeSession, Question, Topic
 from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
-from app.services.lms.mcq_utils import options_from_json
+from app.services.lms.mcq_utils import options_from_json, options_to_json, validate_mcq
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
+_PRACTICE_BATCH_SIZE = 5
 
 
 def _question_is_usable(q: Question) -> bool:
@@ -45,7 +47,127 @@ def get_active_session(student_id: int, topic_id: Optional[int] = None) -> Optio
     )
     if topic_id is not None:
         q = q.filter(PracticeSession.topic_id == topic_id)
+        # A generated batch has one session per question. Serve its oldest
+        # pending question first, so reopening practice resumes the same queue.
+        return q.order_by(PracticeSession.id.asc()).first()
     return q.order_by(PracticeSession.updated_at.desc()).first()
+
+
+def _question_key(text: str) -> str:
+    key = re.sub(r"\s+", " ", (text or "").strip().casefold())
+    key = re.sub(r"\s*([+\-*/=<>])\s*", r"\1", key)
+    return key.rstrip(" ?!.")
+
+
+def _is_repeat(text: str, prior_keys: set[str]) -> bool:
+    key = _question_key(text)
+    if not key or key in prior_keys:
+        return True
+    # A changed numerical value is a new exercise. For the same values, reject
+    # near-identical wording as well as exact repeats.
+    threshold = 0.96 if len(key) < 40 else 0.90
+    numbers = re.findall(r"\d+(?:\.\d+)?", key)
+    return any(
+        numbers == re.findall(r"\d+(?:\.\d+)?", old)
+        and SequenceMatcher(None, key, old).ratio() >= threshold
+        for old in prior_keys
+    )
+
+
+def _create_ai_practice_batch(student_id: int, topic_id: int) -> PracticeSession:
+    """Create fresh, answer-checked MCQs for one topic; never recycle a prior one."""
+    from app.services.lms import class_service
+    from app.services.lms.path_generator import suggest_difficulty
+    from app.services.lms.performance_service import get_student_mastery
+    from app.services.quiz.mcq_answer_check import verify_mcq_models
+    from app.services.quiz.mcq_converter import mcq_to_question_fields
+    from app.services.quiz.remediation_generator import generate_remediation_mcqs
+
+    db = get_db()
+    topic = db.query(Topic).filter(Topic.id == topic_id, Topic.is_active.is_(True)).first()
+    if not topic:
+        raise LMSValidationError("Practice topic is not available")
+
+    prior_texts = [
+        text for (text,) in (
+            db.query(Question.question_text)
+            .join(PracticeSession, PracticeSession.question_id == Question.id)
+            .filter(PracticeSession.student_id == student_id, PracticeSession.topic_id == topic_id)
+            .order_by(PracticeSession.id.desc())
+            .all()
+        ) if text
+    ]
+    prior_keys = {_question_key(text) for text in prior_texts}
+    score = next(
+        (float(row.get("score_percent") or 0) for row in get_student_mastery(student_id)
+         if row.get("topic_id") == topic_id),
+        0.0,
+    )
+    grade = class_service.get_student_diagnostic_grade(student_id) or topic.grade_level
+    difficulty = suggest_difficulty(score)
+    selected = []
+
+    for _ in range(3):
+        if len(selected) >= _PRACTICE_BATCH_SIZE:
+            break
+        try:
+            candidates = generate_remediation_mcqs(
+                topic_name=topic.name,
+                topic_description=topic.description or topic.name,
+                count=_PRACTICE_BATCH_SIZE - len(selected),
+                score_percent=score,
+                difficulty=difficulty,
+                purpose="practice",
+                exclude_question_texts=[item["question_text"] for item in selected] + prior_texts,
+                grade_level=grade,
+            )
+            candidates = verify_mcq_models(candidates)
+        except Exception as exc:  # noqa: BLE001 - show a retryable error, never an unchecked MCQ
+            logger.warning("Guided practice generation failed for topic %s: %s", topic_id, exc)
+            break
+        for mcq in candidates:
+            try:
+                fields = mcq_to_question_fields(mcq)
+                validate_mcq(fields["options"], fields["correct_option_index"])
+            except Exception as exc:  # noqa: BLE001 - skip one malformed AI question
+                logger.warning("Guided practice rejected malformed MCQ for topic %s: %s", topic_id, exc)
+                continue
+            if _is_repeat(fields["question_text"], prior_keys):
+                continue
+            prior_keys.add(_question_key(fields["question_text"]))
+            selected.append(fields)
+            if len(selected) >= _PRACTICE_BATCH_SIZE:
+                break
+
+    if not selected:
+        raise LMSValidationError("Could not prepare new practice questions. Please try again.")
+
+    sessions = []
+    try:
+        for fields in selected:
+            question = Question(
+                topic_id=topic_id,
+                created_by=student_id,
+                question_text=fields["question_text"],
+                question_latex=fields.get("question_latex"),
+                options_json=options_to_json(fields["options"], fields["correct_option_index"]),
+                correct_option_index=fields["correct_option_index"],
+                explanation=fields.get("explanation"),
+                difficulty=fields.get("difficulty", difficulty),
+                source_type="mixed",
+                extraction_confidence=fields.get("extraction_confidence"),
+            )
+            db.add(question)
+            db.flush()
+            session = PracticeSession(student_id=student_id, topic_id=topic_id, question_id=question.id)
+            db.add(session)
+            sessions.append(session)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Could not save guided practice questions for topic %s", topic_id)
+        raise LMSValidationError("Could not prepare new practice questions. Please try again.") from None
+    return sessions[0]
 
 
 def _diagnostic_question_for_topic(student_id: int, topic_id: int) -> Optional[int]:
@@ -105,10 +227,36 @@ def start_session(
 ) -> tuple[PracticeSession, bool]:
     if not force_new:
         existing = get_active_session(student_id, topic_id)
-        if existing:
+        if topic_id and not question_id:
+            db = get_db()
+            while existing:
+                question = db.query(Question).filter(Question.id == existing.question_id).first()
+                if (
+                    question and question.is_active and question.source_type == "mixed"
+                    and question.created_by == student_id and _question_is_usable(question)
+                ):
+                    return existing, True
+                # Sessions from the old bank/diagnostic flow should not bring
+                # back a stale or unverified question after this change.
+                existing.status = "abandoned"
+                db.commit()
+                existing = get_active_session(student_id, topic_id)
+        elif existing:
             return existing, True
 
     db = get_db()
+    if topic_id and not question_id:
+        # The topic button always serves newly generated practice. Each batch
+        # is persisted as pending sessions, so repeated visits use every fresh
+        # question once before another batch is generated.
+        if force_new:
+            db.query(PracticeSession).filter(
+                PracticeSession.student_id == student_id,
+                PracticeSession.topic_id == topic_id,
+                PracticeSession.status == "active",
+            ).update({PracticeSession.status: "abandoned"}, synchronize_session=False)
+            db.commit()
+        return _create_ai_practice_batch(student_id, topic_id), False
     if not question_id and topic_id is None:
         # The dashboard's global Practice button has no topic argument. Prefer
         # the student's weakest topics, then fall back to any active question so
@@ -177,12 +325,14 @@ def get_session_question(session_id: int, student_id: Optional[int] = None) -> d
     if not q:
         raise LMSNotFoundError("Question not found")
     opts = options_from_json(q.options_json)
-    safe = [{"label": o["label"], "text": o["text"]} for o in opts]
+    safe = [{"label": o["label"], "text": o["text"], "latex": o.get("latex")} for o in opts]
     return {
         "session_id": session.id,
         "question_id": q.id,
         "question_text": q.question_text,
+        "question_latex": q.question_latex,
         "options": safe,
+        "difficulty": q.difficulty,
         "hint_level": session.hint_level,
     }
 
@@ -209,10 +359,13 @@ def submit_answer(
     if is_correct:
         session.status = "completed"
     db.commit()
+    next_question = bool(is_correct and get_active_session(session.student_id, session.topic_id))
     return {
         "correct": is_correct,
         "session_status": session.status,
         "explanation": q.explanation if is_correct else None,
+        "next_question": next_question,
+        "completed": bool(is_correct and not next_question),
     }
 
 

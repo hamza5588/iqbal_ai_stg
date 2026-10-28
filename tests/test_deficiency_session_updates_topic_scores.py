@@ -216,30 +216,6 @@ def test_learning_chat_queue_avoids_prior_question_texts(monkeypatch):
         "generate_mcqs_from_content",
         lambda *args, **kwargs: [mcq("Already used?"), mcq("Fresh PDF question")],
     )
-    monkeypatch.setattr(
-        dcs,
-        "_grade_appropriate_fallback",
-        lambda *args, **kwargs: [{
-            "topic_id": 5,
-            "topic_name": "Algebra",
-            "pdf_section": "Algebra",
-            "rag_thread_id": "",
-            "question_text": "Fresh fallback question",
-            "question_latex": None,
-            "options": [
-                {"label": "A", "text": "one"},
-                {"label": "B", "text": "two"},
-                {"label": "C", "text": "three"},
-                {"label": "D", "text": "four"},
-            ],
-            "correct_option_index": 0,
-            "difficulty": "medium",
-            "source": "grade_fit_ai",
-            "answered": False,
-            "correct": None,
-        }],
-    )
-
     queue = dcs._build_question_queue(
         [{"topic_id": 5, "topic_name": "Algebra", "score_percent": 87}],
         ["t1"],
@@ -250,7 +226,6 @@ def test_learning_chat_queue_avoids_prior_question_texts(monkeypatch):
 
     assert [q["question_text"] for q in queue] == [
         "Fresh PDF question",
-        "Fresh fallback question",
     ]
 
 

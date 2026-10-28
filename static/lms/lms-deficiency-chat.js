@@ -238,7 +238,7 @@
       '<p class="sd-desc">Question ' + (data.current_index + 1) + ' of ' + data.total_questions +
       (q.topic_name ? ' &nbsp;•&nbsp; <b style="color:var(--sd-blue-700);">' + escapeHtml(q.topic_name) + '</b>' : '') + '</p>' +
       (data.has_pdf
-        ? '<p class="sd-desc" style="font-size:12.5px;">Questions from teacher target PDF - weak area: ' + escapeHtml((q && q.topic_name) || '') + '</p>'
+        ? '<p class="sd-desc" style="font-size:12.5px;">AI questions based on the teacher target PDF - weak area: ' + escapeHtml((q && q.topic_name) || '') + '</p>'
         : '<p class="sd-desc" style="font-size:12.5px;color:#991b1b;">Teacher has not uploaded target content PDF yet.</p>') +
       '<div class="sd-q-text lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
       opts +
