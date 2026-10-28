@@ -1981,12 +1981,35 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
             _step("retriever_fetch_chunks_start")
             max_context_chunks = max(1, int(os.getenv("RAG_MAX_CONTEXT_CHUNKS", "24")))
             chunk_ids = []
+            # First preserve every ranked aspect's primary hit. Then distribute
+            # query-focused parent evidence and remaining neighbors round-robin,
+            # so the first hit cannot consume the whole context budget.
             for result_row in results:
-                result_ids = result_row.get("context_chunk_ids") or [result_row.get("chunk_id")]
-                for chunk_id in result_ids:
-                    if chunk_id is None or chunk_id in chunk_ids:
-                        continue
+                chunk_id = result_row.get("chunk_id")
+                if chunk_id is not None and chunk_id not in chunk_ids:
                     chunk_ids.append(chunk_id)
+                if len(chunk_ids) >= max_context_chunks:
+                    break
+            context_lists = []
+            for result_row in results:
+                primary_id = result_row.get("chunk_id")
+                support_ids = result_row.get("supporting_context_chunk_ids") or []
+                parent_ids = result_row.get("context_chunk_ids") or []
+                context_lists.append(
+                    list(dict.fromkeys(
+                        chunk_id
+                        for chunk_id in list(support_ids) + list(parent_ids)
+                        if chunk_id is not None and chunk_id != primary_id
+                    ))
+                )
+            max_depth = max((len(values) for values in context_lists), default=0)
+            for depth in range(max_depth):
+                for values in context_lists:
+                    if depth >= len(values):
+                        continue
+                    chunk_id = values[depth]
+                    if chunk_id not in chunk_ids:
+                        chunk_ids.append(chunk_id)
                     if len(chunk_ids) >= max_context_chunks:
                         break
                 if len(chunk_ids) >= max_context_chunks:

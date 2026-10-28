@@ -190,6 +190,7 @@ def fetch_chunks_by_ids(chunk_ids: List[int]) -> Dict[int, Dict[str, Any]]:
             r.id: {
                 "text": r.text,
                 "source": r.source or "",
+                "document_id": r.document_id,
                 "page": r.page,
                 "page_end": r.page_end,
                 "chunk_index": r.chunk_index,
@@ -209,6 +210,9 @@ _LEXICAL_STOP_WORDS = {
     "a", "an", "and", "any", "are", "as", "at", "be", "by", "do", "does", "for", "from",
     "if", "in", "into", "is", "it", "of", "on", "only", "or", "the", "this", "to",
     "use", "using", "what", "when", "where", "which", "with", "without",
+    # Generic question/source boilerplate should not consume the small sparse
+    # query budget ahead of document-specific versions, entities, or concepts.
+    "according", "calculate", "exact", "number", "page", "pdf", "show", "uploaded",
 }
 
 _RERANKER = None
@@ -230,31 +234,59 @@ def _decompose_retrieval_queries(query: str, limit: int = 8) -> List[str]:
     value = re.sub(r"\s+", " ", str(query or "")).strip()
     if not value:
         return []
-    variants = [value]
-    for part in re.split(r"[\n.;:!?]+|\s*,\s*", value):
+    # Do not mistake a thousands separator for a clause boundary.
+    split_value = re.sub(r"(?<=\d),(?=\d)", "", value)
+    clauses = []
+    for position, part in enumerate(re.split(r"[\n.;:!?]+|\s*,\s*", split_value)):
         part = part.strip(" -")
         part_tokens = _lexical_tokens(part)
         if (
-            part.lower() != value.lower()
+            part.lower() != split_value.lower()
             and (len(part_tokens) >= 2 or any(len(token) >= 5 for token in part_tokens))
         ):
-            variants.append(part)
+            numeric_count = sum(any(char.isdigit() for char in token) for token in part_tokens)
+            information_score = (
+                (numeric_count * 5.0)
+                + min(len(set(part_tokens)), 5)
+                + (max((len(token) for token in part_tokens), default=0) / 20.0)
+            )
+            clauses.append((information_score, -position, part))
 
     # Long natural-language questions often contain several requirements joined
     # by conjunctions. Split them only when each side remains meaningful.
-    for part in list(variants):
+    for _, parent_position, part in list(clauses):
         for clause in re.split(r"\s+(?:and|also|plus)\s+", part, flags=re.IGNORECASE):
             clause = clause.strip(" -")
-            if len(_lexical_tokens(clause)) >= 3:
-                variants.append(clause)
+            clause_tokens = _lexical_tokens(clause)
+            if len(clause_tokens) >= 2:
+                numeric_count = sum(any(char.isdigit() for char in token) for token in clause_tokens)
+                information_score = (
+                    (numeric_count * 5.0)
+                    + min(len(set(clause_tokens)), 5)
+                    + (max((len(token) for token in clause_tokens), default=0) / 20.0)
+                )
+                clauses.append((information_score, parent_position, clause))
 
-    # A short focused query may have no punctuation to split. Add its own
-    # high-signal terms as sparse subqueries so one decisive term cannot be
-    # diluted by a broad OR query. These terms are derived entirely at runtime.
+    # Reserve half the budget for focused clauses and half for atomic high-signal
+    # terms. This prevents a long preamble from starving a decisive year/version
+    # or concept near the end of the question.
+    variants = [value]
+    clause_budget = min(len(clauses), max(1, (max(1, int(limit)) - 1) // 2 + 1))
+    clauses.sort(reverse=True)
+    variants.extend(part for _, _, part in clauses[:clause_budget])
+
+    # Add query-derived atomic terms, prioritizing numbers/versions and then
+    # longer distinctive words. No domain vocabulary is encoded here.
     query_terms = list(dict.fromkeys(_lexical_tokens(value)))
-    for term in query_terms:
-        if len(term) >= 5 or any(char.isdigit() for char in term):
-            variants.append(term)
+    high_signal_terms = [
+        term for term in query_terms
+        if len(term) >= 5 or any(char.isdigit() for char in term)
+    ]
+    high_signal_terms.sort(
+        key=lambda term: (any(char.isdigit() for char in term), len(term)),
+        reverse=True,
+    )
+    variants.extend(high_signal_terms)
 
     unique: List[str] = []
     seen = set()
@@ -285,7 +317,7 @@ def postgres_full_text_search(
     tsquery = " | ".join(terms)
     sql = text(
         """
-        SELECT id AS chunk_id, page, page_end, chunk_index,
+        SELECT id AS chunk_id, document_id, page, page_end, chunk_index,
                ts_rank_cd(
                    to_tsvector('simple', coalesce(text, '')),
                    to_tsquery('simple', :tsquery),
@@ -397,6 +429,7 @@ def expand_neighbor_chunks(
                 expanded.append(
                     {
                         "chunk_id": row.id,
+                        "document_id": row.document_id,
                         "page": row.page,
                         "page_end": row.page_end,
                         "chunk_index": row.chunk_index,
@@ -465,12 +498,36 @@ def rerank_candidates(
     query: str,
     candidates: List[Dict[str, Any]],
     limit: int,
+    thread_id: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Cross-encode only the fused candidate set; fall back cleanly to RRF."""
     if not candidates:
         return []
     candidate_ids = [int(row["chunk_id"]) for row in candidates if row.get("chunk_id") is not None]
     chunk_map = fetch_chunks_by_ids(candidate_ids)
+
+    # Parent-document context is used for scoring, not added blindly to the LLM
+    # prompt. A matched heading/continuation can therefore be reranked using an
+    # adjacent table or applicability paragraph without multiplying the number
+    # of cross-encoder pairs.
+    rerank_context_rows: List[Dict[str, Any]] = []
+    context_radius = max(0, int(os.getenv("RAG_PARENT_CONTEXT_RADIUS", "12")))
+    if thread_id is not None and user_id is not None and context_radius > 0:
+        rerank_context_rows = expand_neighbor_chunks(
+            candidates,
+            str(thread_id),
+            int(user_id),
+            radius=context_radius,
+            limit=max(64, len(candidates) * context_radius * 2),
+        )
+        context_ids = [
+            int(row["chunk_id"])
+            for row in rerank_context_rows
+            if row.get("chunk_id") is not None
+        ]
+        if context_ids:
+            chunk_map.update(fetch_chunks_by_ids(context_ids))
     model = _get_cross_encoder()
     if model is None:
         return candidates[: max(1, int(limit))]
@@ -480,26 +537,37 @@ def rerank_candidates(
     query_variants = _decompose_retrieval_queries(query)
     if not query_variants:
         query_variants = [query]
-    text_by_index = {
-        int(row["chunk_index"]): chunk_map.get(int(row["chunk_id"]), {}).get("text", "")
-        for row in candidates
-        if row.get("chunk_id") is not None and row.get("chunk_index") is not None
-    }
+    context_rows = list(candidates) + rerank_context_rows
+    text_by_position = {}
+    row_by_position = {}
+    for row in context_rows:
+        if row.get("chunk_id") is None or row.get("chunk_index") is None:
+            continue
+        chunk = chunk_map.get(int(row["chunk_id"]), {})
+        document_id = row.get("document_id", chunk.get("document_id"))
+        text_by_position[(document_id, int(row["chunk_index"]))] = chunk.get("text", "")
+        row_by_position[(document_id, int(row["chunk_index"]))] = row
     max_windows = max(1, int(os.getenv("RAG_RERANK_MAX_WINDOWS", "1")))
     for row in candidates:
         chunk_id = row.get("chunk_id")
         chunk = chunk_map.get(int(chunk_id)) if chunk_id is not None else None
         current_text = (chunk or {}).get("text", "")
         chunk_index = row.get("chunk_index")
+        document_id = row.get("document_id", (chunk or {}).get("document_id"))
         context_parts = []
         if chunk_index is not None:
-            # Query-focused snippets from the preceding chunks give a table its
-            # heading/applicability context during reranking (parent-document
-            # retrieval) without inflating the final LLM context.
-            for offset in (-2, -1):
-                neighbor_text = text_by_index.get(int(chunk_index) + offset, "")
+            # Query-focused snippets from surrounding chunks give a table its
+            # heading/applicability context, and give a matched heading access to
+            # a nearby table. The final passage remains bounded below.
+            for offset in range(-context_radius, context_radius + 1):
+                if offset == 0:
+                    continue
+                neighbor_text = text_by_position.get(
+                    (document_id, int(chunk_index) + offset),
+                    "",
+                )
                 if neighbor_text:
-                    context_parts.append(_passage_windows(query, neighbor_text, 1)[0][:120])
+                    context_parts.append(_passage_windows(query, neighbor_text, 1)[0])
         context_parts.append(current_text)
         contextual_text = "\n".join(context_parts)
         for passage in _passage_windows(query, contextual_text, max_windows):
@@ -617,17 +685,47 @@ def rerank_candidates(
         for row in candidates
         if row.get("chunk_index") is not None and row.get("chunk_id") is not None
     }
-    parent_radius = max(0, int(os.getenv("RAG_PARENT_CONTEXT_RADIUS", "8")))
+    parent_radius = max(0, int(os.getenv("RAG_PARENT_CONTEXT_RADIUS", "12")))
     context_offsets = [0]
     for distance in range(1, parent_radius + 1):
         context_offsets.extend((-distance, distance))
     for row in selected:
         chunk_index = row.get("chunk_index")
+        chunk = chunk_map.get(int(row["chunk_id"]), {})
+        document_id = row.get("document_id", chunk.get("document_id"))
         if chunk_index is not None:
             row["context_chunk_ids"] = [
                 candidate_id_by_index[int(chunk_index) + offset]
                 for offset in context_offsets
                 if int(chunk_index) + offset in candidate_id_by_index
+            ]
+            query_terms = set(_lexical_tokens(query))
+            support_candidates = []
+            for offset in range(-context_radius, context_radius + 1):
+                if offset == 0:
+                    continue
+                position = (document_id, int(chunk_index) + offset)
+                context_row = row_by_position.get(position)
+                context_text = text_by_position.get(position, "")
+                if not context_row or not context_text:
+                    continue
+                overlap = query_terms & set(_lexical_tokens(context_text))
+                if not overlap:
+                    continue
+                overlap_score = sum(
+                    3.0 if any(char.isdigit() for char in term) else min(len(term), 10) / 10.0
+                    for term in overlap
+                )
+                support_candidates.append(
+                    (
+                        overlap_score,
+                        -abs(offset),
+                        int(context_row["chunk_id"]),
+                    )
+                )
+            support_candidates.sort(reverse=True)
+            row["supporting_context_chunk_ids"] = [
+                chunk_id for _, _, chunk_id in support_candidates[:3]
             ]
         row.pop("_variant_scores", None)
     return selected[: max(1, int(limit))]
@@ -781,13 +879,19 @@ def hybrid_search(
             break
 
     # 5) Accurate second-stage scoring is affordable only after candidate pruning.
-    top = rerank_candidates(query, all_candidates, k)
+    top = rerank_candidates(
+        query,
+        all_candidates,
+        k,
+        thread_id=thread_id,
+        user_id=user_id,
+    )
 
     # Fetch the final parent windows directly from PostgreSQL. Building context
     # only from the rerank pool can leave a relevant adjacent chunk out when the
     # pool cap is reached (for example, a table six chunks before its matched
     # schedule heading).
-    parent_radius = max(0, int(os.getenv("RAG_PARENT_CONTEXT_RADIUS", "8")))
+    parent_radius = max(0, int(os.getenv("RAG_PARENT_CONTEXT_RADIUS", "12")))
     if top and parent_radius > 0:
         parent_rows = expand_neighbor_chunks(
             top,
