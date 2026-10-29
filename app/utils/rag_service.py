@@ -90,7 +90,7 @@ load_dotenv()
 # -------------------
 import time
 import random
-from threading import Lock, Semaphore
+from threading import Event, Lock, Semaphore
 from app.utils.groq_rate_limit import GroqBusyError
 
 
@@ -1871,9 +1871,116 @@ _ACTIVE_RAG_THREAD: "contextvars.ContextVar[Optional[str]]" = contextvars.Contex
 )
 
 
+class _RagInFlightResult:
+    """One exact-query computation shared by concurrent tool calls in this request."""
+
+    def __init__(self) -> None:
+        self.done = Event()
+        self.result: Any = None
+        self.reusable = False
+
+
+class _RagRequestResultCache:
+    """Bounded successful-result memo; a new instance is created for every chat request."""
+
+    def __init__(self) -> None:
+        self.lock = Lock()
+        self.results: Dict[Tuple[str, str], str] = {}
+        self.inflight: Dict[Tuple[str, str], _RagInFlightResult] = {}
+        self.total_chars = 0
+
+
+_RAG_REQUEST_RESULT_CACHE: "contextvars.ContextVar[Optional[_RagRequestResultCache]]" = (
+    contextvars.ContextVar("rag_request_result_cache", default=None)
+)
+
+
+def _exact_rag_query_key(query: str) -> str:
+    """Preserve the raw query so only literal duplicate retrievals can reuse evidence."""
+    return str(query or "")
+
+
+def _is_successful_rag_evidence(result: Any) -> bool:
+    """Cache only completed citation-ready evidence, never errors or empty retrievals."""
+    return (
+        isinstance(result, str)
+        and result.startswith("Relevant content from the PDF (citation-ready evidence):")
+        and "[Evidence " in result
+    )
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _run_rag_tool_with_request_cache(query: str, thread_id: Optional[str], compute):
+    """Reuse only exact successful retrievals inside the current verified chat request.
+
+    The first caller executes the unchanged retrieval path. Concurrent identical callers
+    join that in-flight work; later identical calls receive its byte-for-byte output. The
+    memo is request-scoped, bounded, and cleared by ``reset_active_rag_thread``.
+    """
+    memo = _RAG_REQUEST_RESULT_CACHE.get()
+    active_thread = _ACTIVE_RAG_THREAD.get()
+    thread_key = str(thread_id) if thread_id is not None else ""
+    query_key = _exact_rag_query_key(query)
+    if memo is None or not active_thread or thread_key != active_thread or not query_key:
+        return compute()
+
+    key = (thread_key, query_key)
+    with memo.lock:
+        cached = memo.results.get(key)
+        if cached is not None:
+            logger.info("RAG request result cache hit: thread_id=%s", thread_key)
+            return cached
+        flight = memo.inflight.get(key)
+        owner = flight is None
+        if owner:
+            flight = _RagInFlightResult()
+            memo.inflight[key] = flight
+
+    if not owner:
+        logger.info("RAG request result single-flight join: thread_id=%s", thread_key)
+        flight.done.wait()
+        # A failed/partial owner must not suppress the waiter's normal independent
+        # retrieval. Only completed citation-ready evidence is safe to share.
+        if flight.reusable:
+            return flight.result
+        return compute()
+
+    try:
+        result = compute()
+    except BaseException as exc:
+        with memo.lock:
+            memo.inflight.pop(key, None)
+            flight.done.set()
+        raise
+
+    with memo.lock:
+        reusable = _is_successful_rag_evidence(result)
+        if reusable:
+            max_entries = _positive_int_env("RAG_REQUEST_RESULT_CACHE_MAX_ENTRIES", 16)
+            max_chars = _positive_int_env("RAG_REQUEST_RESULT_CACHE_MAX_CHARS", 2_000_000)
+            result_chars = len(result)
+            if len(memo.results) < max_entries and memo.total_chars + result_chars <= max_chars:
+                memo.results[key] = result
+                memo.total_chars += result_chars
+        memo.inflight.pop(key, None)
+        flight.result = result
+        flight.reusable = reusable
+        flight.done.set()
+    return result
+
+
 def set_active_rag_thread(thread_id: Optional[str]):
     """Pin document access for this request to `thread_id`. Returns a reset token."""
-    return _ACTIVE_RAG_THREAD.set(str(thread_id) if thread_id else None)
+    resolved = str(thread_id) if thread_id else None
+    token = _ACTIVE_RAG_THREAD.set(resolved)
+    _RAG_REQUEST_RESULT_CACHE.set(_RagRequestResultCache() if resolved else None)
+    return token
 
 
 def reset_active_rag_thread(token) -> None:
@@ -1881,6 +1988,9 @@ def reset_active_rag_thread(token) -> None:
         _ACTIVE_RAG_THREAD.reset(token)
     except (ValueError, LookupError):
         _ACTIVE_RAG_THREAD.set(None)
+    finally:
+        # Results must never leak into another user turn handled by this worker thread.
+        _RAG_REQUEST_RESULT_CACHE.set(None)
 
 
 
@@ -3885,8 +3995,7 @@ def _strip_metadata_like_lines(text: str) -> str:
     return "\n".join(kept).strip() or text
 
 
-@tool
-def rag_tool(query: str, thread_id: Optional[str] = None):
+def _rag_tool_uncached(query: str, thread_id: Optional[str] = None):
     """
     Retrieve relevant information from the uploaded PDF for this chat thread.
     Always include the thread_id when calling this tool.
@@ -4077,6 +4186,20 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
 
     _write_speed_log("rag_tool", thread_id, rag_steps, rag_started)
     return content_for_llm
+
+
+@tool
+def rag_tool(query: str, thread_id: Optional[str] = None):
+    """
+    Retrieve relevant information from the uploaded PDF for this chat thread.
+    Always include the thread_id when calling this tool.
+    Returns content-only text for the LLM (no internal metadata).
+    """
+    return _run_rag_tool_with_request_cache(
+        query,
+        thread_id,
+        lambda: _rag_tool_uncached(query=query, thread_id=thread_id),
+    )
 
 
 def _prefetch_lecture_evidence_for_chat(thread_id: str, user_query: str) -> str:

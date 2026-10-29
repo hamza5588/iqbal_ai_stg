@@ -52,7 +52,10 @@ def test_hybrid_search_uses_independent_sparse_lists_and_neighbor_expansion(monk
             {"chunk_id": 90, "page": 527, "chunk_index": 611, "score": 0.0}
         ]
 
+    rerank_calls = []
+
     def fake_rerank(query, candidates, limit, **kwargs):
+        rerank_calls.append([row["chunk_id"] for row in candidates])
         by_id = {row["chunk_id"]: row for row in candidates}
         assert 90 in by_id
         assert 53 in by_id
@@ -77,6 +80,37 @@ def test_hybrid_search_uses_independent_sparse_lists_and_neighbor_expansion(monk
     assert [row["chunk_id"] for row in results] == [90, 53]
     assert len(sparse_calls) >= 2
     assert all(call[1:3] == ("thread-legal", 7) for call in sparse_calls)
+    assert len(rerank_calls) == 1
+    assert len(rerank_calls[0]) == len(set(rerank_calls[0]))
+    assert "Ranking the best matching passages..." in _MODULE_PATH.read_text(encoding="utf-8")
+
+
+def test_cross_encoder_preload_uses_existing_loader_and_can_be_disabled(monkeypatch):
+    calls = []
+    sentinel = object()
+    monkeypatch.setattr(rag_vectorstore, "_get_cross_encoder", lambda: calls.append(1) or sentinel)
+
+    monkeypatch.setenv("RAG_CROSS_ENCODER_PRELOAD", "true")
+    assert rag_vectorstore.preload_cross_encoder() is True
+    assert calls == [1]
+
+    monkeypatch.setenv("RAG_CROSS_ENCODER_PRELOAD", "false")
+    assert rag_vectorstore.preload_cross_encoder() is False
+    assert calls == [1]
+
+
+def test_cross_encoder_preload_failure_keeps_lazy_retry_available(monkeypatch):
+    monkeypatch.setenv("RAG_CROSS_ENCODER_PRELOAD", "true")
+    monkeypatch.setattr(rag_vectorstore, "_RERANKER_LOAD_FAILED", False)
+
+    def fail_startup_load():
+        rag_vectorstore._RERANKER_LOAD_FAILED = True
+        return None
+
+    monkeypatch.setattr(rag_vectorstore, "_get_cross_encoder", fail_startup_load)
+
+    assert rag_vectorstore.preload_cross_encoder() is False
+    assert rag_vectorstore._RERANKER_LOAD_FAILED is False
 
 
 def test_reranker_fallback_preserves_rrf_order(monkeypatch):
@@ -229,9 +263,9 @@ def test_rag_prompt_requires_version_scoped_evidence_and_fail_closed_calculation
     ).read_text(encoding="utf-8")
 
     assert "RAG_DOCUMENT_GROUNDING_INSTRUCTIONS" in source
-    assert "use evidence explicitly applicable to that requested" in source
-    assert "never merge their rates or conditions" in source
-    assert "do not provide a guessed definitive calculation" in source
+    assert "use provisions explicitly applicable to that period" in source
+    assert "do not combine current, amended, substituted, omitted, or historical tables" in source
+    assert "instead of guessing a definitive answer" in source
     assert 'os.getenv("RAG_LARGE_RETRIEVAL_K", "8")' in source
     assert '"page_end": c.get("page_end", c.get("page", 0))' in source
     assert 'else f"{page_start_num}-{page_end_num}"' in source

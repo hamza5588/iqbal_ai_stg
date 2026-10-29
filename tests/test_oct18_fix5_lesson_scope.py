@@ -6,6 +6,10 @@ prompt | llm | parser chain runs without any network call. Whether a real model 
 the prompt cannot be unit-tested."""
 import os
 import tempfile
+import contextvars
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 if "iqbalai_local.db" in os.environ.get("DATABASE_URL", "iqbalai_local.db"):
     os.environ["DATABASE_URL"] = "sqlite:///" + os.path.join(tempfile.mkdtemp(), "oct18_fix5.db").replace("\\", "/")
@@ -264,6 +268,255 @@ def test_active_thread_compares_as_string(owners):
         assert rs._ACTIVE_RAG_THREAD.get() == "123"
     finally:
         rs.reset_active_rag_thread(tok)
+
+
+def _citation_ready_evidence(label="same"):
+    return (
+        "Relevant content from the PDF (citation-ready evidence):\n\n"
+        f"[Evidence 1 | Page 1 | Chunk 0 | Source test.pdf]\n{label}"
+    )
+
+
+def test_same_turn_exact_rag_query_reuses_byte_identical_result(owners):
+    rs = owners
+    calls = []
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        first = rs._run_rag_tool_with_request_cache(
+            "tax obligations for sugar mills",
+            "mine",
+            lambda: calls.append("first") or _citation_ready_evidence(),
+        )
+        second = rs._run_rag_tool_with_request_cache(
+            "tax obligations for sugar mills",
+            "mine",
+            lambda: calls.append("duplicate") or "must not run",
+        )
+        distinct = rs._run_rag_tool_with_request_cache(
+            "tax obligations\nfor sugar mills",
+            "mine",
+            lambda: calls.append("distinct") or _citation_ready_evidence("distinct"),
+        )
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert first == second
+    assert calls == ["first", "distinct"]
+    assert "distinct" in distinct
+
+
+def test_rag_result_cache_does_not_merge_whitespace_variants(owners):
+    rs = owners
+    calls = []
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        rs._run_rag_tool_with_request_cache(
+            "same query", "mine", lambda: calls.append("plain") or _citation_ready_evidence("plain")
+        )
+        rs._run_rag_tool_with_request_cache(
+            " same query ", "mine", lambda: calls.append("spaced") or _citation_ready_evidence("spaced")
+        )
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert calls == ["plain", "spaced"]
+
+
+def test_rag_result_cache_bypasses_thread_mismatch_and_respects_entry_bound(owners, monkeypatch):
+    rs = owners
+    calls = []
+    monkeypatch.setenv("RAG_REQUEST_RESULT_CACHE_MAX_ENTRIES", "1")
+
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        rs._run_rag_tool_with_request_cache(
+            "first query", "mine", lambda: calls.append("first") or _citation_ready_evidence("first")
+        )
+        rs._run_rag_tool_with_request_cache(
+            "second query", "mine", lambda: calls.append("second") or _citation_ready_evidence("second")
+        )
+        rs._run_rag_tool_with_request_cache(
+            "second query", "mine", lambda: calls.append("second-again") or _citation_ready_evidence("second-again")
+        )
+        rs._run_rag_tool_with_request_cache(
+            "first query", "other", lambda: calls.append("other-thread") or _citation_ready_evidence("other")
+        )
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert calls == ["first", "second", "second-again", "other-thread"]
+
+
+def test_rag_result_cache_is_request_scoped_and_reset(owners):
+    rs = owners
+    calls = []
+
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        rs._run_rag_tool_with_request_cache(
+            "same query",
+            "mine",
+            lambda: calls.append(1) or _citation_ready_evidence("turn one"),
+        )
+    finally:
+        rs.reset_active_rag_thread(tok)
+    assert rs._RAG_REQUEST_RESULT_CACHE.get() is None
+
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        result = rs._run_rag_tool_with_request_cache(
+            "same query",
+            "mine",
+            lambda: calls.append(2) or _citation_ready_evidence("turn two"),
+        )
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert calls == [1, 2]
+    assert "turn two" in result
+
+
+def test_rag_tool_wrapper_and_nine_call_trace_skip_only_final_exact_pair(owners, monkeypatch):
+    rs = owners
+    expensive_calls = []
+
+    def fake_uncached(query, thread_id=None):
+        expensive_calls.append((query, thread_id))
+        return _citation_ready_evidence(query)
+
+    monkeypatch.setattr(rs, "_rag_tool_uncached", fake_uncached)
+    logical_queries = [
+        "mandatory prefetch",
+        "round one a", "round one b",
+        "round two a", "round two b",
+        "round three a", "round three b",
+        "round three a", "round three b",
+    ]
+
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        outputs = [
+            rs.rag_tool.invoke({"query": query, "thread_id": "mine"})
+            for query in logical_queries
+        ]
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert len(outputs) == 9
+    assert len(expensive_calls) == 7
+    assert outputs[5] == outputs[7]
+    assert outputs[6] == outputs[8]
+
+
+def test_rag_result_cache_never_caches_failures(owners):
+    rs = owners
+    calls = []
+
+    def fail_once():
+        calls.append("failure")
+        raise RuntimeError("retrieval failed")
+
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        with pytest.raises(RuntimeError, match="retrieval failed"):
+            rs._run_rag_tool_with_request_cache("same query", "mine", fail_once)
+        result = rs._run_rag_tool_with_request_cache(
+            "same query",
+            "mine",
+            lambda: calls.append("retry") or _citation_ready_evidence("retry"),
+        )
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert calls == ["failure", "retry"]
+    assert "retry" in result
+
+
+def test_concurrent_identical_rag_queries_are_single_flight(owners):
+    rs = owners
+    calls = []
+    owner_started = threading.Event()
+    release_owner = threading.Event()
+
+    def retrieve_once():
+        calls.append("retrieval")
+        owner_started.set()
+        assert release_owner.wait(timeout=3)
+        return _citation_ready_evidence("single-flight")
+
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [
+                pool.submit(
+                    contextvars.copy_context().run,
+                    rs._run_rag_tool_with_request_cache,
+                    "same query",
+                    "mine",
+                    retrieve_once,
+                )
+                for _ in range(4)
+            ]
+            assert owner_started.wait(timeout=2)
+            time.sleep(0.1)
+            release_owner.set()
+            results = [future.result(timeout=3) for future in futures]
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert calls == ["retrieval"]
+    assert results == [_citation_ready_evidence("single-flight")] * 4
+
+
+@pytest.mark.parametrize("owner_outcome", ["error", "non_evidence"])
+def test_concurrent_rag_waiter_retries_after_unsuccessful_owner(owners, owner_outcome):
+    rs = owners
+    owner_started = threading.Event()
+    release_owner = threading.Event()
+    calls = []
+
+    def owner_compute():
+        calls.append("owner")
+        owner_started.set()
+        assert release_owner.wait(timeout=3)
+        if owner_outcome == "error":
+            raise RuntimeError("owner failed")
+        return "No relevant content found."
+
+    def waiter_compute():
+        calls.append("waiter")
+        return _citation_ready_evidence("waiter retry")
+
+    tok = rs.set_active_rag_thread("mine")
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            owner_future = pool.submit(
+                contextvars.copy_context().run,
+                rs._run_rag_tool_with_request_cache,
+                "same query",
+                "mine",
+                owner_compute,
+            )
+            assert owner_started.wait(timeout=2)
+            waiter_future = pool.submit(
+                contextvars.copy_context().run,
+                rs._run_rag_tool_with_request_cache,
+                "same query",
+                "mine",
+                waiter_compute,
+            )
+            time.sleep(0.1)
+            release_owner.set()
+            if owner_outcome == "error":
+                with pytest.raises(RuntimeError, match="owner failed"):
+                    owner_future.result(timeout=3)
+            else:
+                assert owner_future.result(timeout=3) == "No relevant content found."
+            assert "waiter retry" in waiter_future.result(timeout=3)
+    finally:
+        rs.reset_active_rag_thread(tok)
+
+    assert calls == ["owner", "waiter"]
 
 
 def test_reset_with_foreign_token_falls_back_to_none(owners):

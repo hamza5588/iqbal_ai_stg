@@ -472,6 +472,21 @@ def _get_cross_encoder():
     return _RERANKER
 
 
+def preload_cross_encoder() -> bool:
+    """Best-effort worker warm-up that preserves a later lazy retry on startup failure."""
+    global _RERANKER_LOAD_FAILED
+    if os.getenv("RAG_CROSS_ENCODER_PRELOAD", "true").lower() not in ("1", "true", "yes"):
+        return False
+    failed_before_preload = _RERANKER_LOAD_FAILED
+    model = _get_cross_encoder()
+    if model is None and not failed_before_preload and _RERANKER_LOAD_FAILED:
+        # A transient startup resource spike must not permanently downgrade this
+        # worker to RRF ordering. The first real query may retry the normal loader.
+        _RERANKER_LOAD_FAILED = False
+        logger.warning("Cross-encoder startup preload failed; lazy query-time retry remains enabled")
+    return model is not None
+
+
 def _passage_windows(query: str, text_value: str, max_windows: int = 2) -> List[str]:
     """Select query-focused windows from oversized extracted chunks."""
     text_value = re.sub(r"\s+", " ", str(text_value or "")).strip()
@@ -879,6 +894,12 @@ def hybrid_search(
             break
 
     # 5) Accurate second-stage scoring is affordable only after candidate pruning.
+    # This is display-only progress; it does not affect retrieval or ranking.
+    try:
+        from app.utils.chat_progress import set_progress as _set_chat_progress
+        _set_chat_progress(thread_id, "Ranking the best matching passages...")
+    except Exception:
+        pass
     top = rerank_candidates(
         query,
         all_candidates,
