@@ -93,7 +93,27 @@
     background:linear-gradient(90deg,var(--green-dark),var(--green-mid));
     color:#fff;
   }
+  .btn-upload{
+    background:rgba(255,255,255,0.08);
+    color:#fff;
+    border:1px solid rgba(255,255,255,0.28);
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    box-shadow:0 0 0 0 rgba(34,197,94,0);
+  }
+  .btn-upload svg{ flex:0 0 auto; }
+  .btn-upload:hover{
+    background:linear-gradient(90deg,var(--green-dark),var(--green-mid));
+    border-color:transparent;
+    box-shadow:0 8px 22px rgba(15,23,42,0.28);
+    opacity:1;
+  }
   .btn:hover{ transform:translateY(-1px); opacity:0.92; }
+  @media (max-width: 640px){
+    .header-bar{ flex-direction:column; gap:12px; padding:14px 16px; }
+    .header-actions{ width:100%; justify-content:center; flex-wrap:wrap; }
+  }
 
   /* Main layout */
   main{
@@ -413,6 +433,16 @@
       {% with variant='dark', height='44px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
     </div>
     <div class="header-actions">
+      <a class="btn btn-upload"
+         href="{{ url_for('static', filename='dashboard/iqbalai-teacher-analytics.html') }}"
+         title="Open Teacher Analytics upload dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+          <path d="M12 16V4"/>
+          <path d="m7 9 5-5 5 5"/>
+          <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/>
+        </svg>
+        Teacher Analytics
+      </a>
       <a class="btn btn-outline" href="{{ url_for('auth.login') }}">LOG IN</a>
       <a class="btn btn-solid" href="{{ url_for('auth.register_email') }}">CREATE AN ACCOUNT</a>
     </div>

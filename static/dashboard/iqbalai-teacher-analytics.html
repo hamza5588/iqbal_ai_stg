@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIL IqbalAI | Teacher Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root{--ink:#18233f;--muted:#64718c;--line:#e4e8f3;--bg:#f4f6fb;--card:#fff;--brand:#4f46e5;--ctrl:#4f46e5;--unc:#0d9488;--red:#d9485f;--amber:#c47f12;--green:#1f8f63;--blue:#3561d6;--side:#151d3b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+button{font:inherit;cursor:pointer;border:0;border-radius:9px;padding:9px 13px;background:var(--brand);color:#fff;font-weight:650;font-size:13px}
+button.secondary{background:#eef0ff;color:#3436a8}button.light{background:#fff;color:var(--ink);border:1px solid var(--line)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #a5b4fc;outline-offset:2px}
+select,input[type=search]{font:inherit;font-size:13px;padding:8px 10px;border:1px solid #d6dcea;border-radius:9px;background:#fff;color:var(--ink);max-width:100%}
+.layout{display:flex;flex-direction:column;min-height:100vh}
+.side{position:sticky;top:0;z-index:60;background:var(--side);color:#c9d0ee;display:flex;align-items:center;gap:18px;padding:8px clamp(12px,2.4vw,30px);box-shadow:0 4px 18px #0b123026}
+.logo{color:#fff;font-weight:800;font-size:17px;white-space:nowrap;flex:0 0 auto}.logo span{color:#7fe0d2}.logo small{display:block;font-size:10px;font-weight:500;color:#9aa5d1}
+.nav{display:flex;gap:3px;flex-wrap:wrap;flex:1;padding:2px 0}
+.nav button{display:flex;align-items:center;gap:7px;background:transparent;color:#c9d0ee;padding:8px 12px;font-weight:600;font-size:13px;white-space:nowrap;flex:0 0 auto}
+.nav button:hover{background:#ffffff14}.nav button.active{background:#4f46e5;color:#fff}
+.nav .ic{font-size:14px}.nav .badge{background:var(--red);color:#fff;border-radius:99px;font-size:10px;padding:1px 7px}
+.nav-sep{width:1px;align-self:stretch;background:#ffffff22;margin:4px 4px;flex:0 0 1px}
+.side-foot{display:none}
+.main{flex:1;min-width:0;width:100%;max-width:1440px;margin:0 auto;padding:18px clamp(12px,2.4vw,30px) 50px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.topbar h1{margin:0;font-size:22px;letter-spacing:-.4px}.topbar .sub{color:var(--muted);font-size:12px}
+.tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+/* upload hub */
+.upload-hub{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:10px;margin:0 0 14px}
+.auto-card{border:2px dashed #a9b0f5;background:#f7f8ff}.auto-card.drag,.upload-hub.drag .auto-card{background:#e9ebff;border-color:#4f46e5}
+.upload-hub-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 14px;min-width:0}
+.upload-hub-card h2{font-size:14px;margin:0 0 2px}.upload-hub-card p{font-size:11px;color:var(--muted);margin:0 0 10px}
+.upload-hub-card .step{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#eef0ff;color:var(--brand);font-size:11px;font-weight:800;margin-right:6px}
+.upload-actions{display:flex;gap:7px;flex-wrap:wrap}.upload-actions button{font-size:12px;padding:8px 10px}
+.btn-c{background:var(--ctrl)}.btn-u{background:var(--unc)}
+.real-file-input{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;overflow:hidden!important;pointer-events:none!important}
+.upload-status{grid-column:1/-1;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:0 4px}
+.uploaded-menu{position:relative;margin-left:auto}.uploaded-menu summary{cursor:pointer;list-style:none;padding:6px 10px;border:1px solid var(--line);background:#fff;border-radius:9px;font-weight:650}
+.uploaded-menu summary::-webkit-details-marker{display:none}.uploaded-menu summary b{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:6px;background:#e9eaff;color:var(--brand);margin:0 3px}
+.uploaded-menu-body{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:260px;max-width:360px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px #1d285522}
+.files{display:grid;gap:5px;max-height:220px;overflow:auto;margin-top:6px}.pill{background:#eef0ff;color:#33449a;padding:4px 9px;border-radius:99px;font-size:11px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:16px 17px;min-width:0;box-shadow:0 4px 16px #1f2a5a08}
+.card h3{margin:0 0 3px;font-size:15px}.card .desc{color:var(--muted);font-size:12px;margin:0 0 10px}
+.section{font-size:16px;margin:22px 0 10px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}
+.grid-main{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);gap:12px;margin:12px 0}
+.cg{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(240px,1fr);gap:18px;align-items:start}
+.chartbox{position:relative;height:260px}.chartbox.sm{height:210px}.chartbox.lg{height:300px}
+.explain{background:#f6f7ff;border-left:3px solid #7775eb;border-radius:0 11px 11px 0;padding:11px 13px;font-size:13px;color:#3b4565;line-height:1.6}
+.explain p{margin:0 0 8px}.explain p:last-child{margin:0}.explain ul{margin:4px 0 0;padding-left:18px}.explain li{margin:3px 0}
+.kpi{display:flex;align-items:center;gap:12px;text-align:left;background:#fff;border:1px solid var(--line);border-radius:15px;padding:14px 15px;color:var(--ink);min-width:0;box-shadow:0 4px 16px #1f2a5a08}
+.kpi:hover{border-color:#b9bff5}.kpi .ki{width:40px;height:40px;flex:0 0 40px;border-radius:12px;display:grid;place-items:center;font-size:18px;font-weight:800}
+.kpi small{display:block;color:var(--muted);font-size:11px;font-weight:600}.kpi strong{display:block;font-size:24px;letter-spacing:-.6px;line-height:1.25}.kpi em{display:block;font-style:normal;color:var(--muted);font-size:11px}
+.k1 .ki{background:#eef0ff;color:#4f46e5}.k2 .ki{background:#e3f7f4;color:#0d8075}.k3 .ki{background:#fff3dc;color:#b7791f}.k4 .ki{background:#e6f6ee;color:#1f8f63}.k5 .ki{background:#ffecef;color:#c03b52}
+.hero{display:flex;justify-content:space-between;align-items:center;gap:18px;background:linear-gradient(115deg,#1f2865,#4f46e5 72%,#7770f3);color:#fff;border-radius:18px;padding:20px 22px;margin:0 0 12px}
+.hero .eyebrow{font-size:10px;letter-spacing:1.6px;font-weight:800;color:#c6c9ff}.hero h2{margin:5px 0 6px;font-size:23px;letter-spacing:-.5px}.hero p{margin:0;color:#e4e6ff;font-size:13px;max-width:680px}
+.hero-stats{display:flex;gap:10px;flex-wrap:wrap}.hero-stat{min-width:150px;text-align:left;background:#ffffff16;border:1px solid #ffffff40;border-radius:13px;padding:11px 14px;color:#fff}
+.hero-stat span{display:flex;align-items:center;gap:6px;font-size:11px;color:#e1e4ff;font-weight:700}.hero-stat strong{display:block;font-size:26px;line-height:1.3}.hero-stat small{font-size:10px;color:#d8dbff}
+.gdot{display:inline-block;width:9px;height:9px;border-radius:50%}.gdot.c{background:var(--ctrl)}.gdot.u{background:var(--unc)}.hero .gdot{border:2px solid #fff}
+.notice{padding:11px 14px;background:#fff8e8;border:1px solid #f0dcab;border-radius:12px;color:#6f520f;margin:10px 0;font-size:13px}
+.good-note{background:#ecf9f2;border-color:#bfe6d1;color:#14593c}
+.empty{padding:30px;text-align:center;color:var(--muted);background:#fff;border:1px dashed #cbd4e6;border-radius:14px}.empty strong{display:block;color:var(--ink);font-size:17px;margin-bottom:6px}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px;text-align:left}.steps div{background:#f7f8ff;border-radius:12px;padding:12px;font-size:12px}.steps b{display:block;color:var(--ink);font-size:13px;margin-bottom:3px}
+/* tables */
+.table-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px;max-height:520px}
+table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}th,td{padding:9px 11px;text-align:left;border-bottom:1px solid #edf0f6;vertical-align:top}
+th{background:#f7f8fc;color:#53627c;position:sticky;top:0;z-index:1;font-weight:700}tbody tr:hover{background:#f8f9ff}tr:last-child td{border-bottom:0}
+.tag{display:inline-block;border-radius:99px;padding:3px 9px;font-size:11px;font-weight:700}.urgent{background:#ffe7ea;color:#a5233a}.attention{background:#fff1d8;color:#875a0b}.track{background:#e4f6ed;color:#14724e}.improve{background:#e7edff;color:#2a4bb4}.nodata{background:#eef1f6;color:#5b6780}
+.up{color:var(--green);font-weight:700}.down{color:var(--red);font-weight:700}
+.student-link{color:#2f4fd0;text-decoration:underline;cursor:pointer;font-weight:700}
+.small{font-size:11px;color:var(--muted)}.hint{font-size:12px;color:var(--muted)}.hidden{display:none!important}
+.footer{color:var(--muted);font-size:11px;margin-top:24px;line-height:1.6}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:99px;padding:6px 12px;font-size:12px;font-weight:650}.chip.on{background:var(--side);color:#fff;border-color:var(--side)}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:10px 0}
+/* preserved pilot + signal panels */
+.dashboard-main-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:12px;margin:12px 0}
+.panel-kicker{font-size:9px;letter-spacing:1.5px;font-weight:850;color:#7776d8;display:block;margin-bottom:3px}
+.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}.panel-head h3{margin:0}
+.gap-pill{font-size:12px;font-weight:800;color:#4b4fc4;background:#f0f1ff;padding:6px 10px;border-radius:9px;white-space:nowrap}
+.pilot-group-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 10px}
+.pilot-group-card{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:13px;border-radius:13px;color:var(--ink);border:1px solid #dfe4f5;background:linear-gradient(145deg,#f7f8ff,#fff);min-width:0;font-weight:400}
+.controlled-card{border-top:4px solid var(--ctrl)}.uncontrolled-card{border-top:4px solid var(--unc)}
+.group-label{font-size:10px;letter-spacing:.7px;font-weight:850;color:#5b6380;display:flex;align-items:center;gap:6px}
+.pilot-group-card>strong{font-size:28px;line-height:1.2;letter-spacing:-1px;margin:3px 0}.group-detail{font-size:11px;color:#5f6b85;line-height:1.45}.group-link{font-size:11px;color:#4f46e5;font-weight:800;margin-top:4px}
+.pilot-difference{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-radius:12px;background:linear-gradient(100deg,#f0f1ff,#f1fbfc);border:1px solid #e5e8fb}
+.pilot-difference small,.pilot-difference span{display:block;font-size:10px;color:#69758e}.pilot-difference strong{display:block;font-size:16px;color:#262b76;margin:2px 0}
+.teacher-group-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.teacher-group-card{border:1px solid var(--line);border-radius:12px;padding:11px}.teacher-group-card h4{margin:0 0 6px;font-size:13px;display:flex;align-items:center;gap:6px}
+.teacher-group-stat{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #eef1f6;font-size:12px}.teacher-group-card button{margin-top:8px;font-size:11px;padding:7px 9px}
+.signal-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto 14px;gap:9px;align-items:center;width:100%;text-align:left;background:#fff;color:var(--ink);padding:8px 10px;border:1px solid #edf0f7;border-radius:11px;margin-top:6px;font-weight:400}
+.signal-row:hover{background:#fafaff;border-color:#cdd3f7}.signal-icon{width:29px;height:29px;border-radius:9px;display:grid;place-items:center;font-weight:900;background:#fff0f1;color:#c63f52}
+.signal-copy strong{display:block;font-size:12px}.signal-copy small{display:block;color:#738097;font-size:10px}.signal-row>b{font-size:18px}.row-arrow{color:#8a92ad}
+.s-green .signal-icon{background:#e3f8ed;color:#12855c}.s-amber .signal-icon{background:#fff4dc;color:#b7791f}.s-blue .signal-icon{background:#e7efff;color:#3155c7}.s-purple .signal-icon{background:#f2eaff;color:#8054c9}.s-muted .signal-icon{background:#eef2f8;color:#66758d}
+.signal-action{font-size:10px;color:#4f46e5;font-weight:800}
+.distribution-list{display:grid;gap:7px}.distribution-list>button{display:grid;grid-template-columns:130px minmax(60px,1fr) 30px;gap:10px;align-items:center;text-align:left;background:#fff;border:1px solid #edf0f8;border-radius:10px;padding:8px 10px;color:var(--ink);font-weight:400}
+.band-name strong,.band-name small{display:block}.band-name strong{font-size:12px}.band-name small{font-size:10px;color:var(--muted)}
+.band-bar{height:8px;background:#f0f1f8;border-radius:20px;overflow:hidden}.band-bar i{display:block;height:100%;border-radius:20px}
+.metric-tile{display:block;text-align:left;background:#fff;border:1px solid var(--line);border-radius:13px;padding:13px 14px;color:var(--ink);font-weight:400;min-width:0}
+.metric-tile:hover{border-color:#b9bff5}.metric-tile .ml{font-size:11px;color:var(--muted);font-weight:650}.metric-tile .mv{font-size:23px;font-weight:800;letter-spacing:-.6px;margin:2px 0}.metric-tile .mh{font-size:11px;color:var(--muted)}
+.watch-card{text-align:left;border-radius:14px;padding:14px;color:var(--ink);background:#fff;border:1px solid var(--line);font-weight:400;min-width:0}
+.watch-card strong.n{display:block;font-size:28px;letter-spacing:-.8px}.watch-card b{display:block;font-size:13px}.watch-card small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.w1{border-top:4px solid #d9485f}.w2{border-top:4px solid #c47f12}.w3{border-top:4px solid #1f8f63}.w4{border-top:4px solid #3561d6}
+.action-list{list-style:none;padding:0;margin:0;display:grid;gap:7px}.action-list li{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #edf0f7;border-radius:11px;background:#fff;font-size:13px}
+.action-list li .ai{width:26px;height:26px;flex:0 0 26px;border-radius:8px;display:grid;place-items:center;font-weight:800;background:#eef0ff;color:#4f46e5}
+.action-list li button{margin-left:auto;font-size:11px;padding:5px 9px;white-space:nowrap}
+.mis{border:1px solid #f1d9a8;background:#fffaf0;border-radius:12px;padding:12px 13px;font-size:13px}.mis b{color:#7a4f06}
+.profile-hero{display:flex;justify-content:space-between;align-items:center;gap:14px;background:linear-gradient(115deg,#e9ecff,#f5f7ff);border:1px solid #dfe3fb;border-radius:18px;padding:18px 20px;margin-bottom:12px}
+.profile-hero h2{margin:2px 0;font-size:22px}.tlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+/* modal */
+.modal-open{overflow:hidden}.modal-backdrop{position:fixed;inset:0;background:#111a35a8;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-card{width:min(100%,1080px);max-height:88vh;overflow:auto;background:#f8f9ff;border-radius:18px;box-shadow:0 28px 90px #10172d66;padding:18px}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}.modal-head h2{margin:2px 0;font-size:20px}
+.modal-close{font-size:22px;padding:3px 11px;background:#eceeff;color:#313b80}
+@media(max-width:1100px){.cg,.grid-main{grid-template-columns:1fr}.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-main-grid{grid-template-columns:1fr}}
+.mini-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.mini-h a{font-size:12px;color:var(--brand);font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap}
+.side{justify-content:space-between;flex-wrap:wrap}
+.side .tools select{background:#ffffff14;color:#fff;border-color:#ffffff30}.side .tools select option{color:#18233f}
+.hbtn{background:#ffffff1c;color:#fff;border:1px solid #ffffff2e;font-size:12px;padding:8px 11px}.hbtn:hover{background:#ffffff30}.hbtn.ghost{background:transparent}
+.upload-bar{background:#fff;border:1px solid var(--line);border-radius:15px;padding:10px 12px;margin:0 0 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center}
+.drop{display:flex;align-items:center;gap:12px;border:2px dashed #b3b9f5;background:#f7f8ff;border-radius:12px;padding:8px 12px;min-width:0}.drop b{display:block;font-size:13px}.drop small{display:block;font-size:11px;color:var(--muted)}.drop>div{flex:1;min-width:0}
+.drop-ic{width:34px;height:34px;flex:0 0 34px;border-radius:10px;background:#e9ebff;color:var(--brand);display:grid;place-items:center;font-size:18px;font-weight:800}
+.upload-bar.drag .drop{background:#e3e6ff;border-color:var(--brand)}
+.manual{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.mini{font-size:11px;padding:7px 9px}
+.tmpl{margin-left:0}.tmpl summary{font-size:11px}
+.upload-bar .upload-status{grid-column:1/-1;padding:0 2px}
+.vhero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;background:linear-gradient(115deg,#1f2865,#4f46e5 75%,#7770f3);color:#fff;border-radius:18px;padding:18px 20px;margin:0 0 12px}
+.vhero .eyebrow{font-size:10px;letter-spacing:1.6px;font-weight:800;color:#c6c9ff}.vhero h2{margin:5px 0 6px;font-size:24px;letter-spacing:-.5px}.vhero p{margin:0;color:#e4e6ff;font-size:13px}
+.vhero .links{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.vhero .links button{background:#ffffff1f;border:1px solid #ffffff40;font-size:12px;padding:7px 11px}
+.gtiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gtile{text-align:left;background:#ffffff14;border:1px solid #ffffff3a;border-radius:14px;padding:12px 14px;color:#fff;font-weight:400}.gtile:hover{background:#ffffff22}
+.gtile .gn{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800}.gtile .gn .gdot{border:2px solid #fff}
+.gtile .big{display:block;font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.2;margin-top:4px}.gtile .bl{display:block;font-size:10px;color:#d8dbff;margin-bottom:6px}
+.gtile .gl{display:flex;justify-content:space-between;font-size:11px;color:#e8eaff;border-top:1px solid #ffffff26;padding-top:4px;margin-top:4px}
+.gap-line{grid-column:1/-1;font-size:11px;color:#dfe2ff}
+.chipline{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.chipline button{background:#f4f5fb;color:var(--ink);border:1px solid var(--line);font-size:12px;padding:6px 10px;font-weight:600}.chipline button:hover{border-color:#b9bff5}
+.wgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}.wgrid .watch-card{padding:11px 12px}.wgrid .watch-card strong.n{font-size:22px}
+.use-panel{background:#f7f8fc;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 10px}.use-title{font-size:12px;font-weight:800;margin-bottom:6px}
+.use-row{margin:6px 0}.use-head{font-size:12px}.use-head span{color:var(--muted)}
+.use-bar{display:flex;gap:2px;height:22px;margin-top:4px;border-radius:7px;overflow:hidden}.use-bar button{border-radius:0;padding:0;font-size:11px;font-weight:700;color:#fff;min-width:24px}.use-bar button:hover{filter:brightness(1.08)}
+.use-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-top:6px}.use-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.more{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:12px 0}.more button{background:#fff;color:var(--ink);border:1px solid var(--line);text-align:left;padding:11px 12px;border-radius:12px;font-weight:400}.more button:hover{border-color:#b9bff5;background:#fafaff}.more b{display:block;font-size:13px}.more small{display:block;font-size:11px;color:var(--muted)}
+.mini-h h3{cursor:pointer}
+@media(max-width:1100px){.vhero{grid-template-columns:1fr}.more{grid-template-columns:repeat(3,minmax(0,1fr))}.upload-bar{grid-template-columns:1fr}.manual{justify-content:flex-start}}
+@media(max-width:600px){.gtiles,.wgrid{grid-template-columns:1fr}.more{grid-template-columns:1fr 1fr}.side .tools{width:100%}.side .tools select{flex:1}}
+@media(max-width:900px){.side{padding:6px 8px;gap:8px}.logo small{display:none}.logo{font-size:14px}.upload-hub{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:1fr}}
+@media(max-width:560px){.logo{display:none}.nav-sep{display:none}.nav{flex-wrap:nowrap;overflow-x:auto}}
+@media(max-width:700px){.grid2,.pilot-group-cards,.teacher-group-grid,.steps{grid-template-columns:1fr}.hero{flex-direction:column;align-items:flex-start}.upload-hub{grid-template-columns:1fr}.uploaded-menu{margin-left:0}.distribution-list>button{grid-template-columns:100px minmax(40px,1fr) 26px}}
+@media(max-width:480px){.grid4{grid-template-columns:1fr}}
+@media print{.side,.upload-bar,.tools,.more{display:none}}
+</style>
+</head>
+<body>
+<div class="layout">
+<header class="side">
+ <div class="logo">DIL IqbalAI <span>Analytics</span><small>Controlled vs Uncontrolled pilot</small></div>
+ <div class="tools">
+  <select id="groupFilter" aria-label="Filter group"><option value="">All groups</option></select>
+  <select id="schoolFilter" aria-label="Filter school"><option value="">All schools/classes</option></select>
+  <button class="hbtn" onclick="exportAll()" title="One Excel file with every report">⬇ Excel (all reports)</button>
+  <button class="hbtn" onclick="exportDashboardHTML()">Export view as HTML</button>
+  <button class="hbtn ghost" onclick="resetAll()">Clear data</button>
+ </div>
+</header>
+<div class="main">
+ <section id="uploadHub" class="upload-bar">
+  <div class="drop" id="autoDrop"><span class="drop-ic">⇪</span><div><b>Drop all test files here</b><small>Group, baseline/follow-up and date are detected automatically</small></div><input id="autoInput" class="real-file-input" type="file" accept=".xlsx,.xls,.csv" multiple><button type="button" onclick="document.getElementById('autoInput').click()">Choose files</button></div>
+  <div class="manual">
+   <span class="small">Or by type:</span>
+   <input id="controlledBaselineInput" class="real-file-input" type="file" accept=".xlsx,.xls,.csv" multiple>
+   <button type="button" class="mini btn-c" onclick="document.getElementById('controlledBaselineInput').click()">Controlled baseline</button>
+   <input id="uncontrolledBaselineInput" class="real-file-input" type="file" accept=".xlsx,.xls,.csv" multiple>
+   <button type="button" class="mini btn-u" onclick="document.getElementById('uncontrolledBaselineInput').click()">Uncontrolled baseline</button>
+   <input id="controlledFollowupInput" class="real-file-input" type="file" accept=".xlsx,.xls,.csv" multiple>
+   <button type="button" class="mini btn-c" onclick="document.getElementById('controlledFollowupInput').click()">Controlled follow-up</button>
+   <input id="uncontrolledFollowupInput" class="real-file-input" type="file" accept=".xlsx,.xls,.csv" multiple>
+   <button type="button" class="mini btn-u" onclick="document.getElementById('uncontrolledFollowupInput').click()">Uncontrolled follow-up</button>
+   <details class="uploaded-menu tmpl"><summary>Excel templates ▾</summary><div class="uploaded-menu-body"><div class="small">Download the matching group template</div><div class="upload-actions" style="margin-top:8px"><button type="button" class="light" onclick="downloadInputTemplate('Controlled')">Controlled template</button><button type="button" class="light" onclick="downloadInputTemplate('Uncontrolled')">Uncontrolled template</button></div></div></details>
+  </div>
+  <div class="upload-status"><div id="status" role="status" aria-live="polite">No files loaded yet.</div><div id="trackedStudentInfo">Students tracked: 0 · 0 assessment records</div><details class="uploaded-menu"><summary>Uploaded files <b id="uploadedCount">0</b></summary><div class="uploaded-menu-body"><div class="small">Files stay in this browser only.</div><div class="files" id="filePills"></div></div></details><div id="scopeSub" class="small" style="flex-basis:100%"></div></div>
+ </section>
+ <div id="view"></div>
+</div>
+</div>
+
+<div id="rosterModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle" onclick="if(event.target===this)closeRosterModal()"><div class="modal-card"><div class="modal-head"><div style="display:flex;gap:10px;align-items:flex-start"><button id="modalBack" class="light hidden" onclick="popBack()" aria-label="Back">←</button><div><div class="panel-kicker" id="modalKicker">DETAILS</div><h2 id="modalTitle">Matching students</h2><div id="modalSubtitle" class="small"></div></div></div><div style="display:flex;gap:6px"><button class="secondary" onclick="exportModal()">⬇ Excel</button><button class="modal-close" onclick="closeRosterModal()" aria-label="Close">×</button></div></div><div id="modalBody"></div></div></div>
+
+<script>
+/* ============ constants & helpers ============ */
+const G=['Controlled','Uncontrolled'];
+const GC={Controlled:'#4f46e5',Uncontrolled:'#0d9488'};
+const GCL={Controlled:'#a5a1f3',Uncontrolled:'#7fcfc6'};
+const SECTIONS=[{id:'compare',name:'Group comparison',sub:'Which group is improving faster, scorecard and how it is calculated'},{id:'history',name:'Test history',sub:'Every test for both groups and every student’s score history'},{id:'students',name:'All students',sub:'Status, scores and online-support use for every student'},{id:'class',name:'Class progress overview',sub:'Averages, proficiency, score bands, improving / same / declining'},{id:'topics',name:'Topic / skill mastery',sub:'What to teach next, topic ranking, student-by-topic detail'},{id:'questions',name:'Question analysis & misconceptions',sub:'% correct per question and common wrong answers'},{id:'support',name:'Online support vs learning progress',sub:'Is time online turning into better scores? Usage and quiz time'},{id:'watch',name:'Action plan',sub:'This week’s priorities, students to watch, data gaps'},{id:'data',name:'Uploaded data',sub:'Files, sheets recognized and how to fill templates'}];
+const state={records:[],topics:[],answers:[],allSheets:[],loadedNames:[],workbooks:[],fileSeq:0,page:'home',student:null,qWave:'',topicView:'latest',stuFilter:'all',stuSearch:'',histSearch:'',stack:[],trendMode:'gain'};
+let WAVES={},WBG={Controlled:[],Uncontrolled:[]},D=null,modalRows=[];
+const $=id=>document.getElementById(id);
+const norm=s=>String(s??'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function get(row,names){const keys=Object.keys(row);for(const n of names){const k=keys.find(x=>norm(x)===norm(n));if(k!==undefined&&row[k]!==''&&row[k]!==null&&row[k]!==undefined)return row[k]}return null}
+function num(v){if(v===null||v===undefined||v==='')return null;if(typeof v==='number')return Number.isFinite(v)?v:null;let s=String(v).trim().replace(/,/g,'');if(s.endsWith('%')){const x=parseFloat(s);return Number.isFinite(x)?x/100:null}const x=Number(s);return Number.isFinite(x)?x:null}
+function pct(v){let x=num(v);if(x===null)return null;if(x>1&&x<=100)x=x/100;return x}
+function scoreOf(r){let p=pct(get(r,['Percentage','Score %','Score','Topic Score %','Topic Score']));if(p!==null)return p;const c=num(get(r,['Correct Answers','Correct'])),t=num(get(r,['Total Questions','Total']));return c!==null&&t?c/t:null}
+function keyStudent(r){return String(r.email||r.student||'').trim().toLowerCase()}
+function firstText(r,names){const v=get(r,names);return v===null?'':String(v).trim()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function percent(x){return x===null||x===undefined||!Number.isFinite(x)?'—':(x*100).toFixed(1)+'%'}
+function pp(x){return x===null||x===undefined||!Number.isFinite(x)?'—':(x>=0?'+':'')+(x*100).toFixed(1)+' pp'}
+function ppCls(x){return x===null||x===undefined?'':x>0?'up':x<0?'down':''}
+function avg(a){const v=a.filter(x=>x!==null&&x!==undefined&&Number.isFinite(x));return v.length?v.reduce((s,x)=>s+x,0)/v.length:null}
+function median(a){const v=a.filter(x=>x!==null&&Number.isFinite(x)).sort((x,y)=>x-y);if(!v.length)return null;const m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2}
+function unique(a){return [...new Set(a.filter(x=>x!==''&&x!==null&&x!==undefined).map(String))].sort((a,b)=>a.localeCompare(b))}
+function r1(x){return x===null||x===undefined||!Number.isFinite(x)?null:Math.round(x*1000)/10}
+function iso(y,mo,d){if(mo<1||mo>12||d<1||d>31)return null;return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
+function fileDate(f){f=String(f||'');let m=f.match(/(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})/);if(m)return iso(+m[1],+m[2],+m[3]);m=f.match(/(?:^|\D)(\d{1,2})[-_.](\d{1,2})[-_.](20\d{2})(?:\D|$)/);if(m)return iso(+m[3],+m[2],+m[1]);return null}
+function dateVal(v){if(v===null||v===undefined||v==='')return null;if(v instanceof Date&&!isNaN(v))return iso(v.getFullYear(),v.getMonth()+1,v.getDate());if(typeof v==='number'&&v>20000&&v<80000)return new Date(Date.UTC(1899,11,30)+Math.round(v)*86400000).toISOString().slice(0,10);const s=String(v).trim();let m=s.match(/^(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);if(m)return iso(+m[1],+m[2],+m[3]);m=s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})/);if(m)return iso(+m[3],+m[2],+m[1]);const d=new Date(s);return isNaN(d)?null:iso(d.getFullYear(),d.getMonth()+1,d.getDate())}
+const DATE_COLS=['Test Date','Assessment Date','Assessment Date (YYYY-MM-DD)','Quiz Date','Test Date','Date'];
+function rowDate(r,file,def){return dateVal(get(r,DATE_COLS))||fileDate(file)||def||null}
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(d){if(!d)return '';const [y,m,dd]=d.split('-');return `${+dd} ${MON[+m-1]} ${y}`}
+function daysBetween(a,b){return Math.round((Date.parse(b)-Date.parse(a))/86400000)}
+function gdot(g){return `<i class="gdot ${g==='Controlled'?'c':'u'}"></i>`}
+function classify(r){const s=r.score;if(s===null||s===undefined)return 'Insufficient data';if(s<.3)return 'Urgent Support';if(s<.5)return 'Needs Attention';if(r.delta!==null&&r.delta!==undefined&&r.delta>=.05)return 'Improving';return 'On Track'}
+function statusTag(s){const c=s==='Urgent Support'?'urgent':s==='Needs Attention'?'attention':s==='Improving'?'improve':s==='On Track'?'track':'nodata';return `<span class="tag ${c}">${esc(s)}</span>`}
+function sid(s){return encodeURIComponent(s.group+'||'+s.key)}
+
+/* ============ parsing ============ */
+function fileSeqNo(f){const m=String(f||'').match(/(20\d{2}[-_.]\d{1,2}[-_.]\d{1,2}|\d{1,2}[-_.]\d{1,2}[-_.]20\d{2})[ _-]\(?(\d{1,2})\)?\.(xlsx|xls|csv)$/i);return m?+m[2]:1}
+function waveKeyOf(x){return x.stage==='Baseline'?`${x.group}|B`:(x.date?`${x.group}|F|${x.date}|${x.seqNo||1}`:`${x.group}|F|#${x.fileSeq}`)}
+function rowsFromSheet(rows,meta){
+ const cols=Object.keys(rows[0]||{}).map(norm);const has=n=>cols.includes(norm(n));
+ if(!(has('student name')||has('name')))return 'Not used (no Student Name column)';
+ const base=r=>{const o={student:firstText(r,['Student Name','Name']),email:firstText(r,['Email','Student ID','Student Email']),school:firstText(r,['School','Class','Section']),group:meta.group,stage:meta.stage,fileSeq:meta.fileSeq,seqNo:fileSeqNo(meta.file),date:rowDate(r,meta.file,meta.defDate),assessment:firstText(r,['Test Name','Assessment','Quiz','Test']),source:meta.origName};o.waveKey=waveKeyOf(o);return o};
+ const isAns=(has('question no')||has('question number')||has('question id'))&&(has('student selected')||has('student answer'));
+ if(isAns){let n=0;for(const r of rows){const b=base(r);if(!b.student)continue;state.answers.push({...b,question:firstText(r,['Question No','Question Number','Question ID']),topic:firstText(r,['Weak Topic','Topic']),selected:firstText(r,['Student Selected','Student Answer']),correct:firstText(r,['Correct Answer']),questionText:firstText(r,['Question','Question Text'])});n++}return `Question answers (${n} rows)`}
+ const isTopic=(has('weak topic')||has('topic'))&&(has('score %')||has('topic score %')||has('topic score')||(has('correct')&&has('total')));
+ if(isTopic){let n=0;for(const r of rows){const b=base(r);if(!b.student)continue;state.topics.push({...b,topic:firstText(r,['Weak Topic','Topic']),score:scoreOf(r),correct:num(get(r,['Correct'])),total:num(get(r,['Total'])),wrongCount:num(get(r,['Wrong Count'])),wrongDetail:firstText(r,['Wrong Q (No / Student / Correct)','Wrong Questions'])});n++}return `Topic scores (${n} rows)`}
+ const valid=['percentage','correct answers','total questions','score','score %'].some(has);
+ if(!valid)return 'Stored only (no score columns)';
+ let n=0;for(const raw of rows){const b=base(raw);if(!b.student)continue;const r=raw;
+  state.records.push({...b,score:scoreOf(r),correct:num(get(r,['Correct Answers','Correct'])),total:num(get(r,['Total Questions','Total'])),incorrect:num(get(r,['Incorrect'])),
+  minutes:num(get(r,['Minutes Taken','No. of Minutes Taken to Finish the Exam','No. of Minutes Taken to Finish Exam'])),
+  quizMinutes:num(get(r,['Quiz Completion Time (Minutes)','Quiz Time Minutes','Time Taken to Complete Quiz (Minutes)','Minutes Taken to Finish Exam','No. of Minutes Taken to Finish Exam','No. of Minutes Taken to Finish the Exam','Minutes Taken'])),
+  usageMinutes:num(get(r,['System Usage Time (Minutes)','System Usage Minutes','Time Used System (Minutes)','Online Support Minutes','Support Minutes','Usage Minutes','Minutes on Platform'])),
+  usageDays:num(get(r,['Days Active','Days Using Online Support','Support Days'])),
+  lessons:num(get(r,['Activities Completed','Lessons Completed','Activities/Lessons Completed'])),
+  lastActive:dateVal(get(r,['Last Active Date','Last Active','Last Login'])),
+  weakTopics:firstText(r,['Weak Topics']),wrongQuestions:firstText(r,['Wrong Questions (by Weak Topic','Wrong Questions'])});n++}
+ return `Student scores (${n} rows)`;
+}
+async function readWB(file){let wb;if(file.name.toLowerCase().endsWith('.csv')){wb=XLSX.read(await file.text(),{type:'string'})}else wb=XLSX.read(await file.arrayBuffer(),{type:'array'});return wb.SheetNames.map(sn=>[sn,XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:null,raw:true})])}
+function fileDefaultDate(all){const cnt={};all.forEach(([,rows])=>rows.forEach(r=>{const d=dateVal(get(r,DATE_COLS));if(d)cnt[d]=(cnt[d]||0)+1}));return Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||null}
+function parseLoaded(all,meta){
+ // A file is one test: sheets without their own date (e.g. topic/answer sheets) inherit the date found elsewhere in the file.
+ meta.defDate=fileDefaultDate(all);
+ for(const [sn,rows] of all){const rec=rows.length?rowsFromSheet(rows,{...meta,sheet:sn}):'Empty sheet';state.allSheets.push({file:meta.origName,label:`${meta.group} ${meta.stage}`,sheet:sn,rows,recognized:rec})}
+}
+async function processJobs(jobs,errors){
+ for(const j of jobs){state.fileSeq++;
+  try{parseLoaded(j.all||await readWB(j.file),{file:j.file.name,origName:j.file.name,group:j.group,stage:j.stage,fileSeq:state.fileSeq});state.workbooks.push({name:j.file.name,group:j.group,stage:j.stage});state.loadedNames.push(`${j.group} ${j.stage}: ${j.file.name}${j.auto?' (auto)':''}`)}
+  catch(err){console.error(err);errors.push(`${j.file.name}: ${err&&err.message?err.message:'could not read file'}`)}}
+ dedupe();buildWaves();rebuildFilters();refreshFileList();saveState();
+}
+function refreshFileList(){$('filePills').innerHTML=state.loadedNames.map(n=>`<span class="pill">${esc(n)}</span>`).join('');$('uploadedCount').textContent=state.loadedNames.length}
+async function uploadTaggedFiles(input,tag){
+ const files=[...input.files];if(!files.length)return;
+ if(!window.XLSX){$('status').textContent='The Excel reader did not load. Check the internet connection and reload the page.';return}
+ const [group,stage]=tag.split('_');const g=group==='uncontrolled'?'Uncontrolled':'Controlled',st=stage==='baseline'?'Baseline':'Follow-up';
+ const status=$('status');const errors=[];status.textContent=`Reading ${files.length} ${g} ${st} file(s)…`;
+ await processJobs(files.map(f=>({file:f,group:g,stage:st})),errors);
+ const ok=files.length-errors.length;
+ status.textContent=errors.length?`Uploaded ${ok} of ${files.length} file(s). Errors: ${errors.join(' | ')}`:`✓ Uploaded ${files.length} ${g} ${st} file(s). ${state.records.length} assessment rows detected.`;
+ status.style.color=errors.length?'#b45309':'#166534';input.value='';render();
+}
+/* Auto upload: works out group, baseline/follow-up and date from the file name or its columns. */
+function detectGroup(name,all){const n=norm(name).replace(/\s/g,'');if(n.includes('uncontrolled')||n.includes('noncontrolled'))return 'Uncontrolled';if(n.includes('controlled'))return 'Controlled';for(const [,rows] of all){const v=norm(get(rows[0]||{},['Group'])||'').replace(/\s/g,'');if(v.includes('uncontrolled')||v.includes('noncontrolled'))return 'Uncontrolled';if(v.includes('controlled'))return 'Controlled'}return null}
+function detectStage(name,all){const n=norm(name);if(/baseline|diagnostic|pre ?test/.test(n))return 'Baseline';if(/follow|final|post ?test|endline|latest|quiz/.test(n))return 'Follow-up';for(const [,rows] of all){const v=norm(get(rows[0]||{},['Test Type','Stage (Baseline/Follow-up)','Stage'])||'');if(v.includes('baseline'))return 'Baseline';if(v.includes('follow'))return 'Follow-up'}return null}
+async function autoUpload(fileList){
+ const files=[...fileList].filter(f=>/\.(xlsx|xls|csv)$/i.test(f.name));if(!files.length)return;
+ if(!window.XLSX){$('status').textContent='The Excel reader did not load. Check the internet connection and reload the page.';return}
+ const status=$('status');status.textContent=`Reading ${files.length} file(s) and detecting group / test type…`;
+ const jobs=[],unknown=[],errors=[];
+ for(const f of files){try{const all=await readWB(f);const g=detectGroup(f.name,all);if(!g){unknown.push(f.name);continue}jobs.push({file:f,all,group:g,stage:detectStage(f.name,all),date:fileDate(f.name)||fileDefaultDate(all),auto:true})}catch(e){errors.push(f.name+': could not read file')}}
+ // No stage found: the earliest test of a group becomes its baseline if the group has none yet; the rest are follow-ups.
+ G.forEach(g=>{const js=jobs.filter(j=>j.group===g);const hasB=WBG[g].some(w=>w.stage==='Baseline')||js.some(j=>j.stage==='Baseline');const open=js.filter(j=>!j.stage).sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999'));open.forEach((j,i)=>j.stage=(!hasB&&i===0)?'Baseline':'Follow-up')});
+ jobs.sort((a,b)=>(a.stage==='Baseline'?0:1)-(b.stage==='Baseline'?0:1)||(a.date||'9999').localeCompare(b.date||'9999'));
+ await processJobs(jobs,errors);
+ const msg=[`✓ Auto-uploaded ${jobs.length} file(s): `+G.map(g=>{const js=jobs.filter(j=>j.group===g);return js.length?`${g} — ${js.filter(j=>j.stage==='Baseline').length} baseline, ${js.filter(j=>j.stage!=='Baseline').length} follow-up`:''}).filter(Boolean).join('; ')+'.'];
+ if(unknown.length)msg.push(`Could not tell the group for: ${unknown.join(', ')} — add “controlled” or “uncontrolled” to the file name, or use the group buttons.`);
+ if(errors.length)msg.push('Errors: '+errors.join(' | '));
+ status.textContent=msg.join(' ');status.style.color=unknown.length||errors.length?'#b45309':'#166534';$('autoInput').value='';render();
+}
+/* Saved automatically in this browser so the teacher does not need to re-upload. */
+const SAVE_KEY='dil_iqbalai_dashboard_v2';
+function saveState(){try{const strip=a=>a.map(r=>{const o={...r};delete o.wave;return o});localStorage.setItem(SAVE_KEY,JSON.stringify({records:strip(state.records),topics:state.topics,answers:state.answers,loadedNames:state.loadedNames,workbooks:state.workbooks,fileSeq:state.fileSeq,sheets:state.allSheets.map(s=>({file:s.file,label:s.label,sheet:s.sheet,n:s.rows.length,recognized:s.recognized})),saved:new Date().toISOString()}))}catch(e){console.warn('Could not save in this browser',e)}}
+function loadState(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;const d=JSON.parse(raw);Object.assign(state,{records:d.records||[],topics:d.topics||[],answers:d.answers||[],loadedNames:d.loadedNames||[],workbooks:d.workbooks||[],fileSeq:d.fileSeq||0,allSheets:(d.sheets||[]).map(s=>({file:s.file,label:s.label,sheet:s.sheet,rows:new Array(s.n||0).fill({}),recognized:s.recognized,restored:true}))});buildWaves();rebuildFilters();refreshFileList();$('status').textContent=`✓ Restored ${state.loadedNames.length} file(s) saved in this browser on ${fmtDate(String(d.saved||'').slice(0,10))}. Use “Clear data” to start fresh.`;$('status').style.color='#166534';return true}catch(e){return false}}
+function mergeInto(old,r){const o={...old};for(const k in r){if((o[k]===null||o[k]===undefined||o[k]==='')&&r[k]!==null&&r[k]!==undefined&&r[k]!=='')o[k]=r[k]}o.fileSeq=Math.min(old.fileSeq,r.fileSeq);return o}
+function dedupe(){
+ const dd=(arr,kf)=>{const m=new Map();for(const r of arr){const k=kf(r);m.set(k,m.has(k)?mergeInto(m.get(k),r):r)}return [...m.values()]};
+ state.records=dd(state.records,r=>r.waveKey+'||'+keyStudent(r));
+ state.topics=dd(state.topics,r=>r.waveKey+'||'+keyStudent(r)+'||'+norm(r.topic));
+ state.answers=dd(state.answers,r=>r.waveKey+'||'+keyStudent(r)+'||'+norm(r.question));
+}
+function buildWaves(){
+ WAVES={};for(const r of state.records){const k=r.waveKey;if(!WAVES[k])WAVES[k]={key:k,group:r.group,stage:r.stage,date:r.date,seqNo:r.seqNo||1,fileSeq:r.fileSeq,name:r.assessment};else WAVES[k].fileSeq=Math.min(WAVES[k].fileSeq,r.fileSeq)}
+ const cmp=(a,b)=>((a.stage==='Baseline'?0:1)-(b.stage==='Baseline'?0:1))||((a.date&&b.date)?a.date.localeCompare(b.date):0)||((a.seqNo||1)-(b.seqNo||1))||(a.fileSeq-b.fileSeq);
+ G.forEach(g=>{const l=Object.values(WAVES).filter(w=>w.group===g).sort(cmp);const hasB=l[0]&&l[0].stage==='Baseline';l.forEach((w,i)=>{w.idx=i;w.label=w.stage==='Baseline'?'Baseline':hasB?`Follow-up ${i}`:`Test ${i+1}`;w.isFirst=i===0;w.isLatest=i===l.length-1;w.full=`${w.label}${w.isLatest&&i>0?' (latest)':''}${w.date?' · '+fmtDate(w.date)+((w.seqNo||1)>1?' (#'+w.seqNo+')':''):''}`});WBG[g]=l});
+ state.records.forEach(r=>r.wave=WAVES[r.waveKey]);
+}
+function rebuildFilters(){const gv=$('groupFilter').value,sv=$('schoolFilter').value;const groups=unique(state.records.map(r=>r.group)),schools=unique(state.records.map(r=>r.school));$('groupFilter').innerHTML='<option value="">All groups</option>'+groups.map(x=>`<option${x===gv?' selected':''}>${esc(x)}</option>`).join('');$('schoolFilter').innerHTML='<option value="">All schools/classes</option>'+schools.map(x=>`<option${x===sv?' selected':''}>${esc(x)}</option>`).join('')}
+function filt(arr){const g=$('groupFilter').value,s=$('schoolFilter').value;if(!s)return arr.filter(r=>!g||r.group===g);const inSchool=new Set(state.records.filter(r=>r.school===s).map(r=>r.group+'||'+keyStudent(r)));return arr.filter(r=>(!g||r.group===g)&&(r.school===s||inSchool.has(r.group+'||'+keyStudent(r))))}
+
+/* ============ computation ============ */
+function compute(){
+ const recs=filt(state.records).filter(r=>r.wave);
+ const by=new Map();recs.forEach(r=>{const k=keyStudent(r);if(!k)return;const kk=r.group+'||'+k;if(!by.has(kk))by.set(kk,[]);by.get(kk).push(r)});
+ const students=[];
+ for(const arr of by.values()){arr.sort((a,b)=>a.wave.idx-b.wave.idx);const sc=arr.filter(r=>r.score!==null);const base=sc.length&&sc[0].wave.idx===0?sc[0]:null;sc.forEach((r,i)=>{r.previous=i?sc[i-1].score:null;r.delta=i?r.score-sc[i-1].score:null;r.sinceFirst=base&&r!==base?r.score-base.score:null;r.status=classify(r)});
+  const L=sc.length?sc[sc.length-1]:arr[arr.length-1];const s={...L,key:keyStudent(L),history:sc,nTests:sc.length,first:base?base.score:null,noBaseline:!base,gain:base&&L!==base?L.score-base.score:null};
+  if(!sc.length){s.previous=null;s.delta=null}
+  ['usageMinutes','usageDays','lessons','lastActive','quizMinutes'].forEach(f=>{if(s[f]===null||s[f]===undefined){for(let i=arr.length-1;i>=0;i--){if(arr[i][f]!==null&&arr[i][f]!==undefined){s[f]=arr[i][f];break}}}});
+  s.status=classify(s);students.push(s)}
+ students.sort((a,b)=>(a.score??2)-(b.score??2));
+ const topics=filt(state.topics),answers=filt(state.answers);
+ const usageVals=students.map(s=>s.usageMinutes).filter(x=>x!==null&&x!==undefined);
+ const D0={recs,students,topics,answers,useMedian:median(usageVals),hasUsage:usageVals.length>0};
+ D=D0;D.gs={};G.forEach(g=>D.gs[g]=groupStats(g));D.tl=timeline();D.q=supportQuadrants();return D;
+}
+function groupStats(name){const arr=D.students.filter(r=>r.group===name);const scores=arr.map(r=>r.score).filter(x=>x!==null&&x!==undefined);const ch=arr.filter(r=>r.delta!==null&&r.delta!==undefined).map(r=>r.delta);const gains=arr.filter(r=>r.gain!==null).map(r=>r.gain);const matched=arr.filter(r=>r.gain!==null);const use=arr.filter(r=>r.usageMinutes!==null&&r.usageMinutes!==undefined);
+ return {name,n:arr.length,mean:avg(scores),proficiency:scores.length?scores.filter(x=>x>=.5).length/scores.length:null,below:scores.filter(x=>x<.5).length,urgent:scores.filter(x=>x<.3).length,improved:ch.length?ch.filter(x=>x>0).length/ch.length:null,improvedCount:ch.filter(x=>x>0).length,meanChange:avg(ch),changes:ch.length,gainN:gains.length,meanGain:avg(gains),gainImproved:gains.filter(x=>x>0).length,firstMatched:avg(matched.map(r=>r.first)),latestMatched:avg(matched.map(r=>r.score)),usageTotal:use.length?use.reduce((a,r)=>a+r.usageMinutes,0):null,records:arr}}
+function waveStats(g){return WBG[g].map(w=>{const arr=D.recs.filter(r=>r.waveKey===w.key&&r.score!==null);const gm=w.idx===0?arr.map(()=>0):arr.filter(r=>r.sinceFirst!==null&&r.sinceFirst!==undefined).map(r=>r.sinceFirst);return {wave:w,n:arr.length,gain:avg(gm),gainN:gm.length,mean:avg(arr.map(r=>r.score)),pro:arr.length?arr.filter(r=>r.score>=.5).length/arr.length:null,records:arr}}).filter(x=>x.n)}
+function timeline(){const ws={};G.forEach(g=>{ws[g]=waveStats(g);ws[g].forEach((w,i)=>{const p=ws[g][i-1],f=ws[g][0];w.chgPrev=i?w.mean-p.mean:null;w.chgFirst=i?w.mean-f.mean:null})});
+ const all=G.flatMap(g=>ws[g]);const dated=all.length>0&&all.every(w=>w.wave.date);let labels=[];
+ if(dated){const kf=w=>w.wave.date+'|'+String(w.wave.seqNo||1).padStart(2,'0');const ds=[...new Set(all.map(kf))].sort();G.forEach(g=>ws[g].forEach(w=>w.slot=ds.indexOf(kf(w))));labels=ds.map(x=>{const [d,q]=x.split('|');return fmtDate(d)+(+q>1?' #'+(+q):'')})}
+ else{const N=Math.max(0,...G.map(g=>ws[g].length-1));labels=['Baseline / 1st test',...Array.from({length:N},(_,i)=>`Follow-up ${i+1}${i===N-1?' (latest)':''}`)];G.forEach(g=>{const k=ws[g].length-1;ws[g].forEach((w,i)=>w.slot=i===0?0:N-k+i)})}
+ const series={};G.forEach(g=>{series[g]=labels.map(()=>null);ws[g].forEach(w=>series[g][w.slot]=w)});return {labels,series,dated,ws}}
+function verdict(){const c=D.gs.Controlled,u=D.gs.Uncontrolled;const word=x=>x>=0?'improved by':'dropped by';const abs=x=>(Math.abs(x)*100).toFixed(1)+' pp';
+ if(!c.n&&!u.n)return {title:'Upload test results to begin',text:'Start with the baseline file for each group.'};
+ if(c.meanGain===null||u.meanGain===null){const have=[c,u].filter(x=>x.meanGain!==null),miss=[c,u].filter(x=>x.meanGain===null).map(x=>x.name);return {title:'Waiting for more test results',text:(have.length?have.map(x=>`${x.name} students ${word(x.meanGain)} ${abs(x.meanGain)} on average since their first test (${x.gainN} students). `).join(''):'')+`Upload a follow-up test for the ${miss.join(' and ')} group to compare progress.`}}
+ const diff=u.meanGain-c.meanGain,leader=diff>0?'Uncontrolled':'Controlled';const small=Math.min(c.gainN,u.gainN)<10?' Note: fewer than 10 matched students in a group, so treat this as an early signal.':'';
+ return {title:Math.abs(diff)<.01?'Both groups are improving at about the same rate':`${leader} group is improving faster`,text:`Since their first test, Uncontrolled students ${word(u.meanGain)} ${abs(u.meanGain)} on average (${u.gainN} students) and Controlled students ${word(c.meanGain)} ${abs(c.meanGain)} (${c.gainN} students). Difference: ${abs(diff)}${Math.abs(diff)<.01?'':' in favour of '+leader}.${small}`}}
+function trendSentence(g){const w=D.tl.ws[g];if(state.trendMode!=='avg'){if(!w.length)return `<b>${g}:</b> no scored tests yet.`;if(w.length<2)return `<b>${g}:</b> baseline only so far.`;let up=0;for(let i=1;i<w.length;i++)if((w[i].gain??0)>(w[i-1].gain??0))up++;return `<b>${g}:</b> ${w.slice(1).map(x=>`${pp(x.gain)} (${x.wave.label}, ${x.gainN} students)`).join(' → ')}. Better than the previous test in ${up} of ${w.length-1} step${w.length>2?'s':''}.`}if(!w.length)return `<b>${g}:</b> no scored tests yet.`;const seq=w.map(x=>Math.round(x.mean*100)+'%').join(' → ');if(w.length<2)return `<b>${g}:</b> ${seq} (only one test so far).`;let up=0;for(let i=1;i<w.length;i++)if(w[i].mean>w[i-1].mean)up++;return `<b>${g}:</b> ${seq}. Average went up in ${up} of ${w.length-1} step${w.length>2?'s':''} (${pp(w[w.length-1].mean-w[0].mean)} overall).`}
+
+/* ============ rosters / drill-down ============ */
+function latestAbsentees(){return D.students.filter(s=>{const l=WBG[s.group]?.filter(w=>D.recs.some(r=>r.waveKey===w.key&&r.score!==null)).slice(-1)[0];return l&&s.waveKey!==l.key}).map(s=>({...s,missingWave:WBG[s.group].slice(-1)[0]}))}
+function topicView(view){const v=view||state.topicView;if(v==='all')return D.topics;const pick=t=>{const l=WBG[t.group]||[];const w=v==='latest'?l.filter(x=>D.topics.some(y=>y.waveKey===x.key)).slice(-1)[0]:l.filter(x=>D.topics.some(y=>y.waveKey===x.key))[0];return w&&t.waveKey===w.key};const r=D.topics.filter(pick);return r.length?r:D.topics}
+function topicAgg(ts){const m=new Map();ts.forEach(t=>{if(!t.topic)return;if(!m.has(t.topic))m.set(t.topic,{topic:t.topic,c:0,t:0,scores:[],students:new Set(),weak:new Set(),wrong:0});const a=m.get(t.topic);if(t.correct!==null&&t.total){a.c+=t.correct;a.t+=t.total}else if(t.score!==null)a.scores.push(t.score);a.students.add(t.group+'||'+keyStudent(t));if(t.score!==null&&t.score<.5)a.weak.add(t.group+'||'+keyStudent(t));if(t.wrongCount!==null)a.wrong+=t.wrongCount;else if(t.correct!==null&&t.total)a.wrong+=t.total-t.correct});return [...m.values()].map(a=>({...a,score:a.t?a.c/a.t:avg(a.scores),nStudents:a.students.size,nWeak:a.weak.size})).filter(a=>a.score!==null).sort((a,b)=>a.score-b.score)}
+function repeatedStruggle(){const m=new Map();D.topics.forEach(t=>{if(t.score===null||t.score>=.5)return;const k=t.group+'||'+keyStudent(t)+'||'+t.topic;m.set(k,(m.get(k)||new Set()).add(t.waveKey))});const per=new Map();for(const [k,s] of m){if(s.size<2)continue;const [g,st,topic]=k.split('||');if(!per.has(topic))per.set(topic,new Set());per.get(topic).add(g+'||'+st)}return [...per.entries()].map(([topic,s])=>({topic,keys:s})).sort((a,b)=>b.keys.size-a.keys.size)}
+function qWaves(){const keys=new Set(D.answers.map(a=>a.waveKey));return G.flatMap(g=>WBG[g].filter(w=>keys.has(w.key)))}
+function defaultQWave(wv){return wv.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(WBG[a.group].length-WBG[b.group].length)||a.idx-b.idx).filter(w=>w.isLatest).slice(-1)[0]?.key||wv[wv.length-1].key}
+function questionAgg(wk){const ans=D.answers.filter(a=>a.waveKey===wk);const full=ans.some(a=>a.selected&&a.correct&&norm(a.selected)===norm(a.correct));const takers=new Set(D.recs.filter(r=>r.waveKey===wk&&r.score!==null).map(keyStudent));const m=new Map();
+ ans.forEach(a=>{const q=a.question||'?';if(!m.has(q))m.set(q,{question:q,topic:a.topic||'Not mapped',text:a.questionText,correctAnswer:a.correct,answered:new Set(),wrong:new Set(),wrongAns:new Map()});const x=m.get(q);const k=keyStudent(a);x.answered.add(k);if(!x.text&&a.questionText)x.text=a.questionText;if(!x.correctAnswer&&a.correct)x.correctAnswer=a.correct;const isWrong=full?norm(a.selected)!==norm(a.correct):true;if(isWrong){x.wrong.add(k);if(a.selected)x.wrongAns.set(a.selected,(x.wrongAns.get(a.selected)||0)+1)}});
+ return {full,list:[...m.values()].map(x=>{const den=full?x.answered.size:(takers.size||x.answered.size);const pw=den?x.wrong.size/den:null;const common=[...x.wrongAns.entries()].sort((a,b)=>b[1]-a[1])[0]||null;return {...x,den,wrongN:x.wrong.size,pWrong:pw,pRight:pw===null?null:1-pw,common,misconception:!!(common&&common[1]>=3&&common[1]/Math.max(1,x.wrong.size)>=.4)}}).sort((a,b)=>String(a.question).localeCompare(String(b.question),undefined,{numeric:true}))}}
+function changeOf(s){return s.gain!==null&&s.gain!==undefined?s.gain:s.delta}
+function supportQuadrants(){const med=D.useMedian,out={hiGood:[],hiLow:[],loWeak:[],loOk:[]};if(med===null)return out;D.students.forEach(s=>{if(s.usageMinutes===null||s.usageMinutes===undefined)return;const hi=s.usageMinutes>=med,ch=changeOf(s);if(hi){if(ch===null||ch===undefined)return;(ch>=.05?out.hiGood:out.hiLow).push(s)}else{(s.score!==null&&s.score<.5?out.loWeak:out.loOk).push(s)}});return out}
+function noRecentUse(){return D.students.filter(s=>{if(s.usageDays===0)return true;if(!s.lastActive)return false;const ref=(s.wave&&s.wave.date)||new Date().toISOString().slice(0,10);return daysBetween(s.lastActive,ref)>=7})}
+// "Practicing" = online-support minutes when the files have them (above/below the median);
+// otherwise = how many of the group's follow-up quizzes the student took (at least half = practicing).
+function practiceOf(s){if(s.usageMinutes!==null&&s.usageMinutes!==undefined&&D.useMedian!==null)return s.usageMinutes>=D.useMedian?'high':'low';const fu=WBG[s.group].filter(w=>w.stage!=='Baseline'&&D.recs.some(r=>r.waveKey===w.key&&r.score!==null));if(!fu.length)return null;const took=(s.history||[]).filter(r=>r.wave.stage!=='Baseline').length;return took>=Math.max(1,Math.ceil(fu.length/2))?'high':'low'}
+function followUps(g){return WBG[g].filter(w=>w.stage!=='Baseline'&&D.recs.some(r=>r.waveKey===w.key&&r.score!==null))}
+function useLevel(s){if(s.usageMinutes!==null&&s.usageMinutes!==undefined&&D.useMedian!==null)return s.usageMinutes<=0?'none':s.usageMinutes>=D.useMedian?'regular':'occasional';const fu=followUps(s.group);if(!fu.length)return null;const took=(s.history||[]).filter(r=>r.wave.stage!=='Baseline').length;return took===0?'none':took>=Math.ceil(fu.length/2)?'regular':'occasional'}
+function usageSummary(g){const st=D.students.filter(s=>s.group===g);const fu=followUps(g);const lv={regular:[],occasional:[],none:[]};st.forEach(s=>{const l=useLevel(s);if(l)lv[l].push(s)});const using=lv.regular.length+lv.occasional.length;
+ const hasMin=st.some(s=>s.usageMinutes!==null&&s.usageMinutes!==undefined);let mins,minLabel;
+ if(hasMin){mins=st.reduce((a,s)=>a+(s.usageMinutes||0),0);minLabel='online'}else{const fr=D.recs.filter(r=>r.group===g&&r.wave&&r.wave.stage!=='Baseline'&&r.quizMinutes!==null&&r.quizMinutes!==undefined);mins=fr.reduce((a,r)=>a+r.quizMinutes,0);minLabel='in follow-up quizzes'}
+ return {g,n:st.length,fu:fu.length,lv,using,judged:lv.regular.length+lv.occasional.length+lv.none.length,mins,minLabel,hasMin}}
+function usagePanel(){return `<div class="use-panel"><div class="use-title">Who is using the system?</div>${G.filter(g=>D.gs[g].n).map(g=>{const u=usageSummary(g);if(!u.judged)return `<div class="use-row"><div class="use-head">${gdot(g)} <b>${g}</b> <span>· no follow-up yet; system use appears after the first follow-up</span></div></div>`;const seg=(k,lab,col)=>{const n=u.lv[k].length;return n?`<button style="flex:${n};background:${col}" title="${lab}: ${n}" onclick="showRoster('use:${k}@${g}')">${n}</button>`:''};
+ return `<div class="use-row"><div class="use-head">${gdot(g)} <b>${g}: ${u.using} of ${u.judged} students using it</b> <span>(${Math.round(u.using/u.judged*100)}%) · ${u.hasMin?'online support':u.fu+' follow-up quiz'+(u.fu===1?'':'zes')+' so far'} · ${Math.round(u.mins).toLocaleString()} min ${u.minLabel}${u.using?` (${(u.mins/u.using).toFixed(1)} min per active student)`:''}</span></div><div class="use-bar">${seg('regular','Regular','#2f9e6e')}${seg('occasional','Occasional','#e5a530')}${seg('none','Not using since baseline','#c9cedb')}</div></div>`}).join('')}
+ <div class="use-legend"><span><i style="background:#2f9e6e"></i>Regular${D.hasUsage?' (at/above median minutes)':' (took at least half of the follow-up quizzes)'}</span><span><i style="background:#e5a530"></i>Occasional</span><span><i style="background:#c9cedb"></i>Not using since baseline</span></div></div>`}
+function watchGroups(){const low=s=>s.score!==null&&s.score!==undefined&&s.score<.5;return {w1:D.students.filter(s=>low(s)&&practiceOf(s)==='low'),w2:D.students.filter(s=>low(s)&&practiceOf(s)==='high'),w3:D.students.filter(s=>{const c=changeOf(s);return c!==null&&c!==undefined&&c>=.15}),w4:D.students.filter(s=>s.score!==null&&s.score>=.85)}}
+function actionRoster(f){if(String(f).includes('@')){const [ff,g]=String(f).split('@');return actionRoster(ff).filter(s=>s.group===g)}const st=D.students;const sc=s=>s.score!==null&&s.score!==undefined;const [kind,arg]=String(f).split(':');
+ if(kind==='topic'){const t=topicAgg(topicView())[+arg];return t?st.filter(s=>t.weak.has(s.group+'||'+s.key)):[]}
+ if(kind==='repeat'){const r=repeatedStruggle()[+arg];return r?st.filter(s=>r.keys.has(s.group+'||'+s.key)):[]}
+ if(kind==='question'){const q=questionAgg(state.qWave).list[+arg];const wg=WAVES[state.qWave]?.group;return q?st.filter(s=>s.group===wg&&q.wrong.has(s.key)):[]}
+ if(kind==='wave'){const keys=new Set(D.recs.filter(r=>r.waveKey===arg).map(r=>keyStudent(r)));const g=WAVES[arg]?.group;return st.filter(s=>s.group===g&&keys.has(s.key))}
+ if(kind==='status')return st.filter(s=>s.status===arg);
+ if(kind==='quad')return D.q[arg]||[];
+ if(kind==='watch')return watchGroups()[arg]||[];
+ if(kind==='use')return st.filter(s=>useLevel(s)===arg);
+ const map={all:()=>st,controlled:()=>st.filter(s=>s.group==='Controlled'),uncontrolled:()=>st.filter(s=>s.group==='Uncontrolled'),proficient:()=>st.filter(s=>sc(s)&&s.score>=.5),below50:()=>st.filter(s=>sc(s)&&s.score<.5),low:()=>st.filter(s=>sc(s)&&s.score<.5),help:()=>st.filter(s=>sc(s)&&s.score>=.3&&s.score<.5),bandUrgent:()=>st.filter(s=>sc(s)&&s.score<.3),bandHelp:()=>st.filter(s=>sc(s)&&s.score>=.3&&s.score<.5),band50:()=>st.filter(s=>sc(s)&&s.score>=.5&&s.score<.7),band70:()=>st.filter(s=>sc(s)&&s.score>=.7&&s.score<.85),band85:()=>st.filter(s=>sc(s)&&s.score>=.85),band70plus:()=>st.filter(s=>sc(s)&&s.score>=.7),urgent:()=>st.filter(s=>sc(s)&&s.score<.3),improving:()=>st.filter(s=>s.delta!==null&&s.delta!==undefined&&s.delta>0),declining:()=>st.filter(s=>s.delta!==null&&s.delta!==undefined&&s.delta<0),same:()=>st.filter(s=>s.delta===0),gainUp:()=>st.filter(s=>s.gain!==null&&s.gain>0),gain15:()=>st.filter(s=>{const c=changeOf(s);return c!==null&&c!==undefined&&c>=.15}),notTaken:()=>latestAbsentees(),noRecentUse:()=>noRecentUse(),lowDays:()=>st.filter(s=>s.usageDays!==null&&s.usageDays!==undefined&&s.usageDays<2)};
+ return (map[kind]||map.all)()}
+function rosterTitle(f){if(String(f).startsWith('use:')&&!String(f).includes('@'))return {regular:'Regular system users',occasional:'Occasional system users',none:'Not using the system since baseline'}[String(f).slice(4)];if(String(f).includes('@')){const [ff,g]=String(f).split('@');return `${g} · ${rosterTitle(ff)}`}const [k,a]=String(f).split(':');if(k==='topic')return `Students below 50% in ${topicAgg(topicView())[+a]?.topic||'topic'}`;if(k==='repeat')return `Repeatedly struggling with ${repeatedStruggle()[+a]?.topic||'topic'}`;if(k==='question'){const q=questionAgg(state.qWave).list[+a];return `Students who got ${q?q.question:'question'} wrong`}if(k==='wave')return `Students in ${WAVES[a]?.group||''} ${WAVES[a]?.full||''}`;if(k==='status')return `Status: ${a}`;
+ return ({all:'All students (latest result)',urgent:'Urgent support · below 30%',help:'Needs help · 30–49%',below50:'Students below 50%',low:'Students below 50%',proficient:'Meeting proficiency · 50%+',controlled:'Controlled group',uncontrolled:'Uncontrolled group',bandUrgent:'Score band · below 30%',bandHelp:'Score band · 30–49%',band50:'Score band · 50–69%',band70:'Score band · 70–84%',band85:'Score band · 85–100%',band70plus:'Score band · 70% and above',improving:'Improving vs previous test',declining:'Declining vs previous test',same:'No change vs previous test',gainUp:'Improved since first test',gain15:'Improved 15+ percentage points',notTaken:'No result on latest test',noRecentUse:'No online support in the last 7 days',lowDays:'Used online support fewer than 2 days','quad:hiGood':'High use + strong improvement','quad:hiLow':'High use + little improvement','quad:loWeak':'Low use + weak performance','quad:loOk':'Low use + doing fine','watch:w1':'Struggling and not practicing (below 50%, little practice)','watch:w2':'Practicing but still struggling (below 50%, regular practice)','watch:w3':'Improving rapidly','watch:w4':'Ready for more challenging work'})[f]||'Matching students'}
+/* ---- pop-up system: everything beyond the dashboard opens here; pop-ups stack with a Back button ---- */
+function showRoster(f){openPop({type:'roster',f})}
+function showStudent(id){openPop({type:'student',id:decodeURIComponent(id)})}
+function openContentModal(t,sub,h){openPop({type:'content',title:t,sub,html:h})}
+function openPop(item){const top=state.stack[state.stack.length-1];if(top&&JSON.stringify(top)===JSON.stringify(item))return;state.stack.push(item);renderModal(true)}
+function popBack(){state.stack.pop();renderModal(true)}
+function closeRosterModal(){state.stack=[];destroyModalCharts();$('rosterModal').classList.add('hidden');document.body.classList.remove('modal-open')}
+function destroyModalCharts(){const body=$('modalBody');Object.keys(charts).forEach(k=>{if(charts[k].canvas&&body.contains(charts[k].canvas)){charts[k].destroy();delete charts[k]}})}
+function rerender(){if(state.stack.length)renderModal(false);else render()}
+function renderModal(resetScroll){
+ const top=state.stack[state.stack.length-1];const card=document.querySelector('.modal-card');if(!top){closeRosterModal();return}
+ const y=card.scrollTop;destroyModalCharts();modalRows=[];let t='',sub='',kick='DETAILS',out={html:''};
+ if(!D&&top.type!=='content'&&!(top.type==='sec'&&top.id==='data')){out={html:'<div class="empty">Upload data first.</div>'}}
+ else if(top.type==='roster'){const rows=actionRoster(top.f);modalRows=rows.map(studentRow);t=rosterTitle(top.f);sub=`${rows.length} student${rows.length===1?'':'s'} · click a name for the student report`;kick='STUDENT LIST';out={html:rows.length?studentTable(rows,{usage:true}):'<div class="empty">No students in this category.</div>'}}
+ else if(top.type==='student'){state.student=top.id;const [g,k]=top.id.split('||');const st=D.students.find(x=>x.group===g&&x.key===k);t=st?st.student:'Student';sub=st?`${g} group · ${st.school||'No class'}`:'';kick='STUDENT REPORT';out=pageStudent();if(st)modalRows=rowsHistory().filter(r=>r.Group===g&&String(r.Email||r.Student).toLowerCase()===k)}
+ else if(top.type==='sec'){const sec=SECTIONS.find(x=>x.id===top.id);t=sec.name;sub=sec.sub;kick='REPORT';out=SECFN[top.id]();state.secSheets=sectionSheets(top.id)}
+ else {t=top.title;sub=top.sub||'';out={html:top.html}}
+ $('modalKicker').textContent=kick;$('modalTitle').textContent=t;$('modalSubtitle').textContent=sub;$('modalBack').classList.toggle('hidden',state.stack.length<2);
+ $('modalBody').innerHTML=out.html+noChart();$('rosterModal').classList.remove('hidden');document.body.classList.add('modal-open');
+ if(out.after)out.after();card.scrollTop=resetScroll?0:y;
+}
+function exportModal(){const top=state.stack[state.stack.length-1];if(!top)return;if(top.type==='sec'){writeBook(sectionSheets(top.id),'DIL_IqbalAI_'+top.id);return}if(!modalRows.length){alert('Nothing to export here.');return}writeBook({Students:modalRows},'DIL_IqbalAI_'+$('modalTitle').textContent.replace(/[^a-z0-9]+/gi,'_'))}
+
+/* ============ tables ============ */
+function chg(x){return `<span class="${ppCls(x)}">${pp(x)}</span>`}
+function studentTable(arr,o={}){if(!arr.length)return '<div class="empty">No matching student records.</div>';return `<div class="table-wrap"><table><thead><tr><th>Student</th><th>Group</th><th>School/Class</th><th>Latest score</th><th>Previous</th><th>Change</th><th>Since first test</th><th>Correct / total</th>${o.usage?'<th>Days online</th><th>Online minutes</th><th>Activities</th>':''}<th>Status</th>${o.source?'<th>Source</th>':''}</tr></thead><tbody>${arr.map(r=>`<tr><td><span class="student-link" onclick="showStudent('${sid(r)}')">${esc(r.student)}</span><div class="small">${esc(r.email)}</div></td><td>${gdot(r.group)} ${esc(r.group)}</td><td>${esc(r.school||'—')}</td><td><strong>${percent(r.score)}</strong></td><td>${percent(r.previous)}</td><td>${chg(r.delta)}</td><td>${chg(r.gain)}</td><td>${r.correct??'—'} / ${r.total??'—'}</td>${o.usage?`<td>${r.usageDays??'—'}</td><td>${r.usageMinutes??'—'}</td><td>${r.lessons??'—'}</td>`:''}<td>${statusTag(r.status||classify(r))}</td>${o.source?`<td>${esc(r.source)}</td>`:''}</tr>`).join('')}</tbody></table></div>`}
+function topicTable(ts){if(!ts.length)return '<div class="empty">No topic-level sheet detected for this selection.</div>';return `<div class="table-wrap"><table><thead><tr><th>Student</th><th>Group</th><th>Test</th><th>Topic</th><th>Score</th><th>Correct</th><th>Total</th><th>Wrong count</th><th>Incorrect question detail</th></tr></thead><tbody>${ts.map(t=>`<tr><td>${esc(t.student)}</td><td>${esc(t.group)}</td><td>${esc(WAVES[t.waveKey]?.label||'—')}</td><td>${esc(t.topic)}</td><td>${percent(t.score)}</td><td>${t.correct??'—'}</td><td>${t.total??'—'}</td><td>${t.wrongCount??(t.correct!==null&&t.total?t.total-t.correct:'—')}</td><td style="white-space:normal;min-width:220px">${esc(t.wrongDetail)}</td></tr>`).join('')}</tbody></table></div>`}
+function wrongTable(ws){ws=ws.filter(w=>!(w.selected&&w.correct&&norm(w.selected)===norm(w.correct)));if(!ws.length)return '<div class="empty">No wrong-answer detail available.</div>';return `<div class="table-wrap"><table><thead><tr><th>Student</th><th>Group</th><th>Test</th><th>Question</th><th>Topic</th><th>Student answer</th><th>Correct answer</th><th>Source</th></tr></thead><tbody>${ws.map(w=>`<tr><td>${esc(w.student)}</td><td>${esc(w.group)}</td><td>${esc(WAVES[w.waveKey]?.label||'—')}</td><td>${esc(w.question)}</td><td>${esc(w.topic)}</td><td>${esc(w.selected||'—')}</td><td>${esc(w.correct||'—')}</td><td>${esc(w.source)}</td></tr>`).join('')}</tbody></table></div>`}
+
+/* ============ charts ============ */
+const charts={};
+function mk(id,cfg){if(!window.Chart)return null;const c=$(id);if(!c)return null;if(charts[id])charts[id].destroy();charts[id]=new Chart(c,cfg);return charts[id]}
+function clickable(fn){return {onClick:(e,els)=>{if(els.length)fn(els[0].index,els[0].datasetIndex)},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default'}}}
+const pctAxis={beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eef1f6'}};
+function barDS(label,data,color){return {label,data,backgroundColor:color,borderRadius:4,maxBarThickness:42,borderSkipped:false}}
+if(window.Chart){Chart.defaults.font.family='Inter,ui-sans-serif,system-ui,Segoe UI,Arial,sans-serif';Chart.defaults.color='#5d6a85';Chart.defaults.plugins.legend.labels.usePointStyle=true;Chart.defaults.plugins.legend.labels.boxWidth=8;Chart.defaults.plugins.legend.labels.boxHeight=8;Chart.defaults.maintainAspectRatio=false;Chart.defaults.scale.grid.color='#eef1f6'}
+const refLines=(xv,yv)=>({id:'ref',afterDraw(c){const {ctx,chartArea:a,scales:{x,y}}=c;ctx.save();ctx.strokeStyle='#9aa3b8';ctx.setLineDash([4,4]);ctx.lineWidth=1;if(xv!=null){const px=x.getPixelForValue(xv);ctx.beginPath();ctx.moveTo(px,a.top);ctx.lineTo(px,a.bottom);ctx.stroke()}if(yv!=null){const py=y.getPixelForValue(yv);ctx.beginPath();ctx.moveTo(a.left,py);ctx.lineTo(a.right,py);ctx.stroke()}ctx.restore()}});
+function noChart(){return window.Chart?'':'<div class="small">Charts need an internet connection to load. All numbers are still shown as text.</div>'}
+function trendToggle(){const m=state.trendMode;return `<div class="chips" style="margin:4px 0 6px"><button class="chip ${m!=='avg'?'on':''}" onclick="state.trendMode='gain';rerenderAll()">Progress since baseline (same students)</button><button class="chip ${m==='avg'?'on':''}" onclick="state.trendMode='avg';rerenderAll()">Average score (everyone who took the test)</button></div>`}
+function rerenderAll(){render()}
+function trendChart(id){const tl=D.tl;const prog=state.trendMode!=='avg';mk(id,{type:'line',data:{labels:tl.labels,datasets:G.filter(g=>tl.ws[g].length).map(g=>({label:g,data:tl.series[g].map(w=>w?r1(prog?w.gain:w.mean):null),borderColor:GC[g],backgroundColor:GC[g],borderWidth:2.5,pointRadius:5,pointHoverRadius:7,spanGaps:true,tension:.15}))},options:{...clickable((i,ds)=>{const g=G.filter(g=>tl.ws[g].length)[ds];const w=tl.series[g][i];if(w)showRoster('wave:'+w.wave.key)}),plugins:{tooltip:{callbacks:{title:it=>tl.labels[it[0].dataIndex],label:ctx=>{const g=ctx.dataset.label,w=tl.series[g][ctx.dataIndex];return w?(prog?`${g} · ${w.wave.label}: ${pp(w.gain)} vs baseline (${w.gainN} students) · average ${percent(w.mean)}`:`${g} · ${w.wave.label}: ${percent(w.mean)} (${w.n} students)`):''}}}},scales:{y:prog?{grid:{color:'#eef1f6'},ticks:{callback:v=>(v>0?'+':'')+v+' pp'},title:{display:true,text:'Change since baseline (pp)'}}:pctAxis}},plugins:prog?[refLines(null,0)]:[]})}
+
+/* ============ navigation & render ============ */
+const SECFN={};
+function go(p){if(p==='home'){closeRosterModal();return}if(p==='students'){openPop({type:'sec',id:'students'});return}if(SECTIONS.some(x=>x.id===p))openPop({type:'sec',id:p})}
+function render(){
+ const has=state.records.length>0;if(has)compute();else D=null;
+ $('trackedStudentInfo').textContent=has?`Students tracked: ${D.students.length} · ${D.recs.length} assessment records`:'Students tracked: 0 · 0 assessment records';
+ $('scopeSub').innerHTML=has?`<b>Test order</b> — ${G.map(g=>`${gdot(g)} ${g}: ${WBG[g].length?WBG[g].map(w=>`${w.label}${w.date?' ('+fmtDate(w.date).replace(/ 20\d\d$/,'')+((w.seqNo||1)>1?' #'+w.seqNo:'')+')':' (no date)'}`).join(' → '):'none yet'}`).join(' &nbsp;·&nbsp; ')}${$('groupFilter').value||$('schoolFilter').value?' · filtered':''}`:'';
+ Object.keys(charts).forEach(k=>{charts[k].destroy();delete charts[k]});
+ if(!has){$('view').innerHTML=welcome()}else{const out=pageHome();$('view').innerHTML=out.html+noChart();out.after()}
+ if(state.stack.length)renderModal(false);
+}
+function welcome(){return `<div class="empty"><strong>Your analytics dashboard is ready</strong>Drop all test files in the box above (or use the buttons). Files stay in this browser only; nothing is sent to a server. The dashboard will show which group is improving and by how much.<div class="steps"><div><b>1 · Baseline</b>Upload the first test for the Controlled and Uncontrolled groups.</div><div><b>2 · Follow-ups</b>Upload each later test with its group's follow-up button. Put the date in the file name, e.g. uncontrolled_quiz_2026-10-28.xlsx.</div><div><b>3 · Read the result</b>This page shows which group improved more since the baseline. Click anything for details in a pop-up.</div></div></div>`}
+
+/* ============ pages ============ */
+function kpi(cls,icon,label,value,hint,onclick){return `<button class="kpi ${cls}" onclick="${onclick}"><span class="ki">${icon}</span><span><small>${label}</small><strong>${value}</strong><em>${hint}</em></span></button>`}
+function overlapWarning(){const c=new Set(D.gs.Controlled.records.map(r=>r.key)),u=new Set(D.gs.Uncontrolled.records.map(r=>r.key));const n=[...c].filter(x=>u.has(x)).length;return n?`<div class="notice"><strong>Data-quality warning:</strong> ${n} student identifier(s) appear in both Controlled and Uncontrolled groups. The group difference is shown as calculated, but should not be treated as a reliable pilot effect until group membership and duplicate exports are checked.</div>`:''}
+function dataGaps(){const s=D.students,gaps=[];
+ G.forEach(g=>{if(!WBG[g].length)gaps.push(`No ${g} files uploaded yet.`);else if(WBG[g].length<2)gaps.push(`${g}: only one test uploaded, so its progress cannot be measured yet.`);else if(WBG[g][0].stage!=='Baseline')gaps.push(`${g}: no baseline uploaded; the first follow-up is used as the starting point.`)});
+ if(Object.values(WAVES).some(w=>w.stage!=='Baseline'&&!w.date))gaps.push('Some follow-up files have no date (in the file name or an “Assessment Date” column). They are ordered by upload order.');
+ if(!s.some(r=>r.email))gaps.push('Student email/unique ID missing; matching across tests uses names and may be unreliable.');
+ if(!D.hasUsage)gaps.push('System usage minutes not provided (needed for the Online support report).');
+ if(!s.some(r=>r.quizMinutes!==null&&r.quizMinutes!==undefined))gaps.push('Quiz completion time not provided.');
+ if(!s.some(r=>r.lastActive))gaps.push('“Last Active Date” not provided, so “not used in 7 days” cannot be checked.');
+ if(!D.topics.length)gaps.push('Topic scores not provided (needed for Topic mastery).');
+ if(!D.answers.length)gaps.push('Question answers not provided (needed for Question analysis and misconceptions).');
+ return gaps}
+function pageHome(){
+ const v=verdict(),st=D.students,W=watchContext(),acts=actionItems();
+ const deltas=st.filter(r=>r.delta!==null&&r.delta!==undefined),imp=deltas.filter(r=>r.delta>0).length,same=deltas.filter(r=>r.delta===0).length,dec=deltas.filter(r=>r.delta<0).length,absent=latestAbsentees().length;
+ const latest=topicAgg(topicView('latest')),first=topicAgg(topicView('first'));const tNames=latest.map(t=>t.topic);
+ const qw=qWaves();if(qw.length&&(!state.qUser||!qw.some(w=>w.key===state.qWave)))state.qWave=defaultQWave(qw);const QA=qw.length?questionAgg(state.qWave):null;const qTop=QA?QA.list.map((q,i)=>({...q,i})).filter(q=>q.pWrong!==null).sort((a,b)=>b.pWrong-a.pWrong).slice(0,6):[];const mis=QA?QA.list.filter(q=>q.misconception).sort((a,b)=>b.common[1]-a.common[1]):[];
+ const gap=D.gs.Controlled.mean!==null&&D.gs.Uncontrolled.mean!==null?D.gs.Uncontrolled.mean-D.gs.Controlled.mean:null;
+ const head=(t,sec,lbl)=>`<div class="mini-h"><h3 onclick="go('${sec}')">${t}</h3><a onclick="go('${sec}')">${lbl||'Details'} ↗</a></div>`;
+ const gtile=g=>{const s=D.gs[g];return `<button class="gtile" onclick="showRoster('${g.toLowerCase()}')"><span class="gn">${gdot(g)} ${g.toUpperCase()}</span><span class="big">${pp(s.meanGain)}</span><span class="bl">change since first test · ${s.gainN} matched students</span><span class="gl"><span>Latest average</span><b>${percent(s.mean)}</b></span><span class="gl"><span>Meeting 50%+</span><b>${s.n-s.below} of ${s.n}</b></span><span class="gl"><span>Tests uploaded</span><b>${WBG[g].length}</b></span><span class="gl"><span>Online support</span><b>${s.usageTotal!==null?Math.round(s.usageTotal).toLocaleString()+' min':'—'}</b></span></button>`};
+ const html=`
+ <section class="vhero"><div><div class="eyebrow">PILOT RESULT · WHICH GROUP IS GETTING BETTER?</div><h2>${esc(v.title)}</h2><p>${esc(v.text)}</p><p style="margin-top:8px">${trendSentence('Uncontrolled').replace(/<\/?b>/g,'')}<br>${trendSentence('Controlled').replace(/<\/?b>/g,'')}</p><div class="links"><button onclick="go('compare')">Full comparison ↗</button><button onclick="go('history')">Every test ↗</button><button onclick="go('students')">All ${st.length} students ↗</button></div></div>
+  <div class="gtiles">${G.map(gtile).join('')}<div class="gap-line">Latest-average gap (Uncontrolled − Controlled): <b>${pp(gap)}</b> · click a group for its students</div></div></section>
+ ${overlapWarning()}
+ <div class="grid-main">
+  <div class="card">${head('Is each group getting better?','history','Every test')}${trendToggle()}<p class="desc">${state.trendMode!=='avg'?'Each dot = average change of the students who took that test, compared with their own baseline. Above 0 = better than baseline.':'Each dot = average score of everyone who took that test (the students may differ between tests).'} Click a dot for the students.</p><div class="chartbox lg"><canvas id="homeTrend" aria-label="Average score over time by group"></canvas></div>${D.tl.dated?'':'<p class="small">Some tests have no date, so they are lined up by order: baselines first, each group’s latest test at the end.</p>'}</div>
+  <div class="card"><span class="panel-kicker">AUTO-GENERATED · WEEK OF ${W.monday.toUpperCase()}</span>${head('This week’s actions','watch','Action plan')}<p class="desc">Priorities and students requiring intervention · click for names</p>${actionList(acts)}</div>
+ </div>
+ <div class="grid2">
+  <div class="card">${head('Where students are now','class','Class report')}<p class="desc">Latest score of every student · click a segment for names</p><div class="chartbox sm"><canvas id="homeLevels"></canvas></div>
+   <div class="chipline"><span class="small" style="align-self:center">Vs previous test:</span><button onclick="showRoster('improving')">↗ ${imp} improved</button><button onclick="showRoster('same')">→ ${same} same</button><button onclick="showRoster('declining')">↘ ${dec} declined</button>${absent?`<button onclick="showRoster('notTaken')">◷ ${absent} missed latest test</button>`:''}</div></div>
+  <div class="card">${head('Students to watch','watch','Action plan')}<p class="desc">Sorted automatically into four groups that need different responses</p>${usagePanel()}<div class="wgrid">${watchTiles(W.wg)}</div></div>
+ </div>
+ <div class="grid3">
+  <div class="card">${head('Topic mastery','topics')}<p class="desc">First vs latest test · click a bar for weak students</p>${latest.length?`<div class="chartbox"><canvas id="homeTopics"></canvas></div><div class="explain" style="margin-top:8px">${latest.filter(a=>a.score<.5).slice(0,2).map(a=>`<p>Reteach <b>${esc(a.topic)}</b> — ${percent(a.score)} correct.</p>`).join('')||`<p>No topic below 50%. Weakest: <b>${esc(latest[0].topic)}</b> (${percent(latest[0].score)}).</p>`}<p>Strongest: <b>${esc(latest[latest.length-1].topic)}</b> (${percent(latest[latest.length-1].score)}).</p></div>`:'<div class="empty">Add a Topic Scores sheet to see this.</div>'}</div>
+  <div class="card">${head('Most-missed questions','questions')}<p class="desc">${QA?`${WAVES[state.qWave].group} · ${esc(WAVES[state.qWave].full)}`:'Latest test'} · % answered wrong</p>${QA?`<div class="chartbox"><canvas id="homeQs"></canvas></div><div class="explain" style="margin-top:8px">${mis.slice(0,2).map(q=>`<p><b>${esc(q.question)}</b>: ${q.common[1]} students chose <b>${esc(q.common[0])}</b>${q.correctAnswer?` instead of ${esc(q.correctAnswer)}`:''} — likely shared misconception.</p>`).join('')||'<p>No shared wrong answer found.</p>'}</div>`:'<div class="empty">Add an Answers sheet to see this.</div>'}</div>
+  <div class="card">${head('Online support vs progress','support')}<p class="desc">Each dot is a student · dashed lines = median use and +5 pp</p>${D.hasUsage?`<div class="chartbox"><canvas id="homeUse"></canvas></div><div class="explain" style="margin-top:8px"><p><span class="student-link" onclick="showRoster('quad:hiGood')">${D.q.hiGood.length}</span> high use + improving · <span class="student-link" onclick="showRoster('quad:hiLow')">${D.q.hiLow.length}</span> high use, not improving · <span class="student-link" onclick="showRoster('quad:loWeak')">${D.q.loWeak.length}</span> low use + weak.</p><p class="small">Average use ${fmtMin(avg(st.map(r=>r.usageMinutes)))} · quiz time ${fmtMin(avg(st.map(r=>r.quizMinutes)))}</p></div>`:'<div class="empty">Add “System Usage Time (Minutes)” to see this.</div>'}</div>
+ </div>
+ <h3 class="section">More reports <span class="small" style="font-weight:500">· open as pop-ups</span></h3>
+ <div class="more">${SECTIONS.map(x=>`<button onclick="go('${x.id}')"><b>${x.name} ↗</b><small>${x.sub}</small></button>`).join('')}</div>
+ ${footer()}`;
+ return {html,after:()=>{
+  trendChart('homeTrend');
+  const bands=[['Below 30%','bandUrgent',x=>x<.3,'#d9485f'],['30–49%','bandHelp',x=>x>=.3&&x<.5,'#e5a530'],['50–69%','band50',x=>x>=.5&&x<.7,'#5fa0e6'],['70%+','band70plus',x=>x>=.7,'#2f9e6e']];const gs=G.filter(g=>D.gs[g].n);
+  mk('homeLevels',{type:'bar',data:{labels:gs,datasets:bands.map(b=>({...barDS(b[0],gs.map(g=>st.filter(s=>s.group===g&&s.score!==null&&s.score!==undefined&&b[2](s.score)).length),b[3]),borderRadius:0,maxBarThickness:46,borderColor:'#fff',borderWidth:{left:2,right:0,top:0,bottom:0}}))},options:{indexAxis:'y',...clickable((i,ds)=>showRoster(bands[ds][1]+'@'+gs[i])),plugins:{tooltip:{callbacks:{label:x=>`${x.dataset.label}: ${x.raw} students`}}},scales:{x:{stacked:true,beginAtZero:true,ticks:{precision:0}},y:{stacked:true}}}});
+  if(latest.length){const ag=topicAgg(topicView());mk('homeTopics',{type:'bar',data:{labels:tNames,datasets:[...(first.length?[barDS('First test',tNames.map(n=>r1(first.find(t=>t.topic===n)?.score??null)),'#c3c7f2')]:[]),barDS('Latest test',latest.map(t=>r1(t.score)),latest.map(t=>t.score<.5?'#d9485f':t.score<.7?'#e5a530':'#2f9e6e'))]},options:{indexAxis:'y',...clickable(i=>{const ix=ag.findIndex(a=>a.topic===tNames[i]);if(ix>=0)showRoster('topic:'+ix)}),plugins:{tooltip:{callbacks:{label:x=>`${x.dataset.label}: ${x.raw??'—'}% correct`}}},scales:{x:pctAxis}}})}
+  if(QA)mk('homeQs',{type:'bar',data:{labels:qTop.map(q=>`${q.question} · ${q.topic}`),datasets:[barDS('% wrong',qTop.map(q=>r1(q.pWrong)),qTop.map(q=>q.pWrong>=.5?'#d9485f':q.pWrong>=.3?'#e5a530':'#7f8bd8'))]},options:{indexAxis:'y',...clickable(i=>showRoster('question:'+qTop[i].i)),plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>`${x.raw}% wrong · ${qTop[x.dataIndex].wrongN} students`}}},scales:{x:pctAxis}}});
+  if(D.hasUsage){const rows=st.filter(s=>s.usageMinutes!==null&&s.usageMinutes!==undefined&&changeOf(s)!==null&&changeOf(s)!==undefined);mk('homeUse',{type:'scatter',data:{datasets:G.map(g=>({label:g,data:rows.filter(s=>s.group===g).map(s=>({x:s.usageMinutes,y:r1(changeOf(s)),s})),backgroundColor:GC[g],borderColor:'#fff',borderWidth:1.5,pointRadius:5,pointHoverRadius:7}))},options:{onClick:(e,els)=>{if(els.length){const p=charts.homeUse.data.datasets[els[0].datasetIndex].data[els[0].index];showStudent(sid(p.s))}},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default'},plugins:{tooltip:{callbacks:{label:x=>`${x.raw.s.student}: ${x.raw.x} min, ${x.raw.y>=0?'+':''}${x.raw.y} pp`}}},scales:{x:{title:{display:true,text:'Minutes online'},beginAtZero:true},y:{title:{display:true,text:'Change (pp)'}}}},plugins:[refLines(D.useMedian,5)]})}
+ }}}
+function fmtMin(v){return v===null?'—':`${v.toFixed(1)} min`}
+function footer(){return `<div class="footer">Interpretation notes: proficiency threshold is 50% because the requirement document uses below 50% as an intervention signal. “Change since first test” compares each student’s latest score with their own first score (baseline), so only students with both tests are counted. “Change vs previous” is the latest score minus the immediately preceding test. “Average score” is the mean of student percentages. “Average score difference” is Uncontrolled minus Controlled, in percentage points (pp). Online-support figures appear only when usage columns are present. Topic names reflect the uploaded topic mapping.</div>`}
+
+function pageCompare(){
+ const c=D.gs.Controlled,u=D.gs.Uncontrolled,v=verdict();
+ const latestDate=g=>{const l=WBG[g].slice(-1)[0];return l?(l.date?fmtDate(l.date):l.label+' (undated)'):'not uploaded'};
+ const metrics=[['Average change since first test (matched students)',c.meanGain,u.meanGain,'pp'],['Students improved since first test',c.gainN?c.gainImproved/c.gainN:null,u.gainN?u.gainImproved/u.gainN:null,'pct'],['Average latest score',c.mean,u.mean,'pct'],['Students meeting 50% proficiency',c.proficiency,u.proficiency,'pct'],['Students below 50%',c.n?c.below/c.n:null,u.n?u.below/u.n:null,'pctLow'],['Students improving vs previous test',c.improved,u.improved,'pct'],['Average change vs previous test',c.meanChange,u.meanChange,'pp']];
+ const html=`<div class="explain"><p><b>${esc(v.title)}.</b> ${esc(v.text)}</p></div>
+ ${overlapWarning()}${!(c.n&&u.n)?`<div class="notice">Upload files for both groups to compare them.</div>`:''}
+ <div class="grid2"><div class="card"><h3>Is each group getting better?</h3>${trendToggle()}<div class="chartbox"><canvas id="cmpTrend"></canvas></div></div>
+ <div class="card"><h3>Progress side by side</h3><p class="desc">Percentage points / % of students</p><div class="chartbox"><canvas id="groupProgressChart"></canvas></div></div></div>
+ <h3 class="section">Pilot scorecard</h3><div class="table-wrap"><table><thead><tr><th>Measure</th><th>${gdot('Controlled')} Controlled (${c.n})</th><th>${gdot('Uncontrolled')} Uncontrolled (${u.n})</th><th>Difference (U − C)</th><th>Who leads?</th></tr></thead><tbody>${metrics.map(([n,a,b,t],i)=>{const diff=a===null||b===null?null:b-a;const f=x=>x===null?'—':t==='pp'?pp(x):percent(x);const lead=diff===null?'Insufficient data':Math.abs(diff)<.0005?'Very similar':(t==='pctLow'?(diff<0?'Uncontrolled':'Controlled'):(diff>0?'Uncontrolled':'Controlled'));return `<tr${i===0?' style="background:#f6f7ff;font-weight:700"':''}><td>${esc(n)}</td><td>${f(a)}</td><td>${f(b)}</td><td>${pp(diff)}</td><td><strong>${lead}</strong></td></tr>`}).join('')}</tbody></table></div>
+ <p class="small">The first row is the main pilot measure. For “Students below 50%”, the lower value leads.</p>
+ <div class="notice"><strong>Date check:</strong> latest Controlled test: ${esc(latestDate('Controlled'))}; latest Uncontrolled test: ${esc(latestDate('Uncontrolled'))}. If these differ, latest averages are not a same-day comparison; “change since first test” is the fairer measure.</div>
+ <p class="hint"><strong>How this is calculated:</strong> Change since first test = each student’s latest score − their own first (baseline) score, averaged over students who took at least two tests. Change vs previous = latest − immediately preceding test. Average score = mean of student percentages. Differences are Uncontrolled − Controlled in percentage points (pp). Group labels come from the upload; “Non-Controlled” counts as Uncontrolled.</p>
+ <div class="chipline"><button onclick="go('history')">Every test, both groups ↗</button><button onclick="showRoster('controlled')">${gdot('Controlled')} Controlled students ↗</button><button onclick="showRoster('uncontrolled')">${gdot('Uncontrolled')} Uncontrolled students ↗</button></div>`;
+ return {html,after:()=>{trendChart('cmpTrend');
+  mk('groupProgressChart',{type:'bar',data:{labels:['Change since first test (pp)','Change vs previous (pp)','Improved since first test (%)','Meeting 50%+ now (%)'],datasets:G.map(g=>{const x=D.gs[g];return barDS(g,[r1(x.meanGain),r1(x.meanChange),x.gainN?Math.round(x.gainImproved/x.gainN*1000)/10:null,r1(x.proficiency)],GC[g])})},options:{...clickable((i,ds)=>showRoster(G[ds].toLowerCase())),scales:{y:{grid:{color:'#eef1f6'}}}}});
+ }}}
+function pageHistory(){
+ const recs=D.recs.filter(r=>r.score!==null).slice().sort((a,b)=>a.group.localeCompare(b.group)||keyStudent(a).localeCompare(keyStudent(b))||a.wave.idx-b.wave.idx);
+ const q=norm(state.histSearch);const rows=recs.filter(r=>!q||norm(r.student+' '+r.email).includes(q));
+ const tl=D.tl;
+ const html=`<div class="card"><h3>Is each group getting better?</h3>${trendToggle()}<div class="cg"><div class="chartbox lg"><canvas id="histTrend"></canvas></div><div class="explain"><p>${trendSentence('Uncontrolled')}</p><p>${trendSentence('Controlled')}</p><p class="small">How tests are ordered: the <b>Baseline</b> file is always first. Follow-ups are ordered by <b>Test Date</b> (the Test Date column, or the date in the file name). Two tests on the same day: add _2, _3 to the file name. Upload order does not matter.</p></div></div></div>
+ ${G.map(g=>{const w=tl.ws[g];return `<h3 class="section">${gdot(g)} ${g} group — each test</h3><div class="table-wrap"><table><thead><tr><th>Test</th><th>Date</th><th>Students scored</th><th>Average score</th><th>At/above 50%</th><th>Change vs previous test</th><th>Change vs baseline</th></tr></thead><tbody>${w.map((x,i)=>`<tr><td><span class="student-link" onclick="showRoster('wave:${x.wave.key}')">${esc(x.wave.label)}</span></td><td>${x.wave.date?fmtDate(x.wave.date):'—'}</td><td>${x.n}</td><td>${percent(x.mean)}</td><td>${percent(x.pro)}</td><td>${i?chg(x.chgPrev):'Baseline'}</td><td>${i?chg(x.chgFirst):'Baseline'}</td></tr>`).join('')||'<tr><td colspan="7">No records detected for this group.</td></tr>'}</tbody></table></div>`}).join('')}
+ <h3 class="section">Controlled vs Uncontrolled at each point</h3><div class="table-wrap"><table><thead><tr><th>${tl.dated?'Date':'Point'}</th><th>Controlled average</th><th>Uncontrolled average</th><th>Difference (U − C)</th><th>Higher average</th></tr></thead><tbody>${tl.labels.map((l,i)=>{const a=tl.series.Controlled[i],b=tl.series.Uncontrolled[i];return `<tr><td>${esc(l)}</td><td>${a?`${percent(a.mean)} (${a.n})`:'—'}</td><td>${b?`${percent(b.mean)} (${b.n})`:'—'}</td><td>${a&&b?pp(b.mean-a.mean):'—'}</td><td>${!a||!b?'Need both groups':Math.abs(a.mean-b.mean)<.0005?'Equal':a.mean>b.mean?'Controlled':'Uncontrolled'}</td></tr>`}).join('')}</tbody></table></div>
+ <h3 class="section">Student-by-student score history</h3><div class="row"><input type="search" id="histSearch" placeholder="Search student or email…" value="${esc(state.histSearch)}" oninput="state.histSearch=this.value;clearTimeout(window._hs);window._hs=setTimeout(()=>{rerender();const e=$('histSearch');e.focus();e.setSelectionRange(e.value.length,e.value.length)},250)"><span class="small">${rows.length} records</span></div>
+ <div class="table-wrap"><table><thead><tr><th>Group</th><th>Student</th><th>Test</th><th>Date</th><th>Score</th><th>Previous score</th><th>Change vs previous</th><th>Change vs baseline</th><th>Source file</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${gdot(r.group)} ${esc(r.group)}</td><td><span class="student-link" onclick="showStudent('${encodeURIComponent(r.group+'||'+keyStudent(r))}')">${esc(r.student)}</span></td><td>${esc(r.wave.label)}</td><td>${r.wave.date?fmtDate(r.wave.date):'—'}</td><td>${percent(r.score)}</td><td>${percent(r.previous)}</td><td>${chg(r.delta)}</td><td>${r.sinceFirst===null||r.sinceFirst===undefined?'Baseline':chg(r.sinceFirst)}</td><td>${esc(r.source)}</td></tr>`).join('')}</tbody></table></div>`;
+ return {html,after:()=>trendChart('histTrend')}}
+
+function pageClass(){
+ const st=D.students,scores=st.map(r=>r.score).filter(x=>x!==null&&x!==undefined),mean=avg(scores),pro=scores.length?scores.filter(x=>x>=.5).length/scores.length:null;
+ const deltas=st.map(r=>r.delta).filter(x=>x!==null&&x!==undefined),imp=deltas.filter(x=>x>0).length,same=deltas.filter(x=>x===0).length,dec=deltas.filter(x=>x<0).length;
+ const ta=topicAgg(topicView()),weak=ta[0],strong=ta[ta.length-1];const use=st.filter(r=>r.usageMinutes!==null&&r.usageMinutes!==undefined);
+ const bins=[['Below 30%','bandUrgent','Urgent support',x=>x<.3,'#d9485f'],['30–49%','bandHelp','Needs help',x=>x>=.3&&x<.5,'#e5a530'],['50–69%','band50','Developing',x=>x>=.5&&x<.7,'#5fa0e6'],['70–84%','band70','Good progress',x=>x>=.7&&x<.85,'#2bb08f'],['85–100%','band85','Strong mastery',x=>x>=.85,'#6c5fe0']].map(b=>({label:b[0],key:b[1],desc:b[2],n:scores.filter(b[3]).length,color:b[4]}));
+ const tile=(l,v,h,on)=>`<button class="metric-tile" onclick="${on}"><div class="ml">${l}</div><div class="mv">${v}</div><div class="mh">${h}</div></button>`;
+ const html=`<div class="explain" style="margin-bottom:12px"><p><b>Summary:</b> the average latest score is <b>${percent(mean)}</b>. ${scores.filter(x=>x>=.5).length} of ${scores.length} students (${percent(pro)}) meet the 50% proficiency level. Compared with the previous test, ${imp} improved, ${same} stayed the same and ${dec} declined. ${weak?`Weakest topic: <b>${esc(weak.topic)}</b> (${percent(weak.score)}); strongest: <b>${esc(strong.topic)}</b> (${percent(strong.score)}).`:''}</p></div>
+ <div class="grid3">${tile('Average assessment score',percent(mean),`${scores.length} students, latest test`,"showRoster('all')")}${tile('Change from previous test',pp(avg(deltas)),`${deltas.length} students with a previous test`,"go('history')")}${tile('Students meeting proficiency (50%+)',percent(pro),`${scores.filter(x=>x>=.5).length} of ${scores.length}`,"showRoster('proficient')")}${tile('Improving / same / declining',`${imp} / ${same} / ${dec}`,deltas.length?`${Math.round(imp/deltas.length*100)}% improving · ${Math.round(same/deltas.length*100)}% same · ${Math.round(dec/deltas.length*100)}% declining`:'Needs two tests','showRoster(\'improving\')')}${tile('Online math-support usage',use.length?fmtMin(avg(use.map(r=>r.usageMinutes))):'Not provided',use.length?`average per student · ${use.filter(r=>r.usageMinutes>0).length} of ${st.length} students used it`:'Add “System Usage Time (Minutes)”',"go('support')")}${tile('Strongest / weakest topic',weak?`${esc(strong.topic)}`:'—',weak?`Weakest: ${esc(weak.topic)} (${percent(weak.score)})`:'No topic data',"go('topics')")}</div>
+ <div class="grid2"><div class="card"><h3>Score distribution</h3><p class="desc">How many students are in each score band. Click a bar or row for names.</p><div class="chartbox sm"><canvas id="bandChart"></canvas></div><div class="distribution-list" style="margin-top:10px">${bins.map(b=>`<button onclick="showRoster('${b.key}')"><span class="band-name"><strong>${b.label}</strong><small>${b.desc}</small></span><span class="band-bar"><i style="width:${scores.length?Math.round(b.n/scores.length*100):0}%;background:${b.color}"></i></span><strong style="text-align:right">${b.n}</strong></button>`).join('')}</div></div>
+ <div class="card"><h3>Improving, staying the same, or declining</h3><p class="desc">Latest test compared with each student’s previous test</p><div class="chartbox sm"><canvas id="changeChart"></canvas></div><div class="explain" style="margin-top:10px"><p>${deltas.length?`<b>${Math.round(imp/deltas.length*100)}%</b> of students with two or more tests improved on their previous score.`:'Upload a follow-up test to see change.'}</p></div></div></div>`;
+ return {html,after:()=>{
+  mk('bandChart',{type:'bar',data:{labels:bins.map(b=>b.label),datasets:[barDS('Students',bins.map(b=>b.n),bins.map(b=>b.color))]},options:{...clickable(i=>showRoster(bins[i].key)),plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+  mk('changeChart',{type:'bar',data:{labels:['Improved','Same','Declined'],datasets:[barDS('Students',[imp,same,dec],['#2f9e6e','#b8c0d2','#d9485f'])]},options:{indexAxis:'y',...clickable(i=>showRoster(['improving','same','declining'][i])),plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
+ }}}
+
+function pageStudents(){
+ const q=norm(state.stuSearch);const f=state.stuFilter;let arr=D.students;if(f!=='all')arr=arr.filter(s=>s.status===f);if(q)arr=arr.filter(s=>norm(s.student+' '+s.email).includes(q));
+ const statuses=['Urgent Support','Needs Attention','On Track','Improving'];const counts=statuses.map(s=>D.students.filter(x=>x.status===s).length);
+ const html=`<div class="card"><h3>Student status</h3><p class="desc">Every student is flagged Urgent Support, Needs Attention, On Track or Improving. Click a bar for names.</p><div class="cg"><div class="chartbox sm"><canvas id="statusChart"></canvas></div><div class="explain"><ul>${statuses.map((s,i)=>`<li>${statusTag(s)} <b>${counts[i]}</b> student${counts[i]===1?'':'s'} — ${['score below 30%','score 30–49%','50%+ and steady','50%+ and up 5+ pp on previous test'][i]}</li>`).join('')}</ul></div></div></div>
+ <div class="row"><div class="chips">${['all',...statuses].map(s=>`<button class="chip ${f===s?'on':''}" onclick="state.stuFilter='${s}';rerender()">${s==='all'?'All students':s}</button>`).join('')}</div><input type="search" id="stuSearch" placeholder="Search student or email…" value="${esc(state.stuSearch)}" oninput="state.stuSearch=this.value;clearTimeout(window._ss);window._ss=setTimeout(()=>{rerender();const e=$('stuSearch');e.focus();e.setSelectionRange(e.value.length,e.value.length)},250)"></div>
+ <p class="small">${arr.length} students · click a name for the full student report (scores over time, topics mastered, topics needing support, online-support use).</p>${studentTable(arr,{usage:true})}`;
+ return {html,after:()=>mk('statusChart',{type:'bar',data:{labels:statuses,datasets:G.map(g=>barDS(g,statuses.map(s=>D.students.filter(x=>x.group===g&&x.status===s).length),GC[g]))},options:{...clickable(i=>showRoster('status:'+statuses[i])),scales:{y:{beginAtZero:true,ticks:{precision:0}}}}})}}
+
+function pageStudent(){
+ const [g,k]=String(state.student||'').split('||');const s=D.students.find(x=>x.group===g&&x.key===k);
+ if(!s)return {html:`<div class="empty"><strong>Student not found in the current filter</strong></div>`};
+ const ts=D.topics.filter(t=>t.group===g&&keyStudent(t)===k);const tw=WBG[g].filter(w=>ts.some(t=>t.waveKey===w.key));const lastT=tw.length?ts.filter(t=>t.waveKey===tw[tw.length-1].key):[];const firstT=tw.length>1?ts.filter(t=>t.waveKey===tw[0].key):[];
+ const mastered=lastT.filter(t=>t.score!==null&&t.score>=.7),need=lastT.filter(t=>t.score!==null&&t.score<.5);
+ const ws=D.answers.filter(a=>a.group===g&&keyStudent(a)===k);const gw=D.tl.ws[g];
+ const html=`<div class="row" style="margin-top:0"><div class="small">${gdot(g)} ${esc(g)} group · ${esc(s.school||'No class')} · ${esc(s.email)}</div>${statusTag(s.status)}</div>
+ <div class="grid4">${kpi('k1','%','Latest score',percent(s.score),`${s.wave.label}${s.wave.date?' · '+fmtDate(s.wave.date):''}`,"")}${kpi('k2','↗','Change since first test',pp(s.gain),s.nTests>1?`from ${percent(s.first)}`:'Only one test so far',"")}${kpi('k3','↺','Change vs previous',pp(s.delta),`previous: ${percent(s.previous)}`,"")}${kpi('k4','✓','Questions correct',`${s.correct??'—'} / ${s.total??'—'}`,`${s.total&&s.correct!==null?s.total-s.correct:'—'} incorrect`,"")}</div>
+ <div class="grid2"><div class="card"><h3>Score over time</h3><p class="desc">${esc(s.student)} compared with the ${g} group average</p><div class="chartbox sm"><canvas id="stuTrend"></canvas></div><div class="explain" style="margin-top:10px"><p>${s.history.map(r=>`${esc(r.wave.label)}: <b>${percent(r.score)}</b>`).join(' → ')||'No scored tests.'}</p></div></div>
+ <div class="card"><h3>Topics — latest test</h3><p class="desc">Green = mastered (70%+), amber = developing, red = needs support (below 50%)</p><div class="chartbox sm"><canvas id="stuTopics"></canvas></div><div class="explain" style="margin-top:10px"><p><b>Skills mastered:</b> ${mastered.map(t=>esc(t.topic)).join(', ')||'—'}</p><p><b>Skills needing support:</b> ${need.map(t=>esc(t.topic)).join(', ')||'—'}</p></div></div></div>
+ <div class="grid4">${kpi('k2','▣','Days using online support',s.usageDays??'—','Days active',"")}${kpi('k1','◷','Minutes spent online',s.usageMinutes??'—','System usage time',"")}${kpi('k3','✎','Activities / lessons completed',s.lessons??'—','',"")}${kpi('k5','⏱','Quiz completion time',s.quizMinutes!==null&&s.quizMinutes!==undefined?s.quizMinutes+' min':'Not provided',s.lastActive?'Last active '+fmtDate(s.lastActive):'',"")}</div>
+ <h3 class="section">Assessment history</h3>${studentTable(s.history.slice().reverse().map(r=>({...r,gain:r.sinceFirst??null,key:s.key})),{source:true})}
+ <h3 class="section">Topic detail</h3>${topicTable(ts)}<h3 class="section">Incorrect answers</h3>${wrongTable(ws)}`;
+ return {html,after:()=>{
+  const labels=gw.map(w=>w.wave.label);mk('stuTrend',{type:'line',data:{labels,datasets:[{label:s.student,data:gw.map(w=>{const r=s.history.find(h=>h.waveKey===w.wave.key);return r?r1(r.score):null}),borderColor:GC[g],backgroundColor:GC[g],borderWidth:2.5,pointRadius:5,spanGaps:true},{label:`${g} average`,data:gw.map(w=>r1(w.mean)),borderColor:'#9aa3b8',backgroundColor:'#9aa3b8',borderDash:[5,4],borderWidth:2,pointRadius:3,spanGaps:true}]},options:{scales:{y:pctAxis}}});
+  const tops=unique(lastT.map(t=>t.topic));mk('stuTopics',{type:'bar',data:{labels:tops,datasets:[...(firstT.length?[barDS('First test',tops.map(t=>{const x=firstT.find(y=>y.topic===t);return x?r1(x.score):null}),'#c7cbe0')]:[]),barDS('Latest test',tops.map(t=>{const x=lastT.find(y=>y.topic===t);return x?r1(x.score):null}),tops.map(t=>{const x=lastT.find(y=>y.topic===t);return !x||x.score===null?'#ccc':x.score<.5?'#d9485f':x.score<.7?'#e5a530':'#2f9e6e'}))]},options:{indexAxis:'y',plugins:{legend:{display:firstT.length>0}},scales:{x:pctAxis}}});
+ }}}
+
+function pageTopics(){
+ const view=state.topicView;const ts=topicView();const agg=topicAgg(ts);const first=topicAgg(topicView('first')),latest=topicAgg(topicView('latest'));const names=unique([...first,...latest].map(t=>t.topic));
+ const rep=repeatedStruggle();
+ const html=`<div class="row"><div class="chips">${[['latest','Latest test'],['first','First test'],['all','All tests']].map(([k,l])=>`<button class="chip ${view===k?'on':''}" onclick="state.topicView='${k}';rerender()">${l}</button>`).join('')}</div><span class="small">Mastery = correct answers ÷ questions in that topic</span></div>
+ ${!D.topics.length?'<div class="empty"><strong>No topic data uploaded</strong>Add a “Topic Scores” or “Weak Topics” sheet (Student Name, Email, Topic, Correct, Total). The Excel template includes it.</div>':`
+ <div class="card"><h3>Topic mastery: first test vs latest test</h3><p class="desc">Click a bar to see students below 50% in that topic.</p><div class="cg"><div class="chartbox lg"><canvas id="topicChart"></canvas></div><div class="explain"><p><b>What to teach next:</b></p><ul>${agg.filter(a=>a.score<.5).slice(0,4).map(a=>`<li>Reteach <b>${esc(a.topic)}</b> — ${percent(a.score)} correct, ${a.nWeak} students below 50%.</li>`).join('')||'<li>No topic below 50%.</li>'}${agg.filter(a=>a.score>=.5&&a.score<.7).slice(0,3).map(a=>`<li>Targeted practice: <b>${esc(a.topic)}</b> (${percent(a.score)}).</li>`).join('')}</ul>${agg.length?`<p>Strongest topic: <b>${esc(agg[agg.length-1].topic)}</b> (${percent(agg[agg.length-1].score)}).</p>`:''}${rep.length?`<p>Repeated struggle: <b>${rep[0].keys.size}</b> students scored below 50% in <b>${esc(rep[0].topic)}</b> on two or more tests.</p>`:''}</div></div></div>
+ <h3 class="section">Topic ranking (weakest first) — ${view==='all'?'all tests':view+' test'}</h3><div class="table-wrap"><table><thead><tr><th>Topic</th><th>Mastery / correct rate</th><th>Students represented</th><th>Students below 50%</th><th>Wrong answers</th><th>Suggested teaching priority</th></tr></thead><tbody>${agg.map((a,i)=>`<tr><td><strong>${esc(a.topic)}</strong></td><td>${percent(a.score)}</td><td>${a.nStudents}</td><td><span class="student-link" onclick="showRoster('topic:${i}')">${a.nWeak}</span></td><td>${a.wrong||'—'}</td><td>${a.score<.5?'Reteach and check understanding':a.score<.7?'Targeted practice':'Extension / maintain mastery'}</td></tr>`).join('')}</tbody></table></div>
+ <h3 class="section">Student-by-topic detail</h3>${topicTable(ts)}`}`;
+ return {html,after:()=>{if(!names.length)return;mk('topicChart',{type:'bar',data:{labels:names,datasets:[...(first.length&&state.topicView!=='all'?[barDS('First test',names.map(n=>r1(first.find(t=>t.topic===n)?.score??null)),'#c3c7f2')]:[]),barDS('Latest test',names.map(n=>r1(latest.find(t=>t.topic===n)?.score??null)),'#4f46e5')]},options:{indexAxis:'y',...clickable(i=>{const ix=agg.findIndex(a=>a.topic===names[i]);if(ix>=0)showRoster('topic:'+ix)}),plugins:{tooltip:{callbacks:{label:x=>`${x.dataset.label}: ${x.raw??'—'}% correct`}}},scales:{x:pctAxis}}})}}}
+
+function pageQuestions(){
+ const wv=qWaves();if(!wv.length)return {html:`<div class="empty"><strong>No question-level data uploaded</strong>Add an “Answers” or “Wrong Answers Detail” sheet with Student Name, Email, Question No, Topic, Student Selected, Correct Answer. Including <b>every</b> answer (not only wrong ones) gives true % correct.</div>`};
+ if(!state.qUser||!wv.some(w=>w.key===state.qWave))state.qWave=defaultQWave(wv);
+ const {full,list}=questionAgg(state.qWave);const w=WAVES[state.qWave];const worst=list.slice().sort((a,b)=>(b.pWrong??0)-(a.pWrong??0));const mis=list.filter(x=>x.misconception);
+ const html=`<div class="row"><label class="small">Test: <select onchange="state.qWave=this.value;state.qUser=true;rerender()">${wv.map(x=>`<option value="${x.key}" ${x.key===state.qWave?'selected':''}>${x.group} · ${esc(x.full)}</option>`).join('')}</select></label><span class="small">${full?'Full answer data: % correct is exact.':'Only wrong answers were uploaded: % is based on students who took this test.'}</span></div>
+ <div class="card"><h3>% of students who got each question wrong</h3><p class="desc">${w.group} · ${esc(w.full)} · click a bar for the students</p><div class="cg"><div class="chartbox lg"><canvas id="qChart"></canvas></div><div class="explain">${worst.slice(0,3).filter(q=>q.pWrong!==null).map(q=>`<p><b>${esc(q.question)}</b> (${esc(q.topic)}): <b>${Math.round(q.pWrong*100)}%</b> answered incorrectly. ${q.pWrong>=.5?'Most of the class did not understand this — reteach the concept.':q.pWrong>=.3?'Consider targeted reteaching.':'Check individual students.'}</p>`).join('')}</div></div></div>
+ <h3 class="section">Question-by-question analysis</h3><div class="table-wrap"><table><thead><tr><th>Question</th><th>Topic</th><th>% correct</th><th>% incorrect</th><th>Students struggling</th><th>Most common wrong answer</th><th>Correct answer</th><th>Interpretation</th></tr></thead><tbody>${list.map((q,i)=>`<tr><td><strong>${esc(q.question)}</strong>${q.text?`<div class="small" style="white-space:normal;max-width:260px">${esc(q.text)}</div>`:''}</td><td>${esc(q.topic)}</td><td>${percent(q.pRight)}</td><td>${percent(q.pWrong)}</td><td><span class="student-link" onclick="showRoster('question:${i}')">${q.wrongN}</span></td><td>${q.common?`${esc(q.common[0])} (${q.common[1]})`:'—'}</td><td>${esc(q.correctAnswer||'—')}</td><td>${q.pWrong>=.5?'Reteach this concept':q.misconception?'Review for a shared misconception':q.pWrong>=.3?'Consider targeted reteaching':'Check individual student needs'}</td></tr>`).join('')}</tbody></table></div>
+ <h3 class="section">Misconception / error report</h3>${mis.length?`<div class="grid2">${mis.map(q=>`<div class="mis"><b>${esc(q.question)} · ${esc(q.topic)}</b><br>${q.common[1]} students chose <b>${esc(q.common[0])}</b>${q.correctAnswer?` instead of <b>${esc(q.correctAnswer)}</b>`:''}. This is probably a <b>shared misconception</b>, not random mistakes.${q.text?`<div class="small" style="margin-top:4px">${esc(q.text)}</div>`:''}</div>`).join('')}</div>`:'<div class="empty">No shared wrong answer found (3+ students picking the same wrong option) in this test.</div>'}
+ <details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:700">Incorrect-answer records (${D.answers.filter(a=>a.waveKey===state.qWave&&!(a.selected&&a.correct&&norm(a.selected)===norm(a.correct))).length})</summary><div style="margin-top:10px">${wrongTable(D.answers.filter(a=>a.waveKey===state.qWave))}</div></details>`;
+ return {html,after:()=>mk('qChart',{type:'bar',data:{labels:list.map(q=>q.question),datasets:[barDS('% incorrect',list.map(q=>r1(q.pWrong)),list.map(q=>q.pWrong>=.5?'#d9485f':q.pWrong>=.3?'#e5a530':'#7f8bd8'))]},options:{...clickable(i=>showRoster('question:'+i)),plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>{const q=list[x.dataIndex];return `${x.raw}% incorrect · ${q.wrongN} students · ${q.topic}`}}}},scales:{y:pctAxis}}})}}
+
+function pageSupport(){
+ if(!D.hasUsage)return {html:`<div class="empty"><strong>No online-support usage in the uploaded files</strong>Add “System Usage Time (Minutes)”, “Days Active” and “Last Active Date” columns (they are in the Excel template) to see whether students who use the online support are improving.</div>`};
+ const Q=D.q,med=D.useMedian;const rows=D.students.filter(s=>s.usageMinutes!==null&&s.usageMinutes!==undefined).sort((a,b)=>b.usageMinutes-a.usageMinutes);const qOf=s=>Object.keys(Q).find(k=>Q[k].includes(s));
+ const ql={hiGood:['High use + strong improvement','Online support seems to be working.','w3'],hiLow:['High use + little improvement','Needs direct teacher help — more time online is not solving the problem.','w1'],loWeak:['Low use + weak performance','Encourage these students to practise online.','w2'],loOk:['Low use + doing fine','No action needed now.','w4']};
+ const html=`<div class="explain" style="margin-bottom:12px"><p>“High use” means at or above the median of <b>${fmtMin(med)}</b> of online support. “Improvement” is the change since the student’s first test (or since the previous test if only that is available); 5 pp or more counts as strong improvement.</p></div>
+ <div class="grid4">${Object.keys(ql).map(k=>`<button class="watch-card ${ql[k][2]}" onclick="showRoster('quad:${k}')"><strong class="n">${Q[k].length}</strong><b>${ql[k][0]}</b><small>${ql[k][1]}</small></button>`).join('')}</div>
+ <div class="card"><h3>Online support use vs progress</h3><p class="desc">Each dot is a student. Dashed lines: median usage and +5 pp improvement. Click a dot for the student report.</p><div class="cg"><div class="chartbox lg"><canvas id="useScatter"></canvas></div><div class="explain">${G.map(g=>{const a=rows.filter(s=>s.group===g);if(!a.length)return '';const hi=a.filter(s=>s.usageMinutes>=med),lo=a.filter(s=>s.usageMinutes<med);return `<p><b>${g}:</b> average ${fmtMin(avg(a.map(s=>s.usageMinutes)))} online. High users changed ${pp(avg(hi.map(changeOf)))} on average; low users ${pp(avg(lo.map(changeOf)))}.</p>`}).join('')}<p><b>${Q.hiLow.length}</b> student${Q.hiLow.length===1?' uses':'s use'} the system a lot but ${Q.hiLow.length===1?'is':'are'} not improving — these need direct teacher intervention.</p></div></div></div>
+ <div class="card" style="margin-top:12px"><h3>System usage & quiz completion time</h3><p class="desc">Average minutes per student · usage ${fmtMin(avg(D.students.map(r=>r.usageMinutes)))} · quiz ${fmtMin(avg(D.students.map(r=>r.quizMinutes)))}</p><div class="chartbox sm"><canvas id="timeChart2"></canvas></div></div>
+ <h3 class="section">Online support vs learning progress</h3><div class="table-wrap"><table><thead><tr><th>Student</th><th>Group</th><th>Usage (minutes)</th><th>Days active</th><th>Activities</th><th>Previous score</th><th>Current score</th><th>Change</th><th>Since first test</th><th>Situation</th></tr></thead><tbody>${rows.map(s=>`<tr><td><span class="student-link" onclick="showStudent('${sid(s)}')">${esc(s.student)}</span></td><td>${gdot(s.group)} ${esc(s.group)}</td><td>${s.usageMinutes}</td><td>${s.usageDays??'—'}</td><td>${s.lessons??'—'}</td><td>${percent(s.previous)}</td><td><strong>${percent(s.score)}</strong></td><td>${chg(s.delta)}</td><td>${chg(s.gain)}</td><td>${qOf(s)?esc(ql[qOf(s)][0]):'—'}</td></tr>`).join('')}</tbody></table></div>`;
+ return {html,after:()=>{const pts=g=>rows.filter(s=>s.group===g&&changeOf(s)!==null&&changeOf(s)!==undefined);mk('useScatter',{type:'scatter',data:{datasets:G.map(g=>({label:g,data:pts(g).map(s=>({x:s.usageMinutes,y:r1(changeOf(s)),s})),backgroundColor:GC[g],borderColor:'#fff',borderWidth:1.5,pointRadius:6,pointHoverRadius:8}))},options:{onClick:(e,els)=>{if(els.length){const p=charts.useScatter.data.datasets[els[0].datasetIndex].data[els[0].index];showStudent(sid(p.s))}},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default'},plugins:{tooltip:{callbacks:{label:x=>`${x.raw.s.student}: ${x.raw.x} min, ${x.raw.y>=0?'+':''}${x.raw.y} pp`}}},scales:{x:{title:{display:true,text:'Online support (minutes)'},beginAtZero:true},y:{title:{display:true,text:'Change in score (pp)'}}}},plugins:[refLines(med,5)]});timeChart('timeChart2')}}}
+function timeChart(id){mk(id,{type:'bar',data:{labels:['System usage','Quiz completion'],datasets:G.map(g=>barDS(g,['usageMinutes','quizMinutes'].map(f=>{const a=avg(D.students.filter(r=>r.group===g).map(r=>r[f]));return a===null?null:Math.round(a*10)/10}),GC[g]))},options:{plugins:{tooltip:{callbacks:{label:x=>x.raw===null?'No data':`${x.dataset.label}: ${x.raw} minutes`}}},scales:{y:{beginAtZero:true,title:{display:true,text:'Minutes'}}}}})}
+
+function watchContext(){
+ const st=D.students,low=st.filter(r=>r.score!==null&&r.score<.5),urgent=st.filter(r=>r.score!==null&&r.score<.3),g15=actionRoster('gain15'),wg=watchGroups(),rep=repeatedStruggle(),nr=noRecentUse(),lowDays=actionRoster('lowDays');
+ const hasAct=st.some(s=>s.lastActive||s.usageDays!==null&&s.usageDays!==undefined);
+ const ta=topicAgg(topicView());const weak=ta[0];
+ const qw=qWaves();let worstQ=null,qIdx=-1;if(qw.length){if(!state.qUser||!qw.some(w=>w.key===state.qWave))state.qWave=defaultQWave(qw);const ql=questionAgg(state.qWave).list;ql.forEach((q,i)=>{if(q.pWrong!==null&&(!worstQ||q.pWrong>worstQ.pWrong)){worstQ=q;qIdx=i}})}
+ const names=urgent.length?urgent:low;const monday=(()=>{const d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7));return fmtDate(iso(d.getFullYear(),d.getMonth()+1,d.getDate()))})();
+ const pri=[];
+ if(weak)pri.push(['◎',`Reteach <b>${esc(weak.topic)}</b> — ${weak.nStudents?Math.round(weak.nWeak/weak.nStudents*100):0}% of students struggling (${percent(weak.score)} correct).`,`showRoster('topic:0')`]);
+ if(names.length)pri.push(['♙',`Work individually with <b>${names.slice(0,3).map(s=>esc(s.student)).join(', ')}</b>${names.length>3?` and ${names.length-3} more`:''}.`,`showRoster('${urgent.length?'urgent':'below50'}')`]);
+ if(lowDays.length)pri.push(['⌨',`Encourage <b>${lowDays.length}</b> students who used online support fewer than twice.`,`showRoster('lowDays')`]);
+ if(worstQ)pri.push(['?',`Review <b>${esc(worstQ.question)}</b> (${esc(worstQ.topic)}) — ${Math.round(worstQ.pWrong*100)}% answered incorrectly.`,`go('questions')`]);
+ if(g15.length)pri.push(['★',`<b>${g15.length}</b> students have shown strong improvement — consider moving them to extension work.`,`showRoster('gain15')`]);
+ const items=[[`<b>${low.length}</b> students scored below 50%.`,'below50'],[hasAct?`<b>${nr.length}</b> students have not used online math support in 7 days.`:'Online-support activity dates not provided (add “Last Active Date” or “Days Active”).',hasAct?'noRecentUse':null],[rep.length?`<b>${rep[0].keys.size}</b> students repeatedly struggle with <b>${esc(rep[0].topic)}</b>.`:'No repeated topic struggle found yet (needs topic scores from 2+ tests).',rep.length?'repeat:0':null],[D.hasUsage?`<b>${D.q.hiLow.length}</b> students use the system frequently but are not improving.`:'Usage minutes not provided, so “high use but not improving” cannot be checked.',D.hasUsage?'quad:hiLow':null],[`<b>${g15.length}</b> students have improved more than 15 percentage points.`,'gain15']];
+ const wl={w1:['Struggling and not practicing','Below 50% and below-median online use'],w2:['Practicing but still struggling','Below 50% despite above-median online use'],w3:['Improving rapidly','Up 15+ pp since first test'],w4:['Ready for more challenge','Scoring 85% or higher']};
+ return {st,low,urgent,g15,wg,rep,nr,lowDays,hasAct,ta,weak,worstQ,names,monday,pri,items,wl}}
+
+function actionItems(){const W=watchContext();const out=[];const add=(ic,text,f,go_)=>out.push({ic,text,f,go:go_});
+ if(W.weak){const r=W.rep.find(x=>x.topic===W.weak.topic);add('◎',`Reteach <b>${esc(W.weak.topic)}</b> — ${W.weak.nStudents?Math.round(W.weak.nWeak/W.weak.nStudents*100):0}% of students below 50% (${percent(W.weak.score)} correct)${r?`; ${r.keys.size} struggled on 2+ tests`:''}.`,'topic:0')}
+ if(W.low.length)add('!',`<b>${W.low.length}</b> students below 50%${W.urgent.length?` — start with <b>${W.urgent.slice(0,3).map(s=>esc(s.student)).join(', ')}</b> (below 30%)`:''}.`,'below50');
+ if(W.worstQ)add('?',`Review <b>${esc(W.worstQ.question)}</b> (${esc(W.worstQ.topic)}) — ${Math.round(W.worstQ.pWrong*100)}% answered it wrong.`,null,'questions');
+ if(D.hasUsage&&D.q.hiLow.length)add('⌨',`<b>${D.q.hiLow.length}</b> students use online support a lot but are not improving — they need direct teacher help.`,'quad:hiLow');
+ if(W.hasAct&&W.nr.length)add('◷',`<b>${W.nr.length}</b> students have not used online support in 7 days — encourage them.`,'noRecentUse');else if(W.lowDays.length)add('◷',`<b>${W.lowDays.length}</b> students used online support fewer than 2 days — encourage them.`,'lowDays');
+ if(W.g15.length)add('★',`<b>${W.g15.length}</b> students improved 15+ points — consider extension work.`,'gain15');
+ return out}
+function actionList(items){return `<ul class="action-list">${items.map(a=>`<li><span class="ai">${a.ic}</span><span>${a.text}</span><button class="secondary" onclick="${a.f?`showRoster('${a.f}')`:`go('${a.go}')`}">${a.f?'Names':'View'}</button></li>`).join('')||'<li>No actions detected — all students are on track.</li>'}</ul>`}
+const WATCH={w1:['Struggling, not practicing','Below 50% and below-median online use'],w2:['Practicing, still struggling','Below 50% despite above-median online use'],w3:['Improving rapidly','Up 15+ pp since first test'],w4:['Ready for a challenge','Scoring 85% or higher']};
+function watchDesc(k){if(D.hasUsage||(k!=='w1'&&k!=='w2'))return WATCH[k][1];return k==='w1'?'Below 50% and skipped most follow-up quizzes':'Below 50% even after taking most follow-up quizzes'}
+function watchTiles(wg){return Object.keys(WATCH).map(k=>`<button class="watch-card ${k}" onclick="showRoster('watch:${k}')"><strong class="n">${wg[k].length}</strong><b>${WATCH[k][0]}</b><small>${watchDesc(k)}</small><small>${wg[k].slice(0,3).map(s=>esc(s.student)).join(', ')}${wg[k].length>3?'…':''}</small></button>`).join('')}
+function pageWatch(){
+ const W=watchContext();const gaps=dataGaps();
+ const html=`<div class="card"><span class="panel-kicker">AUTO-GENERATED · WEEK OF ${W.monday.toUpperCase()}</span><h3>This week’s priorities & students requiring intervention</h3><p class="desc">Built from the current uploads and filters. Verify with classroom context.</p>${actionList(actionItems())}</div>
+ <h3 class="section">Students to watch</h3>${usagePanel()}<div class="grid4">${watchTiles(W.wg)}</div><p class="small">${D.hasUsage?'“Practicing” = online-support minutes at or above the median.':'No usage minutes in the files, so “practicing” = took at least half of their group’s follow-up quizzes. Groups with no follow-up yet (e.g. Controlled with only a baseline) are not judged. Add “System Usage Time (Minutes)” to use real practice time.'}</p>
+ <div class="card" style="margin-top:12px"><h3>Data gaps to fix</h3><ul>${gaps.map(x=>`<li>${esc(x)}</li>`).join('')||'<li>No common data gaps detected.</li>'}<li class="small">Common misconceptions are a likely pattern only; verify before acting.</li></ul></div>
+ <h3 class="section">Intervention roster (below 50%)</h3>${studentTable(W.low,{usage:true})}`;
+ return {html}}
+function pageData(){
+ const sheets=state.allSheets;
+ const html=`<div class="card"><h3>How to name and fill files</h3><ul class="hint"><li>Use the <b>baseline</b> buttons for the first test of each group, and the <b>follow-up</b> buttons for every later test.</li><li>Add the test date to the file name (e.g. <code>uncontrolled_quiz_2026-11-19.xlsx</code>) or include an “Assessment Date” column, so follow-ups are placed in the right order.</li><li>Use the same student email or ID in every test so progress can be matched.</li><li>Optional sheets: “Topic Scores” (topic mastery) and “Answers” (question analysis and misconceptions). The Excel templates include them.</li></ul></div>
+ ${D?`<div class="card" style="margin-top:12px"><h3>Data checks</h3><ul>${dataGaps().map(x=>`<li>${esc(x)}</li>`).join('')||'<li>No common data gaps detected.</li>'}</ul></div>`:''}
+ <h3 class="section">Uploaded source data</h3><p class="hint">Original sheets are kept in memory for this browser session only. Use the exports for offline filtering and review.</p>
+ <div class="table-wrap"><table><thead><tr><th>Workbook</th><th>Uploaded as</th><th>Sheet</th><th>Rows</th><th>Recognized data</th></tr></thead><tbody>${sheets.map(s=>`<tr><td>${esc(s.file)}</td><td>${esc(s.label)}</td><td>${esc(s.sheet)}</td><td>${s.rows.length}</td><td>${esc(s.recognized)}</td></tr>`).join('')||'<tr><td colspan="5">No files uploaded yet.</td></tr>'}</tbody></table></div>
+ ${D?`<h3 class="section">Preview: latest record per student</h3>${studentTable(D.students,{source:true})}`:''}`;
+ return {html}}
+
+/* ============ exports ============ */
+function writeBook(sheets,name){if(!window.XLSX){alert('Excel export library did not load. Check your internet connection and try again.');return}const wb=XLSX.utils.book_new();for(const [n,rows] of Object.entries(sheets)){XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{Message:'No rows available for this report'}]),n.slice(0,31))}XLSX.writeFile(wb,`${name}_${new Date().toISOString().slice(0,10)}.xlsx`)}
+function studentRow(s){return {'Student':s.student,'Email':s.email,'Group':s.group,'School/Class':s.school,'Latest test':s.wave?.label,'Latest test date':s.wave?.date||'','Latest score (%)':r1(s.score),'Previous score (%)':r1(s.previous),'Change vs previous (pp)':r1(s.delta),'First test score (%)':r1(s.first),'Change since first test (pp)':r1(s.gain),'Tests taken':s.nTests,'Correct':s.correct,'Total':s.total,'Status':s.status,'Days active':s.usageDays,'Online minutes':s.usageMinutes,'Activities completed':s.lessons,'Quiz minutes':s.quizMinutes,'Last active':s.lastActive||'','Source':s.source}}
+function rowsPilot(){const c=D.gs.Controlled,u=D.gs.Uncontrolled;const m=[['Students',c.n,u.n],['Average latest score (%)',r1(c.mean),r1(u.mean)],['Meeting 50% (%)',r1(c.proficiency),r1(u.proficiency)],['Below 50% (count)',c.below,u.below],['Below 30% (count)',c.urgent,u.urgent],['Improving vs previous (count)',c.improvedCount,u.improvedCount],['Average change vs previous (pp)',r1(c.meanChange),r1(u.meanChange)],['Matched students (first & latest)',c.gainN,u.gainN],['First test average, matched (%)',r1(c.firstMatched),r1(u.firstMatched)],['Latest test average, matched (%)',r1(c.latestMatched),r1(u.latestMatched)],['Average change since first test (pp)',r1(c.meanGain),r1(u.meanGain)],['Online support total (minutes)',c.usageTotal,u.usageTotal]];return m.map(x=>({'Metric':x[0],'Controlled':x[1],'Uncontrolled':x[2],'Difference (U − C)':typeof x[1]==='number'&&typeof x[2]==='number'?Math.round((x[2]-x[1])*10)/10:null}))}
+function rowsWaves(){return G.flatMap(g=>D.tl.ws[g].map((w,i)=>({'Group':g,'Test':w.wave.label,'Date':w.wave.date||'','Students':w.n,'Average score (%)':r1(w.mean),'At/above 50% (%)':r1(w.pro),'Change vs previous (pp)':r1(w.chgPrev),'Change vs baseline (pp)':r1(w.chgFirst)})))}
+function rowsHistory(){return D.recs.filter(r=>r.score!==null).sort((a,b)=>a.group.localeCompare(b.group)||keyStudent(a).localeCompare(keyStudent(b))||a.wave.idx-b.wave.idx).map(r=>({'Group':r.group,'Student':r.student,'Email':r.email,'Test':r.wave.label,'Date':r.wave.date||'','Score (%)':r1(r.score),'Previous (%)':r1(r.previous),'Change vs previous (pp)':r1(r.delta),'Change vs baseline (pp)':r1(r.sinceFirst),'Source':r.source}))}
+function rowsTopicAgg(){return topicAgg(topicView()).map(a=>({'Topic':a.topic,'Mastery (%)':r1(a.score),'Students':a.nStudents,'Students below 50%':a.nWeak,'Wrong answers':a.wrong,'Priority':a.score<.5?'Reteach':a.score<.7?'Targeted practice':'Extension'}))}
+function rowsTopicDetail(){return topicView().map(t=>({'Student':t.student,'Email':t.email,'Group':t.group,'Test':WAVES[t.waveKey]?.label||'','Topic':t.topic,'Score (%)':r1(t.score),'Correct':t.correct,'Total':t.total,'Wrong count':t.wrongCount,'Wrong questions':t.wrongDetail,'Source':t.source}))}
+function rowsQuestions(){const out=[];qWaves().forEach(w=>questionAgg(w.key).list.forEach(q=>out.push({'Group':w.group,'Test':w.label,'Question':q.question,'Topic':q.topic,'% correct':r1(q.pRight),'% incorrect':r1(q.pWrong),'Students struggling':q.wrongN,'Most common wrong answer':q.common?q.common[0]:'','Chosen by':q.common?q.common[1]:null,'Correct answer':q.correctAnswer,'Likely misconception':q.misconception?'Yes':''})));return out}
+function rowsAnswers(){return D.answers.map(a=>({'Student':a.student,'Email':a.email,'Group':a.group,'Test':WAVES[a.waveKey]?.label||'','Question':a.question,'Topic':a.topic,'Student answer':a.selected,'Correct answer':a.correct,'Source':a.source}))}
+function rowsSupport(){const ql={hiGood:'High use + strong improvement',hiLow:'High use + little improvement',loWeak:'Low use + weak performance',loOk:'Low use + doing fine'};return D.students.filter(s=>s.usageMinutes!==null&&s.usageMinutes!==undefined).map(s=>({...studentRow(s),'Situation':ql[Object.keys(D.q).find(k=>D.q[k].includes(s))]||''}))}
+function rowsWatch(){const wg=watchGroups(),n={w1:'Struggling and not practicing',w2:'Practicing but still struggling',w3:'Improving rapidly',w4:'Ready for more challenge'};const out=Object.keys(wg).flatMap(k=>wg[k].map(s=>({'Watch group':n[k],...studentRow(s)})));D.students.filter(s=>s.score!==null&&s.score<.5).forEach(s=>out.push({'Watch group':'Intervention roster (below 50%)',...studentRow(s)}));return out}
+function sectionSheets(id){if(!D)return {'Source data':[]};return ({compare:{'Pilot scorecard':rowsPilot(),'Tests':rowsWaves()},history:{'Tests':rowsWaves(),'Student history':rowsHistory()},students:{'Students':D.students.map(studentRow)},class:{'Class overview':rowsPilot(),'Students':D.students.map(studentRow)},topics:{'Topic mastery':rowsTopicAgg(),'Student by topic':rowsTopicDetail()},questions:{'Questions':rowsQuestions(),'Answers':rowsAnswers()},support:{'Online support':rowsSupport()},watch:{'Action plan':rowsActions(),'Watch list':rowsWatch()},data:{'Source data':state.allSheets.flatMap(s=>s.rows.map(r=>({'Workbook':s.file,'Uploaded as':s.label,'Sheet':s.sheet,...r})))}})[id]||{}}
+function rowsActions(){return actionItems().map((a,i)=>({'#':i+1,'Action':a.text.replace(/<[^>]+>/g,''),'Students':a.f?actionRoster(a.f).map(s=>s.student).join(', '):''}))}
+function exportAll(){if(!D){alert('Upload data first.');return}writeBook({'Pilot summary':rowsPilot(),'Action plan':rowsActions(),'Tests':rowsWaves(),'Student history':rowsHistory(),'Students':D.students.map(studentRow),'Topic mastery':rowsTopicAgg(),'Student by topic':rowsTopicDetail(),'Questions':rowsQuestions(),'Answers':rowsAnswers(),'Online support':rowsSupport(),'Watch list':rowsWatch()},'DIL_IqbalAI_all_reports')}
+function exportDashboardHTML(){
+ const clone=document.documentElement.cloneNode(true);const originals=[...document.querySelectorAll('canvas')],copies=[...clone.querySelectorAll('canvas')];
+ originals.forEach((c,i)=>{try{const img=document.createElement('img');img.src=c.toDataURL('image/png');img.alt='Dashboard chart';img.style.cssText='max-width:100%;height:auto';copies[i]?.replaceWith(img)}catch(e){}});
+ clone.querySelectorAll('script').forEach(el=>el.remove());clone.querySelectorAll('.modal-backdrop').forEach(el=>el.classList.add('hidden'));clone.querySelectorAll('.upload-bar,.tools,.more').forEach(el=>el.remove());
+ const v=clone.querySelector('#view');if(v)v.insertAdjacentHTML('afterbegin','<div style="padding:10px 14px;margin:0 0 12px;background:#eef2ff;border-radius:10px;color:#334155;font-size:12px">Exported dashboard snapshot. Charts and visible tables are preserved; this file is a read-only report.</div>');
+ const html='<!DOCTYPE html>\n'+clone.outerHTML;const blob=new Blob([html],{type:'text/html;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='DIL_IqbalAI_dashboard_'+new Date().toISOString().slice(0,10)+'.html';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function downloadInputTemplate(group){
+ if(!window.XLSX){alert('Excel library did not load. Check your internet connection.');return}
+ const today=new Date().toISOString().slice(0,10);const name=`${group}_FollowUp_${today}.xlsx`;
+ const R=['Student Name','Email','School','Group','Test Type','Test Date','Test Name','Total Questions','Correct Answers','Incorrect','Percentage','Minutes Taken','System Usage Time (Minutes)','Days Active','Last Active Date','Activities Completed'];
+ const wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([R,['Example Student','example.student@dilpakistan.org','DIL Junior 1',group,'FollowUp',today,'Follow-up quiz',10,7,3,0.7,9.5,45,3,today,4]]),'Results');
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Student Name','Email','Topic','Correct','Total','Score %'],['Example Student','example.student@dilpakistan.org','Numbers',6,8,0.75],['Example Student','example.student@dilpakistan.org','Algebra',1,2,0.5]]),'Topic Scores');
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Student Name','Email','Question No','Topic','Question','Student Selected','Correct Answer','Is Correct'],['Example Student','example.student@dilpakistan.org','Q1','Numbers','Which of the following numbers is rational?','D','D','Yes'],['Example Student','example.student@dilpakistan.org','Q2','Numbers','Which is the correct scientific notation for 0.0000725?','C','A','No']]),'Answers');
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['HOW TO USE THIS TEMPLATE'],['One file = one test for one group.'],['File name: <Group>_<TestType>_<YYYY-MM-DD>.xlsx   e.g. '+name],['Group: Controlled or Uncontrolled (Non-Controlled = Uncontrolled)'],['Test Type: Baseline (first test, once per group) or FollowUp (every later test)'],['Follow-ups are ordered by Test Date. Two tests on the same day: add _2, _3 to the file name.'],['Email must be the same for a student in every test.'],['Required columns: Student Name, Email, Group, Test Type, Test Date, Total Questions, Correct Answers.'],['Topic Scores (optional): one row per student per topic. Answers (optional): one row per student per question, including correct answers.'],['Upload: drop all files into “Drop all test files here”.']]),'Instructions');
+ XLSX.writeFile(wb,`IqbalAI_Template_${group}.xlsx`)}
+function resetAll(){closeRosterModal();try{localStorage.removeItem(SAVE_KEY)}catch(e){}Object.assign(state,{records:[],topics:[],answers:[],allSheets:[],loadedNames:[],workbooks:[],fileSeq:0,page:'home',student:null,qWave:'',qUser:false,stuFilter:'all',stuSearch:'',histSearch:''});WAVES={};WBG={Controlled:[],Uncontrolled:[]};D=null;
+ ['controlledBaselineInput','uncontrolledBaselineInput','controlledFollowupInput','uncontrolledFollowupInput'].forEach(id=>{const e=$(id);if(e)e.value=''});$('filePills').innerHTML='';$('uploadedCount').textContent='0';$('status').textContent='No files loaded yet.';$('status').style.color='';rebuildFilters();render()}
+
+/* ============ wiring ============ */
+Object.assign(SECFN,{compare:pageCompare,history:pageHistory,students:pageStudents,class:pageClass,topics:pageTopics,questions:pageQuestions,support:pageSupport,watch:pageWatch,data:pageData});
+[['controlledBaselineInput','controlled_baseline'],['uncontrolledBaselineInput','uncontrolled_baseline'],['controlledFollowupInput','controlled_followup'],['uncontrolledFollowupInput','uncontrolled_followup']].forEach(([id,tag])=>{const input=$(id);if(input)input.addEventListener('change',()=>uploadTaggedFiles(input,tag))});
+$('groupFilter').addEventListener('change',render);$('schoolFilter').addEventListener('change',render);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeRosterModal()});
+$('autoInput').addEventListener('change',e=>autoUpload(e.target.files));
+['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){e.preventDefault();$('uploadHub').classList.add('drag')}}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{if(ev==='dragleave'&&e.relatedTarget)return;$('uploadHub').classList.remove('drag')}));
+document.addEventListener('drop',e=>{if(e.dataTransfer&&e.dataTransfer.files.length){e.preventDefault();autoUpload(e.dataTransfer.files)}});
+loadState();render();
+</script>
+</body></html>
