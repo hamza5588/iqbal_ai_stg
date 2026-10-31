@@ -95,6 +95,9 @@ class Question(Base):
     correct_option_index = Column(Integer, nullable=False)
     correct_answer_raw = Column(Text, nullable=True)
     explanation = Column(Text, nullable=True)
+    domain = Column(String(255), nullable=True)
+    topic_label = Column(String(255), nullable=True)
+    cognitive_level = Column(String(100), nullable=True)
     difficulty = Column(String(20), nullable=False, default="medium", server_default="medium")
     time_limit_seconds = Column(Integer, nullable=True)
     source_type = Column(

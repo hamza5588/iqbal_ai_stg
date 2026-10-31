@@ -3,7 +3,7 @@ Admin routes for system management
 Provides comprehensive admin functionality including user management,
 RAG prompt management, coupon management, and lesson management.
 """
-from flask import Blueprint, request, jsonify, session, render_template
+from flask import Blueprint, request, jsonify, session, render_template, send_file
 from app.utils.auth import login_required
 from app.rbac.decorators import admin_only
 from app.models import UserModel
@@ -1415,6 +1415,122 @@ def set_stress_test_mode():
 def llm_telemetry_page():
     """LLM usage, cost, and latency analytics."""
     return render_template('admin/llm_telemetry.html')
+
+
+# ==================== PDF EXTRACTION INSPECTOR ====================
+
+
+@bp.route('/pdf-extraction-inspector', methods=['GET'])
+@login_required
+@admin_only
+def pdf_extraction_inspector_page():
+    """Admin tool: upload a PDF and compare original vs extracted text."""
+    return render_template('admin/pdf_extraction_inspector.html')
+
+
+@bp.route('/pdf-extraction-inspector/extract', methods=['POST'])
+@login_required
+@admin_only
+def pdf_extraction_inspector_extract():
+    """
+    Run the Lesson/Quiz ingest text-extraction pipeline on an uploaded PDF
+    (loaders + hybrid + tables) without indexing into RAG.
+    """
+    from app.services.admin.pdf_extraction_inspector import (
+        extract_pdf_text_like_ingest,
+        store_inspector_pdf,
+        wipe_user_inspector_files,
+    )
+
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+        if 'file' not in request.files and 'pdf' not in request.files:
+            return jsonify({'success': False, 'error': 'No PDF file uploaded. Use field name "file".'}), 400
+
+        file = request.files.get('file') or request.files.get('pdf')
+        if not file or not file.filename:
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+        filename = file.filename
+        if not filename.lower().endswith('.pdf'):
+            return jsonify({'success': False, 'error': 'Only PDF files are supported'}), 400
+
+        max_mb = int(os.getenv('MAX_RAG_PDF_MB', '100'))
+        file.seek(0, os.SEEK_END)
+        size_bytes = file.tell()
+        file.seek(0)
+        size_mb = size_bytes / (1024 * 1024)
+        if size_mb > max_mb:
+            return jsonify({
+                'success': False,
+                'error': (
+                    f'PDF is too large ({size_mb:.1f} MB). '
+                    f'Maximum allowed size is {max_mb} MB.'
+                ),
+            }), 400
+
+        file_bytes = file.read()
+        if not file_bytes:
+            return jsonify({'success': False, 'error': 'Uploaded file is empty'}), 400
+
+        # Clear prior preview PDFs for this admin so temp files do not accumulate.
+        wipe_user_inspector_files(user_id)
+
+        result = extract_pdf_text_like_ingest(file_bytes, filename=filename)
+        token = store_inspector_pdf(
+            file_bytes=file_bytes,
+            filename=result['filename'],
+            user_id=user_id,
+        )
+
+        return jsonify({
+            'success': True,
+            'filename': result['filename'],
+            'num_pages': result['num_pages'],
+            'char_count': result['char_count'],
+            'processing_time_seconds': result['processing_time_seconds'],
+            'extraction_method': result['extraction_method'],
+            'warnings': result['warnings'],
+            'full_text': result['full_text'],
+            'pages': result['pages'],
+            'pdf_token': token,
+            'pdf_url': f'/admin/pdf-extraction-inspector/pdf/{token}',
+        })
+    except ValueError as e:
+        logger.warning('PDF extraction inspector failed (validation): %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        logger.error('PDF extraction inspector failed: %s', e, exc_info=True)
+        return jsonify({'success': False, 'error': f'Extraction failed: {e}'}), 500
+
+
+@bp.route('/pdf-extraction-inspector/pdf/<token>', methods=['GET'])
+@login_required
+@admin_only
+def pdf_extraction_inspector_pdf(token):
+    """Serve a temporarily stored inspector PDF for the left-panel viewer."""
+    from app.services.admin.pdf_extraction_inspector import resolve_inspector_pdf
+
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+    resolved = resolve_inspector_pdf(token, user_id)
+    if not resolved:
+        return jsonify({'success': False, 'error': 'PDF not found or expired. Re-upload the file.'}), 404
+
+    path, filename = resolved
+    response = send_file(
+        path,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=filename,
+    )
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @bp.route('/llm-telemetry/api/summary', methods=['GET'])

@@ -1,4 +1,4 @@
-{# Grouped admin navigation. `ad_page` = 'dashboard' | 'load_testing' | 'llm_telemetry'.
+{# Grouped admin navigation. `ad_page` = 'dashboard' | 'load_testing' | 'llm_telemetry' | 'pdf_extraction_inspector'.
    On the dashboard, section links switch in place (showSection); elsewhere they deep-link to /admin/#<section>. #}
 {% set ad_groups = [
   ('Overview', [('dashboard', 'Dashboard', 'fa-chart-line', None)]),
@@ -7,6 +7,7 @@
     ('lessons', 'Lessons', 'fa-book-open', None),
     ('documents', 'Documents', 'fa-file-pdf', None),
     ('diagnostic', 'Diagnostic Assessment', 'fa-stethoscope', None),
+    ('pdf_extraction_inspector', 'PDF Extraction Inspector', 'fa-search', '/admin/pdf-extraction-inspector'),
   ]),
   ('AI configuration', [
     ('settings', 'LLM Settings', 'fa-sliders-h', None),

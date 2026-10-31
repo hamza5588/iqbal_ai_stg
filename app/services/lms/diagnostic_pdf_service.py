@@ -178,6 +178,10 @@ def _ingest_target_pdf(
 
         logger.warning("Target PDF heading extraction failed: %s", exc)
 
+    from app.services.lms.target_question_service import index_target_questions
+    from app.services.quiz.pdf_extractor import pdf_bytes_to_plain_text
+
+    index_target_questions(thread_id, teacher_id, pdf_bytes_to_plain_text(file_bytes), file_bytes)
     return thread_id
 
 
@@ -847,6 +851,8 @@ def generate_diagnostic_questions(
                     "answer key could not be verified"
                 )
 
+            from app.services.quiz.question_metadata import complete_metadata
+            complete_metadata(mcqs)
             for mcq in mcqs:
 
                 fields = mcq_to_question_fields(mcq)
@@ -868,6 +874,10 @@ def generate_diagnostic_questions(
                     explanation=fields.get("explanation"),
 
                     source_type="pdf_ai",
+                    domain=fields.get("domain"),
+                    topic_label=fields.get("topic_label"),
+                    cognitive_level=fields.get("cognitive_level"),
+                    difficulty=fields.get("difficulty", "medium"),
 
                     source_pdf_thread_id=thread_id,
 
