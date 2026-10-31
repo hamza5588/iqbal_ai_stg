@@ -1,0 +1,112 @@
+{% extends 'admin/base.html' %}
+{% set ad_page = 'pdf_extraction_inspector' %}
+{% from 'admin/partials/page_head.html' import page_head %}
+{% block title %}PDF Extraction Inspector{% endblock %}
+{% block main_class %}ad-main--wide{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='admin/css/pdf-extraction-inspector.css') }}">
+{% endblock %}
+
+{% block content %}
+        {% call page_head('PDF Extraction Inspector', 'Upload a PDF and compare the original document with the exact text extracted by the Lesson/Quiz pipeline.', icon='fa-search') %}
+                <button type="button" id="peiReset" class="ad-btn ad-btn-outline" disabled><i class="fas fa-redo"></i>Reset</button>
+            {% endcall %}
+
+        <div class="ad-card pei-upload-card" id="peiUploadCard">
+            <div class="ad-card-head">
+                <div class="ad-section-title">
+                    <div class="ad-icon-badge sm"><i class="fas fa-file-upload"></i></div>
+                    <div>
+                        <h3>Manual PDF upload</h3>
+                        <p>Uses the same extraction path as Lesson and Quiz ingest (loaders, hybrid math, tables). Nothing is indexed.</p>
+                    </div>
+                </div>
+            </div>
+            <form id="peiForm" enctype="multipart/form-data">
+                <label class="pei-dropzone" id="peiDropzone" for="peiFile">
+                    <input type="file" id="peiFile" name="file" accept="application/pdf,.pdf" hidden>
+                    <div class="pei-drop-inner">
+                        <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
+                        <div>
+                            <strong>Choose a PDF</strong> or drag and drop it here
+                            <span class="pei-drop-hint">PDF only · same size limit as RAG ingest</span>
+                        </div>
+                    </div>
+                    <div class="pei-file-name" id="peiFileName" hidden></div>
+                </label>
+                <div class="pei-upload-actions">
+                    <button type="submit" id="peiSubmit" class="ad-btn ad-btn-primary" disabled>
+                        <i class="fas fa-cogs"></i>Extract text
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="peiLoading" class="ad-card pei-loading hidden" aria-live="polite">
+            <div class="pei-spinner" aria-hidden="true"></div>
+            <div>
+                <strong>Extracting PDF…</strong>
+                <p>Running the project extraction pipeline. Large or math-heavy PDFs can take longer.</p>
+            </div>
+        </div>
+
+        <div id="peiError" class="pei-error hidden" role="alert"></div>
+
+        <div id="peiResults" class="hidden">
+            <div class="ad-stat-grid pei-stats" id="peiStats">
+                <div class="ad-stat"><div class="ad-stat-top"><div class="ad-stat-ic"><i class="fas fa-file-pdf"></i></div><div><h4>Filename</h4><b class="ad-big pei-stat-val" id="peiStatName">—</b></div></div></div>
+                <div class="ad-stat"><div class="ad-stat-top"><div class="ad-stat-ic amber"><i class="fas fa-copy"></i></div><div><h4>Pages</h4><b class="ad-big" id="peiStatPages">—</b></div></div></div>
+                <div class="ad-stat"><div class="ad-stat-top"><div class="ad-stat-ic purple"><i class="fas fa-font"></i></div><div><h4>Characters</h4><b class="ad-big" id="peiStatChars">—</b></div></div></div>
+                <div class="ad-stat"><div class="ad-stat-top"><div class="ad-stat-ic indigo"><i class="fas fa-stopwatch"></i></div><div><h4>Processing</h4><b class="ad-big" id="peiStatTime">—</b></div></div></div>
+                <div class="ad-stat"><div class="ad-stat-top"><div class="ad-stat-ic"><i class="fas fa-layer-group"></i></div><div><h4>Method</h4><b class="ad-big pei-stat-val" id="peiStatMethod">—</b></div></div></div>
+            </div>
+
+            <div id="peiWarnings" class="pei-warnings hidden"></div>
+
+            <div class="pei-split">
+                <section class="ad-card pei-panel pei-panel-pdf" aria-label="Original PDF">
+                    <div class="ad-card-head pei-panel-head">
+                        <div class="ad-section-title">
+                            <div class="ad-icon-badge sm"><i class="fas fa-file-pdf"></i></div>
+                            <div><h3>Original PDF</h3><p>Zoom and scroll with the browser PDF viewer.</p></div>
+                        </div>
+                    </div>
+                    <div class="pei-pdf-frame-wrap">
+                        <iframe id="peiPdfFrame" title="Original PDF preview" class="pei-pdf-frame"></iframe>
+                        <p class="pei-pdf-fallback" id="peiPdfFallback" hidden>
+                            Preview unavailable in this browser.
+                            <a id="peiPdfOpen" href="#" target="_blank" rel="noopener">Open PDF in a new tab</a>
+                        </p>
+                    </div>
+                </section>
+
+                <section class="ad-card pei-panel pei-panel-text" aria-label="Extracted text">
+                    <div class="ad-card-head pei-panel-head">
+                        <div class="ad-section-title">
+                            <div class="ad-icon-badge sm"><i class="fas fa-align-left"></i></div>
+                            <div><h3>Complete extracted text</h3><p>Exact pipeline output — not summarized or corrected.</p></div>
+                        </div>
+                        <div class="ad-head-actions pei-text-actions">
+                            <div class="pei-page-nav" id="peiPageNav">
+                                <button type="button" class="ad-icon-btn" id="peiPagePrev" title="Previous page" aria-label="Previous page"><i class="fas fa-chevron-left"></i></button>
+                                <label class="pei-page-label">
+                                    Page
+                                    <select id="peiPageSelect" aria-label="Page number"></select>
+                                </label>
+                                <button type="button" class="ad-icon-btn" id="peiPageNext" title="Next page" aria-label="Next page"><i class="fas fa-chevron-right"></i></button>
+                                <button type="button" class="ad-btn ad-btn-outline ad-btn-sm" id="peiShowAll">All pages</button>
+                            </div>
+                            <button type="button" class="ad-btn ad-btn-outline ad-btn-sm" id="peiCopy"><i class="fas fa-copy"></i>Copy All Text</button>
+                            <button type="button" class="ad-btn ad-btn-outline ad-btn-sm" id="peiDownload"><i class="fas fa-download"></i>Download .txt</button>
+                        </div>
+                    </div>
+                    <pre id="peiTextView" class="pei-text-view" tabindex="0"></pre>
+                </section>
+            </div>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='admin/js/pdf-extraction-inspector.js') }}"></script>
+{% endblock %}
