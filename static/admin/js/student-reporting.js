@@ -149,7 +149,7 @@
         value: items.length > 1 ? 'title:' + items[0].title : String(items[0].id),
         label: items[0].title + ' — ' + items[0].test_type + (items.length > 1 ? ' · ' + items.length + ' school tests' : ' · #' + items[0].id)
       }));
-      assessment.innerHTML = '<option value="all">All tests on selected date</option>' + reportOptions.map(item => '<option value="' + esc(item.value) + '">' + esc(item.label) + '</option>').join('');
+      assessment.innerHTML = '<option value="all">All tests created on selected date</option>' + reportOptions.map(item => '<option value="' + esc(item.value) + '">' + esc(item.label) + '</option>').join('');
       if (reportOptions.some(item => item.value === chosen)) assessment.value = chosen;
       syncSchools(document.getElementById('sr-school'), data.schools, 'All schools');
       document.getElementById('sr-students').innerHTML = data.students.map(item => '<option value="' + item.id + '">' + esc(item.name + ' · ' + item.group + (item.school ? ' · ' + item.school : '')) + '</option>').join('');
@@ -175,6 +175,7 @@
       const score = data.average_score == null ? 'Unavailable' : (data.average_score * 100).toFixed(2) + '%';
       const filters = data.filters;
       target.innerHTML = '<p><strong>Selection:</strong> ' + esc(filters.group.replace('_', ' ')) + ' · ' + esc(filters.start) + (filters.end !== filters.start ? ' to ' + esc(filters.end) : '') + '</p>' +
+        '<p class="ad-help"><strong>Date rule:</strong> ' + esc(data.attempt_rule) + '</p>' +
         '<div class="sr-stat-grid"><div class="sr-stat"><span>Students</span><strong>' + data.matching_students + '</strong></div><div class="sr-stat"><span>Attempts</span><strong>' + data.attempts + '</strong></div><div class="sr-stat"><span>Average score</span><strong>' + score + '</strong></div></div>' +
         (data.files.length ? '<h4>Workbook contents</h4><p>All rows below will be merged into one Excel workbook.</p><ul>' + data.files.map(item => '<li>' + esc(item.group + ' · ' + item.test_type + ' · ' + item.test_date) + ' — ' + item.rows + ' result row(s)</li>').join('') + '</ul>' : '<p class="sr-empty">No matching submitted attempts. No workbook will be generated.</p>') +
         (data.warnings.length ? '<div class="sr-warning"><strong>Missing data warnings</strong><ul>' + data.warnings.map(item => '<li>' + esc(item) + '</li>').join('') + '</ul></div>' : '<p class="sr-ok">All requested report data is available.</p>');

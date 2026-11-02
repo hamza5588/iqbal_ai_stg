@@ -18,6 +18,8 @@ If preview has no rows, it distinguishes no submitted attempts from unclassified
 
 Date inputs are Pakistan dates (`Asia/Karachi`). The start is inclusive at local midnight and the end is inclusive through the next local midnight. For each student and assessment, the latest submitted attempt in that window is used. Results, topic rows, and answer rows all come from that same attempt.
 
+With **All tests created on selected date**, both the assessment's Pakistan creation date and the attempt's Pakistan submission date must fall inside the selected window. This prevents a late retake of an older weekly quiz from entering the current test-day report. When an admin explicitly selects an assessment, the selection is authoritative and only attempt submission dates are restricted; this intentionally supports reporting late retakes for that assessment. The exported `Test Date` remains the attempt submission date.
+
 Every export is one Excel workbook matching the reference template. Results from all selected schools, assessments, dates, and groups are merged into the workbook's existing `Results`, `Topic Scores`, and `Answers` worksheets; `Instructions` remains the fourth worksheet. The identifying columns on each row preserve its group, test type, date, test name, and school, so the combined workbook can be filtered without opening a ZIP or multiple files.
 
 ## Excel mapping and metric rules

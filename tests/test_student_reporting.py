@@ -54,7 +54,7 @@ def user(user_id, email, role="student", name=None, school="School A"):
     )
 
 
-def seed_attempt(db, student_id=2, *, submitted=datetime(2026, 10, 29, 7, 30), correct=True, title="Algebra Test"):
+def seed_attempt(db, student_id=2, *, submitted=datetime(2026, 10, 29, 7, 30), correct=True, title="Algebra Test", assessment_created=None):
     topic = Topic(name="Algebra", slug=f"algebra-{student_id}-{int(submitted.timestamp())}", subject="Mathematics", grade_level="9")
     db.add(topic); db.flush()
     question = Question(
@@ -62,7 +62,10 @@ def seed_attempt(db, student_id=2, *, submitted=datetime(2026, 10, 29, 7, 30), c
         options_json='[{"label":"A","text":"3"},{"label":"B","text":"4"},{"label":"C","text":"5"},{"label":"D","text":"6"}]',
         correct_option_index=1, difficulty="easy", source_type="manual",
     )
-    assessment = Assessment(title=title, assessment_type="quiz", creation_mode="manual", status="published")
+    assessment = Assessment(
+        title=title, assessment_type="quiz", creation_mode="manual", status="published",
+        created_at=assessment_created or submitted,
+    )
     db.add_all([question, assessment]); db.flush()
     db.add(AssessmentQuestion(assessment_id=assessment.id, question_id=question.id, sort_order=1))
     attempt = AssessmentAttempt(
@@ -177,7 +180,7 @@ def test_report_uses_latest_attempt_actual_answers_topics_and_usage(db):
     assert result[11:16] == [15.0, 10.0, 1, date(2026, 10, 29), 2]
     assert report["files"][0]["topics"][0][3:] == [1, 1, 1.0]
     assert report["files"][0]["answers"][0][5:] == ["B", "B", "Yes"]
-    assert report["attempt_rule"].startswith("Latest submitted attempt")
+    assert report["attempt_rule"].startswith("Selected assessment:")
 
 
 def test_cross_group_isolation_and_missing_usage_is_blank(db):
@@ -199,6 +202,47 @@ def test_cross_group_isolation_and_missing_usage_is_blank(db):
     assert report["files"][0]["results"][0][1] == "controlled@example.com"
     assert report["files"][0]["results"][0][12] is None
     assert any("blank, not zero" in warning for warning in report["warnings"])
+
+
+def test_all_tests_date_excludes_old_assessment_retake_but_explicit_selection_allows_it(db):
+    db.add_all([
+        user(1, "admin@example.com", "admin"),
+        user(2, "retake@example.com"),
+        user(3, "current@example.com"),
+    ]); db.flush()
+    old_quiz, _, _ = seed_attempt(
+        db, 2, submitted=datetime(2026, 11, 2, 9, 13),
+        assessment_created=datetime(2026, 10, 26, 8, 43),
+        title="Practice Quiz 1 - Mathematics IX",
+    )
+    current_quiz, _, _ = seed_attempt(
+        db, 3, submitted=datetime(2026, 11, 2, 8, 5),
+        assessment_created=datetime(2026, 11, 2, 6, 48),
+        title="Practice Quiz 2 - Mathematics IX",
+    )
+    db.add_all([
+        StudentStudyGroupAssignment(student_id=2, cohort_key="default", group_name="Uncontrolled", effective_from=datetime(2026, 10, 1)),
+        StudentStudyGroupAssignment(student_id=3, cohort_key="default", group_name="Uncontrolled", effective_from=datetime(2026, 10, 1)),
+    ])
+    classify_assessment(db, old_quiz.id, "default", "FollowUp", 1, 1)
+    classify_assessment(db, current_quiz.id, "default", "FollowUp", 2, 1)
+    db.commit()
+
+    filters = {
+        "cohort": "default", "group": "uncontrolled", "start": "2026-11-02", "end": "2026-11-02",
+        "test_type": "all", "assessment_id": "all",
+    }
+    all_tests = build_report(db, filters)
+    assert all_tests["attempts"] == 1
+    assert [row[6] for item in all_tests["files"] for row in item["results"]] == ["Practice Quiz 2 - Mathematics IX"]
+    assert all_tests["attempt_rule"].startswith("All tests: assessment creation")
+
+    explicit_retake = build_report(db, {**filters, "assessment_id": old_quiz.id})
+    assert explicit_retake["attempts"] == 1
+    assert explicit_retake["files"][0]["results"][0][6] == "Practice Quiz 1 - Mathematics IX"
+
+    date_range = build_report(db, {**filters, "start": "2026-10-26"})
+    assert date_range["attempts"] == 2
 
 
 def test_same_named_school_assessments_can_be_selected_as_one_quiz(db):
@@ -249,7 +293,7 @@ def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
     assert "Student group" in primary and "Test date" in primary and "Assessment" in primary and "School" in primary
     assert "Cohort" not in primary and "Test type" not in primary and "FollowUp order" not in template
     assert 'id="sr-cohort" value="default"' in template
-    assert "admin-dashboard.js') }}?v=20261103reports3" in dashboard
+    assert "admin-dashboard.js') }}?v=20261103reports4" in dashboard
 
 
 def test_workbook_matches_reference_contract_and_export_merges_files(db):

@@ -503,6 +503,12 @@ def build_report(db, filters) -> dict:
         AssessmentAttempt.submitted_at < end_utc,
         User.role == "student",
     )
+    all_assessments = assessment_id is None and assessment_title is None
+    if all_assessments:
+        query = query.filter(
+            Assessment.created_at >= start_utc,
+            Assessment.created_at < end_utc,
+        )
     if assessment_id:
         query = query.filter(AssessmentAttempt.assessment_id == assessment_id)
     elif assessment_title:
@@ -697,7 +703,11 @@ def build_report(db, filters) -> dict:
             "without_effective_group": no_group_count,
             "different_group": other_group_count,
         },
-        "attempt_rule": "Latest submitted attempt per student and assessment within the selected Pakistan-time date window.",
+        "attempt_rule": (
+            "All tests: assessment creation and attempt submission must both fall within the selected Pakistan-time date window."
+            if all_assessments else
+            "Selected assessment: latest submitted attempt per student within the selected Pakistan-time date window."
+        ),
         "metric_rules": {
             "system_usage": "Sum of recorded AI Tutor heartbeat milliseconds in the selected date window; blank when no tracking row exists.",
             "days_active": "Distinct Pakistan dates with positive AI Tutor usage or a submitted assessment in the selected window.",
