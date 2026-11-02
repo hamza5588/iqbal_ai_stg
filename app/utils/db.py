@@ -283,6 +283,8 @@ def init_db(app):
             # Create all tables
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables created/verified successfully")
+            from app.migrations.student_reporting import run_migration as migrate_student_reporting
+            migrate_student_reporting(engine)
             from app.services.tutor_usage_service import initialize_tracking
             initialize_tracking(engine)
             

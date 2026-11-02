@@ -88,6 +88,10 @@ function showSection(sectionName) {
         loadUsers();
     } else if (sectionName === 'daily-usage') {
         loadDailyUsage();
+    } else if (sectionName === 'student-groups') {
+        loadStudentGroups();
+    } else if (sectionName === 'student-reports') {
+        loadStudentReports();
     } else if (sectionName === 'prompts') {
         loadRagSystemPrompt();
     } else if (sectionName === 'coupons') {

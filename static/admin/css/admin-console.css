@@ -413,3 +413,32 @@ table.ad-table tbody tr:hover > td.ad-empty-cell { background: #fff; }
   .ad-body #diagnostic-section .d-row-meta { flex-wrap: wrap; }
   .ad-body #diagnostic-section .d-row-meta span { white-space: nowrap; }
 }
+/* Student study groups and template-compatible performance reporting */
+.sr-filter-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; align-items:end; margin-bottom:16px; }
+.sr-filter-grid .ad-field { min-width:0; }
+.sr-filter-grid select[multiple] { min-height:112px; }
+.sr-students { grid-row:span 2; }
+.sr-stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:14px 0; }
+.sr-stat { padding:14px; display:flex; flex-direction:column; gap:4px; }
+.sr-stat span { color:var(--ad-muted,#64748b); font-size:.82rem; }
+.sr-stat strong { font-size:1.35rem; }
+.sr-bulk-bar,.sr-import-actions,.sr-panel-head { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.sr-bulk-bar { margin-bottom:12px; }
+.sr-bulk-bar strong { margin-right:auto; }
+.sr-panel { margin-top:18px; }
+.sr-panel-head { justify-content:space-between; margin-bottom:14px; }
+.sr-panel-head h3 { margin:0; }
+.sr-panel-head p { margin:4px 0 0; }
+.sr-preview { margin:16px 0; }
+.sr-preview h4 { margin:16px 0 5px; }
+.sr-preview ul,.sr-warning ul { margin:6px 0 0 20px; }
+.sr-badge { display:inline-flex; border-radius:999px; padding:3px 9px; font-size:.78rem; font-weight:700; }
+.sr-controlled { background:#dcfce7; color:#166534; }
+.sr-uncontrolled { background:#dbeafe; color:#1e40af; }
+.sr-unassigned { background:#f1f5f9; color:#475569; }
+.sr-small { padding:5px 9px; font-size:.78rem; }
+.sr-ok { color:#15803d; }
+.sr-error { color:#b91c1c; }
+.sr-warning { border-left:4px solid #d97706; background:#fffbeb; padding:12px; margin-top:12px; }
+.sr-empty { padding:14px; background:#f8fafc; border-radius:8px; }
+@media (max-width:640px) { .sr-filter-grid { grid-template-columns:1fr; } .sr-bulk-bar .ad-btn { flex:1 1 100%; } }

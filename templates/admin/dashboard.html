@@ -11,6 +11,8 @@
     {% include 'admin/sections/overview.html' %}
     {% include 'admin/sections/users.html' %}
     {% include 'admin/sections/daily_usage.html' %}
+    {% include 'admin/sections/student_groups.html' %}
+    {% include 'admin/sections/student_reports.html' %}
     {% include 'admin/sections/prompts.html' %}
     {% include 'admin/sections/coupons.html' %}
     {% include 'admin/sections/lessons.html' %}
@@ -46,6 +48,7 @@
     <script src="https://cdn.jsdelivr.net/npm/mathlive@0.105.3/mathlive.min.js"></script>
     <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261006diag5"></script>
     <script src="{{ url_for('static', filename='admin/js/daily-usage.js') }}?v=20261022usage3"></script>
+    <script src="{{ url_for('static', filename='admin/js/student-reporting.js') }}?v=20261103reports1"></script>
     <script src="{{ url_for('static', filename='admin/js/admin-dashboard.js') }}?v=20261022usage1"></script>
     <script src="{{ url_for('static', filename='admin/lms-admin-diagnostic.js') }}?v=20261006diag5"></script>
     <script src="{{ url_for('static', filename='admin/admin-theme.js') }}"></script>

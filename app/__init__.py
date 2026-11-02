@@ -317,6 +317,7 @@ def create_app():
     from app.routes.rag_routes import bp as rag_bp
     from app.routes.subscription import bp as subscription_bp
     from app.routes.admin_routes import bp as admin_bp
+    from app.routes.student_reporting_routes import bp as student_reporting_bp
     from app.routes.load_test_routes import bp as load_test_bp
 
     # Register blueprints with appropriate prefixes
@@ -330,6 +331,7 @@ def create_app():
     app.register_blueprint(rag_bp, url_prefix='/api/rag')
     app.register_blueprint(subscription_bp, url_prefix='/subscription')
     app.register_blueprint(admin_bp)
+    app.register_blueprint(student_reporting_bp)
     from app.routes.tutor_usage_routes import bp as tutor_usage_bp
     app.register_blueprint(tutor_usage_bp)
     app.register_blueprint(load_test_bp, url_prefix='/api/load-test')

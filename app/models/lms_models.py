@@ -448,6 +448,94 @@ class AttemptAnswer(Base):
     )
 
 
+class StudentStudyGroupAssignment(Base):
+    """Effective-dated Controlled/Uncontrolled membership for one study cohort."""
+
+    __tablename__ = "student_study_group_assignments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    cohort_key = Column(String(100), nullable=False, default="default", server_default="default")
+    group_name = Column(String(20), nullable=False)
+    effective_from = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    effective_to = Column(DateTime, nullable=True)
+    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    source = Column(String(32), nullable=False, default="manual", server_default="manual")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "group_name IN ('Controlled','Uncontrolled')",
+            name="check_student_study_group_name",
+        ),
+        CheckConstraint(
+            "source IN ('manual','import')",
+            name="check_student_study_group_source",
+        ),
+        Index(
+            "idx_student_group_effective",
+            "student_id",
+            "cohort_key",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class StudentStudyGroupAudit(Base):
+    """Append-only history of every assignment, reassignment and unassignment."""
+
+    __tablename__ = "student_study_group_audit"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    cohort_key = Column(String(100), nullable=False, default="default", server_default="default")
+    old_group_name = Column(String(20), nullable=True)
+    new_group_name = Column(String(20), nullable=True)
+    changed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    changed_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    source = Column(String(32), nullable=False, default="manual", server_default="manual")
+    note = Column(String(512), nullable=True)
+
+    __table_args__ = (
+        Index("idx_student_group_audit_student", "student_id", "cohort_key", "changed_at"),
+    )
+
+
+class AssessmentReportClassification(Base):
+    """Admin-owned study classification; assessment_type is intentionally not reused."""
+
+    __tablename__ = "assessment_report_classifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    assessment_id = Column(Integer, ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False)
+    cohort_key = Column(String(100), nullable=False, default="default", server_default="default")
+    test_type = Column(String(20), nullable=False)
+    followup_order = Column(Integer, nullable=True)
+    classified_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "test_type IN ('Baseline','FollowUp')",
+            name="check_assessment_report_test_type",
+        ),
+        CheckConstraint(
+            "followup_order IS NULL OR followup_order > 0",
+            name="check_assessment_report_followup_order",
+        ),
+        UniqueConstraint("assessment_id", "cohort_key", name="uq_assessment_report_cohort"),
+        Index("idx_assessment_report_type", "cohort_key", "test_type", "followup_order"),
+    )
+
+
 class StudentTopicScore(Base):
     __tablename__ = "student_topic_scores"
 
