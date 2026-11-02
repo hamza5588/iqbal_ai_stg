@@ -102,6 +102,21 @@ def _utc_bounds(start_value, end_value) -> tuple[date, date, datetime, datetime]
     )
 
 
+def parse_initial_effective_date(value) -> datetime | None:
+    """Convert an optional Pakistan calendar date to the persisted UTC-naive form."""
+    if value in (None, ""):
+        return None
+    try:
+        effective_day = date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        raise ValueError("Use a valid membership effective date in YYYY-MM-DD format.")
+    today = datetime.now(REPORT_ZONE).date()
+    if effective_day > today:
+        raise ValueError("Membership effective date cannot be in the future.")
+    local_midnight = datetime.combine(effective_day, time.min, tzinfo=REPORT_ZONE)
+    return local_midnight.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _active_assignments(db, cohort: str, now: datetime | None = None):
     at = now or _utc_now()
     return db.query(StudentStudyGroupAssignment).filter(
@@ -165,7 +180,17 @@ def list_student_groups(db, args) -> dict:
     }
 
 
-def assign_students(db, student_ids: Iterable, group, cohort, actor_id, *, source="manual", note=None) -> dict:
+def assign_students(
+    db,
+    student_ids: Iterable,
+    group,
+    cohort,
+    actor_id,
+    *,
+    source="manual",
+    note=None,
+    effective_from: datetime | None = None,
+) -> dict:
     cohort = normalize_cohort(cohort)
     new_group = normalize_group(group, allow_unassigned=True)
     if source not in {"manual", "import"}:
@@ -183,6 +208,58 @@ def assign_students(db, student_ids: Iterable, group, cohort, actor_id, *, sourc
     if missing:
         raise ValueError(f"Unknown student IDs: {', '.join(map(str, missing[:10]))}.")
     now = _utc_now()
+    if effective_from is not None:
+        if new_group is None:
+            raise ValueError("A historical effective date can only be used for an initial group assignment.")
+        if effective_from > now:
+            raise ValueError("Membership effective date cannot be in the future.")
+        history = db.query(StudentStudyGroupAssignment).filter(
+            StudentStudyGroupAssignment.student_id.in_(ids),
+            StudentStudyGroupAssignment.cohort_key == cohort,
+        ).with_for_update().all()
+        history_by_id = defaultdict(list)
+        for row in history:
+            history_by_id[row.student_id].append(row)
+        exact_ids = set()
+        conflicts = []
+        for student_id in ids:
+            rows = history_by_id[student_id]
+            exact = any(
+                row.group_name == new_group
+                and row.effective_from == effective_from
+                and row.effective_to is None
+                for row in rows
+            )
+            if exact:
+                exact_ids.add(student_id)
+            elif rows:
+                conflicts.append(student_id)
+        if conflicts:
+            raise ValueError(
+                "Historical effective dates are only allowed for students with no group history. "
+                f"Conflicting student IDs: {', '.join(map(str, conflicts[:10]))}."
+            )
+        changed = 0
+        for student_id in ids:
+            if student_id in exact_ids:
+                continue
+            db.add(StudentStudyGroupAssignment(
+                student_id=student_id, cohort_key=cohort, group_name=new_group,
+                effective_from=effective_from, assigned_by=actor_id, source=source,
+            ))
+            db.add(StudentStudyGroupAudit(
+                student_id=student_id, cohort_key=cohort, old_group_name=None,
+                new_group_name=new_group, changed_by=actor_id, changed_at=now,
+                source=source, note=(str(note).strip()[:512] if note else None),
+            ))
+            changed += 1
+        return {
+            "changed": changed,
+            "unchanged": len(ids) - changed,
+            "group": new_group,
+            "cohort": cohort,
+            "effective_from": effective_from.isoformat(),
+        }
     active = db.query(StudentStudyGroupAssignment).filter(
         StudentStudyGroupAssignment.student_id.in_(ids),
         StudentStudyGroupAssignment.cohort_key == cohort,
@@ -323,11 +400,14 @@ def classify_assessment(db, assessment_id, cohort, test_type, followup_order, ac
         order = None
     else:
         if followup_order in (None, ""):
-            maximum = db.query(func.max(AssessmentReportClassification.followup_order)).filter(
-                AssessmentReportClassification.cohort_key == cohort,
-                AssessmentReportClassification.test_type == "FollowUp",
-            ).scalar() or 0
-            order = maximum + 1
+            if existing and existing.test_type == "FollowUp" and existing.followup_order:
+                order = existing.followup_order
+            else:
+                maximum = db.query(func.max(AssessmentReportClassification.followup_order)).filter(
+                    AssessmentReportClassification.cohort_key == cohort,
+                    AssessmentReportClassification.test_type == "FollowUp",
+                ).scalar() or 0
+                order = maximum + 1
         else:
             try:
                 order = int(followup_order)
@@ -393,8 +473,16 @@ def build_report(db, filters) -> dict:
     type_scope = str(filters.get("test_type") or "all").strip().lower().replace("-", "")
     if type_scope not in {"all", "baseline", "followup"}:
         raise ValueError("Invalid test type selection.")
+    assessment_value = filters.get("assessment_id")
+    assessment_id = None
+    assessment_title = None
     try:
-        assessment_id = int(filters["assessment_id"]) if filters.get("assessment_id") not in (None, "", "all") else None
+        if isinstance(assessment_value, str) and assessment_value.startswith("title:"):
+            assessment_title = assessment_value[6:].strip()
+            if not assessment_title or len(assessment_title) > 512:
+                raise ValueError
+        elif assessment_value not in (None, "", "all"):
+            assessment_id = int(assessment_value)
         student_ids = {int(value) for value in (filters.get("student_ids") or [])}
     except (TypeError, ValueError):
         raise ValueError("Invalid assessment or student selection.")
@@ -402,7 +490,7 @@ def build_report(db, filters) -> dict:
 
     query = db.query(AssessmentAttempt, Assessment, User, AssessmentReportClassification).join(
         Assessment, Assessment.id == AssessmentAttempt.assessment_id
-    ).join(User, User.id == AssessmentAttempt.student_id).join(
+    ).join(User, User.id == AssessmentAttempt.student_id).outerjoin(
         AssessmentReportClassification,
         and_(AssessmentReportClassification.assessment_id == AssessmentAttempt.assessment_id,
              AssessmentReportClassification.cohort_key == cohort),
@@ -415,13 +503,21 @@ def build_report(db, filters) -> dict:
     )
     if assessment_id:
         query = query.filter(AssessmentAttempt.assessment_id == assessment_id)
-    if type_scope != "all":
-        query = query.filter(AssessmentReportClassification.test_type == ("Baseline" if type_scope == "baseline" else "FollowUp"))
+    elif assessment_title:
+        query = query.filter(Assessment.title == assessment_title)
     if school:
         query = query.filter(User.school_name == school)
     if student_ids:
         query = query.filter(User.id.in_(student_ids))
-    candidates = query.order_by(AssessmentAttempt.submitted_at.desc(), AssessmentAttempt.id.desc()).all()
+    raw_candidates = query.order_by(AssessmentAttempt.submitted_at.desc(), AssessmentAttempt.id.desc()).all()
+    unclassified_count = sum(classification is None for _, _, _, classification in raw_candidates)
+    candidates = [
+        row for row in raw_candidates
+        if row[3] is not None and (
+            type_scope == "all"
+            or row[3].test_type == ("Baseline" if type_scope == "baseline" else "FollowUp")
+        )
+    ]
     candidate_student_ids = {attempt.student_id for attempt, _, _, _ in candidates}
     assignment_rows = db.query(StudentStudyGroupAssignment).filter(
         StudentStudyGroupAssignment.cohort_key == cohort,
@@ -435,13 +531,18 @@ def build_report(db, filters) -> dict:
 
     selected = []
     seen = set()
+    no_group_count = 0
+    other_group_count = 0
     for attempt, assessment, student, classification in candidates:
         group = _group_at(assignments, attempt.student_id, attempt.submitted_at)
         if not group:
+            no_group_count += 1
             continue
         if group_scope == "controlled" and group != "Controlled":
+            other_group_count += 1
             continue
         if group_scope == "uncontrolled" and group != "Uncontrolled":
+            other_group_count += 1
             continue
         # Latest submitted attempt per student and assessment in the chosen window.
         key = (attempt.student_id, attempt.assessment_id)
@@ -497,6 +598,18 @@ def build_report(db, filters) -> dict:
         activity_dates[student_id].update(row.usage_date for row in rows if row.active_ms > 0)
 
     warnings = set()
+    if not raw_candidates:
+        warnings.add("No submitted assessment attempts were found for the selected Pakistan-time date and filters.")
+    if unclassified_count:
+        warnings.add(
+            f"{unclassified_count} submitted attempt(s) were excluded because their assessment is not configured as Baseline or FollowUp."
+        )
+    if no_group_count:
+        warnings.add(
+            f"{no_group_count} submitted attempt(s) were excluded because the student had no group assignment effective on the test date."
+        )
+    if other_group_count and not selected:
+        warnings.add(f"{other_group_count} classified attempt(s) belonged to a different student group on the test date.")
     files = defaultdict(lambda: {"results": [], "topics": [], "answers": [], "assessment_id": None})
     scores = []
     for attempt, assessment, student, classification, group in selected:
@@ -569,12 +682,19 @@ def build_report(db, filters) -> dict:
         file_list.append(data)
     return {
         "filters": {"cohort": cohort, "group": group_scope, "start": start_day.isoformat(), "end": end_day.isoformat(),
-                    "test_type": type_scope, "assessment_id": assessment_id, "school": school,
+                    "test_type": type_scope, "assessment_id": assessment_id, "assessment_title": assessment_title,
+                    "school": school,
                     "student_ids": sorted(student_ids)},
         "matching_students": len({row[0].student_id for row in selected}),
         "attempts": len(selected), "average_score": (sum(scores) / len(scores) if scores else None),
         "topic_rows": sum(len(item["topics"]) for item in file_list), "files": file_list,
         "warnings": sorted(warnings),
+        "diagnostics": {
+            "submitted_candidates": len(raw_candidates),
+            "unclassified": unclassified_count,
+            "without_effective_group": no_group_count,
+            "different_group": other_group_count,
+        },
         "attempt_rule": "Latest submitted attempt per student and assessment within the selected Pakistan-time date window.",
         "metric_rules": {
             "system_usage": "Sum of recorded AI Tutor heartbeat milliseconds in the selected date window; blank when no tracking row exists.",

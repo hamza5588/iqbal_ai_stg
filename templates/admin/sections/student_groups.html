@@ -30,7 +30,12 @@
 
   <div id="sg-import-panel" class="ad-card sr-panel" hidden>
     <div class="sr-panel-head"><div><h3>Import group assignments</h3><p class="ad-help">CSV/XLSX columns: Student ID or Email, and Group. No student accounts are created.</p></div><button type="button" class="ad-btn ad-btn-outline" onclick="studentGroupsToggleImport(false)">Close</button></div>
-    <div class="sr-import-actions"><input type="file" id="sg-import-file" accept=".csv,.xlsx"><button type="button" class="ad-btn ad-btn-outline" onclick="studentGroupsPreviewImport()">Preview</button><button type="button" id="sg-import-apply" class="ad-btn ad-btn-primary" onclick="studentGroupsApplyImport()" disabled>Apply valid rows</button></div>
+    <div class="sr-import-actions">
+      <input type="file" id="sg-import-file" accept=".csv,.xlsx">
+      <label class="ad-field">Initial membership effective date <input type="date" id="sg-effective-date"><small>Optional. Only accepted when a student has no existing group history.</small></label>
+      <button type="button" class="ad-btn ad-btn-outline" onclick="studentGroupsPreviewImport()">Preview</button>
+      <button type="button" id="sg-import-apply" class="ad-btn ad-btn-primary" onclick="studentGroupsApplyImport()" disabled>Apply valid rows</button>
+    </div>
     <p id="sg-import-summary" class="ad-help"></p>
     <div class="ad-table-scroll"><table class="ad-table"><thead><tr><th>Row</th><th>Student</th><th>Email</th><th>Group</th><th>Status</th></tr></thead><tbody id="sg-import-tbody"><tr><td colspan="5">Choose a file to preview.</td></tr></tbody></table></div>
   </div>

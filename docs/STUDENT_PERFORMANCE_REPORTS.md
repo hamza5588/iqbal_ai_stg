@@ -1,6 +1,6 @@
 # Student Performance Reports
 
-The Admin Console exposes **Student Groups** and **Reports → Student Performance**. Access is restricted to authenticated administrators.
+The Admin Console exposes **Student Groups** and **Reports → Student Performance**. Access is restricted to authenticated administrators. The primary report form shows only Group, Test date, Assessment, and School. Optional date ranges, individual students, and assessment setup are under collapsed Advanced sections; the pilot cohort is fixed to `default` in the UI.
 
 ## Group membership
 
@@ -8,11 +8,13 @@ Group membership is stored per `cohort_key` in `student_study_group_assignments`
 
 Valid values are `Controlled` and `Uncontrolled`. `Unassigned` means no active assignment and is never treated as Uncontrolled. During a historical export, membership is evaluated at the assessment's `submitted_at`, so later changes do not alter old reports.
 
-CSV/XLSX imports accept `Student ID` or `Email`, plus `Group`. Emails are normalized to lower case. A preview rejects unmatched identifiers, ID/email conflicts, and duplicate rows. Applying a preview never creates a user.
+CSV/XLSX imports accept `Student ID` or `Email`, plus `Group`. Emails are normalized to lower case. A preview rejects unmatched identifiers, ID/email conflicts, and duplicate rows. Applying a preview never creates a user. An optional Pakistan calendar date may be supplied for the **initial** membership import. Backdating is rejected once any group history exists, so later reassignments cannot rewrite historical reports. Audit `changed_at` remains the real operation time.
 
 ## Assessment and attempt selection
 
 `assessment_report_classifications` explicitly maps an assessment to `Baseline` or `FollowUp` within a cohort. It does not infer study type from the platform-wide first quiz. A cohort can have one Baseline; FollowUps carry a positive admin-controlled order.
+
+If preview has no rows, it distinguishes no submitted attempts from unclassified assessments, missing historical group membership, and attempts belonging to another selected group. These diagnostics contain counts only and do not expose additional student data.
 
 Date inputs are Pakistan dates (`Asia/Karachi`). The start is inclusive at local midnight and the end is inclusive through the next local midnight. For each student and assessment, the latest submitted attempt in that window is used. Results, topic rows, and answer rows all come from that same attempt.
 
@@ -41,3 +43,7 @@ The packaged Controlled or Uncontrolled reference workbook is loaded for every e
 | Answers | attempt question order, question text/options, selected option and stored grading outcome |
 
 The preview surfaces missing duration, grading, topic, question, and usage information. Missing usage is blank rather than zero. Excel strings are forced to string cells to prevent formula injection while preserving Unicode and mathematical content.
+
+## Canonical DIL pilot bootstrap
+
+Run `scripts/backfill_student_reporting.py` as a dry-run first. The two supplied diagnostic Results workbooks are authoritative for their `58` Controlled and `98` Uncontrolled unique/disjoint emails. The newer dashboard workbook is supplemental only for previously unseen emails: it adds three explicit Controlled students and cannot override the canonical files (its 44 conflicts are counted and ignored). The tool verifies stored DB user IDs and refuses school-based inference. It also validates the known Baseline/FollowUp assessment IDs before any write. `--apply` performs assignments, audit rows, and classifications in one transaction; conflicts cause a full rollback, and an exact rerun is idempotent. A student absent from every supplied roster remains Unassigned and is reported as such.

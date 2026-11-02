@@ -28,6 +28,7 @@ from app.services.student_reporting_service import (
     build_report,
     classify_assessment,
     export_report,
+    parse_initial_effective_date,
     preview_group_import,
     workbook_for_file,
 )
@@ -94,6 +95,27 @@ def test_bulk_assignment_preserves_effective_history_and_audit(db):
     assert [(row.old_group_name, row.new_group_name) for row in db.query(StudentStudyGroupAudit).filter_by(student_id=2).order_by(StudentStudyGroupAudit.id)] == [
         (None, "Controlled"), ("Controlled", "Uncontrolled")
     ]
+
+
+def test_initial_assignment_accepts_effective_date_but_rejects_backdated_reassignment(db):
+    db.add_all([user(1, "admin@example.com", "admin"), user(2, "student@example.com")]); db.flush()
+    effective = parse_initial_effective_date("2026-10-07")
+
+    first = assign_students(
+        db, [2], "Uncontrolled", "default", 1, source="import",
+        effective_from=effective, note="canonical roster",
+    )
+    db.flush()
+    repeated = assign_students(
+        db, [2], "Uncontrolled", "default", 1, source="import",
+        effective_from=effective, note="canonical roster",
+    )
+
+    assert first["changed"] == 1
+    assert repeated == {"changed": 0, "unchanged": 1, "group": "Uncontrolled", "cohort": "default", "effective_from": effective.isoformat()}
+    assert db.query(StudentStudyGroupAssignment).filter_by(student_id=2).one().effective_from == effective
+    with pytest.raises(ValueError, match="only allowed for students with no group history"):
+        assign_students(db, [2], "Controlled", "default", 1, source="import", effective_from=effective)
 
 
 def test_import_preview_rejects_duplicates_and_unmatched_without_creating_users(db):
@@ -177,6 +199,57 @@ def test_cross_group_isolation_and_missing_usage_is_blank(db):
     assert report["files"][0]["results"][0][1] == "controlled@example.com"
     assert report["files"][0]["results"][0][12] is None
     assert any("blank, not zero" in warning for warning in report["warnings"])
+
+
+def test_same_named_school_assessments_can_be_selected_as_one_quiz(db):
+    db.add_all([user(1, "admin@example.com", "admin"), user(2, "one@example.com"), user(3, "two@example.com")]); db.flush()
+    first, _, _ = seed_attempt(db, student_id=2, title="Practice Quiz 2 - Mathematics IX")
+    second, _, _ = seed_attempt(db, student_id=3, title="Practice Quiz 2 - Mathematics IX")
+    db.add_all([
+        StudentStudyGroupAssignment(student_id=2, cohort_key="pilot", group_name="Uncontrolled", effective_from=datetime(2026,10,1)),
+        StudentStudyGroupAssignment(student_id=3, cohort_key="pilot", group_name="Uncontrolled", effective_from=datetime(2026,10,1)),
+    ])
+    classify_assessment(db, first.id, "pilot", "FollowUp", 2, 1)
+    classify_assessment(db, second.id, "pilot", "FollowUp", 2, 1)
+    db.commit()
+
+    report = build_report(db, {
+        "cohort":"pilot", "group":"uncontrolled", "start":"2026-10-29", "end":"2026-10-29",
+        "test_type":"all", "assessment_id":"title:Practice Quiz 2 - Mathematics IX",
+    })
+
+    assert report["attempts"] == 2
+    assert report["matching_students"] == 2
+    assert len(report["files"]) == 2
+
+
+def test_preview_diagnostics_explain_unclassified_and_historically_unassigned_attempts(db):
+    db.add_all([user(1, "admin@example.com", "admin"), user(2, "student@example.com")]); db.flush()
+    assessment, _, _ = seed_attempt(db)
+    db.commit()
+
+    unclassified = build_report(db, {"cohort":"default", "group":"uncontrolled", "start":"2026-10-29", "end":"2026-10-29", "test_type":"all"})
+    assert unclassified["diagnostics"] == {
+        "submitted_candidates": 1, "unclassified": 1,
+        "without_effective_group": 0, "different_group": 0,
+    }
+    assert any("not configured" in warning for warning in unclassified["warnings"])
+
+    classify_assessment(db, assessment.id, "default", "FollowUp", 1, 1); db.commit()
+    unassigned = build_report(db, {"cohort":"default", "group":"uncontrolled", "start":"2026-10-29", "end":"2026-10-29", "test_type":"all"})
+    assert unassigned["diagnostics"]["without_effective_group"] == 1
+    assert any("no group assignment effective" in warning for warning in unassigned["warnings"])
+
+
+def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
+    template = Path("templates/admin/sections/student_reports.html").read_text(encoding="utf-8")
+    dashboard = Path("templates/admin/dashboard.html").read_text(encoding="utf-8")
+
+    primary = template.split("<details", 1)[0]
+    assert "Student group" in primary and "Test date" in primary and "Assessment" in primary and "School" in primary
+    assert "Cohort" not in primary and "Test type" not in primary and "FollowUp order" not in template
+    assert 'id="sr-cohort" value="default"' in template
+    assert "admin-dashboard.js') }}?v=20261103reports2" in dashboard
 
 
 def test_workbook_matches_reference_contract_and_zip_separates_files(db):

@@ -415,6 +415,7 @@ table.ad-table tbody tr:hover > td.ad-empty-cell { background: #fff; }
 }
 /* Student study groups and template-compatible performance reporting */
 .sr-filter-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; align-items:end; margin-bottom:16px; }
+.sr-primary-filters { margin-bottom:10px; }
 .sr-filter-grid .ad-field { min-width:0; }
 .sr-filter-grid select[multiple] { min-height:112px; }
 .sr-students { grid-row:span 2; }
@@ -441,4 +442,7 @@ table.ad-table tbody tr:hover > td.ad-empty-cell { background: #fff; }
 .sr-error { color:#b91c1c; }
 .sr-warning { border-left:4px solid #d97706; background:#fffbeb; padding:12px; margin-top:12px; }
 .sr-empty { padding:14px; background:#f8fafc; border-radius:8px; }
+.sr-advanced { margin-top:12px; }
+.sr-advanced > summary { cursor:pointer; color:#1e40af; font-weight:700; padding:7px 0; }
+.sr-advanced[open] > summary { margin-bottom:10px; }
 @media (max-width:640px) { .sr-filter-grid { grid-template-columns:1fr; } .sr-bulk-bar .ad-btn { flex:1 1 100%; } }

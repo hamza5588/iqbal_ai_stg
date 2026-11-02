@@ -107,7 +107,7 @@
     const ready = state.importRows.filter(row => row.status === 'ready');
     if (!ready.length || !window.confirm('Apply ' + ready.length + ' reviewed group assignment(s)?')) return;
     try {
-      const data = await readJson(await fetch('/admin/student-groups/import/apply', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ cohort: document.getElementById('sg-cohort').value, rows: ready }) }));
+      const data = await readJson(await fetch('/admin/student-groups/import/apply', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ cohort: document.getElementById('sg-cohort').value, effective_date: document.getElementById('sg-effective-date').value, rows: ready }) }));
       document.getElementById('sg-import-summary').textContent = data.changed + ' changed; ' + data.unchanged + ' already matched.';
       document.getElementById('sg-import-apply').disabled = true;
       await window.loadStudentGroups(1);
@@ -118,7 +118,7 @@
     return {
       cohort: document.getElementById('sr-cohort').value.trim(), group: document.getElementById('sr-group').value,
       start: document.getElementById('sr-start').value, end: document.getElementById('sr-end').value,
-      test_type: document.getElementById('sr-type').value, assessment_id: document.getElementById('sr-assessment').value,
+      test_type: 'all', assessment_id: document.getElementById('sr-assessment').value,
       school: document.getElementById('sr-school').value,
       student_ids: Array.from(document.getElementById('sr-students').selectedOptions).map(option => Number(option.value))
     };
@@ -126,8 +126,8 @@
   function renderClassifications(assessments) {
     document.getElementById('sr-classification-tbody').innerHTML = assessments.length ? assessments.map(item => {
       const id = item.id;
-      return '<tr><td>' + esc(item.title) + '</td><td>' + esc(item.status) + '</td><td><select id="sr-class-' + id + '"><option value="">Not eligible</option><option value="Baseline"' + (item.test_type === 'Baseline' ? ' selected' : '') + '>Baseline</option><option value="FollowUp"' + (item.test_type === 'FollowUp' ? ' selected' : '') + '>FollowUp</option></select></td><td><input id="sr-order-' + id + '" type="number" min="1" value="' + esc(item.followup_order || '') + '" aria-label="FollowUp order"></td><td><button class="ad-btn ad-btn-outline sr-small" type="button" onclick="studentReportsClassify(' + id + ')">Save</button></td></tr>';
-    }).join('') : '<tr><td colspan="5">No assessments exist.</td></tr>';
+      return '<tr><td>' + esc(item.title) + ' <span class="ad-help">#' + id + '</span></td><td><select id="sr-class-' + id + '"><option value="">Not included</option><option value="Baseline"' + (item.test_type === 'Baseline' ? ' selected' : '') + '>Baseline</option><option value="FollowUp"' + (item.test_type === 'FollowUp' ? ' selected' : '') + '>FollowUp</option></select></td><td><button class="ad-btn ad-btn-outline sr-small" type="button" onclick="studentReportsClassify(' + id + ')">Save</button></td></tr>';
+    }).join('') : '<tr><td colspan="3">No assessments exist.</td></tr>';
   }
   window.loadStudentReports = async function loadStudentReports() {
     const error = document.getElementById('sr-error'); error.textContent = '';
@@ -139,18 +139,30 @@
       state.options = data;
       const assessment = document.getElementById('sr-assessment'), chosen = assessment.value;
       const classified = data.assessments.filter(item => item.test_type);
-      assessment.innerHTML = '<option value="all">All classified assessments</option>' + classified.map(item => '<option value="' + item.id + '">' + esc(item.title) + ' — ' + esc(item.test_type) + '</option>').join('');
-      if (classified.some(item => String(item.id) === chosen)) assessment.value = chosen;
+      const grouped = new Map();
+      classified.forEach(item => {
+        const key = item.title + '\u0000' + item.test_type;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(item);
+      });
+      const reportOptions = Array.from(grouped.values()).map(items => ({
+        value: items.length > 1 ? 'title:' + items[0].title : String(items[0].id),
+        label: items[0].title + ' — ' + items[0].test_type + (items.length > 1 ? ' · ' + items.length + ' school tests' : ' · #' + items[0].id)
+      }));
+      assessment.innerHTML = '<option value="all">All tests on selected date</option>' + reportOptions.map(item => '<option value="' + esc(item.value) + '">' + esc(item.label) + '</option>').join('');
+      if (reportOptions.some(item => item.value === chosen)) assessment.value = chosen;
       syncSchools(document.getElementById('sr-school'), data.schools, 'All schools');
       document.getElementById('sr-students').innerHTML = data.students.map(item => '<option value="' + item.id + '">' + esc(item.name + ' · ' + item.group + (item.school ? ' · ' + item.school : '')) + '</option>').join('');
       renderClassifications(data.assessments);
     } catch (err) { error.textContent = err.message; }
   };
-  document.getElementById('sr-cohort').addEventListener('change', () => window.loadStudentReports());
+  document.getElementById('sr-start').addEventListener('change', event => {
+    document.getElementById('sr-end').value = event.target.value;
+  });
   window.studentReportsClassify = async function studentReportsClassify(assessmentId) {
     const testType = document.getElementById('sr-class-' + assessmentId).value;
     try {
-      await readJson(await fetch('/admin/student-reporting/assessments/' + assessmentId + '/classification', { method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ cohort: document.getElementById('sr-cohort').value, test_type: testType, followup_order: document.getElementById('sr-order-' + assessmentId).value }) }));
+      await readJson(await fetch('/admin/student-reporting/assessments/' + assessmentId + '/classification', { method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ cohort: 'default', test_type: testType, followup_order: null }) }));
       document.getElementById('sr-error').textContent = 'Assessment classification saved.';
       await window.loadStudentReports();
     } catch (err) { document.getElementById('sr-error').textContent = err.message; }
@@ -162,10 +174,9 @@
       const data = await readJson(await fetch('/admin/student-reporting/preview', { method: 'POST', headers: jsonHeaders, body: JSON.stringify(reportPayload()) }));
       const score = data.average_score == null ? 'Unavailable' : (data.average_score * 100).toFixed(2) + '%';
       const filters = data.filters;
-      target.innerHTML = '<p><strong>Selection:</strong> ' + esc(filters.group.replace('_', ' ')) + ' · ' + esc(filters.start) + (filters.end !== filters.start ? ' to ' + esc(filters.end) : '') + ' · ' + esc(filters.test_type) + '</p>' +
-        '<div class="sr-stat-grid"><div class="sr-stat"><span>Students</span><strong>' + data.matching_students + '</strong></div><div class="sr-stat"><span>Attempts</span><strong>' + data.attempts + '</strong></div><div class="sr-stat"><span>Average score</span><strong>' + score + '</strong></div><div class="sr-stat"><span>Topic rows</span><strong>' + data.topic_rows + '</strong></div></div>' +
+      target.innerHTML = '<p><strong>Selection:</strong> ' + esc(filters.group.replace('_', ' ')) + ' · ' + esc(filters.start) + (filters.end !== filters.start ? ' to ' + esc(filters.end) : '') + '</p>' +
+        '<div class="sr-stat-grid"><div class="sr-stat"><span>Students</span><strong>' + data.matching_students + '</strong></div><div class="sr-stat"><span>Attempts</span><strong>' + data.attempts + '</strong></div><div class="sr-stat"><span>Average score</span><strong>' + score + '</strong></div></div>' +
         (data.files.length ? '<h4>Files</h4><ul>' + data.files.map(item => '<li>' + esc(item.filename) + ' — ' + item.rows + ' result row(s)</li>').join('') + '</ul>' : '<p class="sr-empty">No matching submitted attempts. No file will be generated.</p>') +
-        '<p class="ad-help"><strong>Attempt rule:</strong> ' + esc(data.attempt_rule) + '</p>' +
         (data.warnings.length ? '<div class="sr-warning"><strong>Missing data warnings</strong><ul>' + data.warnings.map(item => '<li>' + esc(item) + '</li>').join('') + '</ul></div>' : '<p class="sr-ok">All requested report data is available.</p>');
     } catch (err) { error.textContent = err.message; target.innerHTML = '<p>Preview could not be generated.</p>'; }
   };

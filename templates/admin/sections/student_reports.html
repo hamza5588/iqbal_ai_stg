@@ -4,25 +4,32 @@
     <button type="button" id="sr-download" class="ad-btn ad-btn-primary" onclick="studentReportsDownload()"><i class="fas fa-download"></i>Generate Excel</button>
   {% endcall %}
 
-  <form id="sr-filters" class="ad-card sr-filter-grid" onsubmit="event.preventDefault(); studentReportsPreview()">
-    <label class="ad-field">Cohort<input id="sr-cohort" value="default" maxlength="100" required></label>
-    <label class="ad-field">Student group<select id="sr-group"><option value="all_assigned">All assigned students</option><option value="controlled">Controlled</option><option value="uncontrolled">Uncontrolled</option><option value="both">Both groups (separate files)</option></select></label>
-    <label class="ad-field">From<input type="date" id="sr-start" required></label>
-    <label class="ad-field">To<input type="date" id="sr-end" required></label>
-    <label class="ad-field">Test type<select id="sr-type"><option value="all">All</option><option value="baseline">Baseline</option><option value="followup">FollowUp</option></select></label>
-    <label class="ad-field">Assessment<select id="sr-assessment"><option value="all">All classified assessments</option></select></label>
-    <label class="ad-field">School<select id="sr-school"><option value="">All schools</option></select></label>
-    <label class="ad-field sr-students">Students<select id="sr-students" multiple size="5" aria-describedby="sr-students-help"></select><small id="sr-students-help">No selection means all eligible students.</small></label>
-    <button type="submit" class="ad-btn ad-btn-outline">Preview report</button>
+  <form id="sr-filters" class="ad-card" onsubmit="event.preventDefault(); studentReportsPreview()">
+    <input type="hidden" id="sr-cohort" value="default">
+    <div class="sr-filter-grid sr-primary-filters">
+      <label class="ad-field">Student group<select id="sr-group"><option value="controlled">Controlled</option><option value="uncontrolled">Uncontrolled</option><option value="both">Both groups (separate files)</option></select></label>
+      <label class="ad-field">Test date<input type="date" id="sr-start" required></label>
+      <label class="ad-field">Assessment<select id="sr-assessment"><option value="all">All tests on selected date</option></select></label>
+      <label class="ad-field">School<select id="sr-school"><option value="">All schools</option></select></label>
+      <button type="submit" class="ad-btn ad-btn-outline">Preview report</button>
+    </div>
+    <details class="sr-advanced">
+      <summary>Advanced filters</summary>
+      <div class="sr-filter-grid">
+        <label class="ad-field">End date<input type="date" id="sr-end" required><small>Leave the same as Test date for one-day reports.</small></label>
+        <label class="ad-field sr-students">Students<select id="sr-students" multiple size="5" aria-describedby="sr-students-help"></select><small id="sr-students-help">No selection means all eligible students.</small></label>
+      </div>
+    </details>
   </form>
   <p id="sr-error" class="ad-status-line" role="alert"></p>
   <div id="sr-preview" class="ad-card sr-preview"><p>Choose filters and preview the report before downloading.</p></div>
 
-  <div class="ad-card sr-panel">
-    <div class="sr-panel-head"><div><h3>Assessment classification</h3><p class="ad-help">Classification is explicit per cohort. Only one Baseline is allowed; FollowUps have a stable order.</p></div></div>
+  <details class="ad-card sr-panel sr-advanced">
+    <summary>Assessment report setup</summary>
+    <p class="ad-help">Choose whether an assessment is the Baseline or a FollowUp. FollowUp sequence is saved automatically.</p>
     <div class="ad-table-scroll"><table class="ad-table">
-      <thead><tr><th>Assessment</th><th>Status</th><th>Report type</th><th>FollowUp order</th><th>Save</th></tr></thead>
-      <tbody id="sr-classification-tbody"><tr><td colspan="5">Open this section to load assessments.</td></tr></tbody>
+      <thead><tr><th>Assessment</th><th>Report type</th><th>Save</th></tr></thead>
+      <tbody id="sr-classification-tbody"><tr><td colspan="3">Loading assessments...</td></tr></tbody>
     </table></div>
-  </div>
+  </details>
 </div>

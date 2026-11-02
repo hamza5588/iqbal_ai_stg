@@ -12,6 +12,7 @@ from app.services.student_reporting_service import (
     export_report,
     list_student_groups,
     normalize_cohort,
+    parse_initial_effective_date,
     preview_group_import,
     reporting_options,
 )
@@ -123,11 +124,17 @@ def groups_import_apply():
             by_group.setdefault(row.get("group"), []).append(student_id)
         if not by_group:
             raise ValueError("There are no valid preview rows to apply.")
+        effective_from = parse_initial_effective_date(body.get("effective_date"))
         changed = unchanged = 0
         for group, student_ids in by_group.items():
             result = assign_students(
                 db, student_ids, group, body.get("cohort"), session["user_id"],
-                source="import", note="Applied from reviewed import preview",
+                source="import",
+                note=(
+                    f"Applied from reviewed import preview; initial membership effective {body.get('effective_date')}"
+                    if effective_from else "Applied from reviewed import preview"
+                ),
+                effective_from=effective_from,
             )
             changed += result["changed"]
             unchanged += result["unchanged"]
@@ -180,6 +187,7 @@ def report_preview():
             filters=report["filters"], matching_students=report["matching_students"],
             attempts=report["attempts"], average_score=report["average_score"],
             topic_rows=report["topic_rows"], warnings=report["warnings"],
+            diagnostics=report["diagnostics"],
             attempt_rule=report["attempt_rule"], metric_rules=report["metric_rules"],
             files=[{"filename": item["filename"], "rows": len(item["results"]),
                     "group": item["group"], "test_type": item["test_type"],
