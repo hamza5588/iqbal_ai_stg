@@ -151,8 +151,17 @@ def normalize_options(raw_options: List[Any]) -> List[dict]:
     return normalized
 
 
-def validate_mcq(options: List[Any], correct_option_index: int) -> None:
-    """Validate MCQ structure; raises LMSValidationError on failure."""
+def validate_mcq(
+    options: List[Any],
+    correct_option_index: int,
+    *,
+    allow_duplicate_texts: bool = False,
+) -> None:
+    """Validate MCQ structure; raises LMSValidationError on failure.
+
+    ``allow_duplicate_texts`` is for PDF harvest with preserved A–D paper order,
+    where the sheet (or OCR) may repeat a distractor. Generated MCQs stay unique.
+    """
     if len(options) != 4:
         raise LMSValidationError("MCQ must have exactly 4 options")
     if not (0 <= correct_option_index <= 3):
@@ -168,13 +177,22 @@ def validate_mcq(options: List[Any], correct_option_index: int) -> None:
         if is_label_only(text):
             raise LMSValidationError("Option text cannot be only A/B/C/D — use the full choice")
         texts.append(text.lower())
-    if len(set(texts)) != 4:
+    if len(set(texts)) != 4 and not allow_duplicate_texts:
         raise LMSValidationError("All 4 options must be unique")
 
 
-def options_to_json(options: List[Any], correct_option_index: int) -> str:
+def options_to_json(
+    options: List[Any],
+    correct_option_index: int,
+    *,
+    allow_duplicate_texts: bool = False,
+) -> str:
     normalized = normalize_options(options)
-    validate_mcq(normalized, correct_option_index)
+    validate_mcq(
+        normalized,
+        correct_option_index,
+        allow_duplicate_texts=allow_duplicate_texts,
+    )
     return json.dumps(normalized)
 
 

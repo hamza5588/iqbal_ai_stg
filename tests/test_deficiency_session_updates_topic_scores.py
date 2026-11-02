@@ -212,6 +212,13 @@ def test_learning_chat_queue_avoids_prior_question_texts(monkeypatch):
     # This test is about de-duplication; the (fail-closed) answer-key gate has its own tests.
     monkeypatch.setattr("app.services.quiz.mcq_answer_check.verify_mcq_keys", lambda items: items)
     monkeypatch.setattr(
+        "app.services.quiz.mcq_grounding_check.verify_mcq_grounding",
+        lambda items, source_text, expected_scope: [
+            {**item, "approved_slo": expected_scope, "grounding_verified": "source_scope_v1"}
+            for item in items
+        ],
+    )
+    monkeypatch.setattr(
         dcs,
         "generate_mcqs_from_content",
         lambda *args, **kwargs: [mcq("Already used?"), mcq("Fresh PDF question")],

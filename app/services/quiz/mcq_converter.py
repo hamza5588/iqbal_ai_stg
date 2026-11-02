@@ -197,10 +197,15 @@ def convert_pairs_batch(
 def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
     """Map MCQQuestion to question_bank_service fields with shuffled options."""
     from app.services.quiz.display_format_qa import finalize_display_text, finalize_option_text
+    from app.services.quiz.math_text import wrap_for_mathjax
 
     opts = []
     for o in mcq.options:
         ot, ol = finalize_option_text(o.text, o.latex)
+        # Delimit option math at save time so preview/student views typeset
+        # even when the client wrap-islands miss a pattern.
+        if ot and not ol:
+            ot = wrap_for_mathjax(ot, inline=True)
         opts.append({"label": o.label, "text": ot, "latex": ol})
     correct_idx = resolve_correct_option_index(opts, mcq.correct_option_label)
     if correct_idx is None:
@@ -209,6 +214,8 @@ def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
         opts, correct_idx, preserve_order=bool(mcq.preserve_option_order)
     )
     q_text, q_latex = finalize_display_text(mcq.question_text, mcq.question_latex)
+    if q_text and not q_latex:
+        q_text = wrap_for_mathjax(q_text, inline=True)
     fields = {
         "question_text": q_text or mcq.question_text,
         "question_latex": q_latex,
@@ -216,6 +223,8 @@ def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
         "correct_option_index": new_correct,
         "explanation": mcq.explanation,
         "extraction_confidence": mcq.conversion_confidence,
+        # PDF paper order may include duplicate distractors; save path must allow them.
+        "allow_duplicate_option_texts": bool(mcq.preserve_option_order),
     }
     # Optional PDF metadata — only pass through when present.
     difficulty = getattr(mcq, "difficulty", None)

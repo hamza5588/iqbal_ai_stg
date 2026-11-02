@@ -266,21 +266,34 @@ def recover_stacked_fraction(text: str) -> str:
 
 
 def promote_log_underscore(text: str) -> str:
-    """``log_a 8`` → ``\\log_{a} 8`` so the base typesets as a subscript.
+    """``log_a 8`` / flattened ``log2 x`` → ``\\log_{a} 8`` / ``\\log_{2} x``.
 
     Does not rematch already-TeX ``\\log`` (that would double the backslash).
     """
 
-    def _repl(m: re.Match[str]) -> str:
+    def _repl_underscore(m: re.Match[str]) -> str:
         fn = (m.group(2) or "log").lower()
         base = m.group(3)
         cmd = "\\ln" if fn == "ln" else "\\log"
         return f"{m.group(1)}{cmd}_{{{base}}}"
 
-    return re.sub(
+    def _repl_glued(m: re.Match[str]) -> str:
+        fn = (m.group(2) or "log").lower()
+        base = m.group(3)
+        cmd = "\\ln" if fn == "ln" else "\\log"
+        return f"{m.group(1)}{cmd}_{{{base}}}"
+
+    s = re.sub(
         r"(^|[^\\A-Za-z0-9_])(log|ln)\s*_\{?([A-Za-z0-9]+)\}?",
-        _repl,
+        _repl_underscore,
         text or "",
+        flags=re.IGNORECASE,
+    )
+    # PDF text layers often flatten log₂x to "log2 x".
+    return re.sub(
+        r"(^|[^\\A-Za-z0-9_])(log|ln)(\d+)\b",
+        _repl_glued,
+        s,
         flags=re.IGNORECASE,
     )
 

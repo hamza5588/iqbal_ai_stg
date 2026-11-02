@@ -164,7 +164,11 @@ class MCQQuestion(BaseModel):
         self.options = cleaned
         texts = [opt.text.strip().lower() for opt in self.options]
         if len(set(texts)) != 4:
-            raise ValueError("All 4 options must be unique")
+            # Generated MCQs must stay unique. PDF harvest keeps paper order so
+            # answer-key letters still match even when the sheet prints (or OCR
+            # collapses) two identical distractors.
+            if not self.preserve_option_order:
+                raise ValueError("All 4 options must be unique")
         if self.correct_option_label not in labels:
             raise ValueError("correct_option_label must match one of the option labels")
         q_text, q_latex = pick_display_fields(self.question_text, self.question_latex)

@@ -81,22 +81,29 @@ def legacy_session(monkeypatch):
 
 
 def _question(text, source, policy=None):
-    return {
+    question = {
         "topic_id": 1, "topic_name": "Fractions", "question_text": text,
         "options": [{"label": "A", "text": "1"}, {"label": "B", "text": "2"}],
         "correct_option_index": 0, "source": source, "rag_thread_id": "t1",
         "generation_policy": policy, "key_verified": "llm", "difficulty": "easy",
         "answered": False, "correct": None,
     }
+    if policy == "pdf_slo_only_v2":
+        question.update(
+            approved_slo="Fractions",
+            grounding_verified="source_scope_v1",
+        )
+    return question
 
 
 def test_legacy_fallback_and_old_pdf_queue_cannot_be_served(legacy_session):
-    fresh = _question("New PDF question", "target_pdf", "pdf_only_v1")
+    fresh = _question("New source-verified PDF question", "target_pdf", "pdf_slo_only_v2")
     row = DeficiencyChatSession(
         student_id=4, rag_thread_id="t1", rag_owner_id=9,
         questions_json=json.dumps([
             _question("General AI question", "grade_fit_ai"),
             _question("Old PDF prompt question", "target_pdf"),
+            _question("V1 prompt-only PDF question", "target_pdf", "pdf_only_v1"),
             fresh,
         ]),
         weak_topics_json="[]", status="active",
@@ -105,9 +112,11 @@ def test_legacy_fallback_and_old_pdf_queue_cannot_be_served(legacy_session):
     legacy_session.commit()
 
     state = chat.get_session(row.id, 4)
-    assert state["current_question"]["question_text"] == "New PDF question"
+    assert state["current_question"]["question_text"] == "New source-verified PDF question"
     assert state["has_pdf"] is True
-    assert [q["question_text"] for q in json.loads(row.questions_json)] == ["New PDF question"]
+    assert [q["question_text"] for q in json.loads(row.questions_json)] == [
+        "New source-verified PDF question"
+    ]
 
 
 def test_legacy_queue_without_pdf_preserves_answered_history_without_mastery(legacy_session, monkeypatch):

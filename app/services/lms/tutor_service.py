@@ -35,7 +35,7 @@ TEACHER_TUTOR_PROMPT = """You are IqbalAI, an AI teaching assistant for educator
 - Be practical, accurate, and concise."""
 
 # Soft off-topic marker: model may prefix a redirect with this; we strip it
-# before showing the student and use it only to hold the assist ladder.
+# before showing the student.
 DEFICIENCY_OFF_TOPIC_TAG = "<<OFF_TOPIC>>"
 
 DEFICIENCY_OFF_TOPIC_REFUSE = (
@@ -67,13 +67,15 @@ If clearly off-topic: start the reply with <<OFF_TOPIC>> then one short friendly
 ON-TOPIC tutoring:
 - Use the teacher's target PDF content when explaining.
 - Be encouraging, clear, and concise — same friendly tone as the main IqbalAI tutor.
-- NEVER give the final MCQ letter answer or full solution on early assistance levels (1–4).
-- Follow the ASSISTANCE LEVEL instruction exactly for this turn.
+- Read the student's latest message, earlier conversation, and selected option (when present) before deciding what to say.
+- Respond to the student's actual reasoning or likely misconception. Do NOT move through a fixed sequence of prompts, hints, examples, or explanations.
+- Choose the ONE most useful next teaching move: acknowledge useful reasoning, ask a relevant Socratic follow-up, explain one idea more simply, or give a similar example with different numbers/context.
+- NEVER give the correct MCQ letter/option, the exact answer, or a full solution to the Current practice question. If asked directly, guide the student to work it out.
+- A similar example must not reuse the Current practice question's answer or numbers in a way that reveals its answer.
+- Ask at most one focused follow-up question. Let the student's response decide the next turn.
 - Follow the READING LEVEL rules below in every reply.
 - For simple fractions/numbers prefer plain text like 2/3 or 5/6 (not heavy LaTeX), so the reply stays short and readable."""
 
-# DIL feedback: the tutor's default answers were too hard and too long.
-# Default to short, one-step-at-a-time replies for every student turn.
 _READING_LEVEL_RULES = (
     "REPLY RULES - follow every single turn, no exceptions:\n"
     "- Write for a student in {grade} who is finding this hard. Simple, "
@@ -84,6 +86,20 @@ _READING_LEVEL_RULES = (
     "in a single reply.\n"
     "- End with a short check-in, e.g. \"Does that make sense so far?\" or "
     "\"Want to try the next step?\" - then stop and wait for their answer."
+)
+
+# Learning Chat is answer-aware: it stays concise, but the student's reasoning
+# determines the next move instead of a turn-count hint ladder.
+_DEFICIENCY_REPLY_RULES = (
+    "REPLY RULES:\n"
+    "- Write for a student in {grade} who is finding this hard. Simple, "
+    "everyday words - if you must use a harder word, say what it means.\n"
+    "- Usually use 1-3 short sentences and cover only ONE idea at a time.\n"
+    "- If you explained an idea, you may end with a natural check-in such as "
+    "\"Does that make sense?\"\n"
+    "- If your reply is only a hint, prompt, or Socratic question, do NOT add "
+    "\"Does that make sense?\" or another generic check-in. The focused question "
+    "already invites the student's response."
 )
 
 _CONFUSION_RE = re.compile(
@@ -114,52 +130,18 @@ _NO_REPEAT_RULE = (
     "different way - simpler words or a fresh angle - still at most 2 sentences."
 )
 
-DEFICIENCY_ASSISTANCE_LEVELS = {
-    1: {
-        "label": "Level 1 – Prompt",
-        "instruction": (
-            "Level 1 – Prompt: Do NOT reveal the answer or solve the problem. "
-            "Encourage the student to think about the FIRST step only, in at "
-            "most 2 short sentences. End with something like 'What would you try first?'"
-        ),
-    },
-    2: {
-        "label": "Level 2 – Hint",
-        "instruction": (
-            "Level 2 – Hint: Give ONE small clue about the concept or formula "
-            "needed, in at most 2 short sentences. Do NOT show calculation "
-            "steps or the final answer."
-        ),
-    },
-    3: {
-        "label": "Level 3 – Strong Hint",
-        "instruction": (
-            "Level 3 – Strong Hint: In at most 2 short sentences, name the "
-            "FIRST step to solve it - not the whole method, and leave the "
-            "calculation and conclusion for the student. "
-            "Do NOT state which MCQ option is correct."
-        ),
-    },
-    4: {
-        "label": "Level 4 – Similar Worked Example",
-        "instruction": (
-            "Level 4 – Similar Worked Example: In at most 2 short sentences, "
-            "show ONE step of a SIMILAR problem with different numbers (from "
-            "the PDF material) - not the whole worked example at once. End by "
-            "asking if they want the next step. Never give the exact MCQ answer."
-        ),
-    },
-    5: {
-        "label": "Level 5 – Full Explanation",
-        "instruction": (
-            "Level 5 – Full Explanation: The student has tried several times, "
-            "so this turn is the ONE exception to the 2-sentence rule. Explain "
-            "the concept, show how to solve THIS question step by step (one "
-            "short line per step), and state which option is correct and why "
-            "— grounded in the PDF content. Still simple words, still short lines."
-        ),
-    },
-}
+_DEFICIENCY_CONFUSION_RULE = (
+    "The student sounds confused. Do NOT repeat your last explanation. Choose "
+    "the most helpful response from the conversation: simpler words, ONE simple "
+    "real-life example, or a similar example with different numbers/context. "
+    "Do not solve or reveal the answer to the Current practice question."
+)
+
+_DEFICIENCY_NO_REPEAT_RULE = (
+    "The student has already seen your earlier explanation and asked again. "
+    "Do NOT repeat your previous wording. Respond to their latest reasoning and "
+    "explain the same idea from a fresh angle while staying concise."
+)
 
 HINT_LEVELS = [
     "Offer a gentle nudge — ask what concept might apply.",
@@ -196,16 +178,6 @@ def build_student_context(
     return "\n".join(parts)
 
 
-def get_deficiency_assist_level_label(level: int) -> str:
-    entry = DEFICIENCY_ASSISTANCE_LEVELS.get(min(max(level, 1), 5), DEFICIENCY_ASSISTANCE_LEVELS[1])
-    return entry["label"]
-
-
-def get_deficiency_assist_instruction(level: int) -> str:
-    entry = DEFICIENCY_ASSISTANCE_LEVELS.get(min(max(level, 1), 5), DEFICIENCY_ASSISTANCE_LEVELS[5])
-    return entry["instruction"]
-
-
 def build_deficiency_context(
     weak_topics_json: Optional[str] = None,
     current_question: Optional[dict] = None,
@@ -217,8 +189,9 @@ def build_deficiency_context(
 ) -> str:
     parts = []
     grade_label = f"grade {grade_level}" if grade_level else "this student's grade"
-    parts.append(_READING_LEVEL_RULES.format(grade=grade_label))
-    parts.append(get_deficiency_assist_instruction(assist_level))
+    parts.append(_DEFICIENCY_REPLY_RULES.format(grade=grade_label))
+    # ``assist_level`` remains in the signature so older callers do not break;
+    # Learning Chat no longer changes behavior from a turn-count ladder.
     parts.append(
         "SCOPE JUDGMENT: Prefer helping with the Current practice question below "
         "(stem, choices, topic, PDF). Requests for hints/examples/steps/simpler "
@@ -226,9 +199,9 @@ def build_deficiency_context(
         f"{DEFICIENCY_OFF_TOPIC_TAG} then a short redirect."
     )
     if student_seems_confused(message):
-        parts.append(_REAL_LIFE_EXAMPLE_RULE)
+        parts.append(_DEFICIENCY_CONFUSION_RULE)
     elif prior_turns > 0:
-        parts.append(_NO_REPEAT_RULE)
+        parts.append(_DEFICIENCY_NO_REPEAT_RULE)
     if weak_topics_json:
         parts.append(f"Weak areas (from diagnostic): {weak_topics_json[:800]}")
     if current_question:
@@ -237,11 +210,21 @@ def build_deficiency_context(
         opts = current_question.get("options") or []
         if opts:
             choice_bits = []
-            for o in opts[:6]:
-                label = (o.get("label") or "").strip()
+            for index, o in enumerate(opts[:6]):
+                label = (o.get("label") or chr(65 + index)).strip()
                 text = (o.get("text") or "")[:80]
                 choice_bits.append(f"{label}: {text}".strip(": ").strip())
             parts.append("Answer choices: " + " | ".join(choice_bits))
+            selected_index = current_question.get("last_selected_option_index")
+            if isinstance(selected_index, int) and 0 <= selected_index < len(opts):
+                selected = opts[selected_index]
+                selected_label = (selected.get("label") or chr(65 + selected_index)).strip()
+                selected_text = (selected.get("text") or "")[:160]
+                parts.append(
+                    "Student's latest selected option (incorrect): "
+                    f"{selected_label}: {selected_text}. Address the likely misconception, "
+                    "but do not identify any other option as correct."
+                )
     if pdf_excerpt:
         parts.append(f"Teacher target PDF excerpt:\n{pdf_excerpt[:3500]}")
     return "\n\n".join(parts)
@@ -295,8 +278,6 @@ def tutor_chat(
         system = TEACHER_TUTOR_PROMPT
     elif mode == "deficiency":
         system = DEFICIENCY_TUTOR_PROMPT
-        if assist_level is not None and not context:
-            system += f"\n\n{get_deficiency_assist_instruction(assist_level)}"
     else:
         system = STUDENT_TUTOR_PROMPT
     if context:
@@ -327,13 +308,7 @@ def tutor_chat(
     if mode == "teacher":
         max_tokens = 1024
     elif mode == "deficiency":
-        level = assist_level or 1
-        if level >= 5:
-            max_tokens = 700
-        elif level >= 4:
-            max_tokens = 450
-        else:
-            max_tokens = 320
+        max_tokens = 450
     else:
         max_tokens = 220
     if use_calculator_tool:

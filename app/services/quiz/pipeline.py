@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Callable, List, Optional
 
 from app.models.lms_models import AssessmentQuestion, QuizPdfSource
@@ -15,11 +16,6 @@ from app.services.quiz.assessment_doc_validation import (
 )
 from app.services.quiz.mcq_converter import mcq_to_question_fields
 from app.services.quiz.models import MCQQuestion
-from app.services.quiz.section_topics import (
-    parse_section_topics,
-    question_number_from_label,
-    topic_for_question_number,
-)
 from app.services.quiz.hybrid_mcq_extractor import (
     extract_mcqs_hybrid_vision,
     hybrid_vision_enabled,
@@ -33,21 +29,172 @@ _MAX_CONTENT_MCQS = 40
 ProgressCallback = Optional[Callable[[str, int, str], None]]
 
 
+def _question_categories(
+    questions: List[MCQQuestion],
+    source_numbers: List[int],
+    *,
+    domain_mapping_expected: bool = False,
+) -> tuple[List[MCQQuestion], List[str], bool]:
+    """Return complete categories, failing closed on partial printed domains.
+
+    If even one printed Domain is present, every question must have a real
+    printed Domain. Papers with no Domain column use the question's printed
+    Topic and then the existing concept labeler only for genuine gaps.
+    """
+    from app.services.quiz.concept_labeler import (
+        assign_learning_concepts,
+        is_generic_concept,
+    )
+
+    def clean(value: object) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip())
+
+    domains = [clean(getattr(question, "domain", None)) for question in questions]
+    has_printed_domains = any(domains)
+
+    if has_printed_domains or domain_mapping_expected:
+        invalid = [
+            source_numbers[index] if index < len(source_numbers) else index + 1
+            for index, domain in enumerate(domains)
+            if not domain or is_generic_concept(domain)
+        ]
+        if invalid:
+            joined = ", ".join(f"Q{number}" for number in invalid)
+            raise AssessmentDocValidationError(
+                detail=f"Printed Domain mapping is incomplete or generic for {joined}",
+                public_message=(
+                    "The PDF question categories could not be verified for "
+                    f"{joined}. Please correct the Domain mapping and upload again."
+                ),
+                reason="INCOMPLETE_DOMAIN_MAPPING",
+            )
+        normalized = [
+            question.model_copy(
+                update={"domain": domains[index], "learning_concept": domains[index]}
+            )
+            for index, question in enumerate(questions)
+        ]
+        return normalized, domains, True
+
+    labeled = assign_learning_concepts(list(questions))
+    categories = [
+        clean(getattr(question, "learning_concept", None)) for question in labeled
+    ]
+    invalid = [
+        source_numbers[index] if index < len(source_numbers) else index + 1
+        for index, category in enumerate(categories)
+        if not category or is_generic_concept(category)
+    ]
+    if invalid:
+        joined = ", ".join(f"Q{number}" for number in invalid)
+        raise AssessmentDocValidationError(
+            detail=f"No non-generic question category could be resolved for {joined}",
+            public_message=(
+                "The PDF question categories could not be verified for "
+                f"{joined}. Add a Domain or Topic for every question and upload again."
+            ),
+            reason="UNRESOLVED_QUESTION_CATEGORY",
+        )
+    return labeled, categories, False
+
+
+def _source_declares_question_domains(text: str) -> bool:
+    """Detect an explicit per-question Domain label/table in source text."""
+    source = text or ""
+    if re.search(r"(?i)\bdomain\s*:", source):
+        return True
+    return bool(
+        re.search(
+            r"(?is)\banswer\b.{0,200}\bdomain\b.{0,200}\btopic\b",
+            source,
+        )
+    )
+
+
+def _apply_source_domain_mapping(
+    questions: List[MCQQuestion],
+    source_numbers: List[int],
+    text: str,
+) -> List[MCQQuestion]:
+    """Overlay deterministic answer-key Domain rows onto extracted questions."""
+    if not _source_declares_question_domains(text):
+        return questions
+    from app.services.quiz.hybrid_vision_pipeline import parse_answer_key_from_text
+
+    enrichment = parse_answer_key_from_text(
+        {"pages": [{"page_number": 1, "plain_text": text or ""}]}
+    )
+    by_number = {
+        int(entry.question_no): re.sub(r"\s+", " ", (entry.domain or "").strip())
+        for entry in enrichment.entries
+        if (entry.domain or "").strip()
+    }
+    if not by_number:
+        return questions
+    updated: List[MCQQuestion] = []
+    for index, question in enumerate(questions):
+        number = source_numbers[index] if index < len(source_numbers) else index + 1
+        domain = by_number.get(int(number))
+        if domain:
+            question = question.model_copy(
+                update={"domain": domain, "learning_concept": domain}
+            )
+        updated.append(question)
+    return updated
+
+
+def _category_metadata(
+    description: Optional[str],
+    question_concepts: dict[str, str],
+    question_pdf_topics: dict[str, str],
+    *,
+    categories_are_pdf_domains: bool,
+    is_diagnostic: bool,
+) -> str:
+    """Replace category maps so a reprocessed quiz cannot retain stale IDs."""
+    try:
+        parsed = json.loads(description or "{}")
+    except (json.JSONDecodeError, TypeError):
+        parsed = {}
+    meta = parsed if isinstance(parsed, dict) else {}
+    meta.pop("question_pdf_topics", None)
+    meta.pop("question_concepts", None)
+    meta.pop("concept_source", None)
+    meta["question_concepts"] = dict(question_concepts)
+    if categories_are_pdf_domains:
+        meta["question_pdf_topics"] = dict(question_pdf_topics)
+        meta["concept_source"] = "pdf_domain"
+    else:
+        meta["concept_source"] = "question_concept"
+    if is_diagnostic:
+        meta["awaiting_admin_approval"] = True
+    return json.dumps(meta, ensure_ascii=False)
+
+
 def _run_hybrid_vision_extraction(
     pdf_bytes: bytes,
     *,
     is_diagnostic: bool,
     wanted: Optional[int],
     progress_callback: ProgressCallback,
+    user_id: Optional[int] = None,
 ) -> tuple[List[MCQQuestion], List[int], List[Optional[str]], List[str], float, Optional[str]]:
     """PDF bytes → dual-evidence (text + page images) → structured MCQs."""
-    questions, source_numbers, answer_letters, warnings, confidence, title = (
-        extract_mcqs_hybrid_vision(
-            pdf_bytes,
-            require_answers=is_diagnostic,
-            progress_callback=progress_callback,
+    from app.utils.llm_gateway import llm_workflow
+
+    with llm_workflow(
+        "hybrid_vision_mcq",
+        user_id=user_id,
+        user_role="teacher" if user_id else None,
+        traffic_source="production",
+    ):
+        questions, source_numbers, answer_letters, warnings, confidence, title = (
+            extract_mcqs_hybrid_vision(
+                pdf_bytes,
+                require_answers=is_diagnostic,
+                progress_callback=progress_callback,
+            )
         )
-    )
     if wanted is not None and len(questions) > wanted:
         questions = questions[:wanted]
         source_numbers = source_numbers[:wanted]
@@ -193,6 +340,7 @@ def run_pdf_quiz_pipeline(
                 is_diagnostic=is_diagnostic,
                 wanted=wanted,
                 progress_callback=progress_callback,
+                user_id=user_id,
             )
         except AssessmentDocValidationError:
             raise
@@ -227,18 +375,6 @@ def run_pdf_quiz_pipeline(
                 )
             )
 
-        if is_diagnostic and not parse_section_topics(text):
-            from app.services.quiz.concept_labeler import assign_learning_concepts
-
-            batch_questions = assign_learning_concepts(list(batch_questions))
-        if is_diagnostic:
-            assert_topic_or_key_area_available(
-                text,
-                assessment_type=assessment.assessment_type,
-                topic_id=topic_id,
-                mcq_questions=batch_questions,
-            )
-
         if wanted is not None and len(batch_questions) < wanted:
             warnings.append(
                 f"Hybrid vision produced {len(batch_questions)} of {wanted} "
@@ -246,7 +382,6 @@ def run_pdf_quiz_pipeline(
             )
 
         canonical_used = bool(canonical_source_numbers)
-        sections = parse_section_topics(text)
         question_pdf_topics: dict[str, str] = {}
         question_concepts: dict[str, str] = {}
 
@@ -257,6 +392,38 @@ def run_pdf_quiz_pipeline(
             batch_questions = review_mcqs_for_display(list(batch_questions))
         except Exception as exc:
             logger.warning("Display format review before save skipped: %s", exc)
+
+        batch_questions = _apply_source_domain_mapping(
+            list(batch_questions), canonical_source_numbers, text
+        )
+        batch_questions, category_labels, categories_are_pdf_domains = _question_categories(
+            list(batch_questions),
+            canonical_source_numbers,
+            domain_mapping_expected=_source_declares_question_domains(text),
+        )
+        if is_diagnostic:
+            assert_topic_or_key_area_available(
+                text,
+                assessment_type=assessment.assessment_type,
+                topic_id=topic_id,
+                mcq_questions=batch_questions,
+            )
+
+        from app.services.lms.topic_resolver import get_or_create_topic_from_pdf_label
+
+        category_topic_ids: List[int] = []
+        for label in category_labels:
+            category_topic = get_or_create_topic_from_pdf_label(label)
+            if not category_topic:
+                raise AssessmentDocValidationError(
+                    detail=f"Could not resolve category topic for {label!r}",
+                    public_message=(
+                        "The PDF question categories could not be saved. "
+                        "Please review the Domain mapping and upload again."
+                    ),
+                    reason="CATEGORY_TOPIC_UNRESOLVED",
+                )
+            category_topic_ids.append(int(category_topic.id))
 
         _report_progress(progress_callback, "save", 90, "Saving questions...")
         db = get_db()
@@ -282,7 +449,7 @@ def run_pdf_quiz_pipeline(
                 q_source_number = idx + 1
             q = question_bank_service.create_question(
                 created_by=user_id,
-                topic_id=topic_id,
+                topic_id=category_topic_ids[idx],
                 source_type=q_source,
                 source_pdf_thread_id=rag_thread_id,
                 source_question_number=q_source_number,
@@ -291,15 +458,10 @@ def run_pdf_quiz_pipeline(
             )
             created_ids.append(q.id)
             confidences.append(fields.get("extraction_confidence") or 0.85)
-            if pairs and idx < len(pairs):
-                qnum = question_number_from_label(pairs[idx].question_number)
-                section_topic = topic_for_question_number(qnum, sections) if sections else None
-                if section_topic:
-                    question_pdf_topics[str(q.id)] = section_topic
-                    question_concepts[str(q.id)] = section_topic
-            concept = getattr(mcq, "learning_concept", None)
-            if concept and str(q.id) not in question_concepts:
-                question_concepts[str(q.id)] = str(concept).strip()
+            category = category_labels[idx]
+            question_concepts[str(q.id)] = category
+            if categories_are_pdf_domains:
+                question_pdf_topics[str(q.id)] = category
 
         assessment_service.add_questions(assessment_id, created_ids)
 
@@ -347,30 +509,13 @@ def run_pdf_quiz_pipeline(
             assessment.requires_review = True
         if extraction and extraction.title and assessment.title.startswith("Untitled"):
             assessment.title = extraction.title
-        if question_pdf_topics or question_concepts:
-            meta = {}
-            if assessment.description:
-                try:
-                    meta = json.loads(assessment.description)
-                except (json.JSONDecodeError, TypeError):
-                    meta = {}
-                if not isinstance(meta, dict):
-                    meta = {}
-            if question_pdf_topics:
-                meta["question_pdf_topics"] = question_pdf_topics
-            if question_concepts:
-                meta["question_concepts"] = question_concepts
-            # The labels are the paper's own domains: results, learning path and graphs
-            # group by them as they are (see weakness_analyzer._group_by_stored_concept).
-            if any(
-                (getattr(m, "domain", None) or "").strip()
-                and (m.domain or "").strip() == (getattr(m, "learning_concept", None) or "").strip()
-                for m in batch_questions
-            ):
-                meta["concept_source"] = "pdf_domain"
-            if assessment.assessment_type == "diagnostic":
-                meta["awaiting_admin_approval"] = True
-            assessment.description = json.dumps(meta, ensure_ascii=False)
+        assessment.description = _category_metadata(
+            assessment.description,
+            question_concepts,
+            question_pdf_topics,
+            categories_are_pdf_domains=categories_are_pdf_domains,
+            is_diagnostic=assessment.assessment_type == "diagnostic",
+        )
         db.commit()
 
         if assessment.assessment_type == "diagnostic":

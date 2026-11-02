@@ -1,8 +1,9 @@
-"""The post-diagnostic tutor must (a) default to short, one-step-at-a-time
-replies (DIL feedback: answers were too hard and too long), (b) switch to a
-real-life example when the student says they don't get it instead of just
-rephrasing, (c) tell the model NOT to repeat once it has already answered on
-this question, (d) name the student's grade when known."""
+"""Learning Chat tutor prompt/context regressions.
+
+The tutor is answer-aware and adaptive: it sees the student's selected option,
+keeps the correct answer private, and chooses a natural next teaching move
+instead of advancing through a fixed assistance ladder.
+"""
 import importlib.util
 import pathlib
 import sys
@@ -51,8 +52,8 @@ T = _load()
 def test_reply_rules_always_present():
     ctx = T.build_deficiency_context(current_question={"question_text": "2+2?"}, assist_level=1)
     assert "REPLY RULES" in ctx
-    assert "AT MOST 2 short sentences" in ctx
-    assert "ONE step at a time" in ctx
+    assert "1-3 short sentences" in ctx
+    assert "ONE idea at a time" in ctx
 
 
 def test_grade_is_named_when_known():
@@ -72,14 +73,38 @@ def test_no_repeat_rule_only_after_a_prior_answer():
     assert "Do NOT repeat" in later
 
 
-def test_assist_level_instruction_included():
-    ctx = T.build_deficiency_context(assist_level=5)
-    assert "Level 5" in ctx
+def test_static_assistance_ladder_is_not_in_context():
+    first = T.build_deficiency_context(assist_level=1)
+    later = T.build_deficiency_context(assist_level=5)
+    for ctx in (first, later):
+        assert "Level 1" not in ctx
+        assert "Level 5" not in ctx
+        assert "Full Explanation" not in ctx
 
 
-def test_level_5_is_the_documented_exception_to_the_2_sentence_rule():
-    ctx = T.build_deficiency_context(assist_level=5)
-    assert "exception to the 2-sentence rule" in ctx
+def test_check_in_is_only_allowed_after_an_explanation():
+    ctx = T.build_deficiency_context(assist_level=1)
+    assert "If you explained an idea" in ctx
+    assert "only a hint, prompt, or Socratic question" in ctx
+    assert "do NOT add \"Does that make sense?\"" in ctx
+
+
+def test_selected_wrong_option_is_visible_but_answer_key_is_not():
+    question = {
+        "question_text": "Which value makes x + 2 = 5?",
+        "options": [
+            {"label": "A", "text": "2"},
+            {"label": "B", "text": "3"},
+            {"label": "C", "text": "7"},
+        ],
+        "correct_option_index": 1,
+        "last_selected_option_index": 2,
+    }
+    ctx = T.build_deficiency_context(current_question=question)
+    assert "Student's latest selected option (incorrect): C: 7" in ctx
+    assert "correct_option_index" not in ctx
+    assert "Correct answer" not in ctx
+    assert "B is correct" not in ctx
 
 
 # --- "I don't get it" -> real-life example, not another rephrase ---

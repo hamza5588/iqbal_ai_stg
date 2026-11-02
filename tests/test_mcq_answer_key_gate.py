@@ -281,6 +281,13 @@ def test_queue_tops_up_twice_from_pdf_when_the_check_drops_questions(monkeypatch
 
     monkeypatch.setattr(svc, "generate_mcqs_from_content", from_pdf)
     monkeypatch.setattr(
+        "app.services.quiz.mcq_grounding_check.verify_mcq_grounding",
+        lambda items, source_text, expected_scope: [
+            {**item, "approved_slo": expected_scope, "grounding_verified": "source_scope_v1"}
+            for item in items
+        ],
+    )
+    monkeypatch.setattr(
         svc, "_mcq_to_queue_item",
         lambda mcq, tid, name, section, thread, diff: {
             **item(diff), "source": "target_pdf", "rag_thread_id": thread,
@@ -310,6 +317,7 @@ def chat_db(monkeypatch):
     session = sessionmaker(bind=engine)()
     done = {"scores": [], "path": []}
     monkeypatch.setattr(svc, "get_db", lambda: session)
+    monkeypatch.setattr(svc, "_drop_non_pdf_pending", lambda *args, **kwargs: False)
     monkeypatch.setattr(svc, "_mark_learning_path_chat_complete", lambda sid: done["path"].append(sid))
     import app.services.lms.performance_service as ps
 

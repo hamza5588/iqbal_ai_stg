@@ -99,8 +99,13 @@ def create_question(
     source_pdf_thread_id: Optional[str] = None,
     source_question_number: Optional[int] = None,
     extraction_confidence: Optional[float] = None,
+    allow_duplicate_option_texts: bool = False,
 ) -> Question:
-    validate_mcq(options, correct_option_index)
+    validate_mcq(
+        options,
+        correct_option_index,
+        allow_duplicate_texts=allow_duplicate_option_texts,
+    )
     _check_answer_key(question_text, question_latex, options, correct_option_index, source_type)
     db = get_db()
     question = Question(
@@ -108,7 +113,11 @@ def create_question(
         created_by=created_by,
         question_text=question_text,
         question_latex=question_latex,
-        options_json=options_to_json(options, correct_option_index),
+        options_json=options_to_json(
+            options,
+            correct_option_index,
+            allow_duplicate_texts=allow_duplicate_option_texts,
+        ),
         correct_option_index=correct_option_index,
         correct_answer_raw=correct_answer_raw,
         explanation=explanation,

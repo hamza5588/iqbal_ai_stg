@@ -13,6 +13,8 @@ import os
 import tempfile
 from typing import List, Optional, Tuple
 
+from pydantic import ValidationError
+
 from app.services.quiz import hybrid_vision_pipeline as vision
 from app.services.quiz.math_text import recover_fields
 from app.services.quiz.models import MCQOption, MCQQuestion
@@ -112,18 +114,27 @@ def vision_mcq_to_question(mcq) -> Optional[MCQQuestion]:
         explanation_bits.append(f"Topic: {topic}")
     explanation = "; ".join(explanation_bits) if explanation_bits else None
 
-    return MCQQuestion(
-        question_text=q_text or getattr(mcq, "question", ""),
-        question_latex=q_latex,
-        options=mapped_opts,
-        correct_option_label=correct,  # type: ignore[arg-type]
-        explanation=explanation,
-        learning_concept=learning_concept,
-        domain=domain,
-        difficulty=_normalize_difficulty(getattr(mcq, "difficulty", None)),
-        conversion_confidence=0.92,
-        preserve_option_order=True,
-    )
+    try:
+        return MCQQuestion(
+            question_text=q_text or getattr(mcq, "question", ""),
+            question_latex=q_latex,
+            options=mapped_opts,
+            correct_option_label=correct,  # type: ignore[arg-type]
+            explanation=explanation,
+            learning_concept=learning_concept,
+            domain=domain,
+            difficulty=_normalize_difficulty(getattr(mcq, "difficulty", None)),
+            conversion_confidence=0.92,
+            preserve_option_order=True,
+        )
+    except ValidationError as exc:
+        # Never let one malformed option set abort the whole hybrid arm.
+        logger.warning(
+            "Skipping hybrid MCQ Q%s after validation error: %s",
+            getattr(mcq, "question_no", "?"),
+            exc,
+        )
+        return None
 
 
 # Back-compat alias for earlier adapter name.
@@ -180,10 +191,16 @@ def extract_mcqs_hybrid_vision(
     skipped = 0
 
     for raw in list(getattr(result, "questions", None) or []):
-        mapped = vision_mcq_to_question(raw)
+        qno = getattr(raw, "question_no", "?")
+        try:
+            mapped = vision_mcq_to_question(raw)
+        except Exception as exc:  # noqa: BLE001 - keep remaining MCQs
+            skipped += 1
+            warnings.append(f"Q{qno}: skipped ({exc})")
+            logger.warning("Hybrid MCQ convert failed for Q%s: %s", qno, exc)
+            continue
         if mapped is None:
             skipped += 1
-            qno = getattr(raw, "question_no", "?")
             ans = getattr(raw, "correct_answer", None)
             if require_answers and not ans:
                 warnings.append(f"Q{qno}: skipped (no answer key letter)")

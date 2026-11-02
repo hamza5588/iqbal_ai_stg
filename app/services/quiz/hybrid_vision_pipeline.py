@@ -657,6 +657,141 @@ def parse_quiz_extraction(raw_content: str) -> QuizExtraction:
     return parse_json_model(raw_content, QuizExtraction)
 
 
+def _count_images_in_messages(messages: list) -> int:
+    """Count multimodal image parts (each counts as 2048 input tokens on Groq)."""
+    count = 0
+    for message in messages or []:
+        content = getattr(message, "content", None)
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                count += 1
+    return count
+
+
+def _estimate_vision_tokens(
+    messages: list,
+    *,
+    output_chars: int = 0,
+) -> tuple[int, int, int]:
+    """Fallback token estimate when Groq omits usage metadata."""
+    image_tokens = _count_images_in_messages(messages) * 2048
+    text_chars = 0
+    for message in messages or []:
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            text_chars += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_chars += len(str(part.get("text") or ""))
+    text_tokens = max(500, text_chars // 4)
+    inp = image_tokens + text_tokens
+    out = max(200, output_chars // 4) if output_chars else 1500
+    return inp, out, inp + out
+
+
+def _tokens_from_response(raw_response, messages: list) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    from app.utils.llm_gateway import extract_token_counts_from_message
+
+    inp = out = tot = None
+    try:
+        inp, out, tot = extract_token_counts_from_message(raw_response)
+    except Exception:
+        inp = out = tot = None
+    if tot is None and (inp is None or out is None):
+        content = getattr(raw_response, "content", "") or ""
+        if not isinstance(content, str):
+            content = str(content)
+        inp, out, tot = _estimate_vision_tokens(messages, output_chars=len(content))
+    return inp, out, tot
+
+
+def _record_vision_llm_usage(
+    *,
+    duration_ms: float,
+    success: bool,
+    input_tokens: Optional[int] = None,
+    output_tokens: Optional[int] = None,
+    total_tokens: Optional[int] = None,
+    error_class: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    """Persist one hybrid-vision Groq call into llm_usage_events."""
+    try:
+        from app.utils.llm_gateway import persist_llm_usage_event
+
+        persist_llm_usage_event(
+            provider="groq",
+            model=resolve_vision_model(),
+            duration_ms=int(duration_ms),
+            success=success,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            error_class=error_class,
+            error_message=error_message,
+        )
+    except Exception as exc:  # noqa: BLE001 — telemetry must never break extraction
+        print(f"  Vision telemetry persist skipped: {exc}")
+
+
+def _invoke_structured_messages(
+    structured_llm,
+    messages: list,
+    schema_model: type[BaseModel],
+):
+    """Invoke Groq json_schema chat; recover QuizExtraction from failed_generation."""
+    import time
+
+    from app.services.quiz.retry_utils import parse_groq_failed_generation
+
+    t0 = time.perf_counter()
+    try:
+        raw_response = structured_llm.invoke(messages)
+        content = getattr(raw_response, "content", raw_response)
+        if not isinstance(content, str):
+            content = str(content)
+        parsed = parse_json_model(content, schema_model)
+        inp, out, tot = _tokens_from_response(raw_response, messages)
+        _record_vision_llm_usage(
+            duration_ms=(time.perf_counter() - t0) * 1000,
+            success=True,
+            input_tokens=inp,
+            output_tokens=out,
+            total_tokens=tot,
+        )
+        return parsed
+    except Exception as exc:  # noqa: BLE001 - Groq schema failures are recoverable
+        recovered = parse_groq_failed_generation(exc, schema_model)
+        if recovered is not None:
+            print(
+                f"  Recovered {schema_model.__name__} from Groq "
+                "failed_generation after json_schema error."
+            )
+            # API call still billed; estimate tokens when recovery has no usage meta.
+            inp, out, tot = _estimate_vision_tokens(
+                messages,
+                output_chars=len(str(recovered)),
+            )
+            _record_vision_llm_usage(
+                duration_ms=(time.perf_counter() - t0) * 1000,
+                success=True,
+                input_tokens=inp,
+                output_tokens=out,
+                total_tokens=tot,
+            )
+            return recovered
+        _record_vision_llm_usage(
+            duration_ms=(time.perf_counter() - t0) * 1000,
+            success=False,
+            error_class=type(exc).__name__,
+            error_message=str(exc),
+        )
+        raise
+
+
 # ============================================================
 # 6. EXTRACTION PROMPT (hybrid text + visual)
 # ============================================================
@@ -1353,6 +1488,17 @@ def _pdf_has_answer_key_text(text_evidence: Dict) -> bool:
     return False
 
 
+def _pdf_has_domain_mapping_text(text_evidence: Dict) -> bool:
+    """True when the paper exposes a Domain column/label as source evidence."""
+    for page in text_evidence.get("pages", []):
+        plain = (page.get("plain_text") or "").lower()
+        if "domain" not in plain:
+            continue
+        if "answer" in plain or "assessment mapping" in plain or "topic" in plain:
+            return True
+    return False
+
+
 def validate_result(
     result: QuizExtraction,
     text_evidence: Optional[Dict] = None,
@@ -1399,8 +1545,10 @@ def validate_result(
         )
 
     answered = 0
+    domains = []
 
     for question in result.questions:
+        domains.append((question.domain or "").strip())
         if not question.question or not question.question.strip():
             hard_failures.append(
                 f"Q{question.question_no}: empty question text."
@@ -1473,6 +1621,33 @@ def validate_result(
             warnings.append(
                 f"Answer key mapped for {answered}/{actual_count} "
                 "questions."
+            )
+
+    domain_mapping_present = bool(text_evidence) and _pdf_has_domain_mapping_text(
+        text_evidence or {}
+    )
+    if domain_mapping_present or any(domains):
+        from app.services.quiz.concept_labeler import is_generic_concept
+
+        missing = [
+            result.questions[index].question_no
+            for index, domain in enumerate(domains)
+            if not domain
+        ]
+        generic = [
+            result.questions[index].question_no
+            for index, domain in enumerate(domains)
+            if domain and is_generic_concept(domain)
+        ]
+        if missing:
+            hard_failures.append(
+                "Domain mapping is incomplete for question(s): "
+                + ", ".join(f"Q{number}" for number in missing)
+            )
+        if generic:
+            hard_failures.append(
+                "Generic subject labels are not valid question domains for: "
+                + ", ".join(f"Q{number}" for number in generic)
             )
 
     messages = [
@@ -1658,25 +1833,6 @@ def _find_pages_mentioning_question(
     return hits
 
 
-def _answer_key_page_numbers(text_evidence: Dict) -> List[int]:
-    pages: List[int] = []
-    for page in text_evidence.get("pages", []):
-        plain = (page.get("plain_text") or "").lower()
-        if "answer key" in plain:
-            pages.append(int(page["page_number"]))
-        elif (
-            "answer" in plain
-            and "domain" in plain
-            and "topic" in plain
-            and "cognitive" in plain
-            and int(page["page_number"])
-            >= max(1, len(text_evidence.get("pages", [])) - 1)
-        ):
-            pages.append(int(page["page_number"]))
-    return sorted(set(pages))
-
-
-
 _COGNITIVE_LEVELS = {
     "knowledge",
     "understanding",
@@ -1720,6 +1876,104 @@ _ROW_PATTERN = re.compile(
     r"^(\d{1,3})\s+([A-Da-d])\s+(\S+)\s+(.*)$"
 )
 
+# Compact key rows sometimes omit Domain text on a wrap line, but still
+# start with ``N  X`` (question number + A–D letter).
+_LOOSE_KEY_ROW_PATTERN = re.compile(
+    r"^(\d{1,3})\s+([A-Da-d])(?:\s|$)"
+)
+
+_MARKDOWN_KEY_ROW_PATTERN = re.compile(
+    r"^\s*\|\s*(\d{1,3})\s*\|\s*([A-Da-d])\s*\|\s*([^|]+?)\s*\|"
+    r"\s*([^|]+?)\s*\|\s*([^|]+?)(?:\s*\|\s*([^|]+?))?\s*\|?\s*$"
+)
+
+
+def _normalize_cognitive_level(value: str) -> str:
+    return re.sub(
+        r"(?i)analysis\s*/\s*reasoning",
+        "Analysis/Reasoning",
+        (value or "").strip(),
+    )
+
+
+def _page_has_answer_key_data_rows(plain: str) -> bool:
+    """True when a page carries answer-key data rows (with or without header)."""
+    for raw_line in (plain or "").splitlines():
+        line = _sanitize_text(raw_line).strip()
+        if not line:
+            continue
+        if _MARKDOWN_KEY_ROW_PATTERN.match(line):
+            return True
+        if _ROW_PATTERN.match(line) or _LOOSE_KEY_ROW_PATTERN.match(line):
+            return True
+    return False
+
+
+def _answer_key_page_numbers(text_evidence: Dict) -> List[int]:
+    """
+    Detect answer-key / assessment-mapping pages.
+
+    Includes title pages (\"Answer Key\") and header-only table pages, then
+    extends through contiguous trailing pages that only continue the key
+    rows (common when the mapping table splits across the last pages and
+    the continuation page omits the header).
+    """
+    all_pages = list(text_evidence.get("pages", []) or [])
+    pages: List[int] = []
+    for page in all_pages:
+        plain = (page.get("plain_text") or "").lower()
+        pnum = int(page["page_number"])
+        if "answer key" in plain:
+            pages.append(pnum)
+        elif (
+            "answer" in plain
+            and "domain" in plain
+            and "topic" in plain
+            and "cognitive" in plain
+            and pnum >= max(1, len(all_pages) - 1)
+        ):
+            pages.append(pnum)
+
+    if not pages:
+        return []
+
+    by_num = {int(page["page_number"]): page for page in all_pages}
+    cursor = max(pages)
+    while True:
+        nxt = cursor + 1
+        page = by_num.get(nxt)
+        if page is None:
+            break
+        plain = page.get("plain_text") or ""
+        if not _page_has_answer_key_data_rows(plain):
+            break
+        pages.append(nxt)
+        cursor = nxt
+
+    return sorted(set(pages))
+
+
+def _dedupe_answer_key_entries(
+    entries: List[AnswerKeyEntry],
+) -> List[AnswerKeyEntry]:
+    """Keep one row per question_no, preferring richer / answered rows."""
+
+    def richness(entry: AnswerKeyEntry) -> tuple:
+        return (
+            1 if entry.correct_answer else 0,
+            1 if (entry.domain or "").strip() else 0,
+            1 if (entry.topic or "").strip() else 0,
+            1 if (entry.cognitive_level or "").strip() else 0,
+            len((entry.topic or "").strip()),
+        )
+
+    by_no: Dict[int, AnswerKeyEntry] = {}
+    for entry in entries:
+        prev = by_no.get(entry.question_no)
+        if prev is None or richness(entry) >= richness(prev):
+            by_no[entry.question_no] = entry
+    return [by_no[number] for number in sorted(by_no)]
+
 
 def parse_answer_key_from_text(text_evidence: Dict) -> DocumentEnrichment:
     """
@@ -1742,6 +1996,28 @@ def parse_answer_key_from_text(text_evidence: Dict) -> DocumentEnrichment:
     ]
 
     tabular_entries: List[AnswerKeyEntry] = []
+    for line in lines:
+        markdown = _MARKDOWN_KEY_ROW_PATTERN.match(line)
+        if not markdown:
+            continue
+        question_no = int(markdown.group(1))
+        correct = markdown.group(2).upper()
+
+        def markdown_cell(value: Optional[str]) -> Optional[str]:
+            clean = _sanitize_text(value or "").strip().strip("*_` ")
+            return None if clean in {"", "-", "—", "–", "n/a", "N/A"} else clean
+
+        tabular_entries.append(
+            AnswerKeyEntry(
+                question_no=question_no,
+                correct_answer=correct,
+                domain=markdown_cell(markdown.group(3)),
+                topic=markdown_cell(markdown.group(4)),
+                cognitive_level=markdown_cell(markdown.group(5)),
+                difficulty=markdown_cell(markdown.group(6)),
+            )
+        )
+
     index = 0
     while index < len(lines):
         line = lines[index]
@@ -1759,25 +2035,38 @@ def parse_answer_key_from_text(text_evidence: Dict) -> DocumentEnrichment:
         topic = rest
         cog = _COGNITIVE_PATTERN.search(rest)
         if cog:
-            cognitive = re.sub(
-                r"(?i)analysis\s*/\s*reasoning",
-                "Analysis/Reasoning",
-                cog.group(1),
-            ).strip()
+            cognitive = _normalize_cognitive_level(cog.group(1))
             topic = rest[:cog.start()].strip()
 
         index += 1
         while index < len(lines):
             nxt = lines[index]
-            if _ROW_PATTERN.match(nxt) or re.fullmatch(r"\d{1,3}", nxt):
+            if (
+                _ROW_PATTERN.match(nxt)
+                or _MARKDOWN_KEY_ROW_PATTERN.match(nxt)
+                or _LOOSE_KEY_ROW_PATTERN.match(nxt)
+                or re.fullmatch(r"\d{1,3}", nxt)
+            ):
                 break
             low = nxt.lower()
             if "answer key" in low:
                 break
             if low.startswith("q") and "answer" in low and "domain" in low:
                 break
+            # Topic often wraps; cognitive level may sit alone on the next line.
+            if _looks_like_cognitive_level(nxt):
+                if not cognitive:
+                    cognitive = _normalize_cognitive_level(nxt)
+                index += 1
+                break
             topic = f"{topic} {nxt}".strip()
             index += 1
+
+        if not cognitive and topic:
+            cog_tail = _COGNITIVE_PATTERN.search(topic)
+            if cog_tail:
+                cognitive = _normalize_cognitive_level(cog_tail.group(1))
+                topic = topic[:cog_tail.start()].strip()
 
         tabular_entries.append(
             AnswerKeyEntry(
@@ -1791,7 +2080,7 @@ def parse_answer_key_from_text(text_evidence: Dict) -> DocumentEnrichment:
         )
 
     if sum(1 for entry in tabular_entries if entry.correct_answer) >= 1:
-        entries = tabular_entries
+        entries = _dedupe_answer_key_entries(tabular_entries)
     else:
         entries = []
         start = 0
@@ -1842,6 +2131,7 @@ def parse_answer_key_from_text(text_evidence: Dict) -> DocumentEnrichment:
                     difficulty=None,
                 )
             )
+        entries = _dedupe_answer_key_entries(entries)
 
     title = None
     first_page = _plain_text_for_pages(text_evidence, [1])
@@ -1960,13 +2250,28 @@ def enrich_with_answer_key(
     still_missing = sum(
         1 for question in enriched.questions if not question.correct_answer
     )
-    if answered > 0 and still_missing == 0:
+    deterministic_has_domains = any(
+        (entry.domain or "").strip() for entry in deterministic.entries
+    )
+    domain_mapping_expected = deterministic_has_domains or _pdf_has_domain_mapping_text(
+        text_evidence
+    )
+    missing_domains = sum(
+        1 for question in enriched.questions if not (question.domain or "").strip()
+    )
+    # A complete answer key is not enough. If the paper also supplies a Domain
+    # column, keep enriching until every extracted question has that category.
+    if (
+        answered > 0
+        and still_missing == 0
+        and (not domain_mapping_expected or missing_domains == 0)
+    ):
         return enriched
 
     # Vision fallback when the columnar parse is incomplete.
     print(
         f"  Vision enrichment fallback "
-        f"(still missing answers for {still_missing} question(s))..."
+        f"(missing answers={still_missing}, domains={missing_domains})..."
     )
 
     by_number = _pages_by_number(page_images)
@@ -2027,7 +2332,8 @@ def enrich_with_answer_key(
             }
         )
 
-    raw = structured_llm.invoke(
+    enrichment = _invoke_structured_messages(
+        structured_llm,
         [
             SystemMessage(
                 content=(
@@ -2040,10 +2346,9 @@ def enrich_with_answer_key(
                 )
             ),
             HumanMessage(content=content),
-        ]
+        ],
+        DocumentEnrichment,
     )
-
-    enrichment = parse_json_model(raw.content, DocumentEnrichment)
     print(
         f"  Vision enrichment rows: {len(enrichment.entries)}; "
         f"title={enrichment.title!r}"
@@ -2187,8 +2492,11 @@ def repair_incomplete_questions(
             f"  Repair Q{question.question_no} using pages "
             f"{selected_pages}..."
         )
-        raw = structured_llm.invoke([system, human])
-        part = parse_quiz_extraction(raw.content)
+        part = _invoke_structured_messages(
+            structured_llm,
+            [system, human],
+            QuizExtraction,
+        )
         repaired_parts.append(part)
 
     if not repaired_parts:
@@ -2234,8 +2542,11 @@ def hybrid_analyze(
             f"pages {page_numbers} -> Groq..."
         )
 
-        raw_response = structured_llm.invoke([system, human])
-        part = parse_quiz_extraction(raw_response.content)
+        part = _invoke_structured_messages(
+            structured_llm,
+            [system, human],
+            QuizExtraction,
+        )
         print(
             f"  Batch {batch_index}: "
             f"{len(part.questions)} question(s)."
@@ -2267,6 +2578,14 @@ def hybrid_analyze(
 # ============================================================
 # 10. MAIN PIPELINE
 # ============================================================
+
+
+def _category_validation_failed(messages: List[str]) -> bool:
+    return any(
+        "Domain mapping is incomplete" in message
+        or "Generic subject labels are not valid question domains" in message
+        for message in messages
+    )
 
 def extract_mcqs(
     pdf_path: str,
@@ -2307,6 +2626,11 @@ def extract_mcqs(
         return result
 
     if not allow_retry or retry_dpi <= dpi:
+        if _category_validation_failed(messages):
+            raise ValueError(
+                "PDF Domain mapping remained incomplete after extraction: "
+                + "; ".join(messages)
+            )
         print(
             "Validator: FAIL - no higher-res retry available; "
             "returning best-effort result."
@@ -2332,6 +2656,12 @@ def extract_mcqs(
     if retry_passed:
         print("Validator: PASS after higher-res retry -> Final JSON")
         return retry_result
+
+    if _category_validation_failed(retry_messages):
+        raise ValueError(
+            "PDF Domain mapping remained incomplete after retry: "
+            + "; ".join(retry_messages)
+        )
 
     print(
         "Validator: still FAIL after higher-res retry; "

@@ -64,7 +64,7 @@ MAX_QUESTIONS_TO_CLEAR_TOPIC = 20
 
 # Extra attempts using the same PDF text when answer-key checks drop questions.
 _TOP_UP_ROUNDS = 2
-_PDF_ONLY_POLICY = "pdf_only_v1"
+_PDF_ONLY_POLICY = "pdf_slo_only_v2"
 _PDF_COVERAGE_ERROR = (
     "No verified questions are available from the target PDF for this topic. "
     "Ask your admin to check that the target PDF covers this topic."
@@ -270,6 +270,7 @@ def _mcq_to_queue_item(
         "correct_option_index": correct_idx,
         "difficulty": difficulty if difficulty in _DIFF_RANK else "medium",
         "source": "target_pdf",
+        "generated_concept": (getattr(mcq, "learning_concept", None) or "").strip() or None,
         "answered": False,
         "correct": None,
     }
@@ -327,6 +328,131 @@ def _prior_question_texts_by_topic(student_id: int) -> Dict[int, List[str]]:
     return by_topic
 
 
+def _approved_scopes(entry: dict, topic_name: str) -> List[str]:
+    """Trusted printed Topics/SLOs, or the approved broad topic for legacy papers."""
+    values = entry.get("slo_names") or []
+    if isinstance(values, str):
+        values = [values]
+    scopes: List[str] = []
+    seen: set[str] = set()
+    for value in values:
+        clean = re.sub(r"\s+", " ", str(value or "").strip())
+        key = clean.casefold()
+        if clean and key not in seen:
+            seen.add(key)
+            scopes.append(clean)
+    return scopes or [topic_name]
+
+
+def _build_scope_queue(
+    *,
+    topic_id: int,
+    topic_name: str,
+    approved_scope: str,
+    ladder: List[str],
+    target_thread_ids: List[str],
+    rag_owner_id: int,
+    grade_level: Optional[str],
+    exclude_texts: List[str],
+    exclude_keys: set[str],
+    seen_texts: set[str],
+) -> List[dict]:
+    """Generate questions for one approved SLO and verify source support."""
+    from app.services.quiz.mcq_answer_check import verify_mcq_keys
+    from app.services.quiz.mcq_grounding_check import verify_mcq_grounding
+
+    pdf_section, thread_id, relevance = _match_target_section(
+        approved_scope, target_thread_ids
+    )
+    section_text = ""
+    lookups = []
+    if relevance > 0:
+        lookups.extend(
+            (tid, pdf_section) for tid in [thread_id] + target_thread_ids if tid
+        )
+    # Heading extraction may be incomplete, so also search the exact printed
+    # SLO. Never widen a known SLO back to the broad Domain.
+    lookups.extend((tid, approved_scope) for tid in target_thread_ids if tid)
+    for candidate_thread, heading in dict.fromkeys(lookups):
+        try:
+            section_text = get_section_text(
+                candidate_thread,
+                rag_owner_id,
+                heading,
+                require_topic_match=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - no ungrounded fallback
+            logger.warning("Could not read target-PDF text for %s: %s", heading, exc)
+            continue
+        if section_text.strip():
+            thread_id = candidate_thread
+            pdf_section = heading
+            break
+
+    if not section_text.strip():
+        logger.warning("No matching target-PDF text for approved SLO %s", approved_scope)
+        return []
+
+    def _fresh(items: List[dict]) -> List[dict]:
+        out = []
+        for item in items:
+            key = _question_key(item.get("question_text") or "")
+            if key and key not in exclude_keys and key not in seen_texts:
+                seen_texts.add(key)
+                out.append(item)
+        return out
+
+    kept: List[dict] = []
+    attempted_texts: List[str] = []
+    max_rounds = (len(ladder) + 9) // 10 + _TOP_UP_ROUNDS
+    for _round in range(max_rounds):
+        if len(kept) >= len(ladder):
+            break
+        requested = ladder[len(kept) : len(kept) + 10]
+        try:
+            mcqs = generate_mcqs_from_content(
+                section_text,
+                approved_scope,
+                len(requested),
+                grade_level=grade_level,
+                difficulty_ladder=requested,
+                exclude_question_texts=exclude_texts + attempted_texts,
+                strict_grounding=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - no topic-only fallback
+            logger.warning("Target PDF MCQ gen failed for %s: %s", approved_scope, exc)
+            break
+        if not mcqs:
+            break
+        scope_items = []
+        for index, mcq in enumerate(mcqs):
+            difficulty = requested[index] if index < len(requested) else requested[-1]
+            item = _mcq_to_queue_item(
+                mcq,
+                topic_id,
+                topic_name,
+                pdf_section,
+                thread_id,
+                difficulty,
+            )
+            if item:
+                item["generation_policy"] = _PDF_ONLY_POLICY
+                attempted_texts.append(item.get("question_text") or "")
+                scope_items.append(item)
+        grounded = verify_mcq_grounding(scope_items, section_text, approved_scope)
+        kept.extend(verify_mcq_keys(_fresh(grounded)))
+
+    if len(kept) < len(ladder):
+        logger.warning(
+            "%s / %s: only %d of %d source-verified questions",
+            topic_name,
+            approved_scope,
+            len(kept),
+            len(ladder),
+        )
+    return kept[: len(ladder)]
+
+
 def _build_question_queue(
     weak_topics: List[dict],
     target_thread_ids: List[str],
@@ -334,9 +460,7 @@ def _build_question_queue(
     grade_level: Optional[str] = None,
     used_question_texts_by_topic: Optional[Dict[int, List[str]]] = None,
 ) -> List[dict]:
-    """Generate verified Learning Chat MCQs only from relevant target-PDF text."""
-    from app.services.quiz.mcq_answer_check import verify_mcq_keys
-
+    """Generate answer- and source-verified MCQs for approved missed SLOs."""
     queue: List[dict] = []
     used_question_texts_by_topic = used_question_texts_by_topic or {}
     seen_texts: set[str] = set()
@@ -349,78 +473,27 @@ def _build_question_queue(
             _question_count_for_score(score),
             min(int(entry.get("min_questions") or 0), MAX_QUESTIONS_TO_CLEAR_TOPIC),
         )
-        ladder = _difficulty_plan(score, count)
+        scopes = _approved_scopes(entry, topic_name)[:count]
         exclude_texts = used_question_texts_by_topic.get(topic_id, [])
-        exclude_keys = {_question_key(t) for t in exclude_texts if t}
-        pdf_section, thread_id, relevance = _match_target_section(topic_name, target_thread_ids)
-
-        section_text = ""
-        lookups = []
-        if relevance > 0:
-            lookups.extend((tid, pdf_section) for tid in [thread_id] + target_thread_ids if tid)
-        # Heading extraction may be incomplete, so also look for the weak-topic
-        # label in the assigned PDFs. Never substitute unrelated first chunks.
-        lookups.extend((tid, topic_name) for tid in target_thread_ids if tid)
-        for candidate_thread, heading in dict.fromkeys(lookups):
-            try:
-                section_text = get_section_text(
-                    candidate_thread, rag_owner_id, heading, require_topic_match=True
+        exclude_keys = {_question_key(text) for text in exclude_texts if text}
+        base, extra = divmod(count, len(scopes))
+        for index, approved_scope in enumerate(scopes):
+            scope_count = base + (1 if index < extra else 0)
+            ladder = _difficulty_plan(score, scope_count)
+            queue.extend(
+                _build_scope_queue(
+                    topic_id=topic_id,
+                    topic_name=topic_name,
+                    approved_scope=approved_scope,
+                    ladder=ladder,
+                    target_thread_ids=target_thread_ids,
+                    rag_owner_id=rag_owner_id,
+                    grade_level=grade_level,
+                    exclude_texts=exclude_texts,
+                    exclude_keys=exclude_keys,
+                    seen_texts=seen_texts,
                 )
-            except Exception as exc:  # noqa: BLE001 - no ungrounded fallback on RAG failure
-                logger.warning("Could not read target-PDF text for %s: %s", heading, exc)
-                continue
-            if section_text.strip():
-                thread_id = candidate_thread
-                pdf_section = heading
-                break
-
-        if not section_text.strip():
-            logger.warning("No matching target-PDF text for weak area %s", topic_name)
-            continue
-
-        def _fresh(items: List[dict]) -> List[dict]:
-            out = []
-            for item in items:
-                key = _question_key(item.get("question_text") or "")
-                if key and key not in exclude_keys and key not in seen_texts:
-                    seen_texts.add(key)
-                    out.append(item)
-            return out
-
-        # Fill short batches from this same PDF section only. A short verified
-        # queue is safer than inventing questions to meet the score target.
-        kept: List[dict] = []
-        attempted_texts: List[str] = []
-        max_rounds = (len(ladder) + 9) // 10 + _TOP_UP_ROUNDS
-        for _round in range(max_rounds):
-            if len(kept) >= len(ladder):
-                break
-            requested = ladder[len(kept): len(kept) + 10]
-            try:
-                mcqs = generate_mcqs_from_content(
-                    section_text, pdf_section, len(requested),
-                    grade_level=grade_level, difficulty_ladder=requested,
-                    exclude_question_texts=exclude_texts + attempted_texts,
-                    strict_grounding=True,
-                )
-            except Exception as exc:  # noqa: BLE001 - no topic-only fallback
-                logger.warning("Target PDF MCQ gen failed for %s: %s", pdf_section, exc)
-                break
-            if not mcqs:
-                break
-            topic_items = []
-            for i, mcq in enumerate(mcqs):
-                diff = requested[i] if i < len(requested) else requested[-1]
-                item = _mcq_to_queue_item(mcq, topic_id, topic_name, pdf_section, thread_id, diff)
-                if item:
-                    item["generation_policy"] = _PDF_ONLY_POLICY
-                    attempted_texts.append(item.get("question_text") or "")
-                    topic_items.append(item)
-            kept.extend(verify_mcq_keys(_fresh(topic_items)))
-        if len(kept) < len(ladder):
-            logger.warning("%s: only %d of %d verified questions", topic_name, len(kept), len(ladder))
-        queue.extend(kept[: len(ladder)])
-
+            )
     return queue
 
 
@@ -504,15 +577,17 @@ def _reorder_pending(session: DeficiencyChatSession, questions: List[dict]) -> N
 def _drop_non_pdf_pending(
     session: DeficiencyChatSession, target_thread_ids: Optional[List[str]] = None
 ) -> bool:
-    """Remove old questions that lack the current PDF-only generation policy."""
-    if not session.rag_thread_id or session.status not in ("active", "paused"):
-        return False  # enrichment has no target PDF and keeps its own AI queue
+    """Remove questions lacking current target-PDF + SLO verification."""
+    if session.status not in ("active", "paused"):
+        return False
     if target_thread_ids is None:
         try:
             target_thread_ids, _, _ = _resolve_all_target_threads(session.student_id)
         except Exception as exc:  # noqa: BLE001 - do not serve an unverified old queue
             logger.warning("Could not verify target PDFs for session %s: %s", session.id, exc)
             raise LMSValidationError("Could not verify the target PDF. Please try again.") from None
+    from app.services.quiz.mcq_grounding_check import GROUNDING_VERIFIER
+
     allowed = set(target_thread_ids)
     questions = _load_questions(session)
     idx = session.current_index or 0
@@ -521,6 +596,8 @@ def _drop_non_pdf_pending(
         q for q in pending
         if q.get("source") == "target_pdf"
         and q.get("generation_policy") == _PDF_ONLY_POLICY
+        and q.get("grounding_verified") == GROUNDING_VERIFIER
+        and q.get("approved_slo")
         and q.get("rag_thread_id") in allowed
     ]
     if len(keep) == len(pending):
@@ -574,9 +651,10 @@ def _drop_disproved_pending(session: DeficiencyChatSession) -> None:
     _reset_tutor_state(session)
     db = get_db()
     if not keep_tail:  # nothing valid left to do
+        had_pdf_questions = any(q.get("source") == "target_pdf" for q in questions[idx:])
         session.status = "completed"
         db.commit()
-        if session.rag_thread_id:
+        if session.rag_thread_id or had_pdf_questions:
             raise LMSValidationError(_PDF_COVERAGE_ERROR)
         from app.services.lms import performance_service
 
@@ -597,6 +675,10 @@ def _session_state(session: DeficiencyChatSession) -> dict:
     if session.status in ("active", "paused") and session.current_index < total:
         q = _refresh_question_display(dict(questions[session.current_index]))
         q.pop("correct_option_index", None)
+        q.pop("grounding_verified", None)
+        q.pop("generated_concept", None)
+        q.pop("key_verified", None)
+        q.pop("last_selected_option_index", None)
         q["difficulty"] = q.get("difficulty") or "medium"
         current = q
     weak = []
@@ -605,7 +687,6 @@ def _session_state(session: DeficiencyChatSession) -> dict:
     except json.JSONDecodeError:
         pass
     tutor_state = _load_tutor_state(session)
-    assist_level = tutor_state.get("assist_level", 1)
     tutor_messages = []
     for m in tutor_state.get("messages") or []:
         role = m.get("role", "")
@@ -616,7 +697,11 @@ def _session_state(session: DeficiencyChatSession) -> dict:
             tutor_messages.append({"role": "user", "text": text})
     session_mode = (
         "enrichment"
-        if questions and questions[0].get("source") == "enrichment_ai"
+        if questions
+        and (
+            questions[0].get("learning_chat_mode") == "enrichment"
+            or questions[0].get("source") == "enrichment_ai"
+        )
         else "practice"
     )
     return {
@@ -634,8 +719,6 @@ def _session_state(session: DeficiencyChatSession) -> dict:
             and current.get("rag_thread_id")
         ),
         "pdf_label": "Teacher target content PDF",
-        "tutor_assist_level": assist_level,
-        "tutor_assist_label": tutor_service.get_deficiency_assist_level_label(assist_level),
         "tutor_messages": tutor_messages,
         "completed": session.status == "completed",
     }
@@ -687,9 +770,89 @@ def _latest_diagnostic_attempt(student_id: int, assessment_id: int) -> Optional[
     )
 
 
+_PRINTED_TOPIC_RE = re.compile(r"(?:^|;\s*)Topic:\s*([^;]+)", re.IGNORECASE)
+
+
+def _printed_slo(question) -> Optional[str]:
+    """Printed Topic retained by hybrid extraction in the question explanation."""
+    match = _PRINTED_TOPIC_RE.search(str(getattr(question, "explanation", "") or ""))
+    if not match:
+        return None
+    value = re.sub(r"\s+", " ", match.group(1)).strip()
+    return value[:120] if value else None
+
+
+def _attach_approved_slos(
+    areas: List[dict],
+    attempt: Optional[AssessmentAttempt],
+    *,
+    incorrect_only: bool,
+) -> List[dict]:
+    """Attach trusted printed SLOs from the diagnostic questions in each area."""
+    scoped = [dict(area) for area in areas]
+    if not attempt or not scoped:
+        return scoped
+    from app.models.lms_models import AttemptAnswer, Question
+
+    question_ids = {
+        int(question_id)
+        for area in scoped
+        for question_id in (area.get("question_ids") or [])
+        if question_id
+    }
+    if not question_ids:
+        return scoped
+    db = get_db()
+    try:
+        questions = {
+            question.id: question
+            for question in db.query(Question).filter(Question.id.in_(question_ids)).all()
+        }
+        answer_map = {
+            answer.question_id: answer
+            for answer in db.query(AttemptAnswer)
+            .filter(
+                AttemptAnswer.attempt_id == attempt.id,
+                AttemptAnswer.question_id.in_(question_ids),
+            )
+            .all()
+        }
+    except Exception as exc:  # noqa: BLE001 - broad topic remains the safe fallback
+        logger.warning("Could not resolve printed diagnostic SLOs: %s", exc)
+        return scoped
+
+    for area in scoped:
+        slos: List[str] = []
+        seen: set[str] = set()
+        for raw_id in area.get("question_ids") or []:
+            question_id = int(raw_id)
+            answer = answer_map.get(question_id)
+            if incorrect_only and answer is not None and answer.is_correct is True:
+                continue
+            slo = _printed_slo(questions.get(question_id))
+            key = (slo or "").casefold()
+            if slo and key not in seen:
+                seen.add(key)
+                slos.append(slo)
+        if slos:
+            area["slo_names"] = slos
+    return scoped
+
+
 def _enrichment_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
     """Topics to stretch a student who has no weak areas: their strongest
     diagnostic topics, so the challenge builds on what they already know."""
+    if diag_id:
+        attempt = _latest_diagnostic_attempt(student_id, diag_id)
+        if attempt:
+            try:
+                analysis = analyze_attempt(attempt.id)
+            except Exception:  # noqa: BLE001
+                analysis = {}
+            areas = (analysis.get("strong_topics") or []) or (analysis.get("all_topics") or [])
+            if areas:
+                return _attach_approved_slos(list(areas)[:3], attempt, incorrect_only=False)
+
     from app.services.lms import performance_service
 
     rows = performance_service.get_student_mastery(student_id) or []
@@ -700,60 +863,35 @@ def _enrichment_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
     if strong:
         return [
             {
-                "topic_id": r["topic_id"],
-                "topic_name": r.get("topic_name") or f"Topic #{r['topic_id']}",
-                "score_percent": r.get("score_percent") or 0,
+                "topic_id": row["topic_id"],
+                "topic_name": row.get("topic_name") or f"Topic #{row['topic_id']}",
+                "score_percent": row.get("score_percent") or 0,
             }
-            for r in strong
+            for row in strong
         ]
-    if diag_id:
-        attempt = _latest_diagnostic_attempt(student_id, diag_id)
-        if attempt:
-            try:
-                analysis = analyze_attempt(attempt.id)
-            except Exception:  # noqa: BLE001
-                analysis = {}
-            areas = (analysis.get("strong_topics") or []) or (analysis.get("all_topics") or [])
-            return list(areas)[:3]
     return []
 
 
-def _build_enrichment_queue(areas: List[dict], grade_level: Optional[str]) -> List[dict]:
-    """Above-level challenge questions for a student with no weak areas."""
-    from app.services.quiz.remediation_generator import generate_remediation_mcqs
-
-    ladder = ["medium", "hard"]
-    queue: List[dict] = []
-    seen: set[str] = set()
-    for area in areas:
-        name = (area.get("topic_name") or "Challenge area").strip()
-        tid = _resolve_weak_topic_id(area.get("topic_id") or 0, name)
-        try:
-            mcqs = generate_remediation_mcqs(
-                topic_name=name,
-                topic_description=name,
-                count=len(ladder),
-                score_percent=float(area.get("score_percent") or 0),
-                difficulty="hard",
-                purpose="enrichment",
-                grade_level=grade_level,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Enrichment question gen failed for %s: %s", name, exc)
-            continue
-        for i, mcq in enumerate(mcqs):
-            diff = ladder[i] if i < len(ladder) else "hard"
-            item = _mcq_to_queue_item(mcq, tid, name, name, "", diff)
-            if not item:
-                continue
-            item["source"] = "enrichment_ai"
-            key = (item.get("question_text") or "")[:120].lower()
-            if key and key not in seen:
-                seen.add(key)
-                queue.append(item)
-    from app.services.quiz.mcq_answer_check import verify_mcq_keys
-
-    return verify_mcq_keys(queue)
+def _build_enrichment_queue(
+    areas: List[dict],
+    target_thread_ids: List[str],
+    rag_owner_id: int,
+    grade_level: Optional[str],
+) -> List[dict]:
+    """Grounded challenge questions from the same approved PDF/SLOs."""
+    challenge_areas = [
+        {**area, "score_percent": 80, "min_questions": 2}
+        for area in areas
+    ]
+    queue = _build_question_queue(
+        challenge_areas,
+        target_thread_ids,
+        rag_owner_id,
+        grade_level,
+    )
+    for question in queue:
+        question["learning_chat_mode"] = "enrichment"
+    return queue
 
 
 def _practice_weak_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
@@ -764,6 +902,7 @@ def _practice_weak_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
             "No weak areas found. Complete your diagnostic assessment first."
         )
 
+    attempt = None
     if diag_id:
         attempt = _latest_diagnostic_attempt(student_id, diag_id)
         if attempt:
@@ -781,7 +920,7 @@ def _practice_weak_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
                     weak = still_weak or ai_weak
                 else:
                     weak = ai_weak
-    return weak
+    return _attach_approved_slos(weak, attempt, incorrect_only=True)
 
 
 def _session_topic_ids(session: DeficiencyChatSession) -> set:
@@ -881,6 +1020,7 @@ def _start_topic_session(
             "topic_name": w.get("topic_name") or "Practice area",
             "score_percent": w.get("score_percent", 0),
             "question_ids": w.get("question_ids") or [],
+            "slo_names": w.get("slo_names") or [],
         }
     ]
     session = DeficiencyChatSession(
@@ -916,7 +1056,7 @@ def start_session(
     target_thread_ids, rag_owner_id, diag_id = _resolve_all_target_threads(student_id)
     target_thread_id = target_thread_ids[0] if target_thread_ids else None
 
-    if not enrichment and (not target_thread_id or not rag_owner_id):
+    if not target_thread_id or not rag_owner_id:
         raise LMSValidationError(
             "No target content PDF has been uploaded yet. "
             "Learning Chat uses study material PDFs for weak areas — ask your admin."
@@ -931,9 +1071,21 @@ def start_session(
         _close_old_sessions(student_id)
 
     existing = None if force_new else get_active_session(student_id, diag_id)
-    if existing and (enrichment or existing.rag_thread_id == target_thread_id):
-        if not enrichment:
-            _drop_non_pdf_pending(existing, target_thread_ids)
+    existing_questions = _load_questions(existing) if existing else []
+    existing_mode = (
+        "enrichment"
+        if existing_questions
+        and (
+            existing_questions[0].get("learning_chat_mode") == "enrichment"
+            or existing_questions[0].get("source") == "enrichment_ai"
+        )
+        else "practice"
+    )
+    requested_mode = "enrichment" if enrichment else "practice"
+    if existing and existing_mode == requested_mode and (
+        enrichment or existing.rag_thread_id == target_thread_id
+    ):
+        _drop_non_pdf_pending(existing, target_thread_ids)
         if existing.status in ("active", "paused"):
             if existing.status == "paused":
                 existing.status = "active"
@@ -950,7 +1102,12 @@ def start_session(
             raise LMSValidationError(
                 "Finish your diagnostic assessment first to unlock challenge questions."
             )
-        queue = _build_enrichment_queue(areas, grade_level)
+        queue = _build_enrichment_queue(
+            areas,
+            target_thread_ids,
+            rag_owner_id,
+            grade_level,
+        )
         if not queue:
             raise LMSValidationError(
                 "Could not generate challenge questions right now — please try again shortly."
@@ -960,7 +1117,8 @@ def start_session(
                 "topic_id": a.get("topic_id", 0),
                 "topic_name": a.get("topic_name") or "Challenge area",
                 "score_percent": a.get("score_percent", 0),
-                "question_ids": [],
+                "question_ids": a.get("question_ids") or [],
+                "slo_names": a.get("slo_names") or [],
             }
             for a in areas
         ]
@@ -1001,6 +1159,7 @@ def start_session(
             "topic_name": w.get("topic_name") or "Practice area",
             "score_percent": w.get("score_percent", 0),
             "question_ids": w.get("question_ids") or [],
+            "slo_names": w.get("slo_names") or [],
         }
         for w in weak
     ]
@@ -1059,7 +1218,6 @@ def _reset_tutor_state(session: DeficiencyChatSession) -> None:
     session.chat_history_json = json.dumps(
         {
             "question_index": session.current_index,
-            "assist_level": 1,
             "messages": [],
         },
         ensure_ascii=False,
@@ -1087,6 +1245,10 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         raise LMSValidationError("That option does not exist for this question")
     is_correct = selected_option_index == q.get("correct_option_index")
     already_correct = q.get("correct") is True
+    # Keep the student's latest choice server-side so the tutor can respond to
+    # that misconception. The correct answer remains grading-only and is never
+    # copied into tutor context or the public session payload.
+    q["last_selected_option_index"] = selected_option_index
 
     just_completed = False
     if is_correct:
@@ -1183,18 +1345,17 @@ def pause_session(session_id: int, student_id: int) -> dict:
 
 
 def _load_tutor_state(session: DeficiencyChatSession) -> dict:
-    """Per-question tutor history and assistance level (1–5)."""
+    """Per-question tutor history; legacy assistance levels are ignored."""
     try:
         raw = json.loads(session.chat_history_json or "{}")
     except json.JSONDecodeError:
         raw = {}
     if isinstance(raw, list):
-        raw = {"question_index": session.current_index, "assist_level": 1, "messages": raw}
+        raw = {"question_index": session.current_index, "messages": raw}
     if raw.get("question_index") != session.current_index:
-        return {"question_index": session.current_index, "assist_level": 1, "messages": []}
+        return {"question_index": session.current_index, "messages": []}
     return {
         "question_index": session.current_index,
-        "assist_level": int(raw.get("assist_level") or 1),
         "messages": raw.get("messages") or [],
     }
 
@@ -1203,10 +1364,54 @@ def _save_tutor_state(session: DeficiencyChatSession, state: dict) -> None:
     session.chat_history_json = json.dumps(
         {
             "question_index": state.get("question_index", session.current_index),
-            "assist_level": state.get("assist_level", 1),
             "messages": (state.get("messages") or [])[-20:],
         },
         ensure_ascii=False,
+    )
+
+
+_ANSWER_GUARD_REPLY = (
+    "Let's work it out without naming the answer. "
+    "What rule from the PDF could you use to test your choice?"
+)
+
+
+def _reveals_current_mcq_answer(reply: str, current_question: Optional[dict]) -> bool:
+    """Catch explicit answer-key leaks before a tutor reply reaches the student.
+
+    The model never receives the key, but it can still solve a simple MCQ from
+    the visible stem/options. This narrow guard catches direct disclosures while
+    allowing an option to be discussed as the student's incorrect choice.
+    """
+    if not reply or not current_question:
+        return False
+    options = current_question.get("options") or []
+    correct_index = current_question.get("correct_option_index")
+    if not isinstance(correct_index, int) or not (0 <= correct_index < len(options)):
+        return False
+
+    correct = options[correct_index]
+    label = (correct.get("label") or chr(65 + correct_index)).strip()
+    text = (correct.get("text") or "").strip()
+    escaped_label = re.escape(label)
+    disclosure_patterns = [
+        rf"\b(?:correct\s+answer\s*(?:is|:|=)?|answer\s*(?:is|:|=))\s*"
+        rf"(?:option\s+)?{escaped_label}\b",
+        rf"\b(?:correct\s+)?(?:option|choice)\s*(?:is|:|=)?\s*{escaped_label}\b",
+        rf"\b{escaped_label}\s+is\s+(?:the\s+)?(?:correct|right)\b",
+        rf"\b(?:choose|select|pick)\s+(?:option\s+)?{escaped_label}\b",
+    ]
+    if any(re.search(pattern, reply, re.IGNORECASE) for pattern in disclosure_patterns):
+        return True
+    if not text:
+        return False
+    escaped_text = re.escape(text)
+    return bool(
+        re.search(
+            rf"\b(?:correct\s+answer|answer|result|value)\s*(?:is|:|=)\s*{escaped_text}(?:\b|$)",
+            reply,
+            re.IGNORECASE,
+        )
     )
 
 
@@ -1216,7 +1421,7 @@ def explain_with_tutor(
     message: str,
     api_key: str = "",
 ) -> dict:
-    """PDF-grounded tutor with 5-level step-by-step assistance."""
+    """PDF-grounded, answer-aware Socratic tutor for the current MCQ."""
     db = get_db()
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
     if not session or session.student_id != student_id:
@@ -1248,7 +1453,6 @@ def explain_with_tutor(
                         break
 
     tutor_state = _load_tutor_state(session)
-    assist_level = min(max(int(tutor_state.get("assist_level") or 1), 1), 5)
     history = tutor_state.get("messages") or []
     prior_turns = sum(1 for m in history if m.get("role") == "assistant")
 
@@ -1260,7 +1464,6 @@ def explain_with_tutor(
         weak_topics_json=session.weak_topics_json,
         current_question=current_q,
         pdf_excerpt=pdf_excerpt,
-        assist_level=assist_level,
         grade_level=grade_level,
         prior_turns=prior_turns,
         message=message,
@@ -1271,36 +1474,25 @@ def explain_with_tutor(
         mode="deficiency",
         context=context,
         history=history,
-        assist_level=assist_level,
     )
+    if _reveals_current_mcq_answer(reply, current_q):
+        logger.warning("Learning Chat tutor answer leak blocked for session %s", session_id)
+        reply = _ANSWER_GUARD_REPLY
 
     off_tag = tutor_service.DEFICIENCY_OFF_TOPIC_TAG
     refuse = tutor_service.DEFICIENCY_OFF_TOPIC_REFUSE
-    truncated = tutor_service.DEFICIENCY_TRUNCATED_RETRY
-    incomplete = tutor_service.DEFICIENCY_INCOMPLETE_REPLY
     cleaned = (reply or "").strip()
     # Model-judged off-topic: optional <<OFF_TOPIC>> prefix (stripped before UI).
-    off_topic = cleaned.startswith(off_tag) or cleaned == refuse or refuse in cleaned
     if cleaned.startswith(off_tag):
         cleaned = cleaned[len(off_tag) :].strip() or refuse
         reply = cleaned
     elif refuse in cleaned and cleaned != refuse:
-        # Legacy exact-sentence refuse — keep text, still hold assist level.
+        # Legacy exact-sentence refuse — keep the model's friendly redirect.
         pass
-    # Do not advance the assist ladder on off-topic or failed/truncated generations.
-    hold_level = (
-        off_topic
-        or cleaned in (truncated, incomplete)
-        or cleaned.startswith("Sorry, I could not finish")
-    )
 
     history.append({"role": "user", "content": message})
     history.append({"role": "assistant", "content": reply})
     tutor_state["messages"] = history
-    if not hold_level:
-        tutor_state["assist_level"] = min(assist_level + 1, 5)
-    else:
-        tutor_state["assist_level"] = assist_level
     tutor_state["question_index"] = session.current_index
     _save_tutor_state(session, tutor_state)
     db.commit()
@@ -1308,12 +1500,6 @@ def explain_with_tutor(
     return {
         "reply": reply,
         "session_id": session_id,
-        "assist_level": assist_level,
-        "assist_level_label": tutor_service.get_deficiency_assist_level_label(assist_level),
-        "next_assist_level": tutor_state["assist_level"],
-        "next_assist_level_label": tutor_service.get_deficiency_assist_level_label(
-            tutor_state["assist_level"]
-        ),
     }
 
 

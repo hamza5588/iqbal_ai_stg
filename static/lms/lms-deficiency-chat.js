@@ -95,14 +95,11 @@
     ['Show example', 'Show me a similar example for this question'],
     ['I don\'t understand', 'I still don\'t understand']
   ];
-  var TUTOR_GREETING = 'Ask me about this practice question. I\'ll help step by step — starting with a small prompt, not the full answer.';
+  var TUTOR_GREETING = 'Tell me what you think about this question. I\'ll respond to your idea and help you work it out.';
 
   function renderTutorMessages() {
     var html = defState.tutorHistory.map(function (m, i) {
       var role = m.role === 'user' ? 'user' : 'bot';
-      var levelTag = m.levelLabel
-        ? '<div class="sd-level">' + escapeHtml(m.levelLabel) + '</div>'
-        : '';
       var extra = '';
       if (role === 'bot' && m.retry) {
         extra = '<div class="sd-msg-tools"><button type="button" onclick="retryDeficiencyTutorMessage()">Try again</button></div>';
@@ -111,7 +108,7 @@
       }
       return '<div class="sd-ai-bubble' + (role === 'user' ? ' user' : '') + '">' +
         '<div class="sd-bot-ic">' + (role === 'user' ? 'You' : 'AI') + '</div>' +
-        '<div class="sd-msg">' + levelTag +
+        '<div class="sd-msg">' +
         (role === 'user' ? escapeHtml(m.text) : fmtText(m.text || '')) + extra + '</div></div>';
     }).join('');
     if (!defState.tutorHistory.length) {
@@ -214,13 +211,8 @@
         '<span class="sd-opt-body lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
 
-    var tutorLevelHint = data.tutor_assist_label
-      ? '<div class="sd-help-level">Next help: <b>' + escapeHtml(data.tutor_assist_label) + '</b><br>I won\'t give the answer right away.</div>'
-      : '';
-
     var loading = defState.tutorLoading ? ' disabled' : '';
     var tutorSection =
-      tutorLevelHint +
       '<div id="lmsDeficiencyTutorMessages" class="sd-chat-scroll">' + renderTutorMessages() + '</div>' +
       renderTutorSuggestedPrompts() +
       '<div class="sd-chat-inputbar">' +
@@ -389,8 +381,7 @@
     if (defState.tutorOpen && !defState.tutorHistory.length) {
       defState.tutorHistory.push({
         role: 'bot',
-        text: 'Ask me about this practice question. I\'ll help step by step — starting with a small prompt, not the full answer.',
-        levelLabel: ''
+        text: TUTOR_GREETING
       });
     }
     renderDeficiencyView(window._lmsDeficiencyLastState || { current_question: {}, current_index: 0, total_questions: 1, completed: false });
@@ -461,14 +452,9 @@
     if (data) {
       defState.tutorHistory.push({
         role: 'bot',
-        text: data.reply || 'No response',
-        levelLabel: data.assist_level_label || ''
+        text: data.reply || 'No response'
       });
       defState._lastTutorMsg = null;
-      if (window._lmsDeficiencyLastState) {
-        window._lmsDeficiencyLastState.tutor_assist_level = data.next_assist_level;
-        window._lmsDeficiencyLastState.tutor_assist_label = data.next_assist_level_label;
-      }
     } else {
       // Drop the unanswered question from history and let them retry with
       // one tap - don't leave a dead "Error:" bubble that never recovers.
