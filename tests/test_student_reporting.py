@@ -249,10 +249,10 @@ def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
     assert "Student group" in primary and "Test date" in primary and "Assessment" in primary and "School" in primary
     assert "Cohort" not in primary and "Test type" not in primary and "FollowUp order" not in template
     assert 'id="sr-cohort" value="default"' in template
-    assert "admin-dashboard.js') }}?v=20261103reports2" in dashboard
+    assert "admin-dashboard.js') }}?v=20261103reports3" in dashboard
 
 
-def test_workbook_matches_reference_contract_and_zip_separates_files(db):
+def test_workbook_matches_reference_contract_and_export_merges_files(db):
     file_data = {
         "group":"Controlled", "test_type":"Baseline", "test_date":date(2026,10,29),
         "filename":"Controlled_Baseline_2026-10-29.xlsx", "assessment_id":1,
@@ -272,11 +272,25 @@ def test_workbook_matches_reference_contract_and_zip_separates_files(db):
     assert workbook["Results"]["K2"].number_format == "0.00%"
     assert workbook["Topic Scores"]["F2"].number_format == "0.00%"
     assert workbook["Results"]["A2"].data_type == "s"  # formula injection is neutralized
-    report = {"files":[file_data, {**file_data, "group":"Uncontrolled", "filename":"Uncontrolled_Baseline_2026-10-29.xlsx"}], "filters":{"start":"2026-10-29", "end":"2026-10-29"}}
-    zipped, name, mime = export_report(report)
-    assert name.endswith(".zip") and mime == "application/zip"
-    with __import__("zipfile").ZipFile(zipped) as archive:
-        assert sorted(archive.namelist()) == ["Controlled_Baseline_2026-10-29.xlsx", "Uncontrolled_Baseline_2026-10-29.xlsx"]
+    second = {
+        **file_data,
+        "group": "Uncontrolled",
+        "filename": "Uncontrolled_Baseline_2026-10-29.xlsx",
+        "results": [["Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026,10,29), "Test B", 1, 0, 1, 0.0, 4.0, None, 1, date(2026,10,29), 1]],
+        "topics": [["Second", "second@example.com", "Numbers", 0, 1, 0.0]],
+        "answers": [["Second", "second@example.com", 1, "Numbers", "3+3?", "A", "B", "No"]],
+    }
+    report = {"files":[file_data, second], "filters":{"start":"2026-10-29", "end":"2026-10-29"}}
+    merged, name, mime = export_report(report)
+    assert name == "IqbalAI_Performance_Both_Groups_2026-10-29.xlsx"
+    assert mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    exported = load_workbook(merged, data_only=False)
+    assert exported.sheetnames == ["Results", "Topic Scores", "Answers", "Instructions"]
+    assert exported["Results"].max_row == 3
+    assert exported["Topic Scores"].max_row == 3
+    assert exported["Answers"].max_row == 3
+    assert [exported["Results"][row][1].value for row in (2, 3)] == ["student@example.com", "second@example.com"]
+    assert exported["Instructions"]["A2"].value == "One workbook contains all selected tests and students."
 
 
 def test_report_api_requires_login(monkeypatch):

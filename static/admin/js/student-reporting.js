@@ -176,7 +176,7 @@
       const filters = data.filters;
       target.innerHTML = '<p><strong>Selection:</strong> ' + esc(filters.group.replace('_', ' ')) + ' · ' + esc(filters.start) + (filters.end !== filters.start ? ' to ' + esc(filters.end) : '') + '</p>' +
         '<div class="sr-stat-grid"><div class="sr-stat"><span>Students</span><strong>' + data.matching_students + '</strong></div><div class="sr-stat"><span>Attempts</span><strong>' + data.attempts + '</strong></div><div class="sr-stat"><span>Average score</span><strong>' + score + '</strong></div></div>' +
-        (data.files.length ? '<h4>Files</h4><ul>' + data.files.map(item => '<li>' + esc(item.filename) + ' — ' + item.rows + ' result row(s)</li>').join('') + '</ul>' : '<p class="sr-empty">No matching submitted attempts. No file will be generated.</p>') +
+        (data.files.length ? '<h4>Workbook contents</h4><p>All rows below will be merged into one Excel workbook.</p><ul>' + data.files.map(item => '<li>' + esc(item.group + ' · ' + item.test_type + ' · ' + item.test_date) + ' — ' + item.rows + ' result row(s)</li>').join('') + '</ul>' : '<p class="sr-empty">No matching submitted attempts. No workbook will be generated.</p>') +
         (data.warnings.length ? '<div class="sr-warning"><strong>Missing data warnings</strong><ul>' + data.warnings.map(item => '<li>' + esc(item) + '</li>').join('') + '</ul></div>' : '<p class="sr-ok">All requested report data is available.</p>');
     } catch (err) { error.textContent = err.message; target.innerHTML = '<p>Preview could not be generated.</p>'; }
   };

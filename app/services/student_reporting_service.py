@@ -6,7 +6,6 @@ import csv
 import io
 import json
 import re
-import zipfile
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -743,6 +742,11 @@ def workbook_for_file(file_data) -> io.BytesIO:
         workbook["Topic Scores"].cell(row_number, 6).number_format = "0.00%"
     for sheet_name in expected:
         _safe_text_cells(workbook[sheet_name])
+    instructions = workbook["Instructions"]
+    instructions["A2"] = "One workbook contains all selected tests and students."
+    instructions["A3"] = "Results, Topic Scores, and Answers are merged into their matching worksheets."
+    instructions["A6"] = "Use Group, Test Type, Test Date, Test Name, and School columns to filter each test."
+    instructions["A10"] = "This workbook is ready to review, filter, or share as one report."
     output = io.BytesIO()
     workbook.save(output)
     output.seek(0)
@@ -753,11 +757,16 @@ def export_report(report) -> tuple[io.BytesIO, str, str]:
     files = report["files"]
     if not files:
         raise ValueError("No matching submitted attempts were found. Nothing was exported.")
-    if len(files) == 1:
-        return workbook_for_file(files[0]), files[0]["filename"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for item in files:
-            archive.writestr(item["filename"], workbook_for_file(item).getvalue())
-    output.seek(0)
-    return output, f"Student_Performance_Reports_{report['filters']['start']}_to_{report['filters']['end']}.zip", "application/zip"
+    groups = sorted({item["group"] for item in files})
+    merged = {
+        "group": groups[0] if len(groups) == 1 else "Controlled",
+        "results": [row for item in files for row in item["results"]],
+        "topics": [row for item in files for row in item["topics"]],
+        "answers": [row for item in files for row in item["answers"]],
+    }
+    group_label = groups[0] if len(groups) == 1 else "Both_Groups"
+    start = report["filters"]["start"]
+    end = report["filters"]["end"]
+    date_label = start if start == end else f"{start}_to_{end}"
+    filename = f"IqbalAI_Performance_{group_label}_{date_label}.xlsx"
+    return workbook_for_file(merged), filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

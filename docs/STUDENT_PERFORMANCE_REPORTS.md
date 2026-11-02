@@ -18,7 +18,7 @@ If preview has no rows, it distinguishes no submitted attempts from unclassified
 
 Date inputs are Pakistan dates (`Asia/Karachi`). The start is inclusive at local midnight and the end is inclusive through the next local midnight. For each student and assessment, the latest submitted attempt in that window is used. Results, topic rows, and answer rows all come from that same attempt.
 
-Each workbook contains one group, assessment, and submitted date. Multi-test/date/group exports are returned as a ZIP of individual workbooks. Same-day tests receive stable suffixes ordered by assessment ID.
+Every export is one Excel workbook matching the reference template. Results from all selected schools, assessments, dates, and groups are merged into the workbook's existing `Results`, `Topic Scores`, and `Answers` worksheets; `Instructions` remains the fourth worksheet. The identifying columns on each row preserve its group, test type, date, test name, and school, so the combined workbook can be filtered without opening a ZIP or multiple files.
 
 ## Excel mapping and metric rules
 
