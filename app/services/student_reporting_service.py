@@ -209,6 +209,9 @@ def assign_students(
         raise ValueError(f"Unknown student IDs: {', '.join(map(str, missing[:10]))}.")
     now = _utc_now()
     if effective_from is not None:
+        # Backfills apply multiple roster batches in one transaction. Make prior
+        # batches visible even when the production session has autoflush=False.
+        db.flush()
         if new_group is None:
             raise ValueError("A historical effective date can only be used for an initial group assignment.")
         if effective_from > now:

@@ -154,7 +154,9 @@ def main() -> int:
     args = _parser().parse_args()
     controlled_rows = _read_roster(args.controlled, "Controlled")
     uncontrolled_rows = _read_roster(args.uncontrolled, "Uncontrolled")
-    rosters = {"Controlled": controlled_rows, "Uncontrolled": uncontrolled_rows}
+    # Keep canonical lists independent: supplemental merging must not mutate
+    # their provenance batches used later during the transactional apply.
+    rosters = {"Controlled": list(controlled_rows), "Uncontrolled": list(uncontrolled_rows)}
     controlled_emails = {item["email"] for item in controlled_rows}
     uncontrolled_emails = {item["email"] for item in uncontrolled_rows}
     if controlled_emails & uncontrolled_emails:
@@ -228,11 +230,10 @@ def main() -> int:
             for source in rows:
                 student_id = by_email[source["email"]][0].id
                 history = history_by_student[student_id]
-                exact = any(
+                exact_rows = [row for row in history if (
                     row.group_name == group and row.effective_from == effective_from and row.effective_to is None
-                    for row in history
-                )
-                if exact:
+                )]
+                if len(history) == 1 and len(exact_rows) == 1:
                     assignment_exact += 1
                 elif history:
                     assignment_conflicts.append(student_id)

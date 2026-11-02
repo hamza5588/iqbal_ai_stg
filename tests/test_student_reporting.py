@@ -99,13 +99,13 @@ def test_bulk_assignment_preserves_effective_history_and_audit(db):
 
 def test_initial_assignment_accepts_effective_date_but_rejects_backdated_reassignment(db):
     db.add_all([user(1, "admin@example.com", "admin"), user(2, "student@example.com")]); db.flush()
+    db.autoflush = False
     effective = parse_initial_effective_date("2026-10-07")
 
     first = assign_students(
         db, [2], "Uncontrolled", "default", 1, source="import",
         effective_from=effective, note="canonical roster",
     )
-    db.flush()
     repeated = assign_students(
         db, [2], "Uncontrolled", "default", 1, source="import",
         effective_from=effective, note="canonical roster",
