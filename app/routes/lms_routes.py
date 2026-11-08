@@ -2417,3 +2417,263 @@ def handle_lms_error(err):
     if isinstance(err, LMSValidationError):
         return json_error(str(err), code="validation_error", status=400)
     return json_error(str(err), code="lms_error", status=500)
+
+
+# ---------------------------------------------------------------------------
+# Domain/Subtopic mastery, Guided Practice (Target PDF bank) and bank review
+# ---------------------------------------------------------------------------
+
+
+def _students_only():
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    return None
+
+
+@bp.route("/students/me/subtopic-mastery", methods=["GET"])
+@login_required
+def my_subtopic_mastery():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import subtopic_mastery_service
+
+    return json_success(
+        {
+            "subtopics": subtopic_mastery_service.get_subtopic_mastery(_current_user_id()),
+            "weak_areas": learning_path_service.weak_area_breakdown(_current_user_id()),
+            "policy": subtopic_mastery_service.CALC_VERSION,
+        }
+    )
+
+
+@bp.route("/guided-practice/eligibility", methods=["GET"])
+@login_required
+def guided_practice_eligibility():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    return json_success(guided_practice_service.eligibility(_current_user_id()))
+
+
+@bp.route("/guided-practice/next", methods=["POST"])
+@login_required
+def guided_practice_next():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        domain_id = int(body["domain_topic_id"]) if body.get("domain_topic_id") else None
+        subtopic_id = int(body["subtopic_id"]) if body.get("subtopic_id") else None
+    except (TypeError, ValueError):
+        return json_error("domain_topic_id / subtopic_id must be numbers", code="validation_error")
+    return json_success(
+        guided_practice_service.next_question(
+            _current_user_id(), domain_topic_id=domain_id, subtopic_id=subtopic_id
+        )
+    )
+
+
+@bp.route("/guided-practice/attempts/<int:attempt_id>/answer", methods=["POST"])
+@login_required
+def guided_practice_answer(attempt_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        position = int(body.get("position"))
+    except (TypeError, ValueError):
+        return json_error("position is required", code="validation_error")
+    return json_success(guided_practice_service.submit_answer(_current_user_id(), attempt_id, position))
+
+
+@bp.route("/guided-practice/history", methods=["GET"])
+@login_required
+def guided_practice_history():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    return json_success(guided_practice_service.history(_current_user_id()))
+
+
+@bp.route("/classes/<int:class_id>/analytics/subtopics", methods=["GET"])
+@login_required
+def class_subtopic_analytics(class_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    domain_id = request.args.get("domain_topic_id", type=int)
+    try:
+        return json_success(
+            analytics_service.aggregate_class_subtopics(class_id, _current_user_id(), domain_id)
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+# -- Admin: Target PDF question bank -----------------------------------------
+
+
+@bp.route("/target-bank/import", methods=["POST"])
+@login_required
+def target_bank_import():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    upload = request.files.get("file")
+    grade = (request.form.get("grade_level") or "").strip()
+    if not upload or not upload.filename:
+        return json_error("A Target PDF file is required", code="validation_error")
+    assessment_id = request.form.get("assessment_id", type=int)
+    result = target_bank_service.import_target_bank(
+        upload.read(), upload.filename, grade, assessment_id=assessment_id, user_id=_current_user_id()
+    )
+    return json_success(result, status=201)
+
+
+@bp.route("/target-bank/documents", methods=["GET"])
+@login_required
+def target_bank_documents():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    return json_success(target_bank_service.list_documents(request.args.get("grade_level")))
+
+
+@bp.route("/target-bank/documents/<int:document_id>/items", methods=["GET"])
+@login_required
+def target_bank_items(document_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    return json_success(
+        target_bank_service.list_items(
+            document_id,
+            status=request.args.get("status") or None,
+            limit=request.args.get("limit", 50, type=int),
+            offset=request.args.get("offset", 0, type=int),
+        )
+    )
+
+
+@bp.route("/target-bank/documents/<int:document_id>/pages/<int:page>.png", methods=["GET"])
+@login_required
+def target_bank_page_preview(document_id: int, page: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    bbox = None
+    raw = request.args.get("bbox")
+    if raw:
+        try:
+            bbox = [float(v) for v in raw.split(",")][:4]
+        except ValueError:
+            return json_error("bbox must be x0,y0,x1,y1", code="validation_error")
+    png = target_bank_service.page_preview_png(document_id, page, bbox)
+    return Response(png, mimetype="image/png", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@bp.route("/target-bank/items/approve", methods=["POST"])
+@login_required
+def target_bank_approve():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    body = request.get_json(silent=True) or {}
+    ids = [int(i) for i in body.get("item_ids") or []]
+    if not ids:
+        return json_error("item_ids is required", code="validation_error")
+    return json_success(
+        target_bank_service.approve_items(
+            ids, _current_user_id(), reviewed_individually=bool(body.get("reviewed_individually"))
+        )
+    )
+
+
+@bp.route("/target-bank/items/reject", methods=["POST"])
+@login_required
+def target_bank_reject():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    body = request.get_json(silent=True) or {}
+    ids = [int(i) for i in body.get("item_ids") or []]
+    if not ids:
+        return json_error("item_ids is required", code="validation_error")
+    return json_success(target_bank_service.reject_items(ids, _current_user_id(), body.get("reason") or ""))
+
+
+@bp.route("/target-bank/items/<int:item_id>", methods=["PATCH"])
+@login_required
+def target_bank_correct(item_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    return json_success(
+        target_bank_service.correct_item(item_id, _current_user_id(), request.get_json(silent=True) or {})
+    )
+
+
+@bp.route("/taxonomy", methods=["GET"])
+@login_required
+def taxonomy_tree():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import taxonomy_service
+
+    return json_success(taxonomy_service.list_taxonomy(request.args.get("grade_level")))
+
+
+@bp.route("/taxonomy/subtopics/<int:subtopic_id>/merge", methods=["POST"])
+@login_required
+def taxonomy_merge(subtopic_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import taxonomy_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        target = int(body.get("into"))
+    except (TypeError, ValueError):
+        return json_error("into (target subtopic id) is required", code="validation_error")
+    return json_success(taxonomy_service.merge_subtopic(subtopic_id, target))
+
+
+@bp.route("/target-bank/coverage-gaps", methods=["GET"])
+@login_required
+def target_bank_coverage_gaps():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.models.lms_models import StudentSubtopicScore
+    from app.services.lms import guided_practice_service
+    from app.utils.db import get_db
+
+    ids = [sid for (sid,) in get_db().query(StudentSubtopicScore.student_id).distinct().limit(2000).all()]
+    return json_success(guided_practice_service.coverage_gaps_for_students(ids))

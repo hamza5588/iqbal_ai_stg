@@ -582,6 +582,47 @@
     if (hub) hub.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  // A question-bank Target PDF publishes nothing to students until its extracted
+  // MCQs are approved; show that state (and the way to act on it) on the PDF itself.
+  function bankDocFor(assessmentId, filename) {
+    var name = String(filename || '').trim().toLowerCase();
+    return (state.bankDocs || []).find(function (b) {
+      return Number(b.assessment_id) === Number(assessmentId) && String(b.filename || '').trim().toLowerCase() === name;
+    });
+  }
+
+  function bankStatusHtml(assessmentId, filename) {
+    var b = bankDocFor(assessmentId, filename);
+    if (!b) return '';
+    var c = b.status_counts || {};
+    var approved = c.approved || 0;
+    var ready = c.auto_verified || 0;
+    var review = c.needs_review || 0;
+    var pending = ready + review;
+    var tone = approved === 0 ? 'is-bad' : pending ? 'is-warn' : 'is-ok';
+    var text = approved === 0
+      ? 'Question bank: 0 approved — students get no questions from this PDF yet'
+      : 'Question bank: ' + approved + ' approved';
+    if (pending) text += ' · ' + ready + ' ready to approve · ' + review + ' need review';
+    return (
+      '<div class="d-bank-status ' + tone + '">' +
+      '<span>' + esc(text) + '</span>' +
+      (pending
+        ? '<a class="d-action primary" href="/admin/target-bank?document=' + Number(b.document_id) + '">' +
+          '<i class="fas fa-check-double"></i> Review &amp; approve questions</a>'
+        : '<a class="d-bank-link" href="/admin/target-bank?document=' + Number(b.document_id) + '&status=approved">View</a>') +
+      '</div>'
+    );
+  }
+
+  async function loadBankDocs() {
+    try {
+      state.bankDocs = (await api('/api/lms/target-bank/documents')) || [];
+    } catch (err) {
+      state.bankDocs = [];
+    }
+  }
+
   function renderAdminDiagList(items) {
     var listEl = document.getElementById('adminDiagList');
     if (!listEl) return;
@@ -628,7 +669,8 @@
                 ',' +
                 t.id +
                 ')"><i class="fas fa-times"></i></button>' +
-                '</div>'
+                '</div>' +
+                bankStatusHtml(d.id, t.original_filename)
               );
             })
             .join('');
@@ -746,7 +788,8 @@
     setAdminDiagUploadTab(state.uploadTab || 'publish');
 
     try {
-      var items = await api('/api/lms/admin/diagnostics');
+      var results = await Promise.all([api('/api/lms/admin/diagnostics'), loadBankDocs()]);
+      var items = results[0];
       state.diagnostics = items || [];
       updateDiagStats(items);
       syncTargetGradeUI(items);

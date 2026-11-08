@@ -84,16 +84,33 @@ def parse_grounding_verdicts(text: str) -> Dict[int, Tuple[bool, str]]:
 def _normalize_evidence(value: str) -> str:
     text = unicodedata.normalize("NFKC", value or "")
     text = text.strip().strip('"\'\u201c\u201d\u2018\u2019')
+    # Same maths, different notation: the source says "7.5 \u00d7 10\u207b\u2075" (NFKC -> "10-5")
+    # while the model quotes "7.5 \times 10^{-5}". Canonicalise notation only;
+    # the words and numbers must still match verbatim.
+    text = text.replace("\\times", "\u00d7").replace("\\cdot", "\u00b7").replace("\u2212", "-")
+    text = re.sub(r"\\[()\[\]]|\$|\^|[{}]|\\(?=[a-zA-Z])", "", text)
     text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s*([\u00d7\u00b7=+\-/()])\s*", r"\1", text)
     return text.casefold().strip()
 
 
+def _substantial(fragment: str) -> bool:
+    return len(fragment) >= 8 and len(re.findall(r"[\w]+", fragment, flags=re.UNICODE)) >= 2
+
+
 def evidence_occurs_in_source(evidence: str, source_text: str) -> bool:
-    """Require a useful verbatim fragment after Unicode/whitespace normalization."""
-    needle = _normalize_evidence(evidence)
+    """Require a useful verbatim fragment after Unicode/whitespace normalization.
+
+    Checkers sometimes splice two quotes with "..." ("... is equal to: ... B. 4ab").
+    That passes only if EVERY fragment occurs verbatim in the source and at least
+    one fragment is substantial on its own.
+    """
     haystack = _normalize_evidence(source_text)
-    words = re.findall(r"[\w]+", needle, flags=re.UNICODE)
-    return len(needle) >= 8 and len(words) >= 2 and needle in haystack
+    fragments = [_normalize_evidence(f) for f in re.split(r"\.{3,}|…", evidence or "")]
+    fragments = [f for f in fragments if f]
+    if not fragments:
+        return False
+    return all(f in haystack for f in fragments) and any(_substantial(f) for f in fragments)
 
 
 def _question_block(items: Sequence[dict]) -> str:
@@ -173,11 +190,12 @@ def verify_mcq_grounding(
                     "grounding_verified": GROUNDING_VERIFIER,
                 }
             else:
-                reason = (
-                    "checker unavailable"
-                    if verdicts is None
-                    else "unsupported or non-verbatim evidence"
-                )
+                if verdicts is None:
+                    reason = "checker unavailable"
+                elif not supported:
+                    reason = "judged unsupported by source"
+                else:
+                    reason = f"evidence not verbatim in source: {evidence[:80]!r}"
                 dropped.append(
                     f"{(question.get('question_text') or '')[:70]} [{reason}]"
                 )

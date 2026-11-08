@@ -412,6 +412,21 @@
             font-size: 0.8rem;
             color: #b45309;
         }
+        #diagnostic-section .d-bank-status {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.15rem 0 0.5rem 1.3rem;
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.4rem;
+            font-size: 0.78rem;
+        }
+        #diagnostic-section .d-bank-status.is-bad { background: #fef2f2; color: #b91c1c; }
+        #diagnostic-section .d-bank-status.is-warn { background: #fffbeb; color: #b45309; }
+        #diagnostic-section .d-bank-status.is-ok { background: #f0fdf4; color: #15803d; }
+        #diagnostic-section .d-bank-status .d-action { text-decoration: none; }
+        #diagnostic-section .d-bank-link { color: inherit; font-weight: 600; }
         #diagnostic-section .d-empty {
             text-align: center;
             padding: 1.75rem 1rem;
@@ -658,6 +673,8 @@
             <div>
                 <h3>Library</h3>
                 <p>Active diagnostics by default. Append study PDFs from a row, or browse archives.</p>
+                <p><a href="/admin/target-bank"><strong>Approve Target PDF questions &rarr;</strong></a>
+                   <small>(MCQs extracted from question-bank Target PDFs reach Learning Chat and Guided Practice only after you approve them here)</small></p>
             </div>
             <div class="d-filters" id="adminDiagFilterTabs" role="tablist">
                 <button type="button" class="d-filter is-active" data-filter="published" onclick="setAdminDiagListFilter('published')">

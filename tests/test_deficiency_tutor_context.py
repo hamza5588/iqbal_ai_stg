@@ -101,10 +101,31 @@ def test_selected_wrong_option_is_visible_but_answer_key_is_not():
         "last_selected_option_index": 2,
     }
     ctx = T.build_deficiency_context(current_question=question)
+    assert "SOLVED: false" in ctx
     assert "Student's latest selected option (incorrect): C: 7" in ctx
     assert "correct_option_index" not in ctx
+    assert "Correct option (use in Mode B solution)" not in ctx
     assert "Correct answer" not in ctx
     assert "B is correct" not in ctx
+
+
+def test_solved_context_includes_correct_option_and_mode_b_rules():
+    question = {
+        "question_text": "Which value makes x + 2 = 5?",
+        "options": [
+            {"label": "A", "text": "2"},
+            {"label": "B", "text": "3"},
+            {"label": "C", "text": "7"},
+        ],
+        "correct_option_index": 1,
+        "last_selected_option_index": 1,
+    }
+    ctx = T.build_deficiency_context(current_question=question, solved=True)
+    assert "SOLVED: true" in ctx
+    assert "SOLVED = true" in ctx or "worked solution" in ctx.lower() or "REPLY RULES (SOLVED = true)" in ctx
+    assert "Student's latest selected option (correct): B: 3" in ctx
+    assert "Correct option (use in Mode B solution): B: 3." in ctx
+    assert "1-3 short sentences" not in ctx
 
 
 # --- "I don't get it" -> real-life example, not another rephrase ---

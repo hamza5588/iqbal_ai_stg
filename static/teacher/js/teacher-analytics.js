@@ -56,7 +56,7 @@
   function load() {
     var sel = $('tdAnaClass');
     state.classId = sel ? sel.value : null;
-    state.roster = state.quizzes = state.struggling = null;
+    state.roster = state.quizzes = state.struggling = state.subtopics = null;
     state.topicCache = {};
     state.expanded = {};
     destroyCharts();
@@ -78,10 +78,11 @@
     var seq = ++state.seq;
     var classId = state.classId;
     var tab = state.tab;
-    var emptyEl = $({ progress: 'tdAnaProgressEmpty', quizzes: 'tdAnaQuizEmpty', struggling: 'tdAnaStrugglingEmpty', roster: 'tdAnaRosterEmpty' }[tab]);
-    var rowsEl = $({ progress: 'tdAnaProgressRows', quizzes: 'tdAnaQuizRows', struggling: 'tdAnaStrugglingRows', roster: 'tdAnaRosterRows' }[tab]);
+    var emptyEl = $({ progress: 'tdAnaProgressEmpty', quizzes: 'tdAnaQuizEmpty', struggling: 'tdAnaStrugglingEmpty', roster: 'tdAnaRosterEmpty', subtopics: 'tdAnaSubtopicEmpty' }[tab]);
+    var rowsEl = $({ progress: 'tdAnaProgressRows', quizzes: 'tdAnaQuizRows', struggling: 'tdAnaStrugglingRows', roster: 'tdAnaRosterRows', subtopics: 'tdAnaSubtopicRows' }[tab]);
     var needs = {
-      progress: ['roster', 'quizzes'], quizzes: ['quizzes'], struggling: ['struggling'], roster: ['roster', 'quizzes']
+      progress: ['roster', 'quizzes'], quizzes: ['quizzes'], struggling: ['struggling'], roster: ['roster', 'quizzes'],
+      subtopics: ['subtopics']
     }[tab];
     if (needs.some(function (k) { return state[k] == null; })) {
       if (rowsEl) rowsEl.innerHTML = '';
@@ -91,7 +92,8 @@
       var base = '/api/lms/classes/' + classId;
       await Promise.all(needs.map(async function (k) {
         if (state[k] != null) return;
-        var url = { roster: base + '/students', quizzes: base + '/analytics/quizzes', struggling: base + '/analytics/struggling' }[k];
+        var url = { roster: base + '/students', quizzes: base + '/analytics/quizzes', struggling: base + '/analytics/struggling',
+          subtopics: base + '/analytics/subtopics' }[k];
         var data = await lmsApi(url);
         if (seq === state.seq && classId === state.classId) state[k] = data || [];
       }));
@@ -109,7 +111,95 @@
     if (state.tab === 'progress') renderProgress();
     else if (state.tab === 'quizzes') renderQuizzes();
     else if (state.tab === 'struggling') renderStruggling();
+    else if (state.tab === 'subtopics') renderSubtopics();
     else renderRoster();
+  }
+
+  /* ── Domain → Subtopic drill-down ── */
+  function pctCell(v) { return v == null ? '<span style="color:var(--td-muted);">—</span>' : (Math.round(v * 10) / 10) + '%'; }
+
+  /* Cognitive-level / difficulty breakdown (actual Baseline + Follow-up answers). */
+  var DIFF_NAMES = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+  function levelChips(rows, names) {
+    return (rows || []).map(function (r) {
+      var label = U.esc(names ? (names[r.level] || r.level) : r.level);
+      var change = r.change_since_baseline == null ? '' :
+        ' <span title="Baseline → Follow-up, ' + r.students_with_follow_up + ' student(s)" style="color:' +
+        (r.change_since_baseline >= 0 ? 'var(--td-green, #15803d)' : '#b91c1c') + ';">' +
+        pctCell(r.baseline_percent) + '&rarr;' + pctCell(r.follow_up_percent) + '</span>';
+      var weak = (r.weak_students || []).map(function (w) { return U.esc(w.username) + ' ' + w.correct + '/' + w.total; }).join(', ');
+      var gp = r.guided_practice_answered ? ' <span class="td-desc">GP ' + r.guided_practice_correct + '/' + r.guided_practice_answered + '</span>' : '';
+      var assessed = r.answers_counted
+        ? pctCell(r.percent) + ' <span class="td-desc">(' + r.correct + ' correct / ' + r.incorrect + ' incorrect' +
+          (r.weak_student_count ? ', ' + r.weak_student_count + ' weak' : '') + ')</span>'
+        : '<span class="td-desc">not on any Baseline/Follow-up paper</span>';
+      return '<span class="td-level-chip" style="display:inline-block;margin:2px 10px 2px 0;"' +
+        (weak ? ' title="Weak: ' + weak.replace(/"/g, '&quot;') + '"' : '') + '><b>' + label + ':</b> ' + assessed + change + gp + '</span>';
+    }).join('');
+  }
+  function levelBreakdown(x, indent) {
+    var cog = levelChips(x.cognitive_levels), diff = levelChips(x.difficulty_levels, DIFF_NAMES);
+    var un = x.unlabelled || {};
+    if (!cog && !diff) return '';
+    return '<tr class="td-level-row"><td colspan="5" style="padding-left:' + indent + 'px;font-size:12.5px;">' +
+      (cog ? '<div><span class="td-desc">Cognitive level</span> ' + cog + '</div>' : '') +
+      (diff ? '<div><span class="td-desc">Difficulty</span> ' + diff + '</div>' : '') +
+      ((un.cognitive || un.difficulty) ? '<div class="td-desc">Not printed on the paper: cognitive level for ' + (un.cognitive || 0) +
+        ' answer(s), difficulty for ' + (un.difficulty || 0) + ' answer(s).</div>' : '') +
+      '</td></tr>';
+  }
+
+  function renderSubtopics() {
+    var body = $('tdAnaSubtopicRows');
+    var data = state.subtopics || {};
+    var domains = data.domains || [];
+    var q = searchTerm();
+    if (!domains.length) {
+      body.innerHTML = '';
+      setEmpty('tdAnaSubtopicEmpty', '<p>No subtopic results yet. Subtopics appear once students take a Baseline or Follow-up paper that prints a Topic per question.</p>');
+    } else {
+      setEmpty('tdAnaSubtopicEmpty', '');
+      body.innerHTML = domains.map(function (d) {
+        var subs = (d.subtopics || []).filter(function (s) {
+          return !q || String(s.subtopic_name || '').toLowerCase().indexOf(q) >= 0 || String(d.domain_name || '').toLowerCase().indexOf(q) >= 0;
+        });
+        if (!subs.length && q) return '';
+        var open = !!state.expanded['d' + d.domain_topic_id] || !!q;
+        var weak = subs.reduce(function (n, s) { return n + (s.weak_student_count || 0); }, 0);
+        return '<tr class="td-clickable' + (open ? ' td-expanded' : '') + '" onclick="tdAnalytics.toggleDomain(' + Number(d.domain_topic_id) + ')">' +
+          '<td><b>' + U.esc(d.domain_name) + '</b> <span style="color:var(--td-muted);">(' + subs.length + ' subtopics)</span></td>' +
+          '<td>' + pctCell(d.class_average) + '</td><td>' + pctCell(d.subtopic_question_weighted_percent) + '</td>' +
+          '<td>' + (weak ? '<span class="td-count-badge">' + weak + '</span>' : '0') + '</td>' +
+          '<td><span class="td-chev"><i class="fas fa-chevron-down"></i></span></td></tr>' +
+          (open ? levelBreakdown(d, 14) : '') +
+          (open ? subs.map(function (s) {
+            var names = (s.weak_students || []).map(function (w) { return U.esc(w.username) + ' (' + pctCell(w.score_percent) + ')'; }).join(', ');
+            var change = s.change_since_baseline == null ? '' :
+              ' <b style="color:' + (s.change_since_baseline >= 0 ? 'var(--td-green, #15803d)' : '#b91c1c') + ';">' +
+              (s.change_since_baseline >= 0 ? '+' : '') + s.change_since_baseline + '</b>';
+            return '<tr><td style="padding-left:28px;">' + U.esc(s.subtopic_name) +
+              (s.insufficient_data ? ' <span class="td-desc" title="Fewer than 3 answers behind this average">(low evidence)</span>' : '') +
+              (names ? '<div class="td-desc" style="margin-top:2px;">Weak: ' + names + '</div>' : '') + '</td>' +
+              '<td>' + pctCell(s.class_average) + ' <span class="td-desc">n=' + s.students_assessed + '</span></td>' +
+              '<td>' + pctCell(s.question_weighted_percent) + ' <span class="td-desc">' + s.answers_counted + ' answers</span></td>' +
+              '<td>' + (s.weak_student_count || 0) + '</td>' +
+              '<td>' + pctCell(s.baseline_average) + ' &rarr; ' + pctCell(s.latest_assessment_average) + change + '</td></tr>' +
+              levelBreakdown(s, 42);
+          }).join('') : '');
+      }).join('');
+    }
+    var cov = data.mapping_coverage || {};
+    var gaps = data.coverage_gaps || [];
+    var unmapped = (cov.domain_only || 0) + (cov.unresolved || 0);
+    $('tdAnaSubtopicFooter').innerHTML =
+      (unmapped ? '<p class="td-desc"><i class="fas fa-circle-info"></i> ' + unmapped + ' answered question(s) had no printed subtopic and count at Domain level only.</p>' : '') +
+      (gaps.length ? '<p class="td-desc"><i class="fas fa-triangle-exclamation" style="color:#b45309;"></i> No verified Guided Practice questions yet for: ' +
+        gaps.map(function (g) { return U.esc(g.subtopic_name) + ' (' + g.students_affected + ' student' + (g.students_affected === 1 ? '' : 's') + ')'; }).join(', ') + '</p>' : '');
+  }
+
+  function toggleDomain(id) {
+    state.expanded['d' + id] = !state.expanded['d' + id];
+    renderSubtopics();
   }
 
   /* ── shared ── */
@@ -482,6 +572,6 @@
   window.tdAnalytics = {
     open: open, load: load, switchTab: switchTab, rerender: rerender,
     toggleProgress: toggleProgress, setChartTopic: setChartTopic, toggleQuiz: toggleQuiz,
-    toggleStruggling: toggleStruggling, viewStudent: viewStudent, _state: state
+    toggleStruggling: toggleStruggling, viewStudent: viewStudent, toggleDomain: toggleDomain, _state: state
   };
 })();

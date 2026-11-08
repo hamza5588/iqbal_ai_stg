@@ -230,4 +230,10 @@ def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
     difficulty = getattr(mcq, "difficulty", None)
     if difficulty in ("easy", "medium", "hard"):
         fields["difficulty"] = difficulty
+        printed = (getattr(mcq, "printed_difficulty", None) or "").strip()
+        if printed:
+            fields["printed_difficulty"] = printed[:32]
+    cognitive = (getattr(mcq, "cognitive_level", None) or "").strip()
+    if cognitive:
+        fields["cognitive_level"] = cognitive
     return fields

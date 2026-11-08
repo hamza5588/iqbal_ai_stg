@@ -737,7 +737,47 @@ def _record_vision_llm_usage(
         print(f"  Vision telemetry persist skipped: {exc}")
 
 
+import logging as _logging
+
+logger = _logging.getLogger(__name__)
+
+_TRANSIENT_STATUS = {408, 409, 429, 500, 502, 503, 504}
+_TRANSIENT_NAMES = {"InternalServerError", "RateLimitError", "APIConnectionError", "APITimeoutError",
+                    "ServiceUnavailableError", "Timeout", "ReadTimeout", "ConnectTimeout"}
+# Seconds to wait before each retry of a transient vision-provider failure.
+VISION_RETRY_DELAYS = (8.0, 20.0, 45.0)
+
+
+def is_transient_provider_error(exc: BaseException) -> bool:
+    """Provider over capacity / rate limited / unreachable - not a document problem."""
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    if status in _TRANSIENT_STATUS or type(exc).__name__ in _TRANSIENT_NAMES:
+        return True
+    text = str(exc).lower()
+    return "over capacity" in text or "rate limit" in text or "temporarily unavailable" in text
+
+
 def _invoke_structured_messages(
+    structured_llm,
+    messages: list,
+    schema_model: type[BaseModel],
+):
+    """Invoke Groq json_schema chat with backoff on transient provider failures."""
+    import time
+
+    delays = list(VISION_RETRY_DELAYS)
+    while True:
+        try:
+            return _invoke_structured_messages_once(structured_llm, messages, schema_model)
+        except Exception as exc:  # noqa: BLE001
+            if not delays or not is_transient_provider_error(exc):
+                raise
+            wait = delays.pop(0)
+            logger.warning("Vision provider transient failure (%s); retrying in %.0fs", type(exc).__name__, wait)
+            time.sleep(wait)
+
+
+def _invoke_structured_messages_once(
     structured_llm,
     messages: list,
     schema_model: type[BaseModel],
@@ -1859,11 +1899,32 @@ def _plain_text_for_pages(
     page_numbers: List[int],
 ) -> str:
     wanted = set(page_numbers)
+    furniture = _running_margin_lines(text_evidence)
     chunks = []
     for page in text_evidence.get("pages", []):
         if page.get("page_number") in wanted:
-            chunks.append(page.get("plain_text") or "")
+            lines = (page.get("plain_text") or "").splitlines()
+            kept = [ln for ln in lines if ln.strip() not in furniture and not _PAGE_NO_LINE.match(ln)]
+            chunks.append("\n".join(kept))
     return "\n\n".join(chunks)
+
+
+_PAGE_NO_LINE = re.compile(r"^\s*(?:.*\|\s*)?Page\s+\d+(?:\s+of\s+\d+)?\s*$", re.IGNORECASE)
+
+
+def _running_margin_lines(text_evidence: Dict, edge: int = 2) -> set:
+    """Running header/footer text: the same line at the top or bottom edge of 2+ pages.
+
+    Without this, the page header that follows the last key row on a page was
+    read as part of that row's Topic ("Factor Theorem DIL SAATHI Program -
+    Baseline Diagnostic Assessment" in the real DIL Baseline).
+    """
+    seen: Dict[str, set] = {}
+    for page in text_evidence.get("pages", []):
+        lines = [ln.strip() for ln in (page.get("plain_text") or "").splitlines() if ln.strip()]
+        for ln in lines[:edge] + lines[-edge:]:
+            seen.setdefault(ln, set()).add(page.get("page_number"))
+    return {ln for ln, pages in seen.items() if len(pages) >= 2 and len(ln) > 3}
 
 
 _COGNITIVE_PATTERN = re.compile(

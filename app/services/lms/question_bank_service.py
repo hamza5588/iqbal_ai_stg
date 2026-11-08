@@ -100,7 +100,11 @@ def create_question(
     source_question_number: Optional[int] = None,
     extraction_confidence: Optional[float] = None,
     allow_duplicate_option_texts: bool = False,
+    cognitive_level: Optional[str] = None,
+    printed_difficulty: Optional[str] = None,
 ) -> Question:
+    from app.services.lms import question_attributes as qa
+
     validate_mcq(
         options,
         correct_option_index,
@@ -122,6 +126,8 @@ def create_question(
         correct_answer_raw=correct_answer_raw,
         explanation=explanation,
         difficulty=difficulty,
+        cognitive_level=qa.normalize_cognitive_level(cognitive_level) or qa.cognitive_from_explanation(explanation),
+        printed_difficulty=(printed_difficulty or "").strip()[:32] or None,
         source_type=source_type,
         source_pdf_thread_id=source_pdf_thread_id,
         source_question_number=source_question_number,

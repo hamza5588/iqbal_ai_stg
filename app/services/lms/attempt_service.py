@@ -612,13 +612,19 @@ def _run_post_submit_steps(attempt: AssessmentAttempt, assessment) -> None:
             except Exception:  # noqa: BLE001
                 pass
 
+    from app.services.lms import deficiency_chat_service, subtopic_mastery_service
+    from app.tasks.lms_tasks import enqueue_deficiency_chat_prewarm
+
+    # Baseline and Follow-up both update Domain AND Subtopic mastery, then
+    # everything downstream (path, Learning Chat, Guided Practice eligibility,
+    # analytics) reads the new state.
     step(lambda: performance_service.update_topic_scores_from_attempt(attempt_id))
+    step(lambda: subtopic_mastery_service.record_attempt(attempt_id))
     step(lambda: learning_path_service.refresh_learning_path(student_id))
     step(lambda: performance_service.create_snapshot(student_id))
 
     if assessment_type == "diagnostic":
-        from app.services.lms import deficiency_chat_service, student_profile_service
-        from app.tasks.lms_tasks import enqueue_deficiency_chat_prewarm
+        from app.services.lms import student_profile_service
 
         step(lambda: deficiency_chat_service._close_old_sessions(student_id))
         step(
@@ -626,7 +632,15 @@ def _run_post_submit_steps(attempt: AssessmentAttempt, assessment) -> None:
                 student_id, assessment_id=assessment_id
             )
         )
-        step(lambda: enqueue_deficiency_chat_prewarm(student_id))
+    else:
+        # A Follow-up can clear or create weaknesses: drop stale queued questions
+        # (keeping answered work) before prewarming a queue for the new weak set.
+        step(lambda: deficiency_chat_service.reconcile_sessions_after_assessment(student_id))
+    step(
+        lambda: enqueue_deficiency_chat_prewarm(
+            student_id, allow_inline=assessment_type == "diagnostic"
+        )
+    )
 
     if assignment_id:
         from app.services.lms import assignment_service

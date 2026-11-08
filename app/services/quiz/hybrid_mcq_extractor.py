@@ -39,25 +39,11 @@ def hybrid_vision_enabled() -> bool:
 
 def _normalize_difficulty(raw: Optional[str]) -> Optional[str]:
     """Map PDF difficulty labels onto Question.difficulty enum; None if absent/unknown."""
-    if not raw or not str(raw).strip():
-        return None
-    s = str(raw).strip().lower()
-    if s in ("easy", "medium", "hard"):
-        return s
-    synonyms = {
-        "e": "easy",
-        "low": "easy",
-        "simple": "easy",
-        "m": "medium",
-        "moderate": "medium",
-        "avg": "medium",
-        "average": "medium",
-        "h": "hard",
-        "high": "hard",
-        "difficult": "hard",
-        "challenging": "hard",
-    }
-    return synonyms.get(s)
+    # One synonym table for every importer: the DIL papers print "Intermediate",
+    # which used to fall through to None here (Target bank mapped it to medium).
+    from app.services.lms.question_attributes import normalize_difficulty
+
+    return normalize_difficulty(raw)
 
 
 def _option_label(raw: str, index: int) -> Optional[str]:
@@ -124,6 +110,11 @@ def vision_mcq_to_question(mcq) -> Optional[MCQQuestion]:
             learning_concept=learning_concept,
             domain=domain,
             difficulty=_normalize_difficulty(getattr(mcq, "difficulty", None)),
+            cognitive_level=cognitive,
+            printed_difficulty=(
+                (str(getattr(mcq, "difficulty", None) or "").strip() or None)
+                if _normalize_difficulty(getattr(mcq, "difficulty", None)) else None
+            ),
             conversion_confidence=0.92,
             preserve_option_order=True,
         )

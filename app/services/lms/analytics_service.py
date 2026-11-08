@@ -396,3 +396,308 @@ def export_class_csv(class_id: int, teacher_id: int) -> str:
             f"{r.get('weak_topic_count',0)},{r.get('is_struggling',False)}"
         )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Domain -> Subtopic drill-down (additive; Domain analytics above are unchanged)
+# ---------------------------------------------------------------------------
+
+# A subtopic average built from fewer answers than this is shown as low-evidence.
+MIN_SUBTOPIC_EVIDENCE = 3
+
+
+def aggregate_class_subtopics(class_id: int, teacher_id: int, domain_topic_id: Optional[int] = None) -> dict:
+    """Class performance per Domain and Subtopic.
+
+    Aggregation policy (documented in docs/SUBTOPIC_LEARNING_SYSTEM.md):
+    * ``class_average`` - mean of each assessed student's current subtopic score
+      (same convention as the existing Domain ``avg_score``).
+    * ``question_weighted_percent`` - total correct / total answered in the
+      evidence behind those scores, so subtopics with different question counts
+      are not averaged blindly.
+    * Domain rows: ``class_average`` is the existing Domain mastery average from
+      StudentTopicScore (unchanged); ``subtopic_question_weighted_percent`` is
+      the question-weighted roll-up of its subtopics.
+    * ``baseline_average`` / ``latest_assessment_average`` compare the first
+      diagnostic with the most recent Baseline/Follow-up per student.
+    """
+    from app.models.lms_models import (
+        AttemptAnswer,
+        QuestionTaxonomy,
+        StudentSubtopicScore,
+    )
+    from app.services.lms import guided_practice_service, taxonomy_service
+
+    if not teacher_owns_class(teacher_id, class_id):
+        raise LMSValidationError("Not authorized")
+    db = get_db()
+    student_ids = [e.student_id for e in list_class_students(class_id)]
+    if not student_ids:
+        return {"domains": [], "mapping_coverage": {}, "coverage_gaps": []}
+
+    q = db.query(StudentSubtopicScore).filter(StudentSubtopicScore.student_id.in_(student_ids))
+    if domain_topic_id:
+        q = q.filter(StudentSubtopicScore.domain_topic_id == domain_topic_id)
+    rows = q.all()
+    names = taxonomy_service.subtopic_names(r.subtopic_id for r in rows)
+    users = {u.id: u for u in db.query(DBUser).filter(DBUser.id.in_(student_ids)).all()}
+
+    domain_scores: dict[int, list] = {}
+    for r in db.query(StudentTopicScore).filter(StudentTopicScore.student_id.in_(student_ids)).all():
+        domain_scores.setdefault(r.topic_id, []).append(r.score_percent)
+
+    subs: dict[int, dict] = {}
+    for r in rows:
+        info = names.get(r.subtopic_id) or {}
+        s = subs.setdefault(
+            r.subtopic_id,
+            {
+                "subtopic_id": r.subtopic_id,
+                "subtopic_name": info.get("subtopic_name") or f"Subtopic #{r.subtopic_id}",
+                "domain_topic_id": r.domain_topic_id or info.get("domain_topic_id"),
+                "domain_name": info.get("domain_name"),
+                "_scores": [], "_correct": 0, "_total": 0, "_baseline": [], "_latest": [],
+                "weak_students": [],
+            },
+        )
+        s["_scores"].append(r.score_percent)
+        s["_correct"] += r.correct_count or 0
+        s["_total"] += r.total_count or 0
+        if r.baseline_percent is not None:
+            s["_baseline"].append(r.baseline_percent)
+        if r.latest_assessment_percent is not None:
+            s["_latest"].append(r.latest_assessment_percent)
+        if r.score_percent < WEAK_THRESHOLD:
+            user = users.get(r.student_id)
+            s["weak_students"].append(
+                {
+                    "student_id": r.student_id,
+                    "username": user.username if user else f"Student #{r.student_id}",
+                    "score_percent": round(r.score_percent, 1),
+                }
+            )
+
+    def avg(values):
+        return round(sum(values) / len(values), 1) if values else None
+
+    domains: dict[int, dict] = {}
+    for s in subs.values():
+        did = s["domain_topic_id"] or 0
+        d = domains.setdefault(
+            did,
+            {
+                "domain_topic_id": did,
+                "domain_name": s["domain_name"] or f"Domain #{did}",
+                "class_average": avg(domain_scores.get(did, [])),
+                "_correct": 0, "_total": 0,
+                "subtopics": [],
+            },
+        )
+        d["_correct"] += s["_correct"]
+        d["_total"] += s["_total"]
+        baseline, latest = avg(s["_baseline"]), avg(s["_latest"])
+        s["weak_students"].sort(key=lambda x: (x["username"] or "").lower())
+        d["subtopics"].append(
+            {
+                "subtopic_id": s["subtopic_id"],
+                "subtopic_name": s["subtopic_name"],
+                "class_average": avg(s["_scores"]),
+                "question_weighted_percent": round(100.0 * s["_correct"] / s["_total"], 1) if s["_total"] else None,
+                "answers_counted": s["_total"],
+                "students_assessed": len(s["_scores"]),
+                "weak_student_count": len(s["weak_students"]),
+                "weak_students": s["weak_students"],
+                "baseline_average": baseline,
+                "latest_assessment_average": latest,
+                "change_since_baseline": round(latest - baseline, 1) if baseline is not None and latest is not None else None,
+                "insufficient_data": s["_total"] < MIN_SUBTOPIC_EVIDENCE,
+            }
+        )
+    breakdowns = parameter_breakdowns(student_ids, users)
+    empty = {"cognitive_levels": [], "difficulty_levels": [], "unlabelled": {"cognitive": 0, "difficulty": 0}}
+    out = []
+    for d in domains.values():
+        d.update(breakdowns.get(("d", d["domain_topic_id"]), empty))
+        for s in d["subtopics"]:
+            s.update(breakdowns.get(("s", s["subtopic_id"]), empty))
+        d["subtopic_question_weighted_percent"] = (
+            round(100.0 * d.pop("_correct") / d["_total"], 1) if d["_total"] else None
+        )
+        d["answers_counted"] = d.pop("_total")
+        d["subtopics"].sort(key=lambda x: (x["class_average"] is None, x["class_average"] or 0))
+        out.append(d)
+    out.sort(key=lambda x: (x["class_average"] is None, x["class_average"] or 0))
+
+    # How many answered questions could be mapped to a Subtopic (coverage / gaps).
+    from app.models.lms_models import AssessmentAttempt as _Attempt
+
+    coverage_rows = (
+        db.query(QuestionTaxonomy.mapping_status, func_count(AttemptAnswer.id))
+        .join(AttemptAnswer, AttemptAnswer.question_id == QuestionTaxonomy.question_id)
+        .join(_Attempt, _Attempt.id == AttemptAnswer.attempt_id)
+        .filter(_Attempt.student_id.in_(student_ids), _Attempt.status == "submitted")
+        .group_by(QuestionTaxonomy.mapping_status)
+        .all()
+    )
+    try:
+        gaps = guided_practice_service.coverage_gaps_for_students(student_ids)
+    except Exception:  # noqa: BLE001
+        gaps = []
+    return {
+        "domains": out,
+        "mapping_coverage": {status: int(n) for status, n in coverage_rows},
+        "coverage_gaps": gaps,
+        "policy": "subtopic_v1",
+        "parameter_policy": "four_parameter_v1",
+    }
+
+
+def _level_rows(acc: dict, order: tuple) -> List[dict]:
+    """Finalize one breakdown ({level: accumulator}) into display rows, real data only."""
+    rows = []
+    for level in sorted(acc, key=lambda lv: (order.index(lv) if lv in order else len(order), lv)):
+        a = acc[level]
+        base_c = base_t = fu_c = fu_t = 0
+        weak = []
+        for sid, st in a["students"].items():
+            latest = st["attempts"][st["latest"]]
+            if latest[0] < latest[1]:
+                weak.append({"student_id": sid, "username": st["username"], "correct": latest[0], "total": latest[1]})
+            if st["baseline"] is not None and st["latest"] != st["baseline"]:
+                b = st["attempts"][st["baseline"]]
+                base_c, base_t = base_c + b[0], base_t + b[1]
+                fu_c, fu_t = fu_c + latest[0], fu_t + latest[1]
+        baseline_pct = round(100.0 * base_c / base_t, 1) if base_t else None
+        follow_pct = round(100.0 * fu_c / fu_t, 1) if fu_t else None
+        weak.sort(key=lambda w: (w["username"] or "").lower())
+        rows.append(
+            {
+                "level": level,
+                "correct": a["correct"],
+                "incorrect": a["total"] - a["correct"],
+                "answers_counted": a["total"],
+                "percent": round(100.0 * a["correct"] / a["total"], 1) if a["total"] else None,
+                "students_assessed": len(a["students"]),
+                "weak_student_count": len(weak),
+                "weak_students": weak,
+                # Same students on both sides: their first Baseline vs their latest Follow-up.
+                "students_with_follow_up": sum(
+                    1 for st in a["students"].values() if st["baseline"] is not None and st["latest"] != st["baseline"]
+                ),
+                "baseline_percent": baseline_pct,
+                "follow_up_percent": follow_pct,
+                "change_since_baseline": (
+                    round(follow_pct - baseline_pct, 1) if baseline_pct is not None and follow_pct is not None else None
+                ),
+                "guided_practice_correct": a["gp_correct"],
+                "guided_practice_answered": a["gp_total"],
+                "insufficient_data": a["total"] < MIN_SUBTOPIC_EVIDENCE,
+            }
+        )
+    return rows
+
+
+def parameter_breakdowns(student_ids: List[int], users: dict) -> dict:
+    """Cognitive-level and difficulty performance per Subtopic and per Domain.
+
+    Source: ``lms_subtopic_evidence`` rows of submitted Baseline/Follow-up attempts
+    (the same answers subtopic mastery is built from) joined to the answered
+    question's stored cognitive level / *printed* difficulty. Guided Practice
+    answers are counted separately and never mixed into assessment percentages.
+    Questions whose paper printed no cognitive level / difficulty are counted in
+    ``unlabelled`` instead of being guessed.
+    """
+    from app.models.lms_models import GuidedPracticeAttempt, SubtopicEvidence, TargetBankItem
+    from app.services.lms import question_attributes as qa
+    from app.services.lms.subtopic_mastery_service import ASSESSMENT_SOURCES
+
+    db = get_db()
+    evidence = (
+        db.query(SubtopicEvidence)
+        .filter(
+            SubtopicEvidence.student_id.in_(student_ids),
+            SubtopicEvidence.source_type.in_(ASSESSMENT_SOURCES),
+        )
+        .order_by(SubtopicEvidence.created_at.asc(), SubtopicEvidence.id.asc())
+        .all()
+    )
+    qids = {int(e.question_ref) for e in evidence if str(e.question_ref).isdigit()}
+    gp_rows = (
+        db.query(GuidedPracticeAttempt, TargetBankItem.question_id)
+        .join(TargetBankItem, TargetBankItem.id == GuidedPracticeAttempt.bank_item_id)
+        .filter(GuidedPracticeAttempt.student_id.in_(student_ids), GuidedPracticeAttempt.status == "answered")
+        .all()
+    )
+    qids |= {qid for _, qid in gp_rows}
+    attrs = {
+        q.id: (qa.cognitive_level_of(q), qa.known_difficulty(q))
+        for q in (db.query(Question).filter(Question.id.in_(qids)).all() if qids else [])
+    }
+    sub_domain = {e.subtopic_id: e.domain_topic_id for e in evidence if e.domain_topic_id}
+
+    def new_acc():
+        return {"correct": 0, "total": 0, "students": {}, "gp_correct": 0, "gp_total": 0}
+
+    # scope key ("s", id) / ("d", id) -> dimension -> level -> accumulator
+    data: dict = {}
+    unlabelled: dict = {}
+
+    def bucket(scope, dim, level):
+        return data.setdefault(scope, {"cognitive": {}, "difficulty": {}})[dim].setdefault(level, new_acc())
+
+    for e in evidence:
+        if not str(e.question_ref).isdigit():
+            continue
+        cog, diff = attrs.get(int(e.question_ref), (None, None))
+        domain_id = e.domain_topic_id or sub_domain.get(e.subtopic_id)
+        for scope in (("s", e.subtopic_id), ("d", domain_id)):
+            if scope[1] is None:
+                continue
+            un = unlabelled.setdefault(scope, {"cognitive": 0, "difficulty": 0})
+            for dim, level in (("cognitive", cog), ("difficulty", diff)):
+                if not level:
+                    un[dim] += 1
+                    continue
+                a = bucket(scope, dim, level)
+                a["total"] += 1
+                a["correct"] += 1 if e.is_correct else 0
+                user = users.get(e.student_id)
+                st = a["students"].setdefault(
+                    e.student_id,
+                    {"username": user.username if user else f"Student #{e.student_id}", "attempts": {},
+                     "baseline": None, "latest": None},
+                )
+                key = (e.source_type, e.source_id)
+                pair = st["attempts"].setdefault(key, [0, 0])
+                pair[0] += 1 if e.is_correct else 0
+                pair[1] += 1
+                if e.source_type == "diagnostic" and st["baseline"] is None:
+                    st["baseline"] = key
+                st["latest"] = key  # evidence is ordered oldest-first
+
+    for att, qid in gp_rows:
+        cog, diff = attrs.get(qid, (None, None))
+        domain_id = sub_domain.get(att.subtopic_id)
+        for scope in (("s", att.subtopic_id), ("d", domain_id)):
+            if scope[1] is None:
+                continue
+            for dim, level in (("cognitive", cog), ("difficulty", diff)):
+                if level:
+                    a = bucket(scope, dim, level)
+                    a["gp_total"] += 1
+                    a["gp_correct"] += 1 if att.is_correct else 0
+
+    out = {}
+    for scope, dims in data.items():
+        out[scope] = {
+            "cognitive_levels": _level_rows(dims["cognitive"], qa.COGNITIVE_LEVELS),
+            "difficulty_levels": _level_rows(dims["difficulty"], qa.DIFFICULTY_LEVELS),
+            "unlabelled": unlabelled.get(scope, {"cognitive": 0, "difficulty": 0}),
+        }
+    return out
+
+
+def func_count(column):
+    from sqlalchemy import func
+
+    return func.count(column)

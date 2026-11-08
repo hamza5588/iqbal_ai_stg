@@ -96,6 +96,12 @@ class Question(Base):
     correct_answer_raw = Column(Text, nullable=True)
     explanation = Column(Text, nullable=True)
     difficulty = Column(String(20), nullable=False, default="medium", server_default="medium")
+    # Canonical cognitive level printed on the source paper (Knowledge /
+    # Understanding / Application / Analysis/Reasoning); NULL when not printed.
+    cognitive_level = Column(String(64), nullable=True)
+    # Difficulty label exactly as printed ("Intermediate"). NULL means the paper
+    # printed none and ``difficulty`` is only the default - never a real match.
+    printed_difficulty = Column(String(32), nullable=True)
     time_limit_seconds = Column(Integer, nullable=True)
     source_type = Column(
         String(32), nullable=False, default="manual", server_default="manual"
@@ -590,6 +596,9 @@ class LearningPath(Base):
     student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(512), nullable=False)
     status = Column(String(32), nullable=False, default="active", server_default="active")
+    # Fingerprint of the weak Domains + Subtopics the path was built for, so a
+    # refresh with an unchanged weak set keeps the path instead of duplicating it.
+    weakness_signature = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(
         DateTime,
@@ -772,6 +781,9 @@ class DeficiencyChatSession(Base):
     correct_count = Column(Integer, nullable=False, default=0, server_default="0")
     chat_history_json = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, default="active", server_default="active")
+    # Why a session ended without the student finishing it, e.g. "superseded"
+    # when a newer assessment cleared every subtopic it was practising.
+    close_reason = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(
         DateTime,
@@ -888,4 +900,232 @@ class TutorChatMessage(Base):
 
     __table_args__ = (
         CheckConstraint("role IN ('user','assistant')", name="check_tutor_chat_msg_role"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Domain -> Subtopic taxonomy, subtopic mastery and the Target PDF question bank.
+#
+# Domains stay the existing ``topics`` rows (subject "Content") so every
+# Domain-level score, analytic and Learning Chat payload keeps its ids.
+# Subtopics hang off a Domain topic and are scoped by grade, so the same
+# printed name in two grades never shares mastery.
+# ---------------------------------------------------------------------------
+
+
+class Subtopic(Base):
+    __tablename__ = "lms_subtopics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    domain_topic_id = Column(
+        Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    grade_level = Column(String(100), nullable=False, default="", server_default="")
+    subject = Column(String(100), nullable=False, default="Mathematics", server_default="Mathematics")
+    canonical_name = Column(String(255), nullable=False)
+    name_key = Column(String(255), nullable=False)
+    # Normalised alternative names an admin confirmed map here (JSON list of keys).
+    aliases_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    status = Column(String(32), nullable=False, default="active", server_default="active")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    domain = relationship("Topic")
+
+    __table_args__ = (
+        UniqueConstraint("domain_topic_id", "grade_level", "name_key", name="uq_subtopic_domain_grade_key"),
+        CheckConstraint("status IN ('active','retired')", name="check_subtopic_status"),
+    )
+
+
+class QuestionTaxonomy(Base):
+    """Canonical Domain/Subtopic of one question plus the labels printed on its paper."""
+
+    __tablename__ = "lms_question_taxonomy"
+
+    question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True)
+    domain_topic_id = Column(Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, index=True)
+    subtopic_id = Column(Integer, ForeignKey("lms_subtopics.id", ondelete="SET NULL"), nullable=True, index=True)
+    printed_domain = Column(String(255), nullable=True)
+    printed_topic = Column(String(255), nullable=True)
+    grade_level = Column(String(100), nullable=True)
+    # resolved: Domain + Subtopic ids; domain_only: no printed Topic (legacy or
+    # AI-labelled question); unresolved: the Domain itself could not be determined.
+    mapping_status = Column(String(32), nullable=False, default="unresolved", server_default="unresolved")
+    mapping_note = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "mapping_status IN ('resolved','domain_only','unresolved')",
+            name="check_question_taxonomy_status",
+        ),
+    )
+
+
+class SubtopicEvidence(Base):
+    """One graded answer on a subtopic: the audit trail subtopic mastery is replayed from."""
+
+    __tablename__ = "lms_subtopic_evidence"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    subtopic_id = Column(Integer, ForeignKey("lms_subtopics.id", ondelete="CASCADE"), nullable=False, index=True)
+    domain_topic_id = Column(Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True)
+    source_type = Column(String(32), nullable=False)
+    source_id = Column(Integer, nullable=False)
+    question_ref = Column(String(64), nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+    counts_toward_mastery = Column(Boolean, nullable=False, default=True, server_default="1")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "source_type", "source_id", "question_ref", name="uq_subtopic_evidence_answer"
+        ),
+        CheckConstraint(
+            "source_type IN ('diagnostic','quiz','learning_chat','guided_practice')",
+            name="check_subtopic_evidence_source",
+        ),
+        Index("ix_subtopic_evidence_student_subtopic", "student_id", "subtopic_id"),
+    )
+
+
+class StudentSubtopicScore(Base):
+    """Current subtopic mastery, derived from SubtopicEvidence (always rebuildable)."""
+
+    __tablename__ = "lms_student_subtopic_scores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    subtopic_id = Column(Integer, ForeignKey("lms_subtopics.id", ondelete="CASCADE"), nullable=False, index=True)
+    domain_topic_id = Column(Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, index=True)
+    score_percent = Column(Float, nullable=False, default=0.0, server_default="0")
+    sample_size = Column(Integer, nullable=False, default=0, server_default="0")
+    correct_count = Column(Integer, nullable=False, default=0, server_default="0")
+    total_count = Column(Integer, nullable=False, default=0, server_default="0")
+    mastery_status = Column(String(32), nullable=False, default="needs_practice", server_default="needs_practice")
+    baseline_percent = Column(Float, nullable=True)
+    latest_assessment_percent = Column(Float, nullable=True)
+    last_source = Column(String(32), nullable=True)
+    last_assessed_at = Column(DateTime, nullable=True)
+    calc_version = Column(String(32), nullable=False, default="subtopic_v1", server_default="subtopic_v1")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("student_id", "subtopic_id", name="uq_student_subtopic_score"),
+    )
+
+
+class TargetBankDocument(Base):
+    """A Target PDF whose printed MCQs were extracted into the Guided Practice bank."""
+
+    __tablename__ = "lms_target_bank_documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sha256 = Column(String(64), nullable=False)
+    original_filename = Column(String(512), nullable=True)
+    grade_level = Column(String(100), nullable=False)
+    subject = Column(String(100), nullable=False, default="Mathematics", server_default="Mathematics")
+    assessment_id = Column(Integer, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True, index=True)
+    storage_path = Column(String(1024), nullable=False)
+    page_count = Column(Integer, nullable=True)
+    extractor_version = Column(String(32), nullable=True)
+    stats_json = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("sha256", "grade_level", name="uq_bank_document_sha_grade"),
+    )
+
+
+class TargetBankItem(Base):
+    """One printed Target PDF MCQ. Students only ever see ``approved`` items."""
+
+    __tablename__ = "lms_target_bank_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(
+        Integer, ForeignKey("lms_target_bank_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False, unique=True)
+    source_page = Column(Integer, nullable=True)
+    source_question_number = Column(Integer, nullable=False)
+    verification_status = Column(String(32), nullable=False, default="needs_review", server_default="needs_review")
+    verification_report_json = Column(Text, nullable=True)
+    extraction_metadata_json = Column(Text, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "source_question_number", name="uq_bank_item_doc_qno"),
+        CheckConstraint(
+            "verification_status IN ('auto_verified','needs_review','approved','rejected')",
+            name="check_bank_item_status",
+        ),
+    )
+
+
+class GuidedPracticeAttempt(Base):
+    """A student's answer to a Target PDF bank question in Guided Practice."""
+
+    __tablename__ = "lms_guided_practice_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    bank_item_id = Column(
+        Integer, ForeignKey("lms_target_bank_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subtopic_id = Column(Integer, ForeignKey("lms_subtopics.id", ondelete="SET NULL"), nullable=True)
+    # Display order of the options shown (JSON list of original option indexes).
+    option_order_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    selected_original_index = Column(Integer, nullable=True)
+    is_correct = Column(Boolean, nullable=True)
+    status = Column(String(32), nullable=False, default="served", server_default="served")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    answered_at = Column(DateTime, nullable=True)
+    # Four-parameter match that chose this item: 1 = Domain+Topic+Cognitive+Difficulty,
+    # 2 = +Cognitive, 3 = +Difficulty, 4 = Domain+Topic only. NULL for legacy rows.
+    match_priority = Column(Integer, nullable=True)
+    # The incorrectly answered question this item was matched against (if any).
+    target_question_id = Column(Integer, ForeignKey("questions.id", ondelete="SET NULL"), nullable=True)
+    match_json = Column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('served','answered','abandoned')", name="check_guided_attempt_status"),
+    )
+
+
+class IncorrectAnswerRecord(Base):
+    """One incorrect answer with its four matching parameters (insert-only log).
+
+    Snapshot of Domain / Subtopic / Cognitive level / Difficulty at answer time,
+    so later question edits never rewrite what the student actually got wrong.
+    """
+
+    __tablename__ = "lms_incorrect_answers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
+    domain_topic_id = Column(Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True)
+    subtopic_id = Column(Integer, ForeignKey("lms_subtopics.id", ondelete="SET NULL"), nullable=True, index=True)
+    cognitive_level = Column(String(64), nullable=True)
+    difficulty = Column(String(20), nullable=True)  # known (printed) difficulty only
+    selected_option_index = Column(Integer, nullable=True)  # NULL = left blank
+    correct_option_index = Column(Integer, nullable=True)
+    # diagnostic | quiz (Baseline / Follow-up attempts) | guided_practice
+    source_type = Column(String(32), nullable=False)
+    source_id = Column(Integer, nullable=False)  # attempt id in that source
+    assessment_id = Column(Integer, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("student_id", "source_type", "source_id", "question_id", name="uq_incorrect_answer"),
+        CheckConstraint(
+            "source_type IN ('diagnostic','quiz','guided_practice')", name="check_incorrect_answer_source"
+        ),
+        Index("ix_incorrect_answer_student_subtopic", "student_id", "subtopic_id"),
     )

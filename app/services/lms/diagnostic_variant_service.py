@@ -354,6 +354,9 @@ def _generate_and_store_variant(assessment_id: int, orig_id: int) -> Optional[in
                 topic_id=orig.topic_id,
                 difficulty=orig.difficulty or "medium",
                 source_type=VARIANT_SOURCE_TYPE,
+                # Same printed concept as the original -> same matching parameters.
+                cognitive_level=getattr(orig, "cognitive_level", None) or None,
+                printed_difficulty=getattr(orig, "printed_difficulty", None) or None,
             )
             if orig.time_limit_seconds:
                 q.time_limit_seconds = orig.time_limit_seconds

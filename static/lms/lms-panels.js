@@ -620,108 +620,119 @@
     });
   };
 
-  /* ── Guided practice ── */
+  /* ── Guided practice ──
+     Verified questions from the teacher's Target PDF only (never AI-generated),
+     for the student's currently weak subtopics. The server renders the maths
+     (render fields are escaped HTML + \( \) MathJax) and never sends the key. */
   ensureModal('lmsPracticeModal', 'Guided Practice', 'lms-modal-md');
-  var practiceSession = null;
-  var practiceTopicId = null;
+  var practiceScope = { domain_topic_id: null, subtopic_id: null };
+  var practiceCurrent = null;
 
-  window.openLmsPracticePanel = async function (topicId) {
+  window.openLmsPracticePanel = async function (domainTopicId, subtopicId) {
     if (lmsBlockUntilDiagnostic()) return;
-    practiceTopicId = topicId || null;
+    practiceScope = { domain_topic_id: domainTopicId || null, subtopic_id: subtopicId || null };
     lmsOpenModal('lmsPracticeModal');
+    await loadNextPracticeQuestion();
+  };
+
+  window.startLmsPractice = function (domainTopicId, subtopicId) { openLmsPracticePanel(domainTopicId, subtopicId); };
+  window.nextLmsPracticeQuestion = function () { loadNextPracticeQuestion(); };
+
+  // "Why this question": the four-parameter match against a question the student got wrong.
+  function practiceMatchNote(match) {
+    if (!match) return '';
+    var served = match.served || {};
+    var diff = served.printed_difficulty || (served.difficulty ? served.difficulty.charAt(0).toUpperCase() + served.difficulty.slice(1) : null);
+    var bits = [served.cognitive_level, diff]
+      .filter(Boolean).map(escapeHtml).join(' · ');
+    var why = match.target
+      ? 'Chosen because you missed a similar question (' + escapeHtml(match.matched_on || '') + ')'
+      : 'Practice for this weak subtopic';
+    return '<p class="lms-practice-match" data-priority="' + Number(match.priority || 0) + '" style="margin:0 0 10px;"><small>' +
+      why + (bits ? ' · ' + bits : '') + '</small></p>';
+  }
+
+  function practiceGapsHtml(gaps) {
+    if (!gaps || !gaps.length) return '';
+    return '<div class="lms-card lms-card-warn" style="margin-top:12px;"><strong>No verified questions yet for:</strong><ul style="margin:6px 0 0 18px;">' +
+      gaps.map(function (g) {
+        return '<li>' + escapeHtml(g.subtopic_name || '') + (g.domain_name ? ' <small>(' + escapeHtml(g.domain_name) + ')</small>' : '') + '</li>';
+      }).join('') + '</ul><p style="margin:6px 0 0;"><small>Your teacher can see this gap. Use Learning Chat to practise these.</small></p></div>';
+  }
+
+  async function loadNextPracticeQuestion() {
     var body = document.getElementById('lmsPracticeModalBody');
     body.innerHTML = '<div class="lms-spinner"></div>';
     try {
-      practiceSession = await lmsApi('/api/lms/practice/sessions', {
+      var data = await lmsApi('/api/lms/guided-practice/next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic_id: topicId || null, force_new: false })
+        body: JSON.stringify(practiceScope)
       });
-      if (practiceSession.resumed) {
-        lmsShowToast('Resuming your practice session', 'success');
+      practiceCurrent = data;
+      if (!data.question) {
+        body.innerHTML = '<p>' + escapeHtml(data.message || 'No practice questions available right now.') + '</p>' +
+          practiceGapsHtml(data.coverage_gaps) +
+          '<button type="button" class="lms-btn lms-btn-primary" style="margin-top:12px;" onclick="lmsCloseModal(\'lmsPracticeModal\')">Close</button>';
+        return;
       }
-      await renderPracticeQuestion();
+      if (data.resumed) lmsShowToast('Resuming your practice question', 'success');
+      var q = data.question;
+      var progress = data.progress || {};
+      var opts = (q.options || []).map(function (o) {
+        return '<button type="button" class="lms-quiz-option" data-position="' + o.position + '" onclick="submitLmsPracticeAnswer(' + o.position + ')">' +
+          '<b>' + escapeHtml(o.label) + '.</b> ' + (o.render || escapeHtml(o.text || '')) + '</button>';
+      }).join('');
+      body.innerHTML =
+        '<p style="margin:0 0 6px;"><span class="lms-badge lms-badge-green">' + escapeHtml(data.domain_name || '') + '</span> ' +
+        '<span class="lms-badge">' + escapeHtml(data.subtopic_name || '') + '</span></p>' +
+        '<p style="margin:0 0 10px;"><small>Question ' + escapeHtml(String(q.source_question_number || '')) +
+        ' from your teacher\'s practice question bank · ' + (progress.seen_in_subtopic || 0) + ' of ' +
+        (progress.approved_in_subtopic || 0) + ' practised in this subtopic</small></p>' +
+        practiceMatchNote(data.match) +
+        (data.bank_exhausted ? '<div class="lms-card lms-card-warn" style="margin-bottom:10px;"><small>' + escapeHtml(data.message || '') + '</small></div>' : '') +
+        '<h3 class="lms-quiz-stem">' + (q.question_render || escapeHtml(q.question_text || '')) + '</h3>' +
+        opts +
+        '<div id="lmsPracticeFeedback" style="margin-top:12px;"></div>';
+      typeset(body);
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>' +
         '<button type="button" class="lms-btn lms-btn-primary" onclick="nextLmsPracticeQuestion()">Try again</button>';
     }
-  };
-
-  window.startLmsPractice = function (topicId) { openLmsPracticePanel(topicId); };
-  window.nextLmsPracticeQuestion = function () { openLmsPracticePanel(practiceTopicId); };
-
-  async function renderPracticeQuestion() {
-    var body = document.getElementById('lmsPracticeModalBody');
-    if (!practiceSession || !practiceSession.session_id) return;
-    var q = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id);
-    if (q.completed) {
-      body.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:2rem;color:var(--primary-color);">&#10003;</div>' +
-        '<p><strong>Practice session complete!</strong></p>' +
-        '<button type="button" class="lms-btn lms-btn-primary" onclick="lmsCloseModal(\'lmsPracticeModal\')">Done</button></div>';
-      return;
-    }
-    var opts = (q.options || []).map(function (o, i) {
-      return '<button type="button" class="lms-quiz-option" onclick="submitLmsPracticeAnswer(' + i + ')">' +
-        (fmtOption(o) || escapeHtml(String(i))) + '</button>';
-    }).join('');
-    body.innerHTML =
-      '<p class="lms-badge lms-badge-green">' + escapeHtml(q.difficulty || 'medium') + '</p>' +
-      '<h3 class="lms-quiz-stem">' + fmtQuestion(q) + '</h3>' +
-      opts +
-      '<div id="lmsPracticeFeedback" style="margin-top:12px;"></div>' +
-      '<button type="button" id="lmsPracticeHintBtn" class="lms-btn lms-btn-ghost" style="margin-top:10px;" onclick="requestLmsPracticeHint()">Need a hint?</button>';
-    typeset(body);
   }
 
-  window.submitLmsPracticeAnswer = async function (optIdx) {
+  window.submitLmsPracticeAnswer = async function (position) {
+    if (!practiceCurrent || !practiceCurrent.attempt_id) return;
     var fb = document.getElementById('lmsPracticeFeedback');
-    var optionButtons = document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option');
-    optionButtons.forEach(function (btn) { btn.disabled = true; });
+    var buttons = document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option');
+    buttons.forEach(function (btn) { btn.disabled = true; });
     if (fb) fb.innerHTML = '<div class="lms-spinner" style="width:20px;height:20px"></div>';
     try {
-      var result = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id + '/answer', {
+      var result = await lmsApi('/api/lms/guided-practice/attempts/' + practiceCurrent.attempt_id + '/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selected_option_index: optIdx })
+        body: JSON.stringify({ position: position })
       });
-      var optBtn = document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option')[optIdx];
+      var chosen = document.querySelector('#lmsPracticeModalBody .lms-quiz-option[data-position="' + position + '"]');
+      var right = document.querySelector('#lmsPracticeModalBody .lms-quiz-option[data-position="' + result.correct_position + '"]');
+      var hasFx = typeof lmsFeedback !== 'undefined';
       if (result.correct) {
-        document.querySelectorAll('#lmsPracticeModalBody .lms-quiz-option, #lmsPracticeHintBtn').forEach(function (btn) { btn.disabled = true; });
-        if (optBtn && typeof lmsFeedback !== 'undefined') lmsFeedback.markOption(optBtn, 'correct');
-        var cheer = typeof lmsFeedback !== 'undefined' ? lmsFeedback.praise() : 'Correct!';
-        if (typeof lmsFeedback !== 'undefined') lmsFeedback.celebrate(cheer);
-        if (fb) {
-          fb.innerHTML = '<div class="lms-card lms-card-ok"><strong>' + escapeHtml(cheer) + '</strong> ' + fmtText(result.explanation || '') + '</div>' +
-            '<button type="button" class="lms-btn lms-btn-primary" style="margin-top:12px;" onclick="nextLmsPracticeQuestion()">' +
-            (result.next_question ? 'Next question' : 'Practice more with new questions') + '</button>';
-          typeset(fb);
-        }
+        if (chosen && hasFx) lmsFeedback.markOption(chosen, 'correct');
+        var cheer = hasFx ? lmsFeedback.praise() : 'Correct!';
+        if (hasFx) lmsFeedback.celebrate(cheer);
+        if (fb) fb.innerHTML = '<div class="lms-card lms-card-ok"><strong>' + escapeHtml(cheer) + '</strong></div>';
       } else {
-        optionButtons.forEach(function (btn) { btn.disabled = false; });
-        if (typeof lmsFeedback !== 'undefined') {
+        if (hasFx) {
           lmsFeedback.cue('error');
-          if (optBtn) lmsFeedback.markOption(optBtn, 'wrong');
+          if (chosen) lmsFeedback.markOption(chosen, 'wrong');
+          if (right) lmsFeedback.markOption(right, 'correct');
         }
-        if (fb) {
-          fb.innerHTML = '<div class="lms-card lms-card-bad"><strong>Not quite — take another look.</strong> ' + fmtText(result.feedback || result.hint || '') + '</div>';
-          typeset(fb);
-        }
+        if (fb) fb.innerHTML = '<div class="lms-card lms-card-bad"><strong>Not quite.</strong> The correct answer is ' +
+          escapeHtml(result.correct_label || '') + '. Try Learning Chat for step-by-step help on this subtopic.</div>';
       }
+      if (fb) fb.innerHTML += '<button type="button" class="lms-btn lms-btn-primary" style="margin-top:12px;" onclick="nextLmsPracticeQuestion()">Next question</button>';
     } catch (err) {
-      optionButtons.forEach(function (btn) { btn.disabled = false; });
-      if (fb) fb.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
-    }
-  };
-
-  window.requestLmsPracticeHint = async function () {
-    var fb = document.getElementById('lmsPracticeFeedback');
-    try {
-      var hint = await lmsApi('/api/lms/practice/sessions/' + practiceSession.session_id + '/hint', { method: 'POST' });
-      if (fb) {
-        fb.innerHTML = '<div class="lms-card lms-card-warn"><strong>Hint:</strong> ' + fmtText(hint.hint || hint.message || '') + '</div>';
-        typeset(fb);
-      }
-    } catch (err) {
+      buttons.forEach(function (btn) { btn.disabled = false; });
       if (fb) fb.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }
   };

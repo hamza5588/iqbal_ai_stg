@@ -285,6 +285,18 @@ def init_db(app):
             logger.info("Database tables created/verified successfully")
             from app.migrations.student_reporting import run_migration as migrate_student_reporting
             migrate_student_reporting(engine)
+            try:
+                from app.migrations.subtopic_taxonomy import run_migration as migrate_subtopic_taxonomy
+
+                migrate_subtopic_taxonomy(engine)
+            except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
+                logger.warning("subtopic taxonomy migration warning: %s", e)
+            try:
+                from app.migrations.four_parameter_matching import run_migration as migrate_four_parameter
+
+                migrate_four_parameter(engine)
+            except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
+                logger.warning("four-parameter matching migration warning: %s", e)
             from app.services.tutor_usage_service import initialize_tracking
             initialize_tracking(engine)
             

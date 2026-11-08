@@ -329,6 +329,14 @@ def _upload_diagnostic_bundle(
         )
         target_thread_ids.append(thread_id)
         target_filenames.append(tfname)
+        # Printed MCQs in the Target PDF -> Guided Practice bank (pending admin
+        # review). Best effort: a PDF with no MCQs or a parse failure never
+        # blocks the diagnostic upload.
+        from app.services.lms.target_bank_service import import_target_bank_safely
+
+        import_target_bank_safely(
+            tbytes, tfname, assessment.grade_level or grade_level, assessment_id=assessment.id, user_id=teacher_id
+        )
 
     if not target_thread_ids:
         raise LMSValidationError("At least one target content PDF is required for Learning Chat")
@@ -584,7 +592,11 @@ def upload_target_pdf(
 
     )
 
+    from app.services.lms.target_bank_service import import_target_bank_safely
 
+    import_target_bank_safely(
+        file_bytes, filename, assessment.grade_level or "", assessment_id=assessment_id, user_id=user_id
+    )
 
     meta = {}
     if assessment.description:

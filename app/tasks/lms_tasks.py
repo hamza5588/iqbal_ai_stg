@@ -56,13 +56,18 @@ def prewarm_deficiency_chat_task(self, student_id: int) -> dict:
         return {"student_id": student_id, "warmed": False, "error": str(exc)}
 
 
-def enqueue_deficiency_chat_prewarm(student_id: int) -> None:
+def enqueue_deficiency_chat_prewarm(student_id: int, *, allow_inline: bool = True) -> None:
     """
     Enqueue the Learning Chat prewarm on Celery when async is enabled; otherwise
-    run it in-process (local dev / no broker). All failures are swallowed — the
-    on-demand path in ``deficiency_chat_service.start_session`` remains the
-    fallback.
+    run it in-process (local dev / no broker) unless ``allow_inline`` is False.
+    All failures are swallowed — the on-demand path in
+    ``deficiency_chat_service.start_session`` remains the fallback.
+
+    Follow-up quizzes pass ``allow_inline=False``: without a worker the weekly
+    quiz submit must not wait on live Groq MCQ generation for every student.
     """
+    if not _celery_async_enabled() and not allow_inline:
+        return
     if _celery_async_enabled():
         try:
             prewarm_deficiency_chat_task.delay(student_id=student_id)

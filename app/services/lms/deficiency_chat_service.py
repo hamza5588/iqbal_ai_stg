@@ -246,7 +246,19 @@ def _mcq_to_queue_item(
         options, correct_idx,
         preserve_order=bool(getattr(mcq, "preserve_option_order", False)) or _has_positional_option(options),
     )
-    q_text, q_latex = finalize_display_text(mcq.question_text, mcq.question_latex)
+    stem = (mcq.question_text or "").strip()
+    prose = re.sub(r"\\[A-Za-z]+", " ", stem)  # ignore LaTeX commands (\div, \times, \frac)
+    stem_words = len(re.findall(r"[A-Za-z]{3,}", prose))
+    if stem_words < 1:
+        # An expression with no question ("(a+b+c)^{2}" + four numbers) cannot be answered.
+        logger.warning("Skipping generated MCQ with no question wording: %r", stem[:80])
+        return None
+    q_latex_in = getattr(mcq, "question_latex", None)
+    if q_latex_in and stem.endswith("?") and len(re.findall(r"[A-Za-z]{2,}", prose)) >= 6:
+        # The stem is already a complete question; appending the generator's LaTeX
+        # duplicated the expression or leaked the solving formula.
+        q_latex_in = None
+    q_text, q_latex = finalize_display_text(mcq.question_text, q_latex_in)
     safe_opts = []
     for o in options:
         ot, ol = finalize_option_text(o.get("text"), o.get("latex"))
@@ -328,6 +340,26 @@ def _prior_question_texts_by_topic(student_id: int) -> Dict[int, List[str]]:
     return by_topic
 
 
+def _served_question_keys(student_id: int, exclude_session_id: Optional[int] = None) -> set:
+    """Question keys already served to the student in other Learning Chat sessions."""
+    query = get_db().query(DeficiencyChatSession.questions_json).filter(
+        DeficiencyChatSession.student_id == student_id
+    )
+    if exclude_session_id:
+        query = query.filter(DeficiencyChatSession.id != exclude_session_id)
+    keys: set = set()
+    for (raw_questions,) in query.all():
+        try:
+            questions = json.loads(raw_questions or "[]")
+        except json.JSONDecodeError:
+            continue
+        for q in questions:
+            key = _question_key(q.get("question_text") or "")
+            if key:
+                keys.add(key)
+    return keys
+
+
 def _approved_scopes(entry: dict, topic_name: str) -> List[str]:
     """Trusted printed Topics/SLOs, or the approved broad topic for legacy papers."""
     values = entry.get("slo_names") or []
@@ -364,15 +396,24 @@ def _build_scope_queue(
     pdf_section, thread_id, relevance = _match_target_section(
         approved_scope, target_thread_ids
     )
-    section_text = ""
+    # A Target PDF that is a question bank has no teaching text per topic: ground
+    # on the admin-approved printed MCQs of this exact Subtopic instead (still
+    # subject to the grounding + answer-key checks below).
+    section_text, bank_thread = _bank_source_text(topic_id, approved_scope, grade_level, target_thread_ids)
+    if section_text:
+        thread_id = bank_thread or (target_thread_ids[0] if target_thread_ids else thread_id)
+        pdf_section = approved_scope
     lookups = []
-    if relevance > 0:
+    if section_text:
+        pass
+    elif relevance > 0:
         lookups.extend(
             (tid, pdf_section) for tid in [thread_id] + target_thread_ids if tid
         )
     # Heading extraction may be incomplete, so also search the exact printed
     # SLO. Never widen a known SLO back to the broad Domain.
-    lookups.extend((tid, approved_scope) for tid in target_thread_ids if tid)
+    if not section_text:
+        lookups.extend((tid, approved_scope) for tid in target_thread_ids if tid)
     for candidate_thread, heading in dict.fromkeys(lookups):
         try:
             section_text = get_section_text(
@@ -383,6 +424,11 @@ def _build_scope_queue(
             )
         except Exception as exc:  # noqa: BLE001 - no ungrounded fallback
             logger.warning("Could not read target-PDF text for %s: %s", heading, exc)
+            continue
+        if _looks_like_answer_key_table(section_text):
+            # The answer-key table only names topics; it teaches nothing.
+            logger.info("Target-PDF text for %s is an answer-key table; not used as source", heading)
+            section_text = ""
             continue
         if section_text.strip():
             thread_id = candidate_thread
@@ -453,6 +499,82 @@ def _build_scope_queue(
     return kept[: len(ladder)]
 
 
+_KEY_ROW_RE = re.compile(r"(?m)^\s*\d{1,3}\s+[A-D]\b")
+
+
+def _looks_like_answer_key_table(text: str) -> bool:
+    """True for answer-key / mapping-table text ("62 C Numbers Real and ...")."""
+    if not text:
+        return False
+    rows = len(_KEY_ROW_RE.findall(text))
+    inline = len(re.findall(r"\b\d{1,3}\s+[A-D]\s+(?:Numbers|Algebra|Geometry|Statistics)\b", text))
+    return rows >= 5 or inline >= 5
+
+
+def _bank_source_text(
+    topic_id: int, scope: str, grade_level: Optional[str], target_thread_ids: List[str], limit: int = 12
+) -> Tuple[str, Optional[str]]:
+    """Approved Target-PDF MCQs of this canonical Subtopic as grounding text.
+
+    Returns (source_text, rag_thread_id of the Target PDF they came from).
+    Only ``approved`` bank items are used, so unverified extraction never feeds
+    generation either.
+    """
+    try:
+        from app.models.lms_models import (
+            DiagnosticTargetPdf,
+            Question,
+            QuestionTaxonomy,
+            TargetBankDocument,
+            TargetBankItem,
+        )
+        from app.services.lms import taxonomy_service
+
+        sub = taxonomy_service.find_subtopic(topic_id, scope, grade_level or "")
+        if not sub:
+            return "", None
+        db = get_db()
+        rows = (
+            db.query(TargetBankItem, Question, TargetBankDocument)
+            .join(Question, Question.id == TargetBankItem.question_id)
+            .join(QuestionTaxonomy, QuestionTaxonomy.question_id == Question.id)
+            .join(TargetBankDocument, TargetBankDocument.id == TargetBankItem.document_id)
+            .filter(
+                QuestionTaxonomy.subtopic_id == sub.id,
+                TargetBankItem.verification_status == "approved",
+                Question.is_active.is_(True),
+            )
+            .order_by(TargetBankItem.source_question_number)
+            .limit(limit)
+            .all()
+        )
+    except Exception as exc:  # noqa: BLE001 - fall back to the RAG section text
+        logger.warning("Could not read Target bank source for %s: %s", scope, exc)
+        return "", None
+    if not rows:
+        return "", None
+    lines = [f"Verified Target PDF questions for {sub.canonical_name}:"]
+    filenames = set()
+    for item, q, doc in rows:
+        opts = json.loads(q.options_json or "[]")
+        letter = "ABCD"[q.correct_option_index] if q.correct_option_index is not None else "?"
+        lines.append(
+            f"Q{item.source_question_number}. {q.question_text}\n"
+            + "\n".join(f"{o.get('label')}. {o.get('text')}" for o in opts)
+            + f"\nCorrect answer: {letter}. {(opts[q.correct_option_index].get('text') if q.correct_option_index < len(opts) else '')}"
+        )
+        filenames.add((doc.original_filename or "").strip().lower())
+    thread = None
+    try:
+        for t in get_db().query(DiagnosticTargetPdf).filter(DiagnosticTargetPdf.rag_thread_id.in_(target_thread_ids)).all():
+            if (t.original_filename or "").strip().lower() in filenames:
+                thread = t.rag_thread_id
+                break
+    except Exception:  # noqa: BLE001
+        pass
+    return "\n\n".join(lines), thread
+
+
 def _build_question_queue(
     weak_topics: List[dict],
     target_thread_ids: List[str],
@@ -476,25 +598,47 @@ def _build_question_queue(
         scopes = _approved_scopes(entry, topic_name)[:count]
         exclude_texts = used_question_texts_by_topic.get(topic_id, [])
         exclude_keys = {_question_key(text) for text in exclude_texts if text}
+        known_subtopics = {
+            (s.get("subtopic_name") or "").casefold(): s.get("subtopic_id")
+            for s in entry.get("subtopics") or []
+        }
         base, extra = divmod(count, len(scopes))
         for index, approved_scope in enumerate(scopes):
             scope_count = base + (1 if index < extra else 0)
             ladder = _difficulty_plan(score, scope_count)
-            queue.extend(
-                _build_scope_queue(
-                    topic_id=topic_id,
-                    topic_name=topic_name,
-                    approved_scope=approved_scope,
-                    ladder=ladder,
-                    target_thread_ids=target_thread_ids,
-                    rag_owner_id=rag_owner_id,
-                    grade_level=grade_level,
-                    exclude_texts=exclude_texts,
-                    exclude_keys=exclude_keys,
-                    seen_texts=seen_texts,
-                )
+            items = _build_scope_queue(
+                topic_id=topic_id,
+                topic_name=topic_name,
+                approved_scope=approved_scope,
+                ladder=ladder,
+                target_thread_ids=target_thread_ids,
+                rag_owner_id=rag_owner_id,
+                grade_level=grade_level,
+                exclude_texts=exclude_texts,
+                exclude_keys=exclude_keys,
+                seen_texts=seen_texts,
             )
+            subtopic_id = known_subtopics.get(approved_scope.casefold()) or _scope_subtopic_id(
+                topic_id, approved_scope, grade_level
+            )
+            for item in items:
+                # Tag every item with its canonical Subtopic so completing the
+                # session feeds Subtopic mastery (None = Domain-level scope).
+                item["subtopic_id"] = subtopic_id
+                item["subtopic_name"] = approved_scope if subtopic_id else None
+            queue.extend(items)
     return queue
+
+
+def _scope_subtopic_id(topic_id: int, scope: str, grade_level: Optional[str]) -> Optional[int]:
+    """Canonical subtopic of a legacy SLO scope, if one is registered (never creates)."""
+    try:
+        from app.services.lms import taxonomy_service
+
+        sub = taxonomy_service.find_subtopic(topic_id, scope, grade_level or "")
+        return sub.id if sub else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _load_questions(session: DeficiencyChatSession) -> List[dict]:
@@ -656,10 +800,7 @@ def _drop_disproved_pending(session: DeficiencyChatSession) -> None:
         db.commit()
         if session.rag_thread_id or had_pdf_questions:
             raise LMSValidationError(_PDF_COVERAGE_ERROR)
-        from app.services.lms import performance_service
-
-        performance_service.update_topic_scores_from_deficiency_session(session.id)
-        _mark_learning_path_chat_complete(session.student_id)
+        _on_session_completed(session.id, session.student_id)
     else:
         db.commit()
 
@@ -674,12 +815,16 @@ def _session_state(session: DeficiencyChatSession) -> dict:
     current = None
     if session.status in ("active", "paused") and session.current_index < total:
         q = _refresh_question_display(dict(questions[session.current_index]))
+        solved_review = bool(q.get("solved_review") and q.get("correct") is True)
         q.pop("correct_option_index", None)
         q.pop("grounding_verified", None)
         q.pop("generated_concept", None)
         q.pop("key_verified", None)
         q.pop("last_selected_option_index", None)
+        # solved_review is client-safe (student already got it right); answer key stays server-only.
+        q.pop("solved_review", None)
         q["difficulty"] = q.get("difficulty") or "medium"
+        q["solved_review"] = solved_review
         current = q
     weak = []
     try:
@@ -721,6 +866,11 @@ def _session_state(session: DeficiencyChatSession) -> dict:
         "pdf_label": "Teacher target content PDF",
         "tutor_messages": tutor_messages,
         "completed": session.status == "completed",
+        # A newer Baseline/Follow-up changed which subtopics are weak and this
+        # session's remaining questions were updated to match.
+        "refreshed_after_assessment": getattr(session, "close_reason", None) == "refreshed_after_assessment",
+        "superseded": getattr(session, "close_reason", None) == "superseded",
+        "current_subtopic": (current or {}).get("subtopic_name"),
     }
 
 
@@ -736,7 +886,105 @@ def _close_old_sessions(student_id: int) -> None:
     )
     for session in sessions:
         session.status = "completed"
+        session.close_reason = session.close_reason or "closed_for_new_session"
     db.commit()
+
+
+def _is_enrichment_session(questions: List[dict]) -> bool:
+    return bool(questions) and (
+        questions[0].get("learning_chat_mode") == "enrichment"
+        or questions[0].get("source") == "enrichment_ai"
+    )
+
+
+def reconcile_sessions_after_assessment(student_id: int) -> dict:
+    """Bring open Learning Chat sessions in line with mastery after a Baseline/Follow-up.
+
+    Policy (no student work is ever thrown away):
+
+    * Pending questions on a Subtopic/Domain that is **no longer weak** are dropped.
+    * An **untouched** session (nothing answered yet) whose pending set changed, or
+      that misses a newly weak Subtopic, is closed as ``superseded`` without any
+      mastery change - the next open/prewarm builds a fresh queue from live weaknesses.
+    * A session **with progress** keeps every answered question. If questions remain
+      it stays open, flagged ``refreshed_after_assessment`` so the UI can tell the
+      student; if none remain it is completed and the answered work is credited.
+    """
+    from app.services.lms import subtopic_mastery_service
+
+    db = get_db()
+    sessions = (
+        db.query(DeficiencyChatSession)
+        .filter(
+            DeficiencyChatSession.student_id == student_id,
+            DeficiencyChatSession.status.in_(("active", "paused")),
+        )
+        .all()
+    )
+    if not sessions:
+        return {"superseded": 0, "refreshed": 0, "completed": 0}
+
+    weak_domains = {int(w.get("topic_id") or 0) for w in get_weak_topics(student_id)}
+    weak_subs = subtopic_mastery_service.get_weak_subtopics(student_id)
+    weak_sub_ids = {s["subtopic_id"] for s in weak_subs}
+    weak_domains |= {int(s.get("domain_topic_id") or 0) for s in weak_subs}
+    weak_domains.discard(0)
+    has_weakness = bool(weak_domains or weak_sub_ids)
+
+    def still_weak(item: dict) -> bool:
+        sub_id = item.get("subtopic_id")
+        if sub_id:
+            return int(sub_id) in weak_sub_ids
+        return int(item.get("topic_id") or 0) in weak_domains
+
+    summary = {"superseded": 0, "refreshed": 0, "completed": 0}
+    completed_ids: List[int] = []
+    for session in sessions:
+        questions = _load_questions(session)
+        idx = session.current_index or 0
+        answered = [q for q in questions[:idx]] + [q for q in questions[idx:] if q.get("answered")]
+        pending = questions[idx:]
+        if _is_enrichment_session(questions):
+            if has_weakness and not answered:
+                session.status = "completed"
+                session.close_reason = "superseded"
+                summary["superseded"] += 1
+            continue
+        keep = [q for q in pending if still_weak(q)]
+        covered = {int(q["subtopic_id"]) for q in questions if q.get("subtopic_id")}
+        session_domains = _session_topic_ids(session)
+        missing_new = {
+            s["subtopic_id"] for s in weak_subs
+            if int(s.get("domain_topic_id") or 0) in session_domains and s["subtopic_id"] not in covered
+        }
+        if not answered:
+            if len(keep) != len(pending) or missing_new:
+                session.status = "completed"
+                session.close_reason = "superseded"
+                summary["superseded"] += 1
+            continue
+        if len(keep) == len(pending):
+            continue
+        _save_questions(session, questions[:idx] + keep)
+        _reset_tutor_state(session)
+        if keep:
+            session.close_reason = "refreshed_after_assessment"
+            summary["refreshed"] += 1
+        else:
+            session.status = "completed"
+            session.close_reason = "completed_after_assessment"
+            completed_ids.append(session.id)
+            summary["completed"] += 1
+    db.commit()
+    for sid in completed_ids:
+        try:
+            _on_session_completed(sid, student_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Crediting reconciled Learning Chat session %s failed: %s", sid, exc)
+            db.rollback()
+    if any(summary.values()):
+        logger.info("Learning Chat reconcile for student %s: %s", student_id, summary)
+    return summary
 
 
 def get_active_session(
@@ -895,32 +1143,103 @@ def _build_enrichment_queue(
 
 
 def _practice_weak_areas(student_id: int, diag_id: Optional[int]) -> List[dict]:
-    """Weak areas a practice Learning Chat should cover right now."""
-    weak = get_weak_topics(student_id)
-    if not weak:
+    """Weak areas a practice Learning Chat should cover right now.
+
+    The authority is the student's LIVE mastery after every Baseline and
+    Follow-up (and Learning Chat) - never the frozen diagnostic list:
+
+    * every live weak Domain is included, so a weakness that only a Follow-up
+      quiz revealed is practised too;
+    * a Domain whose own score is fine but which has a weak Subtopic is included
+      (a Follow-up can re-test only part of a Domain);
+    * inside a Domain the scopes are the currently weak Subtopics, weakest first.
+
+    Only a Domain with no Subtopic evidence at all (legacy papers with no printed
+    Topic) falls back to the diagnostic's printed SLOs or, failing that, to the
+    Domain itself - and says so with ``scope_level`` instead of doing it silently.
+    """
+    from app.services.lms import subtopic_mastery_service
+
+    live = [dict(w) for w in get_weak_topics(student_id) if w.get("topic_id")]
+    weak_subs = subtopic_mastery_service.get_weak_subtopics(student_id)
+    tracked_domains = subtopic_mastery_service.domains_with_subtopic_data(student_id)
+    if not live and not weak_subs:
         raise LMSValidationError(
             "No weak areas found. Complete your diagnostic assessment first."
         )
 
     attempt = None
+    ai_by_topic: Dict[int, dict] = {}
     if diag_id:
         attempt = _latest_diagnostic_attempt(student_id, diag_id)
         if attempt:
-            analysis = analyze_attempt(attempt.id)
-            ai_weak = analysis.get("weak_topics") or []
-            if ai_weak:
-                # Use the AI weak areas (they carry question_ids + names for PDF
-                # section matching) but keep only the ones that are STILL weak in
-                # live mastery — so a second Learning Chat session targets what
-                # the student has not practised yet, instead of re-serving the
-                # frozen diagnostic list every time.
-                live_weak_ids = {w.get("topic_id") for w in weak if w.get("topic_id")}
-                if live_weak_ids:
-                    still_weak = [w for w in ai_weak if w.get("topic_id") in live_weak_ids]
-                    weak = still_weak or ai_weak
-                else:
-                    weak = ai_weak
-    return _attach_approved_slos(weak, attempt, incorrect_only=True)
+            try:
+                analysis = analyze_attempt(attempt.id)
+            except Exception as exc:  # noqa: BLE001 - live mastery is enough
+                logger.warning("Learning Chat: diagnostic analysis unavailable: %s", exc)
+                analysis = {}
+            for area in analysis.get("all_topics") or analysis.get("weak_topics") or []:
+                if area.get("topic_id"):
+                    ai_by_topic.setdefault(int(area["topic_id"]), area)
+
+    areas: Dict[int, dict] = {}
+    for w in live:
+        tid = int(w["topic_id"])
+        ai = ai_by_topic.get(tid) or {}
+        areas[tid] = {
+            "topic_id": tid,
+            "topic_name": w.get("topic_name") or ai.get("topic_name") or "Practice area",
+            "score_percent": w.get("score_percent", ai.get("score_percent", 0)),
+            "question_ids": ai.get("question_ids") or [],
+        }
+    for sub in weak_subs:
+        tid = int(sub.get("domain_topic_id") or 0)
+        if not tid:
+            continue
+        area = areas.setdefault(
+            tid,
+            {
+                "topic_id": tid,
+                "topic_name": sub.get("domain_name") or "Practice area",
+                # Domain itself is not weak: size the queue from its weakest subtopic.
+                "score_percent": sub.get("score_percent", 0),
+                "question_ids": (ai_by_topic.get(tid) or {}).get("question_ids") or [],
+            },
+        )
+        area.setdefault("subtopics", []).append(
+            {
+                "subtopic_id": sub["subtopic_id"],
+                "subtopic_name": sub["subtopic_name"],
+                "score_percent": sub["score_percent"],
+            }
+        )
+
+    legacy = []
+    for tid, area in areas.items():
+        if area.get("subtopics"):
+            area["slo_names"] = [s["subtopic_name"] for s in area["subtopics"]]
+            area["scope_level"] = "subtopic"
+        elif tid in tracked_domains:
+            # Every tracked subtopic here is mastered; the Domain is weak only
+            # through questions with no printed Topic. Practise the Domain.
+            area["scope_level"] = "domain"
+        else:
+            legacy.append(area)
+    if legacy:
+        for area in _attach_approved_slos(legacy, attempt, incorrect_only=True):
+            target = areas[int(area["topic_id"])]
+            if area.get("slo_names"):
+                target["slo_names"] = area["slo_names"]
+                target["scope_level"] = "legacy_diagnostic_slo"
+            else:
+                target["scope_level"] = "domain"
+    for area in areas.values():
+        if area.get("scope_level") == "domain":
+            logger.info(
+                "Learning Chat for student %s: Domain %s has no weak Subtopic evidence; "
+                "practising at Domain level", student_id, area.get("topic_name"),
+            )
+    return sorted(areas.values(), key=lambda a: float(a.get("score_percent") or 0))
 
 
 def _session_topic_ids(session: DeficiencyChatSession) -> set:
@@ -994,8 +1313,16 @@ def _start_topic_session(
             continue
         topic_qs = [x for x in _load_questions(s) if _is_topic(x)]
         if topic_qs and not any(x.get("answered") for x in topic_qs):
-            # a pre-built queue may predate the fail-closed key check
-            queue = [dict(x) for x in topic_qs if x.get("key_verified") or not check_answer_key(x).disproved]
+            # A pre-built queue may predate the fail-closed key check, and the
+            # student may already have been served its stems in a session copied
+            # from it - those stay out so the same question is not shown again.
+            served = _served_question_keys(student_id, exclude_session_id=s.id)
+            queue = [
+                dict(x)
+                for x in topic_qs
+                if (x.get("key_verified") or not check_answer_key(x).disproved)
+                and _question_key(x.get("question_text") or "") not in served
+            ]
             break
     if not queue:
         from app.services.lms import class_service
@@ -1021,6 +1348,8 @@ def _start_topic_session(
             "score_percent": w.get("score_percent", 0),
             "question_ids": w.get("question_ids") or [],
             "slo_names": w.get("slo_names") or [],
+            "subtopics": w.get("subtopics") or [],
+            "scope_level": w.get("scope_level"),
         }
     ]
     session = DeficiencyChatSession(
@@ -1160,6 +1489,8 @@ def start_session(
             "score_percent": w.get("score_percent", 0),
             "question_ids": w.get("question_ids") or [],
             "slo_names": w.get("slo_names") or [],
+            "subtopics": w.get("subtopics") or [],
+            "scope_level": w.get("scope_level"),
         }
         for w in weak
     ]
@@ -1193,15 +1524,34 @@ def prewarm_session(student_id: int) -> bool:
 
     Returns True when a session queue was warmed.
     """
+    warmed = False
     try:
         state = start_session(student_id, force_new=False)
-        return bool(state.get("total_questions"))
+        warmed = bool(state.get("total_questions"))
     except LMSValidationError as exc:
         logger.info("Learning Chat prewarm skipped for student %s: %s", student_id, exc)
-        return False
     except Exception as exc:  # noqa: BLE001 — prewarm must never break submit
         logger.warning("Learning Chat prewarm failed for student %s: %s", student_id, exc)
-        return False
+    # The Learning Path opens one chat per weak Domain. After a Follow-up the
+    # combined session may be an older, refreshed one that does not cover newly
+    # weak subtopics, so warm each Domain's own session too (an open one, or
+    # unanswered pre-built questions, are reused - nothing is generated twice).
+    try:
+        _, _, diag_id = _resolve_all_target_threads(student_id)
+        domains = [int(a["topic_id"]) for a in _practice_weak_areas(student_id, diag_id) if a.get("topic_id")]
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Learning Chat per-topic prewarm skipped for student %s: %s", student_id, exc)
+        domains = []
+    for topic_id in domains:
+        try:
+            if start_session(student_id, topic_id=topic_id).get("total_questions"):
+                warmed = True
+        except LMSValidationError as exc:
+            logger.info("Learning Chat prewarm for topic %s skipped: %s", topic_id, exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Learning Chat prewarm for topic %s failed: %s", topic_id, exc)
+            get_db().rollback()
+    return warmed
 
 
 def get_session(session_id: int, student_id: int) -> dict:
@@ -1240,56 +1590,59 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         raise LMSValidationError("No more questions in this session")
 
     q = questions[idx]
+    # Correct answers stay on this MCQ for Mode B review; Next/advance moves on.
+    if q.get("solved_review") and q.get("correct") is True:
+        result = _session_state(session)
+        result["last_answer"] = {
+            "correct": True,
+            "explanation_available": True,
+            "topic_name": q.get("topic_name"),
+            "stay_on_question": True,
+            "solved": True,
+        }
+        return result
+
     option_count = len(q.get("options") or [])
     if selected_option_index < 0 or (option_count and selected_option_index >= option_count):
         raise LMSValidationError("That option does not exist for this question")
     is_correct = selected_option_index == q.get("correct_option_index")
     already_correct = q.get("correct") is True
+    if getattr(session, "close_reason", None) == "refreshed_after_assessment":
+        session.close_reason = None  # the student has seen the refresh notice
     # Keep the student's latest choice server-side so the tutor can respond to
-    # that misconception. The correct answer remains grading-only and is never
-    # copied into tutor context or the public session payload.
+    # that misconception (Mode A) or confirm it (Mode B). The answer key is
+    # still never copied into the public session payload.
     q["last_selected_option_index"] = selected_option_index
 
-    just_completed = False
     if is_correct:
         q["answered"] = True
         q["correct"] = True
+        q["solved_review"] = True
         if not already_correct:
             session.correct_count += 1
-        session.current_index = idx + 1
-        _reset_tutor_state(session)
-        if session.current_index >= len(questions):
-            session.status = "completed"
-            just_completed = True
-        else:
-            # Adaptive: pick the next question at the new (higher) difficulty.
-            _reorder_pending(session, questions)
+        # Stay on this question for the Mode B worked-solution window.
+        # Advance / reorder / complete / tutor reset happen in advance_session.
     else:
         q["answered"] = True
         q["correct"] = False
+        q.pop("solved_review", None)
 
     _save_questions(session, questions)
     db.commit()
 
-    if just_completed:
-        # Must run after the commit above so questions_json (with this final
-        # answer) is what gets read back - see performance_service docstring.
-        from app.services.lms import performance_service
-        performance_service.update_topic_scores_from_deficiency_session(session_id)
-        _mark_learning_path_chat_complete(student_id)
-
     result = _session_state(session)
     result["last_answer"] = {
         "correct": is_correct,
-        "explanation_available": not is_correct,
+        "explanation_available": True,
         "topic_name": q.get("topic_name"),
-        "stay_on_question": not is_correct,
+        "stay_on_question": True,
+        "solved": bool(is_correct),
     }
     return result
 
 
 def advance_session(session_id: int, student_id: int) -> dict:
-    """Skip the current question (after an incorrect attempt) and close the tutor."""
+    """Leave the current question (after wrong attempt or Mode B solved review)."""
     db = get_db()
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
     if not session or session.student_id != student_id:
@@ -1304,16 +1657,16 @@ def advance_session(session_id: int, student_id: int) -> dict:
     if idx >= len(questions):
         session.status = "completed"
         db.commit()
-        from app.services.lms import performance_service
-        performance_service.update_topic_scores_from_deficiency_session(session_id)
-        _mark_learning_path_chat_complete(student_id)
+        _on_session_completed(session_id, student_id)
         return _session_state(session)
 
     q = questions[idx]
+    was_solved_review = bool(q.get("solved_review") and q.get("correct") is True)
     if not q.get("answered"):
         q["answered"] = True
         q["correct"] = False
-        _save_questions(session, questions)
+    q.pop("solved_review", None)
+    _save_questions(session, questions)
 
     session.current_index = idx + 1
     _reset_tutor_state(session)
@@ -1321,17 +1674,19 @@ def advance_session(session_id: int, student_id: int) -> dict:
     if just_completed:
         session.status = "completed"
     else:
+        # Adaptive reorder after a graded item (correct review or skip-after-wrong).
         _reorder_pending(session, questions)
         _save_questions(session, questions)
     db.commit()
 
     if just_completed:
         # Must run after the commit above so questions_json (with the skipped
-        # question just marked incorrect) is what gets read back.
-        from app.services.lms import performance_service
-        performance_service.update_topic_scores_from_deficiency_session(session_id)
-        _mark_learning_path_chat_complete(student_id)
-    return _session_state(session)
+        # or reviewed question) is what gets read back.
+        _on_session_completed(session_id, student_id)
+    result = _session_state(session)
+    if was_solved_review:
+        result["advanced_from_solved"] = True
+    return result
 
 
 def pause_session(session_id: int, student_id: int) -> dict:
@@ -1339,8 +1694,9 @@ def pause_session(session_id: int, student_id: int) -> dict:
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
     if not session or session.student_id != student_id:
         raise LMSValidationError("Not authorized")
-    session.status = "paused"
-    db.commit()
+    if session.status == "active":  # a completed session stays completed
+        session.status = "paused"
+        db.commit()
     return _session_state(session)
 
 
@@ -1437,7 +1793,15 @@ def explain_with_tutor(
     pdf_excerpt = ""
     pdf_section = (current_q or {}).get("pdf_section") or (current_q or {}).get("topic_name") or ""
     thread_for_excerpt = (current_q or {}).get("rag_thread_id") or session.rag_thread_id
-    if thread_for_excerpt and session.rag_owner_id and pdf_section:
+    if current_q and current_q.get("subtopic_name"):
+        from app.services.lms import class_service as _cs
+
+        pdf_excerpt, _ = _bank_source_text(
+            int(current_q.get("topic_id") or 0), current_q["subtopic_name"],
+            _cs.get_student_grade(student_id), [thread_for_excerpt] if thread_for_excerpt else [],
+        )
+        pdf_excerpt = pdf_excerpt[:4000]
+    if not pdf_excerpt and thread_for_excerpt and session.rag_owner_id and pdf_section:
         pdf_excerpt = get_section_text(
             thread_for_excerpt, session.rag_owner_id, pdf_section, max_chars=4000
         )
@@ -1451,10 +1815,17 @@ def explain_with_tutor(
                     pdf_excerpt = get_section_text(alt_id, session.rag_owner_id, pdf_section, max_chars=4000)
                     if pdf_excerpt.strip():
                         break
+    if _looks_like_answer_key_table(pdf_excerpt):
+        pdf_excerpt = ""  # an answer-key table would hand the tutor the answers
 
     tutor_state = _load_tutor_state(session)
     history = tutor_state.get("messages") or []
     prior_turns = sum(1 for m in history if m.get("role") == "assistant")
+    solved = bool(
+        current_q
+        and current_q.get("solved_review")
+        and current_q.get("correct") is True
+    )
 
     from app.services.lms import class_service
 
@@ -1467,6 +1838,7 @@ def explain_with_tutor(
         grade_level=grade_level,
         prior_turns=prior_turns,
         message=message,
+        solved=solved,
     )
     reply = tutor_service.tutor_chat(
         message,
@@ -1474,10 +1846,33 @@ def explain_with_tutor(
         mode="deficiency",
         context=context,
         history=history,
+        solved=solved,
     )
-    if _reveals_current_mcq_answer(reply, current_q):
+    # Mode A only: block answer-key leaks. Mode B must name the correct option.
+    if not solved and _reveals_current_mcq_answer(reply, current_q):
         logger.warning("Learning Chat tutor answer leak blocked for session %s", session_id)
-        reply = _ANSWER_GUARD_REPLY
+        # Let the model rewrite its own reply (so the student still gets a natural,
+        # on-point answer); the fixed sentence is only the last resort.
+        retry_context = (
+            f"{context}\n\nIMPORTANT: Your previous draft named the correct option/final "
+            "answer of the Current practice question, which is not allowed. Reply to the "
+            "student's latest message again, helping as much as possible, but stop before "
+            "the final answer and do not say which option is correct."
+        )
+        try:
+            reply = tutor_service.tutor_chat(
+                message,
+                api_key=api_key,
+                mode="deficiency",
+                context=retry_context,
+                history=history,
+                solved=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Learning Chat leak-rewrite failed for session %s: %s", session_id, exc)
+            reply = ""
+        if not (reply or "").strip() or _reveals_current_mcq_answer(reply, current_q):
+            reply = _ANSWER_GUARD_REPLY
 
     off_tag = tutor_service.DEFICIENCY_OFF_TOPIC_TAG
     refuse = tutor_service.DEFICIENCY_OFF_TOPIC_REFUSE
@@ -1501,6 +1896,20 @@ def explain_with_tutor(
         "reply": reply,
         "session_id": session_id,
     }
+
+
+def _on_session_completed(session_id: int, student_id: int) -> None:
+    """A student finished a Learning Chat session: feed Domain + Subtopic mastery,
+    then update the learning path. Runs after the session's final commit."""
+    from app.services.lms import performance_service, subtopic_mastery_service
+
+    performance_service.update_topic_scores_from_deficiency_session(session_id)
+    try:
+        subtopic_mastery_service.record_learning_chat_session(session_id)
+    except Exception as exc:  # noqa: BLE001 - Domain mastery is already saved
+        logger.warning("Subtopic mastery update failed for session %s: %s", session_id, exc)
+        get_db().rollback()
+    _mark_learning_path_chat_complete(student_id)
 
 
 def _mark_learning_path_chat_complete(student_id: int) -> None:
@@ -1531,6 +1940,10 @@ def _mark_learning_path_chat_complete(student_id: int) -> None:
     is_enrichment = any(i.item_type == "enrichment" for i in path.items)
     mastery = performance_service.get_student_mastery(student_id)
     still_weak = [m for m in mastery if performance_service.is_weak_mastery(m)]
+    if not still_weak:
+        from app.services.lms import subtopic_mastery_service
+
+        still_weak = subtopic_mastery_service.get_weak_subtopics(student_id)
 
     if is_enrichment or (mastery and not still_weak):
         for item in path.items:

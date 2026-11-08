@@ -92,6 +92,16 @@ def is_admin():
         return False
 
 
+# ==================== TARGET PDF QUESTION BANK REVIEW ====================
+
+@bp.route('/target-bank')
+@login_required
+@admin_only
+def target_bank_review():
+    """Review extracted Target PDF MCQs (page preview, rendering, checks) before publishing."""
+    return render_template('admin/target_bank_review.html')
+
+
 # ==================== DASHBOARD ====================
 
 @bp.route('/')

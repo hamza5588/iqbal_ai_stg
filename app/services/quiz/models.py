@@ -88,6 +88,9 @@ class MCQQuestion(BaseModel):
         None,
         description="Optional PDF difficulty label when present; omit when absent",
     )
+    # Printed per-question metadata (DIL papers: "Cognitive Level: X | Difficulty: Y").
+    cognitive_level: Optional[str] = Field(None, description="Cognitive level printed on the paper; omit when absent")
+    printed_difficulty: Optional[str] = Field(None, description="Difficulty label exactly as printed; omit when absent")
     conversion_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
     preserve_option_order: bool = Field(
         default=False,

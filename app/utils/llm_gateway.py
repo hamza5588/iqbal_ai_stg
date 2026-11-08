@@ -211,8 +211,9 @@ _DEFAULT_MODEL_PRICING: dict[tuple[str, str], tuple[float, float]] = {
     ("groq", "openai/gpt-oss-120b"): (0.15, 0.60),
     ("groq", "llama-3.3-70b-versatile"): (0.59, 0.79),
     ("groq", "llama-3.1-8b-instant"): (0.05, 0.08),
-    ("groq", "qwen/qwen3.8-27b"): (0.60, 3.00),
-    ("groq", "qwen/qwen3.6-27b"): (0.60, 3.00),
+    # Groq list price for Qwen 3.8 27B (vision): $0.80 in / $4.00 out per 1M.
+    ("groq", "qwen/qwen3.8-27b"): (0.80, 4.00),
+    ("groq", "qwen/qwen3.6-27b"): (0.80, 4.00),
     ("groq", "qwen/qwen3-32b"): (0.29, 0.59),  # retired on Groq; kept for historical telemetry
     ("groq", "mixtral-8x7b-32768"): (0.24, 0.24),
     ("openai", "gpt-4o"): (2.5, 10.0),

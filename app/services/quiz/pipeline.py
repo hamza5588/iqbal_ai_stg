@@ -356,6 +356,16 @@ def run_pdf_quiz_pipeline(
                     "Hybrid vision is not configured: missing Groq API key. "
                     "Set GROQ_API_KEY on the server or save it in Admin → Settings."
                 ) from hybrid_exc
+            from app.services.quiz.hybrid_vision_pipeline import is_transient_provider_error
+
+            if is_transient_provider_error(hybrid_exc):
+                # Provider outage (e.g. Groq 503 "over capacity") after retries:
+                # the document was never judged - never call it a bad format.
+                raise LMSValidationError(
+                    "The AI extraction service is temporarily over capacity, so this PDF could not be "
+                    "read right now. The document was NOT rejected - please try the upload again in a "
+                    "few minutes."
+                ) from hybrid_exc
             raise AssessmentDocValidationError(
                 detail=f"Hybrid vision extraction failed. {msg}"
             ) from hybrid_exc

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Question Bank Review</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <style>
+    :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --bg:#f8fafc; --card:#fff; --blue:#1d4ed8;
+            --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+    header { padding:16px; background:var(--card); border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    header h1 { font-size:18px; margin:0 12px 0 0; }
+    main { padding:16px; max-width:1200px; margin:0 auto; }
+    select, input, button, textarea { font:inherit; }
+    button { cursor:pointer; border:1px solid var(--line); background:var(--card); padding:6px 12px; border-radius:6px; }
+    button.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
+    button.danger { color:var(--bad); }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .stats span { margin-right:14px; }
+    .item { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; margin:12px 0; display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:16px; }
+    @media (max-width: 800px) { .item { grid-template-columns: 1fr; } }
+    .preview img { max-width:100%; border:1px solid var(--line); border-radius:4px; }
+    .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line); }
+    .s-auto_verified { color:var(--ok); border-color:var(--ok); }
+    .s-needs_review { color:var(--warn); border-color:var(--warn); }
+    .s-approved { color:#fff; background:var(--ok); border-color:var(--ok); }
+    .s-rejected { color:#fff; background:var(--bad); border-color:var(--bad); }
+    .opt { padding:4px 8px; border:1px solid var(--line); border-radius:6px; margin:4px 0; }
+    .opt.correct { border-color:var(--ok); background:#f0fdf4; }
+    .checks li.fail { color:var(--bad); }
+    .checks li.warn { color:var(--warn); }
+    .muted { color:var(--muted); }
+    .edit textarea, .edit input { width:100%; margin:3px 0; padding:5px; border:1px solid var(--line); border-radius:4px; }
+    .upload { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Target PDF Question Bank Review</h1>
+  <select id="doc" aria-label="Document"></select>
+  <select id="status" aria-label="Status filter">
+    <option value="needs_review">Needs review</option>
+    <option value="auto_verified">Auto-verified</option>
+    <option value="approved">Approved</option>
+    <option value="rejected">Rejected</option>
+    <option value="">All</option>
+  </select>
+  <button id="bulk" class="primary" title="Approves every auto-verified item of this PDF. Items needing review are approved one by one.">Approve all auto-verified in this PDF</button>
+  <a href="/admin/" class="muted">Back to admin</a>
+</header>
+<main>
+  <details class="upload">
+    <summary><b>Import a Target PDF question bank</b></summary>
+    <p class="muted">Printed MCQs are extracted from the PDF itself (no AI rewriting). Nothing reaches students until approved here.</p>
+    <form id="importForm" class="row">
+      <input type="file" name="file" accept="application/pdf" required>
+      <input name="grade_level" placeholder="Grade (e.g. 9)" required style="width:140px">
+      <button class="primary" type="submit">Import</button>
+      <span id="importMsg" class="muted"></span>
+    </form>
+  </details>
+  <div id="summary" class="stats muted"></div>
+  <div id="items"></div>
+  <div class="row"><button id="prev">Previous</button><span id="pageInfo" class="muted"></span><button id="next">Next</button></div>
+</main>
+<script>
+(function () {
+  var PAGE = 20, offset = 0, docs = [], items = [];
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  async function api(url, opts) {
+    var res = await fetch(url, Object.assign({ credentials: 'same-origin' }, opts || {}));
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok || body.success === false) throw new Error((body.error && (body.error.message || body.error)) || body.message || ('HTTP ' + res.status));
+    return body.data !== undefined ? body.data : body;
+  }
+  function typeset(el) { if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([el]).catch(function () {}); }
+
+  async function loadDocs(selectId) {
+    docs = await api('/api/lms/target-bank/documents');
+    var sel = document.getElementById('doc');
+    sel.innerHTML = docs.length ? docs.map(function (d) {
+      return '<option value="' + d.document_id + '">' + esc(d.filename) + ' — grade ' + esc(d.grade_level) + '</option>';
+    }).join('') : '<option value="">No documents imported yet</option>';
+    if (selectId) sel.value = String(selectId);
+    offset = 0;
+    if (firstLoad) { pickDefaultStatus(); firstLoad = false; }
+    updateBulkButton();
+    await loadItems();
+  }
+
+  // Open on the items that need the admin's action: auto-verified ones first (bulk
+  // approvable), then needs-review. A ?status= in the URL always wins.
+  var firstLoad = true;
+  var statusFromUrl = new URLSearchParams(location.search).get('status');
+  function pickDefaultStatus() {
+    if (statusFromUrl !== null) { document.getElementById('status').value = statusFromUrl; statusFromUrl = null; return; }
+    var counts = (currentDoc() || {}).status_counts || {};
+    document.getElementById('status').value = counts.auto_verified ? 'auto_verified' : (counts.needs_review ? 'needs_review' : '');
+  }
+  function updateBulkButton() {
+    var counts = (currentDoc() || {}).status_counts || {};
+    var bulk = document.getElementById('bulk');
+    bulk.textContent = 'Approve all auto-verified in this PDF (' + (counts.auto_verified || 0) + ')';
+    bulk.disabled = !counts.auto_verified;
+  }
+
+  function currentDoc() { return docs.find(function (d) { return String(d.document_id) === document.getElementById('doc').value; }); }
+
+  async function loadItems() {
+    var d = currentDoc();
+    var box = document.getElementById('items');
+    if (!d) { box.innerHTML = ''; document.getElementById('summary').textContent = ''; return; }
+    var counts = d.status_counts || {}, st = d.stats || {};
+    document.getElementById('summary').innerHTML =
+      '<span>' + (st.questions_extracted || 0) + ' extracted</span><span>' + (st.answer_key_entries || 0) + ' answer-key rows</span>' +
+      ['auto_verified', 'needs_review', 'approved', 'rejected'].map(function (k) { return '<span class="badge s-' + k + '">' + k.replace('_', ' ') + ': ' + (counts[k] || 0) + '</span>'; }).join(' ') +
+      (st.warnings && st.warnings.length ? '<div>' + st.warnings.map(esc).join('<br>') + '</div>' : '');
+    var status = document.getElementById('status').value;
+    box.innerHTML = '<p class="muted">Loading…</p>';
+    var data = await api('/api/lms/target-bank/documents/' + d.document_id + '/items?limit=' + PAGE + '&offset=' + offset + (status ? '&status=' + status : ''));
+    items = data.items || [];
+    document.getElementById('pageInfo').textContent = data.total ? (offset + 1) + '–' + Math.min(offset + PAGE, data.total) + ' of ' + data.total : 'No items';
+    box.innerHTML = items.map(itemHtml).join('') || '<p class="muted">Nothing here.</p>';
+    typeset(box);
+  }
+
+  function itemHtml(it) {
+    var reg = (it.regions || [])[0];
+    var img = reg ? '/api/lms/target-bank/documents/' + it.document_id + '/pages/' + reg.page + '.png?bbox=' + reg.bbox.map(function (v) { return v.toFixed(1); }).join(',') : null;
+    var rep = it.report || {};
+    var checks = (rep.checks || []).filter(function (c) { return !c.ok; });
+    var blocking = rep.blocking || [], warnings = rep.warnings || [];
+    return '<section class="item" id="it-' + it.item_id + '">' +
+      '<div class="preview"><div class="row"><b>Q' + it.source_question_number + '</b><span class="badge s-' + it.verification_status + '">' + esc(it.verification_status.replace('_', ' ')) + '</span>' +
+      '<span class="muted">page ' + esc(it.source_page) + '</span></div>' +
+      (img ? '<p class="muted">Original PDF:</p><img loading="lazy" alt="Original question on page ' + esc(it.source_page) + '" src="' + img + '">' : '') +
+      '<p class="muted" style="margin-top:8px">Full page: ' + (it.regions || []).map(function (r) {
+        return '<a target="_blank" href="/api/lms/target-bank/documents/' + it.document_id + '/pages/' + r.page + '.png">p' + r.page + '</a>';
+      }).join(' ') + '</p></div>' +
+      '<div><p class="muted">As students will see it:</p><div><b>' + it.question_render + '</b></div>' +
+      (it.options || []).map(function (o) {
+        return '<div class="opt' + (o.label === it.correct_label ? ' correct' : '') + '"><b>' + esc(o.label) + '.</b> ' + o.render + (o.label === it.correct_label ? ' <span class="muted">(answer key)</span>' : '') + '</div>';
+      }).join('') +
+      '<p><b>Domain:</b> ' + esc(it.domain_name || it.printed_domain || '—') + ' &nbsp; <b>Subtopic:</b> ' + esc(it.subtopic_name || it.printed_topic || '—') +
+      ' <span class="muted">(' + esc(it.mapping_status) + ')</span></p>' +
+      (blocking.length || warnings.length ? '<ul class="checks">' + blocking.map(function (b) { return '<li class="fail">' + esc(b) + '</li>'; }).join('') +
+        warnings.map(function (w) { return '<li class="warn">' + esc(w) + '</li>'; }).join('') + '</ul>' : '<p style="color:var(--ok)">All automated checks passed (' + (rep.checks || []).length + ').</p>') +
+      (checks.length ? '' : '') +
+      (it.history && it.history.length ? '<p class="muted">History: ' + it.history.map(function (h) { return esc(h.action) + ' ' + esc((h.at || '').slice(0, 16)); }).join('; ') + '</p>' : '') +
+      '<div class="row">' +
+      (it.verification_status !== 'approved' ? '<button class="primary" data-act="approve" data-id="' + it.item_id + '">' + (it.verification_status === 'needs_review' ? 'I checked it against the page — approve' : 'Approve') + '</button>' : '') +
+      (it.verification_status !== 'rejected' ? '<button class="danger" data-act="reject" data-id="' + it.item_id + '">Reject</button>' : '') +
+      '<button data-act="edit" data-id="' + it.item_id + '">Correct…</button></div>' +
+      '<div class="edit" id="edit-' + it.item_id + '" hidden>' +
+      '<label>Question<textarea rows="3" data-f="question_text">' + esc(it.question_text) + '</textarea></label>' +
+      (it.options || []).map(function (o, i) { return '<label>' + o.label + '<input data-f="opt" data-i="' + i + '" value="' + esc(o.text) + '"></label>'; }).join('') +
+      '<label>Answer (A–D)<input data-f="correct_label" value="' + esc(it.correct_label) + '" maxlength="1"></label>' +
+      '<label>Printed Domain<input data-f="printed_domain" value="' + esc(it.printed_domain || '') + '"></label>' +
+      '<label>Printed Topic (subtopic)<input data-f="printed_topic" value="' + esc(it.printed_topic || '') + '"></label>' +
+      '<p class="muted">Use Unicode scripts (x², log₂) or ^( ) / _( ). Saving keeps the original in history and sends the item back to review.</p>' +
+      '<button class="primary" data-act="save" data-id="' + it.item_id + '">Save correction</button></div></div></section>';
+  }
+
+  document.getElementById('items').addEventListener('click', async function (e) {
+    var btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    var id = Number(btn.getAttribute('data-id')), act = btn.getAttribute('data-act');
+    try {
+      if (act === 'edit') { var ed = document.getElementById('edit-' + id); ed.hidden = !ed.hidden; return; }
+      btn.disabled = true;
+      if (act === 'approve') {
+        var r = await api('/api/lms/target-bank/items/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_ids: [id], reviewed_individually: true }) });
+        if (r.skipped && r.skipped.length) alert('Not approved: ' + r.skipped[0].reason);
+      } else if (act === 'reject') {
+        var reason = prompt('Reason for rejecting (optional):') || '';
+        await api('/api/lms/target-bank/items/reject', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_ids: [id], reason: reason }) });
+      } else if (act === 'save') {
+        var box = document.getElementById('edit-' + id), changes = { options: [] };
+        box.querySelectorAll('[data-f]').forEach(function (el) {
+          var f = el.getAttribute('data-f');
+          if (f === 'opt') changes.options[Number(el.getAttribute('data-i'))] = el.value; else changes[f] = el.value;
+        });
+        await api('/api/lms/target-bank/items/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) });
+      }
+      await loadDocs(document.getElementById('doc').value);
+    } catch (err) { alert(err.message); btn.disabled = false; }
+  });
+
+  document.getElementById('bulk').addEventListener('click', async function () {
+    var d = currentDoc();
+    if (!d) return;
+    var ids = [];
+    try {
+      for (var off = 0; ; off += 200) {
+        var page = await api('/api/lms/target-bank/documents/' + d.document_id + '/items?status=auto_verified&limit=200&offset=' + off);
+        (page.items || []).forEach(function (i) { ids.push(i.item_id); });
+        if (!(page.items || []).length || ids.length >= (page.total || 0)) break;
+      }
+    } catch (err) { alert(err.message); return; }
+    if (!ids.length) { alert('This PDF has no auto-verified items left to approve.'); return; }
+    if (!confirm('Approve ' + ids.length + ' auto-verified question(s)? Items needing review are never bulk-approved.')) return;
+    try {
+      var r = await api('/api/lms/target-bank/items/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_ids: ids }) });
+      alert('Approved ' + r.approved.length + (r.skipped.length ? ', skipped ' + r.skipped.length : ''));
+      await loadDocs(document.getElementById('doc').value);
+    } catch (err) { alert(err.message); }
+  });
+
+  document.getElementById('importForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var msg = document.getElementById('importMsg');
+    msg.textContent = 'Extracting and verifying…';
+    try {
+      var r = await api('/api/lms/target-bank/import', { method: 'POST', body: new FormData(e.target) });
+      msg.textContent = 'Imported: ' + JSON.stringify(r.status_counts);
+      await loadDocs(r.document_id);
+    } catch (err) { msg.textContent = err.message; }
+  });
+
+  document.getElementById('doc').addEventListener('change', function () { offset = 0; pickDefaultStatus(); updateBulkButton(); loadItems(); });
+  document.getElementById('status').addEventListener('change', function () { offset = 0; loadItems(); });
+  document.getElementById('prev').addEventListener('click', function () { offset = Math.max(0, offset - PAGE); loadItems(); });
+  document.getElementById('next').addEventListener('click', function () { offset += PAGE; loadItems(); });
+  loadDocs(new URLSearchParams(location.search).get('document')).catch(function (err) { document.getElementById('items').innerHTML = '<p style="color:var(--bad)">' + esc(err.message) + '</p>'; });
+})();
+</script>
+</body>
+</html>

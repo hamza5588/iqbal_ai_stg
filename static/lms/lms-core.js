@@ -338,10 +338,19 @@
   }
 
   function lmsPromoteLogUnderscore(s) {
-    // log_a 8 → \log_{a} 8. Never rematch already-TeX "\log" (that doubles \).
+    // log_a 8 / flattened log2 x → \log_{a} 8 / \log_{2} x.
+    // Never rematch already-TeX "\log" (that doubles \).
     return lmsMapOutsideMath(String(s || ''), function (chunk) {
-      return chunk.replace(
+      var out = chunk.replace(
         /(^|[^\\A-Za-z0-9_])(log|ln)\s*_\{?([A-Za-z0-9]+)\}?/gi,
+        function (_m, pre, fn, base) {
+          var cmd = String(fn).toLowerCase() === 'ln' ? '\\ln' : '\\log';
+          return pre + cmd + '_{' + base + '}';
+        }
+      );
+      // PDF text layers often flatten log₂x to "log2 x".
+      return out.replace(
+        /(^|[^\\A-Za-z0-9_])(log|ln)(\d+)\b/gi,
         function (_m, pre, fn, base) {
           var cmd = String(fn).toLowerCase() === 'ln' ? '\\ln' : '\\log';
           return pre + cmd + '_{' + base + '}';
@@ -395,6 +404,9 @@
   var _ALG_TERM = '(?:-?\\d*(?:[A-Za-z](?:\\^\\{[^}]+\\}|\\^[A-Za-z0-9]+|\\d+)*)+|-?\\d+)';
   var _ALG_ISLAND_RE = new RegExp(_ALG_TERM + '(?:\\s*[+\\-×÷=]\\s*' + _ALG_TERM + ')+', 'g');
   var _POWER_ISLAND_RE = /[A-Za-z](?:\d+)?(?:\^\{[^}]+\}|\^[A-Za-z0-9]+)(?:\s*=\s*[A-Za-z0-9]+)?/g;
+  // Parenthesized bases with a trailing power: (a+b)^{2}, (3x-2)^2.
+  // Letter-only _POWER_ISLAND_RE misses these and left raw "^{2}" in quiz stems.
+  var _PAREN_POWER_ISLAND_RE = /\([^()]{0,40}\)\s*\^\s*(?:\{[^{}]+\}|-?\d+|[A-Za-z])/g;
   var _LOG_EQ_RE = /\\log(?:_\{[^}]+\}|_[A-Za-z0-9]+)?(?:\s*\([^)]*\)|\s+[0-9A-Za-z]+)(?:\s*=\s*(?:\\frac\{[^{}]+\}\{[^{}]+\}|[A-Za-z0-9\\^{}_+\-/]+))?/g;
   var _LOG_CALL_RE = /\\log(?:_\{[^}]+\}|_[A-Za-z0-9]+)?\s*\([^)]{0,60}\)/g;
   var _TIMES_PAIR_RE = /(\d+(?:\.\d+)?)\s*(?:\\times|×)\s*(\d+(?:\.\d+)?)/g;
@@ -789,6 +801,9 @@
       });
       chunk = lmsMapOutsideMath(chunk, function (c) {
         return c.replace(_FRAC_RE, function (m) { return lmsWrapMathChunk(m, inline); });
+      });
+      chunk = lmsMapOutsideMath(chunk, function (c) {
+        return c.replace(_PAREN_POWER_ISLAND_RE, function (m) { return lmsWrapMathChunk(m, true); });
       });
       chunk = lmsMapOutsideMath(chunk, function (c) {
         return c.replace(_ALG_ISLAND_RE, function (m) { return lmsWrapMathChunk(m, true); });

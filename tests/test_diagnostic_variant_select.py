@@ -20,6 +20,7 @@ def _load():
             sys.modules[name] = types.ModuleType(name)
         sys.modules["app.models.lms_models"].Assessment = object
         sys.modules["app.models.lms_models"].Question = object
+        sys.modules["app.models.lms_models"].AssessmentAttempt = object  # imported by the module since retakes
         sys.modules["app.services.lms.assessment_service"].get_assessment = lambda *_a, **_k: None
         sys.modules["app.services.lms.mcq_utils"].options_from_json = lambda *_a, **_k: []
         sys.modules["app.services.lms.mcq_utils"].pick_display_fields = lambda *a, **_k: (a[0] if a else "", None)

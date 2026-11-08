@@ -12,10 +12,41 @@
     weak: 'Still learning'
   };
 
+  // Live Domain -> weak Subtopic breakdown (learning_path.weak_areas), keyed by Domain id.
+  function weakAreasByDomain() {
+    var d = window.sdDashboard || {};
+    var out = {};
+    (((d.learning_path || {}).weak_areas) || []).forEach(function (w) { out[w.domain_topic_id] = w; });
+    return out;
+  }
+
+  function subtopicListHtml(area) {
+    if (!area || !area.subtopics || !area.subtopics.length) {
+      return area && area.scope_level === 'domain'
+        ? '<p class="sd-note" style="margin:8px 0 0;">Practised at topic level (this paper did not list subtopics).</p>'
+        : '';
+    }
+    return '<div class="sd-subtopics" style="margin-top:10px;"><div class="sd-label" style="margin-bottom:4px;">Weak subtopics</div>' +
+      area.subtopics.map(function (s) {
+        var pct = s.score_percent != null ? Math.round(s.score_percent) + '%' : '—';
+        var practice = (GUIDED_PRACTICE_ENABLED && s.guided_practice_available)
+          ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(area.domain_topic_id) + ',' + Number(s.subtopic_id) + ')"><i class="fas fa-dumbbell"></i> Practice (' + Number(s.guided_practice_available) + ')</button>'
+          : '<span class="sd-pill grey" title="Your teacher has not published verified questions for this subtopic yet">No practice questions yet</span>';
+        return '<div class="sd-meta-line" style="align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;">' +
+          '<b>' + escapeHtml(s.subtopic_name) + '</b><span>' + pct + '</span>' + practice +
+          '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openDeficiencyChat(false, \'practice\', ' + Number(area.domain_topic_id) + ')">Learning Chat</button></div>';
+      }).join('') + '</div>';
+  }
+
   function topicRows() {
     var d = window.sdDashboard || {};
     var weakIds = {};
     (d.weak_topics || []).forEach(function (t) { weakIds[t.topic_id] = true; });
+    // A Domain whose own score is full can still have a weak Subtopic.
+    var areas = weakAreasByDomain();
+    Object.keys(areas).forEach(function (id) {
+      if ((areas[id].subtopics || []).length) weakIds[id] = true;
+    });
     var rows = (d.mastery || []).map(function (m) {
       return Object.assign({}, m, { isWeak: !!weakIds[m.topic_id] });
     });
@@ -37,9 +68,11 @@
       '<div><span class="sd-label">Score</span><b>' + (pct != null ? pct + '%' : '—') + '</b></div>' +
       (t.last_assessed_at ? '<div><span class="sd-label">Last assessed</span><b><i class="far fa-calendar"></i> ' + escapeHtml(window.sdFmtDate(t.last_assessed_at)) + '</b></div>' : '');
     var side;
+    var area = weakAreasByDomain()[t.topic_id];
+    var practiceAvailable = !!(area && (area.subtopics || []).some(function (s) { return s.guided_practice_available; }));
     if (t.isWeak) {
       side = '<span class="sd-pill green">Available</span>' +
-        (GUIDED_PRACTICE_ENABLED && t.topic_id ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')"><i class="fas fa-dumbbell"></i> Guided practice</button>' : '') +
+        (GUIDED_PRACTICE_ENABLED && t.topic_id && practiceAvailable ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')"><i class="fas fa-dumbbell"></i> Guided practice</button>' : '') +
         '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" data-testid="topic-chat-btn" onclick="openDeficiencyChat(false, \'practice\', ' + (Number(t.topic_id) || 0) + ')">Start Learning Chat <i class="fas fa-chevron-right"></i></button>';
     } else {
       side = '<span class="sd-pill grey">Completed</span>' +
@@ -63,13 +96,13 @@
         '<div><div class="sd-block-title" style="color:var(--sd-green);">Status</div>' +
         '<div class="sd-improve-grid"><div class="sd-improve-box strong"><b>' + (pct != null ? pct + '%' : '—') + '</b><small>' +
         escapeHtml(STATUS_LABEL[t.mastery_status] || 'Cleared') + '</small><div class="sd-frac">Not a weak area any more</div></div></div>' +
-        (GUIDED_PRACTICE_ENABLED && t.topic_id ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" style="margin-top:12px;" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')">Practice again</button>' : '') +
         '</div></div></div>';
     }
     var bar = t.isWeak ? 'purple' : 'grey';
     return '<div class="sd-list-row" data-topic-row="' + (t.isWeak ? 'weak' : 'done') + '"><div class="sd-num-bar ' + bar + '"><i class="fas fa-book-open"></i></div>' +
       '<div class="sd-row-body"><div class="sd-row-top"><div class="sd-title-chip"><div class="sd-avatar-sm purple"><i class="fas fa-book-open"></i></div>' +
-      '<div><h3>' + escapeHtml(name) + ' Learning Path</h3><div class="sd-meta-line">' + meta + '</div></div></div>' +
+      '<div><h3>' + escapeHtml(name) + ' Learning Path</h3><div class="sd-meta-line">' + meta + '</div>' +
+      (t.isWeak ? subtopicListHtml(area) : '') + '</div></div>' +
       '<div class="sd-side-actions">' + side + '</div></div>' + result + '</div></div>';
   }
 
