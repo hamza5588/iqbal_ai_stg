@@ -446,6 +446,8 @@ class AttemptAnswer(Base):
     question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
     selected_option_index = Column(Integer, nullable=True)
     is_correct = Column(Boolean, nullable=True)
+    # Actual seconds the student spent viewing this question (client dwell).
+    time_spent_seconds = Column(Integer, nullable=True)
 
     attempt = relationship("AssessmentAttempt", back_populates="answers")
 
@@ -758,6 +760,7 @@ class PracticeAttempt(Base):
     selected_option_index = Column(Integer, nullable=True)
     is_correct = Column(Boolean, nullable=True)
     hint_level_used = Column(Integer, nullable=False, default=0, server_default="0")
+    time_spent_seconds = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
 
     session = relationship("PracticeSession", back_populates="attempts")
@@ -1086,6 +1089,7 @@ class GuidedPracticeAttempt(Base):
     status = Column(String(32), nullable=False, default="served", server_default="served")
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     answered_at = Column(DateTime, nullable=True)
+    time_spent_seconds = Column(Integer, nullable=True)
     # Four-parameter match that chose this item: 1 = Domain+Topic+Cognitive+Difficulty,
     # 2 = +Cognitive, 3 = +Difficulty, 4 = Domain+Topic only. NULL for legacy rows.
     match_priority = Column(Integer, nullable=True)

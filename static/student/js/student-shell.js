@@ -293,8 +293,17 @@
     var unanswered = r.unanswered_count > 0 ? '<div class="sd-note">' + Math.round(r.unanswered_count) + ' unanswered · scored as 0</div>' : '';
     var timeOver = (r.time_over || r.timed_out)
       ? '<div class="sd-note" style="color:var(--sd-amber);">' + escapeHtml(r.message || 'Time ran out — the questions you answered were scored.') + '</div>' : '';
+    var fmtDur = (typeof window.lmsFormatDuration === 'function')
+      ? window.lmsFormatDuration
+      : function (sec) { return Math.max(0, Math.floor(Number(sec) || 0)) + 's'; };
+    var timings = r.question_timings || [];
+    var timeNote = '';
+    if (r.total_time_spent_seconds > 0) {
+      timeNote = '<div class="sd-note">Time on questions: ' + fmtDur(r.total_time_spent_seconds) +
+        (r.avg_time_spent_seconds > 0 ? ' · avg ' + fmtDur(r.avg_time_spent_seconds) + ' / question' : '') + '</div>';
+    }
     var col1 = '<div class="sd-score-big"><b class="' + pctClass(pct) + '">' + (pct != null ? pct + '%' : '—') + '</b>' +
-      '<span>' + escapeHtml(line) + '</span>' + unanswered + timeOver +
+      '<span>' + escapeHtml(line) + '</span>' + unanswered + timeOver + timeNote +
       (pct != null ? '<span class="sd-progress-track"><span class="sd-progress-fill' + (pct >= 70 ? ' green' : '') + '" style="width:' + Math.max(0, Math.min(100, pct)) + '%;"></span></span>' : '') +
       '</div>';
 
@@ -307,9 +316,19 @@
           return '<tr><td>' + escapeHtml(t.topic_name || ('Topic #' + t.topic_id)) + '</td><td>' + sc + '</td><td>' + sp + '</td></tr>';
         }).join('') + '</tbody></table>'
       : '<p class="sd-note">No topic breakdown for this attempt.</p>';
+    var timingTable = '';
+    if (timings.length && timings.some(function (t) { return (t.time_spent_seconds || 0) > 0; })) {
+      timingTable = '<div style="margin-top:12px;"><div class="sd-block-title">Time per question</div>' +
+        '<table class="sd-mini"><thead><tr><th>#</th><th>Time</th><th>Result</th></tr></thead><tbody>' +
+        timings.map(function (t) {
+          var res = !t.answered ? '—' : (t.is_correct === true ? '✓' : (t.is_correct === false ? '✗' : 'answered'));
+          return '<tr><td>Q' + (t.question_number || '') + '</td><td>' +
+            fmtDur(t.time_spent_seconds || 0) + '</td><td>' + res + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
     var weak = r.weak_topics || [];
     var strong = r.strong_topics || [];
-    var col2 = '<div><div class="sd-block-title">Topic-wise performance</div>' + table +
+    var col2 = '<div><div class="sd-block-title">Topic-wise performance</div>' + table + timingTable +
       ((weak.length || strong.length) ? '<p class="sd-note">Grouped by topic below — each tile is that topic\'s own score, already included in the number above.</p>' : '') +
       '</div>';
     var col3 = '<div><div class="sd-block-title red">Areas to improve</div>' +

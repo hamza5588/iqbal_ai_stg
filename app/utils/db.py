@@ -593,6 +593,27 @@ def init_db(app):
                 logger.warning(f"rag_threads gk_consent migration warning: {str(e)}")
                 db.rollback()
 
+            # Migration: per-question dwell time (quiz/diagnostic + guided practice)
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                tables_cols = {
+                    "attempt_answers": "time_spent_seconds",
+                    "lms_guided_practice_attempts": "time_spent_seconds",
+                    "practice_attempts": "time_spent_seconds",
+                }
+                for table_name, col_name in tables_cols.items():
+                    if table_name not in inspector.get_table_names():
+                        continue
+                    columns = [col["name"] for col in inspector.get_columns(table_name)]
+                    if col_name not in columns:
+                        logger.info("Adding %s to %s...", col_name, table_name)
+                        db.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} INTEGER"))
+                        db.commit()
+            except Exception as e:
+                logger.warning("per-question time_spent_seconds migration warning: %s", e)
+                db.rollback()
+
             # Run RAG migration (add new columns, create rag_chunks table)
             try:
                 import sys

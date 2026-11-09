@@ -839,11 +839,23 @@ def save_attempt_answer(attempt_id: int):
         attempt = attempt_service.get_attempt(attempt_id)
         if attempt.student_id != _current_user_id():
             return json_error("Forbidden", code="forbidden", status=403)
-        status = attempt_service.save_answer(
-            attempt_id,
-            int(body["question_id"]),
-            int(body["selected_option_index"]),
-        )
+        question_id = int(body["question_id"])
+        time_spent = body.get("time_spent_seconds")
+        if "selected_option_index" not in body:
+            # Dwell-only ping (navigate away / heartbeat without changing the answer).
+            status = attempt_service.save_answer(
+                attempt_id,
+                question_id,
+                time_spent_seconds=time_spent,
+                time_only=True,
+            )
+        else:
+            status = attempt_service.save_answer(
+                attempt_id,
+                question_id,
+                int(body["selected_option_index"]),
+                time_spent_seconds=time_spent,
+            )
         return json_success(status)
     except (KeyError, TypeError, ValueError) as e:
         return json_error(str(e), code="validation_error")
@@ -887,6 +899,14 @@ def submit_attempt(attempt_id: int):
             return json_error("Forbidden", code="forbidden", status=403)
         body = request.get_json(silent=True) or {}
         time_expired = bool(body.get("time_expired") or body.get("timed_out"))
+        raw_times = body.get("question_times") or {}
+        if isinstance(raw_times, dict) and raw_times:
+            try:
+                times = {int(k): int(v) for k, v in raw_times.items()}
+            except (TypeError, ValueError):
+                times = {}
+            if times:
+                attempt_service.record_question_times(attempt_id, times)
         from app.utils.llm_gateway import llm_workflow
 
         with llm_workflow(
@@ -2346,7 +2366,10 @@ def deficiency_chat_answer(session_id: int):
     try:
         return json_success(
             deficiency_chat_service.submit_answer(
-                session_id, _current_user_id(), int(body["selected_option_index"])
+                session_id,
+                _current_user_id(),
+                int(body["selected_option_index"]),
+                time_spent_seconds=body.get("time_spent_seconds"),
             )
         )
     except (KeyError, TypeError, ValueError):
@@ -2361,8 +2384,15 @@ def deficiency_chat_advance(session_id: int):
     """Move to the next Learning Chat question and close the tutor."""
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
     try:
-        return json_success(deficiency_chat_service.advance_session(session_id, _current_user_id()))
+        return json_success(
+            deficiency_chat_service.advance_session(
+                session_id,
+                _current_user_id(),
+                time_spent_seconds=body.get("time_spent_seconds"),
+            )
+        )
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 
@@ -2535,7 +2565,14 @@ def guided_practice_answer(attempt_id: int):
         position = int(body.get("position"))
     except (TypeError, ValueError):
         return json_error("position is required", code="validation_error")
-    return json_success(guided_practice_service.submit_answer(_current_user_id(), attempt_id, position))
+    return json_success(
+        guided_practice_service.submit_answer(
+            _current_user_id(),
+            attempt_id,
+            position,
+            time_spent_seconds=body.get("time_spent_seconds"),
+        )
+    )
 
 
 @bp.route("/guided-practice/history", methods=["GET"])

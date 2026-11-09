@@ -424,7 +424,7 @@ def _serve_payload(attempt: GuidedPracticeAttempt, item: TargetBankItem, elig: d
     }
 
 
-def submit_answer(student_id: int, attempt_id: int, position: int) -> dict:
+def submit_answer(student_id: int, attempt_id: int, position: int, time_spent_seconds=None) -> dict:
     db = get_db()
     attempt = (
         db.query(GuidedPracticeAttempt)
@@ -445,6 +445,12 @@ def submit_answer(student_id: int, attempt_id: int, position: int) -> dict:
     attempt.is_correct = original == question.correct_option_index
     attempt.status = "answered"
     attempt.answered_at = datetime.utcnow()
+    if time_spent_seconds is not None:
+        try:
+            sec = max(0, min(int(time_spent_seconds), 2 * 60 * 60))
+            attempt.time_spent_seconds = max(int(attempt.time_spent_seconds or 0), sec)
+        except (TypeError, ValueError):
+            pass
     db.commit()
     try:
         subtopic_mastery_service.record_guided_practice(attempt)
@@ -456,6 +462,7 @@ def submit_answer(student_id: int, attempt_id: int, position: int) -> dict:
         "correct": bool(attempt.is_correct),
         "correct_position": correct_position,
         "correct_label": _LABELS[correct_position] if correct_position is not None else None,
+        "time_spent_seconds": attempt.time_spent_seconds,
     }
 
 
@@ -475,6 +482,7 @@ def history(student_id: int, limit: int = 50) -> List[dict]:
             "subtopic_name": (names.get(r.subtopic_id) or {}).get("subtopic_name"),
             "correct": bool(r.is_correct),
             "answered_at": r.answered_at.isoformat() if r.answered_at else None,
+            "time_spent_seconds": r.time_spent_seconds,
         }
         for r in rows
     ]

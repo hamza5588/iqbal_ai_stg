@@ -627,6 +627,12 @@
   ensureModal('lmsPracticeModal', 'Guided Practice', 'lms-modal-md');
   var practiceScope = { domain_topic_id: null, subtopic_id: null };
   var practiceCurrent = null;
+  var practiceDwell = (typeof lmsQuestionDwell === 'function') ? lmsQuestionDwell() : null;
+  document.addEventListener('visibilitychange', function () {
+    if (!practiceDwell || !practiceCurrent) return;
+    if (document.hidden) practiceDwell.pause();
+    else practiceDwell.resume();
+  });
 
   window.openLmsPracticePanel = async function (domainTopicId, subtopicId) {
     if (lmsBlockUntilDiagnostic()) return;
@@ -671,11 +677,13 @@
       });
       practiceCurrent = data;
       if (!data.question) {
+        if (practiceDwell) practiceDwell.stop();
         body.innerHTML = '<p>' + escapeHtml(data.message || 'No practice questions available right now.') + '</p>' +
           practiceGapsHtml(data.coverage_gaps) +
           '<button type="button" class="lms-btn lms-btn-primary" style="margin-top:12px;" onclick="lmsCloseModal(\'lmsPracticeModal\')">Close</button>';
         return;
       }
+      if (practiceDwell) practiceDwell.switchTo(String(data.attempt_id || 'practice'));
       if (data.resumed) lmsShowToast('Resuming your practice question', 'success');
       var q = data.question;
       var progress = data.progress || {};
@@ -711,8 +719,12 @@
       var result = await lmsApi('/api/lms/guided-practice/attempts/' + practiceCurrent.attempt_id + '/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ position: position })
+        body: JSON.stringify({
+          position: position,
+          time_spent_seconds: practiceDwell ? practiceDwell.seconds() : undefined
+        })
       });
+      if (practiceDwell) practiceDwell.stop();
       var chosen = document.querySelector('#lmsPracticeModalBody .lms-quiz-option[data-position="' + position + '"]');
       var right = document.querySelector('#lmsPracticeModalBody .lms-quiz-option[data-position="' + result.correct_position + '"]');
       var hasFx = typeof lmsFeedback !== 'undefined';

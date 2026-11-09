@@ -6,6 +6,75 @@
     };
   }
 
+  /* Per-question dwell clock for quiz / diagnostic / Learning Chat.
+     Tracks absolute seconds while a question key is active; pauses when the
+     tab is hidden or the tracker is paused. Clients send totals with answers. */
+  global.lmsQuestionDwell = function () {
+    var totals = {};
+    var key = null;
+    var started = null;
+    var paused = true;
+
+    function flush() {
+      if (key == null || started == null || paused) return;
+      var add = Math.max(0, Math.round((Date.now() - started) / 1000));
+      if (add > 0) totals[key] = (totals[key] || 0) + add;
+      started = Date.now();
+    }
+
+    return {
+      seed: function (map) {
+        Object.keys(map || {}).forEach(function (k) {
+          var v = Number(map[k]) || 0;
+          if (v > 0) totals[k] = Math.max(totals[k] || 0, v);
+        });
+      },
+      switchTo: function (k) {
+        flush();
+        key = k == null ? null : String(k);
+        started = Date.now();
+        paused = key == null;
+      },
+      pause: function () {
+        flush();
+        paused = true;
+      },
+      resume: function () {
+        if (!paused || key == null) return;
+        started = Date.now();
+        paused = false;
+      },
+      seconds: function (k) {
+        flush();
+        var use = k == null ? key : String(k);
+        return use == null ? 0 : (totals[use] || 0);
+      },
+      all: function () {
+        flush();
+        var out = {};
+        Object.keys(totals).forEach(function (k) { out[k] = totals[k]; });
+        return out;
+      },
+      stop: function () {
+        flush();
+        key = null;
+        started = null;
+        paused = true;
+      }
+    };
+  };
+
+  global.lmsFormatDuration = function (sec) {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    if (sec < 60) return sec + 's';
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    if (m < 60) return s ? (m + 'm ' + s + 's') : (m + 'm');
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    return m ? (h + 'h ' + m + 'm') : (h + 'h');
+  };
+
   global.lmsShowToast = function (msg, type) {
     var existing = document.getElementById('lmsToast');
     if (!existing) {

@@ -48,6 +48,30 @@
     _modeBStarted: false,
     _modeBForIndex: null
   };
+  var defDwell = (typeof lmsQuestionDwell === 'function') ? lmsQuestionDwell() : null;
+
+  function defDwellKey(data) {
+    if (!data) return 'q';
+    return 's' + (data.session_id || defState.sessionId || 0) + '-i' + (data.current_index || 0);
+  }
+  function startDefDwell(data) {
+    if (!defDwell || !data || !data.current_question) return;
+    var key = defDwellKey(data);
+    var seed = {};
+    var prior = data.current_question.time_spent_seconds;
+    if (prior) seed[key] = prior;
+    defDwell.seed(seed);
+    defDwell.switchTo(key);
+  }
+  function defDwellSeconds(data) {
+    if (!defDwell) return 0;
+    return defDwell.seconds(defDwellKey(data || window._lmsDeficiencyLastState));
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (!defDwell || !defState.sessionId) return;
+    if (document.hidden) defDwell.pause();
+    else defDwell.resume();
+  });
 
   function isSolvedReviewState(data) {
     if (!data) return false;
@@ -200,6 +224,7 @@
     if (!body) return;
 
     if (data.completed || !data.current_question) {
+      if (defDwell) defDwell.stop();
       var got = data.correct_count || 0;
       var tot = data.total_questions || 0;
       var aced = tot > 0 && got === tot;
@@ -217,6 +242,7 @@
       return;
     }
 
+    startDefDwell(data);
     var q = data.current_question;
     var solved = isSolvedReviewState(data);
     var pct = data.total_questions
@@ -340,6 +366,7 @@
   };
 
   window.closeDeficiencyChat = async function () {
+    if (defDwell) defDwell.stop();
     var last = window._lmsDeficiencyLastState;
     if (defState.sessionId && last && !last.completed) {
       try {
@@ -374,7 +401,10 @@
       var data = await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selected_option_index: defState.selectedOption })
+        body: JSON.stringify({
+          selected_option_index: defState.selectedOption,
+          time_spent_seconds: defDwellSeconds(window._lmsDeficiencyLastState)
+        })
       });
       window._lmsDeficiencyLastState = data;
       var chosen = defState.selectedOption;
@@ -424,7 +454,11 @@
     var body = document.getElementById('lmsDeficiencyBody');
     try {
       var data = await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/advance', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          time_spent_seconds: defDwellSeconds(window._lmsDeficiencyLastState)
+        })
       });
       defState.selectedOption = null;
       defState.lastWrongIndex = null;

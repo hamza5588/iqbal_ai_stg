@@ -1574,7 +1574,26 @@ def _reset_tutor_state(session: DeficiencyChatSession) -> None:
     )
 
 
-def submit_answer(session_id: int, student_id: int, selected_option_index: int) -> dict:
+def _merge_question_dwell(q: dict, time_spent_seconds) -> None:
+    """Store absolute per-question dwell on the Learning Chat question blob."""
+    if time_spent_seconds is None:
+        return
+    try:
+        sec = int(time_spent_seconds)
+    except (TypeError, ValueError):
+        return
+    if sec < 0:
+        sec = 0
+    sec = min(sec, 2 * 60 * 60)
+    q["time_spent_seconds"] = max(int(q.get("time_spent_seconds") or 0), sec)
+
+
+def submit_answer(
+    session_id: int,
+    student_id: int,
+    selected_option_index: int,
+    time_spent_seconds=None,
+) -> dict:
     db = get_db()
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
     if not session or session.student_id != student_id:
@@ -1590,8 +1609,11 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
         raise LMSValidationError("No more questions in this session")
 
     q = questions[idx]
+    _merge_question_dwell(q, time_spent_seconds)
     # Correct answers stay on this MCQ for Mode B review; Next/advance moves on.
     if q.get("solved_review") and q.get("correct") is True:
+        _save_questions(session, questions)
+        db.commit()
         result = _session_state(session)
         result["last_answer"] = {
             "correct": True,
@@ -1641,7 +1663,7 @@ def submit_answer(session_id: int, student_id: int, selected_option_index: int) 
     return result
 
 
-def advance_session(session_id: int, student_id: int) -> dict:
+def advance_session(session_id: int, student_id: int, time_spent_seconds=None) -> dict:
     """Leave the current question (after wrong attempt or Mode B solved review)."""
     db = get_db()
     session = db.query(DeficiencyChatSession).filter(DeficiencyChatSession.id == session_id).first()
@@ -1661,6 +1683,7 @@ def advance_session(session_id: int, student_id: int) -> dict:
         return _session_state(session)
 
     q = questions[idx]
+    _merge_question_dwell(q, time_spent_seconds)
     was_solved_review = bool(q.get("solved_review") and q.get("correct") is True)
     if not q.get("answered"):
         q["answered"] = True

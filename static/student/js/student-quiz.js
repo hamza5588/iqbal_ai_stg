@@ -27,6 +27,45 @@
 
   var attemptId = null, questions = [], currentQ = 0, savedAnswers = {}, assignmentId = null, quizTitle = '';
   var remainingSeconds = null, timerInterval = null, submitting = false;
+  var quizDwell = (typeof lmsQuestionDwell === 'function') ? lmsQuestionDwell() : null;
+
+  function quizQid(q) {
+    return q ? (q.question_id || q.id) : null;
+  }
+  function quizDwellSeconds(qi) {
+    if (!quizDwell) return 0;
+    var q = questions[qi];
+    var id = quizQid(q);
+    return id != null ? quizDwell.seconds(id) : 0;
+  }
+  function syncQuizDwell(qi) {
+    if (!quizDwell || !attemptId) return;
+    var q = questions[qi];
+    var id = quizQid(q);
+    if (id == null) return;
+    var sec = quizDwell.seconds(id);
+    if (sec <= 0) return;
+    var payload = { question_id: id, time_spent_seconds: sec };
+    if (savedAnswers[qi] !== undefined) payload.selected_option_index = savedAnswers[qi];
+    fetch('/api/lms/attempts/' + attemptId + '/answer', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(function () {});
+  }
+  function startQuizDwell(qi) {
+    if (!quizDwell) return;
+    var q = questions[qi];
+    var id = quizQid(q);
+    if (id == null) return;
+    quizDwell.switchTo(id);
+  }
+  function onQuizVisChange() {
+    if (!quizDwell) return;
+    if (document.hidden) quizDwell.pause();
+    else quizDwell.resume();
+  }
+  document.addEventListener('visibilitychange', onQuizVisChange);
 
   function show(which) {
     ['lmsAssignmentList', 'lmsQuizTaking', 'lmsQuizResult'].forEach(function (id) {
@@ -85,6 +124,8 @@
   };
   window.closeLmsStudentHub = function () {
     clearQuizTimer();
+    if (quizDwell && questions.length) syncQuizDwell(currentQ);
+    if (quizDwell) quizDwell.stop();
     if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
     lmsCloseModal('lmsStudentModal');
     attemptId = null; questions = []; currentQ = 0; savedAnswers = {};
@@ -143,11 +184,24 @@
     savedAnswers = {};
     var saved = d.saved_answers || {};
     Object.keys(saved).forEach(function (k) { savedAnswers[parseInt(k, 10)] = saved[k]; });
+    if (quizDwell) {
+      quizDwell.stop();
+      var seed = {};
+      var times = d.saved_times || {};
+      Object.keys(times).forEach(function (k) {
+        var qi = parseInt(k, 10);
+        var q = questions[qi];
+        var id = quizQid(q);
+        if (id != null) seed[id] = times[k];
+      });
+      quizDwell.seed(seed);
+    }
     currentQ = d.current_question_index != null ? d.current_question_index : 0;
     if (currentQ < 0) currentQ = 0;
     if (currentQ >= questions.length) currentQ = Math.max(0, questions.length - 1);
     show('lmsQuizTaking');
     render();
+    startQuizDwell(currentQ);
   }
 
   function mapHtml() {
@@ -207,12 +261,34 @@
     fetch('/api/lms/attempts/' + attemptId + '/answer', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question_id: q.question_id || q.id, selected_option_index: optIdx })
+      body: JSON.stringify({
+        question_id: q.question_id || q.id,
+        selected_option_index: optIdx,
+        time_spent_seconds: quizDwellSeconds(currentQ)
+      })
     }).catch(function () { /* keep local selection */ });
   };
-  window.goLmsQuizQuestion = function (i) { if (i >= 0 && i < questions.length) { currentQ = i; render(); } };
-  window.nextLmsQuizQuestion = function () { if (currentQ < questions.length - 1) { currentQ++; render(); } };
-  window.prevLmsQuizQuestion = function () { if (currentQ > 0) { currentQ--; render(); } };
+  window.goLmsQuizQuestion = function (i) {
+    if (i < 0 || i >= questions.length || i === currentQ) return;
+    syncQuizDwell(currentQ);
+    currentQ = i;
+    render();
+    startQuizDwell(currentQ);
+  };
+  window.nextLmsQuizQuestion = function () {
+    if (currentQ >= questions.length - 1) return;
+    syncQuizDwell(currentQ);
+    currentQ++;
+    render();
+    startQuizDwell(currentQ);
+  };
+  window.prevLmsQuizQuestion = function () {
+    if (currentQ <= 0) return;
+    syncQuizDwell(currentQ);
+    currentQ--;
+    render();
+    startQuizDwell(currentQ);
+  };
 
   function unansweredIndexes() {
     var out = [];
@@ -235,6 +311,7 @@
   // Selections are saved as they are made, but a save can fail silently on a weak connection.
   // Send them all again so the server's "everything answered" check sees what the student sees.
   async function flushAnswers() {
+    if (quizDwell) syncQuizDwell(currentQ);
     for (var i = 0; i < questions.length; i++) {
       var q = questions[i];
       if (savedAnswers[i] === undefined || !q) continue;
@@ -242,10 +319,26 @@
         await lmsApi('/api/lms/attempts/' + attemptId + '/answer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question_id: q.question_id || q.id, selected_option_index: savedAnswers[i] })
+          body: JSON.stringify({
+            question_id: q.question_id || q.id,
+            selected_option_index: savedAnswers[i],
+            time_spent_seconds: quizDwellSeconds(i)
+          })
         });
       } catch (e) { /* the submit below reports anything still missing */ }
     }
+  }
+
+  function quizTimesPayload() {
+    var out = {};
+    if (!quizDwell) return out;
+    for (var i = 0; i < questions.length; i++) {
+      var id = quizQid(questions[i]);
+      if (id == null) continue;
+      var sec = quizDwellSeconds(i);
+      if (sec > 0) out[id] = sec;
+    }
+    return out;
   }
 
   window.submitLmsQuiz = async function (timeExpired) {
@@ -270,12 +363,16 @@
     }
     try {
       if (!timeExpired) await flushAnswers();
+      else if (quizDwell) syncQuizDwell(currentQ);
       var payload = timeExpired ? { time_expired: true } : {};
+      var times = quizTimesPayload();
+      if (Object.keys(times).length) payload.question_times = times;
       var d = await lmsApi('/api/lms/attempts/' + attemptId + '/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      if (quizDwell) quizDwell.stop();
       var shownFor = Date.now() - startedAt;
       if (shownFor < 700) await new Promise(function (r) { setTimeout(r, 700 - shownFor); });
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);

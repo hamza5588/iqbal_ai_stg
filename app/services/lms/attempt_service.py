@@ -35,6 +35,31 @@ TIME_OVER_MESSAGE = (
     "every question you answered has been scored."
 )
 
+# Cap one question's reported dwell to avoid clock-skew / stuck-tab abuse.
+_MAX_QUESTION_DWELL_SECONDS = 2 * 60 * 60
+
+
+def _normalize_time_spent(value) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        sec = int(value)
+    except (TypeError, ValueError):
+        return None
+    if sec < 0:
+        return 0
+    return min(sec, _MAX_QUESTION_DWELL_SECONDS)
+
+
+def _merge_time_spent(existing, incoming) -> Optional[int]:
+    """Client sends absolute dwell totals; keep the higher of stored vs incoming."""
+    incoming_sec = _normalize_time_spent(incoming)
+    if incoming_sec is None:
+        return existing if existing is None else int(existing)
+    if existing is None:
+        return incoming_sec
+    return max(int(existing or 0), incoming_sec)
+
 
 def _student_completed_diagnostic(student_id: int, assessment_id: int) -> bool:
     db = get_db()
@@ -406,9 +431,19 @@ def get_attempt_delivery_state(attempt_id: int) -> dict:
         for a in rows
         if a.selected_option_index is not None and a.selected_option_index >= 0
     }
+    times_by_qid = {
+        a.question_id: int(a.time_spent_seconds or 0)
+        for a in rows
+        if a.time_spent_seconds is not None and a.time_spent_seconds > 0
+    }
 
     saved_answers: dict[int, int] = {}
+    saved_times: dict[int, int] = {}
     current_index = 0
+    for i, q in enumerate(questions):
+        qid = q["question_id"]
+        if qid in times_by_qid:
+            saved_times[i] = times_by_qid[qid]
     for i, q in enumerate(questions):
         qid = q["question_id"]
         if qid in saved_by_qid:
@@ -424,6 +459,7 @@ def get_attempt_delivery_state(attempt_id: int) -> dict:
         "attempt_id": attempt_id,
         "questions": questions,
         "saved_answers": saved_answers,
+        "saved_times": saved_times,
         "current_question_index": current_index,
     }
 
@@ -504,14 +540,22 @@ def get_attempt_timer_info(attempt_id: int) -> dict:
     }
 
 
-def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -> dict:
-    """Save (or overwrite) one answer. Returns a small status dict.
+def save_answer(
+    attempt_id: int,
+    question_id: int,
+    selected_option_index: Optional[int] = None,
+    time_spent_seconds: Optional[int] = None,
+    *,
+    time_only: bool = False,
+) -> dict:
+    """Save (or overwrite) one answer and/or per-question dwell time.
 
     - Tolerant of a late save after the attempt is already submitted /
       timed out (returns saved=False instead of raising) so a client that
       is mid-flush when the server auto-submits doesn't blow up.
     - Race-safe: two concurrent saves for the same (attempt, question) no
       longer 500 on the uq_attempt_question unique constraint.
+    - ``time_only`` updates dwell without changing the selected option.
     """
     attempt = get_attempt(attempt_id)
     if attempt.status != "in_progress":
@@ -523,25 +567,100 @@ def save_answer(attempt_id: int, question_id: int, selected_option_index: int) -
     db = get_db()
     if question_id not in attempt_question_ids(attempt):
         raise LMSValidationError("That question is not part of this attempt")
+
+    if time_only:
+        answer = _upsert_answer(
+            db,
+            attempt_id,
+            question_id,
+            selected_option_index=None,
+            time_spent_seconds=time_spent_seconds,
+            keep_existing_option=True,
+        )
+        return {
+            "saved": True,
+            "question_id": question_id,
+            "time_spent_seconds": getattr(answer, "time_spent_seconds", None),
+        }
+
     if selected_option_index is not None and selected_option_index >= 0:
         question = db.query(Question).filter(Question.id == question_id).first()
         option_count = len(options_from_json(question.options_json)) if question else 0
         if selected_option_index >= option_count:
             raise LMSValidationError("That option does not exist for this question")
     if selected_option_index is None or selected_option_index < 0:
-        # A cleared answer - remove the row so it reads as unanswered.
-        db.query(AttemptAnswer).filter(
-            AttemptAnswer.attempt_id == attempt_id,
-            AttemptAnswer.question_id == question_id,
-        ).delete(synchronize_session=False)
-        db.commit()
-        return {"saved": True, "cleared": True, "question_id": question_id}
+        # A cleared answer - keep any dwell row with a null selection so timing
+        # is not lost when the student unchecks an option.
+        answer = _upsert_answer(
+            db,
+            attempt_id,
+            question_id,
+            selected_option_index=None,
+            time_spent_seconds=time_spent_seconds,
+            keep_existing_option=False,
+            clear_option=True,
+        )
+        return {
+            "saved": True,
+            "cleared": True,
+            "question_id": question_id,
+            "time_spent_seconds": getattr(answer, "time_spent_seconds", None) if answer else None,
+        }
 
-    _upsert_answer(db, attempt_id, question_id, selected_option_index)
-    return {"saved": True, "question_id": question_id}
+    answer = _upsert_answer(
+        db,
+        attempt_id,
+        question_id,
+        selected_option_index=selected_option_index,
+        time_spent_seconds=time_spent_seconds,
+    )
+    return {
+        "saved": True,
+        "question_id": question_id,
+        "time_spent_seconds": getattr(answer, "time_spent_seconds", None),
+    }
 
 
-def _upsert_answer(db, attempt_id: int, question_id: int, selected_option_index: int) -> AttemptAnswer:
+def record_question_times(attempt_id: int, times: Dict[int, int]) -> dict:
+    """Bulk upsert absolute dwell totals (e.g. right before submit)."""
+    attempt = get_attempt(attempt_id)
+    if attempt.status != "in_progress":
+        return {"saved": False, "reason": "attempt_not_in_progress"}
+    if _attempt_is_expired(attempt):
+        finalize_expired_attempt(attempt.id)
+        return {"saved": False, "reason": "time_over"}
+    allowed = set(attempt_question_ids(attempt))
+    db = get_db()
+    saved = 0
+    for qid, sec in (times or {}).items():
+        try:
+            qid_int = int(qid)
+        except (TypeError, ValueError):
+            continue
+        if qid_int not in allowed:
+            continue
+        _upsert_answer(
+            db,
+            attempt_id,
+            qid_int,
+            selected_option_index=None,
+            time_spent_seconds=sec,
+            keep_existing_option=True,
+        )
+        saved += 1
+    return {"saved": True, "count": saved}
+
+
+def _upsert_answer(
+    db,
+    attempt_id: int,
+    question_id: int,
+    selected_option_index: Optional[int] = None,
+    time_spent_seconds: Optional[int] = None,
+    *,
+    keep_existing_option: bool = False,
+    clear_option: bool = False,
+) -> Optional[AttemptAnswer]:
     from sqlalchemy.exc import IntegrityError
 
     def _find():
@@ -554,17 +673,43 @@ def _upsert_answer(db, attempt_id: int, question_id: int, selected_option_index:
             .first()
         )
 
+    def _apply(answer: AttemptAnswer) -> AttemptAnswer:
+        if clear_option:
+            answer.selected_option_index = None
+            answer.is_correct = None
+        elif not keep_existing_option and selected_option_index is not None:
+            answer.selected_option_index = selected_option_index
+        merged = _merge_time_spent(getattr(answer, "time_spent_seconds", None), time_spent_seconds)
+        if merged is not None:
+            answer.time_spent_seconds = merged
+        return answer
+
     answer = _find()
     if answer is not None:
-        answer.selected_option_index = selected_option_index
+        _apply(answer)
+        # Drop empty cleared rows that also have no timing.
+        if (
+            clear_option
+            and (answer.time_spent_seconds is None or answer.time_spent_seconds <= 0)
+            and answer.selected_option_index is None
+        ):
+            db.delete(answer)
+            db.commit()
+            return None
         db.commit()
         db.refresh(answer)
         return answer
 
+    if keep_existing_option and selected_option_index is None and _normalize_time_spent(time_spent_seconds) is None:
+        return None
+    if clear_option and _normalize_time_spent(time_spent_seconds) is None:
+        return None
+
     answer = AttemptAnswer(
         attempt_id=attempt_id,
         question_id=question_id,
-        selected_option_index=selected_option_index,
+        selected_option_index=None if clear_option or keep_existing_option else selected_option_index,
+        time_spent_seconds=_normalize_time_spent(time_spent_seconds),
     )
     db.add(answer)
     try:
@@ -575,7 +720,7 @@ def _upsert_answer(db, attempt_id: int, question_id: int, selected_option_index:
         answer = _find()
         if answer is None:
             raise
-        answer.selected_option_index = selected_option_index
+        _apply(answer)
         db.commit()
     db.refresh(answer)
     return answer
@@ -799,6 +944,7 @@ def get_attempt_results(attempt_id: int) -> dict:
     question_ids = attempt_question_ids(attempt)
     db = get_db()
     answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()
+    answers_by_qid = {a.question_id: a for a in answers}
     answered_ids = {
         a.question_id
         for a in answers
@@ -806,6 +952,22 @@ def get_attempt_results(attempt_id: int) -> dict:
     }
     answered_count = sum(1 for qid in question_ids if qid in answered_ids)
     unanswered_count = max(0, len(question_ids) - answered_count)
+    question_timings = []
+    total_time = 0
+    for i, qid in enumerate(question_ids):
+        row = answers_by_qid.get(qid)
+        sec = int(row.time_spent_seconds or 0) if row else 0
+        total_time += sec
+        question_timings.append(
+            {
+                "question_number": i + 1,
+                "question_id": qid,
+                "time_spent_seconds": sec,
+                "answered": qid in answered_ids,
+                "is_correct": bool(row.is_correct) if row and row.is_correct is not None else None,
+            }
+        )
+    timed_count = sum(1 for t in question_timings if t["time_spent_seconds"] > 0)
     from app.services.lms import performance_service
 
     # Read-only: topic mastery is written once, when the attempt is submitted
@@ -840,6 +1002,9 @@ def get_attempt_results(attempt_id: int) -> dict:
         "assessment_type": assessment.assessment_type,
         "timed_out": timed_out,
         "topic_breakdown": breakdown,
+        "question_timings": question_timings,
+        "total_time_spent_seconds": total_time,
+        "avg_time_spent_seconds": round(total_time / timed_count, 1) if timed_count else 0,
     }
     if timed_out:
         # The timer ran out, but the answered questions still count - keep
