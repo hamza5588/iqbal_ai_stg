@@ -26,15 +26,13 @@
         ? '<p class="sd-note" style="margin:8px 0 0;">Practised at topic level (this paper did not list subtopics).</p>'
         : '';
     }
+    // Per-row Practice / Learning Chat buttons are intentionally omitted — the
+    // Domain row already has Guided practice + Start Learning Chat once.
     return '<div class="sd-subtopics" style="margin-top:10px;"><div class="sd-label" style="margin-bottom:4px;">Weak subtopics</div>' +
       area.subtopics.map(function (s) {
         var pct = s.score_percent != null ? Math.round(s.score_percent) + '%' : '—';
-        var practice = (GUIDED_PRACTICE_ENABLED && s.guided_practice_available)
-          ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(area.domain_topic_id) + ',' + Number(s.subtopic_id) + ')"><i class="fas fa-dumbbell"></i> Practice (' + Number(s.guided_practice_available) + ')</button>'
-          : '<span class="sd-pill grey" title="Your teacher has not published verified questions for this subtopic yet">No practice questions yet</span>';
         return '<div class="sd-meta-line" style="align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;">' +
-          '<b>' + escapeHtml(s.subtopic_name) + '</b><span>' + pct + '</span>' + practice +
-          '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="openDeficiencyChat(false, \'practice\', ' + Number(area.domain_topic_id) + ')">Learning Chat</button></div>';
+          '<b>' + escapeHtml(s.subtopic_name) + '</b><span>' + pct + '</span></div>';
       }).join('') + '</div>';
   }
 
