@@ -990,6 +990,7 @@ def _bank_items_as_queue(
                 "topic_id": topic_id,
                 "topic_name": topic_name,
                 "pdf_section": approved_scope,
+                "approved_slo": approved_scope,
                 "rag_thread_id": thread_id,
                 "question_text": q_text or q.question_text,
                 "question_latex": q_latex,
@@ -1175,14 +1176,25 @@ def _drop_non_pdf_pending(
     questions = _load_questions(session)
     idx = session.current_index or 0
     pending = questions[idx:]
-    keep = [
-        q for q in pending
-        if q.get("source") == "target_pdf"
-        and q.get("generation_policy") == _PDF_ONLY_POLICY
-        and q.get("grounding_verified") == GROUNDING_VERIFIER
-        and q.get("approved_slo")
-        and q.get("rag_thread_id") in allowed
-    ]
+
+    def _keep_pending(q: dict) -> bool:
+        # Approved Target-bank MCQs selected by semantic relevance are PDF-grounded.
+        if (
+            q.get("source") == "target_bank"
+            and q.get("bank_item_id")
+            and q.get("generation_policy") == _PDF_ONLY_POLICY
+            and (not q.get("rag_thread_id") or q.get("rag_thread_id") in allowed)
+        ):
+            return True
+        return (
+            q.get("source") == "target_pdf"
+            and q.get("generation_policy") == _PDF_ONLY_POLICY
+            and q.get("grounding_verified") == GROUNDING_VERIFIER
+            and q.get("approved_slo")
+            and q.get("rag_thread_id") in allowed
+        )
+
+    keep = [q for q in pending if _keep_pending(q)]
     if len(keep) == len(pending):
         return False
     logger.warning(
