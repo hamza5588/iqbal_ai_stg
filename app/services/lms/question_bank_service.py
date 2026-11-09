@@ -17,6 +17,35 @@ from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
 
+# AI conversion_confidence below this → Needs review (same bar as diagnostic PDF).
+_AI_AUTO_VERIFY_CONFIDENCE_MIN = 0.85
+
+
+def quiz_question_review(q: Question) -> dict:
+    """Target-PDF-style status from the AI's own conversion confidence — not rule checks.
+
+    High AI confidence → ``auto_verified``; low / missing confidence → ``needs_review``.
+    """
+    conf = q.extraction_confidence
+    if conf is None:
+        return {
+            "verification_status": "needs_review",
+            "blocking": ["ai_confidence: missing"],
+            "extraction_confidence": None,
+        }
+    score = float(conf)
+    if score >= _AI_AUTO_VERIFY_CONFIDENCE_MIN:
+        return {
+            "verification_status": "auto_verified",
+            "blocking": [],
+            "extraction_confidence": score,
+        }
+    return {
+        "verification_status": "needs_review",
+        "blocking": [f"ai_confidence: {score:.2f}"],
+        "extraction_confidence": score,
+    }
+
 
 def _serialize_question(q: Question) -> dict:
     q_text, q_latex = pick_display_fields(q.question_text, q.question_latex)
@@ -27,6 +56,7 @@ def _serialize_question(q: Question) -> dict:
         item["text"] = text
         item["latex"] = latex
         opts.append(item)
+    review = quiz_question_review(q)
     return {
         "id": q.id,
         "topic_id": q.topic_id,
@@ -43,6 +73,8 @@ def _serialize_question(q: Question) -> dict:
         "extraction_confidence": q.extraction_confidence,
         "is_active": q.is_active,
         "created_by": q.created_by,
+        "verification_status": review["verification_status"],
+        "verification_blocking": review["blocking"],
     }
 
 
@@ -174,8 +206,16 @@ def list_questions_by_source(source_type: str, limit: int = 100) -> List[Questio
 def update_question(question_id: int, **fields) -> Question:
     db = get_db()
     q = get_question(question_id)
+    allow_dup = bool(fields.pop("allow_duplicate_option_texts", False))
+    # PDF-harvested items may keep paper duplicates (Target bank style); generated stay unique.
+    if q.source_type in {"pdf_qa_converted", "pdf_ai", "mixed"}:
+        allow_dup = True
     if "options" in fields and "correct_option_index" in fields:
-        validate_mcq(fields["options"], fields["correct_option_index"])
+        validate_mcq(
+            fields["options"],
+            fields["correct_option_index"],
+            allow_duplicate_texts=allow_dup,
+        )
         _check_answer_key(
             fields.get("question_text") or q.question_text,
             fields.get("question_latex") or q.question_latex,
@@ -183,7 +223,11 @@ def update_question(question_id: int, **fields) -> Question:
             fields["correct_option_index"],
             q.source_type,
         )
-        q.options_json = options_to_json(fields["options"], fields["correct_option_index"])
+        q.options_json = options_to_json(
+            fields["options"],
+            fields["correct_option_index"],
+            allow_duplicate_texts=allow_dup,
+        )
         q.correct_option_index = fields["correct_option_index"]
         fields.pop("options", None)
         fields.pop("correct_option_index", None)
@@ -234,6 +278,12 @@ def ai_edit_question(question_id: int, instruction: str, *, user_id: Optional[in
         question_text: str = Field(..., description="Full stem; math in $...$ LaTeX when needed")
         options: List[str] = Field(..., description="Exactly four option texts in A–D order")
         correct_label: str = Field(..., description="A, B, C, or D")
+        conversion_confidence: float = Field(
+            ...,
+            ge=0.0,
+            le=1.0,
+            description="Your confidence 0–1 that the edited MCQ is correct and ready",
+        )
         notes: Optional[str] = Field(None, description="One-line summary of the change")
 
     current = {
@@ -242,6 +292,7 @@ def ai_edit_question(question_id: int, instruction: str, *, user_id: Optional[in
         "correct_label": labels[q.correct_option_index]
         if q.correct_option_index is not None and 0 <= q.correct_option_index < 4
         else "A",
+        "extraction_confidence": q.extraction_confidence,
     }
 
     prompt = (
@@ -255,7 +306,10 @@ def ai_edit_question(question_id: int, instruction: str, *, user_id: Optional[in
         "- Square root of a: $\\sqrt{a}$. Fraction a/b: $\\frac{a}{b}$.\n"
         "- Keep surrounding English prose as plain text outside the $...$ spans.\n"
         "- correct_label must be A, B, C, or D.\n"
-        "- options must be exactly four non-empty strings in order A–D.\n\n"
+        "- options must be exactly four non-empty strings in order A–D.\n"
+        "- Prefer four distinct options; if the paper truly has identical distractors, keep them.\n"
+        "- Set conversion_confidence 0–1 for how sure you are the edited item is correct.\n"
+        f"  Use >= {_AI_AUTO_VERIFY_CONFIDENCE_MIN} only when stem, options, and key look solid.\n\n"
         f"TEACHER INSTRUCTION:\n{instruction}\n\n"
         f"CURRENT ITEM JSON:\n{json.dumps(current, ensure_ascii=False)}\n"
     )
@@ -276,12 +330,15 @@ def ai_edit_question(question_id: int, instruction: str, *, user_id: Optional[in
         raise LMSValidationError("AI returned an empty question; try again.")
 
     option_payload = [{"label": labels[i], "text": opts[i], "latex": None} for i in range(4)]
+    # Same as Target PDF bank correct_item: do not hard-fail on duplicate option text.
     updated = update_question(
         question_id,
         question_text=stem,
         question_latex=None,
         options=option_payload,
         correct_option_index=correct_idx,
+        extraction_confidence=float(draft.conversion_confidence),
+        allow_duplicate_option_texts=True,
     )
     return {
         "applied": True,

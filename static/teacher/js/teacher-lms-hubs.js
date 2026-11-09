@@ -1114,9 +1114,27 @@
         return;
       }
       window._lmsQuizPreviewQuestions = d.questions;
-      previewEl.innerHTML = d.questions.map(function (item, idx) {
+      var autoN = 0;
+      var reviewN = 0;
+      (d.questions || []).forEach(function (item) {
+        var st = ((item.question || {}).verification_status) || 'needs_review';
+        if (st === 'auto_verified') autoN += 1;
+        else reviewN += 1;
+      });
+      var summaryHtml =
+        '<div class="lms-quiz-review-summary" style="margin:0 0 0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">' +
+          '<span class="lms-badge lms-badge-green">Auto-verified ' + autoN + '</span>' +
+          '<span class="lms-badge lms-badge-yellow">Needs review ' + reviewN + '</span>' +
+          '<span class="lms-muted" style="font-size:0.85rem;">AI confidence — same idea as Target PDF bank</span>' +
+        '</div>';
+      previewEl.innerHTML = summaryHtml + d.questions.map(function (item, idx) {
         const q = item.question || {};
         const qid = q.id;
+        var status = q.verification_status || 'needs_review';
+        var badgeClass = status === 'auto_verified' ? 'lms-badge-green' : 'lms-badge-yellow';
+        var badgeLabel = status === 'auto_verified' ? 'Auto-verified' : 'Needs review';
+        var conf = q.extraction_confidence;
+        var confLabel = (typeof conf === 'number') ? (' · ' + Math.round(conf * 100) + '%') : '';
         const opts = (q.options || []).map(function (o, oidx) {
           var isCorrect = q.correct_option_index === oidx;
           return '<div class="lms-preview-opt' + (isCorrect ? ' is-correct' : '') + '">' +
@@ -1127,7 +1145,9 @@
         }).join('');
         return '<div class="lms-diag-preview-card lms-quiz-preview-card" data-qid="' + qid + '" data-qidx="' + idx + '">' +
           '<div class="lms-preview-head">' +
-            '<div class="lms-preview-stem"><strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' +
+            '<div class="lms-preview-stem">' +
+              '<span class="lms-badge ' + badgeClass + '" style="margin-right:0.4rem;">' + badgeLabel + confLabel + '</span>' +
+              '<strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' +
             _lmsFmtText(
               (typeof lmsQuestionText === 'function' ? lmsQuestionText(q) : (q.question_text || q.question_latex || '')),
               true
