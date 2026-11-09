@@ -1310,9 +1310,18 @@ def _session_state(session: DeficiencyChatSession) -> dict:
         "current_question": current,
         "mode": session_mode,
         "has_pdf": bool(
-            current and current.get("source") == "target_pdf"
+            current
             and current.get("generation_policy") == _PDF_ONLY_POLICY
-            and current.get("rag_thread_id")
+            and (
+                (
+                    current.get("source") == "target_pdf"
+                    and current.get("rag_thread_id")
+                )
+                or (
+                    current.get("source") == "target_bank"
+                    and current.get("bank_item_id")
+                )
+            )
         ),
         "pdf_label": "Teacher target content PDF",
         "tutor_messages": tutor_messages,
