@@ -354,9 +354,46 @@ def next_question(
     if pending and pending.subtopic_id in allowed_subs:
         item = db.query(TargetBankItem).filter(TargetBankItem.id == pending.bank_item_id).first()
         if item and item.verification_status == "approved":
-            return _serve_payload(pending, item, elig, resumed=True)
-    if pending:
+            # Resume only when the student still has this unanswered item in front of
+            # them; if a widened Domain pool has other unseen questions, move on so
+            # Guided Practice is not stuck forever on the first (often only exact) hit.
+            grade = elig["grade_level"] or None
+            weak_sub_ids = {int(p["subtopic_id"]) for p in pool}
+            domain_ids = {int(p["domain_topic_id"]) for p in pool if p.get("domain_topic_id")}
+            pool_rows = (
+                _approved_query(db, grade)
+                .filter(QuestionTaxonomy.subtopic_id.in_(list(weak_sub_ids)))
+                .all()
+            )
+            if len(pool_rows) < MIN_GUIDED_POOL and domain_ids:
+                wider = (
+                    _approved_query(db, grade)
+                    .filter(QuestionTaxonomy.domain_topic_id.in_(list(domain_ids)))
+                    .all()
+                )
+                seen_ids = {r[0].id for r in pool_rows}
+                pool_rows = list(pool_rows) + [r for r in wider if r[0].id not in seen_ids]
+            seen_ids = {
+                bid
+                for (bid,) in db.query(GuidedPracticeAttempt.bank_item_id)
+                .filter(
+                    GuidedPracticeAttempt.student_id == student_id,
+                    GuidedPracticeAttempt.bank_item_id.in_([r[0].id for r in pool_rows]),
+                    GuidedPracticeAttempt.status == "answered",
+                )
+                .distinct()
+                .all()
+            }
+            unseen_others = [r for r in pool_rows if r[0].id not in seen_ids and r[0].id != item.id]
+            if not unseen_others:
+                return _serve_payload(
+                    pending, item, elig, resumed=True, pool_size=len(pool_rows)
+                )
+            pending.status = "abandoned"
+            db.commit()
+    elif pending:
         pending.status = "abandoned"  # its subtopic is no longer weak / no longer targeted
+        db.commit()
 
     # Prefer exact weak Subtopics; if the pool is smaller than MIN_GUIDED_POOL,
     # fill with other approved Target-bank items from the same Domain(s).
@@ -405,11 +442,11 @@ def next_question(
                 logger.warning("Incorrect-answer backfill failed for student %s: %s", student_id, exc)
                 db.rollback()
         targets = _rotate_targets(db, student_id, incorrect_targets(student_id, focus_sub_id))
-        # Prefer candidates tagged to a weak Subtopic; Domain fill is secondary.
-        preferred = [c for c in candidates if c[2].subtopic_id in weak_sub_ids]
-        choice = _choose_in_pool(preferred or candidates, targets, last_seen, order)
-        if choice is None:
-            choice = _choose_in_pool(candidates, targets, last_seen, order)
+        # Use the full widened Domain pool. Restricting to exact weak-Subtopic rows
+        # left students stuck on a single bank item (e.g. Laws of Logarithms = 1)
+        # even when 50+ same-Domain Target questions were available.
+        # Weak-Subtopic items still rank first via ``order`` inside _choose_in_pool.
+        choice = _choose_in_pool(candidates, targets, last_seen, order)
     if choice:
         (item, question, tax), target, priority, reused = choice
         # Credit mastery to the weak Subtopic the student opened, even when the
