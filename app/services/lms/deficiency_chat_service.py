@@ -376,6 +376,42 @@ def _approved_scopes(entry: dict, topic_name: str) -> List[str]:
     return scopes or [topic_name]
 
 
+_SEMANTIC_BANK_MIN_SCORE = 0.28
+_SEMANTIC_BANK_CANDIDATE_CAP = 80
+
+
+def _weak_area_context(
+    scope: str, topic_name: str, grade_level: Optional[str] = None
+) -> str:
+    """Short context the intelligent layer uses to find related Target PDF questions."""
+    parts = [
+        f"Weak area / SLO: {(scope or '').strip()}",
+        f"Mathematics domain: {(topic_name or '').strip() or 'General'}",
+    ]
+    if grade_level:
+        parts.append(f"Grade level: {grade_level}")
+    parts.append(
+        "Select practice questions from the Target PDF that teach or assess this "
+        f"weak area by meaning, not by exact heading match: {(scope or '').strip()}."
+    )
+    return "\n".join(parts)
+
+
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        na += x * x
+        nb += y * y
+    if na <= 0.0 or nb <= 0.0:
+        return 0.0
+    return dot / ((na ** 0.5) * (nb ** 0.5))
+
+
 def _build_scope_queue(
     *,
     topic_id: int,
@@ -389,55 +425,13 @@ def _build_scope_queue(
     exclude_keys: set[str],
     seen_texts: set[str],
 ) -> List[dict]:
-    """Generate questions for one approved SLO and verify source support."""
+    """Select/generate questions for one weak SLO via AI Target-PDF relevance."""
     from app.services.quiz.mcq_answer_check import verify_mcq_keys
     from app.services.quiz.mcq_grounding_check import verify_mcq_grounding
 
-    pdf_section, thread_id, relevance = _match_target_section(
-        approved_scope, target_thread_ids
-    )
-    # A Target PDF that is a question bank has no teaching text per topic: ground
-    # on the admin-approved printed MCQs of this exact Subtopic instead (still
-    # subject to the grounding + answer-key checks below).
-    section_text, bank_thread = _bank_source_text(topic_id, approved_scope, grade_level, target_thread_ids)
-    if section_text:
-        thread_id = bank_thread or (target_thread_ids[0] if target_thread_ids else thread_id)
-        pdf_section = approved_scope
-    lookups = []
-    if section_text:
-        pass
-    elif relevance > 0:
-        lookups.extend(
-            (tid, pdf_section) for tid in [thread_id] + target_thread_ids if tid
-        )
-    # Heading extraction may be incomplete, so also search the exact printed
-    # SLO. Never widen a known SLO back to the broad Domain.
-    if not section_text:
-        lookups.extend((tid, approved_scope) for tid in target_thread_ids if tid)
-    for candidate_thread, heading in dict.fromkeys(lookups):
-        try:
-            section_text = get_section_text(
-                candidate_thread,
-                rag_owner_id,
-                heading,
-                require_topic_match=True,
-            )
-        except Exception as exc:  # noqa: BLE001 - no ungrounded fallback
-            logger.warning("Could not read target-PDF text for %s: %s", heading, exc)
-            continue
-        if _looks_like_answer_key_table(section_text):
-            # The answer-key table only names topics; it teaches nothing.
-            logger.info("Target-PDF text for %s is an answer-key table; not used as source", heading)
-            section_text = ""
-            continue
-        if section_text.strip():
-            thread_id = candidate_thread
-            pdf_section = heading
-            break
-
-    if not section_text.strip():
-        logger.warning("No matching target-PDF text for approved SLO %s", approved_scope)
-        return []
+    context = _weak_area_context(approved_scope, topic_name, grade_level)
+    thread_id = target_thread_ids[0] if target_thread_ids else ""
+    pdf_section = approved_scope
 
     def _fresh(items: List[dict]) -> List[dict]:
         out = []
@@ -449,44 +443,120 @@ def _build_scope_queue(
         return out
 
     kept: List[dict] = []
+
+    # 1) Primary: approved Target-bank MCQs ranked by embedding relevance.
+    bank_fill = _bank_items_as_queue(
+        topic_id=topic_id,
+        topic_name=topic_name,
+        approved_scope=approved_scope,
+        ladder=ladder,
+        target_thread_ids=target_thread_ids,
+        grade_level=grade_level,
+        exclude_keys=exclude_keys,
+        seen_texts=seen_texts,
+        context=context,
+    )
+    kept.extend(bank_fill)
+    if len(kept) >= len(ladder):
+        return kept[: len(ladder)]
+
+    # 2) Textbook / leftover: RAG semantic chunks for this weak-area context.
+    section_text = ""
+    rag_text, rag_thread = _rag_semantic_section_text(
+        context, target_thread_ids, rag_owner_id
+    )
+    if rag_text.strip():
+        section_text = rag_text
+        thread_id = rag_thread or thread_id
+        pdf_section = approved_scope
+
+    # 3) Thin fallback: exact heading / exact Subtopic bank grounding only.
+    if not section_text.strip():
+        pdf_section, thread_id, relevance = _match_target_section(
+            approved_scope, target_thread_ids
+        )
+        lookups = []
+        if relevance > 0:
+            lookups.extend(
+                (tid, pdf_section) for tid in [thread_id] + target_thread_ids if tid
+            )
+        lookups.extend((tid, approved_scope) for tid in target_thread_ids if tid)
+        for candidate_thread, heading in dict.fromkeys(lookups):
+            try:
+                section_text = get_section_text(
+                    candidate_thread,
+                    rag_owner_id,
+                    heading,
+                    require_topic_match=True,
+                )
+            except Exception as exc:  # noqa: BLE001 - no ungrounded fallback
+                logger.warning("Could not read target-PDF text for %s: %s", heading, exc)
+                continue
+            if _looks_like_answer_key_table(section_text):
+                logger.info(
+                    "Target-PDF text for %s is an answer-key table; not used as source",
+                    heading,
+                )
+                section_text = ""
+                continue
+            if section_text.strip():
+                thread_id = candidate_thread
+                pdf_section = heading
+                break
+
+    if not section_text.strip():
+        exact_text, bank_thread = _exact_bank_source_text(
+            topic_id, approved_scope, grade_level, target_thread_ids
+        )
+        if exact_text.strip():
+            section_text = exact_text
+            thread_id = bank_thread or thread_id
+            pdf_section = approved_scope
+
     attempted_texts: List[str] = []
-    max_rounds = (len(ladder) + 9) // 10 + _TOP_UP_ROUNDS
-    for _round in range(max_rounds):
-        if len(kept) >= len(ladder):
-            break
-        requested = ladder[len(kept) : len(kept) + 10]
-        try:
-            mcqs = generate_mcqs_from_content(
-                section_text,
-                approved_scope,
-                len(requested),
-                grade_level=grade_level,
-                difficulty_ladder=requested,
-                exclude_question_texts=exclude_texts + attempted_texts,
-                strict_grounding=True,
-            )
-        except Exception as exc:  # noqa: BLE001 - no topic-only fallback
-            logger.warning("Target PDF MCQ gen failed for %s: %s", approved_scope, exc)
-            break
-        if not mcqs:
-            break
-        scope_items = []
-        for index, mcq in enumerate(mcqs):
-            difficulty = requested[index] if index < len(requested) else requested[-1]
-            item = _mcq_to_queue_item(
-                mcq,
-                topic_id,
-                topic_name,
-                pdf_section,
-                thread_id,
-                difficulty,
-            )
-            if item:
-                item["generation_policy"] = _PDF_ONLY_POLICY
-                attempted_texts.append(item.get("question_text") or "")
-                scope_items.append(item)
-        grounded = verify_mcq_grounding(scope_items, section_text, approved_scope)
-        kept.extend(verify_mcq_keys(_fresh(grounded)))
+    if not section_text.strip():
+        logger.warning(
+            "No Target-PDF grounding for approved SLO %s after semantic bank + RAG",
+            approved_scope,
+        )
+    else:
+        max_rounds = (len(ladder) - len(kept) + 9) // 10 + _TOP_UP_ROUNDS
+        for _round in range(max(1, max_rounds)):
+            if len(kept) >= len(ladder):
+                break
+            requested = ladder[len(kept) : len(kept) + 10]
+            try:
+                mcqs = generate_mcqs_from_content(
+                    section_text,
+                    approved_scope,
+                    len(requested),
+                    grade_level=grade_level,
+                    difficulty_ladder=requested,
+                    exclude_question_texts=exclude_texts + attempted_texts,
+                    strict_grounding=True,
+                )
+            except Exception as exc:  # noqa: BLE001 - no topic-only fallback
+                logger.warning("Target PDF MCQ gen failed for %s: %s", approved_scope, exc)
+                break
+            if not mcqs:
+                break
+            scope_items = []
+            for index, mcq in enumerate(mcqs):
+                difficulty = requested[index] if index < len(requested) else requested[-1]
+                item = _mcq_to_queue_item(
+                    mcq,
+                    topic_id,
+                    topic_name,
+                    pdf_section,
+                    thread_id,
+                    difficulty,
+                )
+                if item:
+                    item["generation_policy"] = _PDF_ONLY_POLICY
+                    attempted_texts.append(item.get("question_text") or "")
+                    scope_items.append(item)
+            grounded = verify_mcq_grounding(scope_items, section_text, approved_scope)
+            kept.extend(verify_mcq_keys(_fresh(grounded)))
 
     if len(kept) < len(ladder):
         logger.warning(
@@ -511,15 +581,222 @@ def _looks_like_answer_key_table(text: str) -> bool:
     return rows >= 5 or inline >= 5
 
 
-def _bank_source_text(
+def _rag_semantic_section_text(
+    context: str,
+    target_thread_ids: List[str],
+    rag_owner_id: int,
+    max_chars: int = 12000,
+) -> Tuple[str, Optional[str]]:
+    """Retrieve Target PDF chunks by meaning for the weak-area context."""
+    if not context.strip() or not target_thread_ids or not rag_owner_id:
+        return "", None
+    try:
+        from app.utils.rag_service import _get_retriever
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("RAG retriever unavailable for semantic section: %s", exc)
+        return "", None
+
+    parts: List[str] = []
+    used_thread = None
+    for tid in target_thread_ids:
+        if not tid:
+            continue
+        try:
+            retriever = _get_retriever(str(tid), int(rag_owner_id))
+            if not retriever:
+                continue
+            docs = retriever.invoke(context) or []
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Semantic RAG failed for thread %s: %s", tid, exc)
+            continue
+        chunk_parts = []
+        for doc in docs:
+            text = (getattr(doc, "page_content", None) or "").strip()
+            if not text or _looks_like_answer_key_table(text):
+                continue
+            chunk_parts.append(text)
+        if chunk_parts:
+            parts = chunk_parts
+            used_thread = tid
+            break
+    if not parts:
+        return "", None
+    combined = "\n\n".join(parts).strip()
+    if len(combined) > max_chars:
+        combined = combined[:max_chars] + "\n[... truncated ...]"
+    return combined, used_thread
+
+
+def _target_bank_doc_filters(target_thread_ids: List[str]):
+    """Resolve Target bank documents that belong to these diagnostic Target PDFs."""
+    from app.models.lms_models import DiagnosticTargetPdf, TargetBankDocument
+
+    db = get_db()
+    filenames = set()
+    assessment_ids = set()
+    if target_thread_ids:
+        for row in (
+            db.query(DiagnosticTargetPdf)
+            .filter(DiagnosticTargetPdf.rag_thread_id.in_(target_thread_ids))
+            .all()
+        ):
+            name = (row.original_filename or "").strip().lower()
+            if name:
+                filenames.add(name)
+            if row.assessment_id:
+                assessment_ids.add(int(row.assessment_id))
+    doc_ids = set()
+    if filenames or assessment_ids:
+        q = db.query(TargetBankDocument.id, TargetBankDocument.original_filename, TargetBankDocument.assessment_id)
+        for doc_id, fname, assessment_id in q.all():
+            fn = (fname or "").strip().lower()
+            if fn and fn in filenames:
+                doc_ids.add(int(doc_id))
+            elif assessment_id and int(assessment_id) in assessment_ids:
+                doc_ids.add(int(doc_id))
+    return doc_ids, filenames
+
+
+def _load_approved_bank_candidates(
+    topic_id: int,
+    target_thread_ids: List[str],
+    *,
+    limit: int = _SEMANTIC_BANK_CANDIDATE_CAP,
+):
+    """Approved Target-bank rows for this diagnostic's PDFs, Domain-first then widen."""
+    from app.models.lms_models import Question, QuestionTaxonomy, TargetBankDocument, TargetBankItem
+
+    db = get_db()
+    doc_ids, _filenames = _target_bank_doc_filters(target_thread_ids)
+    # Only scan bank rows that belong to this diagnostic's Target PDF(s).
+    if not doc_ids:
+        return []
+
+    base = (
+        db.query(TargetBankItem, Question, TargetBankDocument, QuestionTaxonomy)
+        .join(Question, Question.id == TargetBankItem.question_id)
+        .join(TargetBankDocument, TargetBankDocument.id == TargetBankItem.document_id)
+        .outerjoin(QuestionTaxonomy, QuestionTaxonomy.question_id == Question.id)
+        .filter(
+            TargetBankItem.verification_status == "approved",
+            Question.is_active.is_(True),
+            TargetBankItem.document_id.in_(list(doc_ids)),
+        )
+    )
+
+    domain_rows = []
+    if topic_id:
+        domain_rows = (
+            base.filter(QuestionTaxonomy.domain_topic_id == int(topic_id))
+            .order_by(TargetBankItem.source_question_number)
+            .limit(limit)
+            .all()
+        )
+    rows = domain_rows
+    if len(rows) < max(4, limit // 4):
+        wider = (
+            base.order_by(TargetBankItem.source_question_number)
+            .limit(limit)
+            .all()
+        )
+        seen = {item.id for item, _q, _d, _t in rows}
+        for row in wider:
+            if row[0].id in seen:
+                continue
+            rows.append(row)
+            seen.add(row[0].id)
+            if len(rows) >= limit:
+                break
+    return rows
+
+
+def _rank_bank_rows_by_context(rows, context: str, limit: int, scope: str = ""):
+    """Embed weak-area context + bank stems; keep top related approved items."""
+    if not rows or not (context or "").strip():
+        return []
+
+    def _as_triple(row):
+        return (row[0], row[1], row[2])
+
+    def _exactish(row) -> bool:
+        tax = row[3] if len(row) > 3 else None
+        printed = ((getattr(tax, "printed_topic", None) or "") if tax is not None else "").casefold()
+        want = (scope or "").casefold()
+        return bool(want and printed and (want == printed or want in printed or printed in want))
+
+    try:
+        from app.utils.rag_service import get_rag_embeddings
+
+        embeddings = get_rag_embeddings()
+        query_vec = embeddings.embed_query(context)
+        texts = []
+        for _item, question, _doc, taxonomy in rows:
+            printed = ""
+            if taxonomy is not None:
+                printed = (getattr(taxonomy, "printed_topic", None) or "") or ""
+            stem = (question.question_text or "").strip()
+            texts.append(f"{printed}\n{stem}".strip() if printed else stem)
+        doc_vecs = embeddings.embed_documents(texts)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Semantic bank ranking failed; exact-subtopic fallback: %s", exc)
+        exact_rows = [r for r in rows if _exactish(r)]
+        chosen = exact_rows or rows
+        return [_as_triple(chosen[i]) for i in range(min(limit, len(chosen)))]
+
+    scored = []
+    for idx, row in enumerate(rows):
+        score = _cosine_similarity(query_vec, doc_vecs[idx] if idx < len(doc_vecs) else [])
+        if score < _SEMANTIC_BANK_MIN_SCORE:
+            continue
+        scored.append((score, row))
+    scored.sort(key=lambda x: (-x[0], x[1][0].source_question_number or 0))
+    if not scored and rows:
+        # Soft floor: still return the closest few so Learning Chat can open.
+        soft = []
+        for idx, row in enumerate(rows):
+            score = _cosine_similarity(query_vec, doc_vecs[idx] if idx < len(doc_vecs) else [])
+            soft.append((score, row))
+        soft.sort(key=lambda x: (-x[0], x[1][0].source_question_number or 0))
+        scored = soft[: max(limit, 1)]
+        logger.info(
+            "Semantic bank used soft top-%d (below floor %.2f) for context",
+            len(scored),
+            _SEMANTIC_BANK_MIN_SCORE,
+        )
+    out = []
+    for score, row in scored[:limit]:
+        out.append(_as_triple(row))
+        logger.debug(
+            "Semantic bank pick q#%s score=%.3f",
+            row[0].source_question_number,
+            score,
+        )
+    return out
+
+
+def _semantic_bank_rows(
+    topic_id: int,
+    scope: str,
+    topic_name: str,
+    grade_level: Optional[str],
+    target_thread_ids: List[str],
+    limit: int = 12,
+    context: Optional[str] = None,
+):
+    """Approved Target PDF bank MCQs related to the weak area by meaning."""
+    ctx = context or _weak_area_context(scope, topic_name, grade_level)
+    candidates = _load_approved_bank_candidates(
+        topic_id, target_thread_ids, limit=_SEMANTIC_BANK_CANDIDATE_CAP
+    )
+    if not candidates:
+        return []
+    return _rank_bank_rows_by_context(candidates, ctx, limit=limit, scope=scope)
+
+
+def _exact_bank_source_text(
     topic_id: int, scope: str, grade_level: Optional[str], target_thread_ids: List[str], limit: int = 12
 ) -> Tuple[str, Optional[str]]:
-    """Approved Target-PDF MCQs of this canonical Subtopic as grounding text.
-
-    Returns (source_text, rag_thread_id of the Target PDF they came from).
-    Only ``approved`` bank items are used, so unverified extraction never feeds
-    generation either.
-    """
+    """Exact Subtopic bank grounding only (thin fallback, no near-name matching)."""
     try:
         from app.models.lms_models import (
             DiagnosticTargetPdf,
@@ -548,8 +825,8 @@ def _bank_source_text(
             .limit(limit)
             .all()
         )
-    except Exception as exc:  # noqa: BLE001 - fall back to the RAG section text
-        logger.warning("Could not read Target bank source for %s: %s", scope, exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not read exact Target bank source for %s: %s", scope, exc)
         return "", None
     if not rows:
         return "", None
@@ -558,21 +835,183 @@ def _bank_source_text(
     for item, q, doc in rows:
         opts = json.loads(q.options_json or "[]")
         letter = "ABCD"[q.correct_option_index] if q.correct_option_index is not None else "?"
+        correct_text = ""
+        if q.correct_option_index is not None and q.correct_option_index < len(opts):
+            correct_text = opts[q.correct_option_index].get("text") or ""
         lines.append(
             f"Q{item.source_question_number}. {q.question_text}\n"
             + "\n".join(f"{o.get('label')}. {o.get('text')}" for o in opts)
-            + f"\nCorrect answer: {letter}. {(opts[q.correct_option_index].get('text') if q.correct_option_index < len(opts) else '')}"
+            + f"\nCorrect answer: {letter}. {correct_text}"
         )
         filenames.add((doc.original_filename or "").strip().lower())
     thread = None
     try:
-        for t in get_db().query(DiagnosticTargetPdf).filter(DiagnosticTargetPdf.rag_thread_id.in_(target_thread_ids)).all():
+        for t in (
+            get_db()
+            .query(DiagnosticTargetPdf)
+            .filter(DiagnosticTargetPdf.rag_thread_id.in_(target_thread_ids))
+            .all()
+        ):
             if (t.original_filename or "").strip().lower() in filenames:
                 thread = t.rag_thread_id
                 break
     except Exception:  # noqa: BLE001
         pass
+    if not thread and target_thread_ids:
+        thread = target_thread_ids[0]
     return "\n\n".join(lines), thread
+
+
+def _bank_source_text(
+    topic_id: int,
+    scope: str,
+    grade_level: Optional[str],
+    target_thread_ids: List[str],
+    limit: int = 12,
+    topic_name: str = "",
+) -> Tuple[str, Optional[str]]:
+    """Approved Target-PDF MCQs related to this weak area as grounding text."""
+    try:
+        from app.models.lms_models import DiagnosticTargetPdf
+
+        rows = _semantic_bank_rows(
+            topic_id,
+            scope,
+            topic_name or scope,
+            grade_level,
+            target_thread_ids,
+            limit=limit,
+        )
+    except Exception as exc:  # noqa: BLE001 - fall back to exact Subtopic bank
+        logger.warning("Could not read semantic Target bank source for %s: %s", scope, exc)
+        return _exact_bank_source_text(topic_id, scope, grade_level, target_thread_ids, limit=limit)
+    if not rows:
+        return _exact_bank_source_text(topic_id, scope, grade_level, target_thread_ids, limit=limit)
+    lines = [f"Verified Target PDF questions related to {scope}:"]
+    filenames = set()
+    for item, q, doc in rows:
+        opts = json.loads(q.options_json or "[]")
+        letter = "ABCD"[q.correct_option_index] if q.correct_option_index is not None else "?"
+        correct_text = ""
+        if q.correct_option_index is not None and q.correct_option_index < len(opts):
+            correct_text = opts[q.correct_option_index].get("text") or ""
+        lines.append(
+            f"Q{item.source_question_number}. {q.question_text}\n"
+            + "\n".join(f"{o.get('label')}. {o.get('text')}" for o in opts)
+            + f"\nCorrect answer: {letter}. {correct_text}"
+        )
+        filenames.add((doc.original_filename or "").strip().lower())
+    thread = None
+    try:
+        for t in (
+            get_db()
+            .query(DiagnosticTargetPdf)
+            .filter(DiagnosticTargetPdf.rag_thread_id.in_(target_thread_ids))
+            .all()
+        ):
+            if (t.original_filename or "").strip().lower() in filenames:
+                thread = t.rag_thread_id
+                break
+    except Exception:  # noqa: BLE001
+        pass
+    if not thread and target_thread_ids:
+        thread = target_thread_ids[0]
+    return "\n\n".join(lines), thread
+
+
+def _bank_items_as_queue(
+    *,
+    topic_id: int,
+    topic_name: str,
+    approved_scope: str,
+    ladder: List[str],
+    target_thread_ids: List[str],
+    grade_level: Optional[str],
+    exclude_keys: set[str],
+    seen_texts: set[str],
+    context: Optional[str] = None,
+) -> List[dict]:
+    """Serve approved bank MCQs selected by AI relevance to the weak area."""
+    from app.services.lms.mcq_utils import options_from_json
+    from app.services.quiz.display_format_qa import (
+        finalize_display_text,
+        finalize_option_text,
+        student_render,
+    )
+
+    try:
+        rows = _semantic_bank_rows(
+            topic_id,
+            approved_scope,
+            topic_name,
+            grade_level,
+            target_thread_ids,
+            limit=max(8, len(ladder) * 3),
+            context=context,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Semantic bank queue failed for %s: %s", approved_scope, exc)
+        return []
+    thread_id = target_thread_ids[0] if target_thread_ids else ""
+    out: List[dict] = []
+    for item, q, _doc in rows:
+        if len(out) >= len(ladder):
+            break
+        key = _question_key(q.question_text or "")
+        if not key or key in exclude_keys or key in seen_texts:
+            continue
+        raw_opts = options_from_json(q.options_json or "[]")
+        options = normalize_options(raw_opts)
+        if not options or q.correct_option_index is None:
+            continue
+        if q.correct_option_index < 0 or q.correct_option_index >= len(options):
+            continue
+        if any(is_label_only(o.get("text") or "") and is_label_only(o.get("latex") or "") for o in options):
+            continue
+        options, correct_idx = shuffle_options(
+            options, int(q.correct_option_index), preserve_order=_has_positional_option(options)
+        )
+        q_text, q_latex = finalize_display_text(q.question_text, q.question_latex)
+        safe_opts = []
+        for o in options:
+            ot, ol = finalize_option_text(o.get("text"), o.get("latex"))
+            safe_opts.append(
+                {
+                    "label": o.get("label"),
+                    "text": ot,
+                    "latex": ol,
+                    "render": student_render(ot, ol, inline=True),
+                }
+            )
+        difficulty = ladder[len(out)] if len(out) < len(ladder) else ladder[-1]
+        seen_texts.add(key)
+        out.append(
+            {
+                "topic_id": topic_id,
+                "topic_name": topic_name,
+                "pdf_section": approved_scope,
+                "rag_thread_id": thread_id,
+                "question_text": q_text or q.question_text,
+                "question_latex": q_latex,
+                "question_render": student_render(q_text, q_latex, inline=False),
+                "options": safe_opts,
+                "correct_option_index": correct_idx,
+                "difficulty": difficulty if difficulty in _DIFF_RANK else "medium",
+                "source": "target_bank",
+                "generation_policy": _PDF_ONLY_POLICY,
+                "key_verified": True,
+                "bank_item_id": item.id,
+                "answered": False,
+                "correct": None,
+            }
+        )
+    if out:
+        logger.info(
+            "Learning Chat semantic bank served %d approved item(s) for scope %s",
+            len(out),
+            approved_scope,
+        )
+    return out
 
 
 def _build_question_queue(
@@ -1820,8 +2259,11 @@ def explain_with_tutor(
         from app.services.lms import class_service as _cs
 
         pdf_excerpt, _ = _bank_source_text(
-            int(current_q.get("topic_id") or 0), current_q["subtopic_name"],
-            _cs.get_student_grade(student_id), [thread_for_excerpt] if thread_for_excerpt else [],
+            int(current_q.get("topic_id") or 0),
+            current_q["subtopic_name"],
+            _cs.get_student_grade(student_id),
+            [thread_for_excerpt] if thread_for_excerpt else [],
+            topic_name=(current_q.get("topic_name") or ""),
         )
         pdf_excerpt = pdf_excerpt[:4000]
     if not pdf_excerpt and thread_for_excerpt and session.rag_owner_id and pdf_section:
