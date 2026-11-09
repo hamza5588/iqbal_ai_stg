@@ -265,6 +265,9 @@ def weak_area_breakdown(student_id: int) -> List[dict]:
         bank_counts = guided_practice_service.approved_counts_for_subtopics(
             [s["subtopic_id"] for s in weak_subs]
         )
+        domain_bank_counts = guided_practice_service.approved_counts_for_domains(
+            [s["domain_topic_id"] for s in weak_subs if s.get("domain_topic_id")]
+        )
     except Exception:  # noqa: BLE001 - the breakdown is additive; never break the path
         return []
 
@@ -287,7 +290,10 @@ def weak_area_breakdown(student_id: int) -> List[dict]:
         tid = int(sub.get("domain_topic_id") or 0)
         if not tid:
             continue
-        available = int(bank_counts.get(sub["subtopic_id"], 0))
+        available = guided_practice_service._practice_available_count(
+            int(bank_counts.get(sub["subtopic_id"], 0)),
+            int(domain_bank_counts.get(tid, 0)),
+        )
         domain_entry(tid, sub.get("domain_name"))["subtopics"].append(
             {
                 "subtopic_id": sub["subtopic_id"],

@@ -3,14 +3,16 @@
 Selection rules:
 * only ``approved`` bank items (an admin verified them against the source page);
 * only the student's grade;
-* only Subtopics that are weak for the student *right now* (latest Baseline /
-  Follow-up / Learning Chat), optionally narrowed to one Domain or Subtopic -
-  a broad Domain match alone never qualifies a question;
-* unseen questions first, then the least recently seen (the bank is finite, so
-  questions are reused - and the response says so - rather than invented).
-* four-parameter matching inside the chosen Subtopic: each question the student
-  got wrong (latest Baseline/Follow-up on that Subtopic + Guided Practice misses
-  since) is a *target*, and candidates are ranked against it:
+* focus on Subtopics that are weak for the student *right now* (latest Baseline /
+  Follow-up / Learning Chat), optionally narrowed to one Domain or Subtopic;
+* when a weak Subtopic has fewer than ``MIN_GUIDED_POOL`` approved items, widen
+  the pool to other approved Target-bank questions in the same Domain so the
+  student still gets a rotating set of at least ~10 practice items;
+* unseen questions first (shuffled), then reshuffle/reuse the least recently
+  seen when the finite bank is exhausted - never invent new questions.
+* four-parameter matching inside the pool: each question the student got wrong
+  (latest Baseline/Follow-up on that Subtopic + Guided Practice misses since)
+  is a *target*, and candidates are ranked against it:
 
     P1 Domain + Topic + Cognitive level + Difficulty
     P2 Domain + Topic + Cognitive level
@@ -19,12 +21,10 @@ Selection rules:
 
   A difficulty counts only when both papers printed one (see
   ``question_attributes.known_difficulty``). Wrong answers take turns
-  (round-robin) and each is served its own best available match; an unseen
-  question always beats a repeat, and once a bank is exhausted the repeats
-  rotate across the weak Subtopics (least recently practised first).
+  (round-robin) and each is served its own best available match.
 
-A weak Subtopic with no approved questions is reported as a coverage gap
-(``coverage_gaps``) for admins/teachers; nothing is substituted for it.
+A weak Subtopic with no approved questions *and* no Domain bank fill is reported
+as a coverage gap (``coverage_gaps``) for admins/teachers.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ import json
 import logging
 import random
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 
 from sqlalchemy import func
 
@@ -54,6 +54,10 @@ from app.utils.db import get_db
 logger = logging.getLogger(__name__)
 
 _LABELS = "ABCD"
+
+# Minimum rotating Target-bank questions Guided Practice should offer per session.
+# When the exact weak Subtopic has fewer approved items, same-Domain bank items fill.
+MIN_GUIDED_POOL = 10
 
 
 def _approved_query(db, grade: Optional[str]):
@@ -94,6 +98,36 @@ def approved_counts_for_subtopics(subtopic_ids: Iterable[int], grade: Optional[s
     return {int(k): int(v) for k, v in q.group_by(QuestionTaxonomy.subtopic_id).all()}
 
 
+def approved_counts_for_domains(domain_topic_ids: Iterable[int], grade: Optional[str] = None) -> Dict[int, int]:
+    ids = [int(i) for i in domain_topic_ids if i]
+    if not ids:
+        return {}
+    db = get_db()
+    q = (
+        db.query(QuestionTaxonomy.domain_topic_id, func.count(TargetBankItem.id))
+        .join(TargetBankItem, TargetBankItem.question_id == QuestionTaxonomy.question_id)
+        .join(Question, Question.id == QuestionTaxonomy.question_id)
+        .join(TargetBankDocument, TargetBankDocument.id == TargetBankItem.document_id)
+        .filter(
+            QuestionTaxonomy.domain_topic_id.in_(ids),
+            TargetBankItem.verification_status == "approved",
+            Question.is_active.is_(True),
+        )
+    )
+    if grade:
+        q = q.filter(TargetBankDocument.grade_level == grade)
+    return {int(k): int(v) for k, v in q.group_by(QuestionTaxonomy.domain_topic_id).all()}
+
+
+def _practice_available_count(exact: int, domain_total: int) -> int:
+    """UI/pool size: exact Subtopic count, or Domain fill when below the minimum."""
+    if exact <= 0 and domain_total <= 0:
+        return 0
+    if exact >= MIN_GUIDED_POOL:
+        return exact
+    return max(exact, domain_total)
+
+
 def _student_grade(student_id: int) -> str:
     try:
         from app.services.lms import class_service
@@ -109,17 +143,25 @@ def eligibility(student_id: int) -> dict:
     grade = _student_grade(student_id)
     weak = subtopic_mastery_service.get_weak_subtopics(student_id)
     counts = approved_counts_for_subtopics([w["subtopic_id"] for w in weak], grade or None)
+    domain_counts = approved_counts_for_domains(
+        [w["domain_topic_id"] for w in weak if w.get("domain_topic_id")], grade or None
+    )
     available, gaps = [], []
     for w in weak:
+        exact = counts.get(w["subtopic_id"], 0)
+        domain_total = domain_counts.get(int(w["domain_topic_id"] or 0), 0)
+        available_n = _practice_available_count(exact, domain_total)
         entry = {
             "domain_topic_id": w["domain_topic_id"],
             "domain_name": w["domain_name"],
             "subtopic_id": w["subtopic_id"],
             "subtopic_name": w["subtopic_name"],
             "score_percent": w["score_percent"],
-            "approved_questions": counts.get(w["subtopic_id"], 0),
+            "approved_questions": available_n,
+            "approved_exact": exact,
+            "approved_domain": domain_total,
         }
-        (available if entry["approved_questions"] else gaps).append(entry)
+        (available if available_n else gaps).append(entry)
     return {"grade_level": grade, "available": available, "coverage_gaps": gaps}
 
 
@@ -209,14 +251,26 @@ def _rotate_targets(db, student_id: int, targets: List[dict]) -> List[dict]:
 
 
 def _choose_in_subtopic(cands: list, targets: List[dict], last_seen: dict) -> tuple:
-    """(candidate, target, priority, reused) for one Subtopic's approved candidates."""
+    """Back-compat wrapper: pick inside one Subtopic's candidates."""
+    return _choose_in_pool(cands, targets, last_seen, order=None)
+
+
+def _choose_in_pool(
+    cands: list,
+    targets: List[dict],
+    last_seen: dict,
+    order: Optional[Dict[int, int]] = None,
+) -> Optional[tuple]:
+    """(candidate, target, priority, reused) from a Target-bank pool.
+
+    Unseen items are shuffled each turn. Once every item has been seen, the pool
+    reshuffles among the least-recently-seen tier so repeats still fluctuate.
+    """
+    if not cands:
+        return None
     attrs = {c[0].id: (qa.cognitive_level_of(c[1]), qa.known_difficulty(c[1])) for c in cands}
     unseen = [c for c in cands if c[0].id not in last_seen]
     pool, reused = (unseen, False) if unseen else (cands, True)
-    # Each wrong answer gets its turn (``targets`` is already rotated, least
-    # followed-up first) and is served its own best available match. Choosing the
-    # best (priority, target) pair over all targets instead starved any wrong answer
-    # the bank can only match at P2-P4 (real E2E: an Analysis/Reasoning miss).
     target = targets[0] if targets else None
     by_prio: Dict[int, list] = {}
     for c in pool:
@@ -224,9 +278,20 @@ def _choose_in_subtopic(cands: list, targets: List[dict], last_seen: dict) -> tu
     prio = min(by_prio)
     tier = by_prio[prio]
     if reused:
-        cand = min(tier, key=lambda c: last_seen[c[0].id])
+        # Least recently seen first; shuffle within the same timestamp so repeats vary.
+        oldest = min(last_seen[c[0].id] for c in tier)
+        oldest_tier = [c for c in tier if last_seen[c[0].id] == oldest]
+        if order:
+            oldest_tier.sort(key=lambda c: order.get(c[2].subtopic_id, 10**9))
+        random.shuffle(oldest_tier)
+        cand = oldest_tier[0]
     else:
-        cand = random.choice(tier)
+        if order:
+            # Prefer weaker Subtopics, then shuffle so consecutive serves differ.
+            best_rank = min(order.get(c[2].subtopic_id, 10**9) for c in tier)
+            tier = [c for c in tier if order.get(c[2].subtopic_id, 10**9) == best_rank] or tier
+        random.shuffle(tier)
+        cand = tier[0]
     return cand, target, prio, reused
 
 
@@ -293,16 +358,34 @@ def next_question(
     if pending:
         pending.status = "abandoned"  # its subtopic is no longer weak / no longer targeted
 
-    # Unseen questions first across ALL targeted weak subtopics (weakest subtopic
-    # first); only when every one is exhausted, repeat the least recently seen.
+    # Prefer exact weak Subtopics; if the pool is smaller than MIN_GUIDED_POOL,
+    # fill with other approved Target-bank items from the same Domain(s).
     pool.sort(key=lambda p: (p["score_percent"], p["subtopic_name"]))
     grade = elig["grade_level"] or None
+    weak_sub_ids: Set[int] = {int(p["subtopic_id"]) for p in pool}
+    domain_ids: Set[int] = {int(p["domain_topic_id"]) for p in pool if p.get("domain_topic_id")}
+    focus_sub_id = int(subtopic_id) if subtopic_id else int(pool[0]["subtopic_id"])
     order = {p["subtopic_id"]: rank for rank, p in enumerate(pool)}
-    candidates = (
+
+    exact_candidates = (
         _approved_query(db, grade)
-        .filter(QuestionTaxonomy.subtopic_id.in_(list(order)))
+        .filter(QuestionTaxonomy.subtopic_id.in_(list(weak_sub_ids)))
         .all()
     )
+    candidates = list(exact_candidates)
+    if len(candidates) < MIN_GUIDED_POOL and domain_ids:
+        wider = (
+            _approved_query(db, grade)
+            .filter(QuestionTaxonomy.domain_topic_id.in_(list(domain_ids)))
+            .all()
+        )
+        seen_ids = {c[0].id for c in candidates}
+        for row in wider:
+            if row[0].id in seen_ids:
+                continue
+            candidates.append(row)
+            seen_ids.add(row[0].id)
+
     choice = None
     if candidates:
         last_seen = dict(
@@ -314,20 +397,6 @@ def next_question(
             .group_by(GuidedPracticeAttempt.bank_item_id)
             .all()
         )
-        # Which weak Subtopic: weakest one that still has unseen questions, else
-        # the one practised least recently (by its *latest* serve). Keying on the
-        # oldest single question starved Subtopics: repeats stay in the best-match
-        # tier, so a never-repeated low tier kept its Subtopic "oldest" forever
-        # (real E2E: 30/30 repeats in one Subtopic, Factor Theorem never again).
-        unseen = [c for c in candidates if c[0].id not in last_seen]
-        if unseen:
-            sub_id = min(unseen, key=lambda c: order[c[2].subtopic_id])[2].subtopic_id
-        else:
-            latest: Dict[int, datetime] = {}
-            for c in candidates:
-                sid = c[2].subtopic_id
-                latest[sid] = max(latest.get(sid, last_seen[c[0].id]), last_seen[c[0].id])
-            sub_id = min(latest, key=lambda sid: (latest[sid], order[sid]))
         # Students assessed before wrong answers were recorded: rebuild them once.
         if not db.query(IncorrectAnswerRecord.id).filter(IncorrectAnswerRecord.student_id == student_id).first():
             try:
@@ -335,11 +404,21 @@ def next_question(
             except Exception as exc:  # noqa: BLE001 - matching degrades to topic-only
                 logger.warning("Incorrect-answer backfill failed for student %s: %s", student_id, exc)
                 db.rollback()
-        targets = _rotate_targets(db, student_id, incorrect_targets(student_id, sub_id))
-        sub_cands = [c for c in candidates if c[2].subtopic_id == sub_id]
-        choice = _choose_in_subtopic(sub_cands, targets, last_seen)
+        targets = _rotate_targets(db, student_id, incorrect_targets(student_id, focus_sub_id))
+        # Prefer candidates tagged to a weak Subtopic; Domain fill is secondary.
+        preferred = [c for c in candidates if c[2].subtopic_id in weak_sub_ids]
+        choice = _choose_in_pool(preferred or candidates, targets, last_seen, order)
+        if choice is None:
+            choice = _choose_in_pool(candidates, targets, last_seen, order)
     if choice:
         (item, question, tax), target, priority, reused = choice
+        # Credit mastery to the weak Subtopic the student opened, even when the
+        # served bank item is a same-Domain fill used to reach MIN_GUIDED_POOL.
+        credit_sub_id = (
+            int(tax.subtopic_id)
+            if tax.subtopic_id in weak_sub_ids
+            else focus_sub_id
+        )
         match = {
             "priority": priority,
             "matched_on": PRIORITY_LABELS[priority],
@@ -350,13 +429,14 @@ def next_question(
                 "printed_difficulty": question.printed_difficulty,  # label as on the paper
                 "domain_topic_id": tax.domain_topic_id,
                 "subtopic_id": tax.subtopic_id,
+                "practice_focus_subtopic_id": credit_sub_id,
             },
             "reason": "matched_incorrect_answer" if target else "no_recorded_incorrect_answer",
         }
         attempt = GuidedPracticeAttempt(
             student_id=student_id,
             bank_item_id=item.id,
-            subtopic_id=tax.subtopic_id,
+            subtopic_id=credit_sub_id,
             option_order_json=json.dumps(_option_order(question)),
             status="served",
             match_priority=priority,
@@ -365,12 +445,12 @@ def next_question(
         )
         db.add(attempt)
         db.commit()
-        payload = _serve_payload(attempt, item, elig, resumed=False)
+        payload = _serve_payload(attempt, item, elig, resumed=False, pool_size=len(candidates))
         payload["bank_exhausted"] = reused
         if reused:
             payload["message"] = (
-                "You have practised every verified question for your weak subtopics - "
-                "here is one again so you can keep practising."
+                "You have practised every verified question in this set - "
+                "questions are shuffled so you can keep practising."
             )
         return payload
     db.commit()
@@ -378,7 +458,14 @@ def next_question(
             "coverage_gaps": elig["coverage_gaps"]}
 
 
-def _serve_payload(attempt: GuidedPracticeAttempt, item: TargetBankItem, elig: dict, *, resumed: bool) -> dict:
+def _serve_payload(
+    attempt: GuidedPracticeAttempt,
+    item: TargetBankItem,
+    elig: dict,
+    *,
+    resumed: bool,
+    pool_size: Optional[int] = None,
+) -> dict:
     from app.services.lms.target_bank_service import bank_render
 
     db = get_db()
@@ -394,7 +481,12 @@ def _serve_payload(attempt: GuidedPracticeAttempt, item: TargetBankItem, elig: d
         )
         .scalar()
     )
-    total = next((p["approved_questions"] for p in elig["available"] if p["subtopic_id"] == attempt.subtopic_id), 0)
+    total = next(
+        (p["approved_questions"] for p in elig["available"] if p["subtopic_id"] == attempt.subtopic_id),
+        0,
+    )
+    if pool_size is not None:
+        total = max(int(total or 0), int(pool_size))
     return {
         "attempt_id": attempt.id,
         "resumed": resumed,
