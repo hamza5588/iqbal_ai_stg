@@ -697,6 +697,49 @@ def regenerate_quiz_question(quiz_id: int, question_id: int):
         return json_error(str(e), code="regenerate_error", status=500)
 
 
+@bp.route("/quizzes/<int:quiz_id>/questions/<int:question_id>/ai-edit", methods=["POST"])
+@login_required
+def ai_edit_quiz_question(quiz_id: int, question_id: int):
+    """Teacher describes the fix in plain English; LLM rewrites the MCQ (no math keyboard)."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    denied, _assessment = _require_assessment_owner(quiz_id)
+    if denied:
+        return denied
+
+    from app.models.lms_models import AssessmentQuestion
+    from app.utils.db import get_db
+
+    db = get_db()
+    link = (
+        db.query(AssessmentQuestion)
+        .filter(
+            AssessmentQuestion.assessment_id == quiz_id,
+            AssessmentQuestion.question_id == question_id,
+        )
+        .first()
+    )
+    if not link:
+        return json_error("Question is not on this quiz", code="not_found", status=404)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_success(
+            question_bank_service.ai_edit_question(
+                question_id,
+                body.get("instruction") or body.get("prompt") or "",
+                user_id=_current_user_id(),
+            )
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except Exception as e:
+        return json_error(str(e), code="ai_edit_failed", status=500)
+
+
 @bp.route("/quizzes/<int:quiz_id>/start", methods=["POST"])
 @login_required
 def start_quiz_attempt(quiz_id: int):
@@ -2636,6 +2679,37 @@ def target_bank_correct(item_id: int):
     return json_success(
         target_bank_service.correct_item(item_id, _current_user_id(), request.get_json(silent=True) or {})
     )
+
+
+@bp.route("/target-bank/items/<int:item_id>/ai-edit", methods=["POST"])
+@login_required
+def target_bank_ai_edit(item_id: int):
+    """Admin describes the fix in plain language; LLM rewrites the MCQ (math keyboard optional)."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+    from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
+
+    body = request.get_json(silent=True) or {}
+    apply = body.get("apply", True)
+    if isinstance(apply, str):
+        apply = apply.strip().lower() not in ("0", "false", "no")
+    try:
+        return json_success(
+            target_bank_service.ai_edit_item(
+                item_id,
+                _current_user_id(),
+                body.get("instruction") or body.get("prompt") or "",
+                apply=bool(apply),
+            )
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except Exception as e:
+        return json_error(str(e), code="ai_edit_failed", status=500)
 
 
 @bp.route("/taxonomy", methods=["GET"])

@@ -458,12 +458,119 @@
         #adminDiagReviewModal .d-review-sheet {
             background: #fff;
             border-radius: 14px;
-            width: min(920px, 100%);
+            width: min(1080px, 100%);
             max-height: calc(100vh - 2rem);
             display: flex;
             flex-direction: column;
             overflow: hidden;
             box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+        }
+        #adminDiagReviewModal .d-review-tabs {
+            display: flex;
+            gap: 0.35rem;
+            padding: 0.65rem 1.25rem 0;
+            border-bottom: 1px solid var(--d-line);
+            background: #fff;
+        }
+        #adminDiagReviewModal .d-review-tab {
+            border: 1px solid transparent;
+            border-bottom: none;
+            background: transparent;
+            color: var(--d-muted);
+            font-weight: 700;
+            font-size: 0.86rem;
+            padding: 0.55rem 0.85rem;
+            border-radius: 0.55rem 0.55rem 0 0;
+            cursor: pointer;
+        }
+        #adminDiagReviewModal .d-review-tab.is-active {
+            background: var(--d-bg);
+            color: var(--d-ink);
+            border-color: var(--d-line);
+        }
+        #adminDiagReviewModal .d-bank-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.85rem;
+        }
+        #adminDiagReviewModal .d-bank-toolbar select {
+            border: 1px solid var(--d-line);
+            border-radius: 0.45rem;
+            padding: 0.35rem 0.55rem;
+            font-size: 0.85rem;
+            background: #fff;
+        }
+        #adminDiagReviewModal .d-bank-item {
+            border: 1px solid var(--d-line);
+            border-radius: 0.7rem;
+            padding: 0.85rem 0.95rem;
+            margin-bottom: 0.75rem;
+            background: #fff;
+        }
+        #adminDiagReviewModal .d-bank-item .opt {
+            border: 1px solid var(--d-line);
+            border-radius: 0.4rem;
+            padding: 0.35rem 0.55rem;
+            margin: 0.3rem 0;
+        }
+        #adminDiagReviewModal .d-bank-item .opt.correct {
+            border-color: #15803d;
+            background: #f0fdf4;
+        }
+        #adminDiagReviewModal .d-bank-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.1rem 0.45rem;
+            border-radius: 999px;
+            border: 1px solid var(--d-line);
+            text-transform: uppercase;
+        }
+        #adminDiagReviewModal .d-bank-badge.approved { background: #15803d; color: #fff; border-color: #15803d; }
+        #adminDiagReviewModal .d-bank-badge.needs_review { color: #b45309; border-color: #b45309; }
+        #adminDiagReviewModal .d-bank-badge.auto_verified { color: #15803d; border-color: #15803d; }
+        #adminDiagReviewModal .d-bank-badge.rejected { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+        #adminDiagReviewModal .d-bank-edit {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border: 1px dashed var(--d-line);
+            border-radius: 0.55rem;
+            background: #f8fafc;
+            display: grid;
+            gap: 0.45rem;
+        }
+        #adminDiagReviewModal .d-bank-ai {
+            display: grid;
+            gap: 0.45rem;
+            padding: 0.55rem;
+            border-radius: 0.5rem;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+        }
+        #adminDiagReviewModal .d-bank-edit-hr {
+            border: none;
+            border-top: 1px solid var(--d-line);
+            margin: 0.25rem 0;
+        }
+        #adminDiagReviewModal .d-bank-edit-field {
+            display: grid;
+            gap: 0.2rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--d-muted);
+        }
+        #adminDiagReviewModal .d-bank-edit-field textarea,
+        #adminDiagReviewModal .d-bank-edit-field input {
+            width: 100%;
+            border: 1px solid var(--d-line);
+            border-radius: 0.4rem;
+            padding: 0.4rem 0.55rem;
+            font: inherit;
+            font-weight: 500;
+            color: var(--d-ink);
+            background: #fff;
         }
         #adminDiagReviewModal .d-review-head {
             display: flex;
@@ -673,8 +780,7 @@
             <div>
                 <h3>Library</h3>
                 <p>Active diagnostics by default. Append study PDFs from a row, or browse archives.</p>
-                <p><a href="/admin/target-bank"><strong>Approve Target PDF questions &rarr;</strong></a>
-                   <small>(MCQs extracted from question-bank Target PDFs reach Learning Chat and Guided Practice only after you approve them here)</small></p>
+                <p><small>Target PDF practice questions are approved in <strong>Review &amp; Edit</strong> (Target PDF questions tab), same place as diagnostic MCQs. Full-page tool: <a href="/admin/target-bank">/admin/target-bank</a></small></p>
             </div>
             <div class="d-filters" id="adminDiagFilterTabs" role="tablist">
                 <button type="button" class="d-filter is-active" data-filter="published" onclick="setAdminDiagListFilter('published')">
@@ -694,7 +800,7 @@
         <div id="adminDiagList"></div>
     </div>
 
-    <!-- Review & edit generated MCQs before Approve (students cannot see drafts) -->
+    <!-- Review diagnostic MCQs + Target PDF bank questions before students see practice -->
     <div id="adminDiagReviewModal" role="dialog" aria-modal="true" aria-labelledby="adminDiagReviewTitle" onclick="if(event.target===this)closeAdminDiagReview()">
         <div class="d-review-sheet">
             <div class="d-review-head">
@@ -704,6 +810,10 @@
                 </div>
                 <button type="button" class="d-review-close" onclick="closeAdminDiagReview()" aria-label="Close">&times;</button>
             </div>
+            <div class="d-review-tabs" role="tablist" aria-label="Review sections">
+                <button type="button" class="d-review-tab is-active" id="adminDiagReviewTabDiag" role="tab" aria-selected="true" onclick="adminSetReviewTab('diag')">Diagnostic questions</button>
+                <button type="button" class="d-review-tab" id="adminDiagReviewTabBank" role="tab" aria-selected="false" onclick="adminSetReviewTab('bank')">Target PDF questions</button>
+            </div>
             <div class="d-review-body" id="adminDiagReviewBody">
                 <p class="text-slate-500 text-sm">Loading questions…</p>
             </div>
@@ -712,6 +822,9 @@
                 <button type="button" class="d-action" onclick="closeAdminDiagReview()">Close</button>
                 <button type="button" class="d-action primary" id="adminDiagReviewApproveBtn" onclick="adminApproveFromReview()">
                     <i class="fas fa-check"></i> Approve for Students
+                </button>
+                <button type="button" class="d-action primary" id="adminDiagReviewBankBulkBtn" style="display:none" onclick="adminApproveBankAutoVerified()">
+                    <i class="fas fa-check-double"></i> Approve all auto-verified
                 </button>
             </div>
         </div>

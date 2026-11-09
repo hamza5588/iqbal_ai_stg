@@ -632,6 +632,90 @@ def correct_item(item_id: int, admin_id: int, changes: dict) -> dict:
     return _item_dict(item, question, tax, names)
 
 
+def ai_edit_item(item_id: int, admin_id: int, instruction: str, *, apply: bool = True) -> dict:
+    """Rewrite a bank MCQ from a short admin prompt (no math keyboard).
+
+    Uses the platform LLM. Math that PDF text flattened (e.g. ``√a n`` instead of
+    an nth-root index) is restored with ``$...$`` LaTeX so MathJax can render it.
+    When ``apply`` is true the rewrite is saved via ``correct_item`` (back to
+    needs_review); otherwise only a draft is returned for the admin to review.
+    """
+    from pydantic import BaseModel, Field
+
+    from app.services.quiz.retry_utils import invoke_structured
+    from app.utils.llm_factory import get_chat_model
+    from app.utils.llm_gateway import llm_workflow
+
+    instruction = (instruction or "").strip()
+    if len(instruction) < 3:
+        raise LMSValidationError("Describe what to fix (e.g. 'put n as the index of the radical').")
+    if len(instruction) > 2000:
+        raise LMSValidationError("Instruction is too long (max 2000 characters).")
+
+    item, question = _load_item(item_id)
+    options = options_from_json(question.options_json)
+    db = get_db()
+    tax = db.query(QuestionTaxonomy).filter(QuestionTaxonomy.question_id == question.id).first()
+
+    class _AiBankEdit(BaseModel):
+        question_text: str = Field(..., description="Full stem; math in $...$ LaTeX when needed")
+        options: List[str] = Field(..., description="Exactly four option texts A–D order")
+        correct_label: str = Field(..., description="A, B, C, or D")
+        printed_domain: Optional[str] = None
+        printed_topic: Optional[str] = None
+        notes: Optional[str] = Field(None, description="One-line what you changed")
+
+    current = {
+        "question_text": question.question_text,
+        "options": [o.get("text") for o in options],
+        "correct_label": _LABELS[question.correct_option_index]
+        if question.correct_option_index is not None
+        else "A",
+        "printed_domain": (tax.printed_domain if tax else None) or "",
+        "printed_topic": (tax.printed_topic if tax else None) or "",
+        "verification_status": item.verification_status,
+        "report": json.loads(item.verification_report_json or "{}"),
+    }
+
+    prompt = (
+        "You are editing ONE extracted Target-PDF MCQ for a Grade school math bank.\n"
+        "The admin instruction describes what is wrong. Fix ONLY what they ask for.\n"
+        "Keep the same meaning, answer key, and four options unless the instruction says otherwise.\n"
+        "Math rules:\n"
+        "- Prefer clear LaTeX inside single $...$ for radicals, fractions, exponents, subscripts.\n"
+        "- Nth root with index n of a must be written as $\\sqrt[n]{a}$ (index on the radical), "
+        "never as plain '√a n' or '√an'.\n"
+        "- Square root of a: $\\sqrt{a}$. Fraction a/b: $\\frac{a}{b}$.\n"
+        "- Keep surrounding English prose as plain text outside the $...$ spans.\n"
+        "- Do not invent new topics or change Domain/Topic unless asked.\n"
+        "- correct_label must be A, B, C, or D.\n"
+        "- options must be exactly four non-empty strings in order A–D.\n\n"
+        f"ADMIN INSTRUCTION:\n{instruction}\n\n"
+        f"CURRENT ITEM JSON:\n{json.dumps(current, ensure_ascii=False)}\n"
+    )
+
+    with llm_workflow("target_bank_ai_edit", user_id=admin_id, user_role="admin"):
+        llm = get_chat_model(temperature=0.2, max_tokens=2500)
+        draft: _AiBankEdit = invoke_structured(llm, _AiBankEdit, prompt)
+
+    proposed = {
+        "question_text": draft.question_text.strip(),
+        "options": [str(o).strip() for o in draft.options],
+        "correct_label": draft.correct_label.strip().upper(),
+        "printed_domain": (draft.printed_domain or current["printed_domain"] or "").strip(),
+        "printed_topic": (draft.printed_topic or current["printed_topic"] or "").strip(),
+        "notes": (draft.notes or "").strip() or None,
+    }
+    if len(proposed["options"]) != 4 or not all(proposed["options"]):
+        raise LMSValidationError("AI returned invalid options; try again with a clearer instruction.")
+
+    if not apply:
+        return {"applied": False, "proposed": proposed, "before": current}
+
+    saved = correct_item(item_id, admin_id, proposed)
+    return {"applied": True, "proposed": proposed, "item": saved, "notes": proposed.get("notes")}
+
+
 def page_preview_png(document_id: int, page: int, bbox: Optional[List[float]] = None, zoom: float = 2.0) -> bytes:
     """PNG of a source page (optionally clipped to a question region) for review."""
     import pymupdf

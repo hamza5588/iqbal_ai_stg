@@ -204,3 +204,87 @@ def soft_delete_question(question_id: int) -> None:
 
 def question_to_dict(q: Question) -> dict:
     return _serialize_question(q)
+
+
+def ai_edit_question(question_id: int, instruction: str, *, user_id: Optional[int] = None) -> dict:
+    """Rewrite a quiz/diagnostic MCQ from a short plain-language admin/teacher prompt.
+
+    Same approach as Target PDF bank AI edit: no math keyboard — the model restores
+    flattened radicals/fractions with ``$...$`` LaTeX and updates the stored MCQ.
+    """
+    import json
+
+    from pydantic import BaseModel, Field
+
+    from app.services.quiz.retry_utils import invoke_structured
+    from app.utils.llm_factory import get_chat_model
+    from app.utils.llm_gateway import llm_workflow
+
+    instruction = (instruction or "").strip()
+    if len(instruction) < 3:
+        raise LMSValidationError("Describe what to fix (e.g. 'put n as the index of the radical').")
+    if len(instruction) > 2000:
+        raise LMSValidationError("Instruction is too long (max 2000 characters).")
+
+    q = get_question(question_id)
+    options = options_from_json(q.options_json)
+    labels = "ABCD"
+
+    class _AiMcqEdit(BaseModel):
+        question_text: str = Field(..., description="Full stem; math in $...$ LaTeX when needed")
+        options: List[str] = Field(..., description="Exactly four option texts in A–D order")
+        correct_label: str = Field(..., description="A, B, C, or D")
+        notes: Optional[str] = Field(None, description="One-line summary of the change")
+
+    current = {
+        "question_text": q.question_text,
+        "options": [o.get("text") for o in options],
+        "correct_label": labels[q.correct_option_index]
+        if q.correct_option_index is not None and 0 <= q.correct_option_index < 4
+        else "A",
+    }
+
+    prompt = (
+        "You are editing ONE multiple-choice math question for a school quiz.\n"
+        "The teacher instruction describes what is wrong. Fix ONLY what they ask for.\n"
+        "Keep the same meaning, answer key, and four options unless the instruction says otherwise.\n"
+        "Math rules:\n"
+        "- Prefer clear LaTeX inside single $...$ for radicals, fractions, exponents, subscripts.\n"
+        "- Nth root with index n of a must be $\\sqrt[n]{a}$ (index on the radical), "
+        "never plain '√a n' or '√an'.\n"
+        "- Square root of a: $\\sqrt{a}$. Fraction a/b: $\\frac{a}{b}$.\n"
+        "- Keep surrounding English prose as plain text outside the $...$ spans.\n"
+        "- correct_label must be A, B, C, or D.\n"
+        "- options must be exactly four non-empty strings in order A–D.\n\n"
+        f"TEACHER INSTRUCTION:\n{instruction}\n\n"
+        f"CURRENT ITEM JSON:\n{json.dumps(current, ensure_ascii=False)}\n"
+    )
+
+    with llm_workflow("quiz_question_ai_edit", user_id=user_id, user_role="teacher"):
+        llm = get_chat_model(temperature=0.2, max_tokens=2500)
+        draft: _AiMcqEdit = invoke_structured(llm, _AiMcqEdit, prompt)
+
+    opts = [str(o).strip() for o in draft.options]
+    if len(opts) != 4 or not all(opts):
+        raise LMSValidationError("AI returned invalid options; try again with a clearer instruction.")
+    label = (draft.correct_label or "").strip().upper()
+    if label not in labels:
+        raise LMSValidationError("AI returned an invalid correct answer; try again.")
+    correct_idx = labels.index(label)
+    stem = (draft.question_text or "").strip()
+    if len(stem) < 3:
+        raise LMSValidationError("AI returned an empty question; try again.")
+
+    option_payload = [{"label": labels[i], "text": opts[i], "latex": None} for i in range(4)]
+    updated = update_question(
+        question_id,
+        question_text=stem,
+        question_latex=None,
+        options=option_payload,
+        correct_option_index=correct_idx,
+    )
+    return {
+        "applied": True,
+        "notes": (draft.notes or "").strip() or None,
+        "question": question_to_dict(updated),
+    }
