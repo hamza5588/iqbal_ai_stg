@@ -644,20 +644,6 @@
   window.startLmsPractice = function (domainTopicId, subtopicId) { openLmsPracticePanel(domainTopicId, subtopicId); };
   window.nextLmsPracticeQuestion = function () { loadNextPracticeQuestion(); };
 
-  // "Why this question": the four-parameter match against a question the student got wrong.
-  function practiceMatchNote(match) {
-    if (!match) return '';
-    var served = match.served || {};
-    var diff = served.printed_difficulty || (served.difficulty ? served.difficulty.charAt(0).toUpperCase() + served.difficulty.slice(1) : null);
-    var bits = [served.cognitive_level, diff]
-      .filter(Boolean).map(escapeHtml).join(' · ');
-    var why = match.target
-      ? 'Chosen because you missed a similar question (' + escapeHtml(match.matched_on || '') + ')'
-      : 'Practice for this weak subtopic';
-    return '<p class="lms-practice-match" data-priority="' + Number(match.priority || 0) + '" style="margin:0 0 10px;"><small>' +
-      why + (bits ? ' · ' + bits : '') + '</small></p>';
-  }
-
   function practiceGapsHtml(gaps) {
     if (!gaps || !gaps.length) return '';
     return '<div class="lms-card lms-card-warn" style="margin-top:12px;"><strong>No verified questions yet for:</strong><ul style="margin:6px 0 0 18px;">' +
@@ -686,18 +672,13 @@
       if (practiceDwell) practiceDwell.switchTo(String(data.attempt_id || 'practice'));
       if (data.resumed) lmsShowToast('Resuming your practice question', 'success');
       var q = data.question;
-      var progress = data.progress || {};
       var opts = (q.options || []).map(function (o) {
         return '<button type="button" class="lms-quiz-option" data-position="' + o.position + '" onclick="submitLmsPracticeAnswer(' + o.position + ')">' +
           '<b>' + escapeHtml(o.label) + '.</b> ' + (o.render || escapeHtml(o.text || '')) + '</button>';
       }).join('');
       body.innerHTML =
-        '<p style="margin:0 0 6px;"><span class="lms-badge lms-badge-green">' + escapeHtml(data.domain_name || '') + '</span> ' +
+        '<p style="margin:0 0 10px;"><span class="lms-badge lms-badge-green">' + escapeHtml(data.domain_name || '') + '</span> ' +
         '<span class="lms-badge">' + escapeHtml(data.subtopic_name || '') + '</span></p>' +
-        '<p style="margin:0 0 10px;"><small>Question ' + escapeHtml(String(q.source_question_number || '')) +
-        ' from your teacher\'s practice question bank · ' + (progress.seen_in_subtopic || 0) + ' of ' +
-        (progress.approved_in_subtopic || 0) + ' practised in this subtopic</small></p>' +
-        practiceMatchNote(data.match) +
         (data.bank_exhausted ? '<div class="lms-card lms-card-warn" style="margin-bottom:10px;"><small>' + escapeHtml(data.message || '') + '</small></div>' : '') +
         '<h3 class="lms-quiz-stem">' + (q.question_render || escapeHtml(q.question_text || '')) + '</h3>' +
         opts +
