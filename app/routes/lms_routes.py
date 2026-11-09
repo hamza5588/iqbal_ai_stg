@@ -813,6 +813,7 @@ def get_attempt_questions(attempt_id: int):
                 "attempt_id": attempt_id,
                 "questions": state["questions"],
                 "saved_answers": state.get("saved_answers", {}),
+                "saved_times": state.get("saved_times", {}),
                 "current_question_index": state.get("current_question_index", 0),
             })
         questions = attempt_service.get_delivery_questions(attempt_id)
@@ -820,6 +821,7 @@ def get_attempt_questions(attempt_id: int):
             "attempt_id": attempt_id,
             "questions": questions,
             "saved_answers": {},
+            "saved_times": {},
             "current_question_index": 0,
         })
     except LMSNotFoundError as e:
