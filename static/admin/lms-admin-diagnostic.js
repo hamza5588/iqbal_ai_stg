@@ -605,7 +605,9 @@
     var ready = c.auto_verified || 0;
     var review = c.needs_review || 0;
     var pending = ready + review;
-    var tone = approved === 0 ? 'is-bad' : pending ? 'is-warn' : 'is-ok';
+    // Fully approved: nothing left to approve — hide the status bar entirely.
+    if (!pending && approved > 0) return '';
+    var tone = approved === 0 ? 'is-bad' : 'is-warn';
     var text = approved === 0
       ? 'Question bank: 0 approved — students get no questions from this PDF yet'
       : 'Question bank: ' + approved + ' approved';
@@ -613,17 +615,11 @@
     return (
       '<div class="d-bank-status ' + tone + '">' +
       '<span>' + esc(text) + '</span>' +
-      (pending
-        ? '<button type="button" class="d-action primary" onclick="adminPreviewDiagnostic(' +
-          Number(assessmentId) +
-          ',{tab:\'bank\',documentId:' +
-          Number(b.document_id) +
-          '})"><i class="fas fa-check-double"></i> Review &amp; approve questions</button>'
-        : '<button type="button" class="d-bank-link" onclick="adminPreviewDiagnostic(' +
-          Number(assessmentId) +
-          ',{tab:\'bank\',documentId:' +
-          Number(b.document_id) +
-          ',status:\'approved\'})">View approved</button>') +
+      '<button type="button" class="d-action primary" onclick="adminPreviewDiagnostic(' +
+      Number(assessmentId) +
+      ',{tab:\'bank\',documentId:' +
+      Number(b.document_id) +
+      '})"><i class="fas fa-check-double"></i> Review &amp; approve questions</button>' +
       '</div>'
     );
   }
