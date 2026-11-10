@@ -806,35 +806,7 @@ def workbook_for_file(file_data) -> io.BytesIO:
         workbook["Topic Scores"].append(row)
     for row in file_data["answers"]:
         workbook["Answers"].append(row)
-    # Keep the packaged Domain-Topic reference list; append only brand-new pairs from this export.
-    domain_ws = workbook["Domain-Topic List"]
-    existing_pairs = set()
-    note_row = None
-    for r in range(2, domain_ws.max_row + 1):
-        domain_val = domain_ws.cell(r, 1).value
-        topic_val = domain_ws.cell(r, 2).value
-        if domain_val is None and topic_val and "Add new domains" in str(topic_val):
-            note_row = r
-            continue
-        pair = ((domain_val or "").strip(), (topic_val or "").strip())
-        if pair[0] or pair[1]:
-            existing_pairs.add(pair)
-    new_pairs = []
-    for row in file_data["topics"]:
-        pair = ((row[2] or "").strip(), (row[3] or "").strip())
-        if (pair[0] or pair[1]) and pair not in existing_pairs:
-            existing_pairs.add(pair)
-            new_pairs.append(pair)
-    for row in file_data["answers"]:
-        pair = ((row[3] or "").strip(), (row[4] or "").strip())
-        if (pair[0] or pair[1]) and pair not in existing_pairs:
-            existing_pairs.add(pair)
-            new_pairs.append(pair)
-    insert_at = note_row or (domain_ws.max_row + 1)
-    for offset, (domain_name, topic_name) in enumerate(sorted(new_pairs, key=lambda item: (item[0].lower(), item[1].lower()))):
-        domain_ws.insert_rows(insert_at + offset)
-        domain_ws.cell(insert_at + offset, 1).value = domain_name or None
-        domain_ws.cell(insert_at + offset, 2).value = topic_name or None
+    # Leave Domain-Topic List and Instructions exactly as packaged in the template.
     for row_number in range(2, workbook["Results"].max_row + 1):
         workbook["Results"].cell(row_number, 6).number_format = "yyyy-mm-dd"
         workbook["Results"].cell(row_number, 11).number_format = "0.00%"
@@ -845,9 +817,6 @@ def workbook_for_file(file_data) -> io.BytesIO:
         workbook["Learning Usage"].cell(row_number, 5).number_format = "[h]:mm:ss"
     for sheet_name in DATA_SHEETS:
         _safe_text_cells(workbook[sheet_name])
-    instructions = workbook["Instructions"]
-    instructions["A2"] = "One workbook contains all selected tests and students."
-    instructions["A25"] = "This workbook is ready to review, filter, or share as one report."
     output = io.BytesIO()
     workbook.save(output)
     output.seek(0)

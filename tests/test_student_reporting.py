@@ -322,6 +322,8 @@ def test_workbook_matches_reference_contract_and_export_merges_files(db):
     assert workbook["Topic Scores"]["G2"].number_format == "0.00%"
     assert workbook["Results"]["A2"].data_type == "s"  # formula injection is neutralized
     assert workbook["Domain-Topic List"]["A1"].value == "Domain"
+    assert workbook["Domain-Topic List"].max_row == reference["Domain-Topic List"].max_row
+    assert workbook["Instructions"]["A2"].value == reference["Instructions"]["A2"].value
     assert workbook["Learning Usage"].max_row == 2
     second = {
         **file_data,
@@ -346,7 +348,8 @@ def test_workbook_matches_reference_contract_and_export_merges_files(db):
     assert exported["Topic Scores"].max_row == 3
     assert exported["Answers"].max_row == 3
     assert [exported["Results"][row][1].value for row in (2, 3)] == ["student@example.com", "second@example.com"]
-    assert exported["Instructions"]["A2"].value == "One workbook contains all selected tests and students."
+    assert exported["Instructions"]["A2"].value == reference["Instructions"]["A2"].value
+    assert exported["Domain-Topic List"].max_row == reference["Domain-Topic List"].max_row
 
 
 def test_report_api_requires_login(monkeypatch):
