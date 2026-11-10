@@ -176,14 +176,17 @@ def test_report_uses_latest_attempt_actual_answers_topics_and_usage(db):
 
     assert report["attempts"] == 1
     result = report["files"][0]["results"][0]
-    assert result[7:11] == [1, 1, 0, 1.0]
-    assert result[11:16] == [15.0, 10.0, 1, date(2026, 10, 29), 2]
-    assert report["files"][0]["topics"][0][3:] == [1, 1, 1.0]
-    assert report["files"][0]["answers"][0][5:] == ["B", "B", "Yes"]
+    assert result[7:12] == [1, 1, 0, 1.0, 15.0]
+    assert RESULT_HEADERS[-1] == "Quiz Minutes"
+    assert report["files"][0]["topics"][0][2:] == ["", "Algebra", 1, 1, 1.0]
+    assert report["files"][0]["answers"][0][2:5] == ["Q1", "", "Algebra"]
+    assert report["files"][0]["answers"][0][6:] == ["B", "B", "Yes"]
+    assert report["learning_usage"]
+    assert report["learning_usage"][0][:4] == [date(2026, 10, 29), 2, "Ayesha", "School A"]
     assert report["attempt_rule"].startswith("Selected assessment:")
 
 
-def test_cross_group_isolation_and_missing_usage_is_blank(db):
+def test_cross_group_isolation_keeps_only_selected_group(db):
     db.add_all([user(1, "admin@example.com", "admin"), user(2, "controlled@example.com"), user(3, "other@example.com")]); db.flush()
     assessment, _, _ = seed_attempt(db, student_id=2)
     # Same assessment for the second student.
@@ -200,8 +203,8 @@ def test_cross_group_isolation_and_missing_usage_is_blank(db):
 
     assert report["matching_students"] == 1
     assert report["files"][0]["results"][0][1] == "controlled@example.com"
-    assert report["files"][0]["results"][0][12] is None
-    assert any("blank, not zero" in warning for warning in report["warnings"])
+    assert len(report["files"][0]["results"][0]) == 12
+    assert report["files"][0]["results"][0][11] == 30.0
 
 
 def test_all_tests_date_excludes_old_assessment_retake_but_explicit_selection_allows_it(db):
@@ -300,36 +303,45 @@ def test_workbook_matches_reference_contract_and_export_merges_files(db):
     file_data = {
         "group":"Controlled", "test_type":"Baseline", "test_date":date(2026,10,29),
         "filename":"Controlled_Baseline_2026-10-29.xlsx", "assessment_id":1,
-        "results":[["=unsafe", "student@example.com", "School", "Controlled", "Baseline", date(2026,10,29), "Test", 1, 1, 0, 1.0, 5.0, None, 1, date(2026,10,29), 1]],
-        "topics":[["Student", "student@example.com", "Algebra", 1, 1, 1.0]],
-        "answers":[["Student", "student@example.com", 1, "Algebra", "2+2?", "B", "B", "Yes"]],
+        "results":[["=unsafe", "student@example.com", "School", "Controlled", "Baseline", date(2026,10,29), "Test", 1, 1, 0, 1.0, 5.0]],
+        "topics":[["Student", "student@example.com", "Algebra", "Algebraic Formulas/Identities", 1, 1, 1.0]],
+        "answers":[["Student", "student@example.com", "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes"]],
+        "learning_usage":[[date(2026,10,29), 2, "Student", "School", None, 0, "Not tracked"]],
     }
     stream = workbook_for_file(file_data)
     workbook = load_workbook(stream, data_only=False)
     reference = load_workbook(Path("app/report_templates/controlled.xlsx"))
+    expected_sheets = ["Results", "Learning Usage", "Topic Scores", "Answers", "Domain-Topic List", "Instructions"]
 
-    assert workbook.sheetnames == reference.sheetnames == ["Results", "Topic Scores", "Answers", "Instructions"]
-    assert [cell.value for cell in workbook["Results"][1]] == RESULT_HEADERS
-    assert [cell.value for cell in workbook["Topic Scores"][1]] == TOPIC_HEADERS
-    assert [cell.value for cell in workbook["Answers"][1]] == ANSWER_HEADERS
+    assert workbook.sheetnames == reference.sheetnames == expected_sheets
+    assert [cell.value for cell in workbook["Results"][1][:len(RESULT_HEADERS)]] == RESULT_HEADERS
+    assert [cell.value for cell in workbook["Topic Scores"][1][:len(TOPIC_HEADERS)]] == TOPIC_HEADERS
+    assert [cell.value for cell in workbook["Answers"][1][:len(ANSWER_HEADERS)]] == ANSWER_HEADERS
     assert workbook["Instructions"]["A1"].value == reference["Instructions"]["A1"].value
     assert workbook["Results"]["K2"].number_format == "0.00%"
-    assert workbook["Topic Scores"]["F2"].number_format == "0.00%"
+    assert workbook["Topic Scores"]["G2"].number_format == "0.00%"
     assert workbook["Results"]["A2"].data_type == "s"  # formula injection is neutralized
+    assert workbook["Domain-Topic List"]["A1"].value == "Domain"
+    assert workbook["Learning Usage"].max_row == 2
     second = {
         **file_data,
         "group": "Uncontrolled",
         "filename": "Uncontrolled_Baseline_2026-10-29.xlsx",
-        "results": [["Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026,10,29), "Test B", 1, 0, 1, 0.0, 4.0, None, 1, date(2026,10,29), 1]],
-        "topics": [["Second", "second@example.com", "Numbers", 0, 1, 0.0]],
-        "answers": [["Second", "second@example.com", 1, "Numbers", "3+3?", "A", "B", "No"]],
+        "results": [["Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026,10,29), "Test B", 1, 0, 1, 0.0, 4.0]],
+        "topics": [["Second", "second@example.com", "Numbers", "Laws of Exponents", 0, 1, 0.0]],
+        "answers": [["Second", "second@example.com", "Q1", "Numbers", "Laws of Exponents", "3+3?", "A", "B", "No"]],
+        "learning_usage": [],
     }
-    report = {"files":[file_data, second], "filters":{"start":"2026-10-29", "end":"2026-10-29"}}
+    report = {
+        "files":[file_data, second],
+        "filters":{"start":"2026-10-29", "end":"2026-10-29"},
+        "learning_usage": file_data["learning_usage"],
+    }
     merged, name, mime = export_report(report)
     assert name == "IqbalAI_Performance_Both_Groups_2026-10-29.xlsx"
     assert mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     exported = load_workbook(merged, data_only=False)
-    assert exported.sheetnames == ["Results", "Topic Scores", "Answers", "Instructions"]
+    assert exported.sheetnames == expected_sheets
     assert exported["Results"].max_row == 3
     assert exported["Topic Scores"].max_row == 3
     assert exported["Answers"].max_row == 3

@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from openpyxl import load_workbook
 from sqlalchemy import and_, func, or_
 
-from app.models.database_models import TutorDailyUsage, User
+from app.models.database_models import SystemSettings, TutorDailyUsage, User
 from app.models.lms_models import (
     Assessment,
     AssessmentAttempt,
@@ -23,6 +23,7 @@ from app.models.lms_models import (
     AssessmentReportClassification,
     AttemptAnswer,
     Question,
+    QuestionTaxonomy,
     StudentStudyGroupAssignment,
     StudentStudyGroupAudit,
     Topic,
@@ -36,14 +37,17 @@ COHORT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_. -]{0,99}$")
 RESULT_HEADERS = [
     "Student Name", "Email", "School", "Group", "Test Type", "Test Date",
     "Test Name", "Total Questions", "Correct Answers", "Incorrect", "Percentage",
-    "Minutes Taken", "System Usage Time (Minutes)", "Days Active", "Last Active Date",
-    "Activities Completed",
+    "Quiz Minutes",
 ]
-TOPIC_HEADERS = ["Student Name", "Email", "Topic", "Correct", "Total", "Score %"]
+TOPIC_HEADERS = ["Student Name", "Email", "Domain", "Topic", "Correct", "Total", "Score %"]
 ANSWER_HEADERS = [
-    "Student Name", "Email", "Question No", "Topic", "Question",
+    "Student Name", "Email", "Question No", "Domain", "Topic", "Question",
     "Student Selected", "Correct Answer", "Is Correct",
 ]
+LEARNING_USAGE_HEADERS = [
+    "Date", "Student ID", "Student Name", "School Name", "AI Tutor Time", "Active Minutes", "Coverage",
+]
+DATA_SHEETS = ("Results", "Learning Usage", "Topic Scores", "Answers")
 
 
 def normalize_cohort(value) -> str:
@@ -466,6 +470,69 @@ def _option_value(question: Question, index):
         return ""
 
 
+def _domain_topic_labels(question: Question, topic: Topic | None, taxonomy: QuestionTaxonomy | None):
+    """Prefer printed Domain/Topic labels; fall back to LMS topic name as Topic."""
+    domain = ""
+    topic_name = ""
+    if taxonomy:
+        domain = (taxonomy.printed_domain or "").strip()
+        topic_name = (taxonomy.printed_topic or "").strip()
+    if not topic_name and topic:
+        topic_name = (topic.name or "").strip()
+    if not domain and topic and topic_name and topic.name and topic.name.strip() != topic_name:
+        domain = topic.name.strip()
+    return domain, topic_name
+
+
+def _tracking_start_day(db) -> date | None:
+    row = db.query(SystemSettings).filter(SystemSettings.key == "tutor_usage_started_at").one_or_none()
+    if not row or not row.value:
+        return None
+    try:
+        started = datetime.fromisoformat(str(row.value).replace("Z", ""))
+    except ValueError:
+        return None
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    return started.astimezone(REPORT_ZONE).date()
+
+
+def _learning_usage_rows(db, students: list[User], start_day: date, end_day: date) -> list[list]:
+    """Daily AI Tutor usage rows matching the Learning Usage template sheet."""
+    if not students:
+        return []
+    ids = [student.id for student in students]
+    usage_map = {
+        (row.user_id, row.usage_date): int(row.active_ms or 0)
+        for row in db.query(TutorDailyUsage).filter(
+            TutorDailyUsage.user_id.in_(ids),
+            TutorDailyUsage.usage_date >= start_day,
+            TutorDailyUsage.usage_date <= end_day,
+        ).all()
+    }
+    track_start = _tracking_start_day(db)
+    rows = []
+    day = start_day
+    while day <= end_day:
+        for student in sorted(students, key=lambda item: ((item.full_name or item.username or "").lower(), item.id)):
+            tracked = track_start is not None and day >= track_start
+            ms = usage_map.get((student.id, day)) if tracked else None
+            if tracked and ms is None:
+                ms = 0
+            coverage = "Not tracked" if not tracked else ("Partial day" if day == track_start else "Tracked")
+            rows.append([
+                day,
+                student.id,
+                student.full_name or student.username,
+                student.school_name or "Not provided",
+                timedelta(seconds=ms // 1000) if ms is not None else None,
+                round(ms / 60000, 2) if ms is not None else None,
+                coverage,
+            ])
+        day += timedelta(days=1)
+    return rows
+
+
 def build_report(db, filters) -> dict:
     cohort = normalize_cohort(filters.get("cohort"))
     start_day, end_day, start_utc, end_utc = _utc_bounds(filters.get("start"), filters.get("end"))
@@ -583,27 +650,8 @@ def build_report(db, filters) -> dict:
         all_question_ids.update(ids)
     question_rows = db.query(Question, Topic).outerjoin(Topic, Topic.id == Question.topic_id).filter(Question.id.in_(all_question_ids or {-1})).all()
     questions = {question.id: (question, topic) for question, topic in question_rows}
-
-    usage_rows = db.query(TutorDailyUsage).filter(
-        TutorDailyUsage.user_id.in_(candidate_student_ids or {-1}),
-        TutorDailyUsage.usage_date >= start_day,
-        TutorDailyUsage.usage_date <= end_day,
-    ).all()
-    usage = defaultdict(list)
-    for row in usage_rows:
-        usage[row.user_id].append(row)
-    activity_attempts = db.query(AssessmentAttempt.student_id, AssessmentAttempt.submitted_at).filter(
-        AssessmentAttempt.student_id.in_(candidate_student_ids or {-1}),
-        AssessmentAttempt.status == "submitted", AssessmentAttempt.submitted_at >= start_utc,
-        AssessmentAttempt.submitted_at < end_utc,
-    ).all()
-    activity_dates = defaultdict(set)
-    activity_counts = defaultdict(int)
-    for student_id, submitted_at in activity_attempts:
-        activity_dates[student_id].add(_local_day(submitted_at))
-        activity_counts[student_id] += 1
-    for student_id, rows in usage.items():
-        activity_dates[student_id].update(row.usage_date for row in rows if row.active_ms > 0)
+    taxonomy_rows = db.query(QuestionTaxonomy).filter(QuestionTaxonomy.question_id.in_(all_question_ids or {-1})).all()
+    taxonomies = {row.question_id: row for row in taxonomy_rows}
 
     warnings = set()
     if not raw_candidates:
@@ -637,16 +685,11 @@ def build_report(db, filters) -> dict:
         if attempt.started_at and attempt.submitted_at and attempt.submitted_at >= attempt.started_at:
             minutes = round((attempt.submitted_at - attempt.started_at).total_seconds() / 60, 2)
         else:
-            warnings.add("Some attempts do not have a reliable duration; Minutes Taken is blank.")
-        usage_minutes = round(sum(row.active_ms for row in usage[student.id]) / 60000, 2) if usage[student.id] else None
-        if not usage[student.id]:
-            warnings.add("AI Tutor usage is not tracked for some students in this period; usage cells are blank, not zero.")
-        dates = activity_dates[student.id]
+            warnings.add("Some attempts do not have a reliable duration; Quiz Minutes is blank.")
         bucket["results"].append([
             student.full_name or student.username, student.useremail, student.school_name or "", group,
             classification.test_type, submitted_day, assessment.title, total, correct, incorrect,
-            percentage, minutes, usage_minutes, len(dates) if dates else None, max(dates) if dates else None,
-            activity_counts[student.id],
+            percentage, minutes,
         ])
         if percentage is not None:
             scores.append(percentage)
@@ -658,22 +701,22 @@ def build_report(db, filters) -> dict:
                 continue
             question, topic = pair
             answer = answer_map.get(question_id)
-            topic_name = topic.name if topic else ""
-            if not topic:
-                warnings.add("Some questions have no topic metadata; Topic is blank and no topic score is invented.")
-            if answer and answer.is_correct is not None and topic:
-                topic_totals[topic_name][1] += 1
-                topic_totals[topic_name][0] += int(answer.is_correct is True)
+            domain_name, topic_name = _domain_topic_labels(question, topic, taxonomies.get(question_id))
+            if not topic_name and not domain_name:
+                warnings.add("Some questions have no domain/topic metadata; Domain/Topic are blank and no topic score is invented.")
+            if answer and answer.is_correct is not None and topic_name:
+                topic_totals[(domain_name, topic_name)][1] += 1
+                topic_totals[(domain_name, topic_name)][0] += int(answer.is_correct is True)
             bucket["answers"].append([
-                student.full_name or student.username, student.useremail, number, topic_name,
+                student.full_name or student.username, student.useremail, f"Q{number}", domain_name, topic_name,
                 question.question_text or question.question_latex or "",
                 _option_value(question, answer.selected_option_index) if answer else "",
                 _option_value(question, question.correct_option_index) or question.correct_answer_raw or "",
                 "Yes" if answer and answer.is_correct is True else "No" if answer and answer.is_correct is False else "",
             ])
-        for topic_name, (topic_correct, topic_total) in sorted(topic_totals.items()):
+        for (domain_name, topic_name), (topic_correct, topic_total) in sorted(topic_totals.items()):
             bucket["topics"].append([
-                student.full_name or student.username, student.useremail, topic_name,
+                student.full_name or student.username, student.useremail, domain_name, topic_name,
                 topic_correct, topic_total, topic_correct / topic_total if topic_total else None,
             ])
 
@@ -688,6 +731,14 @@ def build_report(db, filters) -> dict:
         data.update({"group": group, "test_type": test_type, "test_date": test_day,
                      "filename": f"{group}_{test_type}_{test_day.isoformat()}{suffix}.xlsx"})
         file_list.append(data)
+    selected_students = []
+    seen_student_ids = set()
+    for attempt, _, student, _, _ in selected:
+        if student.id in seen_student_ids:
+            continue
+        seen_student_ids.add(student.id)
+        selected_students.append(student)
+    learning_usage = _learning_usage_rows(db, selected_students, start_day, end_day)
     return {
         "filters": {"cohort": cohort, "group": group_scope, "start": start_day.isoformat(), "end": end_day.isoformat(),
                     "test_type": type_scope, "assessment_id": assessment_id, "assessment_title": assessment_title,
@@ -696,6 +747,7 @@ def build_report(db, filters) -> dict:
         "matching_students": len({row[0].student_id for row in selected}),
         "attempts": len(selected), "average_score": (sum(scores) / len(scores) if scores else None),
         "topic_rows": sum(len(item["topics"]) for item in file_list), "files": file_list,
+        "learning_usage": learning_usage,
         "warnings": sorted(warnings),
         "diagnostics": {
             "submitted_candidates": len(raw_candidates),
@@ -709,10 +761,9 @@ def build_report(db, filters) -> dict:
             "Selected assessment: latest submitted attempt per student within the selected Pakistan-time date window."
         ),
         "metric_rules": {
-            "system_usage": "Sum of recorded AI Tutor heartbeat milliseconds in the selected date window; blank when no tracking row exists.",
-            "days_active": "Distinct Pakistan dates with positive AI Tutor usage or a submitted assessment in the selected window.",
-            "last_active": "Latest qualifying activity date in the selected window.",
-            "activities_completed": "Count of submitted assessment attempts in the selected window.",
+            "quiz_minutes": "Minutes from attempt started_at to submitted_at for this quiz.",
+            "learning_usage": "Daily AI Tutor active minutes for matched students in the selected Pakistan-time window.",
+            "domain_topic": "Prefer printed Domain/Topic from question taxonomy; otherwise use the linked LMS topic name.",
         },
     }
 
@@ -730,33 +781,73 @@ def workbook_for_file(file_data) -> io.BytesIO:
     if not template_path.exists():
         raise RuntimeError(f"Report template is missing: {template_name}")
     workbook = load_workbook(template_path)
-    expected = {"Results": RESULT_HEADERS, "Topic Scores": TOPIC_HEADERS, "Answers": ANSWER_HEADERS}
+    expected = {
+        "Results": RESULT_HEADERS,
+        "Learning Usage": LEARNING_USAGE_HEADERS,
+        "Topic Scores": TOPIC_HEADERS,
+        "Answers": ANSWER_HEADERS,
+    }
     for sheet_name, headers in expected.items():
+        if sheet_name not in workbook.sheetnames:
+            raise RuntimeError(f"Packaged template is missing sheet: {sheet_name}")
         ws = workbook[sheet_name]
-        actual = [cell.value for cell in ws[1]]
+        actual = [cell.value for cell in ws[1][:len(headers)]]
         if actual != headers:
             raise RuntimeError(f"Packaged template has incompatible {sheet_name} columns.")
         if ws.max_row > 1:
             ws.delete_rows(2, ws.max_row - 1)
+    if "Domain-Topic List" not in workbook.sheetnames:
+        raise RuntimeError("Packaged template is missing sheet: Domain-Topic List")
     for row in file_data["results"]:
         workbook["Results"].append(row)
+    for row in file_data.get("learning_usage") or []:
+        workbook["Learning Usage"].append(row)
     for row in file_data["topics"]:
         workbook["Topic Scores"].append(row)
     for row in file_data["answers"]:
         workbook["Answers"].append(row)
+    # Keep the packaged Domain-Topic reference list; append only brand-new pairs from this export.
+    domain_ws = workbook["Domain-Topic List"]
+    existing_pairs = set()
+    note_row = None
+    for r in range(2, domain_ws.max_row + 1):
+        domain_val = domain_ws.cell(r, 1).value
+        topic_val = domain_ws.cell(r, 2).value
+        if domain_val is None and topic_val and "Add new domains" in str(topic_val):
+            note_row = r
+            continue
+        pair = ((domain_val or "").strip(), (topic_val or "").strip())
+        if pair[0] or pair[1]:
+            existing_pairs.add(pair)
+    new_pairs = []
+    for row in file_data["topics"]:
+        pair = ((row[2] or "").strip(), (row[3] or "").strip())
+        if (pair[0] or pair[1]) and pair not in existing_pairs:
+            existing_pairs.add(pair)
+            new_pairs.append(pair)
+    for row in file_data["answers"]:
+        pair = ((row[3] or "").strip(), (row[4] or "").strip())
+        if (pair[0] or pair[1]) and pair not in existing_pairs:
+            existing_pairs.add(pair)
+            new_pairs.append(pair)
+    insert_at = note_row or (domain_ws.max_row + 1)
+    for offset, (domain_name, topic_name) in enumerate(sorted(new_pairs, key=lambda item: (item[0].lower(), item[1].lower()))):
+        domain_ws.insert_rows(insert_at + offset)
+        domain_ws.cell(insert_at + offset, 1).value = domain_name or None
+        domain_ws.cell(insert_at + offset, 2).value = topic_name or None
     for row_number in range(2, workbook["Results"].max_row + 1):
         workbook["Results"].cell(row_number, 6).number_format = "yyyy-mm-dd"
         workbook["Results"].cell(row_number, 11).number_format = "0.00%"
-        workbook["Results"].cell(row_number, 15).number_format = "yyyy-mm-dd"
     for row_number in range(2, workbook["Topic Scores"].max_row + 1):
-        workbook["Topic Scores"].cell(row_number, 6).number_format = "0.00%"
-    for sheet_name in expected:
+        workbook["Topic Scores"].cell(row_number, 7).number_format = "0.00%"
+    for row_number in range(2, workbook["Learning Usage"].max_row + 1):
+        workbook["Learning Usage"].cell(row_number, 1).number_format = "yyyy-mm-dd"
+        workbook["Learning Usage"].cell(row_number, 5).number_format = "[h]:mm:ss"
+    for sheet_name in DATA_SHEETS:
         _safe_text_cells(workbook[sheet_name])
     instructions = workbook["Instructions"]
     instructions["A2"] = "One workbook contains all selected tests and students."
-    instructions["A3"] = "Results, Topic Scores, and Answers are merged into their matching worksheets."
-    instructions["A6"] = "Use Group, Test Type, Test Date, Test Name, and School columns to filter each test."
-    instructions["A10"] = "This workbook is ready to review, filter, or share as one report."
+    instructions["A25"] = "This workbook is ready to review, filter, or share as one report."
     output = io.BytesIO()
     workbook.save(output)
     output.seek(0)
@@ -773,6 +864,7 @@ def export_report(report) -> tuple[io.BytesIO, str, str]:
         "results": [row for item in files for row in item["results"]],
         "topics": [row for item in files for row in item["topics"]],
         "answers": [row for item in files for row in item["answers"]],
+        "learning_usage": list(report.get("learning_usage") or []),
     }
     group_label = groups[0] if len(groups) == 1 else "Both_Groups"
     start = report["filters"]["start"]
