@@ -1133,3 +1133,158 @@ class IncorrectAnswerRecord(Base):
         ),
         Index("ix_incorrect_answer_student_subtopic", "student_id", "subtopic_id"),
     )
+
+
+# -- AI Guided Practice (Target PDF driven, version-scoped) -------------------
+
+
+class AIGPPdfVersion(Base):
+    """One processed Target PDF (keyed by its RAG thread) for AI Guided Practice.
+
+    A version only becomes visible to students once ``status == 'ready'`` - its
+    topic hierarchy is extracted first. Which versions are *active* is derived
+    from the Target PDFs currently attached to the grade's live diagnostic, so
+    replacing/removing a Target PDF in the admin panel switches students over
+    automatically while every old version (topics, pool, sessions) is kept.
+    """
+
+    __tablename__ = "lms_aigp_pdf_versions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rag_thread_id = Column(String(255), nullable=False, unique=True)
+    rag_owner_id = Column(Integer, nullable=True)
+    assessment_id = Column(Integer, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True, index=True)
+    grade_level = Column(String(100), nullable=False, default="", server_default="")
+    original_filename = Column(String(512), nullable=True)
+    status = Column(String(32), nullable=False, default="pending", server_default="pending")
+    # outline (PDF bookmarks) | headings (detected headings) | whole_sections (no subtopics found)
+    structure = Column(String(32), nullable=True)
+    outline_json = Column(Text, nullable=True)  # PDF bookmarks captured at upload time
+    warnings_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    replaces_version_id = Column(Integer, ForeignKey("lms_aigp_pdf_versions.id", ondelete="SET NULL"), nullable=True)
+    processing_started_at = Column(DateTime, nullable=True)
+    ready_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','processing','ready','failed')", name="check_aigp_version_status"
+        ),
+    )
+
+
+class AIGPTopic(Base):
+    """Main topic (``parent_id`` NULL) or subtopic extracted from one PDF version."""
+
+    __tablename__ = "lms_aigp_topics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    version_id = Column(
+        Integer, ForeignKey("lms_aigp_pdf_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    parent_id = Column(Integer, ForeignKey("lms_aigp_topics.id", ondelete="CASCADE"), nullable=True, index=True)
+    title = Column(String(512), nullable=False)
+    page_start = Column(Integer, nullable=True)
+    page_end = Column(Integer, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+    # The PDF printed no subtopics under this main topic: practice covers the whole section.
+    is_whole_section = Column(Boolean, nullable=False, default=False, server_default="0")
+    # Where a subtopic title came from: heading (own section in the PDF) | topic_list
+    # (printed in a "Topics:" line - practised from the parent section) | whole_section.
+    title_source = Column(String(32), nullable=True)
+    # Question-pool bookkeeping (subtopics only).
+    generation_locked_until = Column(DateTime, nullable=True)
+    generation_rounds = Column(Integer, nullable=False, default=0, server_default="0")
+    dry_rounds = Column(Integer, nullable=False, default=0, server_default="0")
+    pool_exhausted = Column(Boolean, nullable=False, default=False, server_default="0")
+    insufficient_content = Column(Boolean, nullable=False, default=False, server_default="0")
+    last_generation_error = Column(Text, nullable=True)
+    last_generated_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+
+class AIGPQuestion(Base):
+    """A validated, PDF-grounded MCQ in one subtopic's reusable question pool."""
+
+    __tablename__ = "lms_aigp_questions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    version_id = Column(
+        Integer, ForeignKey("lms_aigp_pdf_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    topic_id = Column(Integer, ForeignKey("lms_aigp_topics.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_text = Column(Text, nullable=False)
+    question_latex = Column(Text, nullable=True)
+    options_json = Column(Text, nullable=False)  # [{label, text, latex}] in canonical order
+    correct_option_index = Column(Integer, nullable=False)
+    explanation = Column(Text, nullable=True)
+    difficulty = Column(String(20), nullable=False, default="medium", server_default="medium")
+    source_page = Column(Integer, nullable=True)
+    source_excerpt = Column(Text, nullable=True)
+    dedupe_key = Column(String(200), nullable=False)
+    key_verified = Column(String(16), nullable=True)  # math | llm
+    preserve_option_order = Column(Boolean, nullable=False, default=False, server_default="0")
+    status = Column(String(16), nullable=False, default="valid", server_default="valid")
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("topic_id", "dedupe_key", name="uq_aigp_question_topic_key"),
+        CheckConstraint("status IN ('valid','retired')", name="check_aigp_question_status"),
+        CheckConstraint(
+            "correct_option_index >= 0 AND correct_option_index <= 3", name="check_aigp_correct_index"
+        ),
+    )
+
+
+class AIGPSession(Base):
+    """One AI Guided Practice session: a fixed question set from one PDF version."""
+
+    __tablename__ = "lms_aigp_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_id = Column(Integer, ForeignKey("lms_aigp_pdf_versions.id", ondelete="CASCADE"), nullable=False)
+    topic_id = Column(Integer, ForeignKey("lms_aigp_topics.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(16), nullable=False, default="in_progress", server_default="in_progress")
+    question_count = Column(Integer, nullable=False, default=0, server_default="0")
+    answered_count = Column(Integer, nullable=False, default=0, server_default="0")
+    correct_count = Column(Integer, nullable=False, default=0, server_default="0")
+    score_percent = Column(Float, nullable=True)
+    reused_count = Column(Integer, nullable=False, default=0, server_default="0")
+    request_key = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    last_activity_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('in_progress','completed','abandoned')", name="check_aigp_session_status"
+        ),
+        UniqueConstraint("student_id", "request_key", name="uq_aigp_session_request_key"),
+        Index("ix_aigp_session_student_topic", "student_id", "topic_id"),
+    )
+
+
+class AIGPSessionItem(Base):
+    """One question inside a session, with its shuffled option order and the answer."""
+
+    __tablename__ = "lms_aigp_session_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("lms_aigp_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("lms_aigp_questions.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, nullable=False)
+    # Display order: JSON list of canonical option indexes.
+    option_order_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    seen_before = Column(Boolean, nullable=False, default=False, server_default="0")
+    selected_original_index = Column(Integer, nullable=True)
+    is_correct = Column(Boolean, nullable=True)
+    answered_at = Column(DateTime, nullable=True)
+    time_spent_seconds = Column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "position", name="uq_aigp_item_position"),
+        UniqueConstraint("session_id", "question_id", name="uq_aigp_item_question"),
+    )

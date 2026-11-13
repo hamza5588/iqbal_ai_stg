@@ -632,6 +632,71 @@
     }
   }
 
+  /* AI Guided Practice: topic-extraction status per Target PDF (keyed by RAG thread). */
+  async function loadAigpStatus(items) {
+    var threads = [];
+    (items || []).forEach(function (d) {
+      (d.target_pdfs || []).forEach(function (t) { if (t.rag_thread_id) threads.push(t.rag_thread_id); });
+    });
+    if (!threads.length) { state.aigpStatus = {}; return; }
+    try {
+      state.aigpStatus = (await api('/api/lms/ai-guided-practice/admin/status?threads=' + encodeURIComponent(threads.join(',')))) || {};
+    } catch (err) {
+      state.aigpStatus = {};
+    }
+  }
+
+  function aigpStatusHtml(threadId) {
+    var s = (state.aigpStatus || {})[threadId];
+    if (!s) return '<div class="d-bank-status is-warn"><span>AI Guided Practice: not processed yet (starts when a student opens the tab)</span></div>';
+    if (s.status === 'ready') {
+      return '<div class="d-bank-status"><span>AI Guided Practice: ' + Number(s.main_topics || 0) + ' main topic(s) ready' +
+        (s.structure === 'whole_sections' ? ' · no subtopics printed, practised per whole section' : '') + '</span></div>';
+    }
+    if (s.status === 'failed') {
+      return '<div class="d-bank-status is-bad"><span>AI Guided Practice failed: ' + esc(s.error || 'unknown error') + '</span>' +
+        '<button type="button" class="d-action primary" onclick="adminAigpReprocess(' + Number(s.version_id) + ')"><i class="fas fa-redo"></i> Retry</button></div>';
+    }
+    return '<div class="d-bank-status is-warn"><span>AI Guided Practice: extracting topics...</span></div>';
+  }
+
+  window.adminAigpReprocess = async function (versionId) {
+    try {
+      await api('/api/lms/ai-guided-practice/admin/versions/' + versionId + '/reprocess', { method: 'POST' });
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+    loadAdminDiagnostics();
+  };
+
+  window.adminReplaceTargetPdf = function (assessmentId, targetPdfId) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,.pdf';
+    input.onchange = async function () {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      if (!confirm('Replace this Target PDF with "' + file.name + '"? Students keep using the current PDF until the new one is fully processed.')) return;
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Processing the new Target PDF...');
+      var fd = new FormData();
+      fd.append('target_file', file);
+      try {
+        var res = await fetch('/api/lms/diagnostics/' + assessmentId + '/target-pdf/' + targetPdfId + '/replace', {
+          method: 'POST', credentials: 'include', body: fd,
+        });
+        var body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || 'Replace failed');
+        alert('Target PDF replaced. AI Guided Practice now uses "' + file.name + '".');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      }
+      loadAdminDiagnostics();
+    };
+    input.click();
+  };
+
   function renderAdminDiagList(items) {
     var listEl = document.getElementById('adminDiagList');
     if (!listEl) return;
@@ -673,13 +738,19 @@
                 '">' +
                 esc(t.original_filename || 'target.pdf') +
                 '</span>' +
+                '<button type="button" class="d-pdf-x" title="Replace PDF (no gap for students)" onclick="adminReplaceTargetPdf(' +
+                d.id +
+                ',' +
+                t.id +
+                ')"><i class="fas fa-sync-alt"></i></button>' +
                 '<button type="button" class="d-pdf-x" title="Remove PDF" onclick="adminRemoveTargetPdf(' +
                 d.id +
                 ',' +
                 t.id +
                 ')"><i class="fas fa-times"></i></button>' +
                 '</div>' +
-                bankStatusHtml(d.id, t.original_filename)
+                bankStatusHtml(d.id, t.original_filename) +
+                aigpStatusHtml(t.rag_thread_id)
               );
             })
             .join('');
@@ -800,6 +871,7 @@
       var results = await Promise.all([api('/api/lms/admin/diagnostics'), loadBankDocs()]);
       var items = results[0];
       state.diagnostics = items || [];
+      await loadAigpStatus(items);
       updateDiagStats(items);
       syncTargetGradeUI(items);
 

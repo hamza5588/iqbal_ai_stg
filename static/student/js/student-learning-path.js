@@ -1,9 +1,8 @@
 /* 03 My Learning Path. Topic rows = the student's assessed topics (dashboard `mastery`; Weak ones are the
-   dashboard `weak_topics`). Start Learning Path opens Learning Chat (lms-deficiency-chat.js); Guided practice
-   opens the per-topic practice panel (lms-panels.js). Path steps keep the old overview's actions. */
+   dashboard `weak_topics`). Start Learning Path opens Learning Chat (lms-deficiency-chat.js). Guided Practice
+   is no longer embedded here - it is the independent AI Guided Practice tab (student-ai-guided-practice.js).
+   Path steps keep the old overview's actions. */
 (function () {
-  // The practice service now skips questions with disproved answer keys.
-  var GUIDED_PRACTICE_ENABLED = true;
   var state = { open: {} };
   var STATUS_LABEL = {
     mastered: 'Mastered',
@@ -27,7 +26,7 @@
         : '';
     }
     // Per-row Practice / Learning Chat buttons are intentionally omitted — the
-    // Domain row already has Guided practice + Start Learning Chat once.
+    // Domain row already has Start Learning Chat once.
     return '<div class="sd-subtopics" style="margin-top:10px;"><div class="sd-label" style="margin-bottom:4px;">Weak subtopics</div>' +
       area.subtopics.map(function (s) {
         var pct = s.score_percent != null ? Math.round(s.score_percent) + '%' : '—';
@@ -67,10 +66,8 @@
       (t.last_assessed_at ? '<div><span class="sd-label">Last assessed</span><b><i class="far fa-calendar"></i> ' + escapeHtml(window.sdFmtDate(t.last_assessed_at)) + '</b></div>' : '');
     var side;
     var area = weakAreasByDomain()[t.topic_id];
-    var practiceAvailable = !!(area && (area.subtopics || []).some(function (s) { return s.guided_practice_available; }));
     if (t.isWeak) {
       side = '<span class="sd-pill green">Available</span>' +
-        (GUIDED_PRACTICE_ENABLED && t.topic_id && practiceAvailable ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="openLmsPracticePanel(' + Number(t.topic_id) + ')"><i class="fas fa-dumbbell"></i> Guided practice</button>' : '') +
         '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" data-testid="topic-chat-btn" onclick="openDeficiencyChat(false, \'practice\', ' + (Number(t.topic_id) || 0) + ')">Start Learning Chat <i class="fas fa-chevron-right"></i></button>';
     } else {
       side = '<span class="sd-pill grey">Completed</span>' +

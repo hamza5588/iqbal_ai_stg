@@ -188,6 +188,10 @@ def verify_mcq_grounding(
                     **question,
                     "approved_slo": expected_scope,
                     "grounding_verified": GROUNDING_VERIFIER,
+                    # Verbatim source fragment the checker cited (already verified to
+                    # occur in the source); AI Guided Practice shows it as the
+                    # explanation when the generator gave none.
+                    "grounding_evidence": evidence,
                 }
             else:
                 if verdicts is None:

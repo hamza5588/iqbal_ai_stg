@@ -1,0 +1,31 @@
+{# 05 — AI Guided Practice. Independent of the diagnostic / Learning Path: active Target PDF -> main topics ->
+   subtopics -> practice sessions (student-ai-guided-practice.js). #}
+<div class="sd-card">
+  <div class="sd-head-row">
+    <div class="sd-section-title">
+      <div class="sd-icon-badge"><img src="{{ url_for('static', filename='student/icons/ai-tutor.png') }}" alt=""></div>
+      <div><h2>AI Guided Practice</h2><p class="sd-desc" id="sdAigpSub">Practise any topic from your study material. Questions come only from your teacher's Target PDF.</p></div>
+    </div>
+    <div class="sd-toolbar">
+      <div class="sd-search"><i class="fas fa-search"></i>
+        <input type="search" id="sdAigpSearch" placeholder="Search topics or subtopics..." oninput="sdAigpRender()" aria-label="Search AI Guided Practice topics">
+      </div>
+      <div class="sd-select"><label for="sdAigpStatus">Status</label>
+        <select id="sdAigpStatus" onchange="sdAigpRender()">
+          <option value="">All subtopics</option>
+          <option value="not_started">Not started</option>
+          <option value="in_progress">In progress</option>
+          <option value="completed">Practised</option>
+        </select></div>
+    </div>
+  </div>
+  <div id="sdAigpSummary" style="margin-top:12px;"></div>
+  <div id="sdAigpTopics" style="margin-top:16px;"><div class="sd-spinner"></div></div>
+</div>
+
+<div class="sd-card" id="sdAigpHistoryCard">
+  <div class="sd-head-row">
+    <div><h3 style="margin:0;color:var(--sd-blue-900);font-size:18px;">Practice history</h3><p class="sd-desc">Your completed AI Guided Practice sessions.</p></div>
+  </div>
+  <div id="sdAigpHistory" style="margin-top:12px;"><div class="sd-spinner"></div></div>
+</div>

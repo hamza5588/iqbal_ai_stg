@@ -2588,6 +2588,159 @@ def guided_practice_history():
     return json_success(guided_practice_service.history(_current_user_id()))
 
 
+# -- AI Guided Practice (independent tab; active Target PDF -> topics -> subtopics) --
+
+
+def _strict_int(value) -> int:
+    """JSON integer only: booleans and fractional numbers are rejected, not coerced."""
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise ValueError("not an integer")
+    return int(value)
+
+
+@bp.route("/ai-guided-practice/dashboard", methods=["GET"])
+@login_required
+def ai_guided_practice_dashboard():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.dashboard(_current_user_id()))
+
+
+@bp.route("/ai-guided-practice/sessions", methods=["POST"])
+@login_required
+def ai_guided_practice_start():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+    from app.utils.llm_gateway import llm_workflow
+
+    body = request.get_json(silent=True) or {}
+    try:
+        subtopic_id = _strict_int(body.get("subtopic_id"))
+    except (TypeError, ValueError, OverflowError):
+        return json_error("subtopic_id is required", code="validation_error")
+    with llm_workflow(
+        "ai_guided_practice_question_generation", user_id=_current_user_id(), user_role="student"
+    ):
+        result = ai_guided_practice_service.start_session(
+            _current_user_id(), subtopic_id, request_key=body.get("request_key")
+        )
+    return json_success(result)
+
+
+@bp.route("/ai-guided-practice/sessions/<int:session_id>", methods=["GET"])
+@login_required
+def ai_guided_practice_session(session_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.session_state(_current_user_id(), session_id))
+
+
+@bp.route("/ai-guided-practice/sessions/<int:session_id>/answer", methods=["POST"])
+@login_required
+def ai_guided_practice_answer(session_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        position = _strict_int(body.get("position"))
+        option_position = _strict_int(body.get("option_position"))
+    except (TypeError, ValueError, OverflowError):
+        return json_error("position and option_position are required", code="validation_error")
+    return json_success(
+        ai_guided_practice_service.submit_answer(
+            _current_user_id(),
+            session_id,
+            position,
+            option_position,
+            time_spent_seconds=body.get("time_spent_seconds"),
+        )
+    )
+
+
+@bp.route("/ai-guided-practice/sessions/<int:session_id>/complete", methods=["POST"])
+@login_required
+def ai_guided_practice_complete(session_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.complete_session(_current_user_id(), session_id))
+
+
+@bp.route("/ai-guided-practice/history", methods=["GET"])
+@login_required
+def ai_guided_practice_history():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.history(_current_user_id()))
+
+
+@bp.route("/ai-guided-practice/admin/status", methods=["GET"])
+@login_required
+def ai_guided_practice_admin_status():
+    """AI Guided Practice processing state per Target PDF thread (admin panel)."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    threads = [t for t in (request.args.get("threads") or "").split(",") if t.strip()]
+    return json_success(ai_guided_practice_service.admin_version_status(threads))
+
+
+@bp.route("/ai-guided-practice/admin/versions/<int:version_id>/reprocess", methods=["POST"])
+@login_required
+def ai_guided_practice_admin_reprocess(version_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+    from app.utils.llm_gateway import llm_workflow
+
+    with llm_workflow("ai_guided_practice_topic_extraction", user_id=_current_user_id(), user_role="admin"):
+        return json_success(ai_guided_practice_service.reprocess_version(version_id))
+
+
+@bp.route("/diagnostics/<int:assessment_id>/target-pdf/<int:target_pdf_id>/replace", methods=["POST"])
+@login_required
+def replace_diagnostic_target_pdf(assessment_id: int, target_pdf_id: int):
+    """Replace one Target PDF; students switch only after the new one is processed. Admin only."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms.diagnostic_pdf_service import replace_target_pdf
+    from app.utils.llm_gateway import llm_workflow
+
+    upload = request.files.get("target_file") or request.files.get("file")
+    if not upload or not upload.filename:
+        return json_error("A replacement PDF is required", code="validation_error")
+    with llm_workflow("ai_guided_practice_topic_extraction", user_id=_current_user_id(), user_role="admin"):
+        result = replace_target_pdf(
+            assessment_id,
+            _current_user_id(),
+            target_pdf_id,
+            upload.read(),
+            upload.filename.strip() or "target.pdf",
+            is_admin=True,
+        )
+    return json_success(result)
+
+
 @bp.route("/classes/<int:class_id>/analytics/subtopics", methods=["GET"])
 @login_required
 def class_subtopic_analytics(class_id: int):

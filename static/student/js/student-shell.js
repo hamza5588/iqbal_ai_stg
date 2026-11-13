@@ -100,10 +100,11 @@
      General AI Tutor (#tutor) is hidden — deep links redirect to learning-path.
      Flows opened from them (need live state, never a landing target):
      diagnostic-quiz (lms-student.js), learning-chat (lms-deficiency-chat.js), lesson (student-lessons.js). */
-  var TOP_VIEWS = ['diagnostic', 'learning-path', 'classes'];
-  var FLOW_PARENT = { 'diagnostic-quiz': 'diagnostic', 'learning-chat': 'learning-path', 'lesson': 'classes' };
+  // AI Guided Practice is deliberately NOT gated: it needs no diagnostic or Learning Path.
+  var TOP_VIEWS = ['diagnostic', 'learning-path', 'classes', 'ai-guided-practice'];
+  var FLOW_PARENT = { 'diagnostic-quiz': 'diagnostic', 'learning-chat': 'learning-path', 'lesson': 'classes', 'ai-guided-session': 'ai-guided-practice' };
   var GATED = { 'learning-path': 1, 'classes': 1, 'learning-chat': 1, 'lesson': 1 };
-  var flows = { 'diagnostic-quiz': false, 'learning-chat': false, 'lesson': false };
+  var flows = { 'diagnostic-quiz': false, 'learning-chat': false, 'lesson': false, 'ai-guided-session': false };
   var pendingSurfaceClose = {};
   var current = null;
   window.sdViews = window.sdViews || {};
@@ -136,16 +137,27 @@
   /** Leave the current flow view. Returns false if the flow may not be left (mandatory diagnostic). */
   function leaveCurrent(target) {
     if (current === 'diagnostic-quiz' && target !== 'diagnostic-quiz' && flows['diagnostic-quiz']) {
-      if (window._lmsDiagnosticMandatory && !window._lmsDiagnosticAllowClose) {
+      // AI Guided Practice does not depend on the diagnostic, so it is the one place a
+      // student may go while the mandatory diagnostic is open (answers are saved by
+      // closeLmsDiagnostic). Every other destination stays locked.
+      var toPractice = target === 'ai-guided-practice' || target === 'ai-guided-session';
+      if (window._lmsDiagnosticMandatory && !window._lmsDiagnosticAllowClose && !toPractice) {
         window.showToast('Please complete and submit the diagnostic assessment first.', 'error');
         return false;
       }
       pendingSurfaceClose['diagnostic-quiz'] = true;
-      if (typeof closeLmsDiagnostic === 'function') closeLmsDiagnostic();
+      if (typeof closeLmsDiagnostic === 'function') {
+        var wasAllowed = window._lmsDiagnosticAllowClose;
+        if (toPractice) window._lmsDiagnosticAllowClose = true;  // checked synchronously on entry
+        try { closeLmsDiagnostic(); } finally { window._lmsDiagnosticAllowClose = wasAllowed; }
+      }
     }
     if (current === 'learning-chat' && target !== 'learning-chat' && flows['learning-chat']) {
       pendingSurfaceClose['learning-chat'] = true;
       if (typeof closeDeficiencyChat === 'function') closeDeficiencyChat();
+    }
+    if (current === 'ai-guided-session' && target !== 'ai-guided-session') {
+      flows['ai-guided-session'] = false;  // answers are saved server-side; Resume picks it up
     }
     if (current === 'lesson' && target !== 'lesson') {
       flows.lesson = false;
@@ -203,6 +215,8 @@
   window.sdCloseLearningChatView = function () { closeFlow('learning-chat'); };
   window.sdOpenLessonView = function () { openFlow('lesson'); };
   window.sdCloseLessonView = function () { closeFlow('lesson'); };
+  window.sdOpenAigpSessionView = function () { openFlow('ai-guided-session'); };
+  window.sdCloseAigpSessionView = function () { closeFlow('ai-guided-session'); };
 
   window.sdOnDiagnosticGate = function (locked) {
     document.querySelectorAll('.sd-navbtn').forEach(function (a) {
@@ -389,6 +403,12 @@
       ob = await lmsApi('/api/lms/students/me/onboarding-status');
     } catch (e) { /* fall back to the server-rendered status */ }
     window._lmsNeedsDiagnostic = ob && ob.diagnostic_completed === false;
+    // A deep link to AI Guided Practice opens it directly; it does not need the diagnostic.
+    var startHash = (window.location.hash || '').replace(/^#/, '');
+    if (window._lmsNeedsDiagnostic && (startHash === 'ai-guided-practice' || startHash === 'ai-guided-session')) {
+      if (typeof setLmsDiagnosticGate === 'function') setLmsDiagnosticGate(true);
+      return false;
+    }
     if (window._lmsNeedsDiagnostic) {
       if (typeof setLmsDiagnosticGate === 'function') setLmsDiagnosticGate(true);
       if (typeof openLmsDiagnostic === 'function') openLmsDiagnostic();
