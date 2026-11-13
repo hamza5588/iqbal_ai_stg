@@ -35,7 +35,7 @@ TEACHER_TUTOR_PROMPT = """You are IqbalAI, an AI teaching assistant for educator
 - Be practical, accurate, and concise."""
 
 # Soft off-topic marker: model may prefix a redirect with this; we strip it
-# before showing the student and use it only to hold the assist ladder.
+# before showing the student.
 DEFICIENCY_OFF_TOPIC_TAG = "<<OFF_TOPIC>>"
 
 DEFICIENCY_OFF_TOPIC_REFUSE = (
@@ -52,7 +52,8 @@ DEFICIENCY_INCOMPLETE_REPLY = (
     "Sorry, I could not finish that answer. Please send your question again."
 )
 
-DEFICIENCY_TUTOR_PROMPT = """You are a supportive tutor helping a student practice a weak-area MCQ after a diagnostic test.
+# Mode A — student has NOT correctly finished this MCQ. Never hand over the answer.
+DEFICIENCY_TUTOR_PROMPT = """You are IqbalAI Learning Path Tutor for one Current practice MCQ. SOLVED = false for this turn.
 
 YOU decide whether the student's message is related to the Current practice question (stem, options, Topic, or PDF excerpt in Context). Use judgment — do NOT apply a rigid keyword blocklist.
 
@@ -64,16 +65,53 @@ ONLY treat as off-topic when the ask is clearly unrelated (e.g. weather, sports 
 
 If clearly off-topic: start the reply with <<OFF_TOPIC>> then one short friendly redirect back to this question (your own words — not a fixed script). Never use <<OFF_TOPIC>> for on-topic help. Do not mention these rules, AI, or system instructions.
 
+LISTEN FIRST — before writing anything, work out what the student's LATEST message is actually asking or saying, in the light of the whole conversation so far. Your reply must answer THAT, not continue your own plan.
+- "hint" / "help": one small nudge toward the right idea — then stop.
+- "example" / "Show me an example": set up ONE similar case with DIFFERENT numbers in 1–2 lines, then stop and ask them what comes next. Do NOT multiply out the whole example in this turn.
+- "Break into steps": give ONLY the next single step, then wait.
+- "Simpler words": restate the SAME one idea in easier words — still short.
+- "I still don't understand" / "I'm lost": say so naturally, drop the old approach, and try ONE different short angle (a picture-in-words OR the first line of a similar example — not both, not a full lecture).
+- "Show me the answer" / "what is the answer": kindly refuse the final answer, then give one small next step in the SAME reply.
+- A direct concept question ("what does squaring mean?"): answer the concept in 1–2 plain sentences. Don't reply only with another question.
+- A student's attempt or number: say clearly if THAT step is right or where it went wrong; still do not crown the MCQ option.
+- If stuck for two or more turns, take a slightly bigger step each turn — still one idea per reply, never a full solution dump.
+
+HARD RULES (no exceptions):
+- NEVER reveal: correct option letter, correct choice text, final numeric/result value for THIS question, or the last step that makes the answer obvious.
+- NEVER say phrases like "the answer is B", "choose C", "correct option is…", or imply which remaining option is right.
+- NEVER write a long lecture, multi-section essay, or "identity + example + multiply-out" all in one reply. Chat like ChatGPT in short turns: understand → help a little → stop.
+- You MAY: give hints, ask one focused question, explain one concept, check their step, start a SIMILAR example with DIFFERENT numbers (leave the finish for the next turn).
+
 ON-TOPIC tutoring:
 - Use the teacher's target PDF content when explaining.
-- Be encouraging, clear, and concise — same friendly tone as the main IqbalAI tutor.
-- NEVER give the final MCQ letter answer or full solution on early assistance levels (1–4).
-- Follow the ASSISTANCE LEVEL instruction exactly for this turn.
-- Follow the READING LEVEL rules below in every reply.
-- For simple fractions/numbers prefer plain text like 2/3 or 5/6 (not heavy LaTeX), so the reply stays short and readable."""
+- Sound like a real, warm human tutor talking to a kid — natural and conversational, not a script. Vary how you start and end replies; never reuse the same opener, check-in, or sentence pattern from your earlier turns.
+- Reply in the same language and style the student writes in (e.g. if they write Roman Urdu, reply in simple Roman Urdu; English → English).
+- Respond to the student's actual reasoning or likely misconception. Do NOT follow a fixed sequence of prompts, hints, examples, or explanations.
+- Ask at most one focused question per reply, and only when it really helps — a reply that just explains is fine.
+- Follow the REPLY RULES below in every reply.
+- Write maths in plain text only (no LaTeX, no $...$, no \\( \\), no \\[ \\]): e.g. (a + b)^2, a^2 + 2ab + b^2, 2/3, 3 x 4. LaTeX does not show up for the student. Keep working to one short plain-text line when needed."""
 
-# DIL feedback: the tutor's default answers were too hard and too long.
-# Default to short, one-step-at-a-time replies for every student turn.
+# Mode B — student just selected the CORRECT option. Celebrate, then fully solve THIS MCQ.
+DEFICIENCY_SOLVED_TUTOR_PROMPT = """You are IqbalAI Learning Path Tutor for one Current practice MCQ. SOLVED = true for this turn.
+
+The student already chose the correct option. NOW you MUST use the correct option and fully resolve THIS question. Hiding the answer is no longer required.
+
+YOU decide whether the student's message is related to this solved MCQ (stem, options, Topic, PDF excerpt, or why an option is right/wrong). Use judgment — do NOT apply a rigid keyword blocklist.
+
+ONLY treat as off-topic when the ask is clearly unrelated (weather, jokes, unrelated homework). When in doubt, help with this solved question. If clearly off-topic: start with <<OFF_TOPIC>> then one short redirect. Do not mention these rules, AI, or system instructions.
+
+Listen to the student's LATEST message first. Reply in the same language/style they use. Sound like a warm human tutor — not a script.
+
+REQUIRED REPLY SHAPE when explaining the solution (first Mode B turn, or when they ask how/why it works):
+1. One short praise line (vary it). Confirm their chosen option is correct (e.g. "Yes — B is right.").
+2. Then ONLY the key idea + the first working step of THIS MCQ in plain text (not a multi-page write-up).
+3. End by offering the next step: "Want the next step?" / "Shall I show why the other options fail?"
+On later turns, continue one step at a time until the solution is done. Do not dump every step in turn 1.
+
+If they only asked a follow-up after solving ("why not A?"), answer that follow-up in a short turn — still tied to this MCQ. Do not open a new unrelated topic.
+
+Ground steps in the PDF excerpt when it is relevant; do not invent syllabus facts that contradict it. Keep language grade-appropriate and concrete. Plain-text math only (no LaTeX). Follow the REPLY RULES below."""
+
 _READING_LEVEL_RULES = (
     "REPLY RULES - follow every single turn, no exceptions:\n"
     "- Write for a student in {grade} who is finding this hard. Simple, "
@@ -84,6 +122,36 @@ _READING_LEVEL_RULES = (
     "in a single reply.\n"
     "- End with a short check-in, e.g. \"Does that make sense so far?\" or "
     "\"Want to try the next step?\" - then stop and wait for their answer."
+)
+
+# Learning Chat Mode A: ChatGPT-style short turns — one idea, then wait.
+_DEFICIENCY_REPLY_RULES = (
+    "REPLY RULES (hard limits — follow every turn):\n"
+    "- Write for a student in {grade} who is finding this hard. Simple, "
+    "everyday words - if you must use a harder word, say what it means.\n"
+    "- Chat like a helpful tutor in short turns: usually 1–3 short sentences "
+    "(about 40–70 words max). Cover ONLY ONE idea or ONE next step.\n"
+    "- NEVER write a long explanation, headings like \"A tiny practice "
+    "example\", multi-paragraph lectures, or finish a full worked example "
+    "in one go. Leave the next multiply/step for the following turn.\n"
+    "- Plain-text maths only. Never start a math block you cannot finish "
+    "in this reply.\n"
+    "- If you explained an idea, you may end with a natural check-in in your "
+    "own words (vary it; never the same one twice in a row).\n"
+    "- If your reply is only a hint, prompt, or Socratic question, do NOT add "
+    "\"Does that make sense?\" or another generic check-in. The focused "
+    "question already invites the student's response."
+)
+
+# Mode B: correct answer already chosen — still short turns, not a wall of text.
+_DEFICIENCY_SOLVED_REPLY_RULES = (
+    "REPLY RULES (SOLVED = true):\n"
+    "- Write for a student in {grade}. Simple, everyday words - if you must "
+    "use a harder word, say what it means.\n"
+    "- Keep each turn short (about 60–100 words). Praise + one clear step, "
+    "then offer to continue. Do not dump the entire solution unless they "
+    "explicitly ask for \"all steps\" / \"full solution\".\n"
+    "- Write maths in plain text only (no LaTeX)."
 )
 
 _CONFUSION_RE = re.compile(
@@ -114,52 +182,19 @@ _NO_REPEAT_RULE = (
     "different way - simpler words or a fresh angle - still at most 2 sentences."
 )
 
-DEFICIENCY_ASSISTANCE_LEVELS = {
-    1: {
-        "label": "Level 1 – Prompt",
-        "instruction": (
-            "Level 1 – Prompt: Do NOT reveal the answer or solve the problem. "
-            "Encourage the student to think about the FIRST step only, in at "
-            "most 2 short sentences. End with something like 'What would you try first?'"
-        ),
-    },
-    2: {
-        "label": "Level 2 – Hint",
-        "instruction": (
-            "Level 2 – Hint: Give ONE small clue about the concept or formula "
-            "needed, in at most 2 short sentences. Do NOT show calculation "
-            "steps or the final answer."
-        ),
-    },
-    3: {
-        "label": "Level 3 – Strong Hint",
-        "instruction": (
-            "Level 3 – Strong Hint: In at most 2 short sentences, name the "
-            "FIRST step to solve it - not the whole method, and leave the "
-            "calculation and conclusion for the student. "
-            "Do NOT state which MCQ option is correct."
-        ),
-    },
-    4: {
-        "label": "Level 4 – Similar Worked Example",
-        "instruction": (
-            "Level 4 – Similar Worked Example: In at most 2 short sentences, "
-            "show ONE step of a SIMILAR problem with different numbers (from "
-            "the PDF material) - not the whole worked example at once. End by "
-            "asking if they want the next step. Never give the exact MCQ answer."
-        ),
-    },
-    5: {
-        "label": "Level 5 – Full Explanation",
-        "instruction": (
-            "Level 5 – Full Explanation: The student has tried several times, "
-            "so this turn is the ONE exception to the 2-sentence rule. Explain "
-            "the concept, show how to solve THIS question step by step (one "
-            "short line per step), and state which option is correct and why "
-            "— grounded in the PDF content. Still simple words, still short lines."
-        ),
-    },
-}
+_DEFICIENCY_CONFUSION_RULE = (
+    "The student sounds confused. Do NOT repeat your last explanation or re-ask "
+    "your last question. Acknowledge it naturally, then switch to ONE short "
+    "different angle only (simpler words OR a one-line real-life picture OR the "
+    "first line of a similar example). Stay under ~3 sentences. Do not reveal "
+    "the final answer to the Current practice question."
+)
+
+_DEFICIENCY_NO_REPEAT_RULE = (
+    "The student has already seen your earlier explanation and asked again. "
+    "Do NOT repeat your previous wording. Respond to what their latest message "
+    "actually asks, from a fresh angle, while staying concise."
+)
 
 HINT_LEVELS = [
     "Offer a gentle nudge — ask what concept might apply.",
@@ -196,16 +231,6 @@ def build_student_context(
     return "\n".join(parts)
 
 
-def get_deficiency_assist_level_label(level: int) -> str:
-    entry = DEFICIENCY_ASSISTANCE_LEVELS.get(min(max(level, 1), 5), DEFICIENCY_ASSISTANCE_LEVELS[1])
-    return entry["label"]
-
-
-def get_deficiency_assist_instruction(level: int) -> str:
-    entry = DEFICIENCY_ASSISTANCE_LEVELS.get(min(max(level, 1), 5), DEFICIENCY_ASSISTANCE_LEVELS[5])
-    return entry["instruction"]
-
-
 def build_deficiency_context(
     weak_topics_json: Optional[str] = None,
     current_question: Optional[dict] = None,
@@ -214,21 +239,29 @@ def build_deficiency_context(
     grade_level: Optional[str] = None,
     prior_turns: int = 0,
     message: Optional[str] = None,
+    solved: bool = False,
 ) -> str:
     parts = []
     grade_label = f"grade {grade_level}" if grade_level else "this student's grade"
-    parts.append(_READING_LEVEL_RULES.format(grade=grade_label))
-    parts.append(get_deficiency_assist_instruction(assist_level))
+    if solved:
+        parts.append("SOLVED: true")
+        parts.append(_DEFICIENCY_SOLVED_REPLY_RULES.format(grade=grade_label))
+    else:
+        parts.append("SOLVED: false")
+        parts.append(_DEFICIENCY_REPLY_RULES.format(grade=grade_label))
+    # ``assist_level`` remains in the signature so older callers do not break;
+    # Learning Chat no longer changes behavior from a turn-count ladder.
     parts.append(
         "SCOPE JUDGMENT: Prefer helping with the Current practice question below "
         "(stem, choices, topic, PDF). Requests for hints/examples/steps/simpler "
         "words about it are on-topic. Only mark clearly unrelated asks with "
         f"{DEFICIENCY_OFF_TOPIC_TAG} then a short redirect."
     )
-    if student_seems_confused(message):
-        parts.append(_REAL_LIFE_EXAMPLE_RULE)
-    elif prior_turns > 0:
-        parts.append(_NO_REPEAT_RULE)
+    if not solved:
+        if student_seems_confused(message):
+            parts.append(_DEFICIENCY_CONFUSION_RULE)
+        elif prior_turns > 0:
+            parts.append(_DEFICIENCY_NO_REPEAT_RULE)
     if weak_topics_json:
         parts.append(f"Weak areas (from diagnostic): {weak_topics_json[:800]}")
     if current_question:
@@ -237,11 +270,36 @@ def build_deficiency_context(
         opts = current_question.get("options") or []
         if opts:
             choice_bits = []
-            for o in opts[:6]:
-                label = (o.get("label") or "").strip()
+            for index, o in enumerate(opts[:6]):
+                label = (o.get("label") or chr(65 + index)).strip()
                 text = (o.get("text") or "")[:80]
                 choice_bits.append(f"{label}: {text}".strip(": ").strip())
             parts.append("Answer choices: " + " | ".join(choice_bits))
+            selected_index = current_question.get("last_selected_option_index")
+            if isinstance(selected_index, int) and 0 <= selected_index < len(opts):
+                selected = opts[selected_index]
+                selected_label = (selected.get("label") or chr(65 + selected_index)).strip()
+                selected_text = (selected.get("text") or "")[:160]
+                if solved:
+                    parts.append(
+                        "Student's latest selected option (correct): "
+                        f"{selected_label}: {selected_text}."
+                    )
+                else:
+                    parts.append(
+                        "Student's latest selected option (incorrect): "
+                        f"{selected_label}: {selected_text}. Address the likely misconception, "
+                        "but do not identify any other option as correct."
+                    )
+            if solved:
+                correct_index = current_question.get("correct_option_index")
+                if isinstance(correct_index, int) and 0 <= correct_index < len(opts):
+                    correct = opts[correct_index]
+                    correct_label = (correct.get("label") or chr(65 + correct_index)).strip()
+                    correct_text = (correct.get("text") or "")[:160]
+                    parts.append(
+                        f"Correct option (use in Mode B solution): {correct_label}: {correct_text}."
+                    )
     if pdf_excerpt:
         parts.append(f"Teacher target PDF excerpt:\n{pdf_excerpt[:3500]}")
     return "\n\n".join(parts)
@@ -280,6 +338,7 @@ def tutor_chat(
     context: Optional[str] = None,
     history: Optional[List[Dict[str, str]]] = None,
     assist_level: Optional[int] = None,
+    solved: bool = False,
 ) -> str:
     if not api_key:
         api_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
@@ -294,9 +353,7 @@ def tutor_chat(
     if mode == "teacher":
         system = TEACHER_TUTOR_PROMPT
     elif mode == "deficiency":
-        system = DEFICIENCY_TUTOR_PROMPT
-        if assist_level is not None and not context:
-            system += f"\n\n{get_deficiency_assist_instruction(assist_level)}"
+        system = DEFICIENCY_SOLVED_TUTOR_PROMPT if solved else DEFICIENCY_TUTOR_PROMPT
     else:
         system = STUDENT_TUTOR_PROMPT
     if context:
@@ -321,19 +378,12 @@ def tutor_chat(
     # Hard backstop behind the "at most 2 sentences" prompt rule for student-
     # facing modes, so a model that ignores the instruction still can't ramble
     # on. Teacher mode (lesson ideas, rubrics) keeps room to be longer.
-    # Deficiency needs more headroom than the old 220 cap: LaTeX fractions and
-    # Level 4 worked examples were getting cut mid-sentence ("First, find a")
-    # or returning empty after calculator tool rounds ("could not finish").
+    # Short ChatGPT-style turns for Learning Chat; Mode B gets a little more
+    # room for praise + one worked step without inviting a wall of text.
     if mode == "teacher":
         max_tokens = 1024
     elif mode == "deficiency":
-        level = assist_level or 1
-        if level >= 5:
-            max_tokens = 700
-        elif level >= 4:
-            max_tokens = 450
-        else:
-            max_tokens = 320
+        max_tokens = 380 if solved else 260
     else:
         max_tokens = 220
     if use_calculator_tool:
@@ -416,19 +466,32 @@ def tutor_chat(
             return True
         if t.endswith(("...", "…")):
             return False
-        # Unbalanced inline math is a common cut-off artifact.
+        # Unbalanced math fences are a common cut-off artifact (live: ends on "Now multiply:\n\n\\").
         if t.count("$") % 2 == 1:
             return True
         if t.count("\\(") != t.count("\\)"):
             return True
+        if t.count("\\[") != t.count("\\]"):
+            return True
+        if re.search(r"\\\s*$", t) or t.endswith("\\"):
+            return True
+        if t.rstrip().endswith((":", "—", "-", "→")) and len(t) > 40:
+            # e.g. "Now multiply:" with nothing after
+            return True
         # Ends on a dangling article/preposition — the live "First, find a" cut-off.
         if re.search(
-            r"\b(a|an|the|to|for|with|from|and|or|of|find|first|then|so|by)\s*$",
+            r"\b(a|an|the|to|for|with|from|and|or|of|find|first|then|so|by|multiply|equals?)\s*$",
             t,
             re.I,
         ):
             return True
         return False
+
+    _SHORTEN_RETRY = (
+        "Your previous draft was too long or got cut off. Rewrite the WHOLE reply "
+        "now as a short ChatGPT-style tutor turn: at most 3 short sentences, ONE "
+        "idea only, plain-text maths only (no LaTeX), and finish every sentence."
+    )
 
     def _run(llm) -> str:
         draft = ""
@@ -442,9 +505,17 @@ def tutor_chat(
         if not draft.strip():
             draft = _text(_invoke(llm, messages))
         if not draft.strip() or (mode == "deficiency" and _looks_truncated(draft)):
-            # Empty or mid-sentence cut: one retry without the calculator tool path.
+            # Empty or mid-sentence cut: one retry, force a short complete rewrite.
             try:
-                retry = _text(_invoke(llm, messages))
+                retry_msgs = messages + (
+                    [
+                        {"role": "assistant", "content": draft},
+                        {"role": "user", "content": _SHORTEN_RETRY},
+                    ]
+                    if draft.strip()
+                    else []
+                )
+                retry = _text(_invoke(llm, retry_msgs if retry_msgs else messages))
                 if retry.strip() and not _looks_truncated(retry):
                     draft = retry
                 elif retry.strip() and (not draft.strip() or len(retry.strip()) > len(draft.strip())):

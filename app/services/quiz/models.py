@@ -90,6 +90,9 @@ class MCQQuestion(BaseModel):
         None,
         description="Optional PDF difficulty label when present; omit when absent",
     )
+    # Printed per-question metadata (DIL papers: "Cognitive Level: X | Difficulty: Y").
+    cognitive_level: Optional[str] = Field(None, description="Cognitive level printed on the paper; omit when absent")
+    printed_difficulty: Optional[str] = Field(None, description="Difficulty label exactly as printed; omit when absent")
     conversion_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
     preserve_option_order: bool = Field(
         default=False,
@@ -166,7 +169,11 @@ class MCQQuestion(BaseModel):
         self.options = cleaned
         texts = [opt.text.strip().lower() for opt in self.options]
         if len(set(texts)) != 4:
-            raise ValueError("All 4 options must be unique")
+            # Generated MCQs must stay unique. PDF harvest keeps paper order so
+            # answer-key letters still match even when the sheet prints (or OCR
+            # collapses) two identical distractors.
+            if not self.preserve_option_order:
+                raise ValueError("All 4 options must be unique")
         if self.correct_option_label not in labels:
             raise ValueError("correct_option_label must match one of the option labels")
         q_text, q_latex = pick_display_fields(self.question_text, self.question_latex)

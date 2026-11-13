@@ -10,7 +10,7 @@
     <div class="ad-toolbar">
         <div class="ad-search">
             <i class="fas fa-search"></i>
-            <input type="text" id="user-search" placeholder="Search by username or email..." oninput="loadUsers()" aria-label="Search users">
+            <input type="text" id="user-search" placeholder="Search by name, email or school..." oninput="loadUsers()" aria-label="Search users">
         </div>
         <select id="user-role-filter" onchange="adSyncUserRoleTabs(); loadUsers()" aria-label="Filter by role" class="ad-role-select">
             <option value="all">All Roles</option>
@@ -34,6 +34,7 @@
                     <tr>
                         <th>ID</th>
                         <th>User</th>
+                        <th>School Name</th>
                         <th>Email</th>
                         <th>Role</th>
                         <th>Subscription</th>
@@ -42,7 +43,7 @@
                 </thead>
                 <tbody id="users-tbody">
                     <tr>
-                        <td colspan="6">Loading...</td>
+                        <td colspan="7">Loading...</td>
                     </tr>
                 </tbody>
             </table>

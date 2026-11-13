@@ -204,6 +204,7 @@ h1.title span{ color:var(--green); font-weight:700; }
 
     <form id="complete-registration-form" action="{{ url_for('auth.register') }}" method="POST" novalidate data-wait-message="Creating your account...">
       <input type="hidden" name="useremail" value="{{ email }}">
+      {% include 'shared/school_suggestions.html' %}
 
       <div class="form-grid">
         <div class="form-field">
@@ -250,6 +251,15 @@ h1.title span{ color:var(--green); font-weight:700; }
               <option value="teacher">Teacher</option>
             </select>
             <div class="field-hint" id="role-hint">Please select your role</div>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12408a" stroke-width="1.8"><path d="m3 10 9-6 9 6v10H3Z"/><path d="M9 20v-7h6v7"/></svg></div>
+          <div class="field-body">
+            <label for="school_name">School Name*</label>
+            <input type="text" id="school_name" name="school_name" required maxlength="255" list="school-name-suggestions" placeholder="Select or enter school name" value="{{ request.form.get('school_name', '') }}">
+            <div class="field-hint" id="school_name-hint">School name is required (up to 255 characters)</div>
           </div>
         </div>
 
@@ -386,6 +396,10 @@ h1.title span{ color:var(--green); font-weight:700; }
     var fullName = document.getElementById('full_name');
     if (!fullName || !fullName.value.trim()) { setFieldError('full_name', 'full_name-hint', true); isValid = false; }
     else setFieldError('full_name', 'full_name-hint', false);
+
+    var schoolName = document.getElementById('school_name').value.trim();
+    if (!schoolName || schoolName.length > 255) { setFieldError('school_name', 'school_name-hint', true); isValid = false; }
+    else setFieldError('school_name', 'school_name-hint', false);
 
     var username = document.getElementById('username');
     if (!username.value.trim()) { setFieldError('username', 'username-hint', true); isValid = false; }

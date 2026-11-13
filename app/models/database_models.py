@@ -17,6 +17,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(255), nullable=False, unique=True)
     full_name = Column(String(255), nullable=True)
+    school_name = Column(String(255), nullable=True)
     useremail = Column(String(255), nullable=False, unique=True)
     password = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default='student',
@@ -47,6 +48,30 @@ class User(Base):
     __table_args__ = (
         CheckConstraint("role IN ('student', 'teacher', 'admin')", name='check_user_role'),
         CheckConstraint("subscription_tier IN ('free', 'pro', 'pro_plus')", name='check_subscription_tier'),
+    )
+
+
+class TutorUsageSession(Base):
+    """Heartbeat counters only; never stores prompts or chat messages."""
+    __tablename__ = 'tutor_usage_sessions'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    sequence = Column(Integer, nullable=False, default=0)
+    client_total_ms = Column(Integer, nullable=False, default=0)
+    last_seen_at = Column(DateTime, nullable=False)
+
+
+class TutorDailyUsage(Base):
+    __tablename__ = 'tutor_daily_usage'
+
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    usage_date = Column(Date, primary_key=True, index=True)
+    active_ms = Column(Integer, nullable=False, default=0)
+    credited_until = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint('active_ms >= 0 AND active_ms <= 86400000', name='check_tutor_daily_ms'),
     )
 
 

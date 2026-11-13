@@ -12,6 +12,7 @@ import smtplib
 from app.utils.mailer import MailConfigError, send_email
 from app.utils.openai_realtime import create_realtime_client_secret
 from app.utils.routes import get_default_route_by_role
+from app.utils.schools import school_name_problem
 import os
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,7 @@ def register():
             # Get all required form fields with validation
             username = request.form.get('username')
             full_name = (request.form.get('full_name') or request.form.get('name') or '').strip()
+            school_name = request.form.get('school_name', '').strip()
             password = request.form.get('password')
             class_standard = request.form.get('class_standard', '')  # Optional field - defaults to empty string
             medium = request.form.get('medium')
@@ -223,7 +225,11 @@ def register():
             
             if missing_fields:
                 logger.error(f"Missing required fields: {missing_fields}")
-                return render_template('register/register.html', error=f"Missing required fields: {', '.join(missing_fields)}")
+                return render_template('register/register.html', email=email, error=f"Missing required fields: {', '.join(missing_fields)}")
+
+            school_error = school_name_problem(school_name)
+            if school_error:
+                return render_template('register/register.html', email=email, error=school_error)
 
             # Self-registration is for students and teachers only; admins are created by an admin.
             if role not in SELF_REGISTER_ROLES:
@@ -243,6 +249,7 @@ def register():
                 groq_api_key=groq_api_key,  # Will default to empty string if not provided
                 role=role,
                 full_name=full_name,
+                school_name=school_name,
             )
             
             # Mark verification token as used and clean up all tokens for this email

@@ -1,13 +1,15 @@
 {% extends 'student/base.html' %}
 {# Single authenticated entry (/student-dashboard). Each screen is a view switched by student-shell.js
-   (#diagnostic, #learning-path, #classes, #tutor) plus the full-page flows opened from them
-   (#diagnostic-quiz, #learning-chat, #lesson). #}
+   (#diagnostic, #learning-path, #classes, #ai-guided-practice, #tutor) plus the full-page flows opened from them
+   (#diagnostic-quiz, #learning-chat, #lesson, #ai-guided-session). #}
 {% block content %}
   <section id="view-diagnostic" class="sd-view" data-view="diagnostic">{% include 'student/diagnostic/index.html' %}</section>
   <section id="view-diagnostic-quiz" class="sd-view" data-view="diagnostic-quiz" data-nav="diagnostic">{% include 'student/diagnostic/quiz.html' %}</section>
   <section id="view-learning-path" class="sd-view" data-view="learning-path">{% include 'student/learning_path/index.html' %}</section>
   <section id="view-learning-chat" class="sd-view" data-view="learning-chat" data-nav="learning-path">{% include 'student/learning_path/practice.html' %}</section>
   <section id="view-classes" class="sd-view" data-view="classes">{% include 'student/classes/index.html' %}</section>
+  <section id="view-ai-guided-practice" class="sd-view" data-view="ai-guided-practice">{% include 'student/ai_guided_practice/index.html' %}</section>
+  <section id="view-ai-guided-session" class="sd-view" data-view="ai-guided-session" data-nav="ai-guided-practice">{% include 'student/ai_guided_practice/session.html' %}</section>
   <section id="view-lesson" class="sd-view" data-view="lesson" data-nav="classes">{% include 'student/lessons/viewer.html' %}</section>
   {# General AI Tutor page hidden from the student dashboard (nav removed). Markup kept off-DOM path for JS safety. #}
   <section id="view-tutor" class="sd-view" data-view="tutor" hidden aria-hidden="true" style="display:none !important;">{% include 'student/ai_tutor/index.html' %}</section>

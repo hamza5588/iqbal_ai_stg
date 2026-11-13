@@ -74,7 +74,7 @@ class UserModel:
     @staticmethod
     def create_user(username: str, useremail: str, password: str, 
                    class_standard: str, medium: str, groq_api_key: str = '', role: str = 'student',
-                   full_name: str = None) -> int:
+                   full_name: str = None, school_name: str = None) -> int:
         """Create a new user in the database"""
         try:
             db = get_db()
@@ -83,6 +83,7 @@ class UserModel:
             user = DBUser(
                 username=username,
                 full_name=display_name,
+                school_name=school_name.strip() if school_name else None,
                 useremail=useremail,
                 password=password if is_hashed(password) else hash_password(password),
                 class_standard=class_standard,

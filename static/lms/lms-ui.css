@@ -1239,6 +1239,30 @@ html.dark .lms-diag-clear-note,
   color: var(--lms-muted);
   line-height: 1.4;
 }
+.lms-q-ai-panel {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.lms-q-ai-hint {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: #1e3a8a;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.lms-q-ai-instruction {
+  display: block;
+  width: 100%;
+  min-height: 3.2rem;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  box-sizing: border-box;
+  resize: vertical;
+}
 math-field.lms-q-edit-field {
   display: block;
   width: 100%;

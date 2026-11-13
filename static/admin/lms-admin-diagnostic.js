@@ -11,6 +11,12 @@
     reviewAssessmentId: null,
     reviewStatus: null,
     reviewQuestions: [],
+    reviewTab: 'diag',
+    bankDocs: [],
+    bankReviewDocId: null,
+    bankReviewStatus: '',
+    bankReviewItems: [],
+    bankReviewTotal: 0,
   };
   var selectedTargetFiles = {
     adminDiagTargetFiles: [],
@@ -582,6 +588,115 @@
     if (hub) hub.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  // A question-bank Target PDF publishes nothing to students until its extracted
+  // MCQs are approved; show that state (and the way to act on it) on the PDF itself.
+  function bankDocFor(assessmentId, filename) {
+    var name = String(filename || '').trim().toLowerCase();
+    return (state.bankDocs || []).find(function (b) {
+      return Number(b.assessment_id) === Number(assessmentId) && String(b.filename || '').trim().toLowerCase() === name;
+    });
+  }
+
+  function bankStatusHtml(assessmentId, filename) {
+    var b = bankDocFor(assessmentId, filename);
+    if (!b) return '';
+    var c = b.status_counts || {};
+    var approved = c.approved || 0;
+    var ready = c.auto_verified || 0;
+    var review = c.needs_review || 0;
+    var pending = ready + review;
+    // Fully approved: nothing left to approve — hide the status bar entirely.
+    if (!pending && approved > 0) return '';
+    var tone = approved === 0 ? 'is-bad' : 'is-warn';
+    var text = approved === 0
+      ? 'Question bank: 0 approved — students get no questions from this PDF yet'
+      : 'Question bank: ' + approved + ' approved';
+    if (pending) text += ' · ' + ready + ' ready to approve · ' + review + ' need review';
+    return (
+      '<div class="d-bank-status ' + tone + '">' +
+      '<span>' + esc(text) + '</span>' +
+      '<button type="button" class="d-action primary" onclick="adminPreviewDiagnostic(' +
+      Number(assessmentId) +
+      ',{tab:\'bank\',documentId:' +
+      Number(b.document_id) +
+      '})"><i class="fas fa-check-double"></i> Review &amp; approve questions</button>' +
+      '</div>'
+    );
+  }
+
+  async function loadBankDocs() {
+    try {
+      state.bankDocs = (await api('/api/lms/target-bank/documents')) || [];
+    } catch (err) {
+      state.bankDocs = [];
+    }
+  }
+
+  /* AI Guided Practice: topic-extraction status per Target PDF (keyed by RAG thread). */
+  async function loadAigpStatus(items) {
+    var threads = [];
+    (items || []).forEach(function (d) {
+      (d.target_pdfs || []).forEach(function (t) { if (t.rag_thread_id) threads.push(t.rag_thread_id); });
+    });
+    if (!threads.length) { state.aigpStatus = {}; return; }
+    try {
+      state.aigpStatus = (await api('/api/lms/ai-guided-practice/admin/status?threads=' + encodeURIComponent(threads.join(',')))) || {};
+    } catch (err) {
+      state.aigpStatus = {};
+    }
+  }
+
+  function aigpStatusHtml(threadId) {
+    var s = (state.aigpStatus || {})[threadId];
+    if (!s) return '<div class="d-bank-status is-warn"><span>AI Guided Practice: not processed yet (starts when a student opens the tab)</span></div>';
+    if (s.status === 'ready') {
+      return '<div class="d-bank-status"><span>AI Guided Practice: ' + Number(s.main_topics || 0) + ' main topic(s) ready' +
+        (s.structure === 'whole_sections' ? ' · no subtopics printed, practised per whole section' : '') + '</span></div>';
+    }
+    if (s.status === 'failed') {
+      return '<div class="d-bank-status is-bad"><span>AI Guided Practice failed: ' + esc(s.error || 'unknown error') + '</span>' +
+        '<button type="button" class="d-action primary" onclick="adminAigpReprocess(' + Number(s.version_id) + ')"><i class="fas fa-redo"></i> Retry</button></div>';
+    }
+    return '<div class="d-bank-status is-warn"><span>AI Guided Practice: extracting topics...</span></div>';
+  }
+
+  window.adminAigpReprocess = async function (versionId) {
+    try {
+      await api('/api/lms/ai-guided-practice/admin/versions/' + versionId + '/reprocess', { method: 'POST' });
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+    loadAdminDiagnostics();
+  };
+
+  window.adminReplaceTargetPdf = function (assessmentId, targetPdfId) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,.pdf';
+    input.onchange = async function () {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      if (!confirm('Replace this Target PDF with "' + file.name + '"? Students keep using the current PDF until the new one is fully processed.')) return;
+      if (typeof showWaitOverlay === 'function') showWaitOverlay('Processing the new Target PDF...');
+      var fd = new FormData();
+      fd.append('target_file', file);
+      try {
+        var res = await fetch('/api/lms/diagnostics/' + assessmentId + '/target-pdf/' + targetPdfId + '/replace', {
+          method: 'POST', credentials: 'include', body: fd,
+        });
+        var body = await res.json();
+        if (!res.ok) throw new Error((body.error && body.error.message) || 'Replace failed');
+        alert('Target PDF replaced. AI Guided Practice now uses "' + file.name + '".');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        if (typeof hideWaitOverlay === 'function') hideWaitOverlay();
+      }
+      loadAdminDiagnostics();
+    };
+    input.click();
+  };
+
   function renderAdminDiagList(items) {
     var listEl = document.getElementById('adminDiagList');
     if (!listEl) return;
@@ -623,12 +738,19 @@
                 '">' +
                 esc(t.original_filename || 'target.pdf') +
                 '</span>' +
+                '<button type="button" class="d-pdf-x" title="Replace PDF (no gap for students)" onclick="adminReplaceTargetPdf(' +
+                d.id +
+                ',' +
+                t.id +
+                ')"><i class="fas fa-sync-alt"></i></button>' +
                 '<button type="button" class="d-pdf-x" title="Remove PDF" onclick="adminRemoveTargetPdf(' +
                 d.id +
                 ',' +
                 t.id +
                 ')"><i class="fas fa-times"></i></button>' +
-                '</div>'
+                '</div>' +
+                bankStatusHtml(d.id, t.original_filename) +
+                aigpStatusHtml(t.rag_thread_id)
               );
             })
             .join('');
@@ -746,8 +868,10 @@
     setAdminDiagUploadTab(state.uploadTab || 'publish');
 
     try {
-      var items = await api('/api/lms/admin/diagnostics');
+      var results = await Promise.all([api('/api/lms/admin/diagnostics'), loadBankDocs()]);
+      var items = results[0];
       state.diagnostics = items || [];
+      await loadAigpStatus(items);
       updateDiagStats(items);
       syncTargetGradeUI(items);
 
@@ -1192,6 +1316,9 @@
     if (modal) modal.classList.remove('is-open');
     state.reviewAssessmentId = null;
     state.reviewQuestions = [];
+    state.reviewTab = 'diag';
+    state.bankReviewDocId = null;
+    state.bankReviewItems = [];
     if (window.mathVirtualKeyboard) {
       try {
         window.mathVirtualKeyboard.hide();
@@ -1199,17 +1326,443 @@
     }
   };
 
-  window.adminPreviewDiagnostic = async function (id) {
+  function setReviewTabUi(tab) {
+    var diagTab = document.getElementById('adminDiagReviewTabDiag');
+    var bankTab = document.getElementById('adminDiagReviewTabBank');
+    var approveBtn = document.getElementById('adminDiagReviewApproveBtn');
+    var bulkBtn = document.getElementById('adminDiagReviewBankBulkBtn');
+    if (diagTab) {
+      diagTab.classList.toggle('is-active', tab === 'diag');
+      diagTab.setAttribute('aria-selected', tab === 'diag' ? 'true' : 'false');
+    }
+    if (bankTab) {
+      bankTab.classList.toggle('is-active', tab === 'bank');
+      bankTab.setAttribute('aria-selected', tab === 'bank' ? 'true' : 'false');
+    }
+    if (approveBtn) {
+      approveBtn.style.display =
+        tab === 'diag' && (state.reviewStatus === 'draft' || !state.reviewStatus) ? 'inline-flex' : 'none';
+    }
+    if (bulkBtn) bulkBtn.style.display = tab === 'bank' ? 'inline-flex' : 'none';
+  }
+
+  function bankDocsForAssessment(assessmentId) {
+    return (state.bankDocs || []).filter(function (b) {
+      return Number(b.assessment_id) === Number(assessmentId);
+    });
+  }
+
+  function renderBankReviewEmpty(assessmentId) {
+    var bodyEl = document.getElementById('adminDiagReviewBody');
+    if (!bodyEl) return;
+    var match = (state.diagnostics || []).find(function (d) {
+      return d.id === assessmentId;
+    });
+    var hasTargets = !!(match && (match.target_pdfs || []).length);
+    bodyEl.innerHTML =
+      '<div class="text-sm text-slate-600" style="line-height:1.5">' +
+      '<p><b>No Target PDF question bank for this diagnostic yet.</b></p>' +
+      (hasTargets
+        ? '<p>Study PDFs are attached, but no printable MCQs were extracted into the bank (or extraction failed). Re-upload a Target PDF that contains printed questions with an answer key, or import from <a href="/admin/target-bank">/admin/target-bank</a>.</p>'
+        : '<p>Add study PDFs with <b>Add study PDFs</b> on this diagnostic. Printed MCQs are extracted automatically, then you approve them on this tab.</p>') +
+      '<p class="text-slate-500">Guided Practice stays empty until questions are approved here.</p></div>';
+    var statusEl = document.getElementById('adminDiagReviewStatus');
+    if (statusEl) statusEl.textContent = '0 bank questions';
+    var bulkBtn = document.getElementById('adminDiagReviewBankBulkBtn');
+    if (bulkBtn) bulkBtn.disabled = true;
+  }
+
+  function bankItemHtml(it) {
+    var status = it.verification_status || '';
+    var opts = (it.options || [])
+      .map(function (o) {
+        return (
+          '<div class="opt' +
+          (o.label === it.correct_label ? ' correct' : '') +
+          '"><b>' +
+          esc(o.label) +
+          '.</b> ' +
+          (o.render || esc(o.text || '')) +
+          (o.label === it.correct_label ? ' <span class="text-slate-500">(key)</span>' : '') +
+          '</div>'
+        );
+      })
+      .join('');
+    var actions = '<div class="d-actions" style="margin-top:0.6rem">';
+    if (status !== 'approved') {
+      actions +=
+        '<button type="button" class="d-action primary" data-bank-act="approve" data-id="' +
+        it.item_id +
+        '">' +
+        (status === 'needs_review' ? 'Checked — approve' : 'Approve') +
+        '</button>';
+    }
+    if (status !== 'rejected') {
+      actions +=
+        '<button type="button" class="d-action danger" data-bank-act="reject" data-id="' +
+        it.item_id +
+        '">Reject</button>';
+    }
+    actions +=
+      '<button type="button" class="d-action" data-bank-act="edit" data-id="' +
+      it.item_id +
+      '"><i class="fas fa-pen"></i> Edit</button></div>';
+    var editPanel =
+      '<div class="d-bank-edit" id="adminBankEdit-' +
+      it.item_id +
+      '" hidden>' +
+      '<div class="d-bank-ai">' +
+      '<label class="d-bank-edit-field"><b>Edit with AI</b> — plain English, no math keyboard' +
+      '<textarea rows="2" data-f="ai_instruction" placeholder="Example: put n as the index of the radical (nth root of a), not beside the square root"></textarea></label>' +
+      '<button type="button" class="d-action primary" data-bank-act="ai" data-id="' +
+      it.item_id +
+      '"><i class="fas fa-magic"></i> Fix with AI</button>' +
+      '<span class="text-slate-500 text-sm" data-ai-status></span></div>' +
+      '<hr class="d-bank-edit-hr">' +
+      '<label class="d-bank-edit-field">Question<textarea rows="3" data-f="question_text">' +
+      esc(it.question_text || '') +
+      '</textarea></label>' +
+      (it.options || [])
+        .map(function (o, i) {
+          return (
+            '<label class="d-bank-edit-field">' +
+            esc(o.label || String.fromCharCode(65 + i)) +
+            '<input data-f="opt" data-i="' +
+            i +
+            '" value="' +
+            esc(o.text || '') +
+            '"></label>'
+          );
+        })
+        .join('') +
+      '<label class="d-bank-edit-field">Answer (A–D)<input data-f="correct_label" value="' +
+      esc(it.correct_label || '') +
+      '" maxlength="1"></label>' +
+      '<label class="d-bank-edit-field">Printed Domain<input data-f="printed_domain" value="' +
+      esc(it.printed_domain || '') +
+      '"></label>' +
+      '<label class="d-bank-edit-field">Printed Topic (subtopic)<input data-f="printed_topic" value="' +
+      esc(it.printed_topic || '') +
+      '"></label>' +
+      '<p class="text-slate-500 text-sm">AI or manual save keeps history and returns the item to Needs review.</p>' +
+      '<button type="button" class="d-action" data-bank-act="save" data-id="' +
+      it.item_id +
+      '">Save correction</button>' +
+      '</div>';
+    return (
+      '<article class="d-bank-item" data-bank-item="' +
+      it.item_id +
+      '">' +
+      '<div class="d-chips" style="margin-bottom:0.4rem">' +
+      '<span class="d-bank-badge ' +
+      esc(status) +
+      '">' +
+      esc(status.replace(/_/g, ' ')) +
+      '</span>' +
+      '<span class="text-slate-500 text-sm">Q' +
+      esc(String(it.source_question_number)) +
+      (it.source_page != null ? ' · page ' + esc(String(it.source_page)) : '') +
+      '</span></div>' +
+      '<div><b>' +
+      (it.question_render || esc(it.question_text || '')) +
+      '</b></div>' +
+      opts +
+      '<p class="text-slate-500 text-sm" style="margin-top:0.45rem"><b>Domain:</b> ' +
+      esc(it.domain_name || it.printed_domain || '—') +
+      ' · <b>Subtopic:</b> ' +
+      esc(it.subtopic_name || it.printed_topic || '—') +
+      '</p>' +
+      actions +
+      editPanel +
+      '</article>'
+    );
+  }
+
+  async function loadBankReviewItems() {
+    var bodyEl = document.getElementById('adminDiagReviewBody');
+    var statusEl = document.getElementById('adminDiagReviewStatus');
+    var bulkBtn = document.getElementById('adminDiagReviewBankBulkBtn');
+    if (!bodyEl || !state.reviewAssessmentId) return;
+
+    var docs = bankDocsForAssessment(state.reviewAssessmentId);
+    if (!docs.length) {
+      renderBankReviewEmpty(state.reviewAssessmentId);
+      return;
+    }
+    if (!state.bankReviewDocId || !docs.some(function (d) { return Number(d.document_id) === Number(state.bankReviewDocId); })) {
+      state.bankReviewDocId = docs[0].document_id;
+    }
+    var current = docs.find(function (d) {
+      return Number(d.document_id) === Number(state.bankReviewDocId);
+    });
+    var counts = (current && current.status_counts) || {};
+    var autoN = counts.auto_verified || 0;
+    if (bulkBtn) {
+      bulkBtn.disabled = !autoN;
+      bulkBtn.innerHTML =
+        '<i class="fas fa-check-double"></i> Approve all auto-verified (' + autoN + ')';
+    }
+
+    var toolbar =
+      '<div class="d-bank-toolbar">' +
+      '<label class="text-sm text-slate-600">PDF <select id="adminBankDocSelect">' +
+      docs
+        .map(function (d) {
+          return (
+            '<option value="' +
+            d.document_id +
+            '"' +
+            (Number(d.document_id) === Number(state.bankReviewDocId) ? ' selected' : '') +
+            '>' +
+            esc(d.filename || 'document') +
+            '</option>'
+          );
+        })
+        .join('') +
+      '</select></label>' +
+      '<label class="text-sm text-slate-600">Status <select id="adminBankStatusSelect">' +
+      [
+        ['', 'All'],
+        ['auto_verified', 'Auto-verified'],
+        ['needs_review', 'Needs review'],
+        ['approved', 'Approved'],
+        ['rejected', 'Rejected'],
+      ]
+        .map(function (pair) {
+          return (
+            '<option value="' +
+            pair[0] +
+            '"' +
+            (state.bankReviewStatus === pair[0] ? ' selected' : '') +
+            '>' +
+            pair[1] +
+            '</option>'
+          );
+        })
+        .join('') +
+      '</select></label></div>';
+
+    bodyEl.innerHTML = toolbar + '<p class="text-slate-500 text-sm">Loading bank questions…</p>';
+    try {
+      var q =
+        '/api/lms/target-bank/documents/' +
+        Number(state.bankReviewDocId) +
+        '/items?limit=100&offset=0' +
+        (state.bankReviewStatus ? '&status=' + encodeURIComponent(state.bankReviewStatus) : '');
+      var data = await api(q);
+      state.bankReviewItems = data.items || [];
+      state.bankReviewTotal = data.total || 0;
+      if (statusEl) {
+        statusEl.textContent =
+          state.bankReviewTotal +
+          ' bank question' +
+          (state.bankReviewTotal === 1 ? '' : 's') +
+          (autoN ? ' · ' + autoN + ' auto-verified ready' : '');
+      }
+      bodyEl.innerHTML =
+        toolbar +
+        (state.bankReviewItems.length
+          ? state.bankReviewItems.map(bankItemHtml).join('')
+          : '<p class="text-slate-500 text-sm">Nothing in this filter.</p>');
+      if (window.MathJax && MathJax.typesetPromise) {
+        MathJax.typesetPromise([bodyEl]).catch(function () {});
+      }
+      var docSel = document.getElementById('adminBankDocSelect');
+      var stSel = document.getElementById('adminBankStatusSelect');
+      if (docSel) {
+        docSel.onchange = function () {
+          state.bankReviewDocId = Number(docSel.value);
+          loadBankReviewItems();
+        };
+      }
+      if (stSel) {
+        stSel.onchange = function () {
+          state.bankReviewStatus = stSel.value;
+          loadBankReviewItems();
+        };
+      }
+      if (!bodyEl._bankActBound) {
+        bodyEl._bankActBound = true;
+        bodyEl.addEventListener('click', onBankReviewClick);
+      }
+    } catch (err) {
+      bodyEl.innerHTML = toolbar + '<p class="text-red-600 text-sm">Bank load failed: ' + esc(err.message) + '</p>';
+    }
+  }
+
+  function _bankCollectManualChanges(box) {
+    var changes = { options: [] };
+    box.querySelectorAll('[data-f]').forEach(function (el) {
+      var f = el.getAttribute('data-f');
+      if (f === 'ai_instruction') return;
+      if (f === 'opt') changes.options[Number(el.getAttribute('data-i'))] = el.value;
+      else changes[f] = el.value;
+    });
+    return changes;
+  }
+
+  async function onBankReviewClick(e) {
+    var btn = e.target.closest('[data-bank-act]');
+    if (!btn || state.reviewTab !== 'bank') return;
+    var id = Number(btn.getAttribute('data-id'));
+    var act = btn.getAttribute('data-bank-act');
+    try {
+      if (act === 'edit') {
+        var ed = document.getElementById('adminBankEdit-' + id);
+        if (ed) {
+          ed.hidden = !ed.hidden;
+          if (!ed.hidden) {
+            var aiBox = ed.querySelector('[data-f="ai_instruction"]');
+            if (aiBox) aiBox.focus();
+          }
+        }
+        return;
+      }
+      btn.disabled = true;
+      if (act === 'approve') {
+        var r = await api('/api/lms/target-bank/items/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_ids: [id], reviewed_individually: true }),
+        });
+        if (r.skipped && r.skipped.length) alert('Not approved: ' + r.skipped[0].reason);
+      } else if (act === 'reject') {
+        var reason = prompt('Reason for rejecting (optional):') || '';
+        await api('/api/lms/target-bank/items/reject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_ids: [id], reason: reason }),
+        });
+      } else if (act === 'ai') {
+        var boxAi = document.getElementById('adminBankEdit-' + id);
+        if (!boxAi) return;
+        var instruction = ((boxAi.querySelector('[data-f="ai_instruction"]') || {}).value || '').trim();
+        var statusEl = boxAi.querySelector('[data-ai-status]');
+        if (!instruction) {
+          alert('Write a short instruction for AI, e.g. "put n as the radical index".');
+          btn.disabled = false;
+          return;
+        }
+        if (statusEl) statusEl.textContent = 'AI is fixing…';
+        var aiRes = await api('/api/lms/target-bank/items/' + id + '/ai-edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction: instruction, apply: true }),
+        });
+        if (statusEl) statusEl.textContent = (aiRes && aiRes.notes) || 'Saved. Review then Approve.';
+      } else if (act === 'save') {
+        var box = document.getElementById('adminBankEdit-' + id);
+        if (!box) return;
+        await api('/api/lms/target-bank/items/' + id, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(_bankCollectManualChanges(box)),
+        });
+      } else {
+        btn.disabled = false;
+        return;
+      }
+      await loadBankDocs();
+      await loadBankReviewItems();
+      renderAdminDiagList(state.diagnostics);
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false;
+      var failBox = document.getElementById('adminBankEdit-' + id);
+      var failStatus = failBox && failBox.querySelector('[data-ai-status]');
+      if (failStatus) failStatus.textContent = '';
+    }
+  }
+
+  window.adminApproveBankAutoVerified = async function () {
+    if (!state.bankReviewDocId) return;
+    var ids = [];
+    try {
+      for (var off = 0; ; off += 200) {
+        var page = await api(
+          '/api/lms/target-bank/documents/' +
+            Number(state.bankReviewDocId) +
+            '/items?status=auto_verified&limit=200&offset=' +
+            off
+        );
+        (page.items || []).forEach(function (i) {
+          ids.push(i.item_id);
+        });
+        if (!(page.items || []).length || ids.length >= (page.total || 0)) break;
+      }
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    if (!ids.length) {
+      alert('No auto-verified items left to approve.');
+      return;
+    }
+    if (!confirm('Approve ' + ids.length + ' auto-verified question(s)? Items needing review stay for one-by-one approval.')) {
+      return;
+    }
+    try {
+      var r = await api('/api/lms/target-bank/items/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_ids: ids }),
+      });
+      alert('Approved ' + (r.approved || []).length + ((r.skipped || []).length ? ', skipped ' + r.skipped.length : ''));
+      await loadBankDocs();
+      await loadBankReviewItems();
+      renderAdminDiagList(state.diagnostics);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  window.adminSetReviewTab = async function (tab) {
+    state.reviewTab = tab === 'bank' ? 'bank' : 'diag';
+    setReviewTabUi(state.reviewTab);
+    var subEl = document.getElementById('adminDiagReviewSubtitle');
+    if (state.reviewTab === 'bank') {
+      if (subEl) {
+        subEl.textContent =
+          'Approve extracted Target PDF MCQs here (same as diagnostic review). Students only get Guided Practice from approved items.';
+      }
+      await loadBankReviewItems();
+      return;
+    }
+    if (subEl) {
+      subEl.textContent =
+        state.reviewStatus === 'published'
+          ? 'Live for students. You can still edit questions if needed.'
+          : 'Draft — verify and edit MCQs. Students only see this after you Approve.';
+    }
+    if (state.reviewQuestions && state.reviewQuestions.length) {
+      renderDiagReviewQuestions(state.reviewQuestions);
+      var statusEl = document.getElementById('adminDiagReviewStatus');
+      if (statusEl) {
+        statusEl.textContent =
+          state.reviewQuestions.length +
+          ' question' +
+          (state.reviewQuestions.length === 1 ? '' : 's') +
+          (state.reviewStatus === 'draft' ? ' · awaiting approval' : '');
+      }
+    } else if (state.reviewAssessmentId) {
+      await adminPreviewDiagnostic(state.reviewAssessmentId, { tab: 'diag', skipOpen: true });
+    }
+  };
+
+  window.adminPreviewDiagnostic = async function (id, opts) {
+    opts = opts || {};
     var modal = document.getElementById('adminDiagReviewModal');
     var bodyEl = document.getElementById('adminDiagReviewBody');
     var statusEl = document.getElementById('adminDiagReviewStatus');
     var titleEl = document.getElementById('adminDiagReviewTitle');
     var subEl = document.getElementById('adminDiagReviewSubtitle');
-    var approveBtn = document.getElementById('adminDiagReviewApproveBtn');
     if (!modal || !bodyEl) return;
 
     state.reviewAssessmentId = id;
-    modal.classList.add('is-open');
+    state.reviewTab = opts.tab === 'bank' ? 'bank' : 'diag';
+    if (opts.documentId) state.bankReviewDocId = Number(opts.documentId);
+    if (opts.status != null) state.bankReviewStatus = String(opts.status);
+    if (!opts.skipOpen) modal.classList.add('is-open');
     bodyEl.innerHTML = '<p class="text-slate-500 text-sm">Loading questions…</p>';
     if (statusEl) statusEl.textContent = '';
 
@@ -1221,14 +1774,23 @@
     if (titleEl) {
       titleEl.textContent = (match && match.title) || 'Review diagnostic questions';
     }
+    setReviewTabUi(state.reviewTab);
+
+    if (state.reviewTab === 'bank') {
+      if (subEl) {
+        subEl.textContent =
+          'Approve extracted Target PDF MCQs here (same as diagnostic review). Students only get Guided Practice from approved items.';
+      }
+      await loadBankDocs();
+      await loadBankReviewItems();
+      return;
+    }
+
     if (subEl) {
       subEl.textContent =
         status === 'published'
           ? 'Live for students. You can still edit questions if needed.'
           : 'Draft — verify and edit MCQs. Students only see this after you Approve.';
-    }
-    if (approveBtn) {
-      approveBtn.style.display = status === 'draft' || !status ? 'inline-flex' : 'none';
     }
 
     try {

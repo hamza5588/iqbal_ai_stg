@@ -6,6 +6,7 @@ numba
 mpmath
 
 # ---- Web / API ----
+openpyxl==3.1.5
 Flask
 flask-cors
 Flask-Mail

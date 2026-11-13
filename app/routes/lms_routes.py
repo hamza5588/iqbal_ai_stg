@@ -700,6 +700,49 @@ def regenerate_quiz_question(quiz_id: int, question_id: int):
         return json_error(str(e), code="regenerate_error", status=500)
 
 
+@bp.route("/quizzes/<int:quiz_id>/questions/<int:question_id>/ai-edit", methods=["POST"])
+@login_required
+def ai_edit_quiz_question(quiz_id: int, question_id: int):
+    """Teacher describes the fix in plain English; LLM rewrites the MCQ (no math keyboard)."""
+    denied = _require_permission(Permissions.CREATE_QUIZ)
+    if denied:
+        return denied
+    denied, _assessment = _require_assessment_owner(quiz_id)
+    if denied:
+        return denied
+
+    from app.models.lms_models import AssessmentQuestion
+    from app.utils.db import get_db
+
+    db = get_db()
+    link = (
+        db.query(AssessmentQuestion)
+        .filter(
+            AssessmentQuestion.assessment_id == quiz_id,
+            AssessmentQuestion.question_id == question_id,
+        )
+        .first()
+    )
+    if not link:
+        return json_error("Question is not on this quiz", code="not_found", status=404)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        return json_success(
+            question_bank_service.ai_edit_question(
+                question_id,
+                body.get("instruction") or body.get("prompt") or "",
+                user_id=_current_user_id(),
+            )
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except Exception as e:
+        return json_error(str(e), code="ai_edit_failed", status=500)
+
+
 @bp.route("/quizzes/<int:quiz_id>/start", methods=["POST"])
 @login_required
 def start_quiz_attempt(quiz_id: int):
@@ -773,6 +816,7 @@ def get_attempt_questions(attempt_id: int):
                 "attempt_id": attempt_id,
                 "questions": state["questions"],
                 "saved_answers": state.get("saved_answers", {}),
+                "saved_times": state.get("saved_times", {}),
                 "current_question_index": state.get("current_question_index", 0),
             })
         questions = attempt_service.get_delivery_questions(attempt_id)
@@ -780,6 +824,7 @@ def get_attempt_questions(attempt_id: int):
             "attempt_id": attempt_id,
             "questions": questions,
             "saved_answers": {},
+            "saved_times": {},
             "current_question_index": 0,
         })
     except LMSNotFoundError as e:
@@ -799,11 +844,23 @@ def save_attempt_answer(attempt_id: int):
         attempt = attempt_service.get_attempt(attempt_id)
         if attempt.student_id != _current_user_id():
             return json_error("Forbidden", code="forbidden", status=403)
-        status = attempt_service.save_answer(
-            attempt_id,
-            int(body["question_id"]),
-            int(body["selected_option_index"]),
-        )
+        question_id = int(body["question_id"])
+        time_spent = body.get("time_spent_seconds")
+        if "selected_option_index" not in body:
+            # Dwell-only ping (navigate away / heartbeat without changing the answer).
+            status = attempt_service.save_answer(
+                attempt_id,
+                question_id,
+                time_spent_seconds=time_spent,
+                time_only=True,
+            )
+        else:
+            status = attempt_service.save_answer(
+                attempt_id,
+                question_id,
+                int(body["selected_option_index"]),
+                time_spent_seconds=time_spent,
+            )
         return json_success(status)
     except (KeyError, TypeError, ValueError) as e:
         return json_error(str(e), code="validation_error")
@@ -847,6 +904,14 @@ def submit_attempt(attempt_id: int):
             return json_error("Forbidden", code="forbidden", status=403)
         body = request.get_json(silent=True) or {}
         time_expired = bool(body.get("time_expired") or body.get("timed_out"))
+        raw_times = body.get("question_times") or {}
+        if isinstance(raw_times, dict) and raw_times:
+            try:
+                times = {int(k): int(v) for k, v in raw_times.items()}
+            except (TypeError, ValueError):
+                times = {}
+            if times:
+                attempt_service.record_question_times(attempt_id, times)
         from app.utils.llm_gateway import llm_workflow
 
         with llm_workflow(
@@ -2293,6 +2358,8 @@ def get_deficiency_chat(session_id: int):
         return json_success(deficiency_chat_service.get_session(session_id, _current_user_id()))
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
 
 
 @bp.route("/deficiency/sessions/<int:session_id>/answer", methods=["POST"])
@@ -2304,7 +2371,10 @@ def deficiency_chat_answer(session_id: int):
     try:
         return json_success(
             deficiency_chat_service.submit_answer(
-                session_id, _current_user_id(), int(body["selected_option_index"])
+                session_id,
+                _current_user_id(),
+                int(body["selected_option_index"]),
+                time_spent_seconds=body.get("time_spent_seconds"),
             )
         )
     except (KeyError, TypeError, ValueError):
@@ -2319,8 +2389,15 @@ def deficiency_chat_advance(session_id: int):
     """Move to the next Learning Chat question and close the tutor."""
     if _current_role() != "student":
         return json_error("Students only", code="forbidden", status=403)
+    body = request.get_json(silent=True) or {}
     try:
-        return json_success(deficiency_chat_service.advance_session(session_id, _current_user_id()))
+        return json_success(
+            deficiency_chat_service.advance_session(
+                session_id,
+                _current_user_id(),
+                time_spent_seconds=body.get("time_spent_seconds"),
+            )
+        )
     except LMSValidationError as e:
         return json_error(str(e), code="validation_error")
 
@@ -2418,3 +2495,454 @@ def handle_lms_error(err):
     if isinstance(err, LMSValidationError):
         return json_error(str(err), code="validation_error", status=400)
     return json_error(str(err), code="lms_error", status=500)
+
+
+# ---------------------------------------------------------------------------
+# Domain/Subtopic mastery, Guided Practice (Target PDF bank) and bank review
+# ---------------------------------------------------------------------------
+
+
+def _students_only():
+    if _current_role() != "student":
+        return json_error("Students only", code="forbidden", status=403)
+    return None
+
+
+@bp.route("/students/me/subtopic-mastery", methods=["GET"])
+@login_required
+def my_subtopic_mastery():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import subtopic_mastery_service
+
+    return json_success(
+        {
+            "subtopics": subtopic_mastery_service.get_subtopic_mastery(_current_user_id()),
+            "weak_areas": learning_path_service.weak_area_breakdown(_current_user_id()),
+            "policy": subtopic_mastery_service.CALC_VERSION,
+        }
+    )
+
+
+@bp.route("/guided-practice/eligibility", methods=["GET"])
+@login_required
+def guided_practice_eligibility():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    return json_success(guided_practice_service.eligibility(_current_user_id()))
+
+
+@bp.route("/guided-practice/next", methods=["POST"])
+@login_required
+def guided_practice_next():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        domain_id = int(body["domain_topic_id"]) if body.get("domain_topic_id") else None
+        subtopic_id = int(body["subtopic_id"]) if body.get("subtopic_id") else None
+    except (TypeError, ValueError):
+        return json_error("domain_topic_id / subtopic_id must be numbers", code="validation_error")
+    return json_success(
+        guided_practice_service.next_question(
+            _current_user_id(), domain_topic_id=domain_id, subtopic_id=subtopic_id
+        )
+    )
+
+
+@bp.route("/guided-practice/attempts/<int:attempt_id>/answer", methods=["POST"])
+@login_required
+def guided_practice_answer(attempt_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        position = int(body.get("position"))
+    except (TypeError, ValueError):
+        return json_error("position is required", code="validation_error")
+    return json_success(
+        guided_practice_service.submit_answer(
+            _current_user_id(),
+            attempt_id,
+            position,
+            time_spent_seconds=body.get("time_spent_seconds"),
+        )
+    )
+
+
+@bp.route("/guided-practice/history", methods=["GET"])
+@login_required
+def guided_practice_history():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import guided_practice_service
+
+    return json_success(guided_practice_service.history(_current_user_id()))
+
+
+# -- AI Guided Practice (independent tab; active Target PDF -> topics -> subtopics) --
+
+
+def _strict_int(value) -> int:
+    """JSON integer only: booleans and fractional numbers are rejected, not coerced."""
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise ValueError("not an integer")
+    return int(value)
+
+
+@bp.route("/ai-guided-practice/dashboard", methods=["GET"])
+@login_required
+def ai_guided_practice_dashboard():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.dashboard(_current_user_id()))
+
+
+@bp.route("/ai-guided-practice/sessions", methods=["POST"])
+@login_required
+def ai_guided_practice_start():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+    from app.utils.llm_gateway import llm_workflow
+
+    body = request.get_json(silent=True) or {}
+    try:
+        subtopic_id = _strict_int(body.get("subtopic_id"))
+    except (TypeError, ValueError, OverflowError):
+        return json_error("subtopic_id is required", code="validation_error")
+    with llm_workflow(
+        "ai_guided_practice_question_generation", user_id=_current_user_id(), user_role="student"
+    ):
+        result = ai_guided_practice_service.start_session(
+            _current_user_id(), subtopic_id, request_key=body.get("request_key")
+        )
+    return json_success(result)
+
+
+@bp.route("/ai-guided-practice/sessions/<int:session_id>", methods=["GET"])
+@login_required
+def ai_guided_practice_session(session_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.session_state(_current_user_id(), session_id))
+
+
+@bp.route("/ai-guided-practice/sessions/<int:session_id>/answer", methods=["POST"])
+@login_required
+def ai_guided_practice_answer(session_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        position = _strict_int(body.get("position"))
+        option_position = _strict_int(body.get("option_position"))
+    except (TypeError, ValueError, OverflowError):
+        return json_error("position and option_position are required", code="validation_error")
+    return json_success(
+        ai_guided_practice_service.submit_answer(
+            _current_user_id(),
+            session_id,
+            position,
+            option_position,
+            time_spent_seconds=body.get("time_spent_seconds"),
+        )
+    )
+
+
+@bp.route("/ai-guided-practice/sessions/<int:session_id>/complete", methods=["POST"])
+@login_required
+def ai_guided_practice_complete(session_id: int):
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.complete_session(_current_user_id(), session_id))
+
+
+@bp.route("/ai-guided-practice/history", methods=["GET"])
+@login_required
+def ai_guided_practice_history():
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    return json_success(ai_guided_practice_service.history(_current_user_id()))
+
+
+@bp.route("/ai-guided-practice/admin/status", methods=["GET"])
+@login_required
+def ai_guided_practice_admin_status():
+    """AI Guided Practice processing state per Target PDF thread (admin panel)."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+
+    threads = [t for t in (request.args.get("threads") or "").split(",") if t.strip()]
+    return json_success(ai_guided_practice_service.admin_version_status(threads))
+
+
+@bp.route("/ai-guided-practice/admin/versions/<int:version_id>/reprocess", methods=["POST"])
+@login_required
+def ai_guided_practice_admin_reprocess(version_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+    from app.utils.llm_gateway import llm_workflow
+
+    with llm_workflow("ai_guided_practice_topic_extraction", user_id=_current_user_id(), user_role="admin"):
+        return json_success(ai_guided_practice_service.reprocess_version(version_id))
+
+
+@bp.route("/diagnostics/<int:assessment_id>/target-pdf/<int:target_pdf_id>/replace", methods=["POST"])
+@login_required
+def replace_diagnostic_target_pdf(assessment_id: int, target_pdf_id: int):
+    """Replace one Target PDF; students switch only after the new one is processed. Admin only."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms.diagnostic_pdf_service import replace_target_pdf
+    from app.utils.llm_gateway import llm_workflow
+
+    upload = request.files.get("target_file") or request.files.get("file")
+    if not upload or not upload.filename:
+        return json_error("A replacement PDF is required", code="validation_error")
+    with llm_workflow("ai_guided_practice_topic_extraction", user_id=_current_user_id(), user_role="admin"):
+        result = replace_target_pdf(
+            assessment_id,
+            _current_user_id(),
+            target_pdf_id,
+            upload.read(),
+            upload.filename.strip() or "target.pdf",
+            is_admin=True,
+        )
+    return json_success(result)
+
+
+@bp.route("/classes/<int:class_id>/analytics/subtopics", methods=["GET"])
+@login_required
+def class_subtopic_analytics(class_id: int):
+    denied = _require_permission(Permissions.VIEW_CLASS_PERFORMANCE)
+    if denied:
+        return denied
+    domain_id = request.args.get("domain_topic_id", type=int)
+    try:
+        return json_success(
+            analytics_service.aggregate_class_subtopics(class_id, _current_user_id(), domain_id)
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="forbidden", status=403)
+
+
+# -- Admin: Target PDF question bank -----------------------------------------
+
+
+@bp.route("/target-bank/import", methods=["POST"])
+@login_required
+def target_bank_import():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    upload = request.files.get("file")
+    grade = (request.form.get("grade_level") or "").strip()
+    if not upload or not upload.filename:
+        return json_error("A Target PDF file is required", code="validation_error")
+    assessment_id = request.form.get("assessment_id", type=int)
+    result = target_bank_service.import_target_bank(
+        upload.read(), upload.filename, grade, assessment_id=assessment_id, user_id=_current_user_id()
+    )
+    return json_success(result, status=201)
+
+
+@bp.route("/target-bank/documents", methods=["GET"])
+@login_required
+def target_bank_documents():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    return json_success(target_bank_service.list_documents(request.args.get("grade_level")))
+
+
+@bp.route("/target-bank/documents/<int:document_id>/items", methods=["GET"])
+@login_required
+def target_bank_items(document_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    return json_success(
+        target_bank_service.list_items(
+            document_id,
+            status=request.args.get("status") or None,
+            limit=request.args.get("limit", 50, type=int),
+            offset=request.args.get("offset", 0, type=int),
+        )
+    )
+
+
+@bp.route("/target-bank/documents/<int:document_id>/pages/<int:page>.png", methods=["GET"])
+@login_required
+def target_bank_page_preview(document_id: int, page: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    bbox = None
+    raw = request.args.get("bbox")
+    if raw:
+        try:
+            bbox = [float(v) for v in raw.split(",")][:4]
+        except ValueError:
+            return json_error("bbox must be x0,y0,x1,y1", code="validation_error")
+    png = target_bank_service.page_preview_png(document_id, page, bbox)
+    return Response(png, mimetype="image/png", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@bp.route("/target-bank/items/approve", methods=["POST"])
+@login_required
+def target_bank_approve():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    body = request.get_json(silent=True) or {}
+    ids = [int(i) for i in body.get("item_ids") or []]
+    if not ids:
+        return json_error("item_ids is required", code="validation_error")
+    return json_success(
+        target_bank_service.approve_items(
+            ids, _current_user_id(), reviewed_individually=bool(body.get("reviewed_individually"))
+        )
+    )
+
+
+@bp.route("/target-bank/items/reject", methods=["POST"])
+@login_required
+def target_bank_reject():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    body = request.get_json(silent=True) or {}
+    ids = [int(i) for i in body.get("item_ids") or []]
+    if not ids:
+        return json_error("item_ids is required", code="validation_error")
+    return json_success(target_bank_service.reject_items(ids, _current_user_id(), body.get("reason") or ""))
+
+
+@bp.route("/target-bank/items/<int:item_id>", methods=["PATCH"])
+@login_required
+def target_bank_correct(item_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+
+    return json_success(
+        target_bank_service.correct_item(item_id, _current_user_id(), request.get_json(silent=True) or {})
+    )
+
+
+@bp.route("/target-bank/items/<int:item_id>/ai-edit", methods=["POST"])
+@login_required
+def target_bank_ai_edit(item_id: int):
+    """Admin describes the fix in plain language; LLM rewrites the MCQ (math keyboard optional)."""
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import target_bank_service
+    from app.services.lms.exceptions import LMSNotFoundError, LMSValidationError
+
+    body = request.get_json(silent=True) or {}
+    apply = body.get("apply", True)
+    if isinstance(apply, str):
+        apply = apply.strip().lower() not in ("0", "false", "no")
+    try:
+        return json_success(
+            target_bank_service.ai_edit_item(
+                item_id,
+                _current_user_id(),
+                body.get("instruction") or body.get("prompt") or "",
+                apply=bool(apply),
+            )
+        )
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except Exception as e:
+        return json_error(str(e), code="ai_edit_failed", status=500)
+
+
+@bp.route("/taxonomy", methods=["GET"])
+@login_required
+def taxonomy_tree():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import taxonomy_service
+
+    return json_success(taxonomy_service.list_taxonomy(request.args.get("grade_level")))
+
+
+@bp.route("/taxonomy/subtopics/<int:subtopic_id>/merge", methods=["POST"])
+@login_required
+def taxonomy_merge(subtopic_id: int):
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.services.lms import taxonomy_service
+
+    body = request.get_json(silent=True) or {}
+    try:
+        target = int(body.get("into"))
+    except (TypeError, ValueError):
+        return json_error("into (target subtopic id) is required", code="validation_error")
+    return json_success(taxonomy_service.merge_subtopic(subtopic_id, target))
+
+
+@bp.route("/target-bank/coverage-gaps", methods=["GET"])
+@login_required
+def target_bank_coverage_gaps():
+    denied = _require_diagnostic_admin()
+    if denied:
+        return denied
+    from app.models.lms_models import StudentSubtopicScore
+    from app.services.lms import guided_practice_service
+    from app.utils.db import get_db
+
+    ids = [sid for (sid,) in get_db().query(StudentSubtopicScore.student_id).distinct().limit(2000).all()]
+    return json_success(guided_practice_service.coverage_gaps_for_students(ids))

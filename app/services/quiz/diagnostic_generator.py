@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
 
 from pydantic import ValidationError
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_CONTEXT_CHARS = 6000
 
-_CONTENT_MCQ_PROMPT = """Generate exactly {count} multiple-choice diagnostic question(s) based ONLY on the educational content below.
+_CONTENT_MCQ_PROMPT = """{opening_rule}
 
 Topic / section: {topic}
 {level_line}
@@ -28,7 +29,7 @@ Content:
 {content}
 
 Rules:
-- Return exactly {count} questions — no fewer. If content is thin, still produce {count} distinct items by covering different facts/skills from the text.
+{quantity_rule}
 - Each question must have exactly 4 unique options labeled A, B, C, D.
 - Pitch every question at the target difficulty and grade level above. Do NOT
   drift easier or harder, and do NOT use skills from a higher grade.
@@ -42,6 +43,7 @@ Rules:
 - Set conversion_confidence between 0 and 1 for each question (numeric only, e.g. 0.9 — never words like "nine").
 - Set learning_concept to a short student-friendly skill name (3-8 words) for what the question tests — not the PDF heading or document title.
 - Do not invent facts not supported by the content.
+{grounding_rule}
 - Do NOT copy or lightly rephrase any question listed under "Already used (avoid repeating)".
 {retry_hint}
 
@@ -56,6 +58,7 @@ def get_section_text(
     topic_name: str,
     page: Optional[int] = None,
     max_chars: int = _MAX_CONTEXT_CHARS,
+    require_topic_match: bool = False,
 ) -> str:
     """Collect RAG chunk text for a PDF topic heading."""
     chunks = query_all_chunks(thread_id=str(thread_id), user_id=user_id)
@@ -70,16 +73,45 @@ def get_section_text(
         except (TypeError, ValueError):
             selected = []
 
-    topic_lower = (topic_name or "").strip().lower()
+    topic_lower = re.sub(r"\s+", " ", (topic_name or "").strip().lower())
     if not selected and topic_lower:
         selected = [
             c
             for c in chunks
-            if topic_lower in (c.get("text") or "").lower()
-            or topic_lower in (c.get("content") or "").lower()
+            if topic_lower in re.sub(r"\s+", " ", (c.get("text") or "").lower())
+            or topic_lower in re.sub(r"\s+", " ", (c.get("content") or "").lower())
         ]
 
+    if require_topic_match and selected and page is None:
+        # A heading and its explanation are often separate RAG chunks on the
+        # same PDF page. Include that page's text, while never using the first
+        # unrelated chunks as a substitute for a missing heading.
+        def _page_number(chunk: dict) -> Optional[int]:
+            try:
+                return int(chunk["page"]) if chunk.get("page") is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        matched_pages = {_page_number(c) for c in selected} - {None}
+        if matched_pages:
+            page_size = {
+                p: sum(
+                    len(c.get("text") or c.get("content") or "")
+                    for c in chunks if _page_number(c) == p
+                )
+                for p in matched_pages
+            }
+            best_page = max(matched_pages, key=lambda p: page_size[p])
+            selected = [c for c in chunks if _page_number(c) == best_page]
+        else:
+            matched_ids = {id(c) for c in selected}
+            positions = {i for i, c in enumerate(chunks) if id(c) in matched_ids}
+            near = {j for i in positions for j in range(max(0, i - 1), min(len(chunks), i + 3))}
+            selected = [c for i, c in enumerate(chunks) if i in near]
+
     if not selected:
+        if require_topic_match:
+            return ""
         selected = chunks[:12]
 
     def _chunk_key(c: dict) -> tuple:
@@ -127,6 +159,7 @@ def generate_mcqs_from_content(
     grade_level: Optional[str] = None,
     difficulty_ladder: Optional[List[str]] = None,
     exclude_question_texts: Optional[List[str]] = None,
+    strict_grounding: bool = False,
 ) -> List[MCQQuestion]:
     """Generate validated MCQs from PDF section text using structured LLM output.
 
@@ -160,6 +193,21 @@ def generate_mcqs_from_content(
             level_line=level_line,
             retry_hint=retry_hint,
             exclude_block=exclude_block,
+            opening_rule=(
+                f"Generate up to {count} new multiple-choice practice question(s) based ONLY on the educational content below."
+                if strict_grounding else
+                f"Generate exactly {count} multiple-choice diagnostic question(s) based ONLY on the educational content below."
+            ),
+            quantity_rule=(
+                "- Return fewer questions, or an empty questions list, if the content does not support the requested count."
+                if strict_grounding else
+                f"- Return exactly {count} questions — no fewer. If content is thin, still produce {count} distinct items by covering different facts/skills from the text."
+            ),
+            grounding_rule=(
+                "- Every tested fact, method, and correct answer must be supported by the content above. "
+                "Do not fill gaps from general topic knowledge."
+                if strict_grounding else ""
+            ),
         )
         # invoke_structured recovers Groq tool_use_failed / broken JSON args.
         batch: MCQBatchResult = invoke_with_groq_rate_limit(
@@ -167,6 +215,8 @@ def generate_mcqs_from_content(
             description=f"diagnostic MCQ gen ({topic})",
         )
         if not batch.questions:
+            if strict_grounding:
+                return batch
             raise ValidationError.from_exception_data(
                 "MCQBatchResult",
                 [{"type": "value_error", "loc": ("questions",), "msg": "No questions generated", "input": []}],

@@ -86,6 +86,12 @@ function showSection(sectionName) {
         loadDashboardStats();
     } else if (sectionName === 'users') {
         loadUsers();
+    } else if (sectionName === 'daily-usage') {
+        loadDailyUsage();
+    } else if (sectionName === 'student-groups') {
+        loadStudentGroups();
+    } else if (sectionName === 'student-reports') {
+        loadStudentReports();
     } else if (sectionName === 'prompts') {
         loadRagSystemPrompt();
     } else if (sectionName === 'coupons') {
@@ -154,7 +160,7 @@ function adEmptyRow(cols, title, sub = '', opts = {}) {
 function renderUsersTable(users) {
     const tbody = document.getElementById('users-tbody');
     if (users.length === 0) {
-        tbody.innerHTML = adEmptyRow(6, 'No users found', 'Try another search or role.', { icon: 'fa-user-slash' });
+        tbody.innerHTML = adEmptyRow(7, 'No users found', 'Try another search or role.', { icon: 'fa-user-slash' });
         return;
     }
 
@@ -165,6 +171,7 @@ function renderUsersTable(users) {
         <tr>
             <td class="id">${user.id}</td>
             <td><div class="ad-user-cell"><span class="ad-initial ${tone}">${adEsc((user.full_name || user.username || '?').charAt(0).toUpperCase())}</span><span><b>${adEsc(user.full_name || user.username)}</b><br><small class="muted">${adEsc(user.username)}</small></span></div></td>
+            <td>${adEsc(user.school_name || 'Not provided')}</td>
             <td class="muted">${adEsc(user.useremail)}</td>
             <td><span class="ad-pill ${tone}">${adEsc(user.role)}</span></td>
             <td><span class="ad-pill ${tier === 'free' ? 'grey' : ''}">${adEsc(tier)}</span></td>
@@ -482,6 +489,7 @@ async function createUser(event) {
     const data = {
         username: document.getElementById('create-username').value.trim(),
         full_name: document.getElementById('create-full-name').value.trim(),
+        school_name: document.getElementById('create-school-name').value.trim(),
         useremail: document.getElementById('create-email').value.trim(),
         password: document.getElementById('create-password').value,
         role: document.getElementById('create-role').value,
@@ -528,6 +536,8 @@ async function editUser(userId) {
             document.getElementById('edit-user-id').value = user.id;
             document.getElementById('edit-username').value = user.username;
             document.getElementById('edit-full-name').value = user.full_name || user.username;
+            document.getElementById('edit-school-name').value = user.school_name || '';
+            document.getElementById('edit-school-name').required = Boolean(user.school_name);
             document.getElementById('edit-email').value = user.useremail;
             document.getElementById('edit-role').value = user.role;
             document.getElementById('edit-class-standard').value = user.class_standard || '';
@@ -551,6 +561,7 @@ async function updateUser(event) {
     const data = {
         username: document.getElementById('edit-username').value.trim(),
         full_name: document.getElementById('edit-full-name').value.trim(),
+        school_name: document.getElementById('edit-school-name').value.trim(),
         useremail: document.getElementById('edit-email').value.trim(),
         role: document.getElementById('edit-role').value,
         class_standard: document.getElementById('edit-class-standard').value.trim() || 'N/A',

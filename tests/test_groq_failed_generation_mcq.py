@@ -66,6 +66,60 @@ def test_parse_failed_generation_mcq_batch_with_word_confidence():
     assert abs(recovered.questions[0].conversion_confidence - 0.9) < 1e-6
 
 
+def test_parse_equals_style_quiz_extraction_failed_generation():
+    """Groq json_validate_failed sometimes returns {key=value} with stem= aliases."""
+    from app.services.quiz.hybrid_vision_pipeline import QuizExtraction
+    from app.services.quiz.retry_utils import (
+        _coerce_failed_generation_data,
+        _normalize_structured_payload,
+        parse_groq_failed_generation,
+    )
+
+    failed = (
+        "{requested_page_count=3, total_questions=2, questions=["
+        "{question_no=1, stem=According to identities, $(a+b)^2$ is:, "
+        "options=[{label=A, text=$2ab$}, {label=B, text=$4ab$}, "
+        "{label=C, text=$2(a^2+b^2)$}, {label=D, text=$a^2-b^2$}], "
+        "domain=Algebra, topic=Algebraic Identities, "
+        "cognitive_level=Knowledge, difficulty=Intermediate, correct_answer=C}, "
+        "{question_no=6, stem=Find x if $\\log_2 x=5$:, "
+        "options=[{label=A, text=10}, {label=B, text=25}, "
+        "{label=C, text=32}, {label=D, text=64}], "
+        "domain=Numbers, topic=Exponential and Logarithmic Forms, "
+        "cognitive_level=Application, difficulty=Intermediate, correct_answer=C}], "
+        "title=Weekly Practice Quiz 2}"
+    )
+    data = _coerce_failed_generation_data(failed)
+    assert isinstance(data, dict)
+    assert data.get("total_questions") == 2
+    assert data["questions"][0]["stem"].startswith("According")
+    assert data["questions"][1]["options"][2]["text"] == "32"
+
+    normalized = _normalize_structured_payload(data, QuizExtraction)
+    assert "requested_page_count" not in normalized
+    assert normalized["questions"][0]["question"].startswith("According")
+    assert "stem" not in normalized["questions"][0]
+
+    exc = Exception(
+        "Error code: 400 - {'error': {'message': \"Failed to generate JSON.\", "
+        "'type': 'invalid_request_error', 'code': 'json_validate_failed', "
+        f"'failed_generation': {failed!r}}}"
+    )
+    exc.body = {  # type: ignore[attr-defined]
+        "error": {
+            "message": "Failed to generate JSON.",
+            "code": "json_validate_failed",
+            "failed_generation": failed,
+        }
+    }
+    recovered = parse_groq_failed_generation(exc, QuizExtraction)
+    assert recovered is not None
+    assert recovered.total_questions == 2
+    assert recovered.questions[0].correct_answer == "C"
+    assert recovered.questions[1].question_no == 6
+    assert recovered.questions[1].correct_answer == "C"
+
+
 def test_mcq_confidence_field_coerces_wordy_strings():
     q = MCQQuestion(
         question_text="Q",

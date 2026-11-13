@@ -333,6 +333,25 @@ def _upload_diagnostic_bundle(
         )
         target_thread_ids.append(thread_id)
         target_filenames.append(tfname)
+        # Printed MCQs in the Target PDF -> Guided Practice bank (pending admin
+        # review). Best effort: a PDF with no MCQs or a parse failure never
+        # blocks the diagnostic upload.
+        from app.services.lms.target_bank_service import import_target_bank_safely
+
+        import_target_bank_safely(
+            tbytes, tfname, assessment.grade_level or grade_level, assessment_id=assessment.id, user_id=teacher_id
+        )
+        # AI Guided Practice: extract this PDF's topic hierarchy in the background.
+        from app.services.lms import ai_guided_practice_service
+
+        ai_guided_practice_service.on_target_pdf_attached(
+            thread_id,
+            assessment_id=assessment.id,
+            grade_level=assessment.grade_level or grade_level,
+            filename=tfname,
+            owner_id=teacher_id,
+            pdf_bytes=tbytes,
+        )
 
     if not target_thread_ids:
         raise LMSValidationError("At least one target content PDF is required for Learning Chat")
@@ -588,7 +607,21 @@ def upload_target_pdf(
 
     )
 
+    from app.services.lms.target_bank_service import import_target_bank_safely
 
+    import_target_bank_safely(
+        file_bytes, filename, assessment.grade_level or "", assessment_id=assessment_id, user_id=user_id
+    )
+    from app.services.lms import ai_guided_practice_service
+
+    ai_guided_practice_service.on_target_pdf_attached(
+        target_thread_id,
+        assessment_id=assessment_id,
+        grade_level=assessment.grade_level or "",
+        filename=filename,
+        owner_id=user_id,
+        pdf_bytes=file_bytes,
+    )
 
     meta = {}
     if assessment.description:
@@ -624,6 +657,106 @@ def upload_target_pdf(
 
         "target_pdfs": assessment_service.list_target_pdfs(assessment_id),
 
+    }
+
+
+def replace_target_pdf(
+    assessment_id: int,
+    user_id: int,
+    target_pdf_id: int,
+    file_bytes: bytes,
+    filename: str,
+    is_admin: bool = False,
+) -> dict:
+    """Swap one Target PDF for a new one without a gap for students.
+
+    The new PDF is ingested and its AI Guided Practice topic hierarchy extracted
+    first; only when that succeeds is it attached and the old PDF detached. On
+    failure nothing changes for students and the error is reported (the failed
+    version is kept for the admin status view).
+    """
+    from app.services.lms import ai_guided_practice_service
+    from app.services.quiz.assessment_doc_validation import assert_supported_assessment_file
+
+    assessment = _assert_diagnostic_owner(assessment_id, user_id, is_admin=is_admin)
+    assert_supported_assessment_file(filename, file_bytes, label="Target content PDF")
+    old = next(
+        (t for t in assessment_service.list_target_pdfs(assessment_id) if t["id"] == int(target_pdf_id)), None
+    )
+    if not old:
+        raise LMSNotFoundError("Target PDF not found")
+    old_version = ai_guided_practice_service.version_for_thread(old["rag_thread_id"])
+    new_thread_id = _ingest_target_pdf(user_id, file_bytes, filename)
+    version = ai_guided_practice_service.register_version(
+        new_thread_id,
+        assessment_id=assessment_id,
+        grade_level=assessment.grade_level or "",
+        filename=filename,
+        owner_id=user_id,
+        pdf_bytes=file_bytes,
+        replaces_version_id=old_version.id if old_version else None,
+    )
+    version = ai_guided_practice_service.process_version(version.id)
+    if version.status != "ready":
+        raise LMSValidationError(
+            f'"{filename}" could not be processed ({version.error_message or "unknown error"}). '
+            "The current Target PDF is still active."
+        )
+    # Swap in ONE transaction, claiming the old row first: two admins replacing the
+    # same PDF at once previously both attached their file (QA B3). Only the request
+    # that actually deletes the old row may attach its replacement.
+    from app.models.lms_models import DiagnosticTargetPdf
+
+    db = get_db()
+    claimed = (
+        db.query(DiagnosticTargetPdf)
+        .filter(DiagnosticTargetPdf.id == int(target_pdf_id), DiagnosticTargetPdf.assessment_id == assessment_id)
+        .delete(synchronize_session=False)
+    )
+    if claimed != 1:
+        db.rollback()
+        raise LMSValidationError(
+            "This Target PDF was already replaced or removed by someone else. Refresh and try again."
+        )
+    entry = DiagnosticTargetPdf(
+        assessment_id=assessment_id,
+        rag_thread_id=new_thread_id,
+        original_filename=filename,
+        sort_order=old.get("sort_order") or 0,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    first = assessment_service.list_target_pdfs(assessment_id)[0]
+    assessment_service.link_target_pdf(assessment_id, first["rag_thread_id"], first.get("original_filename"))
+    from app.services.lms.target_bank_service import import_target_bank_safely
+
+    import_target_bank_safely(
+        file_bytes, filename, assessment.grade_level or "", assessment_id=assessment_id, user_id=user_id
+    )
+    all_targets = assessment_service.list_target_pdfs(assessment_id)
+    meta = {}
+    if assessment.description:
+        try:
+            parsed = json.loads(assessment.description)
+            if isinstance(parsed, dict):
+                meta = parsed
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+    if all_targets:
+        meta["target_rag_thread_id"] = all_targets[0]["rag_thread_id"]
+        meta["target_filename"] = all_targets[0].get("original_filename")
+    meta["target_rag_thread_ids"] = [t["rag_thread_id"] for t in all_targets]
+    meta["target_filenames"] = [t.get("original_filename") or "target.pdf" for t in all_targets]
+    assessment.description = json.dumps(meta, ensure_ascii=False)
+    get_db().commit()
+    return {
+        "assessment_id": assessment_id,
+        "target_pdf_id": entry.id,
+        "target_thread_id": new_thread_id,
+        "target_filename": filename,
+        "ai_guided_practice_version_id": version.id,
+        "target_pdfs": all_targets,
     }
 
 

@@ -283,6 +283,22 @@ def init_db(app):
             # Create all tables
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables created/verified successfully")
+            from app.migrations.student_reporting import run_migration as migrate_student_reporting
+            migrate_student_reporting(engine)
+            try:
+                from app.migrations.subtopic_taxonomy import run_migration as migrate_subtopic_taxonomy
+
+                migrate_subtopic_taxonomy(engine)
+            except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
+                logger.warning("subtopic taxonomy migration warning: %s", e)
+            try:
+                from app.migrations.four_parameter_matching import run_migration as migrate_four_parameter
+
+                migrate_four_parameter(engine)
+            except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
+                logger.warning("four-parameter matching migration warning: %s", e)
+            from app.services.tutor_usage_service import initialize_tracking
+            initialize_tracking(engine)
             
             # Migration: Update existing lessons to have lesson_id if missing
             try:
@@ -342,6 +358,12 @@ def init_db(app):
                 inspector = inspect(engine)
                 if 'users' in inspector.get_table_names():
                     columns = [col['name'] for col in inspector.get_columns('users')]
+
+                    # Add mapped columns before any User ORM query (including login).
+                    if 'school_name' not in columns:
+                        db.execute(text("ALTER TABLE users ADD COLUMN school_name VARCHAR(255)"))
+                        db.commit()
+                        logger.info("school_name column added successfully")
 
                     if 'full_name' not in columns:
                         logger.info("Adding full_name column to users table...")
@@ -573,6 +595,27 @@ def init_db(app):
                         logger.info("rag_threads gk_consent columns added successfully")
             except Exception as e:
                 logger.warning(f"rag_threads gk_consent migration warning: {str(e)}")
+                db.rollback()
+
+            # Migration: per-question dwell time (quiz/diagnostic + guided practice)
+            try:
+                db = get_db()
+                inspector = inspect(engine)
+                tables_cols = {
+                    "attempt_answers": "time_spent_seconds",
+                    "lms_guided_practice_attempts": "time_spent_seconds",
+                    "practice_attempts": "time_spent_seconds",
+                }
+                for table_name, col_name in tables_cols.items():
+                    if table_name not in inspector.get_table_names():
+                        continue
+                    columns = [col["name"] for col in inspector.get_columns(table_name)]
+                    if col_name not in columns:
+                        logger.info("Adding %s to %s...", col_name, table_name)
+                        db.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} INTEGER"))
+                        db.commit()
+            except Exception as e:
+                logger.warning("per-question time_spent_seconds migration warning: %s", e)
                 db.rollback()
 
             # Run RAG migration (add new columns, create rag_chunks table)

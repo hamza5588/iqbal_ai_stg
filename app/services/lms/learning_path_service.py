@@ -128,8 +128,20 @@ def _weak_area_progress(student_id: int) -> dict:
             "weak_remaining": 0,
             "percent": 0.0,
         }
-    weak_n = sum(1 for m in mastery if performance_service.is_weak_mastery(m))
-    total = len(mastery)
+    weak_ids = {m.get("topic_id") for m in mastery if performance_service.is_weak_mastery(m)}
+    total_ids = {m.get("topic_id") for m in mastery}
+    try:
+        from app.services.lms import subtopic_mastery_service
+
+        # A Domain with a weak Subtopic is not cleared yet, even at a full Domain score.
+        sub_domains = {s.get("domain_topic_id") for s in subtopic_mastery_service.get_weak_subtopics(student_id)}
+        sub_domains.discard(None)
+        weak_ids |= sub_domains
+        total_ids |= sub_domains
+    except Exception:  # noqa: BLE001
+        pass
+    weak_n = len(weak_ids)
+    total = len(total_ids)
     cleared = max(0, total - weak_n)
     percent = round(100.0 * cleared / total, 1) if total else 0.0
     return {
@@ -233,7 +245,72 @@ def _path_to_dict(path: LearningPath, student_id: Optional[int] = None) -> dict:
         "total_count": total_count,
         "percent": percent,
         "weak_area_progress": weak_progress,
+        "weak_areas": weak_area_breakdown(student_id) if student_id else [],
     }
+
+
+def weak_area_breakdown(student_id: int) -> List[dict]:
+    """Live Domain -> weak Subtopic view with the recommended activity for each.
+
+    Always read from current mastery, so it reflects the latest Baseline/Follow-up
+    even when the path row itself was kept (unchanged weak set).
+    """
+    try:
+        from app.services.lms import guided_practice_service, performance_service, subtopic_mastery_service
+
+        domain_rows = {int(r["topic_id"]): r for r in performance_service.get_student_mastery(student_id)}
+        weak_domains = {int(r["topic_id"]) for r in performance_service.get_weak_topics_for_student(student_id)
+                        if r.get("topic_id")}
+        weak_subs = subtopic_mastery_service.get_weak_subtopics(student_id)
+        bank_counts = guided_practice_service.approved_counts_for_subtopics(
+            [s["subtopic_id"] for s in weak_subs]
+        )
+        domain_bank_counts = guided_practice_service.approved_counts_for_domains(
+            [s["domain_topic_id"] for s in weak_subs if s.get("domain_topic_id")]
+        )
+    except Exception:  # noqa: BLE001 - the breakdown is additive; never break the path
+        return []
+
+    out: dict[int, dict] = {}
+
+    def domain_entry(tid: int, name: Optional[str]) -> dict:
+        row = domain_rows.get(tid) or {}
+        return out.setdefault(
+            tid,
+            {
+                "domain_topic_id": tid,
+                "domain_name": row.get("topic_name") or name or f"Domain #{tid}",
+                "domain_score_percent": row.get("score_percent"),
+                "domain_is_weak": tid in weak_domains,
+                "subtopics": [],
+            },
+        )
+
+    for sub in weak_subs:
+        tid = int(sub.get("domain_topic_id") or 0)
+        if not tid:
+            continue
+        available = guided_practice_service._practice_available_count(
+            int(bank_counts.get(sub["subtopic_id"], 0)),
+            int(domain_bank_counts.get(tid, 0)),
+        )
+        domain_entry(tid, sub.get("domain_name"))["subtopics"].append(
+            {
+                "subtopic_id": sub["subtopic_id"],
+                "subtopic_name": sub["subtopic_name"],
+                "score_percent": sub["score_percent"],
+                "mastery_status": sub["mastery_status"],
+                "baseline_percent": sub.get("baseline_percent"),
+                "latest_assessment_percent": sub.get("latest_assessment_percent"),
+                "recommended_activities": ["learning_chat"] + (["guided_practice"] if available else []),
+                "guided_practice_available": available,
+            }
+        )
+    for tid in weak_domains:
+        entry = domain_entry(tid, None)
+        if not entry["subtopics"]:
+            entry["scope_level"] = "domain"  # no printed-Topic evidence for this Domain
+    return sorted(out.values(), key=lambda d: (d["domain_score_percent"] is None, d["domain_score_percent"] or 0))
 
 
 def get_path_with_items(student_id: int) -> Optional[dict]:
@@ -304,6 +381,13 @@ def generate_learning_path(student_id: int, force: bool = False) -> Optional[Lea
     archive_active_paths(student_id)
     path = create_path(student_id, "Personalized Learning Path")
     add_items(path.id, items)
+    try:
+        from app.services.lms import subtopic_mastery_service
+
+        path.weakness_signature = subtopic_mastery_service.weakness_signature(student_id)
+        get_db().commit()
+    except Exception:  # noqa: BLE001 - the signature only prevents duplicate paths
+        get_db().rollback()
     student_profile_service.set_current_learning_path(student_id, path.id)
     return path
 
@@ -329,9 +413,31 @@ def _has_enrichment_path_since_last_attempt(student_id: int) -> bool:
 
 
 def refresh_learning_path(student_id: int) -> Optional[LearningPath]:
-    """Regenerate path after reassessment / quiz / diagnostic submit (P-405)."""
+    """Regenerate path after reassessment / quiz / diagnostic submit (P-405).
+
+    Called after every Baseline and Follow-up. A new path (old one archived, so
+    its history is kept) is created only when the weak Domains/Subtopics changed;
+    an unchanged weak set keeps the active path and its progress.
+    """
     weak = path_generator.get_weak_topics(student_id)
+    if not weak:
+        try:
+            from app.services.lms import subtopic_mastery_service
+
+            if subtopic_mastery_service.get_weak_subtopics(student_id):
+                weak = [{"subtopic_only": True}]
+        except Exception:  # noqa: BLE001
+            pass
     if weak:
+        active = get_active_path_for_student(student_id)
+        if active is not None and list(active.items) and active.weakness_signature:
+            try:
+                from app.services.lms import subtopic_mastery_service
+
+                if active.weakness_signature == subtopic_mastery_service.weakness_signature(student_id):
+                    return active
+            except Exception:  # noqa: BLE001
+                pass
         return generate_learning_path(student_id, force=True)
 
     if not path_generator.has_mastery_data(student_id):

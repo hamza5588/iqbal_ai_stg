@@ -2,7 +2,11 @@
    On the dashboard, section links switch in place (showSection); elsewhere they deep-link to /admin/#<section>. #}
 {% set ad_groups = [
   ('Overview', [('dashboard', 'Dashboard', 'fa-chart-line', None)]),
-  ('People', [('users', 'User Management', 'fa-users', None)]),
+  ('People', [
+    ('users', 'User Management', 'fa-users', None),
+    ('student-groups', 'Student Groups', 'fa-user-tag', None),
+  ]),
+  ('Reports', [('student-reports', 'Student Performance', 'fa-file-excel', None)]),
   ('Learning content', [
     ('lessons', 'Lessons', 'fa-book-open', None),
     ('documents', 'Documents', 'fa-file-pdf', None),
@@ -18,6 +22,7 @@
     ('theme', 'Color Theme', 'fa-palette', None),
   ]),
   ('Monitoring', [
+    ('daily-usage', 'Daily Usage', 'fa-clock', None),
     ('load_testing', 'Load Testing', 'fa-tachometer-alt', '/admin/load-testing'),
     ('llm_telemetry', 'LLM Telemetry', 'fa-coins', '/admin/llm-telemetry'),
   ]),

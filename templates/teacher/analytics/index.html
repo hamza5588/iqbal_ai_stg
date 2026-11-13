@@ -27,6 +27,7 @@
   <div class="td-ana-tabs" role="tablist">
     <button type="button" class="td-ana-tab active" data-ana-tab="progress" onclick="tdAnalytics.switchTab('progress')"><i class="fas fa-chart-column"></i> Topic Progress</button>
     <button type="button" class="td-ana-tab" data-ana-tab="quizzes" onclick="tdAnalytics.switchTab('quizzes')"><i class="far fa-file-lines"></i> Quiz Results</button>
+    <button type="button" class="td-ana-tab" data-ana-tab="subtopics" onclick="tdAnalytics.switchTab('subtopics')"><i class="fas fa-sitemap"></i> Subtopics</button>
     <button type="button" class="td-ana-tab" data-ana-tab="struggling" onclick="tdAnalytics.switchTab('struggling')"><i class="fas fa-user-group"></i> Struggling Students</button>
     <button type="button" class="td-ana-tab" data-ana-tab="roster" onclick="tdAnalytics.switchTab('roster')"><i class="fas fa-list-ul"></i> Roster</button>
   </div>
@@ -34,5 +35,6 @@
 
 <div class="td-ana-panel" data-ana-panel="progress">{% include 'teacher/analytics/topic_progress.html' %}</div>
 <div class="td-ana-panel" data-ana-panel="quizzes" hidden>{% include 'teacher/analytics/quiz_results.html' %}</div>
+<div class="td-ana-panel" data-ana-panel="subtopics" hidden>{% include 'teacher/analytics/subtopics.html' %}</div>
 <div class="td-ana-panel" data-ana-panel="struggling" hidden>{% include 'teacher/analytics/struggling_students.html' %}</div>
 <div class="td-ana-panel" data-ana-panel="roster" hidden>{% include 'teacher/analytics/roster.html' %}</div>

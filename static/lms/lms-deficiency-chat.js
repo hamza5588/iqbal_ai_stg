@@ -42,8 +42,43 @@
     selectedOption: null,
     tutorOpen: false,
     tutorHistory: [],
-    tutorLoading: false
+    tutorLoading: false,
+    lastCorrectIndex: null,
+    solvedReview: false,
+    _modeBStarted: false,
+    _modeBForIndex: null
   };
+  var defDwell = (typeof lmsQuestionDwell === 'function') ? lmsQuestionDwell() : null;
+
+  function defDwellKey(data) {
+    if (!data) return 'q';
+    return 's' + (data.session_id || defState.sessionId || 0) + '-i' + (data.current_index || 0);
+  }
+  function startDefDwell(data) {
+    if (!defDwell || !data || !data.current_question) return;
+    var key = defDwellKey(data);
+    var seed = {};
+    var prior = data.current_question.time_spent_seconds;
+    if (prior) seed[key] = prior;
+    defDwell.seed(seed);
+    defDwell.switchTo(key);
+  }
+  function defDwellSeconds(data) {
+    if (!defDwell) return 0;
+    return defDwell.seconds(defDwellKey(data || window._lmsDeficiencyLastState));
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (!defDwell || !defState.sessionId) return;
+    if (document.hidden) defDwell.pause();
+    else defDwell.resume();
+  });
+
+  function isSolvedReviewState(data) {
+    if (!data) return false;
+    if (data.last_answer && data.last_answer.solved) return true;
+    if (data.current_question && data.current_question.solved_review) return true;
+    return !!defState.solvedReview;
+  }
 
   /* The student dashboard hosts Learning Chat as a page view
      (#lmsDeficiencyModal[data-inline]) with sdOpen/CloseLearningChatView. */
@@ -95,14 +130,17 @@
     ['Show example', 'Show me a similar example for this question'],
     ['I don\'t understand', 'I still don\'t understand']
   ];
-  var TUTOR_GREETING = 'Ask me about this practice question. I\'ll help step by step — starting with a small prompt, not the full answer.';
+  var TUTOR_SOLVED_PROMPTS = [
+    ['Explain again', 'Explain why my answer is correct'],
+    ['Why not others?', 'Why are the other options wrong?'],
+    ['Key rule', 'What key rule did I use here?']
+  ];
+  var TUTOR_GREETING = 'Tell me what you think about this question. I\'ll respond to your idea and help you work it out.';
+  var MODE_B_KICKOFF = 'Why is my answer correct?';
 
   function renderTutorMessages() {
     var html = defState.tutorHistory.map(function (m, i) {
       var role = m.role === 'user' ? 'user' : 'bot';
-      var levelTag = m.levelLabel
-        ? '<div class="sd-level">' + escapeHtml(m.levelLabel) + '</div>'
-        : '';
       var extra = '';
       if (role === 'bot' && m.retry) {
         extra = '<div class="sd-msg-tools"><button type="button" onclick="retryDeficiencyTutorMessage()">Try again</button></div>';
@@ -111,7 +149,7 @@
       }
       return '<div class="sd-ai-bubble' + (role === 'user' ? ' user' : '') + '">' +
         '<div class="sd-bot-ic">' + (role === 'user' ? 'You' : 'AI') + '</div>' +
-        '<div class="sd-msg">' + levelTag +
+        '<div class="sd-msg">' +
         (role === 'user' ? escapeHtml(m.text) : fmtText(m.text || '')) + extra + '</div></div>';
     }).join('');
     if (!defState.tutorHistory.length) {
@@ -124,8 +162,11 @@
   }
 
   function renderTutorSuggestedPrompts() {
+    var prompts = isSolvedReviewState(window._lmsDeficiencyLastState)
+      ? TUTOR_SOLVED_PROMPTS
+      : TUTOR_SUGGESTED_PROMPTS;
     return '<div class="sd-chip-row">' +
-      TUTOR_SUGGESTED_PROMPTS.map(function (p) {
+      prompts.map(function (p) {
         return '<button type="button" class="sd-chip"' + (defState.tutorLoading ? ' disabled' : '') +
           ' onclick="sendDeficiencySuggestedPrompt(' + JSON.stringify(p[1]).replace(/"/g, '&quot;') + ')">' + escapeHtml(p[0]) + '</button>';
       }).join('') + '</div>';
@@ -183,6 +224,7 @@
     if (!body) return;
 
     if (data.completed || !data.current_question) {
+      if (defDwell) defDwell.stop();
       var got = data.correct_count || 0;
       var tot = data.total_questions || 0;
       var aced = tot > 0 && got === tot;
@@ -200,7 +242,9 @@
       return;
     }
 
+    startDefDwell(data);
     var q = data.current_question;
+    var solved = isSolvedReviewState(data);
     var pct = data.total_questions
       ? Math.round(100 * (data.current_index + 1) / data.total_questions)
       : 0;
@@ -208,45 +252,58 @@
       var cls = 'sd-q-option lms-quiz-option';
       if (defState.selectedOption === oi) cls += ' selected';
       if (defState.lastWrongIndex === oi) cls += ' lms-opt-wrong';
-      return '<button type="button" class="' + cls + '" onclick="selectDeficiencyOption(' + oi + ')">' +
+      if (solved && defState.lastCorrectIndex === oi) cls += ' selected lms-opt-correct';
+      var click = solved ? '' : ' onclick="selectDeficiencyOption(' + oi + ')"';
+      var disabled = solved ? ' disabled' : '';
+      return '<button type="button" class="' + cls + '"' + click + disabled + '>' +
         '<span class="sd-radio"></span>' +
         '<span class="sd-opt-label lms-quiz-option-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
         '<span class="sd-opt-body lms-quiz-option-body">' + fmtOption(o) + '</span></button>';
     }).join('');
 
-    var tutorLevelHint = data.tutor_assist_label
-      ? '<div class="sd-help-level">Next help: <b>' + escapeHtml(data.tutor_assist_label) + '</b><br>I won\'t give the answer right away.</div>'
-      : '';
-
     var loading = defState.tutorLoading ? ' disabled' : '';
+    var tutorPlaceholder = solved
+      ? 'Ask why this is right, or why another option fails...'
+      : 'I\'m stuck on this step... (Enter to send)';
     var tutorSection =
-      tutorLevelHint +
       '<div id="lmsDeficiencyTutorMessages" class="sd-chat-scroll">' + renderTutorMessages() + '</div>' +
       renderTutorSuggestedPrompts() +
       '<div class="sd-chat-inputbar">' +
       '<div class="sd-chat-field">' +
-      '<textarea id="lmsDeficiencyTutorInput" rows="1" placeholder="I\'m stuck on this step... (Enter to send)"' + loading + '></textarea>' +
+      '<textarea id="lmsDeficiencyTutorInput" rows="1" placeholder="' + tutorPlaceholder + '"' + loading + '></textarea>' +
       '<button type="button" class="sd-field-ic bulb" title="Need more help" aria-label="Need more help" onclick="requestDeficiencyMoreHelp()"' + loading + '><i class="far fa-lightbulb"></i></button>' +
       '</div>' +
       '<button type="button" id="lmsDeficiencyTutorSend" class="sd-send-btn"' + loading + ' onclick="sendDeficiencyTutorMessage()">Send</button></div>' +
       '<p class="sd-hint-line">Press Enter to send · Shift+Enter for new line</p>';
 
+    var showNext = solved || (data.last_answer && data.last_answer.correct === false);
     body.innerHTML =
       '<div class="sd-split-body">' +
       '<div class="sd-split-left">' +
       '<div class="sd-track"><div class="sd-fill" style="width:' + pct + '%"></div></div>' +
       '<p class="sd-desc">Question ' + (data.current_index + 1) + ' of ' + data.total_questions +
-      (q.topic_name ? ' &nbsp;•&nbsp; <b style="color:var(--sd-blue-700);">' + escapeHtml(q.topic_name) + '</b>' : '') + '</p>' +
+      (q.topic_name ? ' &nbsp;•&nbsp; <b style="color:var(--sd-blue-700);">' + escapeHtml(q.topic_name) + '</b>' : '') +
+      (q.subtopic_name ? ' &rsaquo; <b>' + escapeHtml(q.subtopic_name) + '</b>' : '') + '</p>' +
+      (data.refreshed_after_assessment
+        ? '<p class="sd-desc" style="font-size:12.5px;color:var(--sd-blue-700);"><i class="fas fa-sync-alt"></i> Updated after your latest quiz: questions on subtopics you have now mastered were removed. Your earlier answers are kept.</p>'
+        : '') +
       (data.has_pdf
-        ? '<p class="sd-desc" style="font-size:12.5px;">Questions from teacher target PDF - weak area: ' + escapeHtml((q && q.topic_name) || '') + '</p>'
+        ? '<p class="sd-desc" style="font-size:12.5px;">AI questions based on the teacher target PDF - weak area: ' + escapeHtml((q && (q.subtopic_name || q.topic_name)) || '') + '</p>'
         : '<p class="sd-desc" style="font-size:12.5px;color:#991b1b;">Teacher has not uploaded target content PDF yet.</p>') +
+      (solved
+        ? '<p class="sd-desc" style="font-size:12.5px;color:var(--sd-blue-700);"><i class="fas fa-check-circle"></i> Correct — review the tutor explanation, then tap Next.</p>'
+        : '') +
       '<div class="sd-q-text lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
       opts +
       '<div class="sd-q-actions-row">' +
-      '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="submitDeficiencyAnswer()"' +
-      (defState.selectedOption === null ? ' disabled' : '') + '>Submit Answer</button>' +
-      (data.last_answer && data.last_answer.correct === false
-        ? '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="advanceDeficiencyQuestion()">Next question</button>'
+      (solved
+        ? ''
+        : '<button type="button" class="sd-btn sd-btn-primary sd-btn-sm" onclick="submitDeficiencyAnswer()"' +
+          (defState.selectedOption === null ? ' disabled' : '') + '>Submit Answer</button>') +
+      (showNext
+        ? '<button type="button" class="sd-btn ' + (solved ? 'sd-btn-primary' : 'sd-btn-outline') +
+          ' sd-btn-sm" onclick="advanceDeficiencyQuestion()">' +
+          (solved ? 'Next question' : 'Next question') + '</button>'
         : '') +
       '<button type="button" class="sd-btn sd-btn-outline sd-btn-sm" onclick="pauseDeficiencyChat()">Pause &amp; Exit</button>' +
       '<button type="button" class="sd-icon-btn" title="Copy question text" onclick="lmsCopyDeficiencyQuestion(this)"><i class="far fa-clipboard"></i> Copy</button>' +
@@ -257,7 +314,7 @@
       '<button type="button" class="sd-icon-btn lms-sound-toggle" title="Sound cues" onclick="lmsToggleDeficiencySound(this)">' +
       (lmsFeedback.soundEnabled() ? '🔊' : '🔇') + '</button></div>' +
       '</div>' +
-      '<div class="sd-split-right">' + tutorSection + '</div>' +
+      '<div class="sd-split-right" data-tutor-usage="learning-path">' + tutorSection + '</div>' +
       '</div>';
 
     bindDeficiencyTutorInput();
@@ -270,7 +327,10 @@
   window.openDeficiencyChat = async function (forceNew, mode, topicId) {
     ensureDeficiencyModal();
     openDefSurface();
-    defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
+    defState = {
+      sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false,
+      lastCorrectIndex: null, solvedReview: false, _modeBStarted: false, _modeBForIndex: null
+    };
     var body = document.getElementById('lmsDeficiencyBody');
     var isChallenge = mode === 'enrichment';
     body.innerHTML = '<div class="lms-spinner"></div><p class="lms-status" style="text-align:center">' +
@@ -283,20 +343,30 @@
           topic_id: (!isChallenge && topicId) ? Number(topicId) : null })
       });
       defState.sessionId = data.session_id;
+      window._lmsDeficiencyLastState = data;
+      defState.solvedReview = !!(data.current_question && data.current_question.solved_review);
       if (data.tutor_messages && data.tutor_messages.length) {
         defState.tutorHistory = data.tutor_messages.slice();
         defState.tutorOpen = true;
+        if (defState.solvedReview) {
+          defState._modeBStarted = true;
+          defState._modeBForIndex = data.current_index;
+        }
       }
       if (data.current_index > 0 || data.status === 'paused' || data.resumed) {
         lmsShowToast('Resuming where you left off', 'success');
       }
       renderDeficiencyView(data);
+      if (defState.solvedReview && !defState._modeBStarted) {
+        triggerModeBExplain(data);
+      }
     } catch (err) {
       body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
     }
   };
 
   window.closeDeficiencyChat = async function () {
+    if (defDwell) defDwell.stop();
     var last = window._lmsDeficiencyLastState;
     if (defState.sessionId && last && !last.completed) {
       try {
@@ -304,10 +374,14 @@
       } catch (e) { /* ignore */ }
     }
     closeDefSurface();
-    defState = { sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false };
+    defState = {
+      sessionId: null, selectedOption: null, tutorOpen: false, tutorHistory: [], tutorLoading: false,
+      lastCorrectIndex: null, solvedReview: false, _modeBStarted: false, _modeBForIndex: null
+    };
   };
 
   window.selectDeficiencyOption = function (idx) {
+    if (isSolvedReviewState(window._lmsDeficiencyLastState)) return;
     defState.selectedOption = idx;
     defState.lastWrongIndex = null;
     renderDeficiencyView(window._lmsDeficiencyLastState);
@@ -321,12 +395,16 @@
 
   window.submitDeficiencyAnswer = async function () {
     if (defState.sessionId === null || defState.selectedOption === null) return;
+    if (isSolvedReviewState(window._lmsDeficiencyLastState)) return;
     var body = document.getElementById('lmsDeficiencyBody');
     try {
       var data = await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selected_option_index: defState.selectedOption })
+        body: JSON.stringify({
+          selected_option_index: defState.selectedOption,
+          time_spent_seconds: defDwellSeconds(window._lmsDeficiencyLastState)
+        })
       });
       window._lmsDeficiencyLastState = data;
       var chosen = defState.selectedOption;
@@ -340,25 +418,31 @@
       if (data.last_answer && !data.last_answer.correct) {
         defState.streak = 0;
         defState.lastWrongIndex = chosen;
+        defState.lastCorrectIndex = null;
+        defState.solvedReview = false;
         defState.tutorOpen = true;
         lmsFeedback.cue('error');
         lmsShowToast('Not quite — take another look, or ask the tutor for a hint.', 'error');
-      } else {
+        renderDeficiencyView(data);
+        if (chosen != null) {
+          var wrongBtn = document.querySelectorAll('#lmsDeficiencyBody .lms-quiz-option')[chosen];
+          if (wrongBtn) {
+            wrongBtn.classList.add('lms-shake');
+            setTimeout(function () { wrongBtn.classList.remove('lms-shake'); }, 500);
+          }
+        }
+      } else if (data.last_answer && data.last_answer.correct) {
         defState.lastWrongIndex = null;
-        defState.tutorOpen = false;
-        defState.tutorHistory = [];
-        if (data.last_answer && data.last_answer.correct) {
-          defState.streak = (defState.streak || 0) + 1;
-          lmsFeedback.celebrate(lmsFeedback.praise(defState.streak));
-        }
-      }
-      renderDeficiencyView(data);
-      if (data.last_answer && !data.last_answer.correct && chosen != null) {
-        var wrongBtn = document.querySelectorAll('#lmsDeficiencyBody .lms-quiz-option')[chosen];
-        if (wrongBtn) {
-          wrongBtn.classList.add('lms-shake');
-          setTimeout(function () { wrongBtn.classList.remove('lms-shake'); }, 500);
-        }
+        defState.lastCorrectIndex = chosen;
+        defState.solvedReview = true;
+        defState.tutorOpen = true;
+        defState._modeBStarted = false;
+        defState.streak = (defState.streak || 0) + 1;
+        lmsFeedback.celebrate(lmsFeedback.praise(defState.streak));
+        renderDeficiencyView(data);
+        triggerModeBExplain(data);
+      } else {
+        renderDeficiencyView(data);
       }
     } catch (err) {
       if (body) body.innerHTML = '<p class="lms-error">' + escapeHtml(err.message) + '</p>';
@@ -370,10 +454,18 @@
     var body = document.getElementById('lmsDeficiencyBody');
     try {
       var data = await lmsApi('/api/lms/deficiency/sessions/' + defState.sessionId + '/advance', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          time_spent_seconds: defDwellSeconds(window._lmsDeficiencyLastState)
+        })
       });
       defState.selectedOption = null;
       defState.lastWrongIndex = null;
+      defState.lastCorrectIndex = null;
+      defState.solvedReview = false;
+      defState._modeBStarted = false;
+      defState._modeBForIndex = null;
       defState.tutorOpen = false;
       defState.tutorHistory = [];
       defState.tutorLoading = false;
@@ -389,8 +481,7 @@
     if (defState.tutorOpen && !defState.tutorHistory.length) {
       defState.tutorHistory.push({
         role: 'bot',
-        text: 'Ask me about this practice question. I\'ll help step by step — starting with a small prompt, not the full answer.',
-        levelLabel: ''
+        text: TUTOR_GREETING
       });
     }
     renderDeficiencyView(window._lmsDeficiencyLastState || { current_question: {}, current_index: 0, total_questions: 1, completed: false });
@@ -426,14 +517,10 @@
     return data;
   }
 
-  window.sendDeficiencyTutorMessage = async function () {
-    if (defState.tutorLoading) return;
-    var input = document.getElementById('lmsDeficiencyTutorInput');
-    var msg = (input && input.value || '').trim();
-    if (!msg || !defState.sessionId) return;
+  async function _deliverTutorMessage(msg) {
+    if (defState.tutorLoading || !msg || !defState.sessionId) return;
     defState.tutorOpen = true;
     defState.tutorHistory.push({ role: 'user', text: msg });
-    if (input) input.value = '';
     defState.tutorLoading = true;
     defState._lastTutorMsg = msg;
     defState._tutorReconnecting = false;
@@ -461,14 +548,9 @@
     if (data) {
       defState.tutorHistory.push({
         role: 'bot',
-        text: data.reply || 'No response',
-        levelLabel: data.assist_level_label || ''
+        text: data.reply || 'No response'
       });
       defState._lastTutorMsg = null;
-      if (window._lmsDeficiencyLastState) {
-        window._lmsDeficiencyLastState.tutor_assist_level = data.next_assist_level;
-        window._lmsDeficiencyLastState.tutor_assist_label = data.next_assist_level_label;
-      }
     } else {
       // Drop the unanswered question from history and let them retry with
       // one tap - don't leave a dead "Error:" bubble that never recovers.
@@ -485,6 +567,24 @@
     defState.tutorLoading = false;
     renderDeficiencyView(window._lmsDeficiencyLastState);
     scrollDeficiencyChatToBottom();
+  }
+
+  function triggerModeBExplain(data) {
+    if (!data || !isSolvedReviewState(data)) return;
+    if (defState._modeBStarted && defState._modeBForIndex === data.current_index) return;
+    if (defState.tutorLoading) return;
+    defState._modeBStarted = true;
+    defState._modeBForIndex = data.current_index;
+    _deliverTutorMessage(MODE_B_KICKOFF);
+  }
+
+  window.sendDeficiencyTutorMessage = async function () {
+    if (defState.tutorLoading) return;
+    var input = document.getElementById('lmsDeficiencyTutorInput');
+    var msg = (input && input.value || '').trim();
+    if (!msg || !defState.sessionId) return;
+    if (input) input.value = '';
+    await _deliverTutorMessage(msg);
   };
 
   // Background reconnect: as soon as the browser reports the connection is

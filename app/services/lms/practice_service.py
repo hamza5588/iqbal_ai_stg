@@ -45,56 +45,16 @@ def get_active_session(student_id: int, topic_id: Optional[int] = None) -> Optio
     )
     if topic_id is not None:
         q = q.filter(PracticeSession.topic_id == topic_id)
+        # A generated batch has one session per question. Serve its oldest
+        # pending question first, so reopening practice resumes the same queue.
+        return q.order_by(PracticeSession.id.asc()).first()
     return q.order_by(PracticeSession.updated_at.desc()).first()
 
 
-def _diagnostic_question_for_topic(student_id: int, topic_id: int) -> Optional[int]:
-    """A question for a topic that exists only as a diagnostic AI grouping.
-
-    Diagnostic topics are named by the AI grouping and have no question-bank
-    rows (questions.topic_id is empty), so practice on them used to fail with
-    "No practice question available". Use the student's own diagnostic
-    questions from that topic instead - ones they got wrong first.
-    """
-    from app.models.lms_models import Assessment, AssessmentAttempt, AttemptAnswer
-    from app.services.lms.topic_resolver import get_or_create_topic_from_pdf_label
-    from app.services.lms.weakness_analyzer import analyze_diagnostic_attempt
-
-    db = get_db()
-    attempts = (
-        db.query(AssessmentAttempt)
-        .join(Assessment, Assessment.id == AssessmentAttempt.assessment_id)
-        .filter(
-            AssessmentAttempt.student_id == student_id,
-            AssessmentAttempt.status == "submitted",
-            Assessment.assessment_type == "diagnostic",
-        )
-        .order_by(AssessmentAttempt.submitted_at.desc())
-        .limit(3)
-        .all()
-    )
-    for attempt in attempts:
-        for area in analyze_diagnostic_attempt(attempt.id).get("all_topics") or []:
-            area_tid = int(area.get("topic_id") or 0)
-            if area_tid != int(topic_id):
-                named = get_or_create_topic_from_pdf_label(area.get("topic_name") or "")
-                if not named or named.id != int(topic_id):
-                    continue
-            qids = [int(q) for q in area.get("question_ids") or []]
-            if not qids:
-                continue
-            wrong = {
-                a.question_id
-                for a in db.query(AttemptAnswer).filter(
-                    AttemptAnswer.attempt_id == attempt.id, AttemptAnswer.question_id.in_(qids)
-                )
-                if not a.is_correct
-            }
-            for qid in [q for q in qids if q in wrong] + [q for q in qids if q not in wrong]:
-                q = db.query(Question).filter(Question.id == qid, Question.is_active.is_(True)).first()
-                if q and _question_is_usable(q):
-                    return q.id
-    return None
+GUIDED_PRACTICE_MOVED = (
+    "Guided Practice now uses verified questions from your teacher's Target PDF. "
+    "Open it from a weak subtopic on your Learning Path."
+)
 
 
 def start_session(
@@ -103,52 +63,27 @@ def start_session(
     question_id: Optional[int] = None,
     force_new: bool = False,
 ) -> tuple[PracticeSession, bool]:
+    """Legacy single-question practice for an explicitly chosen question.
+
+    Topic/dashboard practice no longer generates AI questions or picks arbitrary
+    bank rows: it is served by ``guided_practice_service`` from approved Target
+    PDF questions for the student's weak Subtopics only.
+    """
+    if not question_id:
+        raise LMSValidationError(GUIDED_PRACTICE_MOVED)
     if not force_new:
         existing = get_active_session(student_id, topic_id)
-        if existing:
+        if existing and existing.question_id == question_id:
             return existing, True
 
     db = get_db()
-    if not question_id and topic_id is None:
-        # The dashboard's global Practice button has no topic argument. Prefer
-        # the student's weakest topics, then fall back to any active question so
-        # the visible control always starts a usable session.
-        from app.services.lms.performance_service import get_weak_topics_for_student
-
-        weak_topic_ids = [
-            item.get("topic_id") for item in get_weak_topics_for_student(student_id)
-            if item.get("topic_id") is not None
-        ]
-        for weak_topic_id in weak_topic_ids:
-            q = _first_usable(
-                db.query(Question)
-                .filter(Question.topic_id == weak_topic_id, Question.is_active.is_(True))
-                .order_by(Question.id.desc())
-            )
-            if q:
-                topic_id = weak_topic_id
-                question_id = q.id
-                break
-        if not question_id:
-            q = _first_usable(db.query(Question).filter(Question.is_active.is_(True)).order_by(Question.id.desc()))
-            if q:
-                topic_id = q.topic_id
-                question_id = q.id
-    if not question_id and topic_id:
-        q = _first_usable(
-            db.query(Question)
-            .filter(Question.topic_id == topic_id, Question.is_active.is_(True))
-            .order_by(Question.id.desc())
-        )
-        question_id = q.id if q else None
-        if not question_id:
-            question_id = _diagnostic_question_for_topic(student_id, topic_id)
-    if not question_id:
+    q = db.query(Question).filter(Question.id == question_id, Question.is_active.is_(True)).first()
+    if not q or not _question_is_usable(q):
         raise LMSValidationError("No practice question available for this topic")
 
     session = PracticeSession(
         student_id=student_id,
-        topic_id=topic_id,
+        topic_id=topic_id or q.topic_id,
         question_id=question_id,
         status="active",
         hint_level=0,
@@ -177,12 +112,14 @@ def get_session_question(session_id: int, student_id: Optional[int] = None) -> d
     if not q:
         raise LMSNotFoundError("Question not found")
     opts = options_from_json(q.options_json)
-    safe = [{"label": o["label"], "text": o["text"]} for o in opts]
+    safe = [{"label": o["label"], "text": o["text"], "latex": o.get("latex")} for o in opts]
     return {
         "session_id": session.id,
         "question_id": q.id,
         "question_text": q.question_text,
+        "question_latex": q.question_latex,
         "options": safe,
+        "difficulty": q.difficulty,
         "hint_level": session.hint_level,
     }
 
@@ -209,10 +146,13 @@ def submit_answer(
     if is_correct:
         session.status = "completed"
     db.commit()
+    next_question = bool(is_correct and get_active_session(session.student_id, session.topic_id))
     return {
         "correct": is_correct,
         "session_status": session.status,
         "explanation": q.explanation if is_correct else None,
+        "next_question": next_question,
+        "completed": bool(is_correct and not next_question),
     }
 
 

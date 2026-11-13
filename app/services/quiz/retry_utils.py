@@ -381,6 +381,166 @@ def _parse_xml_tool_call_args(text: str) -> Optional[dict]:
     return data
 
 
+def _parse_equals_style_value(
+    text: str,
+    start: int,
+    *,
+    in_array: bool = False,
+) -> tuple[Any, int]:
+    """Parse one value from Groq ``{key=value}`` failed_generation blobs."""
+    n = len(text)
+    i = start
+    while i < n and text[i].isspace():
+        i += 1
+    if i >= n:
+        return None, i
+    ch = text[i]
+    if ch == "{":
+        return _parse_equals_style_object(text, i)
+    if ch == "[":
+        return _parse_equals_style_array(text, i)
+
+    # Unquoted scalar: stop at }/], at array commas, or at ``, next_key=``.
+    begin = i
+    while i < n:
+        if text[i] in "}]":
+            break
+        if text[i] == ",":
+            if in_array:
+                break
+            rest = text[i + 1 :].lstrip()
+            if re.match(r"[A-Za-z_][A-Za-z0-9_]*\s*=", rest):
+                break
+        i += 1
+    raw = text[begin:i].strip()
+    if re.fullmatch(r"-?\d+", raw or ""):
+        return int(raw), i
+    if re.fullmatch(r"-?\d+\.\d+", raw or ""):
+        return float(raw), i
+    if raw in ("null", "None"):
+        return None, i
+    if raw in ("true", "True"):
+        return True, i
+    if raw in ("false", "False"):
+        return False, i
+    return raw, i
+
+
+def _parse_equals_style_object(text: str, start: int) -> tuple[dict, int]:
+    assert text[start] == "{"
+    i = start + 1
+    n = len(text)
+    out: dict[str, Any] = {}
+    while i < n:
+        while i < n and text[i] in " \t\r\n,":
+            i += 1
+        if i < n and text[i] == "}":
+            return out, i + 1
+        m = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*=", text[i:])
+        if not m:
+            while i < n and text[i] != "}":
+                i += 1
+            return out, (i + 1 if i < n else i)
+        key = m.group(1)
+        i += m.end()
+        value, i = _parse_equals_style_value(text, i, in_array=False)
+        out[key] = value
+    return out, i
+
+
+def _parse_equals_style_array(text: str, start: int) -> tuple[list, int]:
+    assert text[start] == "["
+    i = start + 1
+    n = len(text)
+    out: list[Any] = []
+    while i < n:
+        while i < n and text[i] in " \t\r\n,":
+            i += 1
+        if i < n and text[i] == "]":
+            return out, i + 1
+        value, i = _parse_equals_style_value(text, i, in_array=True)
+        out.append(value)
+    return out, i
+
+
+def _parse_equals_style_structure(text: str) -> Optional[object]:
+    """Convert Groq ``{a=1, b=foo}`` / ``[{k=v}]`` blobs into Python objects."""
+    s = (text or "").strip()
+    if not s or ("=" not in s):
+        return None
+    # Must look like equals-style, not normal JSON.
+    if re.search(r'"\s*:\s*', s):
+        return None
+    try:
+        if s.startswith("{"):
+            obj, _ = _parse_equals_style_object(s, 0)
+            return obj or None
+        if s.startswith("["):
+            arr, _ = _parse_equals_style_array(s, 0)
+            return arr or None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Equals-style parse failed: %s", exc)
+        return None
+    return None
+
+
+def _stringify_question_option_fields(data: object) -> object:
+    """Keep option labels/text JSON-compatible strings after loose parsing."""
+    if not isinstance(data, dict) or not isinstance(data.get("questions"), list):
+        return data
+    for question in data["questions"]:
+        if not isinstance(question, dict) or not isinstance(question.get("options"), list):
+            continue
+        for option in question["options"]:
+            if not isinstance(option, dict):
+                continue
+            for field in ("label", "text"):
+                if field in option and option[field] is not None and not isinstance(option[field], str):
+                    option[field] = str(option[field])
+    return data
+
+
+def _normalize_structured_payload(data: object, model: Type[BaseModel]) -> object:
+    """Alias stem→question and drop unknown keys for strict QuizExtraction schemas."""
+    if not isinstance(data, dict):
+        return data
+
+    out = dict(data)
+    questions = out.get("questions")
+    if isinstance(questions, list):
+        fixed_qs: list[Any] = []
+        for item in questions:
+            if not isinstance(item, dict):
+                fixed_qs.append(item)
+                continue
+            q = dict(item)
+            if "question" not in q and "stem" in q:
+                q["question"] = q.pop("stem")
+            opts = q.get("options")
+            if isinstance(opts, list):
+                fixed_opts = []
+                for opt in opts:
+                    if not isinstance(opt, dict):
+                        fixed_opts.append(opt)
+                        continue
+                    o = dict(opt)
+                    if "text" in o and o["text"] is not None and not isinstance(o["text"], str):
+                        o["text"] = str(o["text"])
+                    if "label" in o and o["label"] is not None and not isinstance(o["label"], str):
+                        o["label"] = str(o["label"])
+                    fixed_opts.append(o)
+                q["options"] = fixed_opts
+            fixed_qs.append(q)
+        out["questions"] = fixed_qs
+        if "total_questions" not in out:
+            out["total_questions"] = len(fixed_qs)
+
+    allowed = set(model.model_fields.keys())
+    if allowed:
+        out = {k: v for k, v in out.items() if k in allowed}
+    return out
+
+
 def _coerce_failed_generation_data(failed_raw: object) -> Optional[object]:
     if isinstance(failed_raw, dict):
         return failed_raw
@@ -395,6 +555,11 @@ def _coerce_failed_generation_data(failed_raw: object) -> Optional[object]:
     xml_data = _parse_xml_tool_call_args(text)
     if xml_data is not None:
         return xml_data
+
+    # Groq json_schema failures sometimes emit ``{key=value}`` instead of JSON.
+    equals_data = _parse_equals_style_structure(text)
+    if equals_data is not None:
+        return _stringify_question_option_fields(equals_data)
 
     # Tool-call wrapper: PDFExtractionResult({...}) or name + JSON body.
     json_text = text
@@ -468,6 +633,7 @@ def parse_groq_failed_generation(exc: BaseException, model: Type[T]) -> T | None
         if data is None:
             logger.debug("Could not coerce Groq failed_generation into JSON")
             continue
+        data = _normalize_structured_payload(data, model)
         try:
             return model.model_validate(data)
         except (ValidationError, TypeError, ValueError) as parse_exc:

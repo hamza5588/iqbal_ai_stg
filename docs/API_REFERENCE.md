@@ -78,10 +78,18 @@ Base URL: `/api/lms`
 - `POST /teacher/tutor/save-question` — save AI question to bank
 
 ## Guided Practice (Phase 5)
-- `POST /practice/sessions`
+- `POST /practice/sessions` — with `topic_id`, resumes a pending question or generates up to five new AI questions for that topic. Previously served questions are excluded, and only questions with verified answer keys are saved. `force_new: true` abandons pending questions and requests a new batch.
 - `GET /practice/sessions/<id>`
-- `POST /practice/sessions/<id>/answer`
+- `POST /practice/sessions/<id>/answer` — a correct answer completes that question; `next_question` indicates whether another saved question is ready. Request another session to continue, including after the batch is exhausted.
 - `POST /practice/sessions/<id>/hint`
+
+## Learning Chat
+- `POST /deficiency/sessions` — starts or resumes weak-area practice or an enrichment challenge. Student-visible questions are generated only from the assigned target PDF section for the approved diagnostic Topic/SLO. Every generated question must pass fail-closed source/SLO grounding (including a verbatim source-evidence check) and answer-key verification; unsupported questions and unverifiable batches are not queued.
+- `GET /deficiency/sessions/<id>`
+- `POST /deficiency/sessions/<id>/answer`
+- `POST /deficiency/sessions/<id>/advance`
+- `POST /deficiency/sessions/<id>/pause`
+- `POST /deficiency/sessions/<id>/explain`
 
 ## Interventions (Phase 8)
 - `GET /interventions?class_id=&student_id=&topic_id=`

@@ -90,6 +90,39 @@ _EXAM_WORDS = tuple(
 )
 
 
+_SUB_CHARS = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎"
+_UNICODE_SUB = str.maketrans(_SUB_CHARS, "0123456789+-=()")
+_ALL_SUPER_CHARS = _SUPER_CHARS + "⁼ⁿⁱ"
+_UNICODE_SUPER_ALL = str.maketrans(_ALL_SUPER_CHARS, "0123456789+-()=ni")
+
+
+def protect_unicode_scripts(text: str) -> str:
+    """Real Unicode super/subscripts -> explicit ``^{..}`` / ``_{..}``.
+
+    Must run BEFORE NFKC normalisation: NFKC maps ``²``->``2``, ``₂``->``2`` and
+    ``⁻``->``-``, which silently turned ``2⁵`` into ``25``, ``10⁻⁵`` into ``10-5``
+    and ``log₂5`` into ``log25``. Text without script glyphs is returned unchanged.
+    """
+    if not text or not any(c in _ALL_SUPER_CHARS or c in _SUB_CHARS for c in text):
+        return text
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch in _ALL_SUPER_CHARS or ch in _SUB_CHARS:
+            chars, table, op = (_ALL_SUPER_CHARS, _UNICODE_SUPER_ALL, "^") if ch in _ALL_SUPER_CHARS else (
+                _SUB_CHARS, _UNICODE_SUB, "_")
+            j = i
+            while j < n and text[j] in chars:
+                j += 1
+            out.append(op + "{" + text[i:j].translate(table).replace("−", "-") + "}")
+            i = j
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def _unicode_supers_to_latex(text: str) -> str:
     out = []
     i = 0
@@ -124,6 +157,20 @@ def implicit_exponents_to_latex(text: str) -> str:
 
     def repl(match: re.Match[str]) -> str:
         base, digits = match.group(1), match.group(2)
+        if base == "}":
+            # Digits after a subscript group are its operand, not a power:
+            # "\log_{2}5" must stay log base 2 of 5, never \log_{2}^{5}.
+            depth, k = 0, match.start(1)
+            while k >= 0:
+                if match.string[k] == "}":
+                    depth += 1
+                elif match.string[k] == "{":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                k -= 1
+            if k > 0 and match.string[k - 1] == "_":
+                return match.group(0)
         if base.isalpha():
             # The letters may be a TeX command (the math editor writes "\neq1", "\pm5", "\times10"
             # with no space): that digit is an operand, never a power - "a \neq^{1}" was saved.
@@ -266,21 +313,34 @@ def recover_stacked_fraction(text: str) -> str:
 
 
 def promote_log_underscore(text: str) -> str:
-    """``log_a 8`` → ``\\log_{a} 8`` so the base typesets as a subscript.
+    """``log_a 8`` / flattened ``log2 x`` → ``\\log_{a} 8`` / ``\\log_{2} x``.
 
     Does not rematch already-TeX ``\\log`` (that would double the backslash).
     """
 
-    def _repl(m: re.Match[str]) -> str:
+    def _repl_underscore(m: re.Match[str]) -> str:
         fn = (m.group(2) or "log").lower()
         base = m.group(3)
         cmd = "\\ln" if fn == "ln" else "\\log"
         return f"{m.group(1)}{cmd}_{{{base}}}"
 
-    return re.sub(
+    def _repl_glued(m: re.Match[str]) -> str:
+        fn = (m.group(2) or "log").lower()
+        base = m.group(3)
+        cmd = "\\ln" if fn == "ln" else "\\log"
+        return f"{m.group(1)}{cmd}_{{{base}}}"
+
+    s = re.sub(
         r"(^|[^\\A-Za-z0-9_])(log|ln)\s*_\{?([A-Za-z0-9]+)\}?",
-        _repl,
+        _repl_underscore,
         text or "",
+        flags=re.IGNORECASE,
+    )
+    # PDF text layers often flatten log₂x to "log2 x".
+    return re.sub(
+        r"(^|[^\\A-Za-z0-9_])(log|ln)(\d+)\b",
+        _repl_glued,
+        s,
         flags=re.IGNORECASE,
     )
 
@@ -346,7 +406,7 @@ def recover_latex(text: Optional[str]) -> str:
     s = recover_eaten_backslash_commands(text or "").strip()
     if not s:
         return ""
-    s = unicodedata.normalize("NFKC", s)
+    s = unicodedata.normalize("NFKC", protect_unicode_scripts(s))
     s = unwrap_outer_math_if_prose(s)
     s = unsquash_english(s)
     s = s.replace("−", "-").replace("×", "\\times ").replace("÷", "\\div ")
@@ -799,11 +859,13 @@ def recover_fields(text: Optional[str], latex: Optional[str] = None) -> Tuple[st
     """Return (display_text, latex) with reconstructed math for diagnostic MCQs."""
     # Repair BEFORE strip() - see recover_latex() for why the order matters.
     text_s = recover_eaten_backslash_commands(text or "").strip()
-    text_s = unsquash_english(unicodedata.normalize("NFKC", text_s))
+    text_s = unsquash_english(unicodedata.normalize("NFKC", protect_unicode_scripts(text_s)))
     text_s = unwrap_outer_math_if_prose(text_s)
     latex_s = recover_eaten_backslash_commands(latex or "").strip() or None
     if latex_s:
-        latex_s = unwrap_outer_math_if_prose(unsquash_english(unicodedata.normalize("NFKC", latex_s)))
+        latex_s = unwrap_outer_math_if_prose(
+            unsquash_english(unicodedata.normalize("NFKC", protect_unicode_scripts(latex_s)))
+        )
 
     # Short instruction + math in latex ("Simplify:" + fraction).
     if text_s and latex_s and not looks_like_prose(latex_s):

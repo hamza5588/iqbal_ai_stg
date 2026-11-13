@@ -1114,9 +1114,27 @@
         return;
       }
       window._lmsQuizPreviewQuestions = d.questions;
-      previewEl.innerHTML = d.questions.map(function (item, idx) {
+      var autoN = 0;
+      var reviewN = 0;
+      (d.questions || []).forEach(function (item) {
+        var st = ((item.question || {}).verification_status) || 'needs_review';
+        if (st === 'auto_verified') autoN += 1;
+        else reviewN += 1;
+      });
+      var summaryHtml =
+        '<div class="lms-quiz-review-summary" style="margin:0 0 0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">' +
+          '<span class="lms-badge lms-badge-green">Auto-verified ' + autoN + '</span>' +
+          '<span class="lms-badge lms-badge-yellow">Needs review ' + reviewN + '</span>' +
+          '<span class="lms-muted" style="font-size:0.85rem;">AI confidence — same idea as Target PDF bank</span>' +
+        '</div>';
+      previewEl.innerHTML = summaryHtml + d.questions.map(function (item, idx) {
         const q = item.question || {};
         const qid = q.id;
+        var status = q.verification_status || 'needs_review';
+        var badgeClass = status === 'auto_verified' ? 'lms-badge-green' : 'lms-badge-yellow';
+        var badgeLabel = status === 'auto_verified' ? 'Auto-verified' : 'Needs review';
+        var conf = q.extraction_confidence;
+        var confLabel = (typeof conf === 'number') ? (' · ' + Math.round(conf * 100) + '%') : '';
         const opts = (q.options || []).map(function (o, oidx) {
           var isCorrect = q.correct_option_index === oidx;
           return '<div class="lms-preview-opt' + (isCorrect ? ' is-correct' : '') + '">' +
@@ -1125,42 +1143,30 @@
             (isCorrect ? ' <span class="lms-preview-correct-mark">✓</span>' : '') +
             '</span></div>';
         }).join('');
-        var editOpts = (q.options || []).map(function (o, oidx) {
-          var lab = o.label || String.fromCharCode(65 + oidx);
-          return '<label class="lms-q-edit-opt">' +
-            '<span>' + escapeHtml(lab) + '</span>' +
-            '<math-field class="lms-q-edit-option lms-q-edit-field" data-oidx="' + oidx + '"></math-field>' +
-            '</label>';
-        }).join('');
-        var correctSel = [0,1,2,3].map(function (i) {
-          var lab = String.fromCharCode(65 + i);
-          return '<option value="' + i + '"' + (q.correct_option_index === i ? ' selected' : '') + '>' + lab + '</option>';
-        }).join('');
         return '<div class="lms-diag-preview-card lms-quiz-preview-card" data-qid="' + qid + '" data-qidx="' + idx + '">' +
           '<div class="lms-preview-head">' +
-            '<div class="lms-preview-stem"><strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' +
+            '<div class="lms-preview-stem">' +
+              '<span class="lms-badge ' + badgeClass + '" style="margin-right:0.4rem;">' + badgeLabel + confLabel + '</span>' +
+              '<strong class="lms-preview-qnum">Q' + (idx + 1) + '.</strong> ' +
             _lmsFmtText(
               (typeof lmsQuestionText === 'function' ? lmsQuestionText(q) : (q.question_text || q.question_latex || '')),
               true
             ) + '</div>' +
-            '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-toggle" data-qid="' + qid + '">Edit</button>' +
+            '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-toggle" data-qid="' + qid + '">Edit with AI</button>' +
           '</div>' +
           '<div class="lms-preview-opts">' + opts + '</div>' +
-          '<div class="lms-q-edit-panel" data-qid="' + qid + '" hidden>' +
-            '<p class="lms-math-keyboard-hint">Tap a field to edit as normal math (not LaTeX code). Use the scientific keyboard for symbols, fractions, roots, Greek, and functions.</p>' +
-            '<label class="lms-q-edit-stem">Question' +
-              '<math-field class="lms-q-edit-stem-input lms-q-edit-field"></math-field>' +
+          '<div class="lms-q-edit-panel lms-q-ai-panel" data-qid="' + qid + '" hidden>' +
+            '<p class="lms-q-ai-hint">Describe the fix in plain English (same as Target PDF bank). No math keyboard.</p>' +
+            '<label class="lms-q-edit-stem">Your instruction' +
+              '<textarea class="lms-q-ai-instruction" rows="2" placeholder="Example: put n as the index of the radical (nth root of a), not beside the square root"></textarea>' +
             '</label>' +
-            '<div class="lms-q-edit-options">' + editOpts + '</div>' +
-            '<label class="lms-q-edit-correct">Correct answer <select class="lms-q-edit-correct-sel">' + correctSel + '</select></label>' +
             '<div class="lms-q-edit-actions">' +
-              '<button type="button" class="lms-btn lms-btn-primary lms-q-edit-save" data-qid="' + qid + '">Save</button>' +
+              '<button type="button" class="lms-btn lms-btn-primary lms-q-edit-ai" data-qid="' + qid + '">Fix with AI</button>' +
               '<button type="button" class="lms-btn lms-btn-ghost lms-q-edit-cancel" data-qid="' + qid + '">Cancel</button>' +
               '<span class="lms-q-edit-status"></span>' +
             '</div>' +
           '</div></div>';
       }).join('');
-      _lmsHydrateQuizMathFields(previewEl, d.questions);
       _lmsTypeset(previewEl);
       _bindLmsQuizEditHandlers(previewEl);
     }
@@ -1364,15 +1370,8 @@
           if (panelT) {
             panelT.hidden = !panelT.hidden;
             if (!panelT.hidden) {
-              var first = panelT.querySelector('math-field.lms-q-edit-field');
-              if (first && typeof first.focus === 'function') {
-                setTimeout(function () {
-                  try { first.focus(); } catch (e) {}
-                  _lmsStemTextModeAtEnd(first);
-                }, 50);
-              }
-            } else if (window.mathVirtualKeyboard) {
-              try { window.mathVirtualKeyboard.hide(); } catch (e) {}
+              var aiBox = panelT.querySelector('.lms-q-ai-instruction');
+              if (aiBox) aiBox.focus();
             }
           }
           return;
@@ -1381,69 +1380,39 @@
         if (cancel) {
           var panelC = panelFor(cancel.getAttribute('data-qid'));
           if (panelC) panelC.hidden = true;
-          if (window.mathVirtualKeyboard) {
-            try { window.mathVirtualKeyboard.hide(); } catch (e) {}
-          }
           return;
         }
-        var save = t.closest && t.closest('.lms-q-edit-save');
-        if (!save) return;
-        var qid = save.getAttribute('data-qid');
-        var card = root.querySelector('.lms-quiz-preview-card[data-qid="' + qid + '"]');
+        var aiBtn = t.closest && t.closest('.lms-q-edit-ai');
+        if (!aiBtn) return;
+        var qid = aiBtn.getAttribute('data-qid');
         var panel = panelFor(qid);
         var status = panel ? panel.querySelector('.lms-q-edit-status') : null;
         var assessmentId = root._lmsAssessmentId || _lmsCurrentAssessmentId;
-        if (!card || !panel || !assessmentId) return;
-        var stemMf = panel.querySelector('math-field.lms-q-edit-stem-input');
-        var stem = _lmsFromMathlive(stemMf);
-        if (!stem) {
-          if (status) status.textContent = 'The question cannot be empty.';
+        if (!panel || !assessmentId) return;
+        var instruction = ((panel.querySelector('.lms-q-ai-instruction') || {}).value || '').trim();
+        if (!instruction) {
+          if (status) status.textContent = 'Write a short instruction for AI.';
+          else alert('Write a short instruction for AI, e.g. "put n as the radical index".');
           return;
         }
-        var correctIdx = parseInt((panel.querySelector('.lms-q-edit-correct-sel') || {}).value, 10);
-        if (isNaN(correctIdx)) correctIdx = 0;
-        var options = [];
-        panel.querySelectorAll('math-field.lms-q-edit-option').forEach(function (mf) {
-          var oidx = parseInt(mf.getAttribute('data-oidx'), 10);
-          options.push({
-            label: String.fromCharCode(65 + oidx),
-            text: _lmsFromMathlive(mf),
-            latex: null
-          });
-        });
-        if (options.length !== 4) {
-          if (status) status.textContent = 'Need 4 options.';
-          return;
-        }
-        if (options.some(function (o) { return !o.text; })) {
-          if (status) status.textContent = 'Every option needs an answer.';
-          return;
-        }
-        save.disabled = true;
-        if (status) status.textContent = 'Saving...';
+        aiBtn.disabled = true;
+        if (status) status.textContent = 'AI is fixing…';
         try {
-          var res = await fetch('/api/lms/quizzes/' + assessmentId + '/questions/' + qid, {
-            method: 'PUT',
+          var res = await fetch('/api/lms/quizzes/' + assessmentId + '/questions/' + qid + '/ai-edit', {
+            method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              question_text: stem,
-              question_latex: null,
-              options: options,
-              correct_option_index: correctIdx
-            })
+            body: JSON.stringify({ instruction: instruction })
           });
           var body = await res.json();
-          if (!res.ok) throw new Error((body.error && body.error.message) || body.message || 'Save failed');
-          if (status) status.textContent = 'Saved.';
-          if (window.mathVirtualKeyboard) {
-            try { window.mathVirtualKeyboard.hide(); } catch (e) {}
-          }
-          if (typeof lmsShowToast === 'function') lmsShowToast('Question saved');
+          if (!res.ok) throw new Error((body.error && body.error.message) || body.message || 'AI edit failed');
+          var data = body.data || body;
+          if (status) status.textContent = (data && data.notes) || 'Fixed.';
+          if (typeof lmsShowToast === 'function') lmsShowToast('Question updated with AI');
           await lmsRenderQuizEditor(root, assessmentId);
         } catch (err) {
           if (status) status.textContent = 'Error: ' + err.message;
-          save.disabled = false;
+          aiBtn.disabled = false;
         }
       });
     }

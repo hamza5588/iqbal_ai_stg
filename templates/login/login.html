@@ -93,7 +93,28 @@
     background:linear-gradient(90deg,var(--green-dark),var(--green-mid));
     color:#fff;
   }
+  .btn-upload{
+    background:#fff;
+    color:var(--text-dark);
+    border:1px solid #cbd5e1;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-weight:700;
+  }
+  .btn-upload svg{ flex:0 0 auto; }
+  .btn-upload:hover{
+    background:linear-gradient(90deg,var(--green-dark),var(--green-mid));
+    border-color:transparent;
+    color:#fff;
+    box-shadow:0 8px 22px rgba(15,23,42,0.18);
+    opacity:1;
+  }
   .btn:hover{ transform:translateY(-1px); opacity:0.92; }
+  @media (max-width: 640px){
+    .header-bar{ flex-direction:column; gap:12px; padding:14px 16px; }
+    .header-actions{ width:100%; justify-content:center; flex-wrap:wrap; }
+  }
 
   /* Main layout */
   main{
@@ -403,7 +424,7 @@
     .panel{ min-height:auto; }
   }
 </style>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}?v=analytics-btn-1">
 </head>
 <body class="nu-page nu-auth nu-login">
 
@@ -413,6 +434,16 @@
       {% with variant='dark', height='44px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
     </div>
     <div class="header-actions">
+      <a class="btn btn-upload"
+         href="{{ url_for('static', filename='dashboard/iqbalai-teacher-analytics.html') }}"
+         title="Open Analytics upload dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+          <path d="M12 16V4"/>
+          <path d="m7 9 5-5 5 5"/>
+          <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/>
+        </svg>
+        Analytics
+      </a>
       <a class="btn btn-outline" href="{{ url_for('auth.login') }}">LOG IN</a>
       <a class="btn btn-solid" href="{{ url_for('auth.register_email') }}">CREATE AN ACCOUNT</a>
     </div>

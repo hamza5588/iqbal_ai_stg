@@ -190,6 +190,15 @@ def build_path_items(student_id: int) -> List[dict]:
     """
 
     weak = get_weak_topics(student_id)
+    if not weak:
+        # A Follow-up may re-test only part of a Domain: a weak Subtopic still
+        # needs practice even when its Domain's latest score is full.
+        try:
+            from app.services.lms import subtopic_mastery_service
+
+            weak = subtopic_mastery_service.get_weak_subtopics(student_id)
+        except Exception:  # noqa: BLE001
+            weak = []
 
     if weak:
 

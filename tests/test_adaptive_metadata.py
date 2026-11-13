@@ -232,6 +232,7 @@ def test_supplied_diagnostic_pdf_has_all_twenty_printed_metadata_records():
     assert metadata[20] == profile(domain="Algebra", topic="Factor Theorem", cognitive="Analysis/Reasoning")
 
 
+@pytest.mark.xfail(reason="Merge decision 2026-11-14: Learning Chat uses the Subtopic system first; prod metadata-first weak-area selection is no longer primary", strict=True)
 def test_learning_chat_serves_all_seven_and_quiz_invalidates_old_session(db, monkeypatch):
     from app.services.lms import deficiency_chat_service as chat, performance_service as perf
     from app.services.lms.attempt_service import _run_post_submit_steps

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -23,6 +24,47 @@ _GENERIC = {
     "unknown",
     "n/a",
     "na",
+    "math",
+    "maths",
+    "mathematics",
+    "general math",
+    "general maths",
+    "general mathematics",
+    "basic math",
+    "basic maths",
+    "basic mathematics",
+}
+
+_GENERIC_SUBJECT_RE = re.compile(
+    r"^(?:(?:general|basic)\s+)?(?:math|maths|mathematics)"
+    r"(?:\s+(?:(?:grade|class)\s*)?(?:\d+|[ivxlcdm]+))?$"
+    r"|^(?:grade|class)\s*(?:\d+|[ivxlcdm]+)\s+(?:math|maths|mathematics)$",
+    re.IGNORECASE,
+)
+
+_SUBJECT_TITLE_WORDS = {
+    "math",
+    "maths",
+    "mathematics",
+    "general",
+    "basic",
+    "grade",
+    "class",
+    "practice",
+    "quiz",
+    "question",
+    "questions",
+    "bank",
+    "paper",
+    "assessment",
+    "diagnostic",
+    "baseline",
+    "weekly",
+    "final",
+    "finalized",
+    "program",
+    "dil",
+    "saathi",
 }
 
 
@@ -55,7 +97,19 @@ Questions JSON (array of {{index, question_text, options}}):
 
 
 def is_generic_concept(label: Optional[str]) -> bool:
-    return (label or "").strip().lower() in _GENERIC
+    clean = re.sub(r"[^a-z0-9]+", " ", (label or "").strip().lower())
+    clean = re.sub(r"\s+", " ", clean).strip()
+    if clean in _GENERIC or bool(_GENERIC_SUBJECT_RE.fullmatch(clean)):
+        return True
+    tokens = clean.split()
+    has_math_subject = any(token in {"math", "maths", "mathematics"} for token in tokens)
+    only_subject_title_words = all(
+        token in _SUBJECT_TITLE_WORDS
+        or token.isdigit()
+        or bool(re.fullmatch(r"[ivxlcdm]+", token))
+        for token in tokens
+    )
+    return bool(tokens) and has_math_subject and only_subject_title_words
 
 
 def assign_learning_concepts(mcqs: List[MCQQuestion]) -> List[MCQQuestion]:

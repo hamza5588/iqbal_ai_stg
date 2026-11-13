@@ -53,6 +53,44 @@
     remainingSeconds: null,
     timerInterval: null
   };
+  var diagDwell = (typeof lmsQuestionDwell === 'function') ? lmsQuestionDwell() : null;
+
+  function diagQidAt(qi) {
+    var item = diagState.questions[qi];
+    if (!item) return null;
+    return item.question_id || (item.question && item.question.id) || null;
+  }
+  function diagDwellSeconds(qi) {
+    if (!diagDwell) return 0;
+    var id = diagQidAt(qi);
+    return id != null ? diagDwell.seconds(id) : 0;
+  }
+  function startDiagDwell(qi) {
+    if (!diagDwell) return;
+    var id = diagQidAt(qi);
+    if (id == null) return;
+    diagDwell.switchTo(id);
+  }
+  function syncDiagDwell(qi) {
+    if (!diagDwell || !diagState.attemptId) return;
+    var id = diagQidAt(qi);
+    if (id == null) return;
+    var sec = diagDwell.seconds(id);
+    if (sec <= 0) return;
+    var payload = { question_id: id, time_spent_seconds: sec };
+    if (diagState.answers[qi] !== undefined) payload.selected_option_index = diagState.answers[qi];
+    fetch('/api/lms/attempts/' + diagState.attemptId + '/answer', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(function () {});
+  }
+  function onDiagVisChange() {
+    if (!diagDwell || !diagState.attemptId) return;
+    if (document.hidden) diagDwell.pause();
+    else diagDwell.resume();
+  }
+  document.addEventListener('visibilitychange', onDiagVisChange);
 
   /* ---- Local answer backup (DIL feedback: don't lose answers when the
      connection drops). Every pick is written to localStorage synchronously,
@@ -380,6 +418,7 @@
     if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
     try { localStorage.removeItem('lmsDiagWs:' + (diagState.attemptId || 'x')); } catch (e) { /* ignore */ }
     closeDiagSurface();
+    if (diagDwell) diagDwell.stop();
     diagState = { assessmentId: null, attemptId: null, questions: [], current: 0, answers: {}, expiresAt: null, remainingSeconds: null, timerInterval: null };
     window._lmsDiagWorkspaceOpen = false;
     window._lmsDiagExplainCache = {};
@@ -388,6 +427,7 @@
 
   async function persistDiagAnswers() {
     if (!diagState.attemptId) return;
+    if (diagDwell) syncDiagDwell(diagState.current);
     for (var i = 0; i < diagState.questions.length; i++) {
       if (diagState.answers[i] === undefined) continue;
       var item = diagState.questions[i];
@@ -399,7 +439,11 @@
         await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question_id: qid, selected_option_index: idx })
+          body: JSON.stringify({
+            question_id: qid,
+            selected_option_index: idx,
+            time_spent_seconds: diagDwellSeconds(i)
+          })
         });
         markDiagAnswerSynced(diagState.attemptId, qid);
       } catch (e) { /* offline / server hiccup - one answer failing must not stop the rest, and stays queued locally */ }
@@ -420,7 +464,11 @@
       await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_id: qid, selected_option_index: idx })
+        body: JSON.stringify({
+          question_id: qid,
+          selected_option_index: idx,
+          time_spent_seconds: diagDwellSeconds(qIdx)
+        })
       });
       markDiagAnswerSynced(diagState.attemptId, qid);
     } catch (e) { /* offline / server hiccup - stays queued in localStorage, retried automatically */ }
@@ -529,6 +577,17 @@
       });
       flushDiagPendingAnswers();
       diagState.current = qData.current_question_index != null ? qData.current_question_index : 0;
+      if (diagDwell) {
+        diagDwell.stop();
+        var seed = {};
+        var times = qData.saved_times || {};
+        Object.keys(times).forEach(function (k) {
+          var qi = parseInt(k, 10);
+          var id = diagQidAt(qi);
+          if (id != null) seed[id] = times[k];
+        });
+        diagDwell.seed(seed);
+      }
       if (start.resumed) {
         lmsShowToast('Resuming where you left off', 'success');
       }
@@ -542,6 +601,7 @@
       }
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(true);
       renderDiagnosticQuestion();
+      startDiagDwell(diagState.current);
       startDiagTimer();
     } catch (err) {
       var startMsg = err && err.message ? String(err.message) : '';
@@ -680,23 +740,29 @@
     renderDiagnosticQuestion();
   };
   window.jumpToDiagQuestion = function (i) {
-    if (i < 0 || i >= diagState.questions.length) return;
+    if (i < 0 || i >= diagState.questions.length || i === diagState.current) return;
     saveDiagAnswerAtIndex(diagState.current);
+    syncDiagDwell(diagState.current);
     diagState.current = i;
     renderDiagnosticQuestion();
+    startDiagDwell(diagState.current);
   };
   window.nextDiagQuestion = function () {
     if (diagState.current < diagState.questions.length - 1) {
       saveDiagAnswerAtIndex(diagState.current);
+      syncDiagDwell(diagState.current);
       diagState.current++;
       renderDiagnosticQuestion();
+      startDiagDwell(diagState.current);
     }
   };
   window.prevDiagQuestion = function () {
     if (diagState.current > 0) {
       saveDiagAnswerAtIndex(diagState.current);
+      syncDiagDwell(diagState.current);
       diagState.current--;
       renderDiagnosticQuestion();
+      startDiagDwell(diagState.current);
     }
   };
   /* ---- Math workspace: scratch notes + freehand canvas ---- */
@@ -882,6 +948,7 @@
       showWaitOverlay(autoSubmit ? 'Time over — submitting...' : 'Submitting diagnostic...');
     }
     try {
+      if (diagDwell) syncDiagDwell(diagState.current);
       if (!autoSubmit) {
         // Best-effort flush of every selected answer. Answers are already
         // saved on selection; this is a safety net, so one failed save
@@ -895,7 +962,11 @@
               await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/answer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question_id: qid, selected_option_index: diagState.answers[i] })
+                body: JSON.stringify({
+                  question_id: qid,
+                  selected_option_index: diagState.answers[i],
+                  time_spent_seconds: diagDwellSeconds(i)
+                })
               });
               markDiagAnswerSynced(diagState.attemptId, qid);
             } catch (flushErr) { /* keep going - submit will score what's saved, and this stays queued for a retry */ }
@@ -906,11 +977,22 @@
         // last time before submit scores the attempt server-side.
         await flushDiagPendingAnswers();
       }
+      var submitBody = { time_expired: !!autoSubmit };
+      if (diagDwell) {
+        var qTimes = {};
+        for (var ti = 0; ti < diagState.questions.length; ti++) {
+          var tqid = diagQidAt(ti);
+          var tsec = diagDwellSeconds(ti);
+          if (tqid != null && tsec > 0) qTimes[tqid] = tsec;
+        }
+        if (Object.keys(qTimes).length) submitBody.question_times = qTimes;
+      }
       var result = await lmsApi('/api/lms/attempts/' + diagState.attemptId + '/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ time_expired: !!autoSubmit })
+        body: JSON.stringify(submitBody)
       });
+      if (diagDwell) diagDwell.stop();
       // Attempt is finalized server-side now - the local backup has done its job.
       clearDiagLocal(diagState.attemptId);
       if ((result.timed_out || result.time_over) && !(result.max_score != null && result.score != null)) {

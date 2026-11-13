@@ -1,0 +1,47 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="student-groups-section" class="section hidden">
+  {% call page_head('Student Groups', 'Assign students to Controlled or Uncontrolled study cohorts with a complete history.', icon='fa-user-tag') %}
+    <button type="button" class="ad-btn ad-btn-outline" onclick="studentGroupsToggleImport()"><i class="fas fa-file-import"></i>Import list</button>
+  {% endcall %}
+
+  <form id="student-groups-filters" class="ad-card sr-filter-grid" onsubmit="event.preventDefault(); loadStudentGroups(1)">
+    <label class="ad-field">Cohort<input id="sg-cohort" value="default" maxlength="100" required></label>
+    <label class="ad-field">Search<input id="sg-search" maxlength="255" placeholder="Name or email"></label>
+    <label class="ad-field">School<select id="sg-school"><option value="">All schools</option></select></label>
+    <label class="ad-field">Group<select id="sg-group"><option value="all">All students</option><option value="controlled">Controlled</option><option value="uncontrolled">Uncontrolled</option><option value="unassigned">Unassigned</option></select></label>
+    <button class="ad-btn ad-btn-outline" type="submit">Apply filters</button>
+  </form>
+  <p id="sg-error" class="ad-status-line" role="alert"></p>
+  <div id="sg-counts" class="sr-stat-grid" aria-live="polite"></div>
+
+  <div class="ad-card sr-bulk-bar">
+    <strong id="sg-selected-count">0 selected</strong>
+    <button type="button" class="ad-btn ad-btn-primary" onclick="studentGroupsAssign('Controlled')">Set Controlled</button>
+    <button type="button" class="ad-btn ad-btn-outline" onclick="studentGroupsAssign('Uncontrolled')">Set Uncontrolled</button>
+    <button type="button" class="ad-btn ad-btn-danger" onclick="studentGroupsAssign(null)">Set Unassigned</button>
+  </div>
+  <div class="ad-card ad-card-flush">
+    <div class="ad-table-scroll"><table class="ad-table">
+      <thead><tr><th><input type="checkbox" id="sg-check-all" aria-label="Select all visible students"></th><th>Student</th><th>Email</th><th>School</th><th>Group</th><th>Effective from</th><th>History</th></tr></thead>
+      <tbody id="sg-tbody"><tr><td colspan="7">Open this section to load students.</td></tr></tbody>
+    </table></div>
+    <div id="sg-pagination" class="ad-card-foot"></div>
+  </div>
+
+  <div id="sg-import-panel" class="ad-card sr-panel" hidden>
+    <div class="sr-panel-head"><div><h3>Import group assignments</h3><p class="ad-help">CSV/XLSX columns: Student ID or Email, and Group. No student accounts are created.</p></div><button type="button" class="ad-btn ad-btn-outline" onclick="studentGroupsToggleImport(false)">Close</button></div>
+    <div class="sr-import-actions">
+      <input type="file" id="sg-import-file" accept=".csv,.xlsx">
+      <label class="ad-field">Initial membership effective date <input type="date" id="sg-effective-date"><small>Optional. Only accepted when a student has no existing group history.</small></label>
+      <button type="button" class="ad-btn ad-btn-outline" onclick="studentGroupsPreviewImport()">Preview</button>
+      <button type="button" id="sg-import-apply" class="ad-btn ad-btn-primary" onclick="studentGroupsApplyImport()" disabled>Apply valid rows</button>
+    </div>
+    <p id="sg-import-summary" class="ad-help"></p>
+    <div class="ad-table-scroll"><table class="ad-table"><thead><tr><th>Row</th><th>Student</th><th>Email</th><th>Group</th><th>Status</th></tr></thead><tbody id="sg-import-tbody"><tr><td colspan="5">Choose a file to preview.</td></tr></tbody></table></div>
+  </div>
+
+  <div id="sg-history-panel" class="ad-card sr-panel" hidden>
+    <div class="sr-panel-head"><h3 id="sg-history-title">Assignment history</h3><button type="button" class="ad-btn ad-btn-outline" onclick="document.getElementById('sg-history-panel').hidden=true">Close</button></div>
+    <div class="ad-table-scroll"><table class="ad-table"><thead><tr><th>Changed at</th><th>From</th><th>To</th><th>Source</th><th>Changed by</th></tr></thead><tbody id="sg-history-tbody"></tbody></table></div>
+  </div>
+</div>

@@ -13,6 +13,8 @@ import os
 import tempfile
 from typing import List, Optional, Tuple
 
+from pydantic import ValidationError
+
 from app.services.quiz import hybrid_vision_pipeline as vision
 from app.services.quiz.math_text import recover_fields
 from app.services.quiz.models import MCQOption, MCQQuestion
@@ -37,26 +39,11 @@ def hybrid_vision_enabled() -> bool:
 
 def _normalize_difficulty(raw: Optional[str]) -> Optional[str]:
     """Map PDF difficulty labels onto Question.difficulty enum; None if absent/unknown."""
-    if not raw or not str(raw).strip():
-        return None
-    s = str(raw).strip().lower()
-    if s in ("easy", "medium", "hard"):
-        return s
-    synonyms = {
-        "e": "easy",
-        "low": "easy",
-        "simple": "easy",
-        "m": "medium",
-        "moderate": "medium",
-        "avg": "medium",
-        "average": "medium",
-        "intermediate": "medium",
-        "h": "hard",
-        "high": "hard",
-        "difficult": "hard",
-        "challenging": "hard",
-    }
-    return synonyms.get(s)
+    # One synonym table for every importer: the DIL papers print "Intermediate",
+    # which used to fall through to None here (Target bank mapped it to medium).
+    from app.services.lms.question_attributes import normalize_difficulty
+
+    return normalize_difficulty(raw)
 
 
 def _option_label(raw: str, index: int) -> Optional[str]:
@@ -113,20 +100,33 @@ def vision_mcq_to_question(mcq) -> Optional[MCQQuestion]:
         explanation_bits.append(f"Topic: {topic}")
     explanation = "; ".join(explanation_bits) if explanation_bits else None
 
-    return MCQQuestion(
-        question_text=q_text or getattr(mcq, "question", ""),
-        question_latex=q_latex,
-        options=mapped_opts,
-        correct_option_label=correct,  # type: ignore[arg-type]
-        explanation=explanation,
-        learning_concept=learning_concept,
-        domain=domain,
-        topic=topic,
-        cognitive_level=cognitive,
-        difficulty=_normalize_difficulty(getattr(mcq, "difficulty", None)),
-        conversion_confidence=0.92,
-        preserve_option_order=True,
-    )
+    try:
+        return MCQQuestion(
+            question_text=q_text or getattr(mcq, "question", ""),
+            question_latex=q_latex,
+            options=mapped_opts,
+            correct_option_label=correct,  # type: ignore[arg-type]
+            explanation=explanation,
+            learning_concept=learning_concept,
+            domain=domain,
+            topic=topic,
+            difficulty=_normalize_difficulty(getattr(mcq, "difficulty", None)),
+            cognitive_level=cognitive,
+            printed_difficulty=(
+                (str(getattr(mcq, "difficulty", None) or "").strip() or None)
+                if _normalize_difficulty(getattr(mcq, "difficulty", None)) else None
+            ),
+            conversion_confidence=0.92,
+            preserve_option_order=True,
+        )
+    except ValidationError as exc:
+        # Never let one malformed option set abort the whole hybrid arm.
+        logger.warning(
+            "Skipping hybrid MCQ Q%s after validation error: %s",
+            getattr(mcq, "question_no", "?"),
+            exc,
+        )
+        return None
 
 
 # Back-compat alias for earlier adapter name.
@@ -183,10 +183,16 @@ def extract_mcqs_hybrid_vision(
     skipped = 0
 
     for raw in list(getattr(result, "questions", None) or []):
-        mapped = vision_mcq_to_question(raw)
+        qno = getattr(raw, "question_no", "?")
+        try:
+            mapped = vision_mcq_to_question(raw)
+        except Exception as exc:  # noqa: BLE001 - keep remaining MCQs
+            skipped += 1
+            warnings.append(f"Q{qno}: skipped ({exc})")
+            logger.warning("Hybrid MCQ convert failed for Q%s: %s", qno, exc)
+            continue
         if mapped is None:
             skipped += 1
-            qno = getattr(raw, "question_no", "?")
             ans = getattr(raw, "correct_answer", None)
             if require_answers and not ans:
                 warnings.append(f"Q{qno}: skipped (no answer key letter)")

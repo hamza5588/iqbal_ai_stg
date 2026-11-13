@@ -14,6 +14,7 @@ from app.services.lms.topic_resolver import (
     resolve_topic_id_from_label,
     resolve_topic_id_from_text,
 )
+from app.services.quiz.concept_labeler import is_generic_concept
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,7 @@ def _question_pdf_label(question: Question, assessment) -> Optional[str]:
     meta = _parse_assessment_meta(assessment)
     pdf_map = meta.get("question_pdf_topics") or {}
     label = pdf_map.get(str(question.id))
-    if label and str(label).strip():
+    if label and str(label).strip() and not is_generic_concept(str(label)):
         return str(label).strip()
     return None
 
@@ -152,8 +153,9 @@ def _resolve_question_topic_id(question: Question, assessment) -> Optional[int]:
     meta = _parse_assessment_meta(assessment)
     if _concepts_are_pdf_domains(meta):
         stored = (meta.get("question_concepts") or {}).get(str(question.id))
-        if stored and str(stored).strip():
-            topic = get_or_create_topic_from_pdf_label(_domain_of_stored_label(stored))
+        domain_label = _domain_of_stored_label(stored) if stored else ""
+        if domain_label and not is_generic_concept(domain_label):
+            topic = get_or_create_topic_from_pdf_label(domain_label)
             if topic:
                 return topic.id
 
@@ -162,7 +164,9 @@ def _resolve_question_topic_id(question: Question, assessment) -> Optional[int]:
             from app.services.lms import curriculum_service
 
             topic = curriculum_service.get_topic_by_id(question.topic_id)
-            if topic.subject != "Math" or assessment.creation_mode != "pdf_ai":
+            if is_generic_concept(topic.name):
+                pass
+            elif topic.subject != "Math" or assessment.creation_mode != "pdf_ai":
                 return question.topic_id
         except Exception:
             return question.topic_id
@@ -182,6 +186,8 @@ def _resolve_question_topic_id(question: Question, assessment) -> Optional[int]:
             .all()
         )
         for (heading,) in headings:
+            if is_generic_concept(heading):
+                continue
             topic = get_or_create_topic_from_pdf_label(heading)
             if topic:
                 return topic.id
@@ -192,17 +198,22 @@ def _resolve_question_topic_id(question: Question, assessment) -> Optional[int]:
     meta = _parse_assessment_meta(assessment)
     for entry in meta.get("source_topics") or []:
         name = (entry.get("name") or entry.get("pdf_label") or "").strip()
-        if name:
+        if name and not is_generic_concept(name):
             topic = get_or_create_topic_from_pdf_label(name)
             if topic:
                 return topic.id
         tid = entry.get("topic_id")
-        if tid is not None and assessment.creation_mode != "pdf_ai":
+        if tid is not None and assessment.creation_mode not in {"pdf_ai", "pdf_qa_auto"}:
             return int(tid)
 
-    tid = resolve_topic_id_from_label(assessment.title if assessment else "")
-    if tid:
-        return tid
+    # A PDF document title is context, not a per-question category. Falling
+    # back from an incomplete map to "Mathematics IX" caused generic mastery.
+    if assessment and assessment.creation_mode not in {"pdf_ai", "pdf_qa_auto"}:
+        title = assessment.title or ""
+        if not is_generic_concept(title):
+            tid = resolve_topic_id_from_label(title)
+            if tid:
+                return tid
 
     return None
 

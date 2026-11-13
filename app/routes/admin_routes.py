@@ -10,6 +10,7 @@ from app.models import UserModel
 from app.models.models import LessonModel
 from app.utils.db import get_db
 from app.utils.passwords import hash_password, password_problem
+from app.utils.schools import school_name_problem
 import re
 from app.models.database_models import (
     User as DBUser,
@@ -89,6 +90,16 @@ def is_admin():
         return user_model.is_admin()
     except:
         return False
+
+
+# ==================== TARGET PDF QUESTION BANK REVIEW ====================
+
+@bp.route('/target-bank')
+@login_required
+@admin_only
+def target_bank_review():
+    """Review extracted Target PDF MCQs (page preview, rendering, checks) before publishing."""
+    return render_template('admin/target_bank_review.html')
 
 
 # ==================== DASHBOARD ====================
@@ -214,6 +225,7 @@ def list_users():
                     DBUser.username.ilike(like, escape='\\'),
                     DBUser.useremail.ilike(like, escape='\\'),
                     DBUser.full_name.ilike(like, escape='\\'),
+                    DBUser.school_name.ilike(like, escape='\\'),
                 )
             )
         
@@ -229,6 +241,7 @@ def list_users():
                 'id': user.id,
                 'username': user.username,
                 'full_name': user.full_name or user.username,
+                'school_name': user.school_name or '',
                 'useremail': user.useremail,
                 'role': user.role,
                 'class_standard': user.class_standard or '',
@@ -261,6 +274,7 @@ def create_user():
             return jsonify({'success': False, 'error': 'A JSON body is required'}), 400
         username = _text(data.get('username'))
         full_name = _text(data.get('full_name') or data.get('name')) or username
+        school_name = data.get('school_name')
         useremail = _text(data.get('useremail'))
         password = data.get('password') if isinstance(data.get('password'), str) else ''
         role = _text(data.get('role')) or 'student'
@@ -276,7 +290,8 @@ def create_user():
 
         problem = (
             _username_problem(username) or _email_problem(useremail) or password_problem(password)
-            or _name_problem(full_name) or _class_standard_problem(class_standard, role)
+            or _name_problem(full_name) or school_name_problem(school_name)
+            or _class_standard_problem(class_standard, role)
         )
         if problem:
             return jsonify({'success': False, 'error': problem}), 400
@@ -300,6 +315,7 @@ def create_user():
             groq_api_key='',
             role=role,
             full_name=full_name or username,
+            school_name=school_name.strip(),
         )
         
         return jsonify({
@@ -332,6 +348,7 @@ def get_user(user_id):
                 'id': user.id,
                 'username': user.username,
                 'full_name': user.full_name or user.username,
+                'school_name': user.school_name or '',
                 'useremail': user.useremail,
                 'role': user.role,
                 'class_standard': user.class_standard or '',
@@ -377,6 +394,9 @@ def update_user(user_id):
             problem = problem or ('Email already exists' if clash else '')
         if 'full_name' in data:
             problem = problem or _name_problem(_text(data['full_name']), required=True)
+        if 'school_name' in data:
+            # Existing accounts may predate school collection; retain edit access.
+            problem = problem or school_name_problem(data['school_name'], required=bool(user.school_name))
         if data.get('password'):
             problem = problem or password_problem(str(data['password']))
         if 'class_standard' in data:
@@ -391,6 +411,8 @@ def update_user(user_id):
             user.username = _text(data['username'])
         if 'full_name' in data:
             user.full_name = _text(data['full_name'])
+        if 'school_name' in data:
+            user.school_name = _text(data['school_name']) or None
         if 'useremail' in data:
             user.useremail = _text(data['useremail'])
         if data.get('password'):

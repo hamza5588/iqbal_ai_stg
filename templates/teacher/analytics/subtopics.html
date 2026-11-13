@@ -1,0 +1,20 @@
+{# Domain -> Subtopic drill-down (/analytics/subtopics). Domain averages are the existing
+   Domain mastery averages; subtopic rows add class average, question-weighted %, weak
+   students and Baseline vs latest assessment. #}
+<div class="td-card">
+  <div class="td-section-title" style="margin-bottom:14px;">
+    <div class="td-icon-badge"><i class="fas fa-sitemap"></i></div>
+    <div><h2>Domain &amp; Subtopic Performance</h2>
+      <p>Click a domain to see its subtopics. Class average = mean of student scores; weighted % = all correct answers / all answers.
+        Under each domain and subtopic, Cognitive level and Difficulty show Baseline + Follow-up answers as printed on the paper;
+        Baseline&rarr;Follow-up compares the same students; GP = Guided Practice answers (counted separately).</p></div>
+  </div>
+  <div class="td-table-wrap">
+    <table class="td-data">
+      <thead><tr><th>Domain / Subtopic</th><th>Class average</th><th>Weighted %</th><th>Weak students</th><th>Baseline &rarr; latest</th></tr></thead>
+      <tbody id="tdAnaSubtopicRows"></tbody>
+    </table>
+  </div>
+  <div class="td-empty" id="tdAnaSubtopicEmpty" hidden></div>
+  <div id="tdAnaSubtopicFooter" style="margin-top:12px;"></div>
+</div>

@@ -401,6 +401,74 @@ def save_pdf_extraction(
     return extraction
 
 
+def pdf_category_integrity_errors(assessment: Assessment) -> List[str]:
+    """Return publish-blocking category problems for a PDF-generated assessment."""
+    if assessment.creation_mode not in {"pdf_ai", "pdf_qa_auto"}:
+        return []
+
+    from app.services.quiz.concept_labeler import is_generic_concept
+
+    try:
+        parsed = json.loads(assessment.description or "{}")
+    except (json.JSONDecodeError, TypeError):
+        parsed = {}
+    meta = parsed if isinstance(parsed, dict) else {}
+    concepts = meta.get("question_concepts") or {}
+    pdf_topics = meta.get("question_pdf_topics") or {}
+    if not isinstance(concepts, dict):
+        concepts = {}
+    if not isinstance(pdf_topics, dict):
+        pdf_topics = {}
+
+    attached = sorted(assessment.questions, key=lambda row: row.sort_order)
+    current_ids = {str(row.question_id) for row in attached}
+    errors: List[str] = []
+
+    stale_concepts = sorted(set(map(str, concepts)) - current_ids)
+    stale_pdf_topics = sorted(set(map(str, pdf_topics)) - current_ids)
+    if stale_concepts:
+        errors.append("stale question_concepts IDs " + ", ".join(stale_concepts))
+    if stale_pdf_topics:
+        errors.append("stale question_pdf_topics IDs " + ", ".join(stale_pdf_topics))
+
+    source_is_domain = meta.get("concept_source") == "pdf_domain"
+
+    def normalized(value: object) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+
+    for row in attached:
+        question = row.question
+        q_no = getattr(question, "source_question_number", None) or row.sort_order + 1
+        key = str(row.question_id)
+        label = str(concepts.get(key) or "").strip()
+        if not label:
+            errors.append(f"Q{q_no} missing question_concepts category")
+        elif is_generic_concept(label):
+            errors.append(f"Q{q_no} has generic category {label!r}")
+
+        if source_is_domain:
+            pdf_label = str(pdf_topics.get(key) or "").strip()
+            if not pdf_label:
+                errors.append(f"Q{q_no} missing printed Domain mapping")
+            elif is_generic_concept(pdf_label):
+                errors.append(f"Q{q_no} has generic printed Domain {pdf_label!r}")
+            elif label and normalized(pdf_label) != normalized(label):
+                errors.append(f"Q{q_no} category disagrees with printed Domain")
+
+        if not question or not question.topic_id:
+            errors.append(f"Q{q_no} missing topic_id")
+            continue
+        topic_name = str(getattr(question.topic, "name", "") or "").strip()
+        if not topic_name or is_generic_concept(topic_name):
+            errors.append(f"Q{q_no} has invalid topic {topic_name!r}")
+        elif label and normalized(topic_name) != normalized(label):
+            errors.append(f"Q{q_no} topic_id disagrees with category {label!r}")
+
+    if pdf_topics and not source_is_domain:
+        errors.append("question_pdf_topics exists without concept_source=pdf_domain")
+    return errors
+
+
 def can_publish(assessment_id: int) -> tuple[bool, Optional[str]]:
     assessment = get_assessment(assessment_id)
     if not assessment.questions:
@@ -410,6 +478,9 @@ def can_publish(assessment_id: int) -> tuple[bool, Optional[str]]:
     if assessment.creation_mode == "pdf_qa_auto" and assessment.overall_confidence is not None:
         if assessment.overall_confidence < CONFIDENCE_PUBLISH_MIN:
             return False, "Confidence too low — manual review required before publish"
+    category_errors = pdf_category_integrity_errors(assessment)
+    if category_errors:
+        return False, "PDF question category review required: " + "; ".join(category_errors)
     return True, None
 
 

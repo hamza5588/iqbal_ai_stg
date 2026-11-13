@@ -62,6 +62,15 @@ filee.txt
 .DS_Store
 .idea/
 tests/
+!tests/
+tests/*
+!tests/test_pdf_quiz_category_integrity.py
+!tests/test_mcq_grounding_check.py
+!tests/test_learning_chat_adaptive_tutor.py
+!tests/test_student_reporting.py
+!app/migrations/
+!app/migrations/__init__.py
+!app/migrations/student_reporting.py
 chatbot.db
 tmp/
 Deep Research Module.pdf

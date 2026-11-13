@@ -187,6 +187,8 @@ def index_target_questions(thread_id, owner_id, text, pdf_bytes=None):
             continue
         seen.add(identity)
         options = fields.pop("options")
+        # Save-path flag, not a column; duplicate options in an extraction still need review here.
+        fields.pop("allow_duplicate_option_texts", None)
         requires_review = getattr(mcq, "requires_review", False)
         try:
             options_json = options_to_json(options, fields["correct_option_index"])
