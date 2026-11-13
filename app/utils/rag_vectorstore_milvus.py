@@ -116,11 +116,16 @@ def similarity_search(
     coll = Collection(coll_name)
     safe_tid = str(thread_id).replace('"', '\\"')
     expr = f'thread_id == "{safe_tid}" && user_id == {user_id}'
+    # The thread/user expression already scopes the corpus, so asking Milvus for
+    # 3*k and then discarding 2/3 wastes work. More importantly, HNSW requires
+    # ef >= limit; the old fixed ef=128 failed as soon as hybrid retrieval asked
+    # for more than 42 candidates (3*k > 128).
+    search_ef = max(128, int(k))
     results = coll.search(
         data=[query_vector],
         anns_field="vector",
-        param={"metric_type": "L2", "params": {"ef": 128}},
-        limit=k * 3,
+        param={"metric_type": "L2", "params": {"ef": search_ef}},
+        limit=max(1, int(k)),
         expr=expr,
         output_fields=["chunk_id", "page", "chunk_index"],
     )

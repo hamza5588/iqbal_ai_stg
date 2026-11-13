@@ -225,6 +225,9 @@ def mcq_to_question_fields(mcq: MCQQuestion) -> dict:
         "extraction_confidence": mcq.conversion_confidence,
         # PDF paper order may include duplicate distractors; save path must allow them.
         "allow_duplicate_option_texts": bool(mcq.preserve_option_order),
+        "domain": mcq.domain,
+        "topic_label": mcq.topic,
+        "cognitive_level": mcq.cognitive_level,
     }
     # Optional PDF metadata — only pass through when present.
     difficulty = getattr(mcq, "difficulty", None)

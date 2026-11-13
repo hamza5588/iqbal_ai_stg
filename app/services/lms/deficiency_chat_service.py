@@ -1035,6 +1035,13 @@ def _build_question_queue(
             _question_count_for_score(score),
             min(int(entry.get("min_questions") or 0), MAX_QUESTIONS_TO_CLEAR_TOPIC),
         )
+        if entry.get("wrong_metadata"):
+            from app.services.lms.adaptive_practice_service import build_queue
+            items = build_queue(entry, target_thread_ids, rag_owner_id, count, grade_level,
+                                used_question_texts_by_topic.get(topic_id, []) +
+                                [q["question_text"] for q in queue])
+            queue.extend(items)
+            continue
         scopes = _approved_scopes(entry, topic_name)[:count]
         exclude_texts = used_question_texts_by_topic.get(topic_id, [])
         exclude_keys = {_question_key(text) for text in exclude_texts if text}
@@ -1760,7 +1767,7 @@ def _start_topic_session(
         weak = [w for w in get_weak_topics(student_id) if _is_topic(w)]
     if not weak:
         raise LMSValidationError("This topic is not one of your weak areas any more.")
-    weak = _note_outstanding_misses(student_id, weak[:1])
+    weak = _note_outstanding_misses(student_id, weak)
 
     # Questions already generated for this topic (the session pre-built right after
     # the diagnostic) are reused, so opening a topic costs no new generation.
@@ -1810,6 +1817,9 @@ def _start_topic_session(
             "slo_names": w.get("slo_names") or [],
             "subtopics": w.get("subtopics") or [],
             "scope_level": w.get("scope_level"),
+            "attempt_id": w.get("attempt_id"),
+            "wrong_metadata": w.get("wrong_metadata") or [],
+            "domain": w.get("domain"),
         }
     ]
     session = DeficiencyChatSession(
@@ -1951,6 +1961,9 @@ def start_session(
             "slo_names": w.get("slo_names") or [],
             "subtopics": w.get("subtopics") or [],
             "scope_level": w.get("scope_level"),
+            "attempt_id": w.get("attempt_id"),
+            "wrong_metadata": w.get("wrong_metadata") or [],
+            "domain": w.get("domain"),
         }
         for w in weak
     ]

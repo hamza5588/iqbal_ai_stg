@@ -13,6 +13,9 @@ class MCQOptionSchema(BaseModel):
 
 
 class QuestionCreate(BaseModel):
+    domain: Optional[str] = None
+    topic_label: Optional[str] = None
+    cognitive_level: Optional[str] = None
     topic_id: Optional[int] = None
     question_text: str
     question_latex: Optional[str] = None
@@ -28,6 +31,9 @@ class QuestionCreate(BaseModel):
 
 
 class QuestionRead(BaseModel):
+    domain: Optional[str] = None
+    topic_label: Optional[str] = None
+    cognitive_level: Optional[str] = None
     id: int
     topic_id: Optional[int] = None
     question_text: str

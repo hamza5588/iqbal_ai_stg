@@ -67,6 +67,9 @@ def _serialize_question(q: Question) -> dict:
         "correct_answer_raw": q.correct_answer_raw,
         "explanation": q.explanation,
         "difficulty": q.difficulty,
+        "domain": q.domain,
+        "topic_label": q.topic_label,
+        "cognitive_level": q.cognitive_level,
         "source_type": q.source_type,
         "source_pdf_thread_id": q.source_pdf_thread_id,
         "source_question_number": q.source_question_number,
@@ -134,6 +137,8 @@ def create_question(
     allow_duplicate_option_texts: bool = False,
     cognitive_level: Optional[str] = None,
     printed_difficulty: Optional[str] = None,
+    domain: Optional[str] = None,
+    topic_label: Optional[str] = None,
 ) -> Question:
     from app.services.lms import question_attributes as qa
 
@@ -164,6 +169,8 @@ def create_question(
         source_pdf_thread_id=source_pdf_thread_id,
         source_question_number=source_question_number,
         extraction_confidence=extraction_confidence,
+        domain=domain.strip() if domain else None,
+        topic_label=topic_label.strip() if topic_label else None,
     )
     db.add(question)
     db.commit()

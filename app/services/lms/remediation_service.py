@@ -151,6 +151,8 @@ def get_or_create_remediation_quiz(
     )
 
     question_ids: List[int] = []
+    from app.services.quiz.question_metadata import complete_metadata
+    complete_metadata(mcqs)
     for mcq in mcqs:
         fields = mcq_to_question_fields(mcq)
         q = question_bank_service.create_question(
@@ -163,6 +165,9 @@ def get_or_create_remediation_quiz(
             explanation=fields.get("explanation"),
             difficulty=diff,
             source_type="mixed",
+            domain=fields.get("domain"),
+            topic_label=fields.get("topic_label"),
+            cognitive_level=fields.get("cognitive_level"),
             extraction_confidence=fields.get("extraction_confidence"),
         )
         question_ids.append(q.id)

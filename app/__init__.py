@@ -305,6 +305,15 @@ def create_app():
                 import traceback
                 print("Failed to initialize Lesson Q&A LangGraph:", e)
                 traceback.print_exc()
+            # Gunicorn creates the Flask app independently in every worker. Loading the
+            # existing cross-encoder here removes the first-query cold start without
+            # changing its model, inputs, scores, or ranking behavior.
+            try:
+                from app.utils.rag_vectorstore import preload_cross_encoder
+                if not preload_cross_encoder():
+                    logger.warning("RAG cross-encoder was not preloaded; lazy loading remains available")
+            except Exception:
+                logger.warning("RAG cross-encoder startup preload failed", exc_info=True)
     
     # Register blueprints (import here to avoid circular imports)
     from app.routes.auth import bp as auth_bp

@@ -22,7 +22,8 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir tiktoken flask-wtf sentence-transformers langchain-huggingface
+    pip install --no-cache-dir tiktoken flask-wtf sentence-transformers langchain-huggingface && \
+    python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L6-v2', device='cpu')"
 
 COPY . .
 

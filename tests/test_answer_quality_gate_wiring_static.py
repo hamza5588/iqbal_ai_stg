@@ -8,12 +8,22 @@ a cheap heuristic pre-filter for non-lesson intents. See PHASE2_DESIGN.md for th
 
 Run: python tests/test_answer_quality_gate_wiring_static.py
 """
+import ast
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RAG_SERVICE_SRC = (ROOT / "app" / "utils" / "rag_service.py").read_text(encoding="utf-8")
+
+
+def _module_string_constant(name: str) -> str:
+    tree = ast.parse(RAG_SERVICE_SRC)
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+                return ast.literal_eval(node.value)
+    raise AssertionError(f"{name} not found as a module-level string constant")
 
 
 def _gate_function_body() -> str:
@@ -163,6 +173,44 @@ def test_filler_patterns_cover_the_own_answer_followup_live_bug_phrase():
     assert m, "_FILLER_PATTERNS not found"
     body = m.group(1)
     assert "finalized and saved" in body
+
+
+# --- Immutable global document-grounding policy ---------------------------------------
+
+def test_global_grounding_policy_is_structured_complete_and_domain_neutral():
+    policy = _module_string_constant("RAG_DOCUMENT_GROUNDING_INSTRUCTIONS")
+    lower = policy.lower()
+
+    assert policy.count("<document_grounding_policy>") == 1
+    assert policy.count("</document_grounding_policy>") == 1
+    for required in (
+        "only retrieved evidence",
+        "directly entails",
+        "general rule",
+        "entity-specific fact",
+        "certainty/modality",
+        "conditions",
+        "exceptions",
+        "do not merge incompatible passages",
+        "claim completeness only when evidence establishes it",
+        "state what cannot be established",
+    ):
+        assert required in lower, f"missing grounding rule: {required}"
+
+    for prohibited_domain_word in ("tax", "salary", "sugar", "medical"):
+        assert prohibited_domain_word not in lower
+
+
+def test_global_grounding_policy_follows_teacher_customization():
+    body = re.search(
+        r"def _chat_build_system_message\(.*?\n(?=\ndef |\Z)",
+        RAG_SERVICE_SRC,
+        re.S,
+    ).group(0)
+    custom_branch = body.split("if custom_prompt:", 1)[1].split("else:", 1)[0]
+    assert custom_branch.index("Teacher additional instructions:") < custom_branch.index(
+        "RAG_DOCUMENT_GROUNDING_INSTRUCTIONS"
+    )
 
 
 if __name__ == "__main__":

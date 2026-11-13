@@ -1,0 +1,194 @@
+/* PDF Extraction Inspector — split viewer on admin console */
+
+.ad-main--wide .ad-main-inner { max-width: 1600px; }
+
+.pei-upload-card { margin-bottom: 16px; }
+
+.pei-dropzone {
+  display: block;
+  border: 1.5px dashed var(--ad-line);
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 28px 20px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.pei-dropzone:hover, .pei-dropzone.pei-dragover {
+  border-color: var(--ad-blue-500);
+  background: var(--ad-blue-50);
+}
+.pei-drop-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ad-ink);
+}
+.pei-drop-inner i { font-size: 28px; color: var(--ad-blue-700); }
+.pei-drop-inner strong { display: block; font-size: 15px; }
+.pei-drop-hint { display: block; margin-top: 4px; font-size: 13px; color: var(--ad-muted); font-weight: 500; }
+.pei-file-name {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--ad-line);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ad-blue-800);
+}
+.pei-upload-actions { margin-top: 16px; display: flex; gap: 10px; }
+
+.pei-loading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.pei-loading.hidden { display: none !important; }
+.pei-loading p { margin: 4px 0 0; color: var(--ad-muted); font-size: 14px; }
+.pei-spinner {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid var(--ad-blue-100); border-top-color: var(--ad-blue-700);
+  animation: pei-spin .8s linear infinite; flex-shrink: 0;
+}
+@keyframes pei-spin { to { transform: rotate(360deg); } }
+
+.pei-error {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--ad-red-bg);
+  color: #b91c1c;
+  font-weight: 600;
+  font-size: 14px;
+}
+.pei-error.hidden { display: none !important; }
+
+.pei-stats {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 14px;
+}
+.pei-stat-val {
+  font-size: 15px !important;
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.pei-warnings {
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--ad-amber-bg);
+  color: #92400e;
+  font-size: 14px;
+}
+.pei-warnings strong { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.pei-warnings ul { margin: 0; padding-left: 18px; }
+.pei-warnings li { margin: 4px 0; font-weight: 500; }
+
+.pei-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+  min-height: 70vh;
+}
+.pei-panel {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+  min-height: 0;
+  min-width: 0;
+}
+.pei-panel-head { margin-bottom: 10px; align-items: flex-start; }
+.pei-text-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.pei-page-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+}
+.pei-page-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ad-muted);
+}
+.pei-page-label select {
+  border: 1px solid var(--ad-line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+  color: var(--ad-ink);
+}
+#peiShowAll.active {
+  border-color: var(--ad-blue-500);
+  color: var(--ad-blue-700);
+  background: var(--ad-blue-50);
+}
+
+.pei-pdf-frame-wrap {
+  flex: 1;
+  min-height: 560px;
+  border: 1px solid var(--ad-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #e2e8f0;
+  position: relative;
+}
+.pei-pdf-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 560px;
+  border: 0;
+  background: #525659;
+}
+.pei-pdf-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 24px;
+  background: #f8fafc;
+  font-weight: 600;
+  color: var(--ad-muted);
+}
+.pei-pdf-fallback a { color: var(--ad-blue-700); }
+
+.pei-text-view {
+  flex: 1;
+  min-height: 560px;
+  max-height: calc(100vh - 220px);
+  margin: 0;
+  padding: 16px 18px;
+  overflow: auto;
+  border: 1px solid var(--ad-line);
+  border-radius: 12px;
+  background: #fbfdff;
+  color: var(--ad-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+@media (max-width: 1100px) {
+  .pei-split { grid-template-columns: 1fr; }
+  .pei-pdf-frame-wrap, .pei-text-view, .pei-pdf-frame { min-height: 420px; }
+}
