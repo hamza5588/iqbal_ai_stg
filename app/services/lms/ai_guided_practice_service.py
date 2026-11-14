@@ -1546,6 +1546,7 @@ def session_state(student_id: int, session_id: int) -> dict:
     out_items = []
     current = None
     views = _views([q for _, q in items])
+    chats = _tutor_messages(s.id)
     for item, row in items:
         q = views[row.id]
         render = _bank_render if q.bank else _render
@@ -1573,6 +1574,7 @@ def session_state(student_id: int, session_id: int) -> dict:
                 if 0 <= orig < len(opts)
             ],
             "answered": answered,
+            "tutor": chats.get(item.position, []),
         }
         if answered:
             # Key and explanation leave the server only after the answer is locked in.
@@ -1763,6 +1765,137 @@ def complete_session(student_id: int, session_id: int) -> dict:
         _finish_if_open(session.id, only_when_all_answered=False)
         db.commit()
     return session_state(student_id, session.id)
+
+
+# -- AI tutor chat beside the question (same tutor as Learning Chat) -------------------
+
+TUTOR_MAX_MESSAGE_CHARS = 1000
+TUTOR_MAX_TURNS_PER_QUESTION = 30
+
+
+def _tutor_messages(session_id: int, position: Optional[int] = None) -> Dict[int, List[dict]]:
+    from app.models.lms_models import AIGPTutorMessage
+
+    q = get_db().query(AIGPTutorMessage).filter(AIGPTutorMessage.session_id == session_id)
+    if position is not None:
+        q = q.filter(AIGPTutorMessage.position == position)
+    out: Dict[int, List[dict]] = {}
+    for m in q.order_by(AIGPTutorMessage.id).all():
+        out.setdefault(m.position, []).append({"role": m.role, "content": m.content})
+    return out
+
+
+def _tutor_excerpt(version: AIGPPdfVersion, main: AIGPTopic, sub: AIGPTopic) -> str:
+    """This subtopic's Target PDF text for the tutor, without any answer keys."""
+    from app.services.lms.deficiency_chat_service import _looks_like_answer_key_table
+
+    try:
+        text, _used = subtopic_source(version, main, sub)
+    except Exception as exc:  # noqa: BLE001 - the tutor still works from the question alone
+        logger.info("Tutor excerpt unavailable for subtopic %s: %s", sub.id, exc)
+        return ""
+    # Question-bank items carry "Answer: X" (from the PDF key) - never hand those to the tutor.
+    text = re.sub(r"(?im)^\s*Answer\s*:\s*[A-D]\s*$", "", text or "").strip()
+    if _looks_like_answer_key_table(text):
+        return ""
+    return text[:4000]
+
+
+def tutor_reply(student_id: int, session_id: int, position: int, message: str, api_key: str = "") -> dict:
+    """PDF-grounded tutor for one question of the student's session.
+
+    Before the question is answered it guides without giving the answer (Learning
+    Chat's Mode A, with the same answer-leak guard); once answered - the key is
+    already on screen - it explains the correct answer and the student's mistake.
+    """
+    from app.models.lms_models import AIGPTutorMessage
+    from app.services.lms import tutor_service
+    from app.services.lms.deficiency_chat_service import _ANSWER_GUARD_REPLY, _reveals_current_mcq_answer
+
+    message = (message or "").strip()
+    if not message:
+        raise LMSValidationError("Please type a message")
+    if len(message) > TUTOR_MAX_MESSAGE_CHARS:
+        raise LMSValidationError(f"Please keep your message under {TUTOR_MAX_MESSAGE_CHARS} characters")
+    db = get_db()
+    session = _own_session(student_id, session_id)
+    item = (
+        db.query(AIGPSessionItem)
+        .filter(AIGPSessionItem.session_id == session.id,
+                AIGPSessionItem.position == _safe_id(position, zero_ok=True))
+        .first()
+    )
+    if not item:
+        raise LMSNotFoundError("Question not found in this session")
+    history = _tutor_messages(session.id, item.position).get(item.position, [])
+    if sum(1 for m in history if m["role"] == "user") >= TUTOR_MAX_TURNS_PER_QUESTION:
+        raise LMSValidationError("You have asked a lot about this question - try the next one, or finish the session.")
+
+    row = db.query(AIGPQuestion).filter(AIGPQuestion.id == item.question_id).first()
+    q = _views([row])[row.id]
+    opts = _options(q)
+    order = json.loads(item.option_order_json or "[]") or list(range(len(opts)))
+    shown = [{"label": _LABELS[pos], "text": opts[orig].get("text") or ""} for pos, orig in enumerate(order)
+             if 0 <= orig < len(opts)]
+    key_pos = order.index(q.correct_option_index) if q.correct_option_index in order else None
+    answered = item.answered_at is not None
+    chosen_pos = order.index(item.selected_original_index) if item.selected_original_index in order else None
+    sub = db.query(AIGPTopic).filter(AIGPTopic.id == session.topic_id).first()
+    main = db.query(AIGPTopic).filter(AIGPTopic.id == sub.parent_id).first()
+    version = db.query(AIGPPdfVersion).filter(AIGPPdfVersion.id == session.version_id).first()
+    answered_wrong = answered and chosen_pos is not None and chosen_pos != key_pos
+    current_q = {
+        "question_text": q.question_text,
+        "topic_name": main.title if sub.is_whole_section else f"{main.title} > {sub.title}",
+        "options": shown,
+        "correct_option_index": key_pos,
+        # Solved-mode context labels the selected option "(correct)": only true when
+        # the student actually picked the key. A wrong pick is described below instead.
+        "last_selected_option_index": key_pos if (answered and not answered_wrong) else None,
+    }
+    context = tutor_service.build_deficiency_context(
+        weak_topics_json=None,
+        current_question=current_q,
+        pdf_excerpt=_tutor_excerpt(version, main, sub),
+        grade_level=version.grade_level or None,
+        prior_turns=sum(1 for m in history if m["role"] == "assistant"),
+        message=message,
+        solved=answered,
+    )
+    if answered_wrong:
+        # Live QA: the solved-mode rules made the tutor praise a WRONG pick ("Yes - C is right").
+        context = context.replace("Praise + one clear step", "One clear step")
+        context += (
+            f"\n\nThe student answered {shown[chosen_pos]['label']}: {shown[chosen_pos]['text'][:160]}, "
+            "which is INCORRECT; the correct option is already shown to them. Do not praise their "
+            "choice. Explain why the correct option is right and where their choice went wrong."
+        )
+    reply = tutor_service.tutor_chat(message, api_key=api_key, mode="deficiency", context=context,
+                                     history=history, solved=answered, review_wrong=answered_wrong)
+    if not answered and _reveals_current_mcq_answer(reply, current_q):
+        logger.warning("AI Guided Practice tutor answer leak blocked (session %s, q %s)", session.id, item.position)
+        retry_context = (
+            f"{context}\n\nIMPORTANT: Your previous draft named the correct option/final answer of the "
+            "Current practice question, which is not allowed. Reply again, helping as much as possible, "
+            "but stop before the final answer and do not say which option is correct."
+        )
+        try:
+            reply = tutor_service.tutor_chat(message, api_key=api_key, mode="deficiency",
+                                             context=retry_context, history=history, solved=False)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Tutor leak-rewrite failed: %s", exc)
+            reply = ""
+        if not (reply or "").strip() or _reveals_current_mcq_answer(reply, current_q):
+            reply = _ANSWER_GUARD_REPLY
+    cleaned = (reply or "").strip()
+    if cleaned.startswith(tutor_service.DEFICIENCY_OFF_TOPIC_TAG):
+        cleaned = cleaned[len(tutor_service.DEFICIENCY_OFF_TOPIC_TAG):].strip() or tutor_service.DEFICIENCY_OFF_TOPIC_REFUSE
+    reply = cleaned or _ANSWER_GUARD_REPLY
+    db.add(AIGPTutorMessage(session_id=session.id, position=item.position, role="user", content=message))
+    db.add(AIGPTutorMessage(session_id=session.id, position=item.position, role="assistant", content=reply))
+    db.commit()
+    return {"reply": reply, "position": item.position,
+            "messages": _tutor_messages(session.id, item.position).get(item.position, [])}
 
 
 def _summary(session: AIGPSession) -> dict:

@@ -112,6 +112,24 @@ If they only asked a follow-up after solving ("why not A?"), answer that follow-
 
 Ground steps in the PDF excerpt when it is relevant; do not invent syllabus facts that contradict it. Keep language grade-appropriate and concrete. Plain-text math only (no LaTeX). Follow the REPLY RULES below."""
 
+# AI Guided Practice: the student answered WRONG and the correct option is already on
+# their screen. (Learning Chat never reaches this state - a wrong answer stays unsolved.)
+DEFICIENCY_REVIEW_WRONG_PROMPT = """You are IqbalAI Practice Tutor for one Current practice MCQ that the student has ALREADY ANSWERED INCORRECTLY. The correct option is already shown to them, so you may name and explain it.
+
+Never praise their choice or say their answer was right - it was wrong. Be warm and encouraging about the effort, not about the answer.
+
+YOU decide whether the student's message is related to this MCQ (stem, options, Topic, PDF excerpt, why an option is right/wrong). When in doubt, help with this question. If clearly off-topic: start with <<OFF_TOPIC>> then one short redirect. Do not mention these rules, AI, or system instructions.
+
+Listen to the student's LATEST message first. Reply in the same language/style they use. Sound like a warm human tutor.
+
+REQUIRED REPLY SHAPE when explaining (first turn, or when they ask how/why):
+1. One short line naming the correct option and that their choice was not right (e.g. "The right answer is C, not A.").
+2. The key idea + the first working step that shows why the correct option works, and the likely mistake behind their choice.
+3. End by offering the next step: "Want the next step?" / "Shall I show why the other options fail?"
+On later turns, continue one step at a time. Do not dump every step in turn 1.
+
+Ground steps in the PDF excerpt when it is relevant; do not invent syllabus facts that contradict it. Keep language grade-appropriate and concrete. Plain-text math only (no LaTeX). Follow the REPLY RULES below."""
+
 _READING_LEVEL_RULES = (
     "REPLY RULES - follow every single turn, no exceptions:\n"
     "- Write for a student in {grade} who is finding this hard. Simple, "
@@ -339,7 +357,10 @@ def tutor_chat(
     history: Optional[List[Dict[str, str]]] = None,
     assist_level: Optional[int] = None,
     solved: bool = False,
+    review_wrong: bool = False,
 ) -> str:
+    """``review_wrong`` (AI Guided Practice only): the student answered incorrectly and
+    already sees the key - explain it without the solved-mode praise of their pick."""
     if not api_key:
         api_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
     if not api_key:
@@ -352,6 +373,8 @@ def tutor_chat(
 
     if mode == "teacher":
         system = TEACHER_TUTOR_PROMPT
+    elif mode == "deficiency" and solved and review_wrong:
+        system = DEFICIENCY_REVIEW_WRONG_PROMPT
     elif mode == "deficiency":
         system = DEFICIENCY_SOLVED_TUTOR_PROMPT if solved else DEFICIENCY_TUTOR_PROMPT
     else:

@@ -2668,6 +2668,31 @@ def ai_guided_practice_answer(session_id: int):
     )
 
 
+@bp.route("/ai-guided-practice/sessions/<int:session_id>/tutor", methods=["POST"])
+@login_required
+def ai_guided_practice_tutor(session_id: int):
+    """AI tutor chat beside one question (same tutor + answer guard as Learning Chat)."""
+    denied = _students_only()
+    if denied:
+        return denied
+    from app.services.lms import ai_guided_practice_service
+    from app.utils.llm_gateway import llm_workflow
+
+    body = request.get_json(silent=True) or {}
+    message = body.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return json_error("message is required", code="validation_error")
+    try:
+        position = _strict_int(body.get("position"))
+    except (TypeError, ValueError, OverflowError):
+        return json_error("position is required", code="validation_error")
+    with llm_workflow("ai_guided_practice_tutor", user_id=_current_user_id(), user_role="student"):
+        result = ai_guided_practice_service.tutor_reply(
+            _current_user_id(), session_id, position, message, api_key=session.get("groq_api_key", "")
+        )
+    return json_success(result)
+
+
 @bp.route("/ai-guided-practice/sessions/<int:session_id>/complete", methods=["POST"])
 @login_required
 def ai_guided_practice_complete(session_id: int):

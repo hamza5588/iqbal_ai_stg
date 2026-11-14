@@ -320,7 +320,7 @@
     var unanswered = d.items.filter(function (it) { return !it.answered; }).length;
     var isLast = sess.position >= d.items.length - 1;
     body.innerHTML =
-      '<div class="sd-split-left" style="border:0;">' +
+      '<div class="sd-split-body"><div class="sd-split-left">' +
       '<div class="sd-track"><div class="sd-fill" style="width:' + progress + '%"></div></div>' +
       '<p class="sd-desc">Question ' + (sess.position + 1) + ' of ' + total +
       ' &nbsp;•&nbsp; <b style="color:var(--sd-blue-700);">' + esc(d.main_topic_title || '') + '</b>' +
@@ -337,13 +337,123 @@
       '<div class="sd-q-nav-end">' +
       (!isLast ? '<button type="button" class="sd-btn sd-btn-primary" onclick="sdAigpGo(' + (sess.position + 1) + ')">Next <i class="fas fa-chevron-right"></i></button>' : '') +
       (unanswered === 0 || isLast ? '<button type="button" class="sd-btn ' + (unanswered ? 'sd-btn-outline' : 'sd-btn-primary') + '" onclick="sdAigpFinish()">Finish session</button>' : '') +
-      '</div></div></div>';
+      '</div></div></div>' +
+      '<div class="sd-split-right">' + tutorPanelHtml(item) + '</div></div>';
     typeset(body);
+    bindTutor(item);
     if (dwell) {
       if (item.answered) dwell.stop();
       else dwell.switchTo('aigp-' + d.session_id + '-' + item.position);
     }
   }
+
+  /* ── AI tutor chat beside the question (same look + tutor as Learning Chat) ── */
+  var TUTOR_PROMPTS = [
+    ['Simpler words', 'Explain this in simpler words'],
+    ['Break into steps', 'Break it into small steps'],
+    ['Give a hint', 'Give me a hint'],
+    ['Show example', 'Show me a similar example for this question'],
+    ["I don't understand", "I still don't understand"]
+  ];
+  var TUTOR_ANSWERED_PROMPTS = [
+    ['Explain the answer', 'Explain why the correct answer is right'],
+    ['Where did I go wrong?', 'Where did my answer go wrong?'],
+    ['Why not others?', 'Why are the other options wrong?'],
+    ['Key rule', 'What key rule from the PDF is used here?']
+  ];
+  sess.tutorLoading = {};
+  sess.drafts = {};
+
+  function botHtml(text) {
+    if (typeof window.lmsFormatRichText === 'function') return window.lmsFormatRichText(text || '', {});
+    return esc(text).replace(/\n/g, '<br>');
+  }
+
+  function tutorPanelHtml(item) {
+    var msgs = item.tutor || [];
+    var loading = !!sess.tutorLoading[item.position];
+    var greeting = item.answered
+      ? 'Ask me why the correct answer is right, or where your answer went wrong.'
+      : "Tell me what you think about this question. I'll respond to your idea and help you work it out - without giving away the answer.";
+    var html = msgs.length ? msgs.map(function (m) {
+      var user = m.role === 'user';
+      return '<div class="sd-ai-bubble' + (user ? ' user' : '') + '"><div class="sd-bot-ic">' + (user ? 'You' : 'AI') + '</div>' +
+        '<div class="sd-msg">' + (user ? esc(m.content) : botHtml(m.content)) +
+        (m.failed ? '<div class="sd-msg-tools"><button type="button" onclick="sdAigpTutorRetry(' + item.position + ')">Try again</button></div>' : '') +
+        '</div></div>';
+    }).join('') : '<div class="sd-ai-bubble"><div class="sd-bot-ic">AI</div><div class="sd-msg">' + esc(greeting) + '</div></div>';
+    if (loading) {
+      html += '<div class="sd-ai-bubble"><div class="sd-bot-ic">AI</div><div class="sd-msg"><span class="sd-typing"><span></span><span></span><span></span></span>' +
+        '<span class="sd-hint-line" style="margin-left:8px;">Thinking...</span></div></div>';
+    }
+    var prompts = (item.answered ? TUTOR_ANSWERED_PROMPTS : TUTOR_PROMPTS).map(function (p) {
+      return '<button type="button" class="sd-chip"' + (loading ? ' disabled' : '') + ' data-prompt="' + esc(p[1]) + '">' + esc(p[0]) + '</button>';
+    }).join('');
+    var dis = loading ? ' disabled' : '';
+    return '<div class="sd-chat-scroll" id="sdAigpTutorMessages">' + html + '</div>' +
+      '<div class="sd-chip-row" id="sdAigpTutorPrompts">' + prompts + '</div>' +
+      '<div class="sd-chat-inputbar"><div class="sd-chat-field">' +
+      '<textarea id="sdAigpTutorInput" rows="1" maxlength="1000" placeholder="' +
+      (item.answered ? 'Ask about this question...' : "I'm stuck on this step... (Enter to send)") + '"' + dis + '>' +
+      esc(sess.drafts[item.position] || '') + '</textarea>' +
+      '<button type="button" class="sd-field-ic bulb" title="Need more help" aria-label="Need more help" data-prompt="I still need help with this question."' + dis + '><i class="far fa-lightbulb"></i></button>' +
+      '</div><button type="button" class="sd-send-btn" id="sdAigpTutorSend"' + dis + '>Send</button></div>' +
+      '<p class="sd-hint-line">Press Enter to send · Shift+Enter for new line</p>';
+  }
+
+  function bindTutor(item) {
+    var box = document.getElementById('sdAigpTutorMessages');
+    if (box) { box.scrollTop = box.scrollHeight; typeset(box); }
+    var input = document.getElementById('sdAigpTutorInput');
+    if (input) {
+      input.addEventListener('input', function () { sess.drafts[item.position] = input.value; });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sdAigpTutorSend(); }
+      });
+    }
+    var send = document.getElementById('sdAigpTutorSend');
+    if (send) send.addEventListener('click', function () { window.sdAigpTutorSend(); });
+    document.querySelectorAll('#view-ai-guided-session [data-prompt]').forEach(function (b) {
+      b.addEventListener('click', function () { window.sdAigpTutorSend(b.getAttribute('data-prompt')); });
+    });
+  }
+
+  window.sdAigpTutorSend = async function (text) {
+    var d = sess.data;
+    var item = currentItem();
+    if (!d || !item || sess.tutorLoading[item.position]) return;
+    var input = document.getElementById('sdAigpTutorInput');
+    var msg = (text != null ? String(text) : (input ? input.value : '')).trim();
+    if (!msg) return;
+    var pos = item.position;
+    item.tutor = (item.tutor || []).filter(function (m) { return !m.failed; });
+    item.tutor.push({ role: 'user', content: msg });
+    sess.drafts[pos] = '';
+    sess.tutorLoading[pos] = true;
+    sess.lastTutorMsg = msg;
+    renderSession();
+    try {
+      var r = await lmsApi('/api/lms/ai-guided-practice/sessions/' + d.session_id + '/tutor', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: pos, message: msg })
+      });
+      item.tutor = r.messages || item.tutor.concat([{ role: 'assistant', content: r.reply }]);
+    } catch (err) {
+      item.tutor.push({ role: 'assistant', content: err.message || 'Something went wrong. Please try again.', failed: true });
+    } finally {
+      sess.tutorLoading[pos] = false;
+      if (sess.data === d && currentItem() && currentItem().position === pos) renderSession();
+    }
+  };
+
+  window.sdAigpTutorRetry = function (pos) {
+    var item = currentItem();
+    if (!item || item.position !== pos) return;
+    item.tutor = (item.tutor || []).filter(function (m) { return !m.failed; });
+    var last = null;
+    if (item.tutor.length && item.tutor[item.tutor.length - 1].role === 'user') last = item.tutor.pop().content;
+    window.sdAigpTutorSend(last || sess.lastTutorMsg);
+  };
 
   function renderCompletion() {
     var d = sess.data;

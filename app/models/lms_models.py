@@ -1271,6 +1271,24 @@ class AIGPSession(Base):
     )
 
 
+class AIGPTutorMessage(Base):
+    """One AI-tutor chat turn about one question of an AI Guided Practice session."""
+
+    __tablename__ = "lms_aigp_tutor_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("lms_aigp_sessions.id", ondelete="CASCADE"), nullable=False)
+    position = Column(Integer, nullable=False)
+    role = Column(String(16), nullable=False)  # user | assistant
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("role IN ('user','assistant')", name="check_aigp_tutor_role"),
+        Index("ix_aigp_tutor_session_position", "session_id", "position"),
+    )
+
+
 class AIGPSessionItem(Base):
     """One question inside a session, with its shuffled option order and the answer."""
 
