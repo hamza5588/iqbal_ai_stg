@@ -297,6 +297,12 @@ def init_db(app):
                 migrate_four_parameter(engine)
             except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
                 logger.warning("four-parameter matching migration warning: %s", e)
+            try:
+                from app.migrations.ai_guided_practice import run_migration as migrate_ai_guided_practice
+
+                migrate_ai_guided_practice(engine)
+            except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
+                logger.warning("AI guided practice migration warning: %s", e)
             from app.services.tutor_usage_service import initialize_tracking
             initialize_tracking(engine)
             

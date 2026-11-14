@@ -1227,6 +1227,10 @@ class AIGPQuestion(Base):
     key_verified = Column(String(16), nullable=True)  # math | llm
     preserve_option_order = Column(Boolean, nullable=False, default=False, server_default="0")
     status = Column(String(16), nullable=False, default="valid", server_default="valid")
+    # Set when this is an admin-approved Target-bank question printed in the PDF: its
+    # text, options and key are then always read live from that ``questions`` row, so
+    # admin edits/formatting apply as-is and a rejected item leaves the pool.
+    bank_question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
 
     __table_args__ = (

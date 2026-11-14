@@ -219,7 +219,7 @@
     var body = sessionBody();
     if (body) {
       body.innerHTML = '<div class="sd-split-left" style="border:0;"><div class="sd-spinner"></div>' +
-        '<p class="sd-desc" style="text-align:center;">Preparing your questions from the Target PDF... this can take a little while the first time.</p></div>';
+        '<p class="sd-desc" style="text-align:center;">Getting your practice questions ready... Please wait a moment.</p></div>';
     }
     // One key per click: a retried/double request returns the same session instead of a second one.
     var key = newKey();
@@ -284,7 +284,7 @@
     return '<button type="button" class="' + cls + '" data-position="' + o.position + '"' + attrs + '>' +
       '<span class="sd-radio"></span>' +
       '<span class="sd-opt-label lms-quiz-option-label">' + esc(o.label) + '.</span>' +
-      '<span class="sd-opt-body lms-quiz-option-body">' + rich(o.render || o.text, true) + '</span>' +
+      '<span class="sd-opt-body lms-quiz-option-body">' + (item.render_html ? (o.render || esc(o.text)) : rich(o.render || o.text, true)) + '</span>' +
       (tag ? '<span class="sd-pill ' + (o.position === item.correct_position ? 'green' : 'red') +
         ' round" style="margin-left:auto;white-space:nowrap;">' + esc(tag) + '</span>' : '') +
       '</button>';
@@ -328,7 +328,7 @@
       ' &nbsp;•&nbsp; ' + (d.correct_count || 0) + ' correct</p>' +
       '<p class="sd-desc" style="font-size:12.5px;">Questions generated only from your teacher\'s Target PDF' + (d.pdf_filename ? ' (' + esc(d.pdf_filename) + ')' : '') + '.</p>' +
       '<div class="sd-q-box">' +
-      '<div class="sd-q-text lms-quiz-stem">' + rich(item.question_render || item.question_text, false) + '</div>' +
+      '<div class="sd-q-text lms-quiz-stem">' + (item.render_html ? (item.question_render || esc(item.question_text)) : rich(item.question_render || item.question_text, false)) + '</div>' +
       item.options.map(function (o) { return optionHtml(item, o); }).join('') +
       '<div id="sdAigpFeedback">' + feedbackHtml(item) + '</div></div>' +
       '<div class="sd-chip-row" style="margin-top:14px;flex-wrap:wrap;gap:6px;display:flex;">' + nav + '</div>' +

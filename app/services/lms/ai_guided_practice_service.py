@@ -33,6 +33,7 @@ import random
 import re
 import time
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import func, or_
@@ -135,6 +136,115 @@ def _options(q: AIGPQuestion) -> List[dict]:
     except (TypeError, ValueError):
         data = []
     return [o for o in data if isinstance(o, dict)]
+
+
+# -- admin-approved Target-bank questions (question-bank PDFs) ------------------
+
+
+def _views(questions: Sequence[AIGPQuestion]) -> Dict[int, SimpleNamespace]:
+    """Read-only view of pool questions; bank-backed ones read the admin's live row.
+
+    The Target-bank ``questions`` row is what the admin reviewed and finalised
+    (text, options, key, formatting). Reading it live keeps every later admin edit
+    in effect; the ORM pool rows are never mutated here.
+    """
+    from app.models.lms_models import Question
+    from app.services.lms.mcq_utils import options_from_json
+
+    bank_ids = [q.bank_question_id for q in questions if q.bank_question_id]
+    rows = {}
+    if bank_ids:
+        rows = {r.id: r for r in get_db().query(Question).filter(Question.id.in_(bank_ids)).all()}
+    out = {}
+    for q in questions:
+        row = rows.get(q.bank_question_id) if q.bank_question_id else None
+        if row is not None:
+            out[q.id] = SimpleNamespace(
+                id=q.id, bank=True, question_text=row.question_text, question_latex=None,
+                options_json=json.dumps(options_from_json(row.options_json), ensure_ascii=False),
+                correct_option_index=row.correct_option_index, explanation=q.explanation,
+                source_page=q.source_page, preserve_option_order=q.preserve_option_order, difficulty=q.difficulty,
+            )
+        else:
+            out[q.id] = SimpleNamespace(
+                id=q.id, bank=False, question_text=q.question_text, question_latex=q.question_latex,
+                options_json=q.options_json, correct_option_index=q.correct_option_index,
+                explanation=q.explanation, source_page=q.source_page,
+                preserve_option_order=q.preserve_option_order, difficulty=q.difficulty,
+            )
+    return out
+
+
+def _bank_document(version: AIGPPdfVersion):
+    """The Target-bank document extracted from this same Target PDF upload."""
+    from app.models.lms_models import TargetBankDocument
+
+    db = get_db()
+    q = db.query(TargetBankDocument).filter(TargetBankDocument.original_filename == version.original_filename)
+    exact = q.filter(TargetBankDocument.assessment_id == version.assessment_id).order_by(
+        TargetBankDocument.id.desc()).first()
+    if exact or not version.grade_level:
+        return exact
+    return q.filter(TargetBankDocument.grade_level == version.grade_level).order_by(TargetBankDocument.id.desc()).first()
+
+
+def seed_bank_questions(version: AIGPPdfVersion, main: AIGPTopic, sub: AIGPTopic) -> int:
+    """Add this subtopic's admin-APPROVED printed questions to its pool (no LLM).
+
+    Only for question-bank PDFs (subtopics from Domain/Topic labels): the printed
+    item numbers under this label are matched to approved Target-bank items.
+    """
+    if sub.title_source != "labelled":
+        return 0
+    from app.models.lms_models import Question, TargetBankItem
+
+    doc = _bank_document(version)
+    if doc is None:
+        return 0
+    items = topics_mod.labelled_items(topics_mod.page_texts(_thread_chunks(version)), main.title, sub.title)
+    numbers = {it["number"] for it in items}
+    if not numbers:
+        return 0
+    db = get_db()
+    rows = (
+        db.query(TargetBankItem, Question)
+        .join(Question, Question.id == TargetBankItem.question_id)
+        .filter(
+            TargetBankItem.document_id == doc.id,
+            TargetBankItem.verification_status == "approved",
+            TargetBankItem.source_question_number.in_(list(numbers)),
+            Question.is_active.is_(True),
+        )
+        .all()
+    )
+    have = {b for (b,) in db.query(AIGPQuestion.bank_question_id).filter(
+        AIGPQuestion.topic_id == sub.id, AIGPQuestion.bank_question_id.isnot(None)).all()}
+    added = 0
+    for item, question in rows:
+        if question.id in have:
+            continue
+        db.add(
+            AIGPQuestion(
+                version_id=version.id,
+                topic_id=sub.id,
+                question_text=question.question_text,
+                options_json=question.options_json,
+                correct_option_index=question.correct_option_index,
+                explanation=f"This is question {item.source_question_number} of the Target PDF.",
+                difficulty=question.difficulty if question.difficulty in _DIFFICULTIES else "medium",
+                source_page=item.source_page,
+                dedupe_key=f"bank:{question.id}",
+                key_verified="admin",
+                bank_question_id=question.id,
+            )
+        )
+        try:
+            db.flush()
+            added += 1
+        except IntegrityError:  # seeded concurrently
+            db.rollback()
+    db.commit()
+    return added
 
 
 def _has_positional_option(options: List[dict]) -> bool:
@@ -910,13 +1020,31 @@ def _wait_for_lock_release(topic_id: int) -> None:
 
 
 def _valid_pool(topic_id: int) -> List[AIGPQuestion]:
-    return (
-        get_db()
-        .query(AIGPQuestion)
+    """Servable questions: generated ones, plus bank items the admin still approves."""
+    from app.models.lms_models import Question, TargetBankItem
+
+    db = get_db()
+    rows = (
+        db.query(AIGPQuestion)
         .filter(AIGPQuestion.topic_id == topic_id, AIGPQuestion.status == "valid")
         .order_by(AIGPQuestion.id)
         .all()
     )
+    bank_ids = [q.bank_question_id for q in rows if q.bank_question_id]
+    if not bank_ids:
+        return rows
+    approved = {
+        qid
+        for (qid,) in db.query(TargetBankItem.question_id)
+        .join(Question, Question.id == TargetBankItem.question_id)
+        .filter(
+            TargetBankItem.question_id.in_(bank_ids),
+            TargetBankItem.verification_status == "approved",
+            Question.is_active.is_(True),
+        )
+        .all()
+    }
+    return [q for q in rows if not q.bank_question_id or q.bank_question_id in approved]
 
 
 def _clean_quotes(text: Optional[str]) -> Optional[str]:
@@ -1223,6 +1351,11 @@ def start_session(student_id: int, subtopic_id: int, request_key: Optional[str] 
 
     n = session_size()
     history = _student_history(student_id, sub.id)
+    try:  # question-bank PDF: the admin-approved printed questions come first (no LLM)
+        seed_bank_questions(version, main, sub)
+    except Exception as exc:  # noqa: BLE001 - generation still works without the bank
+        logger.warning("Target-bank seeding failed for subtopic %s: %s", sub.id, exc)
+        db.rollback()
     pool = _valid_pool(sub.id)
     unseen = sum(1 for q in pool if q.id not in history)
     gen_error = None
@@ -1245,10 +1378,19 @@ def start_session(student_id: int, subtopic_id: int, request_key: Optional[str] 
             )
         return {"session": None, "reason": reason, "message": message}
 
-    picked, reused = select_questions(
-        [(q.id, q.difficulty) for q in pool], history, n, _last_sequence(student_id, sub.id)
-    )
+    # Unseen printed (admin-approved) questions first, then everything else as before.
+    fresh_bank = [(q.id, q.difficulty) for q in pool if q.bank_question_id and q.id not in history]
+    picked, _ = select_questions(fresh_bank, {}, n)
+    reused = 0
+    if len(picked) < n:
+        rest, reused = select_questions(
+            [(q.id, q.difficulty) for q in pool if q.id not in set(picked)], history, n - len(picked),
+            _last_sequence(student_id, sub.id),
+        )
+        picked = picked + rest
+        random.shuffle(picked)
     by_id = {q.id: q for q in pool}
+    views = _views(pool)
     session = AIGPSession(
         student_id=student_id,
         version_id=version.id,
@@ -1267,7 +1409,7 @@ def start_session(student_id: int, subtopic_id: int, request_key: Optional[str] 
                     session_id=session.id,
                     question_id=qid,
                     position=pos,
-                    option_order_json=json.dumps(option_order(by_id[qid])),
+                    option_order_json=json.dumps(option_order(views[qid])),
                     seen_before=qid in history,
                 )
             )
@@ -1320,7 +1462,64 @@ def start_session(student_id: int, subtopic_id: int, request_key: Optional[str] 
     return state
 
 
+_MATH_DELIMS_RE = re.compile(r"(\$\$.+?\$\$|\$[^$]+\$|\\\(.+?\\\)|\\\[.+?\\\])", re.S)
+_MATH_TOKEN_RE = re.compile(
+    r"^[\(\[]*(?:"
+    r"[A-Za-z]|\d+(?:\.\d+)?[A-Za-z]{0,2}|"  # a, 1, 2.5, 3x
+    r"[=+\-−×÷<>≤≥≠±*/·]|"  # operators
+    # \times, \frac{1}{2}, \sqrt[3]{x}, \frac{\sqrt{15}}{3} (one level of nested braces)
+    r"\\[A-Za-z]+(?:\{(?:[^\s{}]|\{[^\s{}]*\})*\}|\[[^\s\]]*\])*|"
+    r"[A-Za-z\d()]*[\^_](?:\{(?:[^\s{}]|\{[^\s{}]*\})*\}|[A-Za-z\d])[A-Za-z\d()^_{}]*"  # x^{2}, a_1
+    r")[\)\]]*$"
+)
+
+
+def delimit_bare_latex(text: Optional[str]) -> Optional[str]:
+    """Wrap math runs that contain a bare LaTeX command in \\( \\) for MathJax.
+
+    Generated text mixes prose and undelimited LaTeX ("For any real number a,
+    a \\times 1 = a"). The browser formatter only wrapped the trailing "1 = a",
+    leaving a raw "\\times" on screen. Here the whole run of math tokens around a
+    command is delimited; text already inside $ / \\( \\) / \\[ \\] is untouched.
+    """
+    if not text or "\\" not in text:
+        return text
+    parts = _MATH_DELIMS_RE.split(text)
+    out = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1 or "\\" not in part:  # odd parts are already-delimited math
+            out.append(part)
+            continue
+        tokens = re.split(r"(\s+)", part)
+        words = [(j, t) for j, t in enumerate(tokens) if t and not t.isspace()]
+        k = 0
+        while k < len(words):
+            j0, tok = words[k]
+            core = tok.rstrip(".,;:?!")
+            if not _MATH_TOKEN_RE.match(core):
+                k += 1
+                continue
+            run = [k]
+            m = k + 1
+            # Extend while tokens stay math-like; stop after a token ending in punctuation.
+            while (m < len(words) and words[m - 1][1] == words[m - 1][1].rstrip(".,;:?!")
+                   and _MATH_TOKEN_RE.match(words[m][1].rstrip(".,;:?!"))):
+                run.append(m)
+                m += 1
+            texts = [words[r][1] for r in run]
+            if any("\\" in t for t in texts) and (len(run) > 1 or texts[0].rstrip(".,;:?!").startswith("\\")):
+                last = texts[-1]
+                trail = last[len(last.rstrip(".,;:?!")):]
+                first_idx, last_idx = words[run[0]][0], words[run[-1]][0]
+                tokens[first_idx] = "\\(" + tokens[first_idx]
+                tokens[last_idx] = tokens[last_idx][: len(tokens[last_idx]) - len(trail)] + "\\)" + trail
+            k = m
+        out.append("".join(tokens))
+    return "".join(out)
+
+
 def _render(text: Optional[str], latex: Optional[str], inline: bool) -> str:
+    text = delimit_bare_latex(text)
     try:
         from app.services.quiz.display_format_qa import student_render
 
@@ -1346,7 +1545,10 @@ def session_state(student_id: int, session_id: int) -> dict:
     )
     out_items = []
     current = None
-    for item, q in items:
+    views = _views([q for _, q in items])
+    for item, row in items:
+        q = views[row.id]
+        render = _bank_render if q.bank else _render
         opts = _options(q)
         order = json.loads(item.option_order_json or "[]") or list(range(len(opts)))
         answered = item.answered_at is not None
@@ -1355,14 +1557,17 @@ def session_state(student_id: int, session_id: int) -> dict:
         entry = {
             "position": item.position,
             "question_text": q.question_text,
-            "question_render": _render(q.question_text, q.question_latex, inline=False),
+            "question_render": render(q.question_text, q.question_latex, inline=False),
             "difficulty": q.difficulty,
+            # bank_render output is already-escaped HTML (admin-finalised formatting);
+            # generated text is MathJax-ready plain text that the client escapes.
+            "render_html": bool(q.bank),
             "options": [
                 {
                     "position": pos,
                     "label": _LABELS[pos],
                     "text": opts[orig].get("text"),
-                    "render": _render(opts[orig].get("text"), opts[orig].get("latex"), inline=True),
+                    "render": render(opts[orig].get("text"), opts[orig].get("latex"), inline=True),
                 }
                 for pos, orig in enumerate(order)
                 if 0 <= orig < len(opts)
@@ -1395,7 +1600,15 @@ def session_state(student_id: int, session_id: int) -> dict:
     }
 
 
-def _answer_feedback(item: AIGPSessionItem, q: AIGPQuestion, order: List[int]) -> dict:
+def _bank_render(text: Optional[str], latex: Optional[str] = None, inline: bool = True) -> str:
+    """Admin-approved Target-bank text: the same renderer the admin review and the
+    legacy Guided Practice use, so students see exactly the finalised formatting."""
+    from app.services.lms.target_bank_service import bank_render
+
+    return bank_render(text or "")
+
+
+def _answer_feedback(item: AIGPSessionItem, q, order: List[int]) -> dict:
     correct_position = order.index(q.correct_option_index) if q.correct_option_index in order else None
     selected_position = (
         order.index(item.selected_original_index) if item.selected_original_index in order else None
@@ -1478,6 +1691,7 @@ def submit_answer(
     if not item:
         raise LMSNotFoundError("Question not found in this session")
     q = db.query(AIGPQuestion).filter(AIGPQuestion.id == item.question_id).first()
+    q = _views([q])[q.id]  # bank items grade against the admin's current key
     order = json.loads(item.option_order_json or "[]") or list(range(len(_options(q))))
     if not 0 <= int(option_position) < len(order):
         raise LMSValidationError("That option does not exist for this question")
