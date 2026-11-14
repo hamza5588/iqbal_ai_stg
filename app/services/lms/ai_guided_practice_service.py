@@ -230,7 +230,7 @@ def seed_bank_questions(version: AIGPPdfVersion, main: AIGPTopic, sub: AIGPTopic
                 question_text=question.question_text,
                 options_json=question.options_json,
                 correct_option_index=question.correct_option_index,
-                explanation=f"This is question {item.source_question_number} of the Target PDF.",
+                explanation=None,
                 difficulty=question.difficulty if question.difficulty in _DIFFICULTIES else "medium",
                 source_page=item.source_page,
                 dedupe_key=f"bank:{question.id}",
@@ -1553,7 +1553,8 @@ def session_state(student_id: int, session_id: int) -> dict:
         opts = _options(q)
         order = json.loads(item.option_order_json or "[]") or list(range(len(opts)))
         answered = item.answered_at is not None
-        if not answered and current is None:
+        solved = item.solved_at is not None
+        if not solved and current is None:
             current = item.position
         entry = {
             "position": item.position,
@@ -1574,10 +1575,14 @@ def session_state(student_id: int, session_id: int) -> dict:
                 if 0 <= orig < len(opts)
             ],
             "answered": answered,
+            "solved": solved,
+            "first_try_correct": bool(item.is_correct) if answered else None,
+            "wrong_positions": _wrong_positions(item, order),
             "tutor": chats.get(item.position, []),
         }
-        if answered:
-            # Key and explanation leave the server only after the answer is locked in.
+        if solved:
+            # Like Learning Chat: the key/explanation only leave the server once the
+            # student has found the correct option themselves.
             entry.update(_answer_feedback(item, q, order))
         out_items.append(entry)
     return {
@@ -1595,6 +1600,7 @@ def session_state(student_id: int, session_id: int) -> dict:
         "incorrect_count": int(s.answered_count or 0) - int(s.correct_count or 0),
         "score_percent": s.score_percent,
         "reused_count": s.reused_count,
+        "solved_count": sum(1 for it in out_items if it["solved"]),
         "current_position": current,
         "created_at": _iso(s.created_at),
         "completed_at": _iso(s.completed_at),
@@ -1610,18 +1616,36 @@ def _bank_render(text: Optional[str], latex: Optional[str] = None, inline: bool 
     return bank_render(text or "")
 
 
+def _wrong_positions(item: AIGPSessionItem, order: List[int]) -> List[int]:
+    try:
+        wrong = json.loads(item.wrong_options_json or "[]")
+    except (TypeError, ValueError):
+        wrong = []
+    return [order.index(o) for o in wrong if o in order]
+
+
+def _shown_explanation(q) -> Optional[str]:
+    """Explanation text for students; internal source notes are never shown."""
+    text = _clean_quotes(q.explanation)
+    # Internal source notes (question number / quoted PDF fragment) are not
+    # explanations; like Learning Chat, the AI helper explains the solution instead.
+    if not text or text.startswith(("This is question ", "Related question in the Target PDF", "From the Target PDF")):
+        return None
+    return text
+
+
 def _answer_feedback(item: AIGPSessionItem, q, order: List[int]) -> dict:
+    """Shown only once the question is solved (the student picked the key)."""
     correct_position = order.index(q.correct_option_index) if q.correct_option_index in order else None
-    selected_position = (
-        order.index(item.selected_original_index) if item.selected_original_index in order else None
-    )
+    explanation = _shown_explanation(q)
     return {
-        "correct": bool(item.is_correct),
-        "selected_position": selected_position,
+        "correct": True,
+        "solved": True,
+        "selected_position": correct_position,
         "correct_position": correct_position,
         "correct_label": _LABELS[correct_position] if correct_position is not None else None,
-        "explanation": _clean_quotes(q.explanation),
-        "explanation_render": _render(_clean_quotes(q.explanation), None, inline=False) if q.explanation else None,
+        "explanation": explanation,
+        "explanation_render": _render(explanation, None, inline=False) if explanation else None,
         "source_page": q.source_page,
     }
 
@@ -1669,7 +1693,14 @@ def _finish_if_open(session_id: int, *, only_when_all_answered: bool) -> None:
     db = get_db()
     q = db.query(AIGPSession).filter(AIGPSession.id == session_id, AIGPSession.status == "in_progress")
     if only_when_all_answered:
-        q = q.filter(AIGPSession.answered_count >= AIGPSession.question_count)
+        solved = (
+            db.query(func.count(AIGPSessionItem.id))
+            .filter(AIGPSessionItem.session_id == session_id, AIGPSessionItem.solved_at.isnot(None))
+            .scalar()
+        )
+        total = db.query(AIGPSession.question_count).filter(AIGPSession.id == session_id).scalar() or 0
+        if solved < total:
+            return
     q.update({AIGPSession.status: "completed", AIGPSession.completed_at: _now()}, synchronize_session=False)
     s = db.query(AIGPSession).filter(AIGPSession.id == session_id).populate_existing().one()
     if s.status == "completed":
@@ -1680,6 +1711,9 @@ def _finish_if_open(session_id: int, *, only_when_all_answered: bool) -> None:
 def submit_answer(
     student_id: int, session_id: int, position: int, option_position: int, time_spent_seconds=None
 ) -> dict:
+    """Learning-Chat style: a wrong pick keeps the student on the question (the key is
+    not revealed); they retry until they choose the correct option. The FIRST pick
+    scores the session."""
     db = get_db()
     session = _lock_session(student_id, session_id)
     item = (
@@ -1698,12 +1732,20 @@ def submit_answer(
     if not 0 <= int(option_position) < len(order):
         raise LMSValidationError("That option does not exist for this question")
     original = order[int(option_position)]
-    if item.answered_at is not None:
-        if item.selected_original_index == original:  # idempotent retry
+    is_right = original == q.correct_option_index
+    try:
+        wrong = json.loads(item.wrong_options_json or "[]")
+    except (TypeError, ValueError):
+        wrong = []
+    if item.solved_at is not None:
+        if is_right:  # idempotent retry of the solving click
             return {**_answer_feedback(item, q, order), "session": _summary(session)}
-        raise LMSValidationError("This question was already answered")
+        raise LMSValidationError("This question is already solved")
     if session.status != "in_progress":
         raise LMSValidationError("This practice session is already finished")
+    if not is_right and original in wrong:  # same wrong option clicked again
+        return {"correct": False, "solved": False, "wrong_positions": _wrong_positions(item, order),
+                "session": _summary(session)}
     seconds = None
     if time_spent_seconds is not None:
         try:
@@ -1711,6 +1753,20 @@ def submit_answer(
         except (TypeError, ValueError, OverflowError):
             seconds = None
     now = _now()
+    values = {AIGPSessionItem.attempt_count: int(item.attempt_count or 0) + 1}
+    if item.answered_at is None:  # first pick scores the session
+        values.update({
+            AIGPSessionItem.selected_original_index: original,
+            AIGPSessionItem.is_correct: is_right,
+            AIGPSessionItem.answered_at: now,
+            AIGPSessionItem.time_spent_seconds: seconds,
+        })
+    elif seconds is not None:
+        values[AIGPSessionItem.time_spent_seconds] = max(int(item.time_spent_seconds or 0), seconds)
+    if is_right:
+        values[AIGPSessionItem.solved_at] = now
+    else:
+        values[AIGPSessionItem.wrong_options_json] = json.dumps(wrong + [original])
     open_session = (
         db.query(AIGPSession.id)
         .filter(AIGPSession.id == session.id, AIGPSession.status == "in_progress")
@@ -1720,29 +1776,25 @@ def submit_answer(
         db.query(AIGPSessionItem)
         .filter(
             AIGPSessionItem.id == item.id,
-            AIGPSessionItem.answered_at.is_(None),
+            AIGPSessionItem.solved_at.is_(None),
+            AIGPSessionItem.attempt_count == int(item.attempt_count or 0),  # no lost concurrent pick
             # Never record an answer into a session a concurrent Finish already closed.
             AIGPSessionItem.session_id == open_session,
         )
-        .update(
-            {
-                AIGPSessionItem.selected_original_index: original,
-                AIGPSessionItem.is_correct: original == q.correct_option_index,
-                AIGPSessionItem.answered_at: now,
-                AIGPSessionItem.time_spent_seconds: seconds,
-            },
-            synchronize_session=False,
-        )
+        .update(values, synchronize_session=False)
     )
-    if not updated:  # a concurrent submit or finish won
+    if not updated:  # a concurrent pick or finish won: report the current truth
         db.rollback()
         item = db.query(AIGPSessionItem).filter(AIGPSessionItem.id == item.id).populate_existing().one()
         session = db.query(AIGPSession).filter(AIGPSession.id == session.id).populate_existing().one()
-        if item.answered_at is not None and item.selected_original_index == original:
+        if item.solved_at is not None and is_right:
             return {**_answer_feedback(item, q, order), "session": _summary(session)}
-        if item.answered_at is None:
+        if session.status != "in_progress":
             raise LMSValidationError("This practice session is already finished")
-        raise LMSValidationError("This question was already answered")
+        if item.solved_at is not None:
+            raise LMSValidationError("This question is already solved")
+        return {"correct": False, "solved": False, "wrong_positions": _wrong_positions(item, order),
+                "session": _summary(session)}
     _refresh_counters(session.id)
     db.query(AIGPSession).filter(AIGPSession.id == session.id).update(
         {AIGPSession.last_activity_at: now}, synchronize_session=False
@@ -1751,7 +1803,10 @@ def submit_answer(
     db.commit()
     item = db.query(AIGPSessionItem).filter(AIGPSessionItem.id == item.id).populate_existing().one()
     session = db.query(AIGPSession).filter(AIGPSession.id == session.id).populate_existing().one()
-    return {**_answer_feedback(item, q, order), "session": _summary(session)}
+    if is_right:
+        return {**_answer_feedback(item, q, order), "session": _summary(session)}
+    return {"correct": False, "solved": False, "wrong_positions": _wrong_positions(item, order),
+            "session": _summary(session)}
 
 
 def complete_session(student_id: int, session_id: int) -> dict:
@@ -1838,12 +1893,15 @@ def tutor_reply(student_id: int, session_id: int, position: int, message: str, a
     shown = [{"label": _LABELS[pos], "text": opts[orig].get("text") or ""} for pos, orig in enumerate(order)
              if 0 <= orig < len(opts)]
     key_pos = order.index(q.correct_option_index) if q.correct_option_index in order else None
-    answered = item.answered_at is not None
-    chosen_pos = order.index(item.selected_original_index) if item.selected_original_index in order else None
+    # Learning Chat: Mode A (hints, never the answer) until the student picks the
+    # correct option; Mode B (complete solution) once it is solved.
+    answered = item.solved_at is not None
+    wrong_shown = _wrong_positions(item, order)
+    chosen_pos = key_pos if answered else (wrong_shown[-1] if wrong_shown else None)
     sub = db.query(AIGPTopic).filter(AIGPTopic.id == session.topic_id).first()
     main = db.query(AIGPTopic).filter(AIGPTopic.id == sub.parent_id).first()
     version = db.query(AIGPPdfVersion).filter(AIGPPdfVersion.id == session.version_id).first()
-    answered_wrong = answered and chosen_pos is not None and chosen_pos != key_pos
+    answered_wrong = False  # retry-until-correct: a solved question was solved correctly
     current_q = {
         "question_text": q.question_text,
         "topic_name": main.title if sub.is_whole_section else f"{main.title} > {sub.title}",
@@ -1851,7 +1909,7 @@ def tutor_reply(student_id: int, session_id: int, position: int, message: str, a
         "correct_option_index": key_pos,
         # Solved-mode context labels the selected option "(correct)": only true when
         # the student actually picked the key. A wrong pick is described below instead.
-        "last_selected_option_index": key_pos if (answered and not answered_wrong) else None,
+        "last_selected_option_index": chosen_pos,
     }
     context = tutor_service.build_deficiency_context(
         weak_topics_json=None,
@@ -1899,7 +1957,13 @@ def tutor_reply(student_id: int, session_id: int, position: int, message: str, a
 
 
 def _summary(session: AIGPSession) -> dict:
+    solved = (
+        get_db().query(func.count(AIGPSessionItem.id))
+        .filter(AIGPSessionItem.session_id == session.id, AIGPSessionItem.solved_at.isnot(None))
+        .scalar()
+    )
     return {
+        "solved_count": int(solved or 0),
         "session_id": session.id,
         "status": session.status,
         "question_count": session.question_count,

@@ -266,39 +266,41 @@
   }
 
   function optionHtml(item, o) {
+    // Learning-Chat style: a wrong pick is marked and the student tries again; the
+    // correct option is only revealed once they find it themselves.
     var cls = 'sd-q-option lms-quiz-option';
     var tag = '';
-    if (item.answered) {
-      // The filled radio marks what the STUDENT chose; the correct option is outlined
-      // green. (Marking the correct option "selected" made a wrong pick look right.)
-      var mine = o.position === item.selected_position;
-      var right = o.position === item.correct_position;
-      if (mine) cls += ' selected';
-      if (right) cls += ' lms-opt-correct';
-      else if (mine) cls += ' lms-opt-wrong';
-      if (mine && right) tag = 'Your answer ✓';
-      else if (mine) tag = 'Your answer';
-      else if (right) tag = 'Correct answer';
+    var wrong = (item.wrong_positions || []).indexOf(o.position) !== -1;
+    var clickable = !item.solved && !wrong;
+    if (item.solved && o.position === item.correct_position) {
+      cls += ' selected lms-opt-correct';
+      tag = 'Correct ✓';
+    } else if (wrong) {
+      cls += ' lms-opt-wrong';
+      tag = 'Try again';
     }
-    var attrs = item.answered ? ' disabled' : ' onclick="sdAigpAnswer(' + o.position + ')"';
+    var attrs = clickable ? ' onclick="sdAigpAnswer(' + o.position + ')"' : ' disabled';
     return '<button type="button" class="' + cls + '" data-position="' + o.position + '"' + attrs + '>' +
       '<span class="sd-radio"></span>' +
       '<span class="sd-opt-label lms-quiz-option-label">' + esc(o.label) + '.</span>' +
       '<span class="sd-opt-body lms-quiz-option-body">' + (item.render_html ? (o.render || esc(o.text)) : rich(o.render || o.text, true)) + '</span>' +
-      (tag ? '<span class="sd-pill ' + (o.position === item.correct_position ? 'green' : 'red') +
+      (tag ? '<span class="sd-pill ' + (item.solved ? 'green' : 'red') +
         ' round" style="margin-left:auto;white-space:nowrap;">' + esc(tag) + '</span>' : '') +
       '</button>';
   }
 
   function feedbackHtml(item) {
-    if (!item.answered) return '';
-    var head = item.correct
-      ? '<strong><i class="fas fa-check-circle"></i> Correct!</strong>'
-      : '<strong><i class="fas fa-times-circle"></i> Not quite.</strong> The correct answer is ' + esc(item.correct_label || '') + '.';
-    return '<div class="lms-card ' + (item.correct ? 'lms-card-ok' : 'lms-card-bad') + '" style="margin-top:12px;">' + head +
-      (item.explanation ? '<div style="margin-top:8px;">' + rich(item.explanation_render || item.explanation, false) + '</div>' : '') +
-      (item.source_page ? '<p class="sd-note" style="margin:8px 0 0;"><i class="fas fa-file-pdf"></i> Source: Target PDF, page ' + esc(item.source_page) + '</p>' : '') +
-      '</div>';
+    if (item.solved) {
+      return '<div class="lms-card lms-card-ok" style="margin-top:12px;"><strong><i class="fas fa-check-circle"></i> Correct!</strong>' +
+        ((item.wrong_positions || []).length ? ' You found it - well done for sticking with it.' : '') +
+        (item.explanation ? '<div style="margin-top:8px;">' + rich(item.explanation_render || item.explanation, false) + '</div>' : '') +
+        '<p class="sd-note" style="margin:8px 0 0;">Ask the AI helper for the complete solution.</p></div>';
+    }
+    if ((item.wrong_positions || []).length) {
+      return '<div class="lms-card lms-card-bad" style="margin-top:12px;"><strong><i class="fas fa-times-circle"></i> Not quite.</strong> ' +
+        'Take another look, or ask the AI helper for a hint.</div>';
+    }
+    return '';
   }
 
   function renderSession() {
@@ -312,12 +314,17 @@
     if (!item) { renderCompletion(); return; }
     var total = d.question_count || d.items.length;
     var progress = Math.round(100 * (d.answered_count || 0) / Math.max(total, 1));
+    var firstOpen = d.items.findIndex(function (it) { return !it.solved; });
+    var reachable = firstOpen === -1 ? d.items.length - 1 : firstOpen;
     var nav = d.items.map(function (it) {
       var cls = 'sd-btn sd-btn-xs ' + (it.position === sess.position ? 'sd-btn-primary' : 'sd-btn-outline');
-      var mark = it.answered ? (it.correct ? ' ✓' : ' ✗') : '';
-      return '<button type="button" class="' + cls + '" aria-label="Question ' + (it.position + 1) + '" onclick="sdAigpGo(' + it.position + ')">' + (it.position + 1) + mark + '</button>';
+      var mark = it.solved ? ' ✓' : '';
+      var locked = it.position > reachable;  // solve the current question first
+      return '<button type="button" class="' + cls + '" aria-label="Question ' + (it.position + 1) + '"' +
+        (locked ? ' disabled title="Solve the current question first"' : ' onclick="sdAigpGo(' + it.position + ')"') + '>' +
+        (it.position + 1) + mark + '</button>';
     }).join(' ');
-    var unanswered = d.items.filter(function (it) { return !it.answered; }).length;
+    var unanswered = d.items.filter(function (it) { return !it.solved; }).length;
     var isLast = sess.position >= d.items.length - 1;
     body.innerHTML =
       '<div class="sd-split-body"><div class="sd-split-left">' +
@@ -335,14 +342,16 @@
       '<div class="sd-q-nav">' +
       '<button type="button" class="sd-btn sd-btn-outline" ' + (sess.position === 0 ? 'disabled' : '') + ' onclick="sdAigpGo(' + (sess.position - 1) + ')"><i class="fas fa-chevron-left"></i> Previous</button>' +
       '<div class="sd-q-nav-end">' +
-      (!isLast ? '<button type="button" class="sd-btn sd-btn-primary" onclick="sdAigpGo(' + (sess.position + 1) + ')">Next <i class="fas fa-chevron-right"></i></button>' : '') +
-      (unanswered === 0 || isLast ? '<button type="button" class="sd-btn ' + (unanswered ? 'sd-btn-outline' : 'sd-btn-primary') + '" onclick="sdAigpFinish()">Finish session</button>' : '') +
+      (!isLast ? '<button type="button" class="sd-btn sd-btn-primary"' +
+        (item.solved ? ' onclick="sdAigpGo(' + (sess.position + 1) + ')"' : ' disabled title="Choose the correct option to continue"') +
+        '>Next <i class="fas fa-chevron-right"></i></button>' : '') +
+      (unanswered === 0 ? '<button type="button" class="sd-btn sd-btn-primary" onclick="sdAigpFinish()">Finish session</button>' : '') +
       '</div></div></div>' +
       '<div class="sd-split-right">' + tutorPanelHtml(item) + '</div></div>';
     typeset(body);
     bindTutor(item);
     if (dwell) {
-      if (item.answered) dwell.stop();
+      if (item.solved) dwell.stop();
       else dwell.switchTo('aigp-' + d.session_id + '-' + item.position);
     }
   }
@@ -356,11 +365,11 @@
     ["I don't understand", "I still don't understand"]
   ];
   var TUTOR_ANSWERED_PROMPTS = [
-    ['Explain the answer', 'Explain why the correct answer is right'],
-    ['Where did I go wrong?', 'Where did my answer go wrong?'],
+    ['Explain again', 'Explain the complete solution again'],
     ['Why not others?', 'Why are the other options wrong?'],
-    ['Key rule', 'What key rule from the PDF is used here?']
+    ['Key rule', 'What key rule did I use here?']
   ];
+  var MODE_B_KICKOFF = 'Why is my answer correct?';
   sess.tutorLoading = {};
   sess.drafts = {};
 
@@ -372,8 +381,8 @@
   function tutorPanelHtml(item) {
     var msgs = item.tutor || [];
     var loading = !!sess.tutorLoading[item.position];
-    var greeting = item.answered
-      ? 'Ask me why the correct answer is right, or where your answer went wrong.'
+    var greeting = item.solved
+      ? 'Well done! Ask me for the complete solution, or why the other options are wrong.'
       : "Tell me what you think about this question. I'll respond to your idea and help you work it out - without giving away the answer.";
     var html = msgs.length ? msgs.map(function (m) {
       var user = m.role === 'user';
@@ -386,7 +395,7 @@
       html += '<div class="sd-ai-bubble"><div class="sd-bot-ic">AI</div><div class="sd-msg"><span class="sd-typing"><span></span><span></span><span></span></span>' +
         '<span class="sd-hint-line" style="margin-left:8px;">Thinking...</span></div></div>';
     }
-    var prompts = (item.answered ? TUTOR_ANSWERED_PROMPTS : TUTOR_PROMPTS).map(function (p) {
+    var prompts = (item.solved ? TUTOR_ANSWERED_PROMPTS : TUTOR_PROMPTS).map(function (p) {
       return '<button type="button" class="sd-chip"' + (loading ? ' disabled' : '') + ' data-prompt="' + esc(p[1]) + '">' + esc(p[0]) + '</button>';
     }).join('');
     var dis = loading ? ' disabled' : '';
@@ -394,7 +403,7 @@
       '<div class="sd-chip-row" id="sdAigpTutorPrompts">' + prompts + '</div>' +
       '<div class="sd-chat-inputbar"><div class="sd-chat-field">' +
       '<textarea id="sdAigpTutorInput" rows="1" maxlength="1000" placeholder="' +
-      (item.answered ? 'Ask about this question...' : "I'm stuck on this step... (Enter to send)") + '"' + dis + '>' +
+      (item.solved ? 'Ask about this question...' : "I'm stuck on this step... (Enter to send)") + '"' + dis + '>' +
       esc(sess.drafts[item.position] || '') + '</textarea>' +
       '<button type="button" class="sd-field-ic bulb" title="Need more help" aria-label="Need more help" data-prompt="I still need help with this question."' + dis + '><i class="far fa-lightbulb"></i></button>' +
       '</div><button type="button" class="sd-send-btn" id="sdAigpTutorSend"' + dis + '>Send</button></div>' +
@@ -472,8 +481,8 @@
       '<div class="sd-score-big" style="margin:12px auto;"><b class="' + window.sdPctClass(d.score_percent) + '">' + pct(d.score_percent) + '</b><span>Score</span></div>' +
       '<table class="sd-mini" style="max-width:420px;margin:0 auto;"><tbody>' +
       '<tr><td>Questions attempted</td><td><b>' + answered + ' / ' + total + '</b></td></tr>' +
-      '<tr><td>Correct</td><td><b>' + got + '</b></td></tr>' +
-      '<tr><td>Incorrect</td><td><b>' + (d.incorrect_count || 0) + '</b></td></tr>' +
+      '<tr><td>Correct on first try</td><td><b>' + got + '</b></td></tr>' +
+      '<tr><td>Needed another try</td><td><b>' + (d.incorrect_count || 0) + '</b></td></tr>' +
       '<tr><td>Status</td><td><b>Completed</b></td></tr></tbody></table>' +
       '<div class="sd-q-nav" style="justify-content:center;">' +
       '<button type="button" class="sd-btn sd-btn-outline" onclick="sdAigpCloseSession()">Back to topics</button>' +
@@ -488,6 +497,8 @@
   window.sdAigpGo = function (position) {
     var d = sess.data;
     if (!d || position < 0 || position >= d.items.length) return;
+    var firstOpen = d.items.findIndex(function (it) { return !it.solved; });
+    if (firstOpen !== -1 && position > firstOpen) return;
     sess.position = position;
     renderSession();
   };
@@ -495,12 +506,11 @@
   window.sdAigpAnswer = async function (optionPosition) {
     var d = sess.data;
     var item = currentItem();
-    if (!d || !item || item.answered || sess.busy) return;
+    if (!d || !item || item.solved || sess.busy) return;
+    if ((item.wrong_positions || []).indexOf(optionPosition) !== -1) return;
     sess.busy = true;
     var buttons = document.querySelectorAll('#sdAigpSessionBody .lms-quiz-option');
     buttons.forEach(function (b) { b.disabled = true; });
-    var fb = document.getElementById('sdAigpFeedback');
-    if (fb) fb.innerHTML = '<div class="sd-spinner" style="width:20px;height:20px"></div>';
     try {
       var r = await lmsApi('/api/lms/ai-guided-practice/sessions/' + d.session_id + '/answer', {
         method: 'POST',
@@ -511,19 +521,34 @@
           time_spent_seconds: dwell ? dwell.seconds() : undefined
         })
       });
-      Object.assign(item, {
-        answered: true, correct: r.correct, selected_position: r.selected_position,
-        correct_position: r.correct_position, correct_label: r.correct_label,
-        explanation: r.explanation, explanation_render: r.explanation_render, source_page: r.source_page
-      });
       Object.assign(d, r.session || {});
-      if (typeof lmsFeedback !== 'undefined') {
-        if (r.correct) lmsFeedback.celebrate(lmsFeedback.praise());
-        else lmsFeedback.cue('error');
+      if (!item.answered) item.first_try_correct = !!r.correct;
+      item.answered = true;
+      if (r.correct) {
+        Object.assign(item, {
+          solved: true, correct: true, correct_position: r.correct_position, correct_label: r.correct_label,
+          explanation: r.explanation, explanation_render: r.explanation_render, source_page: r.source_page
+        });
+        if (typeof lmsFeedback !== 'undefined') lmsFeedback.celebrate(lmsFeedback.praise());
+        renderSession();
+        // Like Learning Chat: once solved, the AI helper explains the complete solution.
+        if (!(item.tutor || []).some(function (m) { return m.content === MODE_B_KICKOFF; })) {
+          window.sdAigpTutorSend(MODE_B_KICKOFF);
+        }
+      } else {
+        item.wrong_positions = r.wrong_positions || (item.wrong_positions || []).concat([optionPosition]);
+        if (typeof lmsFeedback !== 'undefined') lmsFeedback.cue('error');
+        if (typeof showToast === 'function') showToast('Not quite — take another look, or ask the AI helper for a hint.', 'error', 3000);
+        renderSession();
+        var wrongBtn = document.querySelector('#sdAigpSessionBody .lms-quiz-option[data-position="' + optionPosition + '"]');
+        if (wrongBtn) {
+          wrongBtn.classList.add('lms-shake');
+          setTimeout(function () { wrongBtn.classList.remove('lms-shake'); }, 500);
+        }
       }
-      renderSession();
     } catch (err) {
       buttons.forEach(function (b) { b.disabled = false; });
+      var fb = document.getElementById('sdAigpFeedback');
       if (fb) fb.innerHTML = '<p class="lms-error">' + esc(err.message) + '</p>';
     } finally {
       sess.busy = false;

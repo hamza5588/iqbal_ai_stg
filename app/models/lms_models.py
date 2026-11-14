@@ -1301,8 +1301,14 @@ class AIGPSessionItem(Base):
     # Display order: JSON list of canonical option indexes.
     option_order_json = Column(Text, nullable=False, default="[]", server_default="[]")
     seen_before = Column(Boolean, nullable=False, default=False, server_default="0")
+    # FIRST attempt (scores the session): what was picked and whether it was right.
     selected_original_index = Column(Integer, nullable=True)
     is_correct = Column(Boolean, nullable=True)
+    # Learning-Chat style: wrong picks stay on the question until the correct one is
+    # chosen. Wrong canonical option indexes (JSON list), total picks, and when solved.
+    wrong_options_json = Column(Text, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
+    solved_at = Column(DateTime, nullable=True)
     answered_at = Column(DateTime, nullable=True)
     time_spent_seconds = Column(Integer, nullable=True)
 
